@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import json
+import re
+import csv
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
-from momentum_hunter.models import Candidate, NewsItem
+from momentum_hunter.market import MarketRegimeSnapshot
+from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, NewsItem, ScannerCriteria, TradingMode
 from momentum_hunter.time_utils import now_central
+
+
+CAPTURES_DIR = DATA_DIR / "captures"
+ANALYSIS_CSV = DATA_DIR / "analysis-captures.csv"
 
 
 def watchlist_path(for_date: datetime | None = None) -> Path:
@@ -23,12 +30,339 @@ def save_watchlist(candidates: list[Candidate], for_date: datetime | None = None
     return path
 
 
+def report_path(for_date: datetime | None = None) -> Path:
+    ensure_app_dirs()
+    value = for_date or now_central()
+    return DATA_DIR / f"watchlist-report-{value.strftime('%Y-%m-%d')}.md"
+
+
+def snapshot_path(for_date: datetime | None = None, label: str = "session") -> Path:
+    ensure_app_dirs()
+    value = for_date or now_central()
+    safe_label = label.replace(" ", "-").lower()
+    return DATA_DIR / f"snapshot-{value.strftime('%Y-%m-%d-%H%M')}-{safe_label}.md"
+
+
+def capture_dir(for_date: datetime | None = None) -> Path:
+    ensure_app_dirs()
+    value = for_date or now_central()
+    path = CAPTURES_DIR / value.strftime("%Y-%m-%d")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def capture_json_path(for_date: datetime | None = None, session: CaptureSession = CaptureSession.MANUAL) -> Path:
+    return capture_dir(for_date) / f"{session.value}.json"
+
+
+def capture_report_path(for_date: datetime | None = None, session: CaptureSession = CaptureSession.MANUAL) -> Path:
+    return capture_dir(for_date) / f"{session.value}.md"
+
+
+def save_daily_capture(
+    *,
+    candidates: list[Candidate],
+    selected_tickers: set[str],
+    reviewed_tickers: set[str],
+    criteria: ScannerCriteria,
+    provider: str,
+    mode: TradingMode,
+    session: CaptureSession,
+    market_regime: MarketRegimeSnapshot,
+    capture_time: datetime | None = None,
+) -> tuple[Path, Path]:
+    capture_time = capture_time or now_central()
+    payload = {
+        "schema_version": 1,
+        "capture_time": capture_time.isoformat(),
+        "capture_date": capture_time.strftime("%Y-%m-%d"),
+        "session": session.value,
+        "mode": mode.value,
+        "provider": provider,
+        "scanner": asdict(criteria),
+        "market": {
+            "regime": market_regime.regime.value,
+            "symbol": market_regime.symbol,
+            "close": market_regime.close,
+            "sma_50": market_regime.sma_50,
+            "sma_200": market_regime.sma_200,
+            "reason": market_regime.reason,
+        },
+        "candidates": [
+            {
+                **candidate_to_dict(candidate),
+                "selected": candidate.ticker in selected_tickers,
+                "reviewed": candidate.ticker in reviewed_tickers,
+                "rank": index,
+            }
+            for index, candidate in enumerate(sorted(candidates, key=lambda item: item.score, reverse=True), 1)
+        ],
+    }
+    json_path = capture_json_path(capture_time, session)
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    report_path_value = capture_report_path(capture_time, session)
+    report_path_value.write_text(capture_to_markdown(payload), encoding="utf-8")
+    append_analysis_rows(payload)
+    return json_path, report_path_value
+
+
+def capture_to_markdown(payload: dict) -> str:
+    market = payload["market"]
+    scanner = payload["scanner"]
+    candidates = payload["candidates"]
+    lines = [
+        f"# Momentum Hunter {payload['session'].title()} Capture - {payload['capture_date']}",
+        "",
+        f"- Captured: {payload['capture_time']}",
+        f"- Mode: {payload['mode']}",
+        f"- Provider: {payload['provider']}",
+        f"- Scanner: {scanner['name']}",
+        f"- Market Regime: {market['regime'].title()} ({market['symbol']})",
+        f"- Regime Reason: {market['reason']}",
+        "",
+        "| Pick | Rank | Ticker | Score | Price | Change | Volume | Rel Vol | Sector | Notes |",
+        "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+    ]
+    for candidate in candidates:
+        pick = "Y" if candidate["selected"] else ""
+        rel_volume = f"{candidate['relative_volume']:.2f}x" if candidate["relative_volume"] else "n/a"
+        notes = (candidate.get("user_notes") or "").replace("|", "/").replace("\n", " ")
+        lines.append(
+            f"| {pick} | {candidate['rank']} | {candidate['ticker']} | {candidate['score']} | "
+            f"${candidate['price']:,.2f} | {candidate['percent_change']:.1f}% | "
+            f"{candidate['volume']:,} | {rel_volume} | {candidate['sector']} | {notes} |"
+        )
+    lines.extend(["", "## Score Reasons", ""])
+    for candidate in candidates:
+        lines.append(f"- {candidate['ticker']}: {', '.join(candidate.get('score_reasons') or []) or 'None'}")
+    return "\n".join(lines)
+
+
+def append_analysis_rows(payload: dict) -> None:
+    ensure_app_dirs()
+    fieldnames = [
+        "capture_date",
+        "capture_time",
+        "session",
+        "mode",
+        "provider",
+        "scanner",
+        "market_regime",
+        "market_symbol",
+        "market_close",
+        "market_sma_50",
+        "market_sma_200",
+        "rank",
+        "selected",
+        "reviewed",
+        "ticker",
+        "company",
+        "score",
+        "score_reasons",
+        "price",
+        "percent_change",
+        "volume",
+        "relative_volume",
+        "market_cap",
+        "sector",
+        "industry",
+        "user_notes",
+    ]
+    exists = ANALYSIS_CSV.exists()
+    with ANALYSIS_CSV.open("a", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        if not exists:
+            writer.writeheader()
+        market = payload["market"]
+        for candidate in payload["candidates"]:
+            writer.writerow(
+                {
+                    "capture_date": payload["capture_date"],
+                    "capture_time": payload["capture_time"],
+                    "session": payload["session"],
+                    "mode": payload["mode"],
+                    "provider": payload["provider"],
+                    "scanner": payload["scanner"]["name"],
+                    "market_regime": market["regime"],
+                    "market_symbol": market["symbol"],
+                    "market_close": market["close"],
+                    "market_sma_50": market["sma_50"],
+                    "market_sma_200": market["sma_200"],
+                    "rank": candidate["rank"],
+                    "selected": candidate["selected"],
+                    "reviewed": candidate["reviewed"],
+                    "ticker": candidate["ticker"],
+                    "company": candidate["company"],
+                    "score": candidate["score"],
+                    "score_reasons": "; ".join(candidate.get("score_reasons") or []),
+                    "price": candidate["price"],
+                    "percent_change": candidate["percent_change"],
+                    "volume": candidate["volume"],
+                    "relative_volume": candidate["relative_volume"],
+                    "market_cap": candidate["market_cap"],
+                    "sector": candidate["sector"],
+                    "industry": candidate["industry"],
+                    "user_notes": candidate.get("user_notes", ""),
+                }
+            )
+
+
+def save_watchlist_report(candidates: list[Candidate], for_date: datetime | None = None) -> Path:
+    path = report_path(for_date)
+    value = for_date or now_central()
+    lines = [
+        f"# Momentum Hunter Watchlist - {value.strftime('%Y-%m-%d')}",
+        "",
+        "Research only. Confirm thesis, liquidity, risk, and trade plan manually before trading.",
+        "",
+    ]
+    for index, candidate in enumerate(sorted(candidates, key=lambda item: item.score, reverse=True), 1):
+        lines.extend(
+            [
+                f"## {index}. {candidate.ticker} - {candidate.company}",
+                "",
+                f"- Score: {candidate.score}",
+                f"- Price: ${candidate.price:,.2f}",
+                f"- Change: {candidate.percent_change:.1f}%",
+                f"- Volume: {candidate.volume:,}",
+                f"- Relative Volume: {candidate.relative_volume:.2f}x" if candidate.relative_volume else "- Relative Volume: n/a",
+                f"- Market Cap: {format_market_cap(candidate.market_cap)}",
+                f"- Sector: {candidate.sector}",
+                f"- Industry: {candidate.industry}",
+                f"- Score Reasons: {', '.join(candidate.score_reasons) or 'None'}",
+                "",
+                "### Notes",
+                candidate.user_notes.strip() or "No notes entered.",
+                "",
+                "### Headlines",
+            ]
+        )
+        if candidate.news:
+            for item in candidate.news[:6]:
+                summary = f" - {item.summary}" if item.summary else ""
+                lines.append(f"- {item.headline}{summary}")
+        else:
+            lines.append("- No headlines loaded.")
+        lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+def save_snapshot_report(
+    candidates: list[Candidate],
+    *,
+    snapshot_time: datetime | None = None,
+    label: str = "session",
+) -> Path:
+    path = snapshot_path(snapshot_time, label)
+    value = snapshot_time or now_central()
+    lines = [
+        f"# Momentum Hunter Snapshot - {value.strftime('%Y-%m-%d %I:%M %p CT')}",
+        "",
+        f"Snapshot label: {label}",
+        "",
+        "Research only. This is a point-in-time capture of the current staged picks.",
+        "",
+    ]
+    for index, candidate in enumerate(sorted(candidates, key=lambda item: item.score, reverse=True), 1):
+        lines.extend(
+            [
+                f"## {index}. {candidate.ticker} - {candidate.company}",
+                "",
+                f"- Score: {candidate.score}",
+                f"- Price: ${candidate.price:,.2f}",
+                f"- Change: {candidate.percent_change:.1f}%",
+                f"- Volume: {candidate.volume:,}",
+                f"- Relative Volume: {candidate.relative_volume:.2f}x" if candidate.relative_volume else "- Relative Volume: n/a",
+                f"- Market Cap: {format_market_cap(candidate.market_cap)}",
+                f"- Sector: {candidate.sector}",
+                f"- Industry: {candidate.industry}",
+                f"- Score Reasons: {', '.join(candidate.score_reasons) or 'None'}",
+                "",
+                "### Notes",
+                candidate.user_notes.strip() or "No notes entered.",
+                "",
+            ]
+        )
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
 def load_watchlist(for_date: datetime | None = None) -> list[Candidate]:
     path = watchlist_path(for_date)
     if not path.exists():
         return []
     raw = json.loads(path.read_text(encoding="utf-8"))
     return [candidate_from_dict(item) for item in raw]
+
+
+def load_latest_watchlist() -> list[Candidate]:
+    ensure_app_dirs()
+    files = sorted(DATA_DIR.glob("watchlist-*.json"), reverse=True)
+    if not files:
+        return []
+    raw = json.loads(files[0].read_text(encoding="utf-8"))
+    return [candidate_from_dict(item) for item in raw]
+
+
+def load_latest_report() -> str:
+    ensure_app_dirs()
+    files = sorted(DATA_DIR.glob("watchlist-report-*.md"), reverse=True)
+    if not files:
+        return ""
+    return files[0].read_text(encoding="utf-8")
+
+
+def list_snapshot_dates() -> list[str]:
+    ensure_app_dirs()
+    dates = set()
+    for path in DATA_DIR.glob("snapshot-*.md"):
+        match = re.match(r"snapshot-(\d{4}-\d{2}-\d{2})-\d{4}-.+\.md$", path.name)
+        if match:
+            dates.add(match.group(1))
+    dates = sorted(dates, reverse=True)
+    return dates
+
+
+def load_snapshot_report_for_date(date_text: str) -> str:
+    ensure_app_dirs()
+    files = sorted(DATA_DIR.glob(f"snapshot-{date_text}-*.md"), reverse=True)
+    if not files:
+        return ""
+    return files[0].read_text(encoding="utf-8")
+
+
+def list_capture_dates() -> list[str]:
+    ensure_app_dirs()
+    if not CAPTURES_DIR.exists():
+        return []
+    dates = [path.name for path in CAPTURES_DIR.iterdir() if path.is_dir()]
+    return sorted(dates, reverse=True)
+
+
+def list_capture_sessions(date_text: str) -> list[CaptureSession]:
+    base = CAPTURES_DIR / date_text
+    if not base.exists():
+        return []
+    sessions: list[CaptureSession] = []
+    for session in (CaptureSession.MORNING, CaptureSession.EVENING, CaptureSession.MANUAL):
+        if (base / f"{session.value}.json").exists() or (base / f"{session.value}.md").exists():
+            sessions.append(session)
+    return sessions
+
+
+def load_capture_report(date_text: str, session: CaptureSession) -> str:
+    path = CAPTURES_DIR / date_text / f"{session.value}.md"
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def load_capture_json(date_text: str, session: CaptureSession) -> dict:
+    path = CAPTURES_DIR / date_text / f"{session.value}.json"
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def candidate_to_dict(candidate: Candidate) -> dict:
@@ -81,3 +415,13 @@ def candidate_from_dict(payload: dict) -> Candidate:
         user_notes=payload.get("user_notes", ""),
         saved_at=datetime.fromisoformat(saved_at) if saved_at else None,
     )
+
+
+def format_market_cap(value: int) -> str:
+    if value >= 1_000_000_000_000:
+        return f"${value / 1_000_000_000_000:.1f}T"
+    if value >= 1_000_000_000:
+        return f"${value / 1_000_000_000:.1f}B"
+    if value >= 1_000_000:
+        return f"${value / 1_000_000:.1f}M"
+    return "n/a"

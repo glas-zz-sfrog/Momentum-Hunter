@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
+from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor, QBrush
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -19,6 +22,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QPlainTextEdit,
     QSplitter,
+    QAbstractScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -26,10 +30,24 @@ from PySide6.QtWidgets import (
 )
 
 from momentum_hunter.config import AppConfig, load_config, save_config
-from momentum_hunter.models import Candidate, SCANNER_PRESETS, TradingMode
+from momentum_hunter.market import MarketRegimeSnapshot, detect_market_regime
+from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, SCANNER_PRESETS, TradingMode
 from momentum_hunter.providers import provider_from_name
 from momentum_hunter.scoring import score_candidates
-from momentum_hunter.storage import save_watchlist
+from momentum_hunter.startup import install_startup_script, is_startup_installed
+from momentum_hunter.storage import (
+    candidate_from_dict,
+    list_capture_dates,
+    list_capture_sessions,
+    load_capture_json,
+    load_capture_report,
+    load_latest_report,
+    load_latest_watchlist,
+    save_daily_capture,
+    save_snapshot_report,
+    save_watchlist,
+    save_watchlist_report,
+)
 from momentum_hunter.time_utils import format_central, next_market_session, now_central
 
 
@@ -39,13 +57,25 @@ class MomentumHunterWindow(QMainWindow):
         self.config = load_config()
         self.candidates: list[Candidate] = []
         self.saved_candidates: dict[str, Candidate] = {}
+        self.reviewed_tickers: set[str] = set()
         self.selected_ticker: str | None = None
+        self.last_snapshot_key: str = ""
+        self.is_historical_view = False
+        self.market_regime = MarketRegimeSnapshot(
+            regime=MarketRegime.UNKNOWN,
+            symbol="SPY",
+            reason="Not refreshed yet.",
+        )
 
         self.setWindowTitle("Momentum Hunter")
         self.resize(1280, 780)
         self.setMinimumSize(980, 620)
         self._build_ui()
         self._apply_config_to_controls()
+        self._ensure_windows_startup()
+        self._load_capture_history()
+        self._start_snapshot_timer()
+        self._set_current_view()
         self._update_status("Ready. Human review required before any trading decision.")
 
     def _build_ui(self) -> None:
@@ -56,11 +86,16 @@ class MomentumHunterWindow(QMainWindow):
 
         layout.addWidget(self._build_top_bar())
 
+        self.view_state_label = QLabel()
+        self.view_state_label.setObjectName("viewStateCurrent")
+        layout.addWidget(self.view_state_label)
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_candidate_panel())
         splitter.addWidget(self._build_research_panel())
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
+        splitter.setSizes([760, 520])
         layout.addWidget(splitter, 1)
 
         self.status_label = QLabel()
@@ -89,11 +124,34 @@ class MomentumHunterWindow(QMainWindow):
         self.scan_button = QPushButton("Run Scanner")
         self.scan_button.clicked.connect(self.run_scan)
 
-        self.save_button = QPushButton("Save Candidate")
-        self.save_button.clicked.connect(self.save_selected_candidate)
+        self.save_button = QPushButton("Add Selected")
+        self.save_button.clicked.connect(self.save_selected_candidates)
 
-        self.watchlist_button = QPushButton("Save Tomorrow Watchlist")
+        self.clear_button = QPushButton("Clear Marks")
+        self.clear_button.clicked.connect(self.clear_row_marks)
+
+        self.watchlist_button = QPushButton("Generate Watchlist Report")
         self.watchlist_button.clicked.connect(self.save_tomorrow_watchlist)
+
+        self.view_button = QPushButton("View Research List")
+        self.view_button.clicked.connect(self.view_research_list)
+
+        self.regime_combo = QComboBox()
+        self.regime_combo.addItems([item.value for item in MarketRegime])
+        self.regime_combo.currentTextChanged.connect(self._manual_regime_changed)
+
+        self.regime_button = QPushButton("Refresh Regime")
+        self.regime_button.clicked.connect(self.refresh_market_regime)
+
+        self.capture_date_combo = QComboBox()
+        self.capture_date_combo.currentTextChanged.connect(self._capture_date_changed)
+
+        self.capture_session_combo = QComboBox()
+        self.open_capture_button = QPushButton("Open Capture")
+        self.open_capture_button.clicked.connect(self.open_selected_capture)
+
+        self.current_button = QPushButton("Current Dashboard")
+        self.current_button.clicked.connect(self.return_to_current_dashboard)
 
         self.clock_label = QLabel(format_central())
         self.criteria_label = QLabel()
@@ -107,11 +165,22 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(self.scanner_combo, 0, 5)
         layout.addWidget(self.scan_button, 0, 6)
         layout.addWidget(self.save_button, 0, 7)
-        layout.addWidget(self.watchlist_button, 0, 8)
+        layout.addWidget(self.clear_button, 0, 8)
+        layout.addWidget(self.watchlist_button, 0, 9)
+        layout.addWidget(self.view_button, 0, 10)
         layout.addWidget(self.clock_label, 1, 0, 1, 2)
         layout.addWidget(QLabel("Evening review: 7:00 PM - 8:00 PM CT"), 1, 2, 1, 3)
         layout.addWidget(QLabel("Morning review: 7:00 AM - 8:00 AM CT"), 1, 5, 1, 4)
-        layout.addWidget(self.criteria_label, 2, 0, 1, 9)
+        layout.addWidget(QLabel("Market"), 2, 0)
+        layout.addWidget(self.regime_combo, 2, 1)
+        layout.addWidget(self.regime_button, 2, 2)
+        layout.addWidget(QLabel("History Date"), 2, 3)
+        layout.addWidget(self.capture_date_combo, 2, 4)
+        layout.addWidget(QLabel("Session"), 2, 5)
+        layout.addWidget(self.capture_session_combo, 2, 6)
+        layout.addWidget(self.open_capture_button, 2, 7)
+        layout.addWidget(self.current_button, 2, 8, 1, 3)
+        layout.addWidget(self.criteria_label, 3, 0, 1, 11)
         return box
 
     def _build_candidate_panel(self) -> QWidget:
@@ -119,16 +188,19 @@ class MomentumHunterWindow(QMainWindow):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.table = QTableWidget(0, 9)
+        self.table = QTableWidget(0, 10)
         self.table.setHorizontalHeaderLabels(
-            ["Score", "Ticker", "Price", "% Chg", "Volume", "Rel Vol", "Market Cap", "Sector", "Industry"]
+            ["Pick", "Score", "Ticker", "Price", "% Chg", "Volume", "Rel Vol", "Market Cap", "Sector", "Industry"]
         )
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        self.table.setHorizontalScrollMode(QTableWidget.ScrollMode.ScrollPerPixel)
+        self.table.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.itemSelectionChanged.connect(self._selection_changed)
+        self._set_table_widths()
         layout.addWidget(self.table)
         return panel
 
@@ -215,16 +287,10 @@ class MomentumHunterWindow(QMainWindow):
         )
 
     def run_scan(self) -> None:
-        criteria = SCANNER_PRESETS[self.scanner_combo.currentText()]
-        provider = provider_from_name(self.provider_combo.currentText())
-        self._update_status(f"Running {criteria.name} with {provider.name} provider...")
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            candidates = provider.scan(criteria)
-            for candidate in candidates:
-                if not candidate.news:
-                    candidate.news = provider.fetch_news(candidate.ticker)
-            self.candidates = score_candidates(candidates)
+            self._set_current_view()
+            self._scan_current_candidates()
             self._populate_table()
             self._update_status(f"Scan complete at {format_central()}. {len(self.candidates)} candidates found.")
         except Exception as exc:
@@ -233,10 +299,21 @@ class MomentumHunterWindow(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
+    def _scan_current_candidates(self) -> None:
+        criteria = SCANNER_PRESETS[self.scanner_combo.currentText()]
+        provider = provider_from_name(self.provider_combo.currentText())
+        self._update_status(f"Running {criteria.name} with {provider.name} provider...")
+        candidates = provider.scan(criteria)
+        for candidate in candidates:
+            if not candidate.news:
+                candidate.news = provider.fetch_news(candidate.ticker)
+        self.candidates = score_candidates(candidates)
+
     def _populate_table(self) -> None:
         self.table.setRowCount(len(self.candidates))
         for row, candidate in enumerate(self.candidates):
             values = [
+                "",
                 str(candidate.score),
                 candidate.ticker,
                 f"${candidate.price:,.2f}",
@@ -250,8 +327,19 @@ class MomentumHunterWindow(QMainWindow):
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 if column == 0:
+                    flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+                    if not self.is_historical_view:
+                        flags |= Qt.ItemFlag.ItemIsUserCheckable
+                    item.setFlags(flags)
+                    item.setCheckState(
+                        Qt.CheckState.Checked if candidate.ticker in self.saved_candidates else Qt.CheckState.Unchecked
+                    )
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                elif column == 1:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     item.setBackground(score_color(candidate.score))
+                if candidate.ticker in self.reviewed_tickers:
+                    item.setBackground(QBrush(QColor("#20394a" if not self.is_historical_view else "#3a314d")))
                 self.table.setItem(row, column, item)
         if self.candidates:
             self.table.selectRow(0)
@@ -270,39 +358,344 @@ class MomentumHunterWindow(QMainWindow):
         self.notes_edit.setPlainText(candidate.user_notes)
         self.notes_edit.blockSignals(False)
         self.news_text.setPlainText(format_news(candidate))
+        self.reviewed_tickers.add(candidate.ticker)
+        self._refresh_row_states()
 
     def _notes_changed(self) -> None:
         candidate = self._selected_candidate()
         if candidate is not None:
             candidate.user_notes = self.notes_edit.toPlainText()
 
-    def save_selected_candidate(self) -> None:
-        candidate = self._selected_candidate()
-        if candidate is None:
-            self._update_status("Select a candidate before saving.")
+    def save_selected_candidates(self) -> None:
+        if self.is_historical_view:
+            self._update_status("Historical captures are read-only. Return to Current Dashboard before staging picks.")
             return
-        candidate.user_notes = self.notes_edit.toPlainText()
-        candidate.saved_at = now_central()
-        self.saved_candidates[candidate.ticker] = candidate
-        self._update_status(f"Saved {candidate.ticker} to tomorrow watchlist staging.")
+        marked = self._marked_candidates()
+        if not marked:
+            candidate = self._selected_candidate()
+            if candidate is None:
+                self._update_status("Check one or more rows before adding to the watchlist.")
+                return
+            marked = [candidate]
+        for candidate in marked:
+            if candidate.ticker == self.selected_ticker:
+                candidate.user_notes = self.notes_edit.toPlainText()
+            candidate.saved_at = now_central()
+            self.saved_candidates[candidate.ticker] = candidate
+            self.reviewed_tickers.add(candidate.ticker)
+        self._refresh_row_states()
+        self._update_status(f"Added {len(marked)} candidate(s) to watchlist staging.")
+
+    def clear_row_marks(self) -> None:
+        if self.is_historical_view:
+            self._update_status("Historical captures are read-only.")
+            return
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            if item is not None:
+                item.setCheckState(Qt.CheckState.Unchecked)
+        self._update_status("Cleared row marks.")
 
     def save_tomorrow_watchlist(self) -> None:
+        if self.is_historical_view:
+            self._update_status("Return to Current Dashboard before generating a watchlist.")
+            return
         if not self.saved_candidates:
             self._update_status("No saved candidates yet.")
             return
         session_date = next_market_session()
         path = save_watchlist(list(self.saved_candidates.values()), session_date)
-        QMessageBox.information(self, "Watchlist Saved", f"Saved {len(self.saved_candidates)} candidates to:\n{path}")
-        self._update_status(f"Watchlist saved to {path}")
+        report = save_watchlist_report(list(self.saved_candidates.values()), session_date)
+        self.capture_daily_snapshot(session=CaptureSession.MANUAL, show_message=False)
+        self._load_capture_history()
+        QMessageBox.information(
+            self,
+            "Watchlist Report Generated",
+            f"Saved {len(self.saved_candidates)} candidates.\n\nData:\n{path}\n\nReport:\n{report}",
+        )
+        self._update_status(f"Watchlist report generated: {report}")
+
+    def view_research_list(self) -> None:
+        report = load_latest_report()
+        if report:
+            self._show_text_dialog("Latest Research List", report)
+            self._update_status("Opened latest saved research list.")
+            return
+
+        staged = load_latest_watchlist()
+        if staged:
+            fallback = "\n\n".join(
+                [
+                    f"{index}. {candidate.ticker} - {candidate.company} | Score {candidate.score}\n"
+                    f"Price ${candidate.price:,.2f} | Change {candidate.percent_change:.1f}% | "
+                    f"Notes: {candidate.user_notes or 'None'}"
+                    for index, candidate in enumerate(staged, 1)
+                ]
+            )
+            self._show_text_dialog("Latest Watchlist", fallback)
+            self._update_status("Opened latest saved watchlist.")
+            return
+
+        self._show_text_dialog("Latest Research List", "No saved research list found yet.")
+        self._update_status("No saved research list found.")
+
+    def capture_daily_snapshot(self, session: CaptureSession | None = None, show_message: bool = True) -> None:
+        candidates = self.candidates or list(self.saved_candidates.values())
+        if not candidates:
+            self._update_status("No scanned candidates available to capture.")
+            return
+        selected = {candidate.ticker for candidate in self._marked_candidates()} | set(self.saved_candidates)
+        for candidate in candidates:
+            if candidate.ticker in selected:
+                self.saved_candidates[candidate.ticker] = candidate
+        session = session or self._current_capture_session()
+        if self.market_regime.regime == MarketRegime.UNKNOWN:
+            self.refresh_market_regime(show_status=False)
+        json_path, report_path = save_daily_capture(
+            candidates=candidates,
+            selected_tickers=selected,
+            reviewed_tickers=self.reviewed_tickers,
+            criteria=SCANNER_PRESETS[self.scanner_combo.currentText()],
+            provider=self.provider_combo.currentText(),
+            mode=self.config.mode,
+            session=session,
+            market_regime=self.market_regime,
+        )
+        self._load_capture_history()
+        if show_message:
+            QMessageBox.information(
+                self,
+                "Daily Capture Saved",
+                f"Saved {session.value} capture.\n\nData:\n{json_path}\n\nReport:\n{report_path}",
+            )
+        self._update_status(f"Saved {session.value} capture: {report_path}")
+
+    def _capture_snapshot(self, label: str) -> None:
+        if not self.saved_candidates:
+            return
+        snapshot_time = now_central()
+        key = snapshot_time.strftime("%Y-%m-%d-%H%M") + f"-{label}"
+        if key == self.last_snapshot_key:
+            return
+        save_snapshot_report(list(self.saved_candidates.values()), snapshot_time=snapshot_time, label=label)
+        self.last_snapshot_key = key
+
+    def _start_snapshot_timer(self) -> None:
+        self.snapshot_timer = QTimer(self)
+        self.snapshot_timer.setInterval(60_000)
+        self.snapshot_timer.timeout.connect(self._auto_snapshot_check)
+        self.snapshot_timer.start()
+
+    def _auto_snapshot_check(self) -> None:
+        current = now_central()
+        in_evening = current.hour == 19 or (current.hour == 20 and current.minute == 0)
+        in_morning = current.hour == 7 or (current.hour == 8 and current.minute == 0)
+        if in_evening:
+            self._auto_capture_once(CaptureSession.EVENING)
+        elif in_morning:
+            self._auto_capture_once(CaptureSession.MORNING)
+
+    def _auto_capture_once(self, session: CaptureSession) -> None:
+        key = now_central().strftime("%Y-%m-%d") + f"-{session.value}"
+        if key == self.last_snapshot_key:
+            return
+        if not self.candidates:
+            try:
+                self._scan_current_candidates()
+                self._populate_table()
+            except Exception as exc:
+                self._update_status(f"Auto scan failed before {session.value} capture: {exc}")
+                return
+        if self.candidates or self.saved_candidates:
+            self.capture_daily_snapshot(session=session, show_message=False)
+            self.last_snapshot_key = key
+
+    def _load_capture_history(self) -> None:
+        current_date = self.capture_date_combo.currentText()
+        self.capture_date_combo.blockSignals(True)
+        self.capture_date_combo.clear()
+        dates = list_capture_dates()
+        if not dates:
+            self.capture_date_combo.addItem("No captures yet")
+        for date_text in dates:
+            self.capture_date_combo.addItem(date_text)
+        if current_date and current_date in [self.capture_date_combo.itemText(i) for i in range(self.capture_date_combo.count())]:
+            self.capture_date_combo.setCurrentText(current_date)
+        self.capture_date_combo.blockSignals(False)
+        self._capture_date_changed(self.capture_date_combo.currentText())
+
+    def _capture_date_changed(self, value: str) -> None:
+        current_session = self.capture_session_combo.currentText()
+        self.capture_session_combo.blockSignals(True)
+        self.capture_session_combo.clear()
+        if not value or value == "No captures yet":
+            self.capture_session_combo.addItem("No sessions yet")
+            self.capture_session_combo.blockSignals(False)
+            return
+        for session in list_capture_sessions(value):
+            self.capture_session_combo.addItem(session.value)
+        if self.capture_session_combo.count() == 0:
+            self.capture_session_combo.addItem("No sessions yet")
+        if current_session and current_session in [
+            self.capture_session_combo.itemText(i) for i in range(self.capture_session_combo.count())
+        ]:
+            self.capture_session_combo.setCurrentText(current_session)
+        self.capture_session_combo.blockSignals(False)
+
+    def open_selected_capture(self) -> None:
+        date_text = self.capture_date_combo.currentText()
+        session_text = self.capture_session_combo.currentText()
+        if not date_text or not session_text or date_text == "No captures yet" or session_text == "No sessions yet":
+            self._show_text_dialog("Daily Capture", "No daily capture is available yet.")
+            return
+        session = CaptureSession(session_text)
+        payload = load_capture_json(date_text, session)
+        if payload:
+            self._load_historical_capture(payload)
+            return
+        report = load_capture_report(date_text, session)
+        if not report:
+            self._show_text_dialog("Daily Capture", "No report exists for that date and session.")
+            return
+        self._show_text_dialog(f"{date_text} {session_text.title()} Capture", report)
+
+    def _load_historical_capture(self, payload: dict) -> None:
+        self.is_historical_view = True
+        self.candidates = [candidate_from_dict(item) for item in payload.get("candidates", [])]
+        self.saved_candidates = {
+            item["ticker"]: candidate
+            for item, candidate in zip(payload.get("candidates", []), self.candidates)
+            if item.get("selected")
+        }
+        self.reviewed_tickers = {
+            item["ticker"] for item in payload.get("candidates", []) if item.get("reviewed") or item.get("selected")
+        }
+        self.selected_ticker = None
+        self._populate_table()
+        market = payload.get("market", {})
+        self.view_state_label.setObjectName("viewStateHistorical")
+        self.view_state_label.setText(
+            f"HISTORICAL SNAPSHOT - {payload.get('capture_date', 'unknown date')} "
+            f"{payload.get('session', 'session').upper()} | Market: {market.get('regime', 'unknown').upper()} | "
+            "Read-only. Do not make live decisions from this table."
+        )
+        self._apply_header_style(historical=True)
+        self._refresh_view_state_style()
+        self._update_status("Loaded historical capture into the main table.")
+
+    def return_to_current_dashboard(self) -> None:
+        self._set_current_view()
+        self._update_status("Returned to current dashboard. Run Scanner for fresh data.")
+
+    def _set_current_view(self) -> None:
+        self.is_historical_view = False
+        self.view_state_label.setObjectName("viewStateCurrent")
+        self.view_state_label.setText(
+            f"CURRENT DASHBOARD - {format_central()} | Fresh decisions belong here. Historical captures are read-only."
+        )
+        self._apply_header_style(historical=False)
+        self._refresh_view_state_style()
+
+    def _refresh_view_state_style(self) -> None:
+        self.view_state_label.style().unpolish(self.view_state_label)
+        self.view_state_label.style().polish(self.view_state_label)
+
+    def _apply_header_style(self, historical: bool) -> None:
+        if historical:
+            self.table.horizontalHeader().setStyleSheet(
+                "QHeaderView::section { background: #4a355f; color: #f4ecff; "
+                "border: 0; border-right: 1px solid #6d5780; padding: 6px; font-weight: 600; }"
+            )
+            return
+        self.table.horizontalHeader().setStyleSheet(
+            "QHeaderView::section { background: #243445; color: #e8eef6; "
+            "border: 0; border-right: 1px solid #35485d; padding: 6px; font-weight: 600; }"
+        )
+
+    def refresh_market_regime(self, show_status: bool = True) -> None:
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            self.market_regime = detect_market_regime()
+            self.regime_combo.blockSignals(True)
+            self.regime_combo.setCurrentText(self.market_regime.regime.value)
+            self.regime_combo.blockSignals(False)
+            if show_status:
+                self._update_status(self.market_regime.reason)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def _manual_regime_changed(self, value: str) -> None:
+        self.market_regime = MarketRegimeSnapshot(
+            regime=MarketRegime(value),
+            symbol="manual",
+            reason=f"Manually set to {value}.",
+        )
+
+    def _current_capture_session(self) -> CaptureSession:
+        current = now_central()
+        if 5 <= current.hour < 12:
+            return CaptureSession.MORNING
+        if 12 <= current.hour <= 23:
+            return CaptureSession.EVENING
+        return CaptureSession.MANUAL
+
+    def _ensure_windows_startup(self) -> None:
+        if is_startup_installed():
+            return
+        try:
+            install_startup_script(Path(__file__).resolve().parents[1])
+        except Exception as exc:
+            self._update_status(f"Could not install Windows startup launcher: {exc}")
 
     def _selected_candidate(self) -> Candidate | None:
         if self.selected_ticker is None:
             return None
         return next((candidate for candidate in self.candidates if candidate.ticker == self.selected_ticker), None)
 
+    def _marked_candidates(self) -> list[Candidate]:
+        marked: list[Candidate] = []
+        for row, candidate in enumerate(self.candidates):
+            item = self.table.item(row, 0)
+            if item is not None and item.checkState() == Qt.CheckState.Checked:
+                marked.append(candidate)
+        return marked
+
+    def _refresh_row_states(self) -> None:
+        for row, candidate in enumerate(self.candidates):
+            item = self.table.item(row, 0)
+            if item is not None:
+                item.setCheckState(
+                    Qt.CheckState.Checked if candidate.ticker in self.saved_candidates else Qt.CheckState.Unchecked
+                )
+            if candidate.ticker in self.reviewed_tickers:
+                for column in range(self.table.columnCount()):
+                    cell = self.table.item(row, column)
+                    if cell is not None and column != 1:
+                        cell.setBackground(QBrush(QColor("#20394a" if not self.is_historical_view else "#3a314d")))
+
     def _update_status(self, message: str) -> None:
         self.clock_label.setText(format_central())
         self.status_label.setText(message)
+
+    def _set_table_widths(self) -> None:
+        widths = [48, 58, 72, 88, 78, 116, 86, 104, 128, 180]
+        for column, width in enumerate(widths):
+            self.table.setColumnWidth(column, width)
+
+    def _show_text_dialog(self, title: str, text: str) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.resize(900, 700)
+        layout = QVBoxLayout(dialog)
+        editor = QPlainTextEdit()
+        editor.setReadOnly(True)
+        editor.setPlainText(text)
+        layout.addWidget(editor)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        dialog.exec()
 
 
 def format_news(candidate: Candidate) -> str:
@@ -329,60 +722,64 @@ def format_market_cap(value: int) -> str:
 
 def score_color(score: int) -> QColor:
     if score >= 85:
-        return QColor("#b7e4c7")
+        return QColor("#1f6f4a")
     if score >= 70:
-        return QColor("#d8f3dc")
+        return QColor("#285943")
     if score >= 50:
-        return QColor("#fff3bf")
-    return QColor("#ffd6d6")
+        return QColor("#735f24")
+    return QColor("#6d3030")
 
 
 STYLESHEET = """
 QMainWindow, QWidget {
-    background: #f7f8fa;
-    color: #17202a;
+    background: #101820;
+    color: #e7edf4;
     font-family: Segoe UI;
     font-size: 10pt;
 }
 QGroupBox {
-    border: 1px solid #cfd6df;
+    border: 1px solid #2d3b4a;
     border-radius: 6px;
     margin-top: 8px;
     padding: 8px;
-    background: #ffffff;
+    background: #162230;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
     left: 10px;
     padding: 0 4px;
+    color: #b9c8d8;
 }
 QPushButton {
-    background: #1f6feb;
+    background: #2f80ed;
     color: #ffffff;
     border: 0;
     border-radius: 4px;
     padding: 7px 10px;
 }
 QPushButton:hover {
-    background: #1a5fcc;
+    background: #4392ff;
 }
 QComboBox, QLineEdit, QPlainTextEdit {
-    background: #ffffff;
-    border: 1px solid #b9c2cf;
+    background: #0f1720;
+    color: #e7edf4;
+    border: 1px solid #34475b;
     border-radius: 4px;
     padding: 5px;
 }
 QTableWidget {
-    background: #ffffff;
-    alternate-background-color: #f2f5f8;
-    gridline-color: #d9e0e8;
-    selection-background-color: #cfe3ff;
-    selection-color: #17202a;
+    background: #0f1720;
+    color: #e7edf4;
+    alternate-background-color: #132030;
+    gridline-color: #263648;
+    selection-background-color: #315f88;
+    selection-color: #ffffff;
 }
 QHeaderView::section {
-    background: #e9edf2;
+    background: #243445;
+    color: #e8eef6;
     border: 0;
-    border-right: 1px solid #d5dbe3;
+    border-right: 1px solid #35485d;
     padding: 6px;
     font-weight: 600;
 }
@@ -391,13 +788,29 @@ QHeaderView::section {
     font-weight: 700;
 }
 #statusLabel {
-    color: #52616f;
+    color: #9cb0c4;
 }
 #criteriaLabel {
-    background: #eef3f8;
+    background: #18283a;
     border-radius: 4px;
-    color: #263442;
+    color: #cbd8e6;
     padding: 6px;
+}
+#viewStateCurrent {
+    background: #123222;
+    border: 1px solid #1f6f4a;
+    border-radius: 6px;
+    color: #d8ffe8;
+    font-weight: 700;
+    padding: 8px;
+}
+#viewStateHistorical {
+    background: #2b1f36;
+    border: 1px solid #6d5780;
+    border-radius: 6px;
+    color: #f4ecff;
+    font-weight: 700;
+    padding: 8px;
 }
 """
 

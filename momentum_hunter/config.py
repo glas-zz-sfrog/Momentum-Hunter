@@ -7,7 +7,7 @@ from pathlib import Path
 from momentum_hunter.models import TradingMode
 
 
-APP_DIR = Path.home() / "MomentumHunter"
+APP_DIR = Path(__file__).resolve().parents[1] / "MomentumHunterData"
 DATA_DIR = APP_DIR / "data"
 CONFIG_PATH = APP_DIR / "config.json"
 

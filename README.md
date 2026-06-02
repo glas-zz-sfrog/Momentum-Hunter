@@ -20,6 +20,10 @@ Version 0.1 implements the V1/V3 foundation:
 - Candidate notes
 - Save selected candidates to a next-session watchlist JSON file
 - All displayed times use Central Time
+- Daily morning/evening capture files for point-in-time review
+- Structured capture JSON plus a flat analysis CSV for future scoring review
+- Market regime label for each capture
+- Automatic Windows startup launcher
 
 ## Install
 
@@ -41,16 +45,71 @@ The app starts with the `sample` provider so you can verify the workflow without
 
 ## Data Files
 
-Configuration and watchlists are stored under:
+Configuration and watchlists are stored under the project folder:
 
 ```text
-%USERPROFILE%\MomentumHunter
+MomentumHunterData
 ```
 
 Watchlists are saved as:
 
 ```text
-%USERPROFILE%\MomentumHunter\data\watchlist-YYYY-MM-DD.json
+MomentumHunterData\data\watchlist-YYYY-MM-DD.json
+```
+
+Daily captures are stored as:
+
+```text
+MomentumHunterData\data\captures\YYYY-MM-DD\morning.json
+MomentumHunterData\data\captures\YYYY-MM-DD\morning.md
+MomentumHunterData\data\captures\YYYY-MM-DD\evening.json
+MomentumHunterData\data\captures\YYYY-MM-DD\evening.md
+```
+
+The analysis table is stored as:
+
+```text
+MomentumHunterData\data\analysis-captures.csv
+```
+
+## Daily Capture Workflow
+
+1. Run the scanner during the morning or evening review window.
+2. Review candidates and check the rows you want to track.
+3. Click `Add Selected` to stage the picks.
+4. Set or refresh the market regime.
+5. Momentum Hunter auto-captures morning and evening snapshots while the app is running.
+6. Use the date and session selectors to reopen a past morning or evening capture.
+
+Momentum Hunter installs a Windows startup launcher automatically so the app is available for scheduled captures after login.
+
+## Scheduled Capture Jobs
+
+Momentum Hunter also includes a headless capture job for Windows Task Scheduler:
+
+```powershell
+.\.venv\Scripts\python.exe tools\capture_job.py --session morning
+.\.venv\Scripts\python.exe tools\capture_job.py --session evening
+```
+
+Install the daily scheduled tasks:
+
+```powershell
+.\tools\install_capture_tasks.ps1
+```
+
+By default, Windows runs these tasks under the current user. To configure Windows to run them whether the user is logged in or not, run the installer with:
+
+```powershell
+.\tools\install_capture_tasks.ps1 -RunWhetherLoggedOn
+```
+
+Run that command from an elevated PowerShell window. Windows may ask for your account credentials for that mode. That is a Task Scheduler requirement, not a Momentum Hunter requirement.
+
+Scheduled capture logs are written to:
+
+```text
+MomentumHunterData\logs
 ```
 
 ## Scanner Presets

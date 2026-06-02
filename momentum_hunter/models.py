@@ -10,6 +10,19 @@ class TradingMode(str, Enum):
     LIVE = "LIVE"
 
 
+class CaptureSession(str, Enum):
+    MORNING = "morning"
+    EVENING = "evening"
+    MANUAL = "manual"
+
+
+class MarketRegime(str, Enum):
+    BULL = "bull"
+    BEAR = "bear"
+    NEUTRAL = "neutral"
+    UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True)
 class ScannerCriteria:
     name: str
