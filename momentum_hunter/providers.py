@@ -1,0 +1,257 @@
+from __future__ import annotations
+
+import re
+from abc import ABC, abstractmethod
+from typing import Iterable
+
+from momentum_hunter.models import Candidate, NewsItem, ScannerCriteria
+
+
+class MarketDataProvider(ABC):
+    name: str
+
+    @abstractmethod
+    def scan(self, criteria: ScannerCriteria) -> list[Candidate]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def fetch_news(self, ticker: str) -> list[NewsItem]:
+        raise NotImplementedError
+
+
+class SampleProvider(MarketDataProvider):
+    name = "sample"
+
+    def scan(self, criteria: ScannerCriteria) -> list[Candidate]:
+        candidates = [
+            Candidate(
+                ticker="MU",
+                company="Micron Technology",
+                price=128.45,
+                percent_change=6.8,
+                volume=35_200_000,
+                relative_volume=2.3,
+                market_cap=142_000_000_000,
+                sector="Technology",
+                industry="Semiconductors",
+                news=[
+                    NewsItem(
+                        headline="Micron rallies after stronger AI memory demand commentary",
+                        source="Sample",
+                        summary="AI infrastructure demand and analyst follow-through are supporting momentum.",
+                    ),
+                    NewsItem(
+                        headline="Analysts lift targets following upbeat earnings outlook",
+                        source="Sample",
+                        summary="Upgrade and target activity suggests institutional attention.",
+                    ),
+                ],
+            ),
+            Candidate(
+                ticker="DELL",
+                company="Dell Technologies",
+                price=151.20,
+                percent_change=4.9,
+                volume=12_850_000,
+                relative_volume=1.7,
+                market_cap=105_000_000_000,
+                sector="Technology",
+                industry="Computer Hardware",
+                news=[
+                    NewsItem(
+                        headline="Dell gains as AI server backlog expands",
+                        source="Sample",
+                        summary="AI server demand is the primary catalyst.",
+                    )
+                ],
+            ),
+            Candidate(
+                ticker="PLTR",
+                company="Palantir Technologies",
+                price=72.30,
+                percent_change=5.4,
+                volume=55_000_000,
+                relative_volume=1.6,
+                market_cap=166_000_000_000,
+                sector="Technology",
+                industry="Software - Infrastructure",
+                news=[
+                    NewsItem(
+                        headline="Palantir extends move on enterprise AI platform demand",
+                        source="Sample",
+                        summary="Large-cap momentum and AI theme alignment remain strong.",
+                    )
+                ],
+            ),
+            Candidate(
+                ticker="XYZP",
+                company="Example Microcap",
+                price=2.10,
+                percent_change=42.0,
+                volume=900_000,
+                relative_volume=6.8,
+                market_cap=85_000_000,
+                sector="Healthcare",
+                industry="Biotechnology",
+                news=[NewsItem(headline="Thinly traded microcap spikes on vague promotion", source="Sample")],
+            ),
+        ]
+        return filter_candidates(candidates, criteria)
+
+    def fetch_news(self, ticker: str) -> list[NewsItem]:
+        for candidate in self.scan(criteria=_loose_criteria()):
+            if candidate.ticker == ticker:
+                return candidate.news
+        return []
+
+
+class FinvizProvider(MarketDataProvider):
+    name = "finviz"
+    base_url = "https://finviz.com"
+
+    def __init__(self) -> None:
+        import requests
+
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36"
+                )
+            }
+        )
+
+    def scan(self, criteria: ScannerCriteria) -> list[Candidate]:
+        from bs4 import BeautifulSoup
+
+        url = self._screener_url(criteria)
+        response = self.session.get(url, timeout=20)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "lxml")
+        table = soup.find("table", class_="screener_table")
+        if table is None:
+            raise RuntimeError("Finviz screener table was not found. Try Sample provider or update parser.")
+
+        rows = table.find_all("tr")
+        candidates: list[Candidate] = []
+        for row in rows[1:]:
+            cells = [cell.get_text(" ", strip=True) for cell in row.find_all("td")]
+            if len(cells) < 11:
+                continue
+            candidates.append(
+                Candidate(
+                    ticker=cells[1],
+                    company=cells[2],
+                    sector=cells[3],
+                    industry=cells[4],
+                    market_cap=parse_market_cap(cells[6]),
+                    price=parse_float(cells[8]),
+                    percent_change=parse_percent(cells[9]),
+                    volume=parse_int(cells[10]),
+                    relative_volume=0.0,
+                )
+            )
+
+        return filter_candidates(candidates, criteria)
+
+    def fetch_news(self, ticker: str) -> list[NewsItem]:
+        from bs4 import BeautifulSoup
+
+        url = f"{self.base_url}/quote.ashx?t={ticker}"
+        response = self.session.get(url, timeout=20)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "lxml")
+        news_table = soup.find(id="news-table")
+        if news_table is None:
+            return []
+
+        items: list[NewsItem] = []
+        for row in news_table.find_all("tr")[:8]:
+            link = row.find("a")
+            if link is None:
+                continue
+            items.append(
+                NewsItem(
+                    headline=link.get_text(" ", strip=True),
+                    source="Finviz",
+                    url=link.get("href", ""),
+                    summary=summarize_catalyst(link.get_text(" ", strip=True)),
+                )
+            )
+        return items
+
+    def _screener_url(self, criteria: ScannerCriteria) -> str:
+        cap_filter = "cap_midover" if criteria.min_market_cap >= 2_000_000_000 else "cap_smallover"
+        price_filter = "sh_price_o10" if criteria.min_price >= 10 else "sh_price_o5"
+        volume_filter = "sh_avgvol_o3000" if criteria.min_volume >= 3_000_000 else "sh_avgvol_o1000"
+        change_filter = "ta_change_u3" if criteria.min_percent_change <= 3 else "ta_change_u5"
+        filters = ",".join([cap_filter, price_filter, volume_filter, change_filter])
+        return f"{self.base_url}/screener.ashx?v=111&f={filters}&o=-volume"
+
+
+def provider_from_name(name: str) -> MarketDataProvider:
+    if name == FinvizProvider.name:
+        return FinvizProvider()
+    return SampleProvider()
+
+
+def filter_candidates(candidates: Iterable[Candidate], criteria: ScannerCriteria) -> list[Candidate]:
+    filtered = [
+        candidate
+        for candidate in candidates
+        if candidate.volume >= criteria.min_volume
+        and candidate.percent_change >= criteria.min_percent_change
+        and candidate.market_cap >= criteria.min_market_cap
+        and candidate.price >= criteria.min_price
+        and (candidate.relative_volume == 0.0 or candidate.relative_volume >= criteria.min_relative_volume)
+    ]
+    return sorted(filtered, key=lambda item: (item.score, item.volume, item.percent_change), reverse=True)
+
+
+def summarize_catalyst(headline: str) -> str:
+    headline_lower = headline.lower()
+    catalyst_map = {
+        "earnings": "Potential earnings catalyst.",
+        "guidance": "Potential guidance catalyst.",
+        "upgrade": "Potential analyst upgrade catalyst.",
+        "price target": "Potential analyst target catalyst.",
+        "ai": "Potential AI infrastructure or automation theme.",
+        "partnership": "Potential partnership catalyst.",
+        "fda": "Potential FDA catalyst.",
+    }
+    for keyword, summary in catalyst_map.items():
+        if keyword in headline_lower:
+            return summary
+    return "Review headline for catalyst quality."
+
+
+def parse_market_cap(value: str) -> int:
+    match = re.match(r"([\d.]+)([MBT])", value.replace(",", "").upper())
+    if not match:
+        return 0
+    number = float(match.group(1))
+    multiplier = {"M": 1_000_000, "B": 1_000_000_000, "T": 1_000_000_000_000}[match.group(2)]
+    return int(number * multiplier)
+
+
+def parse_percent(value: str) -> float:
+    return parse_float(value.replace("%", ""))
+
+
+def parse_float(value: str) -> float:
+    try:
+        return float(value.replace(",", ""))
+    except ValueError:
+        return 0.0
+
+
+def parse_int(value: str) -> int:
+    try:
+        return int(float(value.replace(",", "")))
+    except ValueError:
+        return 0
+
+
+def _loose_criteria() -> ScannerCriteria:
+    return ScannerCriteria("Loose", 0, 0, 0, 0, 0)
