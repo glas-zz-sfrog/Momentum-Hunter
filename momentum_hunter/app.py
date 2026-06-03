@@ -6,13 +6,15 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QBrush
+from PySide6.QtGui import QColor, QBrush, QFont
+from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QValueAxis
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QGridLayout,
+    QGraphicsSimpleTextItem,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -49,6 +51,7 @@ from momentum_hunter.storage import (
     save_watchlist,
     save_watchlist_report,
 )
+from momentum_hunter.study import StudySummary, build_capture_study
 from momentum_hunter.time_utils import format_central, next_market_session, now_central
 from momentum_hunter.ui.data_view_state import DataViewState, DataViewStyle, get_data_view_style
 
@@ -162,6 +165,9 @@ class MomentumHunterWindow(QMainWindow):
         self.current_button = QPushButton("Current Dashboard")
         self.current_button.clicked.connect(self.return_to_current_dashboard)
 
+        self.study_button = QPushButton("Study Engine")
+        self.study_button.clicked.connect(self.open_study_engine)
+
         self.clock_label = QLabel(format_central())
         self.criteria_label = QLabel()
         self.criteria_label.setObjectName("criteriaLabel")
@@ -188,7 +194,8 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(QLabel("Session"), 2, 5)
         layout.addWidget(self.capture_session_combo, 2, 6)
         layout.addWidget(self.open_capture_button, 2, 7)
-        layout.addWidget(self.current_button, 2, 8, 1, 3)
+        layout.addWidget(self.current_button, 2, 8)
+        layout.addWidget(self.study_button, 2, 9, 1, 2)
         layout.addWidget(self.criteria_label, 3, 0, 1, 11)
         return box
 
@@ -235,6 +242,24 @@ class MomentumHunterWindow(QMainWindow):
         identity_layout.addWidget(self.company_label, 2, 0, 1, 2)
         identity_layout.addWidget(self.reasons_label, 3, 0, 1, 2)
         layout.addWidget(identity)
+
+        chart_box = QGroupBox("Momentum Chart")
+        chart_layout = QVBoxLayout(chart_box)
+        self.chart_state_label = QLabel("STALE - Top Momentum Candidates")
+        self.chart_state_label.setObjectName("chartStateLabel")
+        self.score_chart = QChart()
+        self.score_chart.legend().hide()
+        self.score_chart.setBackgroundVisible(False)
+        self.score_chart.plotAreaChanged.connect(self._position_chart_watermark)
+        self.chart_watermark = QGraphicsSimpleTextItem(self.score_chart)
+        self.chart_watermark.setBrush(QBrush(QColor("#cbd8e6")))
+        self.chart_watermark.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        self.chart_watermark.setOpacity(0.28)
+        self.score_chart_view = QChartView(self.score_chart)
+        self.score_chart_view.setMinimumHeight(190)
+        chart_layout.addWidget(self.chart_state_label)
+        chart_layout.addWidget(self.score_chart_view)
+        layout.addWidget(chart_box, 1)
 
         news_box = QGroupBox("News & Catalysts")
         news_layout = QVBoxLayout(news_box)
@@ -311,6 +336,7 @@ class MomentumHunterWindow(QMainWindow):
             self.live_reviewed_tickers = set(self.reviewed_tickers)
             self._apply_data_view_state()
             self._populate_table()
+            self._update_score_chart()
             self._update_status(f"Scan complete at {format_central()}. {len(self.candidates)} candidates found.")
         except Exception as exc:
             QMessageBox.warning(self, "Scanner Error", str(exc))
@@ -363,6 +389,7 @@ class MomentumHunterWindow(QMainWindow):
                 self.table.setItem(row, column, item)
         if self.candidates:
             self.table.selectRow(0)
+        self._update_score_chart()
 
     def _selection_changed(self) -> None:
         rows = self.table.selectionModel().selectedRows()
@@ -592,6 +619,10 @@ class MomentumHunterWindow(QMainWindow):
             return
         self._show_text_dialog(f"{date_text} {session_text.title()} Capture", report)
 
+    def open_study_engine(self) -> None:
+        summary = build_capture_study()
+        self._show_study_dialog(summary)
+
     def _load_historical_capture(self, payload: dict) -> None:
         self.data_view_state = DataViewState.HISTORICAL
         self.display_capture_time = datetime.fromisoformat(payload["capture_time"]) if payload.get("capture_time") else None
@@ -608,6 +639,7 @@ class MomentumHunterWindow(QMainWindow):
         self.selected_ticker = None
         self._apply_data_view_state()
         self._populate_table()
+        self._update_score_chart()
         self._update_status("Loaded historical capture into the main table.")
 
     def return_to_current_dashboard(self) -> None:
@@ -620,6 +652,7 @@ class MomentumHunterWindow(QMainWindow):
         self.selected_ticker = None
         self._apply_data_view_state()
         self._populate_table()
+        self._update_score_chart()
         self._update_status("Returned to current dashboard. Run Scanner for fresh data.")
 
     def _apply_data_view_state(self) -> None:
@@ -632,6 +665,8 @@ class MomentumHunterWindow(QMainWindow):
         self.view_state_label.setObjectName(style.object_name)
         self.view_state_label.setText(style.banner_text)
         self.detail_state_label.setText(style.detail_label)
+        self.chart_state_label.setText(f"{style.chart_prefix}Top Momentum Candidates")
+        self._set_chart_watermark(style)
         self.table.horizontalHeader().setStyleSheet(style.header_stylesheet)
         read_only = style.read_only
         self.save_button.setEnabled(not read_only)
@@ -644,6 +679,7 @@ class MomentumHunterWindow(QMainWindow):
         self.scan_button.style().unpolish(self.scan_button)
         self.scan_button.style().polish(self.scan_button)
         self._refresh_view_state_style()
+        self._update_score_chart()
 
     def _refresh_view_state_style(self) -> None:
         self.view_state_label.style().unpolish(self.view_state_label)
@@ -651,6 +687,74 @@ class MomentumHunterWindow(QMainWindow):
 
     def _is_read_only_view(self) -> bool:
         return bool(self.current_view_style and self.current_view_style.read_only)
+
+    def _update_score_chart(self) -> None:
+        if not hasattr(self, "score_chart"):
+            return
+        self.score_chart.removeAllSeries()
+        for axis in list(self.score_chart.axes()):
+            self.score_chart.removeAxis(axis)
+
+        top_candidates = sorted(self.candidates, key=lambda item: item.score, reverse=True)[:8]
+        if not top_candidates:
+            self.score_chart.setTitle("No candidates loaded")
+            return
+
+        style = self.current_view_style or get_data_view_style(
+            self.data_view_state,
+            captured_at=self.display_capture_time,
+            session_label=self.display_session_label,
+        )
+        self.score_chart.setTitle(f"{style.chart_prefix}Candidate Scores")
+        self.score_chart.setTitleBrush(QBrush(QColor("#e7edf4")))
+        self._set_chart_watermark(style)
+
+        score_set = QBarSet("Score")
+        score_set.setColor(chart_bar_color(style.state))
+        for candidate in top_candidates:
+            score_set.append(candidate.score)
+
+        series = QBarSeries()
+        series.append(score_set)
+        self.score_chart.addSeries(series)
+
+        category_axis = QBarCategoryAxis()
+        category_axis.append([candidate.ticker for candidate in top_candidates])
+        category_axis.setLabelsColor(QColor("#cbd8e6"))
+
+        value_axis = QValueAxis()
+        value_axis.setRange(0, 100)
+        value_axis.setTickCount(6)
+        value_axis.setLabelsColor(QColor("#cbd8e6"))
+
+        self.score_chart.addAxis(category_axis, Qt.AlignmentFlag.AlignBottom)
+        self.score_chart.addAxis(value_axis, Qt.AlignmentFlag.AlignLeft)
+        series.attachAxis(category_axis)
+        series.attachAxis(value_axis)
+
+        self.score_chart.setPlotAreaBackgroundVisible(True)
+        self.score_chart.setPlotAreaBackgroundBrush(QBrush(QColor("#0f1720")))
+        self._position_chart_watermark()
+
+    def _set_chart_watermark(self, style: DataViewStyle) -> None:
+        label = {
+            DataViewState.CURRENT: "LIVE DATA" if not style.is_warning else "AGING DATA",
+            DataViewState.STALE: "STALE DATA",
+            DataViewState.HISTORICAL: "HISTORICAL",
+            DataViewState.STUDY: "SIMULATED",
+        }[style.state]
+        self.chart_watermark.setText(label)
+        self.chart_watermark.setBrush(QBrush(chart_badge_color(style.state, style.is_warning)))
+        self._position_chart_watermark()
+
+    def _position_chart_watermark(self) -> None:
+        if not hasattr(self, "chart_watermark"):
+            return
+        area = self.score_chart.plotArea()
+        if area.isNull():
+            self.chart_watermark.setPos(24, 44)
+            return
+        self.chart_watermark.setPos(area.left() + 14, area.top() + 10)
 
     def refresh_market_regime(self, show_status: bool = True) -> None:
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
@@ -739,6 +843,67 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(buttons)
         dialog.exec()
 
+    def _show_study_dialog(self, summary: StudySummary) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Momentum Hunter Study Engine")
+        dialog.resize(980, 760)
+        layout = QVBoxLayout(dialog)
+
+        style = get_data_view_style(
+            DataViewState.STUDY,
+            captured_at=None,
+            study_run_id=summary.run_id,
+            source_range=summary.source_range,
+        )
+        banner = QLabel(style.banner_text)
+        banner.setObjectName(style.object_name)
+        banner.setWordWrap(True)
+        layout.addWidget(banner)
+
+        stats = QLabel(
+            f"Captures: {summary.capture_count} | Candidates: {summary.candidate_count} | "
+            f"Selected: {summary.selected_count} | Reviewed: {summary.reviewed_count}"
+        )
+        stats.setObjectName("criteriaLabel")
+        layout.addWidget(stats)
+
+        chart = build_study_chart(summary, style)
+        layout.addWidget(chart, 2)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        bucket_table = QTableWidget(0, 4)
+        bucket_table.setHorizontalHeaderLabels(["Score Bucket", "Candidates", "Selected", "Reviewed"])
+        bucket_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        bucket_table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+        bucket_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        bucket_table.setRowCount(len(summary.score_buckets))
+        for row, bucket in enumerate(summary.score_buckets):
+            values = [bucket.label, str(bucket.count), str(bucket.selected_count), str(bucket.reviewed_count)]
+            for column, value in enumerate(values):
+                bucket_table.setItem(row, column, QTableWidgetItem(value))
+
+        regime_table = QTableWidget(0, 2)
+        regime_table.setHorizontalHeaderLabels(["Market Regime", "Candidates"])
+        regime_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        regime_table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+        regime_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        regime_table.setRowCount(len(summary.regimes))
+        for row, regime in enumerate(summary.regimes):
+            regime_table.setItem(row, 0, QTableWidgetItem(regime.regime))
+            regime_table.setItem(row, 1, QTableWidgetItem(str(regime.count)))
+
+        splitter.addWidget(bucket_table)
+        splitter.addWidget(regime_table)
+        splitter.setSizes([620, 320])
+        layout.addWidget(splitter, 2)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        dialog.setStyleSheet(STYLESHEET)
+        dialog.exec()
+
 
 def format_news(candidate: Candidate) -> str:
     if not candidate.news:
@@ -770,6 +935,79 @@ def score_color(score: int) -> QColor:
     if score >= 50:
         return QColor("#735f24")
     return QColor("#6d3030")
+
+
+def chart_bar_color(state: DataViewState) -> QColor:
+    if state == DataViewState.HISTORICAL:
+        return QColor("#8f6bb5")
+    if state == DataViewState.STUDY:
+        return QColor("#5f86d9")
+    if state == DataViewState.STALE:
+        return QColor("#c24d4d")
+    return QColor("#2f9d68")
+
+
+def chart_badge_color(state: DataViewState, is_warning: bool = False) -> QColor:
+    if state == DataViewState.HISTORICAL:
+        return QColor("#f4ecff")
+    if state == DataViewState.STUDY:
+        return QColor("#eaf1ff")
+    if state == DataViewState.STALE:
+        return QColor("#ffe1e1")
+    if is_warning:
+        return QColor("#fff0bd")
+    return QColor("#d8ffe8")
+
+
+def build_study_chart(summary: StudySummary, style: DataViewStyle) -> QChartView:
+    chart = QChart()
+    chart.legend().hide()
+    chart.setBackgroundVisible(False)
+    chart.setTitle(f"{style.chart_prefix}Score Bucket Coverage")
+    chart.setTitleBrush(QBrush(QColor("#e7edf4")))
+
+    score_set = QBarSet("Candidates")
+    score_set.setColor(chart_bar_color(DataViewState.STUDY))
+    for bucket in summary.score_buckets:
+        score_set.append(bucket.count)
+
+    series = QBarSeries()
+    series.append(score_set)
+    chart.addSeries(series)
+
+    category_axis = QBarCategoryAxis()
+    category_axis.append([bucket.label for bucket in summary.score_buckets])
+    category_axis.setLabelsColor(QColor("#cbd8e6"))
+
+    max_count = max([bucket.count for bucket in summary.score_buckets] or [1])
+    value_axis = QValueAxis()
+    value_axis.setRange(0, max(1, max_count))
+    value_axis.setTickCount(min(6, max(2, max_count + 1)))
+    value_axis.setLabelsColor(QColor("#cbd8e6"))
+
+    chart.addAxis(category_axis, Qt.AlignmentFlag.AlignBottom)
+    chart.addAxis(value_axis, Qt.AlignmentFlag.AlignLeft)
+    series.attachAxis(category_axis)
+    series.attachAxis(value_axis)
+    chart.setPlotAreaBackgroundVisible(True)
+    chart.setPlotAreaBackgroundBrush(QBrush(QColor("#0f1720")))
+
+    watermark = QGraphicsSimpleTextItem(chart)
+    watermark.setText("SIMULATED")
+    watermark.setBrush(QBrush(chart_badge_color(DataViewState.STUDY)))
+    watermark.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+    watermark.setOpacity(0.28)
+
+    def position_watermark() -> None:
+        area = chart.plotArea()
+        watermark.setPos(area.left() + 14 if not area.isNull() else 24, area.top() + 10 if not area.isNull() else 44)
+
+    chart.plotAreaChanged.connect(position_watermark)
+    position_watermark()
+
+    view = QChartView(chart)
+    view.setMinimumHeight(280)
+    return view
 
 
 STYLESHEET = """
@@ -884,6 +1122,13 @@ QHeaderView::section {
     padding: 8px;
 }
 #detailStateLabel {
+    background: #1b2a3a;
+    border-radius: 4px;
+    color: #cbd8e6;
+    font-weight: 700;
+    padding: 5px;
+}
+#chartStateLabel {
     background: #1b2a3a;
     border-radius: 4px;
     color: #cbd8e6;
