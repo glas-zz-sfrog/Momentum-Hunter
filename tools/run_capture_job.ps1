@@ -14,6 +14,7 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $timestamp = Get-Date -Format "yyyy-MM-dd-HHmmss"
 $logPath = Join-Path $logDir "capture-$Session-$timestamp.log"
 $jobPath = Join-Path $ProjectRoot "tools\capture_job.py"
+$outcomePath = Join-Path $ProjectRoot "tools\update_outcomes.py"
 
 try {
     "Momentum Hunter capture started: $(Get-Date -Format o)" | Tee-Object -FilePath $logPath
@@ -21,6 +22,11 @@ try {
     "ProjectRoot: $ProjectRoot" | Tee-Object -FilePath $logPath -Append
     & $PythonExe $jobPath --session $Session 2>&1 | Tee-Object -FilePath $logPath -Append
     $exitCode = $LASTEXITCODE
+    if ($exitCode -eq 0) {
+        "Updating outcomes: $(Get-Date -Format o)" | Tee-Object -FilePath $logPath -Append
+        & $PythonExe $outcomePath 2>&1 | Tee-Object -FilePath $logPath -Append
+        $exitCode = $LASTEXITCODE
+    }
     "ExitCode: $exitCode" | Tee-Object -FilePath $logPath -Append
     exit $exitCode
 }

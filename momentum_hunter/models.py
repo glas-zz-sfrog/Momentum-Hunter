@@ -63,6 +63,8 @@ class Candidate:
     news: list[NewsItem] = field(default_factory=list)
     score: int = 0
     score_reasons: list[str] = field(default_factory=list)
+    score_profile: str = ""
+    score_regime: str = ""
     user_notes: str = ""
     saved_at: datetime | None = None
 

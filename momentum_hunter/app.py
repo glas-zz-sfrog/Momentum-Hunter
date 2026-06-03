@@ -51,7 +51,7 @@ from momentum_hunter.storage import (
     save_watchlist,
     save_watchlist_report,
 )
-from momentum_hunter.study import StudySummary, build_capture_study
+from momentum_hunter.study import FILTER_ALL, FILTER_REVIEWED, FILTER_SELECTED, StudySummary, build_capture_study
 from momentum_hunter.time_utils import format_central, next_market_session, now_central
 from momentum_hunter.ui.data_view_state import DataViewState, DataViewStyle, get_data_view_style
 
@@ -320,7 +320,8 @@ class MomentumHunterWindow(QMainWindow):
             f"Change >= {criteria.min_percent_change:.1f}% | "
             f"Market Cap >= {format_market_cap(criteria.min_market_cap)} | "
             f"Price >= ${criteria.min_price:,.2f} | "
-            f"Relative Volume >= {criteria.min_relative_volume:.2f}x"
+            f"Relative Volume >= {criteria.min_relative_volume:.2f}x | "
+            "Scoring: regime-aware-v1"
         )
 
     def run_scan(self) -> None:
@@ -345,6 +346,8 @@ class MomentumHunterWindow(QMainWindow):
             QApplication.restoreOverrideCursor()
 
     def _scan_current_candidates(self) -> None:
+        if self.market_regime.regime == MarketRegime.UNKNOWN:
+            self.refresh_market_regime(show_status=False)
         criteria = SCANNER_PRESETS[self.scanner_combo.currentText()]
         provider = provider_from_name(self.provider_combo.currentText())
         self._update_status(f"Running {criteria.name} with {provider.name} provider...")
@@ -352,7 +355,7 @@ class MomentumHunterWindow(QMainWindow):
         for candidate in candidates:
             if not candidate.news:
                 candidate.news = provider.fetch_news(candidate.ticker)
-        self.candidates = score_candidates(candidates)
+        self.candidates = score_candidates(candidates, regime=self.market_regime.regime)
 
     def _populate_table(self) -> None:
         read_only = self._is_read_only_view()
@@ -860,42 +863,83 @@ class MomentumHunterWindow(QMainWindow):
         banner.setWordWrap(True)
         layout.addWidget(banner)
 
-        stats = QLabel(
-            f"Captures: {summary.capture_count} | Candidates: {summary.candidate_count} | "
-            f"Selected: {summary.selected_count} | Reviewed: {summary.reviewed_count}"
-        )
+        filter_row = QWidget()
+        filter_layout = QHBoxLayout(filter_row)
+        filter_layout.setContentsMargins(0, 0, 0, 0)
+        filter_layout.addWidget(QLabel("Study Filter"))
+        filter_combo = QComboBox()
+        filter_combo.addItems([FILTER_ALL, FILTER_SELECTED, FILTER_REVIEWED])
+        filter_layout.addWidget(filter_combo)
+        filter_layout.addStretch(1)
+        layout.addWidget(filter_row)
+
+        stats = QLabel()
         stats.setObjectName("criteriaLabel")
         layout.addWidget(stats)
 
-        chart = build_study_chart(summary, style)
-        layout.addWidget(chart, 2)
+        chart_holder = QWidget()
+        chart_layout = QVBoxLayout(chart_holder)
+        chart_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(chart_holder, 2)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        bucket_table = QTableWidget(0, 4)
-        bucket_table.setHorizontalHeaderLabels(["Score Bucket", "Candidates", "Selected", "Reviewed"])
+        bucket_table = QTableWidget(0, 6)
+        bucket_table.setHorizontalHeaderLabels(
+            ["Score Bucket", "Candidates", "Selected", "Reviewed", "Next Avg", "5-Day Avg"]
+        )
         bucket_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         bucket_table.horizontalHeader().setStyleSheet(style.header_stylesheet)
         bucket_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        bucket_table.setRowCount(len(summary.score_buckets))
-        for row, bucket in enumerate(summary.score_buckets):
-            values = [bucket.label, str(bucket.count), str(bucket.selected_count), str(bucket.reviewed_count)]
-            for column, value in enumerate(values):
-                bucket_table.setItem(row, column, QTableWidgetItem(value))
 
         regime_table = QTableWidget(0, 2)
         regime_table.setHorizontalHeaderLabels(["Market Regime", "Candidates"])
         regime_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         regime_table.horizontalHeader().setStyleSheet(style.header_stylesheet)
         regime_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        regime_table.setRowCount(len(summary.regimes))
-        for row, regime in enumerate(summary.regimes):
-            regime_table.setItem(row, 0, QTableWidgetItem(regime.regime))
-            regime_table.setItem(row, 1, QTableWidgetItem(str(regime.count)))
 
         splitter.addWidget(bucket_table)
         splitter.addWidget(regime_table)
         splitter.setSizes([620, 320])
         layout.addWidget(splitter, 2)
+
+        def refresh_study_view(row_filter: str) -> None:
+            filtered = build_capture_study(row_filter=row_filter)
+            filtered_style = get_data_view_style(
+                DataViewState.STUDY,
+                captured_at=None,
+                study_run_id=filtered.run_id,
+                source_range=filtered.source_range,
+            )
+            banner.setText(filtered_style.banner_text)
+            stats.setText(study_stats_text(filtered))
+
+            while chart_layout.count():
+                item = chart_layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+            chart_layout.addWidget(build_study_chart(filtered, filtered_style))
+
+            bucket_table.setRowCount(len(filtered.score_buckets))
+            for row, bucket in enumerate(filtered.score_buckets):
+                values = [
+                    bucket.label,
+                    str(bucket.count),
+                    str(bucket.selected_count),
+                    str(bucket.reviewed_count),
+                    format_percent(bucket.avg_next_day_return_pct),
+                    format_percent(bucket.avg_five_day_return_pct),
+                ]
+                for column, value in enumerate(values):
+                    bucket_table.setItem(row, column, QTableWidgetItem(value))
+
+            regime_table.setRowCount(len(filtered.regimes))
+            for row, regime in enumerate(filtered.regimes):
+                regime_table.setItem(row, 0, QTableWidgetItem(regime.regime))
+                regime_table.setItem(row, 1, QTableWidgetItem(str(regime.count)))
+
+        filter_combo.currentTextChanged.connect(refresh_study_view)
+        refresh_study_view(FILTER_ALL)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
@@ -957,6 +1001,22 @@ def chart_badge_color(state: DataViewState, is_warning: bool = False) -> QColor:
     if is_warning:
         return QColor("#fff0bd")
     return QColor("#d8ffe8")
+
+
+def format_percent(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.2f}%"
+
+
+def study_stats_text(summary: StudySummary) -> str:
+    return (
+        f"Captures: {summary.capture_count} | Candidates: {summary.candidate_count} | "
+        f"Selected: {summary.selected_count} | Reviewed: {summary.reviewed_count} | "
+        f"Profiles: {', '.join(summary.scoring_profiles) or 'n/a'} | "
+        f"Outcome Rows: {summary.outcome_count} | Complete 5-Day Outcomes: {summary.complete_outcome_count} | "
+        f"Next-Day Avg: {format_percent(summary.avg_next_day_return_pct)} | "
+        f"5-Day Avg: {format_percent(summary.avg_five_day_return_pct)} | "
+        f"5-Day Win Rate: {format_percent(summary.five_day_win_rate_pct)}"
+    )
 
 
 def build_study_chart(summary: StudySummary, style: DataViewStyle) -> QChartView:

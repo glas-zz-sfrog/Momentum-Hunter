@@ -1,0 +1,83 @@
+{
+  "active_profile": "regime-aware-v1",
+  "profiles": {
+    "regime-aware-v1": {
+      "base_score": 35,
+      "market_cap": {
+        "large_threshold": 50000000000,
+        "large_points": 12,
+        "mid_threshold": 5000000000,
+        "mid_points": 9,
+        "small_threshold": 1000000000,
+        "small_penalty": -25
+      },
+      "volume": {
+        "high_threshold": 25000000,
+        "high_points": 12,
+        "medium_threshold": 3000000,
+        "medium_points": 8
+      },
+      "relative_volume": {
+        "high_threshold": 2.0,
+        "high_points": 10,
+        "medium_threshold": 1.2,
+        "medium_points": 6
+      },
+      "price_momentum": {
+        "high_threshold": 8.0,
+        "high_points": 8,
+        "medium_threshold": 3.0,
+        "medium_points": 5
+      },
+      "low_price": {
+        "threshold": 5.0,
+        "penalty": -20
+      },
+      "positive_catalysts": {
+        "earnings": 12,
+        "beat": 10,
+        "guidance": 10,
+        "raise": 8,
+        "upgrade": 10,
+        "price target": 7,
+        "ai": 10,
+        "server": 6,
+        "partnership": 6,
+        "fda": 6
+      },
+      "risk_terms": {
+        "offering": -12,
+        "dilution": -10,
+        "investigation": -10,
+        "bankruptcy": -20,
+        "promotion": -8
+      },
+      "regime_adjustments": {
+        "bull": {
+          "price_momentum_multiplier": 1.15,
+          "positive_catalyst_multiplier": 1.10,
+          "relative_volume_multiplier": 1.00,
+          "risk_term_multiplier": 1.00
+        },
+        "neutral": {
+          "price_momentum_multiplier": 1.00,
+          "positive_catalyst_multiplier": 1.00,
+          "relative_volume_multiplier": 1.00,
+          "risk_term_multiplier": 1.00
+        },
+        "bear": {
+          "price_momentum_multiplier": 0.80,
+          "positive_catalyst_multiplier": 0.85,
+          "relative_volume_multiplier": 1.10,
+          "risk_term_multiplier": 1.25
+        },
+        "unknown": {
+          "price_momentum_multiplier": 1.00,
+          "positive_catalyst_multiplier": 1.00,
+          "relative_volume_multiplier": 1.00,
+          "risk_term_multiplier": 1.00
+        }
+      }
+    }
+  }
+}

@@ -4,7 +4,13 @@ import csv
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from momentum_hunter.outcomes import OUTCOMES_CSV
 from momentum_hunter.storage import ANALYSIS_CSV
+
+
+FILTER_ALL = "all candidates"
+FILTER_SELECTED = "selected only"
+FILTER_REVIEWED = "reviewed only"
 
 
 @dataclass(frozen=True)
@@ -13,6 +19,8 @@ class ScoreBucketSummary:
     count: int = 0
     selected_count: int = 0
     reviewed_count: int = 0
+    avg_next_day_return_pct: float | None = None
+    avg_five_day_return_pct: float | None = None
 
 
 @dataclass(frozen=True)
@@ -29,6 +37,13 @@ class StudySummary:
     candidate_count: int
     selected_count: int
     reviewed_count: int
+    scoring_profiles: list[str] = field(default_factory=list)
+    outcome_count: int = 0
+    complete_outcome_count: int = 0
+    avg_next_day_return_pct: float | None = None
+    avg_five_day_return_pct: float | None = None
+    next_day_win_rate_pct: float | None = None
+    five_day_win_rate_pct: float | None = None
     score_buckets: list[ScoreBucketSummary] = field(default_factory=list)
     regimes: list[RegimeSummary] = field(default_factory=list)
     has_data: bool = False
@@ -42,17 +57,19 @@ BUCKETS = [
 ]
 
 
-def build_capture_study(path: Path = ANALYSIS_CSV) -> StudySummary:
-    if not path.exists():
+def build_capture_study(path: Path = ANALYSIS_CSV, row_filter: str = FILTER_ALL) -> StudySummary:
+    outcome_path = OUTCOMES_CSV if OUTCOMES_CSV.exists() else path
+    if not outcome_path.exists():
         return empty_study("No analysis capture file exists yet.")
-    with path.open(newline="", encoding="utf-8") as file:
+    with outcome_path.open(newline="", encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
     if not rows:
         return empty_study("No captured candidate rows exist yet.")
-    return summarize_capture_rows(rows)
+    return summarize_capture_rows(rows, row_filter=row_filter)
 
 
-def summarize_capture_rows(rows: list[dict]) -> StudySummary:
+def summarize_capture_rows(rows: list[dict], row_filter: str = FILTER_ALL) -> StudySummary:
+    rows = filter_rows(rows, row_filter)
     dates = sorted({row.get("capture_date", "") for row in rows if row.get("capture_date")})
     captures = {
         (row.get("capture_date", ""), row.get("capture_time", ""), row.get("session", ""))
@@ -60,6 +77,13 @@ def summarize_capture_rows(rows: list[dict]) -> StudySummary:
     }
     bucket_counts = {label: {"count": 0, "selected": 0, "reviewed": 0} for label, _, _ in BUCKETS}
     regime_counts: dict[str, int] = {}
+    scoring_profiles = sorted(
+        {
+            row.get("score_profile", "")
+            for row in rows
+            if row.get("score_profile")
+        }
+    )
     selected_count = 0
     reviewed_count = 0
 
@@ -70,6 +94,11 @@ def summarize_capture_rows(rows: list[dict]) -> StudySummary:
         reviewed = parse_bool(row.get("reviewed", "false"))
         regime = (row.get("market_regime") or "unknown").lower()
 
+        next_day_return = parse_optional_float(row.get("next_day_return_pct", ""))
+        five_day_return = parse_optional_float(row.get("five_day_return_pct", ""))
+
+        bucket_counts[bucket].setdefault("next_returns", [])
+        bucket_counts[bucket].setdefault("five_returns", [])
         bucket_counts[bucket]["count"] += 1
         if selected:
             bucket_counts[bucket]["selected"] += 1
@@ -78,22 +107,46 @@ def summarize_capture_rows(rows: list[dict]) -> StudySummary:
             bucket_counts[bucket]["reviewed"] += 1
             reviewed_count += 1
         regime_counts[regime] = regime_counts.get(regime, 0) + 1
+        if next_day_return is not None:
+            bucket_counts[bucket]["next_returns"].append(next_day_return)
+        if five_day_return is not None:
+            bucket_counts[bucket]["five_returns"].append(five_day_return)
+
+    all_next_returns = [
+        value
+        for values in bucket_counts.values()
+        for value in values.get("next_returns", [])
+    ]
+    all_five_returns = [
+        value
+        for values in bucket_counts.values()
+        for value in values.get("five_returns", [])
+    ]
 
     source_range = f"{dates[0]} to {dates[-1]}" if dates else "unknown"
     run_id = f"{dates[-1] if dates else 'unknown'}_study_v1"
     return StudySummary(
         run_id=run_id,
-        source_range=source_range,
+        source_range=f"{source_range} | Filter: {row_filter}",
         capture_count=len(captures),
         candidate_count=len(rows),
         selected_count=selected_count,
         reviewed_count=reviewed_count,
+        scoring_profiles=scoring_profiles,
+        outcome_count=len(all_next_returns),
+        complete_outcome_count=len(all_five_returns),
+        avg_next_day_return_pct=average(all_next_returns),
+        avg_five_day_return_pct=average(all_five_returns),
+        next_day_win_rate_pct=win_rate(all_next_returns),
+        five_day_win_rate_pct=win_rate(all_five_returns),
         score_buckets=[
             ScoreBucketSummary(
                 label=label,
                 count=values["count"],
                 selected_count=values["selected"],
                 reviewed_count=values["reviewed"],
+                avg_next_day_return_pct=average(values.get("next_returns", [])),
+                avg_five_day_return_pct=average(values.get("five_returns", [])),
             )
             for label, values in bucket_counts.items()
         ],
@@ -113,10 +166,20 @@ def empty_study(reason: str) -> StudySummary:
         candidate_count=0,
         selected_count=0,
         reviewed_count=0,
+        outcome_count=0,
+        complete_outcome_count=0,
         score_buckets=[ScoreBucketSummary(label=label) for label, _, _ in BUCKETS],
         regimes=[],
         has_data=False,
     )
+
+
+def filter_rows(rows: list[dict], row_filter: str) -> list[dict]:
+    if row_filter == FILTER_SELECTED:
+        return [row for row in rows if parse_bool(row.get("selected", "false"))]
+    if row_filter == FILTER_REVIEWED:
+        return [row for row in rows if parse_bool(row.get("reviewed", "false"))]
+    return rows
 
 
 def bucket_for_score(score: int) -> str:
@@ -135,3 +198,24 @@ def parse_int(value: str) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return 0
+
+
+def parse_optional_float(value: str) -> float | None:
+    try:
+        if value is None or str(value).strip() == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def average(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return round(sum(values) / len(values), 4)
+
+
+def win_rate(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return round((sum(1 for value in values if value > 0) / len(values)) * 100, 2)

@@ -80,6 +80,10 @@ def save_daily_capture(
         "mode": mode.value,
         "provider": provider,
         "scanner": asdict(criteria),
+        "scoring": {
+            "profile": next((candidate.score_profile for candidate in candidates if candidate.score_profile), ""),
+            "regime": market_regime.regime.value,
+        },
         "market": {
             "regime": market_regime.regime.value,
             "symbol": market_regime.symbol,
@@ -117,6 +121,7 @@ def capture_to_markdown(payload: dict) -> str:
         f"- Mode: {payload['mode']}",
         f"- Provider: {payload['provider']}",
         f"- Scanner: {scanner['name']}",
+        f"- Scoring Profile: {payload.get('scoring', {}).get('profile') or 'unknown'}",
         f"- Market Regime: {market['regime'].title()} ({market['symbol']})",
         f"- Regime Reason: {market['reason']}",
         "",
@@ -158,6 +163,8 @@ def append_analysis_rows(payload: dict) -> None:
         "ticker",
         "company",
         "score",
+        "score_profile",
+        "score_regime",
         "score_reasons",
         "price",
         "percent_change",
@@ -168,6 +175,7 @@ def append_analysis_rows(payload: dict) -> None:
         "industry",
         "user_notes",
     ]
+    ensure_csv_fieldnames(ANALYSIS_CSV, fieldnames)
     exists = ANALYSIS_CSV.exists()
     with ANALYSIS_CSV.open("a", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames)
@@ -194,6 +202,8 @@ def append_analysis_rows(payload: dict) -> None:
                     "ticker": candidate["ticker"],
                     "company": candidate["company"],
                     "score": candidate["score"],
+                    "score_profile": candidate.get("score_profile", ""),
+                    "score_regime": candidate.get("score_regime", ""),
                     "score_reasons": "; ".join(candidate.get("score_reasons") or []),
                     "price": candidate["price"],
                     "percent_change": candidate["percent_change"],
@@ -205,6 +215,22 @@ def append_analysis_rows(payload: dict) -> None:
                     "user_notes": candidate.get("user_notes", ""),
                 }
             )
+
+
+def ensure_csv_fieldnames(path: Path, fieldnames: list[str]) -> None:
+    if not path.exists():
+        return
+    with path.open(newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        existing_fieldnames = reader.fieldnames or []
+        if existing_fieldnames == fieldnames:
+            return
+        rows = list(reader)
+    with path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field, "") for field in fieldnames})
 
 
 def save_watchlist_report(candidates: list[Candidate], for_date: datetime | None = None) -> Path:
@@ -412,6 +438,8 @@ def candidate_from_dict(payload: dict) -> Candidate:
         news=news,
         score=payload.get("score", 0),
         score_reasons=payload.get("score_reasons", []),
+        score_profile=payload.get("score_profile", ""),
+        score_regime=payload.get("score_regime", ""),
         user_notes=payload.get("user_notes", ""),
         saved_at=datetime.fromisoformat(saved_at) if saved_at else None,
     )

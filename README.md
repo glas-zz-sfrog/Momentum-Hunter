@@ -72,6 +72,22 @@ The analysis table is stored as:
 MomentumHunterData\data\analysis-captures.csv
 ```
 
+Forward outcome tracking is stored as:
+
+```text
+MomentumHunterData\data\analysis-outcomes.csv
+```
+
+Outcome fields include:
+
+- `next_day_return_pct`
+- `five_day_return_pct`
+- `max_gain_pct`
+- `max_drawdown_pct`
+- `outcome_status`
+
+Rows remain `pending_next_day` or `pending_five_day` until enough future daily price bars exist. Scheduled capture jobs run the outcome updater after each successful capture.
+
 ## Daily Capture Workflow
 
 1. Run the scanner during the morning or evening review window.
@@ -127,6 +143,29 @@ Current thresholds:
 - Stale data: more than `20` minutes old
 
 Momentum Hunter uses visible banners, timestamps, age text, read-only state, and table-header styling so current, stale, historical, and study data cannot be quietly confused.
+
+## Scoring Profiles
+
+Regime-aware scoring settings live here:
+
+```text
+config\scoring_profiles.json
+```
+
+The active profile is currently:
+
+```text
+regime-aware-v1
+```
+
+This profile preserves the original scoring structure, then applies small market-regime overlays:
+
+- `bull`: slightly increases price-momentum and positive-catalyst points
+- `neutral`: uses baseline weights
+- `bear`: reduces price-momentum/catalyst points and increases risk-term penalties
+- `unknown`: uses baseline weights
+
+Each captured candidate records `score_profile` and `score_regime` for later study.
 
 ## Administrator Actions
 
