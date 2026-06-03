@@ -69,6 +69,36 @@ class GuiStateTests(unittest.TestCase):
         self.assertFalse(self.window.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable)
         self.assertIn("read-only", self.window.status_label.text())
 
+    def test_run_scan_replaces_stale_candidate_detail_panel(self) -> None:
+        self.window.candidates = [candidate("OLD", score=72)]
+        self.window.display_capture_time = now_central() - timedelta(seconds=30)
+        self.window._apply_data_view_state()
+        self.window._populate_table()
+        self.assertEqual("OLD", self.window.ticker_label.text())
+
+        with patch.object(self.window, "_scan_current_candidates", lambda: setattr(self.window, "candidates", [candidate("NEW", score=94)])):
+            self.window.run_scan()
+
+        self.assertEqual("NEW", self.window.ticker_label.text())
+        self.assertEqual("Score: 94", self.window.score_label.text())
+        self.assertEqual("NEW", self.window.table.item(0, 2).text())
+        self.assertNotEqual("OLD", self.window.selected_ticker)
+
+    def test_empty_scan_clears_candidate_detail_panel(self) -> None:
+        self.window.candidates = [candidate("OLD", score=72)]
+        self.window.display_capture_time = now_central() - timedelta(seconds=30)
+        self.window._apply_data_view_state()
+        self.window._populate_table()
+        self.assertEqual("OLD", self.window.ticker_label.text())
+
+        with patch.object(self.window, "_scan_current_candidates", lambda: setattr(self.window, "candidates", [])):
+            self.window.run_scan()
+
+        self.assertEqual("No candidate selected", self.window.ticker_label.text())
+        self.assertEqual("", self.window.score_label.text())
+        self.assertEqual("", self.window.news_text.toPlainText())
+        self.assertIsNone(self.window.selected_ticker)
+
     def test_historical_capture_is_read_only_and_restores_current_dashboard(self) -> None:
         self.window.live_candidates = [candidate("CURR", score=88)]
         self.window.live_saved_candidates = {}

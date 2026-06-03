@@ -347,6 +347,7 @@ class MomentumHunterWindow(QMainWindow):
     def run_scan(self) -> None:
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
+            self._clear_candidate_details("Scanning fresh candidates...")
             self._scan_current_candidates()
             self.current_capture_time = now_central()
             self.display_capture_time = self.current_capture_time
@@ -379,6 +380,8 @@ class MomentumHunterWindow(QMainWindow):
 
     def _populate_table(self) -> None:
         read_only = self._is_read_only_view()
+        self.table.clearSelection()
+        self.selected_ticker = None
         self.table.setRowCount(len(self.candidates))
         for row, candidate in enumerate(self.candidates):
             values = [
@@ -412,6 +415,9 @@ class MomentumHunterWindow(QMainWindow):
                 self.table.setItem(row, column, item)
         if self.candidates:
             self.table.selectRow(0)
+            self._selection_changed()
+        else:
+            self._clear_candidate_details()
         self._update_score_chart()
 
     def _selection_changed(self) -> None:
@@ -419,6 +425,9 @@ class MomentumHunterWindow(QMainWindow):
         if not rows:
             return
         candidate = self.candidates[rows[0].row()]
+        self._show_candidate_details(candidate)
+
+    def _show_candidate_details(self, candidate: Candidate) -> None:
         self.selected_ticker = candidate.ticker
         self.ticker_label.setText(candidate.ticker)
         self.company_label.setText(candidate.company)
@@ -432,6 +441,19 @@ class MomentumHunterWindow(QMainWindow):
         if self.data_view_state == DataViewState.CURRENT:
             self.live_reviewed_tickers.add(candidate.ticker)
         self._refresh_row_states()
+
+    def _clear_candidate_details(self, message: str = "No candidate selected") -> None:
+        self.selected_ticker = None
+        self.ticker_label.setText(message)
+        self.company_label.setText("")
+        self.score_label.setText("")
+        self.reasons_label.setText("")
+        self.notes_edit.blockSignals(True)
+        self.notes_edit.clear()
+        self.notes_edit.blockSignals(False)
+        self.news_text.clear()
+        self.entry_trigger.clear()
+        self.stop_level.clear()
 
     def _notes_changed(self) -> None:
         candidate = self._selected_candidate()
