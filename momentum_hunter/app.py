@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QPlainTextEdit,
+    QScrollArea,
     QSplitter,
     QAbstractScrollArea,
     QTableWidget,
@@ -117,7 +118,11 @@ class MomentumHunterWindow(QMainWindow):
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_candidate_panel())
-        splitter.addWidget(self._build_research_panel())
+        research_scroll = QScrollArea()
+        research_scroll.setWidgetResizable(True)
+        research_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        research_scroll.setWidget(self._build_research_panel())
+        splitter.addWidget(research_scroll)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         splitter.setSizes([760, 520])
@@ -155,10 +160,10 @@ class MomentumHunterWindow(QMainWindow):
         self.clear_button = QPushButton("Clear Marks")
         self.clear_button.clicked.connect(self.clear_row_marks)
 
-        self.watchlist_button = QPushButton("Generate Watchlist Report")
+        self.watchlist_button = QPushButton("Watchlist Report")
         self.watchlist_button.clicked.connect(self.save_tomorrow_watchlist)
 
-        self.view_button = QPushButton("View Research List")
+        self.view_button = QPushButton("Research List")
         self.view_button.clicked.connect(self.view_research_list)
 
         self.regime_combo = QComboBox()
@@ -172,10 +177,10 @@ class MomentumHunterWindow(QMainWindow):
         self.capture_date_combo.currentTextChanged.connect(self._capture_date_changed)
 
         self.capture_session_combo = QComboBox()
-        self.open_capture_button = QPushButton("Open Capture")
+        self.open_capture_button = QPushButton("Open Snapshot")
         self.open_capture_button.clicked.connect(self.open_selected_capture)
 
-        self.current_button = QPushButton("Current Dashboard")
+        self.current_button = QPushButton("Current")
         self.current_button.clicked.connect(self.return_to_current_dashboard)
 
         self.study_button = QPushButton("Study Engine")
@@ -237,7 +242,7 @@ class MomentumHunterWindow(QMainWindow):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(6)
 
         identity = QGroupBox("Candidate")
         identity_layout = QGridLayout(identity)
@@ -269,7 +274,7 @@ class MomentumHunterWindow(QMainWindow):
         self.chart_watermark.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
         self.chart_watermark.setOpacity(0.28)
         self.score_chart_view = QChartView(self.score_chart)
-        self.score_chart_view.setMinimumHeight(190)
+        self.score_chart_view.setMinimumHeight(180)
         chart_layout.addWidget(self.chart_state_label)
         chart_layout.addWidget(self.score_chart_view)
         layout.addWidget(chart_box, 1)
@@ -278,6 +283,7 @@ class MomentumHunterWindow(QMainWindow):
         news_layout = QVBoxLayout(news_box)
         self.news_text = QTextBrowser()
         self.news_text.setOpenExternalLinks(True)
+        self.news_text.setMinimumHeight(88)
         self.news_text.setPlaceholderText("Select a candidate to review headlines.")
         news_layout.addWidget(self.news_text)
         layout.addWidget(news_box, 2)
@@ -285,6 +291,7 @@ class MomentumHunterWindow(QMainWindow):
         notes_box = QGroupBox("Candidate Notes")
         notes_layout = QVBoxLayout(notes_box)
         self.notes_edit = QPlainTextEdit()
+        self.notes_edit.setMaximumHeight(72)
         self.notes_edit.setPlaceholderText("Watch breakout over 105; gap-and-go candidate; earnings continuation play.")
         self.notes_edit.textChanged.connect(self._notes_changed)
         notes_layout.addWidget(self.notes_edit)
