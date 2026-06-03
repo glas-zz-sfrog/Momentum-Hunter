@@ -72,6 +72,40 @@ class StudySummaryTests(unittest.TestCase):
         self.assertEqual(1, summary.selected_count)
         self.assertIn("selected only", summary.source_range)
 
+    def test_summarizes_outcome_returns(self) -> None:
+        summary = summarize_capture_rows(
+            [
+                {
+                    "capture_date": "2026-06-01",
+                    "capture_time": "2026-06-01T07:00:00-05:00",
+                    "session": "morning",
+                    "market_regime": "bull",
+                    "score": "90",
+                    "selected": "false",
+                    "reviewed": "false",
+                    "next_day_return_pct": "2.0",
+                    "five_day_return_pct": "4.0",
+                },
+                {
+                    "capture_date": "2026-06-01",
+                    "capture_time": "2026-06-01T07:00:00-05:00",
+                    "session": "morning",
+                    "market_regime": "bull",
+                    "score": "88",
+                    "selected": "false",
+                    "reviewed": "false",
+                    "next_day_return_pct": "-1.0",
+                    "five_day_return_pct": "2.0",
+                },
+            ]
+        )
+
+        self.assertEqual(2, summary.outcome_count)
+        self.assertEqual(2, summary.complete_outcome_count)
+        self.assertEqual(0.5, summary.avg_next_day_return_pct)
+        self.assertEqual(3.0, summary.avg_five_day_return_pct)
+        self.assertEqual(100.0, summary.five_day_win_rate_pct)
+
 
 if __name__ == "__main__":
     unittest.main()

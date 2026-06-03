@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QAbstractScrollArea,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -877,10 +878,8 @@ class MomentumHunterWindow(QMainWindow):
         stats.setObjectName("criteriaLabel")
         layout.addWidget(stats)
 
-        chart_holder = QWidget()
-        chart_layout = QVBoxLayout(chart_holder)
-        chart_layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(chart_holder, 2)
+        chart_tabs = QTabWidget()
+        layout.addWidget(chart_tabs, 2)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         bucket_table = QTableWidget(0, 6)
@@ -913,12 +912,9 @@ class MomentumHunterWindow(QMainWindow):
             banner.setText(filtered_style.banner_text)
             stats.setText(study_stats_text(filtered))
 
-            while chart_layout.count():
-                item = chart_layout.takeAt(0)
-                widget = item.widget()
-                if widget is not None:
-                    widget.deleteLater()
-            chart_layout.addWidget(build_study_chart(filtered, filtered_style))
+            chart_tabs.clear()
+            chart_tabs.addTab(build_study_chart(filtered, filtered_style), "Coverage")
+            chart_tabs.addTab(build_outcome_chart(filtered, filtered_style), "Outcomes")
 
             bucket_table.setRowCount(len(filtered.score_buckets))
             for row, bucket in enumerate(filtered.score_buckets):
@@ -1068,6 +1064,76 @@ def build_study_chart(summary: StudySummary, style: DataViewStyle) -> QChartView
     view = QChartView(chart)
     view.setMinimumHeight(280)
     return view
+
+
+def build_outcome_chart(summary: StudySummary, style: DataViewStyle) -> QChartView:
+    chart = QChart()
+    chart.legend().hide()
+    chart.setBackgroundVisible(False)
+    chart.setTitleBrush(QBrush(QColor("#e7edf4")))
+    chart.setPlotAreaBackgroundVisible(True)
+    chart.setPlotAreaBackgroundBrush(QBrush(QColor("#0f1720")))
+
+    completed = [bucket for bucket in summary.score_buckets if bucket.avg_five_day_return_pct is not None]
+    if not completed:
+        chart.setTitle(f"{style.chart_prefix}5-Day Outcomes Pending")
+        add_chart_watermark(chart, "PENDING OUTCOMES", QColor("#fff0bd"), opacity=0.32)
+        view = QChartView(chart)
+        view.setMinimumHeight(280)
+        return view
+
+    chart.setTitle(f"{style.chart_prefix}5-Day Avg Return by Score Bucket")
+
+    return_set = QBarSet("5-Day Avg")
+    return_set.setColor(QColor("#5f86d9"))
+    values = []
+    for bucket in summary.score_buckets:
+        value = bucket.avg_five_day_return_pct if bucket.avg_five_day_return_pct is not None else 0.0
+        values.append(value)
+        return_set.append(value)
+
+    series = QBarSeries()
+    series.append(return_set)
+    chart.addSeries(series)
+
+    category_axis = QBarCategoryAxis()
+    category_axis.append([bucket.label for bucket in summary.score_buckets])
+    category_axis.setLabelsColor(QColor("#cbd8e6"))
+
+    lowest = min(values)
+    highest = max(values)
+    padding = max(1.0, (highest - lowest) * 0.2)
+    value_axis = QValueAxis()
+    value_axis.setRange(min(0.0, lowest - padding), max(1.0, highest + padding))
+    value_axis.setTickCount(6)
+    value_axis.setLabelsColor(QColor("#cbd8e6"))
+    value_axis.setLabelFormat("%.2f%%")
+
+    chart.addAxis(category_axis, Qt.AlignmentFlag.AlignBottom)
+    chart.addAxis(value_axis, Qt.AlignmentFlag.AlignLeft)
+    series.attachAxis(category_axis)
+    series.attachAxis(value_axis)
+    add_chart_watermark(chart, "SIMULATED", chart_badge_color(DataViewState.STUDY))
+
+    view = QChartView(chart)
+    view.setMinimumHeight(280)
+    return view
+
+
+def add_chart_watermark(chart: QChart, text: str, color: QColor, opacity: float = 0.28) -> QGraphicsSimpleTextItem:
+    watermark = QGraphicsSimpleTextItem(chart)
+    watermark.setText(text)
+    watermark.setBrush(QBrush(color))
+    watermark.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+    watermark.setOpacity(opacity)
+
+    def position_watermark() -> None:
+        area = chart.plotArea()
+        watermark.setPos(area.left() + 14 if not area.isNull() else 24, area.top() + 10 if not area.isNull() else 44)
+
+    chart.plotAreaChanged.connect(position_watermark)
+    position_watermark()
+    return watermark
 
 
 STYLESHEET = """
