@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
@@ -49,6 +50,7 @@ from momentum_hunter.storage import (
     save_watchlist_report,
 )
 from momentum_hunter.time_utils import format_central, next_market_session, now_central
+from momentum_hunter.ui.data_view_state import DataViewState, DataViewStyle, get_data_view_style
 
 
 class MomentumHunterWindow(QMainWindow):
@@ -58,9 +60,16 @@ class MomentumHunterWindow(QMainWindow):
         self.candidates: list[Candidate] = []
         self.saved_candidates: dict[str, Candidate] = {}
         self.reviewed_tickers: set[str] = set()
+        self.live_candidates: list[Candidate] = []
+        self.live_saved_candidates: dict[str, Candidate] = {}
+        self.live_reviewed_tickers: set[str] = set()
         self.selected_ticker: str | None = None
         self.last_snapshot_key: str = ""
-        self.is_historical_view = False
+        self.data_view_state = DataViewState.CURRENT
+        self.current_capture_time: datetime | None = None
+        self.display_capture_time: datetime | None = None
+        self.display_session_label = ""
+        self.current_view_style: DataViewStyle | None = None
         self.market_regime = MarketRegimeSnapshot(
             regime=MarketRegime.UNKNOWN,
             symbol="SPY",
@@ -75,7 +84,7 @@ class MomentumHunterWindow(QMainWindow):
         self._ensure_windows_startup()
         self._load_capture_history()
         self._start_snapshot_timer()
-        self._set_current_view()
+        self._apply_data_view_state()
         self._update_status("Ready. Human review required before any trading decision.")
 
     def _build_ui(self) -> None:
@@ -212,16 +221,19 @@ class MomentumHunterWindow(QMainWindow):
 
         identity = QGroupBox("Candidate")
         identity_layout = QGridLayout(identity)
+        self.detail_state_label = QLabel("LIVE REVIEW CANDIDATE")
+        self.detail_state_label.setObjectName("detailStateLabel")
         self.ticker_label = QLabel("No candidate selected")
         self.ticker_label.setObjectName("tickerLabel")
         self.company_label = QLabel("")
         self.score_label = QLabel("")
         self.reasons_label = QLabel("")
         self.reasons_label.setWordWrap(True)
-        identity_layout.addWidget(self.ticker_label, 0, 0)
-        identity_layout.addWidget(self.score_label, 0, 1)
-        identity_layout.addWidget(self.company_label, 1, 0, 1, 2)
-        identity_layout.addWidget(self.reasons_label, 2, 0, 1, 2)
+        identity_layout.addWidget(self.detail_state_label, 0, 0, 1, 2)
+        identity_layout.addWidget(self.ticker_label, 1, 0)
+        identity_layout.addWidget(self.score_label, 1, 1)
+        identity_layout.addWidget(self.company_label, 2, 0, 1, 2)
+        identity_layout.addWidget(self.reasons_label, 3, 0, 1, 2)
         layout.addWidget(identity)
 
         news_box = QGroupBox("News & Catalysts")
@@ -289,8 +301,15 @@ class MomentumHunterWindow(QMainWindow):
     def run_scan(self) -> None:
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            self._set_current_view()
             self._scan_current_candidates()
+            self.current_capture_time = now_central()
+            self.display_capture_time = self.current_capture_time
+            self.display_session_label = "live"
+            self.data_view_state = DataViewState.CURRENT
+            self.live_candidates = list(self.candidates)
+            self.live_saved_candidates = dict(self.saved_candidates)
+            self.live_reviewed_tickers = set(self.reviewed_tickers)
+            self._apply_data_view_state()
             self._populate_table()
             self._update_status(f"Scan complete at {format_central()}. {len(self.candidates)} candidates found.")
         except Exception as exc:
@@ -310,6 +329,7 @@ class MomentumHunterWindow(QMainWindow):
         self.candidates = score_candidates(candidates)
 
     def _populate_table(self) -> None:
+        read_only = self._is_read_only_view()
         self.table.setRowCount(len(self.candidates))
         for row, candidate in enumerate(self.candidates):
             values = [
@@ -328,7 +348,7 @@ class MomentumHunterWindow(QMainWindow):
                 item = QTableWidgetItem(value)
                 if column == 0:
                     flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
-                    if not self.is_historical_view:
+                    if not read_only:
                         flags |= Qt.ItemFlag.ItemIsUserCheckable
                     item.setFlags(flags)
                     item.setCheckState(
@@ -339,7 +359,7 @@ class MomentumHunterWindow(QMainWindow):
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     item.setBackground(score_color(candidate.score))
                 if candidate.ticker in self.reviewed_tickers:
-                    item.setBackground(QBrush(QColor("#20394a" if not self.is_historical_view else "#3a314d")))
+                    item.setBackground(QBrush(QColor("#20394a" if self.data_view_state == DataViewState.CURRENT else "#3a314d")))
                 self.table.setItem(row, column, item)
         if self.candidates:
             self.table.selectRow(0)
@@ -359,6 +379,8 @@ class MomentumHunterWindow(QMainWindow):
         self.notes_edit.blockSignals(False)
         self.news_text.setPlainText(format_news(candidate))
         self.reviewed_tickers.add(candidate.ticker)
+        if self.data_view_state == DataViewState.CURRENT:
+            self.live_reviewed_tickers.add(candidate.ticker)
         self._refresh_row_states()
 
     def _notes_changed(self) -> None:
@@ -367,8 +389,8 @@ class MomentumHunterWindow(QMainWindow):
             candidate.user_notes = self.notes_edit.toPlainText()
 
     def save_selected_candidates(self) -> None:
-        if self.is_historical_view:
-            self._update_status("Historical captures are read-only. Return to Current Dashboard before staging picks.")
+        if self._is_read_only_view():
+            self._update_status("This view is read-only. Run Scanner for fresh current data before staging picks.")
             return
         marked = self._marked_candidates()
         if not marked:
@@ -382,13 +404,15 @@ class MomentumHunterWindow(QMainWindow):
                 candidate.user_notes = self.notes_edit.toPlainText()
             candidate.saved_at = now_central()
             self.saved_candidates[candidate.ticker] = candidate
+            self.live_saved_candidates[candidate.ticker] = candidate
             self.reviewed_tickers.add(candidate.ticker)
+            self.live_reviewed_tickers.add(candidate.ticker)
         self._refresh_row_states()
         self._update_status(f"Added {len(marked)} candidate(s) to watchlist staging.")
 
     def clear_row_marks(self) -> None:
-        if self.is_historical_view:
-            self._update_status("Historical captures are read-only.")
+        if self._is_read_only_view():
+            self._update_status("This view is read-only.")
             return
         for row in range(self.table.rowCount()):
             item = self.table.item(row, 0)
@@ -397,8 +421,8 @@ class MomentumHunterWindow(QMainWindow):
         self._update_status("Cleared row marks.")
 
     def save_tomorrow_watchlist(self) -> None:
-        if self.is_historical_view:
-            self._update_status("Return to Current Dashboard before generating a watchlist.")
+        if self._is_read_only_view():
+            self._update_status("Run Scanner for fresh current data before generating a watchlist.")
             return
         if not self.saved_candidates:
             self._update_status("No saved candidates yet.")
@@ -484,6 +508,7 @@ class MomentumHunterWindow(QMainWindow):
         self.snapshot_timer = QTimer(self)
         self.snapshot_timer.setInterval(60_000)
         self.snapshot_timer.timeout.connect(self._auto_snapshot_check)
+        self.snapshot_timer.timeout.connect(self._refresh_current_freshness)
         self.snapshot_timer.start()
 
     def _auto_snapshot_check(self) -> None:
@@ -509,6 +534,14 @@ class MomentumHunterWindow(QMainWindow):
         if self.candidates or self.saved_candidates:
             self.capture_daily_snapshot(session=session, show_message=False)
             self.last_snapshot_key = key
+
+    def _refresh_current_freshness(self) -> None:
+        if self.data_view_state != DataViewState.CURRENT:
+            return
+        old_read_only = self._is_read_only_view()
+        self._apply_data_view_state()
+        if old_read_only != self._is_read_only_view() and self.candidates:
+            self._populate_table()
 
     def _load_capture_history(self) -> None:
         current_date = self.capture_date_combo.currentText()
@@ -560,7 +593,9 @@ class MomentumHunterWindow(QMainWindow):
         self._show_text_dialog(f"{date_text} {session_text.title()} Capture", report)
 
     def _load_historical_capture(self, payload: dict) -> None:
-        self.is_historical_view = True
+        self.data_view_state = DataViewState.HISTORICAL
+        self.display_capture_time = datetime.fromisoformat(payload["capture_time"]) if payload.get("capture_time") else None
+        self.display_session_label = payload.get("session", "snapshot")
         self.candidates = [candidate_from_dict(item) for item in payload.get("candidates", [])]
         self.saved_candidates = {
             item["ticker"]: candidate
@@ -571,46 +606,51 @@ class MomentumHunterWindow(QMainWindow):
             item["ticker"] for item in payload.get("candidates", []) if item.get("reviewed") or item.get("selected")
         }
         self.selected_ticker = None
+        self._apply_data_view_state()
         self._populate_table()
-        market = payload.get("market", {})
-        self.view_state_label.setObjectName("viewStateHistorical")
-        self.view_state_label.setText(
-            f"HISTORICAL SNAPSHOT - {payload.get('capture_date', 'unknown date')} "
-            f"{payload.get('session', 'session').upper()} | Market: {market.get('regime', 'unknown').upper()} | "
-            "Read-only. Do not make live decisions from this table."
-        )
-        self._apply_header_style(historical=True)
-        self._refresh_view_state_style()
         self._update_status("Loaded historical capture into the main table.")
 
     def return_to_current_dashboard(self) -> None:
-        self._set_current_view()
+        self.data_view_state = DataViewState.CURRENT
+        self.display_capture_time = self.current_capture_time
+        self.display_session_label = "live"
+        self.candidates = list(self.live_candidates)
+        self.saved_candidates = dict(self.live_saved_candidates)
+        self.reviewed_tickers = set(self.live_reviewed_tickers)
+        self.selected_ticker = None
+        self._apply_data_view_state()
+        self._populate_table()
         self._update_status("Returned to current dashboard. Run Scanner for fresh data.")
 
-    def _set_current_view(self) -> None:
-        self.is_historical_view = False
-        self.view_state_label.setObjectName("viewStateCurrent")
-        self.view_state_label.setText(
-            f"CURRENT DASHBOARD - {format_central()} | Fresh decisions belong here. Historical captures are read-only."
+    def _apply_data_view_state(self) -> None:
+        style = get_data_view_style(
+            self.data_view_state,
+            captured_at=self.display_capture_time,
+            session_label=self.display_session_label,
         )
-        self._apply_header_style(historical=False)
+        self.current_view_style = style
+        self.view_state_label.setObjectName(style.object_name)
+        self.view_state_label.setText(style.banner_text)
+        self.detail_state_label.setText(style.detail_label)
+        self.table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+        read_only = style.read_only
+        self.save_button.setEnabled(not read_only)
+        self.clear_button.setEnabled(not read_only)
+        self.watchlist_button.setEnabled(not read_only)
+        self.notes_edit.setReadOnly(read_only)
+        self.entry_trigger.setReadOnly(read_only)
+        self.stop_level.setReadOnly(read_only)
+        self.scan_button.setProperty("emphasized", style.state == DataViewState.STALE)
+        self.scan_button.style().unpolish(self.scan_button)
+        self.scan_button.style().polish(self.scan_button)
         self._refresh_view_state_style()
 
     def _refresh_view_state_style(self) -> None:
         self.view_state_label.style().unpolish(self.view_state_label)
         self.view_state_label.style().polish(self.view_state_label)
 
-    def _apply_header_style(self, historical: bool) -> None:
-        if historical:
-            self.table.horizontalHeader().setStyleSheet(
-                "QHeaderView::section { background: #4a355f; color: #f4ecff; "
-                "border: 0; border-right: 1px solid #6d5780; padding: 6px; font-weight: 600; }"
-            )
-            return
-        self.table.horizontalHeader().setStyleSheet(
-            "QHeaderView::section { background: #243445; color: #e8eef6; "
-            "border: 0; border-right: 1px solid #35485d; padding: 6px; font-weight: 600; }"
-        )
+    def _is_read_only_view(self) -> bool:
+        return bool(self.current_view_style and self.current_view_style.read_only)
 
     def refresh_market_regime(self, show_status: bool = True) -> None:
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
@@ -671,7 +711,9 @@ class MomentumHunterWindow(QMainWindow):
                 for column in range(self.table.columnCount()):
                     cell = self.table.item(row, column)
                     if cell is not None and column != 1:
-                        cell.setBackground(QBrush(QColor("#20394a" if not self.is_historical_view else "#3a314d")))
+                        cell.setBackground(
+                            QBrush(QColor("#20394a" if self.data_view_state == DataViewState.CURRENT else "#3a314d"))
+                        )
 
     def _update_status(self, message: str) -> None:
         self.clock_label.setText(format_central())
@@ -760,6 +802,11 @@ QPushButton {
 QPushButton:hover {
     background: #4392ff;
 }
+QPushButton[emphasized="true"] {
+    background: #b83232;
+    color: #fff4f4;
+    font-weight: 700;
+}
 QComboBox, QLineEdit, QPlainTextEdit {
     background: #0f1720;
     color: #e7edf4;
@@ -804,6 +851,22 @@ QHeaderView::section {
     font-weight: 700;
     padding: 8px;
 }
+#viewStateAging {
+    background: #3a3117;
+    border: 1px solid #a4812a;
+    border-radius: 6px;
+    color: #fff0bd;
+    font-weight: 700;
+    padding: 8px;
+}
+#viewStateStale {
+    background: #3a1717;
+    border: 1px solid #a14646;
+    border-radius: 6px;
+    color: #ffe1e1;
+    font-weight: 700;
+    padding: 8px;
+}
 #viewStateHistorical {
     background: #2b1f36;
     border: 1px solid #6d5780;
@@ -811,6 +874,21 @@ QHeaderView::section {
     color: #f4ecff;
     font-weight: 700;
     padding: 8px;
+}
+#viewStateStudy {
+    background: #172746;
+    border: 1px solid #3c5d9d;
+    border-radius: 6px;
+    color: #eaf1ff;
+    font-weight: 700;
+    padding: 8px;
+}
+#detailStateLabel {
+    background: #1b2a3a;
+    border-radius: 4px;
+    color: #cbd8e6;
+    font-weight: 700;
+    padding: 5px;
 }
 """
 

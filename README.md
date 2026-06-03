@@ -112,6 +112,45 @@ Scheduled capture logs are written to:
 MomentumHunterData\logs
 ```
 
+## Data Freshness Safety
+
+Freshness settings live here:
+
+```text
+config\ui_freshness_settings.json
+```
+
+Current thresholds:
+
+- Fresh current data: `0-10` minutes old
+- Aging current data: more than `10` minutes old
+- Stale data: more than `20` minutes old
+
+Momentum Hunter uses visible banners, timestamps, age text, read-only state, and table-header styling so current, stale, historical, and study data cannot be quietly confused.
+
+## Administrator Actions
+
+Normal dashboard use does not require Administrator rights.
+
+Administrator rights are useful for one-time system setup:
+
+- Installing or repairing scheduled capture tasks
+- Configuring scheduled tasks to run whether the user is logged in or not
+- Running scheduled capture tasks with highest privileges
+
+Rollback scheduled capture tasks:
+
+```powershell
+Unregister-ScheduledTask -TaskName "Momentum Hunter Morning Capture" -Confirm:$false
+Unregister-ScheduledTask -TaskName "Momentum Hunter Evening Capture" -Confirm:$false
+```
+
+Rollback Windows startup launcher:
+
+```powershell
+Remove-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Momentum Hunter.bat"
+```
+
 ## Scanner Presets
 
 Base Momentum:

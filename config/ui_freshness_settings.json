@@ -1,0 +1,8 @@
+{
+  "timezone": "America/Chicago",
+  "current_dashboard_warning_minutes": 10,
+  "current_dashboard_stale_minutes": 20,
+  "require_manual_refresh_after_stale": true,
+  "show_age_seconds_under_minutes": 5,
+  "show_age_minutes": true
+}
