@@ -37,6 +37,7 @@ from momentum_hunter.config import AppConfig, load_config, save_config
 from momentum_hunter.market import MarketRegimeSnapshot, detect_market_regime
 from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, SCANNER_PRESETS, TradingMode
 from momentum_hunter.providers import provider_from_name
+from momentum_hunter.recommendations import RecommendationReport, build_weight_recommendations
 from momentum_hunter.scoring import score_candidates
 from momentum_hunter.startup import install_startup_script, is_startup_installed
 from momentum_hunter.storage import (
@@ -52,7 +53,16 @@ from momentum_hunter.storage import (
     save_watchlist,
     save_watchlist_report,
 )
-from momentum_hunter.study import FILTER_ALL, FILTER_REVIEWED, FILTER_SELECTED, StudySummary, build_capture_study
+from momentum_hunter.study import (
+    FILTER_ALL,
+    FILTER_REVIEWED,
+    FILTER_SELECTED,
+    REGIME_ALL,
+    SESSION_ALL,
+    StudyFilter,
+    StudySummary,
+    build_capture_study,
+)
 from momentum_hunter.time_utils import format_central, next_market_session, now_central
 from momentum_hunter.ui.data_view_state import DataViewState, DataViewStyle, get_data_view_style
 
@@ -871,6 +881,22 @@ class MomentumHunterWindow(QMainWindow):
         filter_combo = QComboBox()
         filter_combo.addItems([FILTER_ALL, FILTER_SELECTED, FILTER_REVIEWED])
         filter_layout.addWidget(filter_combo)
+        filter_layout.addWidget(QLabel("Start"))
+        start_date_edit = QLineEdit()
+        start_date_edit.setPlaceholderText("YYYY-MM-DD")
+        filter_layout.addWidget(start_date_edit)
+        filter_layout.addWidget(QLabel("End"))
+        end_date_edit = QLineEdit()
+        end_date_edit.setPlaceholderText("YYYY-MM-DD")
+        filter_layout.addWidget(end_date_edit)
+        filter_layout.addWidget(QLabel("Session"))
+        session_combo = QComboBox()
+        session_combo.addItems([SESSION_ALL, "morning", "evening", "manual"])
+        filter_layout.addWidget(session_combo)
+        filter_layout.addWidget(QLabel("Regime"))
+        regime_combo = QComboBox()
+        regime_combo.addItems([REGIME_ALL, "bull", "bear", "neutral", "unknown"])
+        filter_layout.addWidget(regime_combo)
         filter_layout.addStretch(1)
         layout.addWidget(filter_row)
 
@@ -901,8 +927,17 @@ class MomentumHunterWindow(QMainWindow):
         splitter.setSizes([620, 320])
         layout.addWidget(splitter, 2)
 
-        def refresh_study_view(row_filter: str) -> None:
-            filtered = build_capture_study(row_filter=row_filter)
+        def current_study_filter() -> StudyFilter:
+            return StudyFilter(
+                row_filter=filter_combo.currentText(),
+                start_date=start_date_edit.text().strip(),
+                end_date=end_date_edit.text().strip(),
+                session=session_combo.currentText(),
+                regime=regime_combo.currentText(),
+            )
+
+        def refresh_study_view() -> None:
+            filtered = build_capture_study(study_filter=current_study_filter())
             filtered_style = get_data_view_style(
                 DataViewState.STUDY,
                 captured_at=None,
@@ -915,6 +950,7 @@ class MomentumHunterWindow(QMainWindow):
             chart_tabs.clear()
             chart_tabs.addTab(build_study_chart(filtered, filtered_style), "Coverage")
             chart_tabs.addTab(build_outcome_chart(filtered, filtered_style), "Outcomes")
+            chart_tabs.addTab(build_recommendation_panel(build_weight_recommendations(), filtered_style), "Recommendations")
 
             bucket_table.setRowCount(len(filtered.score_buckets))
             for row, bucket in enumerate(filtered.score_buckets):
@@ -935,7 +971,11 @@ class MomentumHunterWindow(QMainWindow):
                 regime_table.setItem(row, 1, QTableWidgetItem(str(regime.count)))
 
         filter_combo.currentTextChanged.connect(refresh_study_view)
-        refresh_study_view(FILTER_ALL)
+        start_date_edit.editingFinished.connect(refresh_study_view)
+        end_date_edit.editingFinished.connect(refresh_study_view)
+        session_combo.currentTextChanged.connect(refresh_study_view)
+        regime_combo.currentTextChanged.connect(refresh_study_view)
+        refresh_study_view()
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
@@ -1118,6 +1158,50 @@ def build_outcome_chart(summary: StudySummary, style: DataViewStyle) -> QChartVi
     view = QChartView(chart)
     view.setMinimumHeight(280)
     return view
+
+
+def build_recommendation_panel(report: RecommendationReport, style: DataViewStyle) -> QWidget:
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    status = QLabel(
+        f"{style.chart_prefix}Score-Weight Recommendations | "
+        f"Completed Rows: {report.completed_rows} | Minimum Rows: {report.minimum_rows} | {report.status}"
+    )
+    status.setObjectName("criteriaLabel")
+    status.setWordWrap(True)
+    layout.addWidget(status)
+
+    table = QTableWidget(0, 7)
+    table.setHorizontalHeaderLabels(
+        ["Regime", "Bucket", "Rows", "5-Day Avg", "Win Rate", "Recommendation", "Rationale"]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    table.setRowCount(max(1, len(report.recommendations)))
+
+    if not report.recommendations:
+        values = ["all", "all", str(report.completed_rows), "n/a", "n/a", "Wait", report.status]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, item in enumerate(report.recommendations):
+            values = [
+                item.regime,
+                item.bucket,
+                str(item.sample_size),
+                format_percent(item.avg_five_day_return_pct),
+                format_percent(item.win_rate_pct),
+                item.recommendation,
+                item.rationale,
+            ]
+            for column, value in enumerate(values):
+                table.setItem(row, column, QTableWidgetItem(value))
+
+    layout.addWidget(table, 1)
+    return panel
 
 
 def add_chart_watermark(chart: QChart, text: str, color: QColor, opacity: float = 0.28) -> QGraphicsSimpleTextItem:

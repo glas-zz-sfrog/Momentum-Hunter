@@ -11,6 +11,27 @@ from momentum_hunter.storage import ANALYSIS_CSV
 FILTER_ALL = "all candidates"
 FILTER_SELECTED = "selected only"
 FILTER_REVIEWED = "reviewed only"
+SESSION_ALL = "all sessions"
+REGIME_ALL = "all regimes"
+
+
+@dataclass(frozen=True)
+class StudyFilter:
+    row_filter: str = FILTER_ALL
+    start_date: str = ""
+    end_date: str = ""
+    session: str = SESSION_ALL
+    regime: str = REGIME_ALL
+
+    def label(self) -> str:
+        parts = [self.row_filter]
+        if self.start_date or self.end_date:
+            parts.append(f"{self.start_date or 'start'} to {self.end_date or 'end'}")
+        if self.session != SESSION_ALL:
+            parts.append(self.session)
+        if self.regime != REGIME_ALL:
+            parts.append(self.regime)
+        return " | ".join(parts)
 
 
 @dataclass(frozen=True)
@@ -57,7 +78,12 @@ BUCKETS = [
 ]
 
 
-def build_capture_study(path: Path = ANALYSIS_CSV, row_filter: str = FILTER_ALL) -> StudySummary:
+def build_capture_study(
+    path: Path = ANALYSIS_CSV,
+    row_filter: str = FILTER_ALL,
+    study_filter: StudyFilter | None = None,
+) -> StudySummary:
+    study_filter = study_filter or StudyFilter(row_filter=row_filter)
     outcome_path = OUTCOMES_CSV if OUTCOMES_CSV.exists() else path
     if not outcome_path.exists():
         return empty_study("No analysis capture file exists yet.")
@@ -65,11 +91,16 @@ def build_capture_study(path: Path = ANALYSIS_CSV, row_filter: str = FILTER_ALL)
         rows = list(csv.DictReader(file))
     if not rows:
         return empty_study("No captured candidate rows exist yet.")
-    return summarize_capture_rows(rows, row_filter=row_filter)
+    return summarize_capture_rows(rows, study_filter=study_filter)
 
 
-def summarize_capture_rows(rows: list[dict], row_filter: str = FILTER_ALL) -> StudySummary:
-    rows = filter_rows(rows, row_filter)
+def summarize_capture_rows(
+    rows: list[dict],
+    row_filter: str = FILTER_ALL,
+    study_filter: StudyFilter | None = None,
+) -> StudySummary:
+    study_filter = study_filter or StudyFilter(row_filter=row_filter)
+    rows = filter_rows(rows, study_filter)
     dates = sorted({row.get("capture_date", "") for row in rows if row.get("capture_date")})
     captures = {
         (row.get("capture_date", ""), row.get("capture_time", ""), row.get("session", ""))
@@ -127,7 +158,7 @@ def summarize_capture_rows(rows: list[dict], row_filter: str = FILTER_ALL) -> St
     run_id = f"{dates[-1] if dates else 'unknown'}_study_v1"
     return StudySummary(
         run_id=run_id,
-        source_range=f"{source_range} | Filter: {row_filter}",
+        source_range=f"{source_range} | Filter: {study_filter.label()}",
         capture_count=len(captures),
         candidate_count=len(rows),
         selected_count=selected_count,
@@ -174,12 +205,23 @@ def empty_study(reason: str) -> StudySummary:
     )
 
 
-def filter_rows(rows: list[dict], row_filter: str) -> list[dict]:
-    if row_filter == FILTER_SELECTED:
-        return [row for row in rows if parse_bool(row.get("selected", "false"))]
-    if row_filter == FILTER_REVIEWED:
-        return [row for row in rows if parse_bool(row.get("reviewed", "false"))]
-    return rows
+def filter_rows(rows: list[dict], study_filter: StudyFilter) -> list[dict]:
+    filtered = rows
+    if study_filter.row_filter == FILTER_SELECTED:
+        filtered = [row for row in filtered if parse_bool(row.get("selected", "false"))]
+    elif study_filter.row_filter == FILTER_REVIEWED:
+        filtered = [row for row in filtered if parse_bool(row.get("reviewed", "false"))]
+    if study_filter.start_date:
+        filtered = [row for row in filtered if row.get("capture_date", "") >= study_filter.start_date]
+    if study_filter.end_date:
+        filtered = [row for row in filtered if row.get("capture_date", "") <= study_filter.end_date]
+    if study_filter.session != SESSION_ALL:
+        filtered = [row for row in filtered if row.get("session", "") == study_filter.session]
+    if study_filter.regime != REGIME_ALL:
+        filtered = [
+            row for row in filtered if (row.get("market_regime") or "unknown").lower() == study_filter.regime
+        ]
+    return filtered
 
 
 def bucket_for_score(score: int) -> str:

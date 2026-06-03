@@ -88,6 +88,8 @@ Outcome fields include:
 
 Rows remain `pending_next_day` or `pending_five_day` until enough future daily price bars exist. Scheduled capture jobs run the outcome updater after each successful capture.
 
+The Study Engine includes score-weight recommendations once enough completed 5-day outcomes exist. Recommendations are advisory only; Momentum Hunter does not automatically rewrite `config\scoring_profiles.json`.
+
 ## Daily Capture Workflow
 
 1. Run the scanner during the morning or evening review window.
