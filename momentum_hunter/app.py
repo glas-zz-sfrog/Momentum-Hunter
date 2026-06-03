@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from dataclasses import replace
 from datetime import datetime
+from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -274,8 +276,8 @@ class MomentumHunterWindow(QMainWindow):
 
         news_box = QGroupBox("News & Catalysts")
         news_layout = QVBoxLayout(news_box)
-        self.news_text = QPlainTextEdit()
-        self.news_text.setReadOnly(True)
+        self.news_text = QTextBrowser()
+        self.news_text.setOpenExternalLinks(True)
         self.news_text.setPlaceholderText("Select a candidate to review headlines.")
         news_layout.addWidget(self.news_text)
         layout.addWidget(news_box, 2)
@@ -418,7 +420,7 @@ class MomentumHunterWindow(QMainWindow):
         self.notes_edit.blockSignals(True)
         self.notes_edit.setPlainText(candidate.user_notes)
         self.notes_edit.blockSignals(False)
-        self.news_text.setPlainText(format_news(candidate))
+        self.news_text.setHtml(format_news_html(candidate))
         self.reviewed_tickers.add(candidate.ticker)
         if self.data_view_state == DataViewState.CURRENT:
             self.live_reviewed_tickers.add(candidate.ticker)
@@ -995,6 +997,30 @@ def format_news(candidate: Candidate) -> str:
         url = f"\n  {item.url}" if item.url else ""
         blocks.append(f"- {item.headline}{source}{summary}{url}")
     return "\n\n".join(blocks)
+
+
+def format_news_html(candidate: Candidate) -> str:
+    if not candidate.news:
+        return "<p>No headlines loaded. Review news manually before trading.</p>"
+    blocks = []
+    for item in candidate.news:
+        headline = escape(item.headline)
+        source = f" <span class='source'>({escape(item.source)})</span>" if item.source else ""
+        if item.url:
+            headline = f"<a href='{escape(item.url, quote=True)}'>{headline}</a>"
+        summary = f"<div class='summary'>{escape(item.summary)}</div>" if item.summary else ""
+        blocks.append(f"<li>{headline}{source}{summary}</li>")
+    return (
+        "<style>"
+        "body { color: #e7edf4; background: #0f1720; font-family: Segoe UI; font-size: 10pt; }"
+        "a { color: #7fb4ff; text-decoration: none; font-weight: 600; }"
+        "a:hover { text-decoration: underline; }"
+        ".source { color: #9cb0c4; }"
+        ".summary { color: #cbd8e6; margin-top: 4px; margin-bottom: 10px; }"
+        "li { margin-bottom: 10px; }"
+        "</style>"
+        f"<ul>{''.join(blocks)}</ul>"
+    )
 
 
 def format_market_cap(value: int) -> str:
