@@ -38,10 +38,10 @@ python -m pip install -r requirements.txt
 ## Run
 
 ```powershell
-python run.py
+.\tools\launch_momentum_hunter.ps1
 ```
 
-The app starts with the `sample` provider so you can verify the workflow without internet access.
+The launcher uses `pythonw.exe` when available, so the desktop app opens without a lingering console window. The app starts with the `sample` provider so you can verify the workflow without internet access.
 
 ## Data Files
 
@@ -100,6 +100,7 @@ The Study Engine includes score-weight recommendations once enough completed 5-d
 6. Use the date and session selectors to reopen a past morning or evening capture.
 
 Momentum Hunter installs a Windows startup launcher automatically so the app is available for scheduled captures after login.
+The startup launcher is written as `Momentum Hunter.vbs` and launches the GUI hidden through `pythonw.exe`, avoiding a visible command window.
 
 ## Scheduled Capture Jobs
 
@@ -189,7 +190,7 @@ Unregister-ScheduledTask -TaskName "Momentum Hunter Evening Capture" -Confirm:$f
 Rollback Windows startup launcher:
 
 ```powershell
-Remove-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Momentum Hunter.bat"
+Remove-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Momentum Hunter.vbs"
 ```
 
 ## Scanner Presets
