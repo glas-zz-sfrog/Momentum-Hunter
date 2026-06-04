@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from momentum_hunter.app import MomentumHunterWindow
 from momentum_hunter.models import Candidate, NewsItem
+from momentum_hunter.news_age import apply_candidate_news_freshness
 from momentum_hunter.recommendations import (
     RecommendationReport,
     ScoreWeightRecommendation,
@@ -92,41 +93,42 @@ def settle(app: QApplication) -> None:
 
 
 def demo_candidates() -> list[Candidate]:
+    current = now_central()
     rows = [
-        ("PATH", "UiPath Inc", 13.10, 11.8, 67_981_128, 1.85, 6_800_000_000, 96, "earnings catalyst, beat catalyst, AI catalyst"),
-        ("HPE", "Hewlett Packard Enterprise", 47.00, 9.2, 115_597_824, 1.44, 62_400_000_000, 95, "AI infrastructure catalyst, institutional volume"),
-        ("INFY", "Infosys Ltd ADR", 13.41, 6.0, 34_182_096, 1.31, 54_400_000_000, 90, "partnership catalyst, large-cap participation"),
-        ("ORCL", "Oracle Corp", 248.15, 9.9, 48_389_992, 1.53, 713_700_000_000, 89, "AI catalyst, cloud infrastructure momentum"),
-        ("IBM", "International Business Machines", 320.42, 7.6, 32_880_180, 1.27, 301_200_000_000, 89, "enterprise AI catalyst, institutional participation"),
-        ("NVDA", "NVIDIA Corp", 224.36, 6.3, 212_793_744, 1.22, 5_400_000_000_000, 74, "AI infrastructure theme"),
+        ("PATH", "UiPath Inc", 13.10, 11.8, 67_981_128, 1.85, 6_800_000_000, 96, 11, "earnings catalyst, beat catalyst, AI catalyst"),
+        ("HPE", "Hewlett Packard Enterprise", 47.00, 9.2, 115_597_824, 1.44, 62_400_000_000, 95, 22, "AI infrastructure catalyst, institutional volume"),
+        ("INFY", "Infosys Ltd ADR", 13.41, 6.0, 34_182_096, 1.31, 54_400_000_000, 90, 56, "partnership catalyst, large-cap participation"),
+        ("ORCL", "Oracle Corp", 248.15, 9.9, 48_389_992, 1.53, 713_700_000_000, 89, 120, "AI catalyst, cloud infrastructure momentum"),
+        ("IBM", "International Business Machines", 320.42, 7.6, 32_880_180, 1.27, 301_200_000_000, 89, 240, "enterprise AI catalyst, institutional participation"),
+        ("NVDA", "NVIDIA Corp", 224.36, 6.3, 212_793_744, 1.22, 5_400_000_000_000, 74, 672, "AI infrastructure theme"),
     ]
     candidates: list[Candidate] = []
-    for ticker, company, price, change, volume, rel_vol, market_cap, score, reasons in rows:
-        candidates.append(
-            Candidate(
-                ticker=ticker,
-                company=company,
-                price=price,
-                percent_change=change,
-                volume=volume,
-                relative_volume=rel_vol,
-                market_cap=market_cap,
-                sector="Technology",
-                industry="Software - Infrastructure",
-                news=[
-                    NewsItem(
-                        headline=f"{company} momentum headline with AI catalyst",
-                        source="Finviz",
-                        url=f"https://example.com/{ticker.lower()}",
-                        summary="Review catalyst quality before making a trading decision.",
-                    )
-                ],
-                score=score,
-                score_reasons=[reasons],
-                score_profile="regime-aware-v1",
-                score_regime="bull",
-            )
+    for ticker, company, price, change, volume, rel_vol, market_cap, score, hours_old, reasons in rows:
+        candidate = Candidate(
+            ticker=ticker,
+            company=company,
+            price=price,
+            percent_change=change,
+            volume=volume,
+            relative_volume=rel_vol,
+            market_cap=market_cap,
+            sector="Technology",
+            industry="Software - Infrastructure",
+            news=[
+                NewsItem(
+                    headline=f"{company} momentum headline with AI catalyst",
+                    source="Finviz",
+                    published_at=current - timedelta(hours=hours_old),
+                    url=f"https://example.com/{ticker.lower()}",
+                    summary="Review catalyst quality before making a trading decision.",
+                )
+            ],
+            score=score,
+            score_reasons=[reasons],
+            score_profile="regime-aware-v1",
+            score_regime="bull",
         )
+        candidates.append(apply_candidate_news_freshness(candidate, now=current))
     return candidates
 
 
@@ -157,13 +159,16 @@ def candidate_to_payload(candidate: Candidate) -> dict:
             {
                 "headline": item.headline,
                 "source": item.source,
-                "published_at": None,
+                "published_at": item.published_at.isoformat() if item.published_at else None,
                 "url": item.url,
                 "summary": item.summary,
             }
             for item in candidate.news
         ],
         "score": candidate.score,
+        "news_hours_old": candidate.news_hours_old,
+        "freshness": candidate.freshness,
+        "freshness_score": candidate.freshness_score,
         "score_reasons": candidate.score_reasons,
         "score_profile": candidate.score_profile,
         "score_regime": candidate.score_regime,

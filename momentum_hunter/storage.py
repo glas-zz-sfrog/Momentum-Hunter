@@ -10,6 +10,7 @@ from pathlib import Path
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.market import MarketRegimeSnapshot
 from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, NewsItem, ScannerCriteria, TradingMode
+from momentum_hunter.news_age import format_news_age
 from momentum_hunter.time_utils import now_central
 
 
@@ -125,8 +126,8 @@ def capture_to_markdown(payload: dict) -> str:
         f"- Market Regime: {market['regime'].title()} ({market['symbol']})",
         f"- Regime Reason: {market['reason']}",
         "",
-        "| Pick | Rank | Ticker | Score | Price | Change | Volume | Rel Vol | Sector | Notes |",
-        "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        "| Pick | Rank | Ticker | Score | News Age | Freshness | Price | Change | Volume | Rel Vol | Sector | Notes |",
+        "| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
     ]
     for candidate in candidates:
         pick = "Y" if candidate["selected"] else ""
@@ -134,6 +135,8 @@ def capture_to_markdown(payload: dict) -> str:
         notes = (candidate.get("user_notes") or "").replace("|", "/").replace("\n", " ")
         lines.append(
             f"| {pick} | {candidate['rank']} | {candidate['ticker']} | {candidate['score']} | "
+            f"{format_news_age(candidate.get('news_hours_old'))} {candidate.get('freshness', 'UNKNOWN')} | "
+            f"{candidate.get('freshness_score', 0)} | "
             f"${candidate['price']:,.2f} | {candidate['percent_change']:.1f}% | "
             f"{candidate['volume']:,} | {rel_volume} | {candidate['sector']} | {notes} |"
         )
@@ -163,6 +166,9 @@ def append_analysis_rows(payload: dict) -> None:
         "ticker",
         "company",
         "score",
+        "news_hours_old",
+        "freshness",
+        "freshness_score",
         "score_profile",
         "score_regime",
         "score_reasons",
@@ -202,6 +208,9 @@ def append_analysis_rows(payload: dict) -> None:
                     "ticker": candidate["ticker"],
                     "company": candidate["company"],
                     "score": candidate["score"],
+                    "news_hours_old": candidate.get("news_hours_old", ""),
+                    "freshness": candidate.get("freshness", "UNKNOWN"),
+                    "freshness_score": candidate.get("freshness_score", 0),
                     "score_profile": candidate.get("score_profile", ""),
                     "score_regime": candidate.get("score_regime", ""),
                     "score_reasons": "; ".join(candidate.get("score_reasons") or []),
@@ -248,6 +257,8 @@ def save_watchlist_report(candidates: list[Candidate], for_date: datetime | None
                 f"## {index}. {candidate.ticker} - {candidate.company}",
                 "",
                 f"- Score: {candidate.score}",
+                f"- News Age: {format_news_age(candidate.news_hours_old)} {candidate.freshness}",
+                f"- Freshness Score: {candidate.freshness_score}",
                 f"- Price: ${candidate.price:,.2f}",
                 f"- Change: {candidate.percent_change:.1f}%",
                 f"- Volume: {candidate.volume:,}",
@@ -296,6 +307,8 @@ def save_snapshot_report(
                 f"## {index}. {candidate.ticker} - {candidate.company}",
                 "",
                 f"- Score: {candidate.score}",
+                f"- News Age: {format_news_age(candidate.news_hours_old)} {candidate.freshness}",
+                f"- Freshness Score: {candidate.freshness_score}",
                 f"- Price: ${candidate.price:,.2f}",
                 f"- Change: {candidate.percent_change:.1f}%",
                 f"- Volume: {candidate.volume:,}",
@@ -418,6 +431,9 @@ def candidate_from_dict(payload: dict) -> Candidate:
             )
         )
     saved_at = payload.get("saved_at")
+    news_hours_old = payload.get("news_hours_old")
+    if news_hours_old == "":
+        news_hours_old = None
     return Candidate(
         ticker=payload.get("ticker", ""),
         company=payload.get("company", ""),
@@ -437,6 +453,9 @@ def candidate_from_dict(payload: dict) -> Candidate:
         relative_strength=payload.get("relative_strength"),
         news=news,
         score=payload.get("score", 0),
+        news_hours_old=news_hours_old,
+        freshness=payload.get("freshness", "UNKNOWN"),
+        freshness_score=payload.get("freshness_score", 0),
         score_reasons=payload.get("score_reasons", []),
         score_profile=payload.get("score_profile", ""),
         score_regime=payload.get("score_regime", ""),

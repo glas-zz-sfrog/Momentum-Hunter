@@ -80,8 +80,8 @@ class GuiStateTests(unittest.TestCase):
             self.window.run_scan()
 
         self.assertEqual("NEW", self.window.ticker_label.text())
-        self.assertEqual("Score: 94", self.window.score_label.text())
-        self.assertEqual("NEW", self.window.table.item(0, 2).text())
+        self.assertEqual("Momentum: 94 | Freshness: 0 UNKNOWN", self.window.score_label.text())
+        self.assertEqual("NEW", self.window.table.item(0, 3).text())
         self.assertNotEqual("OLD", self.window.selected_ticker)
 
     def test_empty_scan_clears_candidate_detail_panel(self) -> None:
@@ -129,7 +129,7 @@ class GuiStateTests(unittest.TestCase):
         self.window.return_to_current_dashboard()
 
         self.assertIn("CURRENT DASHBOARD - LIVE REVIEW", self.window.view_state_label.text())
-        self.assertEqual("CURR", self.window.table.item(0, 2).text())
+        self.assertEqual("CURR", self.window.table.item(0, 3).text())
         self.assertTrue(self.window.save_button.isEnabled())
         self.assertFalse(self.window.notes_edit.isReadOnly())
 

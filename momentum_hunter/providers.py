@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
 from typing import Iterable
 
 from momentum_hunter.models import Candidate, NewsItem, ScannerCriteria
+from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 
 
 class MarketDataProvider(ABC):
@@ -23,6 +25,7 @@ class SampleProvider(MarketDataProvider):
     name = "sample"
 
     def scan(self, criteria: ScannerCriteria) -> list[Candidate]:
+        current = now_central()
         candidates = [
             Candidate(
                 ticker="MU",
@@ -38,11 +41,13 @@ class SampleProvider(MarketDataProvider):
                     NewsItem(
                         headline="Micron rallies after stronger AI memory demand commentary",
                         source="Sample",
+                        published_at=current - timedelta(hours=6),
                         summary="AI infrastructure demand and analyst follow-through are supporting momentum.",
                     ),
                     NewsItem(
                         headline="Analysts lift targets following upbeat earnings outlook",
                         source="Sample",
+                        published_at=current - timedelta(hours=11),
                         summary="Upgrade and target activity suggests institutional attention.",
                     ),
                 ],
@@ -61,6 +66,7 @@ class SampleProvider(MarketDataProvider):
                     NewsItem(
                         headline="Dell gains as AI server backlog expands",
                         source="Sample",
+                        published_at=current - timedelta(hours=31),
                         summary="AI server demand is the primary catalyst.",
                     )
                 ],
@@ -79,6 +85,7 @@ class SampleProvider(MarketDataProvider):
                     NewsItem(
                         headline="Palantir extends move on enterprise AI platform demand",
                         source="Sample",
+                        published_at=current - timedelta(days=3),
                         summary="Large-cap momentum and AI theme alignment remain strong.",
                     )
                 ],
@@ -93,7 +100,13 @@ class SampleProvider(MarketDataProvider):
                 market_cap=85_000_000,
                 sector="Healthcare",
                 industry="Biotechnology",
-                news=[NewsItem(headline="Thinly traded microcap spikes on vague promotion", source="Sample")],
+                news=[
+                    NewsItem(
+                        headline="Thinly traded microcap spikes on vague promotion",
+                        source="Sample",
+                        published_at=current - timedelta(days=28),
+                    )
+                ],
             ),
         ]
         return filter_candidates(candidates, criteria)
@@ -171,10 +184,12 @@ class FinvizProvider(MarketDataProvider):
             link = row.find("a")
             if link is None:
                 continue
+            timestamp_text = row.find("td").get_text(" ", strip=True) if row.find("td") else ""
             items.append(
                 NewsItem(
                     headline=link.get_text(" ", strip=True),
                     source="Finviz",
+                    published_at=parse_finviz_news_time(timestamp_text),
                     url=link.get("href", ""),
                     summary=summarize_catalyst(link.get_text(" ", strip=True)),
                 )
@@ -194,6 +209,28 @@ def provider_from_name(name: str) -> MarketDataProvider:
     if name == FinvizProvider.name:
         return FinvizProvider()
     return SampleProvider()
+
+
+def parse_finviz_news_time(value: str, now: datetime | None = None) -> datetime | None:
+    value = " ".join(value.split())
+    if not value:
+        return None
+    current = now or now_central()
+    parts = value.split()
+    try:
+        if len(parts) == 1:
+            parsed_time = datetime.strptime(parts[0], "%I:%M%p").time()
+            return datetime.combine(current.date(), parsed_time, tzinfo=CENTRAL_TZ)
+        date_text, time_text = parts[0], parts[1]
+        parsed_time = datetime.strptime(time_text, "%I:%M%p").time()
+        if date_text.lower() == "today":
+            return datetime.combine(current.date(), parsed_time, tzinfo=CENTRAL_TZ)
+        if date_text.lower() == "yesterday":
+            return datetime.combine((current - timedelta(days=1)).date(), parsed_time, tzinfo=CENTRAL_TZ)
+        parsed_date = datetime.strptime(date_text, "%b-%d-%y").date()
+        return datetime.combine(parsed_date, parsed_time, tzinfo=CENTRAL_TZ)
+    except ValueError:
+        return None
 
 
 def filter_candidates(candidates: Iterable[Candidate], criteria: ScannerCriteria) -> list[Candidate]:

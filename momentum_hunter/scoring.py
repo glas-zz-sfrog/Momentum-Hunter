@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from momentum_hunter.models import Candidate, MarketRegime
+from momentum_hunter.news_age import apply_candidate_news_freshness
 
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "scoring_profiles.json"
@@ -29,6 +30,7 @@ def score_candidate(
     regime: MarketRegime = MarketRegime.UNKNOWN,
     profile: ScoringProfile | None = None,
 ) -> Candidate:
+    apply_candidate_news_freshness(candidate)
     profile = profile or load_active_profile()
     adjustment = regime_adjustment(profile, regime)
     score = int(profile.payload.get("base_score", 35))

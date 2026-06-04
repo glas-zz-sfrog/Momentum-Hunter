@@ -62,6 +62,9 @@ class Candidate:
     relative_strength: float | None = None
     news: list[NewsItem] = field(default_factory=list)
     score: int = 0
+    news_hours_old: float | None = None
+    freshness: str = "UNKNOWN"
+    freshness_score: int = 0
     score_reasons: list[str] = field(default_factory=list)
     score_profile: str = ""
     score_regime: str = ""

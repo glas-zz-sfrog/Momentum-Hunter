@@ -7,7 +7,7 @@ from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QBrush, QFont
+from PySide6.QtGui import QColor, QBrush, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QValueAxis
 from PySide6.QtWidgets import (
     QApplication,
@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 from momentum_hunter.config import AppConfig, load_config, save_config
 from momentum_hunter.market import MarketRegimeSnapshot, detect_market_regime
 from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, SCANNER_PRESETS, TradingMode
+from momentum_hunter.news_age import evaluate_news_freshness, freshness_badge, format_news_age
 from momentum_hunter.providers import provider_from_name
 from momentum_hunter.recommendations import RecommendationReport, build_weight_recommendations
 from momentum_hunter.scoring import score_candidates
@@ -70,6 +71,59 @@ from momentum_hunter.time_utils import format_central, next_market_session, now_
 from momentum_hunter.ui.data_view_state import DataViewState, DataViewStyle, get_data_view_style
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+APP_LOGO_PATH = PROJECT_ROOT / "assets" / "momentum_hunter_logo.jpg"
+
+
+class WatermarkWidget(QWidget):
+    def __init__(self, watermark_path: Path) -> None:
+        super().__init__()
+        self.watermark = QPixmap(str(watermark_path)) if watermark_path.exists() else QPixmap()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self.watermark.isNull():
+            return
+        max_width = max(240, min(520, int(self.width() * 0.34)))
+        max_height = max(280, min(620, int(self.height() * 0.62)))
+        scaled = self.watermark.scaled(
+            max_width,
+            max_height,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        x = int((self.width() - scaled.width()) / 2)
+        y = int((self.height() - scaled.height()) / 2) + 36
+        painter = QPainter(self)
+        painter.setOpacity(0.055)
+        painter.drawPixmap(x, y, scaled)
+
+
+class WatermarkTableWidget(QTableWidget):
+    def __init__(self, rows: int, columns: int, watermark_path: Path) -> None:
+        super().__init__(rows, columns)
+        self.watermark = QPixmap(str(watermark_path)) if watermark_path.exists() else QPixmap()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self.watermark.isNull():
+            return
+        viewport = self.viewport()
+        max_width = max(275, min(575, int(viewport.width() * 0.52)))
+        max_height = max(325, min(650, int(viewport.height() * 0.88)))
+        scaled = self.watermark.scaled(
+            max_width,
+            max_height,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        x = int((viewport.width() - scaled.width()) / 2)
+        y = int((viewport.height() - scaled.height()) / 2)
+        painter = QPainter(viewport)
+        painter.setOpacity(0.045)
+        painter.drawPixmap(x, y, scaled)
+
+
 class MomentumHunterWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -94,6 +148,8 @@ class MomentumHunterWindow(QMainWindow):
         )
 
         self.setWindowTitle("Momentum Hunter")
+        if APP_LOGO_PATH.exists():
+            self.setWindowIcon(QIcon(str(APP_LOGO_PATH)))
         self.resize(1280, 780)
         self.setMinimumSize(980, 620)
         self._build_ui()
@@ -105,7 +161,7 @@ class MomentumHunterWindow(QMainWindow):
         self._update_status("Ready. Human review required before any trading decision.")
 
     def _build_ui(self) -> None:
-        root = QWidget()
+        root = WatermarkWidget(APP_LOGO_PATH)
         layout = QVBoxLayout(root)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
@@ -189,6 +245,13 @@ class MomentumHunterWindow(QMainWindow):
         self.clock_label = QLabel(format_central())
         self.criteria_label = QLabel()
         self.criteria_label.setObjectName("criteriaLabel")
+        self.brand_logo = QLabel()
+        self.brand_logo.setObjectName("brandLogo")
+        self.brand_logo.setToolTip("Momentum Hunter")
+        if APP_LOGO_PATH.exists():
+            self.brand_logo.setPixmap(contained_logo_pixmap(APP_LOGO_PATH, 76, 76))
+        self.brand_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.brand_logo.setFixedSize(82, 82)
 
         layout.addWidget(QLabel("Mode"), 0, 0)
         layout.addWidget(self.mode_combo, 0, 1)
@@ -214,7 +277,8 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(self.open_capture_button, 2, 7)
         layout.addWidget(self.current_button, 2, 8)
         layout.addWidget(self.study_button, 2, 9, 1, 2)
-        layout.addWidget(self.criteria_label, 3, 0, 1, 11)
+        layout.addWidget(self.brand_logo, 0, 11, 3, 1)
+        layout.addWidget(self.criteria_label, 3, 0, 1, 12)
         return box
 
     def _build_candidate_panel(self) -> QWidget:
@@ -222,9 +286,9 @@ class MomentumHunterWindow(QMainWindow):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.table = QTableWidget(0, 10)
+        self.table = WatermarkTableWidget(0, 11, APP_LOGO_PATH)
         self.table.setHorizontalHeaderLabels(
-            ["Pick", "Score", "Ticker", "Price", "% Chg", "Volume", "Rel Vol", "Market Cap", "Sector", "Industry"]
+            ["Pick", "Score", "News Age", "Ticker", "Price", "% Chg", "Volume", "Rel Vol", "Market Cap", "Sector", "Industry"]
         )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)
@@ -387,6 +451,7 @@ class MomentumHunterWindow(QMainWindow):
             values = [
                 "",
                 str(candidate.score),
+                freshness_badge(candidate),
                 candidate.ticker,
                 f"${candidate.price:,.2f}",
                 f"{candidate.percent_change:.1f}%",
@@ -410,6 +475,9 @@ class MomentumHunterWindow(QMainWindow):
                 elif column == 1:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     item.setBackground(score_color(candidate.score))
+                elif column == 2:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    item.setBackground(freshness_color(candidate.freshness))
                 if candidate.ticker in self.reviewed_tickers:
                     item.setBackground(QBrush(QColor("#20394a" if self.data_view_state == DataViewState.CURRENT else "#3a314d")))
                 self.table.setItem(row, column, item)
@@ -431,7 +499,9 @@ class MomentumHunterWindow(QMainWindow):
         self.selected_ticker = candidate.ticker
         self.ticker_label.setText(candidate.ticker)
         self.company_label.setText(candidate.company)
-        self.score_label.setText(f"Score: {candidate.score}")
+        self.score_label.setText(
+            f"Momentum: {candidate.score} | Freshness: {candidate.freshness_score} {candidate.freshness}"
+        )
         self.reasons_label.setText(", ".join(candidate.score_reasons) or "No score reasons yet.")
         self.notes_edit.blockSignals(True)
         self.notes_edit.setPlainText(candidate.user_notes)
@@ -859,7 +929,7 @@ class MomentumHunterWindow(QMainWindow):
             if candidate.ticker in self.reviewed_tickers:
                 for column in range(self.table.columnCount()):
                     cell = self.table.item(row, column)
-                    if cell is not None and column != 1:
+                    if cell is not None and column not in (1, 2):
                         cell.setBackground(
                             QBrush(QColor("#20394a" if self.data_view_state == DataViewState.CURRENT else "#3a314d"))
                         )
@@ -869,7 +939,7 @@ class MomentumHunterWindow(QMainWindow):
         self.status_label.setText(message)
 
     def _set_table_widths(self) -> None:
-        widths = [48, 58, 72, 88, 78, 116, 86, 104, 128, 180]
+        widths = [48, 62, 128, 72, 88, 78, 116, 86, 104, 128, 180]
         for column, width in enumerate(widths):
             self.table.setColumnWidth(column, width)
 
@@ -1037,14 +1107,26 @@ def format_news_html(candidate: Candidate) -> str:
         source = f" <span class='source'>({escape(item.source)})</span>" if item.source else ""
         if item.url:
             headline = f"<a href='{escape(item.url, quote=True)}'>{headline}</a>"
+        age = ""
+        if item.published_at:
+            freshness = evaluate_news_freshness(
+                ticker=candidate.ticker,
+                headline=item.headline,
+                publish_time=item.published_at,
+            )
+            age = (
+                f"<div class='age'>{escape(freshness.freshness)} "
+                f"{freshness.score} | Age: {escape(format_news_age(freshness.hours_old))}</div>"
+            )
         summary = f"<div class='summary'>{escape(item.summary)}</div>" if item.summary else ""
-        blocks.append(f"<li>{headline}{source}{summary}</li>")
+        blocks.append(f"<li>{headline}{source}{age}{summary}</li>")
     return (
         "<style>"
         "body { color: #e7edf4; background: #0f1720; font-family: Segoe UI; font-size: 10pt; }"
         "a { color: #7fb4ff; text-decoration: none; font-weight: 600; }"
         "a:hover { text-decoration: underline; }"
         ".source { color: #9cb0c4; }"
+        ".age { color: #f3d28b; margin-top: 3px; font-size: 9pt; }"
         ".summary { color: #cbd8e6; margin-top: 4px; margin-bottom: 10px; }"
         "li { margin-bottom: 10px; }"
         "</style>"
@@ -1072,6 +1154,16 @@ def score_color(score: int) -> QColor:
     return QColor("#6d3030")
 
 
+def freshness_color(freshness: str) -> QColor:
+    if freshness == "HOT":
+        return QColor("#8a2e2e")
+    if freshness == "ACTIVE":
+        return QColor("#735f24")
+    if freshness == "STALE":
+        return QColor("#2c4f73")
+    return QColor("#334155")
+
+
 def chart_bar_color(state: DataViewState) -> QColor:
     if state == DataViewState.HISTORICAL:
         return QColor("#8f6bb5")
@@ -1092,6 +1184,18 @@ def chart_badge_color(state: DataViewState, is_warning: bool = False) -> QColor:
     if is_warning:
         return QColor("#fff0bd")
     return QColor("#d8ffe8")
+
+
+def contained_logo_pixmap(path: Path, width: int, height: int) -> QPixmap:
+    pixmap = QPixmap(str(path))
+    if pixmap.isNull():
+        return pixmap
+    return pixmap.scaled(
+        width,
+        height,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
 
 
 def format_percent(value: float | None) -> str:
@@ -1294,6 +1398,11 @@ QGroupBox::title {
     left: 10px;
     padding: 0 4px;
     color: #b9c8d8;
+}
+QLabel#brandLogo {
+    background: #0f1720;
+    border: 1px solid #334457;
+    border-radius: 6px;
 }
 QPushButton {
     background: #2f80ed;
