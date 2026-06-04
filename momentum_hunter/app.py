@@ -39,7 +39,13 @@ from PySide6.QtWidgets import (
 from momentum_hunter.config import AppConfig, load_config, save_config
 from momentum_hunter.market import MarketRegimeSnapshot, detect_market_regime
 from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, SCANNER_PRESETS, TradingMode
-from momentum_hunter.news_age import evaluate_news_freshness, freshness_badge, format_news_age
+from momentum_hunter.news_age import (
+    apply_candidate_news_stack,
+    evaluate_news_freshness,
+    format_news_age,
+    news_stack_badge,
+    news_stack_summary,
+)
 from momentum_hunter.providers import provider_from_name
 from momentum_hunter.recommendations import RecommendationReport, build_weight_recommendations
 from momentum_hunter.scoring import score_candidates
@@ -288,7 +294,7 @@ class MomentumHunterWindow(QMainWindow):
 
         self.table = WatermarkTableWidget(0, 11, APP_LOGO_PATH)
         self.table.setHorizontalHeaderLabels(
-            ["Pick", "Score", "News Age", "Ticker", "Price", "% Chg", "Volume", "Rel Vol", "Market Cap", "Sector", "Industry"]
+            ["Pick", "Score", "News Stack", "Ticker", "Price", "% Chg", "Volume", "Rel Vol", "Market Cap", "Sector", "Industry"]
         )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)
@@ -316,13 +322,16 @@ class MomentumHunterWindow(QMainWindow):
         self.ticker_label.setObjectName("tickerLabel")
         self.company_label = QLabel("")
         self.score_label = QLabel("")
+        self.news_stack_label = QLabel("")
+        self.news_stack_label.setWordWrap(True)
         self.reasons_label = QLabel("")
         self.reasons_label.setWordWrap(True)
         identity_layout.addWidget(self.detail_state_label, 0, 0, 1, 2)
         identity_layout.addWidget(self.ticker_label, 1, 0)
         identity_layout.addWidget(self.score_label, 1, 1)
         identity_layout.addWidget(self.company_label, 2, 0, 1, 2)
-        identity_layout.addWidget(self.reasons_label, 3, 0, 1, 2)
+        identity_layout.addWidget(self.news_stack_label, 3, 0, 1, 2)
+        identity_layout.addWidget(self.reasons_label, 4, 0, 1, 2)
         layout.addWidget(identity)
 
         chart_box = QGroupBox("Momentum Chart")
@@ -448,10 +457,12 @@ class MomentumHunterWindow(QMainWindow):
         self.selected_ticker = None
         self.table.setRowCount(len(self.candidates))
         for row, candidate in enumerate(self.candidates):
+            if candidate.news and candidate.news_stack.article_count == 0:
+                apply_candidate_news_stack(candidate, now=self.display_capture_time)
             values = [
                 "",
                 str(candidate.score),
-                freshness_badge(candidate),
+                news_stack_badge(candidate),
                 candidate.ticker,
                 f"${candidate.price:,.2f}",
                 f"{candidate.percent_change:.1f}%",
@@ -477,8 +488,8 @@ class MomentumHunterWindow(QMainWindow):
                     item.setBackground(score_color(candidate.score))
                 elif column == 2:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    item.setBackground(freshness_color(candidate.freshness))
-                if candidate.ticker in self.reviewed_tickers:
+                    item.setBackground(freshness_color(candidate.news_stack.freshness))
+                if candidate.ticker in self.reviewed_tickers and column not in (1, 2):
                     item.setBackground(QBrush(QColor("#20394a" if self.data_view_state == DataViewState.CURRENT else "#3a314d")))
                 self.table.setItem(row, column, item)
         if self.candidates:
@@ -500,13 +511,14 @@ class MomentumHunterWindow(QMainWindow):
         self.ticker_label.setText(candidate.ticker)
         self.company_label.setText(candidate.company)
         self.score_label.setText(
-            f"Momentum: {candidate.score} | Freshness: {candidate.freshness_score} {candidate.freshness}"
+            f"Momentum: {candidate.score} | Freshness: {candidate.news_stack.freshness_score} {candidate.news_stack.freshness}"
         )
+        self.news_stack_label.setText(" | ".join(news_stack_summary(candidate)))
         self.reasons_label.setText(", ".join(candidate.score_reasons) or "No score reasons yet.")
         self.notes_edit.blockSignals(True)
         self.notes_edit.setPlainText(candidate.user_notes)
         self.notes_edit.blockSignals(False)
-        self.news_text.setHtml(format_news_html(candidate))
+        self.news_text.setHtml(format_news_html(candidate, now=self.display_capture_time))
         self.reviewed_tickers.add(candidate.ticker)
         if self.data_view_state == DataViewState.CURRENT:
             self.live_reviewed_tickers.add(candidate.ticker)
@@ -517,6 +529,7 @@ class MomentumHunterWindow(QMainWindow):
         self.ticker_label.setText(message)
         self.company_label.setText("")
         self.score_label.setText("")
+        self.news_stack_label.setText("")
         self.reasons_label.setText("")
         self.notes_edit.blockSignals(True)
         self.notes_edit.clear()
@@ -939,7 +952,7 @@ class MomentumHunterWindow(QMainWindow):
         self.status_label.setText(message)
 
     def _set_table_widths(self) -> None:
-        widths = [48, 62, 128, 72, 88, 78, 116, 86, 104, 128, 180]
+        widths = [48, 62, 190, 72, 88, 78, 116, 86, 104, 128, 180]
         for column, width in enumerate(widths):
             self.table.setColumnWidth(column, width)
 
@@ -1098,7 +1111,7 @@ def format_news(candidate: Candidate) -> str:
     return "\n\n".join(blocks)
 
 
-def format_news_html(candidate: Candidate) -> str:
+def format_news_html(candidate: Candidate, now: datetime | None = None) -> str:
     if not candidate.news:
         return "<p>No headlines loaded. Review news manually before trading.</p>"
     blocks = []
@@ -1113,6 +1126,7 @@ def format_news_html(candidate: Candidate) -> str:
                 ticker=candidate.ticker,
                 headline=item.headline,
                 publish_time=item.published_at,
+                now=now,
             )
             age = (
                 f"<div class='age'>{escape(freshness.freshness)} "

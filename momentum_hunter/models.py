@@ -43,6 +43,21 @@ class NewsItem:
 
 
 @dataclass
+class NewsStack:
+    article_count: int = 0
+    known_timestamp_count: int = 0
+    unknown_timestamp_count: int = 0
+    latest_article_age_hours: float | None = None
+    oldest_article_age_hours: float | None = None
+    latest_article_published_at: datetime | None = None
+    oldest_article_published_at: datetime | None = None
+    freshest_headline: str = ""
+    freshest_url: str = ""
+    freshness: str = "UNKNOWN"
+    freshness_score: int = 0
+
+
+@dataclass
 class Candidate:
     ticker: str
     company: str = ""
@@ -62,6 +77,7 @@ class Candidate:
     relative_strength: float | None = None
     news: list[NewsItem] = field(default_factory=list)
     score: int = 0
+    news_stack: NewsStack = field(default_factory=NewsStack)
     news_hours_old: float | None = None
     freshness: str = "UNKNOWN"
     freshness_score: int = 0

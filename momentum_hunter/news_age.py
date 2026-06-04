@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from momentum_hunter.models import Candidate, NewsItem
+from momentum_hunter.models import Candidate, NewsItem, NewsStack
 from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 
 
@@ -53,12 +53,10 @@ def evaluate_news_freshness(
     )
 
 
-def apply_candidate_news_freshness(candidate: Candidate, now: datetime | None = None) -> Candidate:
+def build_news_stack(candidate: Candidate, now: datetime | None = None) -> NewsStack:
+    article_count = len(candidate.news)
     if not candidate.news:
-        candidate.news_hours_old = None
-        candidate.freshness = FRESHNESS_UNKNOWN
-        candidate.freshness_score = 0
-        return candidate
+        return NewsStack()
 
     evaluations = [
         evaluate_news_freshness(
@@ -71,15 +69,42 @@ def apply_candidate_news_freshness(candidate: Candidate, now: datetime | None = 
     ]
     known = [item for item in evaluations if item.hours_old is not None]
     if not known:
-        candidate.news_hours_old = None
-        candidate.freshness = FRESHNESS_UNKNOWN
-        candidate.freshness_score = 0
-        return candidate
+        return NewsStack(
+            article_count=article_count,
+            known_timestamp_count=0,
+            unknown_timestamp_count=article_count,
+            freshness=FRESHNESS_UNKNOWN,
+            freshness_score=0,
+        )
 
     freshest = min(known, key=lambda item: item.hours_old or 0)
-    candidate.news_hours_old = freshest.hours_old
-    candidate.freshness = freshest.freshness
-    candidate.freshness_score = freshest.score
+    oldest = max(known, key=lambda item: item.hours_old or 0)
+    unknown_count = article_count - len(known)
+    return NewsStack(
+        article_count=article_count,
+        known_timestamp_count=len(known),
+        unknown_timestamp_count=unknown_count,
+        latest_article_age_hours=freshest.hours_old,
+        oldest_article_age_hours=oldest.hours_old,
+        latest_article_published_at=freshest.publish_time,
+        oldest_article_published_at=oldest.publish_time,
+        freshest_headline=freshest.headline,
+        freshest_url=next((item.url for item in candidate.news if item.headline == freshest.headline), ""),
+        freshness=freshest.freshness,
+        freshness_score=freshest.score,
+    )
+
+
+def apply_candidate_news_stack(candidate: Candidate, now: datetime | None = None) -> Candidate:
+    candidate.news_stack = build_news_stack(candidate, now=now)
+    candidate.news_hours_old = candidate.news_stack.latest_article_age_hours
+    candidate.freshness = candidate.news_stack.freshness
+    candidate.freshness_score = candidate.news_stack.freshness_score
+    return candidate
+
+
+def apply_candidate_news_freshness(candidate: Candidate, now: datetime | None = None) -> Candidate:
+    apply_candidate_news_stack(candidate, now=now)
     return candidate
 
 
@@ -107,10 +132,43 @@ def format_news_age(hours_old: float | None) -> str:
     if hours_old is None:
         return "unknown"
     if hours_old < 1:
-        return "<1h"
+        minutes = int(round(hours_old * 60))
+        if minutes <= 0:
+            return "<1m"
+        return f"{minutes}m"
     if hours_old < 48:
         return f"{int(round(hours_old))}h"
     return f"{int(round(hours_old / 24))}d"
+
+
+def format_news_range(stack: NewsStack) -> str:
+    if stack.latest_article_age_hours is None or stack.oldest_article_age_hours is None:
+        return "unknown"
+    latest = format_news_age(stack.latest_article_age_hours)
+    oldest = format_news_age(stack.oldest_article_age_hours)
+    if latest == oldest:
+        return latest
+    return f"{latest}-{oldest}"
+
+
+def news_stack_badge(candidate: Candidate) -> str:
+    stack = candidate.news_stack
+    if stack.article_count == 0:
+        return "No articles"
+    latest = format_news_age(stack.latest_article_age_hours)
+    return f"{stack.freshness} {latest} | {stack.article_count} | {format_news_range(stack)}"
+
+
+def news_stack_summary(candidate: Candidate) -> list[str]:
+    stack = candidate.news_stack
+    if stack.article_count == 0:
+        return ["Articles Found: 0", "Range: unknown", "Freshest: n/a"]
+    return [
+        f"Latest Article: {format_news_age(stack.latest_article_age_hours)}",
+        f"Articles Found: {stack.article_count}",
+        f"Range: {format_news_range(stack)}",
+        f"Freshest: {stack.freshest_headline or 'n/a'}",
+    ]
 
 
 def freshness_badge(candidate: Candidate) -> str:

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from momentum_hunter.models import Candidate, MarketRegime
-from momentum_hunter.news_age import apply_candidate_news_freshness
+from momentum_hunter.news_age import apply_candidate_news_stack
+from momentum_hunter.time_utils import now_central
 
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "scoring_profiles.json"
@@ -29,8 +31,9 @@ def score_candidate(
     candidate: Candidate,
     regime: MarketRegime = MarketRegime.UNKNOWN,
     profile: ScoringProfile | None = None,
+    now: datetime | None = None,
 ) -> Candidate:
-    apply_candidate_news_freshness(candidate)
+    apply_candidate_news_stack(candidate, now=now)
     profile = profile or load_active_profile()
     adjustment = regime_adjustment(profile, regime)
     score = int(profile.payload.get("base_score", 35))
@@ -100,9 +103,11 @@ def score_candidates(
     candidates: list[Candidate],
     regime: MarketRegime = MarketRegime.UNKNOWN,
     profile: ScoringProfile | None = None,
+    now: datetime | None = None,
 ) -> list[Candidate]:
     profile = profile or load_active_profile()
-    scored = [score_candidate(candidate, regime=regime, profile=profile) for candidate in candidates]
+    evaluation_time = now or now_central()
+    scored = [score_candidate(candidate, regime=regime, profile=profile, now=evaluation_time) for candidate in candidates]
     return sorted(scored, key=lambda item: item.score, reverse=True)
 
 

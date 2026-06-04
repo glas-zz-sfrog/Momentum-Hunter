@@ -9,8 +9,8 @@ from pathlib import Path
 
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.market import MarketRegimeSnapshot
-from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, NewsItem, ScannerCriteria, TradingMode
-from momentum_hunter.news_age import format_news_age
+from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, NewsItem, NewsStack, ScannerCriteria, TradingMode
+from momentum_hunter.news_age import apply_candidate_news_stack, format_news_age, format_news_range
 from momentum_hunter.time_utils import now_central
 
 
@@ -73,6 +73,8 @@ def save_daily_capture(
     capture_time: datetime | None = None,
 ) -> tuple[Path, Path]:
     capture_time = capture_time or now_central()
+    for candidate in candidates:
+        apply_candidate_news_stack(candidate, now=capture_time)
     payload = {
         "schema_version": 1,
         "capture_time": capture_time.isoformat(),
@@ -126,8 +128,8 @@ def capture_to_markdown(payload: dict) -> str:
         f"- Market Regime: {market['regime'].title()} ({market['symbol']})",
         f"- Regime Reason: {market['reason']}",
         "",
-        "| Pick | Rank | Ticker | Score | News Age | Freshness | Price | Change | Volume | Rel Vol | Sector | Notes |",
-        "| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        "| Pick | Rank | Ticker | Score | Latest Article | Articles | Range | Freshness Score | Price | Change | Volume | Rel Vol | Sector | Notes |",
+        "| --- | ---: | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
     ]
     for candidate in candidates:
         pick = "Y" if candidate["selected"] else ""
@@ -135,7 +137,9 @@ def capture_to_markdown(payload: dict) -> str:
         notes = (candidate.get("user_notes") or "").replace("|", "/").replace("\n", " ")
         lines.append(
             f"| {pick} | {candidate['rank']} | {candidate['ticker']} | {candidate['score']} | "
-            f"{format_news_age(candidate.get('news_hours_old'))} {candidate.get('freshness', 'UNKNOWN')} | "
+            f"{format_news_age(candidate.get('latest_article_age_hours'))} | "
+            f"{candidate.get('article_count', 0)} | "
+            f"{candidate.get('news_range', 'unknown')} | "
             f"{candidate.get('freshness_score', 0)} | "
             f"${candidate['price']:,.2f} | {candidate['percent_change']:.1f}% | "
             f"{candidate['volume']:,} | {rel_volume} | {candidate['sector']} | {notes} |"
@@ -169,6 +173,13 @@ def append_analysis_rows(payload: dict) -> None:
         "news_hours_old",
         "freshness",
         "freshness_score",
+        "article_count",
+        "known_timestamp_count",
+        "unknown_timestamp_count",
+        "latest_article_age_hours",
+        "oldest_article_age_hours",
+        "news_range",
+        "freshest_headline",
         "score_profile",
         "score_regime",
         "score_reasons",
@@ -211,6 +222,13 @@ def append_analysis_rows(payload: dict) -> None:
                     "news_hours_old": candidate.get("news_hours_old", ""),
                     "freshness": candidate.get("freshness", "UNKNOWN"),
                     "freshness_score": candidate.get("freshness_score", 0),
+                    "article_count": candidate.get("article_count", 0),
+                    "known_timestamp_count": candidate.get("known_timestamp_count", 0),
+                    "unknown_timestamp_count": candidate.get("unknown_timestamp_count", 0),
+                    "latest_article_age_hours": candidate.get("latest_article_age_hours", ""),
+                    "oldest_article_age_hours": candidate.get("oldest_article_age_hours", ""),
+                    "news_range": candidate.get("news_range", "unknown"),
+                    "freshest_headline": candidate.get("freshest_headline", ""),
                     "score_profile": candidate.get("score_profile", ""),
                     "score_regime": candidate.get("score_regime", ""),
                     "score_reasons": "; ".join(candidate.get("score_reasons") or []),
@@ -257,7 +275,10 @@ def save_watchlist_report(candidates: list[Candidate], for_date: datetime | None
                 f"## {index}. {candidate.ticker} - {candidate.company}",
                 "",
                 f"- Score: {candidate.score}",
-                f"- News Age: {format_news_age(candidate.news_hours_old)} {candidate.freshness}",
+                f"- Latest Article: {format_news_age(candidate.news_stack.latest_article_age_hours)}",
+                f"- Articles Found: {candidate.news_stack.article_count}",
+                f"- Range: {format_news_range(candidate.news_stack)}",
+                f"- Freshest Headline: {candidate.news_stack.freshest_headline or 'n/a'}",
                 f"- Freshness Score: {candidate.freshness_score}",
                 f"- Price: ${candidate.price:,.2f}",
                 f"- Change: {candidate.percent_change:.1f}%",
@@ -307,7 +328,10 @@ def save_snapshot_report(
                 f"## {index}. {candidate.ticker} - {candidate.company}",
                 "",
                 f"- Score: {candidate.score}",
-                f"- News Age: {format_news_age(candidate.news_hours_old)} {candidate.freshness}",
+                f"- Latest Article: {format_news_age(candidate.news_stack.latest_article_age_hours)}",
+                f"- Articles Found: {candidate.news_stack.article_count}",
+                f"- Range: {format_news_range(candidate.news_stack)}",
+                f"- Freshest Headline: {candidate.news_stack.freshest_headline or 'n/a'}",
                 f"- Freshness Score: {candidate.freshness_score}",
                 f"- Price: ${candidate.price:,.2f}",
                 f"- Change: {candidate.percent_change:.1f}%",
@@ -407,6 +431,8 @@ def load_capture_json(date_text: str, session: CaptureSession) -> dict:
 def candidate_to_dict(candidate: Candidate) -> dict:
     payload = asdict(candidate)
     payload["saved_at"] = candidate.saved_at.isoformat() if candidate.saved_at else None
+    payload["news_stack"] = news_stack_to_dict(candidate.news_stack)
+    payload.update(news_stack_flat_fields(candidate.news_stack))
     payload["news"] = [
         {
             **asdict(item),
@@ -434,6 +460,9 @@ def candidate_from_dict(payload: dict) -> Candidate:
     news_hours_old = payload.get("news_hours_old")
     if news_hours_old == "":
         news_hours_old = None
+    news_stack = news_stack_from_dict(payload.get("news_stack") or payload, news)
+    if news_hours_old is None:
+        news_hours_old = news_stack.latest_article_age_hours
     return Candidate(
         ticker=payload.get("ticker", ""),
         company=payload.get("company", ""),
@@ -453,15 +482,74 @@ def candidate_from_dict(payload: dict) -> Candidate:
         relative_strength=payload.get("relative_strength"),
         news=news,
         score=payload.get("score", 0),
+        news_stack=news_stack,
         news_hours_old=news_hours_old,
-        freshness=payload.get("freshness", "UNKNOWN"),
-        freshness_score=payload.get("freshness_score", 0),
+        freshness=payload.get("freshness", news_stack.freshness),
+        freshness_score=payload.get("freshness_score", news_stack.freshness_score),
         score_reasons=payload.get("score_reasons", []),
         score_profile=payload.get("score_profile", ""),
         score_regime=payload.get("score_regime", ""),
         user_notes=payload.get("user_notes", ""),
         saved_at=datetime.fromisoformat(saved_at) if saved_at else None,
     )
+
+
+def news_stack_to_dict(stack: NewsStack) -> dict:
+    payload = asdict(stack)
+    payload["latest_article_published_at"] = (
+        stack.latest_article_published_at.isoformat() if stack.latest_article_published_at else None
+    )
+    payload["oldest_article_published_at"] = (
+        stack.oldest_article_published_at.isoformat() if stack.oldest_article_published_at else None
+    )
+    return payload
+
+
+def news_stack_flat_fields(stack: NewsStack) -> dict:
+    return {
+        "article_count": stack.article_count,
+        "known_timestamp_count": stack.known_timestamp_count,
+        "unknown_timestamp_count": stack.unknown_timestamp_count,
+        "latest_article_age_hours": stack.latest_article_age_hours,
+        "oldest_article_age_hours": stack.oldest_article_age_hours,
+        "news_range": format_news_range(stack),
+        "freshest_headline": stack.freshest_headline,
+        "freshest_url": stack.freshest_url,
+    }
+
+
+def news_stack_from_dict(payload: dict, news: list[NewsItem]) -> NewsStack:
+    latest_age = optional_float(payload.get("latest_article_age_hours", payload.get("news_hours_old")))
+    oldest_age = optional_float(payload.get("oldest_article_age_hours", latest_age))
+    article_count = int(payload.get("article_count") or len(news))
+    known_count = int(payload.get("known_timestamp_count") or (1 if latest_age is not None else 0))
+    unknown_count = int(payload.get("unknown_timestamp_count") or max(0, article_count - known_count))
+    return NewsStack(
+        article_count=article_count,
+        known_timestamp_count=known_count,
+        unknown_timestamp_count=unknown_count,
+        latest_article_age_hours=latest_age,
+        oldest_article_age_hours=oldest_age,
+        latest_article_published_at=parse_optional_datetime(payload.get("latest_article_published_at")),
+        oldest_article_published_at=parse_optional_datetime(payload.get("oldest_article_published_at")),
+        freshest_headline=payload.get("freshest_headline", ""),
+        freshest_url=payload.get("freshest_url", ""),
+        freshness=payload.get("freshness", "UNKNOWN"),
+        freshness_score=int(payload.get("freshness_score") or 0),
+    )
+
+
+def parse_optional_datetime(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value else None
+
+
+def optional_float(value: object) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def format_market_cap(value: int) -> str:

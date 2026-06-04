@@ -14,11 +14,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from momentum_hunter.app import MomentumHunterWindow
 from momentum_hunter.models import Candidate, NewsItem
-from momentum_hunter.news_age import apply_candidate_news_freshness
+from momentum_hunter.news_age import apply_candidate_news_stack
 from momentum_hunter.recommendations import (
     RecommendationReport,
     ScoreWeightRecommendation,
 )
+from momentum_hunter.storage import candidate_to_dict
 from momentum_hunter.study import RegimeSummary, ScoreBucketSummary, StudySummary
 from momentum_hunter.time_utils import now_central
 from momentum_hunter.ui.data_view_state import DataViewState
@@ -121,6 +122,13 @@ def demo_candidates() -> list[Candidate]:
                     published_at=current - timedelta(hours=hours_old),
                     url=f"https://example.com/{ticker.lower()}",
                     summary="Review catalyst quality before making a trading decision.",
+                ),
+                NewsItem(
+                    headline=f"{company} earlier institutional follow-through headline",
+                    source="Finviz",
+                    published_at=current - timedelta(hours=hours_old + 8),
+                    url=f"https://example.com/{ticker.lower()}-follow-through",
+                    summary="Older article included to show the News Stack range.",
                 )
             ],
             score=score,
@@ -128,7 +136,7 @@ def demo_candidates() -> list[Candidate]:
             score_profile="regime-aware-v1",
             score_regime="bull",
         )
-        candidates.append(apply_candidate_news_freshness(candidate, now=current))
+        candidates.append(apply_candidate_news_stack(candidate, now=current))
     return candidates
 
 
@@ -145,36 +153,7 @@ def historical_payload() -> dict:
 
 
 def candidate_to_payload(candidate: Candidate) -> dict:
-    return {
-        "ticker": candidate.ticker,
-        "company": candidate.company,
-        "price": candidate.price,
-        "percent_change": candidate.percent_change,
-        "volume": candidate.volume,
-        "relative_volume": candidate.relative_volume,
-        "market_cap": candidate.market_cap,
-        "sector": candidate.sector,
-        "industry": candidate.industry,
-        "news": [
-            {
-                "headline": item.headline,
-                "source": item.source,
-                "published_at": item.published_at.isoformat() if item.published_at else None,
-                "url": item.url,
-                "summary": item.summary,
-            }
-            for item in candidate.news
-        ],
-        "score": candidate.score,
-        "news_hours_old": candidate.news_hours_old,
-        "freshness": candidate.freshness,
-        "freshness_score": candidate.freshness_score,
-        "score_reasons": candidate.score_reasons,
-        "score_profile": candidate.score_profile,
-        "score_regime": candidate.score_regime,
-        "user_notes": candidate.user_notes,
-        "saved_at": None,
-    }
+    return candidate_to_dict(candidate)
 
 
 def study_summary() -> StudySummary:
