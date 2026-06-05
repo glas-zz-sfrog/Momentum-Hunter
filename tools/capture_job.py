@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import traceback
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -10,16 +11,44 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from momentum_hunter.config import load_config
 from momentum_hunter.market import detect_market_regime
 from momentum_hunter.models import CaptureSession, SCANNER_PRESETS
-from momentum_hunter.providers import provider_from_name
+from momentum_hunter.providers import ProviderUnavailableError, provider_from_name
 from momentum_hunter.scoring import score_candidates
-from momentum_hunter.storage import save_daily_capture
+from momentum_hunter.storage import save_capture_failure, save_daily_capture
 from momentum_hunter.time_utils import now_central
 
 
 def main() -> int:
     args = parse_args()
-    config = load_config()
     session = CaptureSession(args.session)
+    provider_name = args.provider or "config"
+    scanner_name = args.scanner or "Institutional Momentum"
+    failure_time = now_central()
+    try:
+        return run_capture(args, session=session)
+    except Exception as exc:
+        traceback_text = traceback.format_exc()
+        try:
+            config = load_config()
+            provider_name = args.provider or config.provider
+        except Exception:
+            pass
+        failure_path = save_capture_failure(
+            session=session,
+            provider=provider_name,
+            scanner=scanner_name,
+            error_message=friendly_error_message(exc),
+            exception_type=type(exc).__name__,
+            traceback_text=traceback_text,
+            failure_time=failure_time,
+        )
+        print(f"Capture failed: {friendly_error_message(exc)}", file=sys.stderr)
+        print(f"Failure record: {failure_path}", file=sys.stderr)
+        print(traceback_text, file=sys.stderr)
+        return 1
+
+
+def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
+    config = load_config()
     criteria = SCANNER_PRESETS[args.scanner] if args.scanner else SCANNER_PRESETS["Institutional Momentum"]
     provider = provider_from_name(args.provider or config.provider)
     market_regime = detect_market_regime()
@@ -47,6 +76,12 @@ def main() -> int:
     print(f"Candidates: {len(candidates)}")
     print(f"Market regime: {market_regime.regime.value}")
     return 0
+
+
+def friendly_error_message(exc: Exception) -> str:
+    if isinstance(exc, ProviderUnavailableError):
+        return exc.user_message
+    return str(exc)
 
 
 def parse_args() -> argparse.Namespace:

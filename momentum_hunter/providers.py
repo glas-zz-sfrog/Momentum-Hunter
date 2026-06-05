@@ -1,12 +1,27 @@
 from __future__ import annotations
 
 import re
+import socket
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from typing import Iterable
 
+import requests
+
 from momentum_hunter.models import Candidate, NewsItem, ScannerCriteria
 from momentum_hunter.time_utils import CENTRAL_TZ, now_central
+
+
+FINVIZ_BACKOFF_SECONDS = (10, 30, 60)
+
+
+class ProviderUnavailableError(RuntimeError):
+    def __init__(self, provider: str, message: str, reason: str = "unavailable") -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.reason = reason
+        self.user_message = message
 
 
 class MarketDataProvider(ABC):
@@ -122,9 +137,9 @@ class FinvizProvider(MarketDataProvider):
     name = "finviz"
     base_url = "https://finviz.com"
 
-    def __init__(self) -> None:
-        import requests
-
+    def __init__(self, *, sleeper=time.sleep, backoff_seconds: tuple[int, ...] = FINVIZ_BACKOFF_SECONDS) -> None:
+        self.sleeper = sleeper
+        self.backoff_seconds = backoff_seconds
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -139,8 +154,7 @@ class FinvizProvider(MarketDataProvider):
         from bs4 import BeautifulSoup
 
         url = self._screener_url(criteria)
-        response = self.session.get(url, timeout=20)
-        response.raise_for_status()
+        response = self._get_with_retries(url, action="scan")
         soup = BeautifulSoup(response.text, "lxml")
         table = soup.find("table", class_="screener_table")
         if table is None:
@@ -173,8 +187,7 @@ class FinvizProvider(MarketDataProvider):
 
         cutoff = as_of or now_central()
         url = f"{self.base_url}/quote.ashx?t={ticker}"
-        response = self.session.get(url, timeout=20)
-        response.raise_for_status()
+        response = self._get_with_retries(url, action=f"news for {ticker}")
         soup = BeautifulSoup(response.text, "lxml")
         news_table = soup.find(id="news-table")
         if news_table is None:
@@ -208,11 +221,55 @@ class FinvizProvider(MarketDataProvider):
         filters = ",".join([cap_filter, price_filter, volume_filter, change_filter])
         return f"{self.base_url}/screener.ashx?v=111&f={filters}&o=-volume"
 
+    def _get_with_retries(self, url: str, *, action: str) -> requests.Response:
+        last_error: Exception | None = None
+        attempts = len(self.backoff_seconds) + 1
+        for attempt in range(attempts):
+            try:
+                response = self.session.get(url, timeout=20)
+                response.raise_for_status()
+                return response
+            except requests.RequestException as exc:
+                last_error = exc
+                if attempt < len(self.backoff_seconds):
+                    self.sleeper(self.backoff_seconds[attempt])
+                    continue
+                raise provider_error_from_exception(self.name, action, exc) from exc
+        raise provider_error_from_exception(self.name, action, last_error or RuntimeError("unknown provider failure"))
+
 
 def provider_from_name(name: str) -> MarketDataProvider:
     if name == FinvizProvider.name:
         return FinvizProvider()
     return SampleProvider()
+
+
+def provider_error_from_exception(provider: str, action: str, exc: BaseException) -> ProviderUnavailableError:
+    if is_dns_failure(exc):
+        return ProviderUnavailableError(
+            provider=provider,
+            reason="dns_failure",
+            message=f"Provider unavailable / DNS failure while running {provider} {action}.",
+        )
+    return ProviderUnavailableError(
+        provider=provider,
+        reason="request_failure",
+        message=f"Provider unavailable while running {provider} {action}.",
+    )
+
+
+def is_dns_failure(exc: BaseException | None) -> bool:
+    current = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, socket.gaierror):
+            return True
+        message = str(current).lower()
+        if "getaddrinfo failed" in message or "failed to resolve" in message or "name resolution" in message:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def parse_finviz_news_time(value: str, now: datetime | None = None) -> datetime | None:

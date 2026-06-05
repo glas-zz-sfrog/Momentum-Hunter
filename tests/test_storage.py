@@ -9,7 +9,7 @@ from unittest.mock import patch
 from momentum_hunter.market import MarketRegimeSnapshot
 from momentum_hunter.models import BASE_MOMENTUM, Candidate, CaptureSession, MarketRegime, NewsItem, TradingMode
 from momentum_hunter.news_age import apply_candidate_news_stack
-from momentum_hunter.storage import candidate_from_dict, candidate_to_dict, save_daily_capture
+from momentum_hunter.storage import candidate_from_dict, candidate_to_dict, load_latest_capture_failure, save_capture_failure, save_daily_capture
 from momentum_hunter.time_utils import CENTRAL_TZ
 
 
@@ -94,6 +94,31 @@ class StorageSerializationTests(unittest.TestCase):
         self.assertEqual(0, saved_candidate["future_timestamp_count"])
         self.assertEqual(1, saved_candidate["excluded_from_scoring_count"])
         self.assertEqual("Known premarket headline", saved_candidate["freshest_headline"])
+
+    def test_capture_failure_record_round_trips_for_dashboard_health(self) -> None:
+        failure_dir = Path.cwd() / "MomentumHunterData" / "data" / "_test_capture_failures"
+        try:
+            with patch("momentum_hunter.storage.CAPTURE_FAILURES_DIR", failure_dir):
+                path = save_capture_failure(
+                    session=CaptureSession.MORNING,
+                    provider="finviz",
+                    scanner="Base Momentum",
+                    error_message="Provider unavailable / DNS failure while running finviz scan.",
+                    exception_type="ProviderUnavailableError",
+                    traceback_text="full traceback",
+                    failure_time=datetime(2026, 6, 5, 7, 0, tzinfo=CENTRAL_TZ),
+                )
+                loaded = load_latest_capture_failure()
+
+            self.assertTrue(path.exists())
+            self.assertEqual("failure", loaded["status"])
+            self.assertEqual("finviz", loaded["provider"])
+            self.assertIn("DNS failure", loaded["error_message"])
+            self.assertEqual("full traceback", loaded["traceback"])
+        finally:
+            for child in failure_dir.glob("*"):
+                child.unlink()
+            failure_dir.rmdir()
 
 
 if __name__ == "__main__":

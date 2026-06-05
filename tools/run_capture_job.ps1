@@ -32,5 +32,6 @@ try {
 }
 catch {
     "ERROR: $($_.Exception.Message)" | Tee-Object -FilePath $logPath -Append
+    ($_ | Format-List * -Force | Out-String) | Tee-Object -FilePath $logPath -Append
     exit 1
 }

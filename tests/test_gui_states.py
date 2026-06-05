@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QDialog, QTableWidget
 
 from momentum_hunter.app import MomentumHunterWindow
 from momentum_hunter.models import Candidate, NewsItem
+from momentum_hunter.providers import ProviderUnavailableError
 from momentum_hunter.study import RegimeSummary, ScoreBucketSummary, StudySummary
 from momentum_hunter.time_utils import now_central
 from momentum_hunter.ui.data_view_state import DataViewState
@@ -98,6 +99,29 @@ class GuiStateTests(unittest.TestCase):
         self.assertEqual("", self.window.score_label.text())
         self.assertEqual("", self.window.news_text.toPlainText())
         self.assertIsNone(self.window.selected_ticker)
+
+    def test_provider_failure_preserves_existing_table_and_shows_retry(self) -> None:
+        self.window.data_view_state = DataViewState.CURRENT
+        self.window.display_capture_time = now_central() - timedelta(days=1)
+        self.window.current_capture_time = self.window.display_capture_time
+        self.window.display_session_label = "live"
+        self.window.candidates = [candidate("OLD", score=72)]
+        self.window._apply_data_view_state()
+        self.window._populate_table()
+
+        def fail_scan():
+            raise ProviderUnavailableError("finviz", "Provider unavailable / DNS failure while running finviz scan.", "dns_failure")
+
+        with (
+            patch.object(self.window, "_scan_current_candidates", fail_scan),
+            patch("momentum_hunter.app.QMessageBox.warning"),
+        ):
+            self.window.run_scan()
+
+        self.assertEqual("OLD", self.window.table.item(0, 3).text())
+        self.assertIn("STALE DATA - REFRESH REQUIRED", self.window.view_state_label.text())
+        self.assertFalse(self.window.retry_scan_button.isHidden())
+        self.assertIn("DNS failure", self.window.provider_status_label.text())
 
     def test_historical_capture_is_read_only_and_restores_current_dashboard(self) -> None:
         self.window.live_candidates = [candidate("CURR", score=88)]

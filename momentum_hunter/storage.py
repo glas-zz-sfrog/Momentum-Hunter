@@ -16,6 +16,7 @@ from momentum_hunter.time_utils import now_central
 
 CAPTURES_DIR = DATA_DIR / "captures"
 ANALYSIS_CSV = DATA_DIR / "analysis-captures.csv"
+CAPTURE_FAILURES_DIR = DATA_DIR / "capture-failures"
 
 
 def watchlist_path(for_date: datetime | None = None) -> Path:
@@ -58,6 +59,51 @@ def capture_json_path(for_date: datetime | None = None, session: CaptureSession 
 
 def capture_report_path(for_date: datetime | None = None, session: CaptureSession = CaptureSession.MANUAL) -> Path:
     return capture_dir(for_date) / f"{session.value}.md"
+
+
+def capture_failure_path(failure_time: datetime | None = None, session: CaptureSession = CaptureSession.MANUAL) -> Path:
+    ensure_app_dirs()
+    failure_time = failure_time or now_central()
+    CAPTURE_FAILURES_DIR.mkdir(parents=True, exist_ok=True)
+    safe_session = session.value if isinstance(session, CaptureSession) else str(session)
+    return CAPTURE_FAILURES_DIR / f"{failure_time.strftime('%Y-%m-%d-%H%M%S')}-{safe_session}.json"
+
+
+def save_capture_failure(
+    *,
+    session: CaptureSession,
+    provider: str,
+    scanner: str,
+    error_message: str,
+    exception_type: str,
+    traceback_text: str,
+    failure_time: datetime | None = None,
+) -> Path:
+    failure_time = failure_time or now_central()
+    payload = {
+        "schema_version": 1,
+        "status": "failure",
+        "failure_time": failure_time.isoformat(),
+        "session": session.value,
+        "provider": provider,
+        "scanner": scanner,
+        "error_message": error_message,
+        "exception_type": exception_type,
+        "traceback": traceback_text,
+    }
+    path = capture_failure_path(failure_time, session)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def load_latest_capture_failure() -> dict:
+    ensure_app_dirs()
+    if not CAPTURE_FAILURES_DIR.exists():
+        return {}
+    files = sorted(CAPTURE_FAILURES_DIR.glob("*.json"), reverse=True)
+    if not files:
+        return {}
+    return json.loads(files[0].read_text(encoding="utf-8"))
 
 
 def save_daily_capture(

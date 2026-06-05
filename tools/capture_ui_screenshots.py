@@ -36,6 +36,7 @@ def main() -> int:
         stack.enter_context(patch.object(MomentumHunterWindow, "_ensure_windows_startup", lambda window: None))
         stack.enter_context(patch.object(MomentumHunterWindow, "_start_snapshot_timer", lambda window: None))
         stack.enter_context(patch.object(MomentumHunterWindow, "refresh_market_regime", lambda window, show_status=True: None))
+        stack.enter_context(patch("momentum_hunter.app.load_latest_capture_failure", return_value={}))
 
         window = MomentumHunterWindow()
         window.resize(1280, 780)

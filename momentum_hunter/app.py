@@ -46,7 +46,7 @@ from momentum_hunter.news_age import (
     news_stack_badge,
     news_stack_summary,
 )
-from momentum_hunter.providers import provider_from_name
+from momentum_hunter.providers import ProviderUnavailableError, provider_from_name
 from momentum_hunter.recommendations import RecommendationReport, build_weight_recommendations
 from momentum_hunter.scoring import score_candidates
 from momentum_hunter.startup import install_startup_script, is_startup_installed
@@ -56,6 +56,7 @@ from momentum_hunter.storage import (
     list_capture_sessions,
     load_capture_json,
     load_capture_report,
+    load_latest_capture_failure,
     load_latest_report,
     load_latest_watchlist,
     save_daily_capture,
@@ -147,6 +148,8 @@ class MomentumHunterWindow(QMainWindow):
         self.display_capture_time: datetime | None = None
         self.display_session_label = ""
         self.current_view_style: DataViewStyle | None = None
+        self.provider_status_text = "Provider: not checked"
+        self.provider_status_ok = True
         self.market_regime = MarketRegimeSnapshot(
             regime=MarketRegime.UNKNOWN,
             symbol="SPY",
@@ -162,6 +165,7 @@ class MomentumHunterWindow(QMainWindow):
         self._apply_config_to_controls()
         self._ensure_windows_startup()
         self._load_capture_history()
+        self._refresh_capture_health()
         self._start_snapshot_timer()
         self._apply_data_view_state()
         self._update_status("Ready. Human review required before any trading decision.")
@@ -334,6 +338,20 @@ class MomentumHunterWindow(QMainWindow):
         identity_layout.addWidget(self.reasons_label, 4, 0, 1, 2)
         layout.addWidget(identity)
 
+        health_box = QGroupBox("Capture Health")
+        health_layout = QVBoxLayout(health_box)
+        self.provider_status_label = QLabel(self.provider_status_text)
+        self.provider_status_label.setWordWrap(True)
+        self.capture_failure_label = QLabel("Scheduled captures: no failures recorded.")
+        self.capture_failure_label.setWordWrap(True)
+        self.retry_scan_button = QPushButton("Retry Scan")
+        self.retry_scan_button.clicked.connect(self.run_scan)
+        self.retry_scan_button.hide()
+        health_layout.addWidget(self.provider_status_label)
+        health_layout.addWidget(self.capture_failure_label)
+        health_layout.addWidget(self.retry_scan_button)
+        layout.addWidget(health_box)
+
         chart_box = QGroupBox("Momentum Chart")
         chart_layout = QVBoxLayout(chart_box)
         self.chart_state_label = QLabel("STALE - Top Momentum Candidates")
@@ -403,6 +421,11 @@ class MomentumHunterWindow(QMainWindow):
     def _provider_changed(self, value: str) -> None:
         self.config = replace(self.config, provider=value)
         save_config(self.config)
+        self.provider_status_text = f"Provider: {value} not checked"
+        self.provider_status_ok = True
+        if hasattr(self, "retry_scan_button"):
+            self.retry_scan_button.hide()
+        self._refresh_capture_health()
         self._update_status(f"Provider set to {value}.")
 
     def _scanner_changed(self, value: str) -> None:
@@ -420,26 +443,49 @@ class MomentumHunterWindow(QMainWindow):
     def run_scan(self) -> None:
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            self._clear_candidate_details("Scanning fresh candidates...")
-            self._scan_current_candidates()
-            self.current_capture_time = now_central()
+            self._update_status(f"Running {self.scanner_combo.currentText()} with {self.provider_combo.currentText()} provider...")
+            result = self._scan_current_candidates()
+            if result is None:
+                candidates = self.candidates
+                scan_time = now_central()
+            else:
+                candidates, scan_time = result
+            self.candidates = candidates
+            self.current_capture_time = scan_time
             self.display_capture_time = self.current_capture_time
             self.display_session_label = "live"
             self.data_view_state = DataViewState.CURRENT
             self.live_candidates = list(self.candidates)
             self.live_saved_candidates = dict(self.saved_candidates)
             self.live_reviewed_tickers = set(self.reviewed_tickers)
+            self.provider_status_text = f"Provider: {self.provider_combo.currentText()} OK at {format_central(scan_time)}"
+            self.provider_status_ok = True
+            self.retry_scan_button.hide()
             self._apply_data_view_state()
+            self._refresh_capture_health()
             self._populate_table()
             self._update_score_chart()
             self._update_status(f"Scan complete at {format_central()}. {len(self.candidates)} candidates found.")
+        except ProviderUnavailableError as exc:
+            self.provider_status_text = f"Provider: {exc.user_message}"
+            self.provider_status_ok = False
+            self.retry_scan_button.show()
+            self._refresh_capture_health()
+            self._apply_data_view_state()
+            QMessageBox.warning(self, "Scanner Error", exc.user_message)
+            self._update_status(f"{exc.user_message} Old data was left in place.")
         except Exception as exc:
-            QMessageBox.warning(self, "Scanner Error", str(exc))
-            self._update_status(f"Scanner failed: {exc}")
+            self.provider_status_text = f"Provider: scanner failed. {exc}"
+            self.provider_status_ok = False
+            self.retry_scan_button.show()
+            self._refresh_capture_health()
+            self._apply_data_view_state()
+            QMessageBox.warning(self, "Scanner Error", "Scanner failed. Old data was left in place.")
+            self._update_status(f"Scanner failed. Old data was left in place. Detail: {exc}")
         finally:
             QApplication.restoreOverrideCursor()
 
-    def _scan_current_candidates(self) -> None:
+    def _scan_current_candidates(self) -> tuple[list[Candidate], datetime] | None:
         if self.market_regime.regime == MarketRegime.UNKNOWN:
             self.refresh_market_regime(show_status=False)
         scan_time = now_central()
@@ -450,7 +496,7 @@ class MomentumHunterWindow(QMainWindow):
         for candidate in candidates:
             if not candidate.news:
                 candidate.news = provider.fetch_news(candidate.ticker, as_of=scan_time)
-        self.candidates = score_candidates(candidates, regime=self.market_regime.regime, now=scan_time)
+        return score_candidates(candidates, regime=self.market_regime.regime, now=scan_time), scan_time
 
     def _populate_table(self) -> None:
         read_only = self._is_read_only_view()
@@ -682,8 +728,22 @@ class MomentumHunterWindow(QMainWindow):
             return
         if not self.candidates:
             try:
-                self._scan_current_candidates()
+                result = self._scan_current_candidates()
+                if result is not None:
+                    self.candidates, self.current_capture_time = result
+                    self.display_capture_time = self.current_capture_time
+                    self.provider_status_text = f"Provider: {self.provider_combo.currentText()} OK at {format_central(self.current_capture_time)}"
+                    self.provider_status_ok = True
+                    self.retry_scan_button.hide()
+                    self._refresh_capture_health()
                 self._populate_table()
+            except ProviderUnavailableError as exc:
+                self.provider_status_text = f"Provider: {exc.user_message}"
+                self.provider_status_ok = False
+                self.retry_scan_button.show()
+                self._refresh_capture_health()
+                self._update_status(f"Auto scan failed before {session.value} capture: {exc.user_message}")
+                return
             except Exception as exc:
                 self._update_status(f"Auto scan failed before {session.value} capture: {exc}")
                 return
@@ -698,6 +758,27 @@ class MomentumHunterWindow(QMainWindow):
         self._apply_data_view_state()
         if old_read_only != self._is_read_only_view() and self.candidates:
             self._populate_table()
+
+    def _refresh_capture_health(self) -> None:
+        if not hasattr(self, "provider_status_label"):
+            return
+        self.provider_status_label.setText(self.provider_status_text)
+        self.provider_status_label.setStyleSheet(
+            "color: #a7f3d0; font-weight: 600;" if self.provider_status_ok else "color: #fecaca; font-weight: 700;"
+        )
+        failure = load_latest_capture_failure()
+        if failure:
+            failure_time = failure.get("failure_time", "unknown time")
+            session = failure.get("session", "unknown")
+            provider = failure.get("provider", "unknown")
+            message = failure.get("error_message", "unknown failure")
+            self.capture_failure_label.setText(
+                f"WARNING - last scheduled capture failure: {failure_time} | {session} | {provider} | {message}"
+            )
+            self.capture_failure_label.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        else:
+            self.capture_failure_label.setText("Scheduled captures: no failures recorded.")
+            self.capture_failure_label.setStyleSheet("color: #cbd8e6;")
 
     def _load_capture_history(self) -> None:
         current_date = self.capture_date_combo.currentText()
