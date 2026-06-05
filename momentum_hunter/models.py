@@ -45,8 +45,11 @@ class NewsItem:
 @dataclass
 class NewsStack:
     article_count: int = 0
+    valid_timestamp_count: int = 0
     known_timestamp_count: int = 0
     unknown_timestamp_count: int = 0
+    future_timestamp_count: int = 0
+    excluded_from_scoring_count: int = 0
     latest_article_age_hours: float | None = None
     oldest_article_age_hours: float | None = None
     latest_article_published_at: datetime | None = None

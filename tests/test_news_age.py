@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from momentum_hunter.models import Candidate, NewsItem
 from momentum_hunter.news_age import (
     FRESHNESS_ACTIVE,
+    FRESHNESS_FUTURE,
     FRESHNESS_HOT,
     FRESHNESS_STALE,
     FRESHNESS_UNKNOWN,
@@ -61,6 +62,18 @@ class NewsAgeTests(unittest.TestCase):
         self.assertEqual(FRESHNESS_UNKNOWN, result.freshness)
         self.assertEqual(0, result.score)
 
+    def test_future_publish_time_is_excluded_from_scoring(self) -> None:
+        result = evaluate_news_freshness(
+            ticker="LEAK",
+            headline="Future headline",
+            publish_time=self.now + timedelta(hours=2),
+            now=self.now,
+        )
+
+        self.assertEqual(FRESHNESS_FUTURE, result.freshness)
+        self.assertEqual(0, result.score)
+        self.assertTrue(result.excluded_from_scoring)
+
     def test_candidate_uses_freshest_known_headline(self) -> None:
         candidate = Candidate(
             ticker="TEST",
@@ -106,6 +119,25 @@ class NewsAgeTests(unittest.TestCase):
         apply_candidate_news_freshness(candidate, now=self.now)
 
         self.assertEqual("HOT 32m | 2 | 32m-18h", news_stack_badge(candidate))
+
+    def test_news_stack_ignores_future_and_unknown_rows_for_candidate_freshness(self) -> None:
+        candidate = Candidate(
+            ticker="SAFE",
+            news=[
+                NewsItem(headline="Future headline", published_at=self.now + timedelta(hours=4)),
+                NewsItem(headline="Valid headline", published_at=self.now - timedelta(hours=5)),
+                NewsItem(headline="Unknown timestamp headline"),
+            ],
+        )
+
+        stack = build_news_stack(candidate, now=self.now)
+
+        self.assertEqual("Valid headline", stack.freshest_headline)
+        self.assertEqual(1, stack.valid_timestamp_count)
+        self.assertEqual(1, stack.future_timestamp_count)
+        self.assertEqual(1, stack.unknown_timestamp_count)
+        self.assertEqual(2, stack.excluded_from_scoring_count)
+        self.assertEqual(FRESHNESS_HOT, stack.freshness)
 
     def test_active_window_between_one_and_seven_days(self) -> None:
         result = evaluate_news_freshness(

@@ -11,6 +11,7 @@ FRESHNESS_HOT = "HOT"
 FRESHNESS_ACTIVE = "ACTIVE"
 FRESHNESS_STALE = "STALE"
 FRESHNESS_UNKNOWN = "UNKNOWN"
+FRESHNESS_FUTURE = "FUTURE_TIMESTAMP"
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class NewsFreshness:
     hours_old: float | None
     freshness: str
     score: int
+    excluded_from_scoring: bool = False
 
 
 def evaluate_news_freshness(
@@ -40,16 +42,27 @@ def evaluate_news_freshness(
             hours_old=None,
             freshness=FRESHNESS_UNKNOWN,
             score=0,
+            excluded_from_scoring=True,
         )
 
-    hours_old = max(0.0, (current_time - published).total_seconds() / 3600)
+    raw_hours_old = (current_time - published).total_seconds() / 3600
+    if raw_hours_old < 0:
+        return NewsFreshness(
+            ticker=ticker,
+            headline=headline,
+            publish_time=published,
+            hours_old=round(raw_hours_old, 2),
+            freshness=FRESHNESS_FUTURE,
+            score=0,
+            excluded_from_scoring=True,
+        )
     return NewsFreshness(
         ticker=ticker,
         headline=headline,
         publish_time=published,
-        hours_old=round(hours_old, 2),
-        freshness=freshness_label(hours_old),
-        score=freshness_score(hours_old),
+        hours_old=round(raw_hours_old, 2),
+        freshness=freshness_label(raw_hours_old),
+        score=freshness_score(raw_hours_old),
     )
 
 
@@ -67,23 +80,31 @@ def build_news_stack(candidate: Candidate, now: datetime | None = None) -> NewsS
         )
         for item in candidate.news
     ]
-    known = [item for item in evaluations if item.hours_old is not None]
-    if not known:
+    valid = [item for item in evaluations if item.hours_old is not None and not item.excluded_from_scoring]
+    unknown_count = sum(1 for item in evaluations if item.freshness == FRESHNESS_UNKNOWN)
+    future_count = sum(1 for item in evaluations if item.freshness == FRESHNESS_FUTURE)
+    excluded_count = unknown_count + future_count
+    if not valid:
         return NewsStack(
             article_count=article_count,
+            valid_timestamp_count=0,
             known_timestamp_count=0,
-            unknown_timestamp_count=article_count,
+            unknown_timestamp_count=unknown_count,
+            future_timestamp_count=future_count,
+            excluded_from_scoring_count=excluded_count,
             freshness=FRESHNESS_UNKNOWN,
             freshness_score=0,
         )
 
-    freshest = min(known, key=lambda item: item.hours_old or 0)
-    oldest = max(known, key=lambda item: item.hours_old or 0)
-    unknown_count = article_count - len(known)
+    freshest = min(valid, key=lambda item: item.hours_old or 0)
+    oldest = max(valid, key=lambda item: item.hours_old or 0)
     return NewsStack(
         article_count=article_count,
-        known_timestamp_count=len(known),
+        valid_timestamp_count=len(valid),
+        known_timestamp_count=len(valid),
         unknown_timestamp_count=unknown_count,
+        future_timestamp_count=future_count,
+        excluded_from_scoring_count=excluded_count,
         latest_article_age_hours=freshest.hours_old,
         oldest_article_age_hours=oldest.hours_old,
         latest_article_published_at=freshest.publish_time,
@@ -179,6 +200,18 @@ def freshness_badge(candidate: Candidate) -> str:
     if candidate.freshness == FRESHNESS_STALE:
         return f"STALE {candidate.freshness_score} ({format_news_age(candidate.news_hours_old)})"
     return "UNKNOWN"
+
+
+def filter_news_known_at_capture(news: list[NewsItem], captured_at: datetime | None) -> list[NewsItem]:
+    cutoff = normalize_datetime(captured_at)
+    if cutoff is None:
+        return list(news)
+    known: list[NewsItem] = []
+    for item in news:
+        published = normalize_datetime(item.published_at)
+        if published is None or published <= cutoff:
+            known.append(item)
+    return known
 
 
 def normalize_datetime(value: datetime | None) -> datetime | None:

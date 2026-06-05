@@ -442,14 +442,15 @@ class MomentumHunterWindow(QMainWindow):
     def _scan_current_candidates(self) -> None:
         if self.market_regime.regime == MarketRegime.UNKNOWN:
             self.refresh_market_regime(show_status=False)
+        scan_time = now_central()
         criteria = SCANNER_PRESETS[self.scanner_combo.currentText()]
         provider = provider_from_name(self.provider_combo.currentText())
         self._update_status(f"Running {criteria.name} with {provider.name} provider...")
         candidates = provider.scan(criteria)
         for candidate in candidates:
             if not candidate.news:
-                candidate.news = provider.fetch_news(candidate.ticker)
-        self.candidates = score_candidates(candidates, regime=self.market_regime.regime)
+                candidate.news = provider.fetch_news(candidate.ticker, as_of=scan_time)
+        self.candidates = score_candidates(candidates, regime=self.market_regime.regime, now=scan_time)
 
     def _populate_table(self) -> None:
         read_only = self._is_read_only_view()
@@ -756,6 +757,9 @@ class MomentumHunterWindow(QMainWindow):
         self.display_capture_time = datetime.fromisoformat(payload["capture_time"]) if payload.get("capture_time") else None
         self.display_session_label = payload.get("session", "snapshot")
         self.candidates = [candidate_from_dict(item) for item in payload.get("candidates", [])]
+        for raw_candidate, candidate in zip(payload.get("candidates", []), self.candidates):
+            if not raw_candidate.get("news_stack"):
+                apply_candidate_news_stack(candidate, now=self.display_capture_time)
         self.saved_candidates = {
             item["ticker"]: candidate
             for item, candidate in zip(payload.get("candidates", []), self.candidates)

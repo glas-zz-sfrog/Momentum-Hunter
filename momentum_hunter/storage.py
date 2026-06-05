@@ -10,7 +10,7 @@ from pathlib import Path
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.market import MarketRegimeSnapshot
 from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, NewsItem, NewsStack, ScannerCriteria, TradingMode
-from momentum_hunter.news_age import apply_candidate_news_stack, format_news_age, format_news_range
+from momentum_hunter.news_age import apply_candidate_news_stack, filter_news_known_at_capture, format_news_age, format_news_range
 from momentum_hunter.time_utils import now_central
 
 
@@ -74,6 +74,7 @@ def save_daily_capture(
 ) -> tuple[Path, Path]:
     capture_time = capture_time or now_central()
     for candidate in candidates:
+        candidate.news = filter_news_known_at_capture(candidate.news, capture_time)
         apply_candidate_news_stack(candidate, now=capture_time)
     payload = {
         "schema_version": 1,
@@ -174,8 +175,11 @@ def append_analysis_rows(payload: dict) -> None:
         "freshness",
         "freshness_score",
         "article_count",
+        "valid_timestamp_count",
         "known_timestamp_count",
         "unknown_timestamp_count",
+        "future_timestamp_count",
+        "excluded_from_scoring_count",
         "latest_article_age_hours",
         "oldest_article_age_hours",
         "news_range",
@@ -223,8 +227,11 @@ def append_analysis_rows(payload: dict) -> None:
                     "freshness": candidate.get("freshness", "UNKNOWN"),
                     "freshness_score": candidate.get("freshness_score", 0),
                     "article_count": candidate.get("article_count", 0),
+                    "valid_timestamp_count": candidate.get("valid_timestamp_count", 0),
                     "known_timestamp_count": candidate.get("known_timestamp_count", 0),
                     "unknown_timestamp_count": candidate.get("unknown_timestamp_count", 0),
+                    "future_timestamp_count": candidate.get("future_timestamp_count", 0),
+                    "excluded_from_scoring_count": candidate.get("excluded_from_scoring_count", 0),
                     "latest_article_age_hours": candidate.get("latest_article_age_hours", ""),
                     "oldest_article_age_hours": candidate.get("oldest_article_age_hours", ""),
                     "news_range": candidate.get("news_range", "unknown"),
@@ -508,8 +515,11 @@ def news_stack_to_dict(stack: NewsStack) -> dict:
 def news_stack_flat_fields(stack: NewsStack) -> dict:
     return {
         "article_count": stack.article_count,
+        "valid_timestamp_count": stack.valid_timestamp_count,
         "known_timestamp_count": stack.known_timestamp_count,
         "unknown_timestamp_count": stack.unknown_timestamp_count,
+        "future_timestamp_count": stack.future_timestamp_count,
+        "excluded_from_scoring_count": stack.excluded_from_scoring_count,
         "latest_article_age_hours": stack.latest_article_age_hours,
         "oldest_article_age_hours": stack.oldest_article_age_hours,
         "news_range": format_news_range(stack),
@@ -522,12 +532,18 @@ def news_stack_from_dict(payload: dict, news: list[NewsItem]) -> NewsStack:
     latest_age = optional_float(payload.get("latest_article_age_hours", payload.get("news_hours_old")))
     oldest_age = optional_float(payload.get("oldest_article_age_hours", latest_age))
     article_count = int(payload.get("article_count") or len(news))
-    known_count = int(payload.get("known_timestamp_count") or (1 if latest_age is not None else 0))
+    valid_count = int(payload.get("valid_timestamp_count") or payload.get("known_timestamp_count") or (1 if latest_age is not None else 0))
+    known_count = int(payload.get("known_timestamp_count") or valid_count)
     unknown_count = int(payload.get("unknown_timestamp_count") or max(0, article_count - known_count))
+    future_count = int(payload.get("future_timestamp_count") or 0)
+    excluded_count = int(payload.get("excluded_from_scoring_count") or (unknown_count + future_count))
     return NewsStack(
         article_count=article_count,
+        valid_timestamp_count=valid_count,
         known_timestamp_count=known_count,
         unknown_timestamp_count=unknown_count,
+        future_timestamp_count=future_count,
+        excluded_from_scoring_count=excluded_count,
         latest_article_age_hours=latest_age,
         oldest_article_age_hours=oldest_age,
         latest_article_published_at=parse_optional_datetime(payload.get("latest_article_published_at")),

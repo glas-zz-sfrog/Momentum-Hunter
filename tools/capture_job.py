@@ -23,12 +23,13 @@ def main() -> int:
     criteria = SCANNER_PRESETS[args.scanner] if args.scanner else SCANNER_PRESETS["Institutional Momentum"]
     provider = provider_from_name(args.provider or config.provider)
     market_regime = detect_market_regime()
+    capture_time = now_central()
 
     candidates = provider.scan(criteria)
     for candidate in candidates:
         if not candidate.news:
-            candidate.news = provider.fetch_news(candidate.ticker)
-    candidates = score_candidates(candidates, regime=market_regime.regime)
+            candidate.news = provider.fetch_news(candidate.ticker, as_of=capture_time)
+    candidates = score_candidates(candidates, regime=market_regime.regime, now=capture_time)
     json_path, report_path = save_daily_capture(
         candidates=candidates,
         selected_tickers=set(),
@@ -38,7 +39,7 @@ def main() -> int:
         mode=config.mode,
         session=session,
         market_regime=market_regime,
-        capture_time=now_central(),
+        capture_time=capture_time,
     )
     print(f"Saved {session.value} capture")
     print(f"JSON: {json_path}")

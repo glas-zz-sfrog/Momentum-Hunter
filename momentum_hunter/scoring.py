@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from momentum_hunter.models import Candidate, MarketRegime
-from momentum_hunter.news_age import apply_candidate_news_stack
+from momentum_hunter.news_age import apply_candidate_news_stack, filter_news_known_at_capture
 from momentum_hunter.time_utils import now_central
 
 
@@ -33,7 +33,8 @@ def score_candidate(
     profile: ScoringProfile | None = None,
     now: datetime | None = None,
 ) -> Candidate:
-    apply_candidate_news_stack(candidate, now=now)
+    evaluation_time = now or now_central()
+    apply_candidate_news_stack(candidate, now=evaluation_time)
     profile = profile or load_active_profile()
     adjustment = regime_adjustment(profile, regime)
     score = int(profile.payload.get("base_score", 35))
@@ -74,7 +75,8 @@ def score_candidate(
         score += weighted_points(price_momentum["medium_points"], adjustment.price_momentum_multiplier)
         reasons.append(f"{candidate.percent_change:.1f}% price momentum")
 
-    catalyst_text = " ".join([item.headline + " " + item.summary for item in candidate.news]).lower()
+    scoring_news = filter_news_known_at_capture(candidate.news, evaluation_time)
+    catalyst_text = " ".join([item.headline + " " + item.summary for item in scoring_news]).lower()
     for keyword, points in profile.payload["positive_catalysts"].items():
         if keyword in catalyst_text:
             score += weighted_points(points, adjustment.positive_catalyst_multiplier)

@@ -17,7 +17,7 @@ class MarketDataProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def fetch_news(self, ticker: str) -> list[NewsItem]:
+    def fetch_news(self, ticker: str, as_of: datetime | None = None) -> list[NewsItem]:
         raise NotImplementedError
 
 
@@ -111,7 +111,7 @@ class SampleProvider(MarketDataProvider):
         ]
         return filter_candidates(candidates, criteria)
 
-    def fetch_news(self, ticker: str) -> list[NewsItem]:
+    def fetch_news(self, ticker: str, as_of: datetime | None = None) -> list[NewsItem]:
         for candidate in self.scan(criteria=_loose_criteria()):
             if candidate.ticker == ticker:
                 return candidate.news
@@ -168,9 +168,10 @@ class FinvizProvider(MarketDataProvider):
 
         return filter_candidates(candidates, criteria)
 
-    def fetch_news(self, ticker: str) -> list[NewsItem]:
+    def fetch_news(self, ticker: str, as_of: datetime | None = None) -> list[NewsItem]:
         from bs4 import BeautifulSoup
 
+        cutoff = as_of or now_central()
         url = f"{self.base_url}/quote.ashx?t={ticker}"
         response = self.session.get(url, timeout=20)
         response.raise_for_status()
@@ -185,11 +186,14 @@ class FinvizProvider(MarketDataProvider):
             if link is None:
                 continue
             timestamp_text = row.find("td").get_text(" ", strip=True) if row.find("td") else ""
+            published_at = parse_finviz_news_time(timestamp_text, now=cutoff)
+            if published_at is not None and published_at > cutoff:
+                continue
             items.append(
                 NewsItem(
                     headline=link.get_text(" ", strip=True),
                     source="Finviz",
-                    published_at=parse_finviz_news_time(timestamp_text),
+                    published_at=published_at,
                     url=link.get("href", ""),
                     summary=summarize_catalyst(link.get_text(" ", strip=True)),
                 )
