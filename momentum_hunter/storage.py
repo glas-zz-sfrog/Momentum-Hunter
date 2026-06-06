@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import re
 import csv
@@ -17,6 +19,11 @@ from momentum_hunter.time_utils import now_central
 CAPTURES_DIR = DATA_DIR / "captures"
 ANALYSIS_CSV = DATA_DIR / "analysis-captures.csv"
 CAPTURE_FAILURES_DIR = DATA_DIR / "capture-failures"
+CAPTURE_INTEGRITY_MANIFEST = DATA_DIR / "capture-integrity-manifest.json"
+
+
+class RawCaptureAlreadyExistsError(FileExistsError):
+    pass
 
 
 def watchlist_path(for_date: datetime | None = None) -> Path:
@@ -59,6 +66,84 @@ def capture_json_path(for_date: datetime | None = None, session: CaptureSession 
 
 def capture_report_path(for_date: datetime | None = None, session: CaptureSession = CaptureSession.MANUAL) -> Path:
     return capture_dir(for_date) / f"{session.value}.md"
+
+
+def capture_manifest_key(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(DATA_DIR.resolve()).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def capture_source_hash(payload: dict) -> str:
+    normalized = copy.deepcopy(payload)
+    integrity = normalized.get("integrity")
+    if isinstance(integrity, dict):
+        integrity.pop("source_hash", None)
+    encoded = json.dumps(
+        normalized,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def load_capture_integrity_manifest(path: Path | None = None) -> dict:
+    path = path or CAPTURE_INTEGRITY_MANIFEST
+    if not path.exists():
+        return {"schema_version": 1, "records": {}}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_capture_integrity_manifest(payload: dict, path: Path | None = None) -> Path:
+    path = path or CAPTURE_INTEGRITY_MANIFEST
+    ensure_app_dirs()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def record_raw_capture_integrity(
+    *,
+    json_path: Path,
+    report_path: Path,
+    capture_time: datetime,
+    session: CaptureSession,
+    provider: str,
+    scanner: str,
+    created_at: datetime,
+) -> None:
+    manifest = load_capture_integrity_manifest()
+    records = manifest.setdefault("records", {})
+    for path, kind in ((json_path, "raw_capture_json"), (report_path, "raw_capture_markdown")):
+        records[capture_manifest_key(path)] = {
+            "kind": kind,
+            "created_at": created_at.isoformat(),
+            "capture_time": capture_time.isoformat(),
+            "capture_date": capture_time.strftime("%Y-%m-%d"),
+            "session": session.value,
+            "provider": provider,
+            "scanner": scanner,
+            "source_hash": file_sha256(path),
+        }
+    manifest["updated_at"] = now_central().isoformat()
+    save_capture_integrity_manifest(manifest)
+
+
+def write_raw_text_once(path: Path, text: str) -> None:
+    if path.exists():
+        raise RawCaptureAlreadyExistsError(f"Raw capture already exists and will not be overwritten: {path}")
+    path.write_text(text, encoding="utf-8")
 
 
 def capture_failure_path(failure_time: datetime | None = None, session: CaptureSession = CaptureSession.MANUAL) -> Path:
@@ -119,6 +204,7 @@ def save_daily_capture(
     capture_time: datetime | None = None,
 ) -> tuple[Path, Path]:
     capture_time = capture_time or now_central()
+    created_at = now_central()
     for candidate in candidates:
         candidate.news = filter_news_known_at_capture(candidate.news, capture_time)
         apply_candidate_news_stack(candidate, now=capture_time)
@@ -144,19 +230,38 @@ def save_daily_capture(
         },
         "candidates": [
             {
-                **candidate_to_dict(candidate),
-                "selected": candidate.ticker in selected_tickers,
-                "reviewed": candidate.ticker in reviewed_tickers,
+                **candidate_to_raw_capture_dict(candidate),
                 "rank": index,
             }
             for index, candidate in enumerate(sorted(candidates, key=lambda item: item.score, reverse=True), 1)
         ],
     }
+    payload["integrity"] = {
+        "created_at": created_at.isoformat(),
+        "source_hash": "",
+    }
+    payload["integrity"]["source_hash"] = capture_source_hash(payload)
     json_path = capture_json_path(capture_time, session)
-    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     report_path_value = capture_report_path(capture_time, session)
-    report_path_value.write_text(capture_to_markdown(payload), encoding="utf-8")
-    append_analysis_rows(payload)
+    if json_path.exists() or report_path_value.exists():
+        existing = json_path if json_path.exists() else report_path_value
+        raise RawCaptureAlreadyExistsError(f"Raw capture already exists and will not be overwritten: {existing}")
+    write_raw_text_once(json_path, json.dumps(payload, indent=2))
+    write_raw_text_once(report_path_value, capture_to_markdown(payload))
+    record_raw_capture_integrity(
+        json_path=json_path,
+        report_path=report_path_value,
+        capture_time=capture_time,
+        session=session,
+        provider=provider,
+        scanner=criteria.name,
+        created_at=created_at,
+    )
+    analysis_payload = copy.deepcopy(payload)
+    for candidate in analysis_payload["candidates"]:
+        candidate["selected"] = candidate["ticker"] in selected_tickers
+        candidate["reviewed"] = candidate["ticker"] in reviewed_tickers
+    append_analysis_rows(analysis_payload)
     return json_path, report_path_value
 
 
@@ -174,26 +279,23 @@ def capture_to_markdown(payload: dict) -> str:
         f"- Scoring Profile: {payload.get('scoring', {}).get('profile') or 'unknown'}",
         f"- Market Regime: {market['regime'].title()} ({market['symbol']})",
         f"- Regime Reason: {market['reason']}",
+        f"- Created At: {payload.get('integrity', {}).get('created_at', 'unknown')}",
+        f"- Source Hash: {payload.get('integrity', {}).get('source_hash', 'unknown')}",
         "",
-        "| Pick | Rank | Ticker | Score | Latest Article | Articles | Range | Freshness Score | Price | Change | Volume | Rel Vol | Sector | Notes |",
-        "| --- | ---: | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        "| Rank | Ticker | Score | Latest Article | Articles | Range | Freshness Score | Price | Change | Volume | Rel Vol | Sector |",
+        "| ---: | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for candidate in candidates:
-        pick = "Y" if candidate["selected"] else ""
         rel_volume = f"{candidate['relative_volume']:.2f}x" if candidate["relative_volume"] else "n/a"
-        notes = (candidate.get("user_notes") or "").replace("|", "/").replace("\n", " ")
         lines.append(
-            f"| {pick} | {candidate['rank']} | {candidate['ticker']} | {candidate['score']} | "
+            f"| {candidate['rank']} | {candidate['ticker']} | {candidate['score']} | "
             f"{format_news_age(candidate.get('latest_article_age_hours'))} | "
             f"{candidate.get('article_count', 0)} | "
             f"{candidate.get('news_range', 'unknown')} | "
             f"{candidate.get('freshness_score', 0)} | "
             f"${candidate['price']:,.2f} | {candidate['percent_change']:.1f}% | "
-            f"{candidate['volume']:,} | {rel_volume} | {candidate['sector']} | {notes} |"
+            f"{candidate['volume']:,} | {rel_volume} | {candidate['sector']} |"
         )
-    lines.extend(["", "## Score Reasons", ""])
-    for candidate in candidates:
-        lines.append(f"- {candidate['ticker']}: {', '.join(candidate.get('score_reasons') or []) or 'None'}")
     return "\n".join(lines)
 
 
@@ -493,6 +595,13 @@ def candidate_to_dict(candidate: Candidate) -> dict:
         }
         for item in candidate.news
     ]
+    return payload
+
+
+def candidate_to_raw_capture_dict(candidate: Candidate) -> dict:
+    payload = candidate_to_dict(candidate)
+    for field in ("saved_at", "user_notes", "score_reasons"):
+        payload.pop(field, None)
     return payload
 
 

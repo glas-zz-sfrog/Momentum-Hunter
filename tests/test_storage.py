@@ -60,10 +60,12 @@ class StorageSerializationTests(unittest.TestCase):
         data_dir = Path.cwd() / "MomentumHunterData" / "data"
         json_path = data_dir / "_test_future_capture.json"
         report_path = data_dir / "_test_future_capture.md"
+        manifest_path = data_dir / "_test_future_capture_manifest.json"
         try:
             with (
                 patch("momentum_hunter.storage.capture_json_path", return_value=json_path),
                 patch("momentum_hunter.storage.capture_report_path", return_value=report_path),
+                patch("momentum_hunter.storage.CAPTURE_INTEGRITY_MANIFEST", manifest_path),
                 patch("momentum_hunter.storage.append_analysis_rows", lambda payload: None),
             ):
                 saved_json_path, _ = save_daily_capture(
@@ -82,6 +84,7 @@ class StorageSerializationTests(unittest.TestCase):
         finally:
             json_path.unlink(missing_ok=True)
             report_path.unlink(missing_ok=True)
+            manifest_path.unlink(missing_ok=True)
 
         saved_candidate = payload["candidates"][0]
         headlines = [item["headline"] for item in saved_candidate["news"]]
@@ -94,6 +97,12 @@ class StorageSerializationTests(unittest.TestCase):
         self.assertEqual(0, saved_candidate["future_timestamp_count"])
         self.assertEqual(1, saved_candidate["excluded_from_scoring_count"])
         self.assertEqual("Known premarket headline", saved_candidate["freshest_headline"])
+        self.assertIn("created_at", payload["integrity"])
+        self.assertRegex(payload["integrity"]["source_hash"], r"^[0-9a-f]{64}$")
+        self.assertNotIn("selected", saved_candidate)
+        self.assertNotIn("reviewed", saved_candidate)
+        self.assertNotIn("user_notes", saved_candidate)
+        self.assertNotIn("score_reasons", saved_candidate)
 
     def test_capture_failure_record_round_trips_for_dashboard_health(self) -> None:
         failure_dir = Path.cwd() / "MomentumHunterData" / "data" / "_test_capture_failures"

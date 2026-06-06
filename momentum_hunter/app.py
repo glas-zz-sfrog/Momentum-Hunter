@@ -65,6 +65,7 @@ from momentum_hunter.review import (
 from momentum_hunter.scoring import score_candidates
 from momentum_hunter.startup import install_startup_script, is_startup_installed
 from momentum_hunter.storage import (
+    RawCaptureAlreadyExistsError,
     candidate_from_dict,
     list_capture_dates,
     list_capture_sessions,
@@ -798,16 +799,22 @@ class MomentumHunterWindow(QMainWindow):
         session = session or self._current_capture_session()
         if self.market_regime.regime == MarketRegime.UNKNOWN:
             self.refresh_market_regime(show_status=False)
-        json_path, report_path = save_daily_capture(
-            candidates=candidates,
-            selected_tickers=selected,
-            reviewed_tickers=self.reviewed_tickers,
-            criteria=SCANNER_PRESETS[self.scanner_combo.currentText()],
-            provider=self.provider_combo.currentText(),
-            mode=self.config.mode,
-            session=session,
-            market_regime=self.market_regime,
-        )
+        try:
+            json_path, report_path = save_daily_capture(
+                candidates=candidates,
+                selected_tickers=selected,
+                reviewed_tickers=self.reviewed_tickers,
+                criteria=SCANNER_PRESETS[self.scanner_combo.currentText()],
+                provider=self.provider_combo.currentText(),
+                mode=self.config.mode,
+                session=session,
+                market_regime=self.market_regime,
+            )
+        except RawCaptureAlreadyExistsError as exc:
+            self._update_status(str(exc))
+            if show_message:
+                QMessageBox.warning(self, "Capture Already Exists", str(exc))
+            return
         self._load_capture_history()
         self._refresh_capture_health()
         if show_message:

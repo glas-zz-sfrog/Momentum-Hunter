@@ -58,12 +58,14 @@ class ReviewDecisionPersistenceTests(unittest.TestCase):
         data_dir = Path.cwd() / "MomentumHunterData" / "data"
         json_path = data_dir / "_test-review-capture.json"
         report_path = data_dir / "_test-review-capture.md"
+        manifest_path = data_dir / "_test-review-capture-manifest.json"
         candidate = make_candidate("MDT", 96)
         capture_time = datetime(2026, 6, 5, 7, 0, tzinfo=CENTRAL_TZ)
 
         with (
             patch("momentum_hunter.storage.capture_json_path", return_value=json_path),
             patch("momentum_hunter.storage.capture_report_path", return_value=report_path),
+            patch("momentum_hunter.storage.CAPTURE_INTEGRITY_MANIFEST", manifest_path),
             patch("momentum_hunter.storage.append_analysis_rows", lambda payload: None),
         ):
             saved_json, _ = save_daily_capture(
@@ -88,8 +90,13 @@ class ReviewDecisionPersistenceTests(unittest.TestCase):
         self.assertNotIn("review_status", candidate_payload)
         self.assertNotIn("decision_timestamp", candidate_payload)
         self.assertNotIn("decision_note", candidate_payload)
+        self.assertNotIn("selected", candidate_payload)
+        self.assertNotIn("reviewed", candidate_payload)
+        self.assertNotIn("user_notes", candidate_payload)
+        self.assertNotIn("score_reasons", candidate_payload)
         json_path.unlink()
         report_path.unlink()
+        manifest_path.unlink()
 
 
 class ReviewWorkflowGuiTests(unittest.TestCase):
