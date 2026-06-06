@@ -22,6 +22,49 @@ CAPTURE_FAILURES_DIR = DATA_DIR / "capture-failures"
 INTEGRITY_DIR = DATA_DIR / "integrity"
 CAPTURE_INTEGRITY_MANIFEST = INTEGRITY_DIR / "capture_manifest.json"
 CAPTURE_VERSION = "raw-capture-v2"
+ANALYSIS_FIELDNAMES = [
+    "capture_date",
+    "capture_time",
+    "session",
+    "mode",
+    "provider",
+    "scanner",
+    "market_regime",
+    "market_symbol",
+    "market_close",
+    "market_sma_50",
+    "market_sma_200",
+    "rank",
+    "selected",
+    "reviewed",
+    "ticker",
+    "company",
+    "score",
+    "news_hours_old",
+    "freshness",
+    "freshness_score",
+    "article_count",
+    "valid_timestamp_count",
+    "known_timestamp_count",
+    "unknown_timestamp_count",
+    "future_timestamp_count",
+    "excluded_from_scoring_count",
+    "latest_article_age_hours",
+    "oldest_article_age_hours",
+    "news_range",
+    "freshest_headline",
+    "score_profile",
+    "score_regime",
+    "score_reasons",
+    "price",
+    "percent_change",
+    "volume",
+    "relative_volume",
+    "market_cap",
+    "sector",
+    "industry",
+    "user_notes",
+]
 
 
 class RawCaptureAlreadyExistsError(FileExistsError):
@@ -285,102 +328,79 @@ def capture_to_markdown(payload: dict) -> str:
 
 def append_analysis_rows(payload: dict) -> None:
     ensure_app_dirs()
-    fieldnames = [
-        "capture_date",
-        "capture_time",
-        "session",
-        "mode",
-        "provider",
-        "scanner",
-        "market_regime",
-        "market_symbol",
-        "market_close",
-        "market_sma_50",
-        "market_sma_200",
-        "rank",
-        "selected",
-        "reviewed",
-        "ticker",
-        "company",
-        "score",
-        "news_hours_old",
-        "freshness",
-        "freshness_score",
-        "article_count",
-        "valid_timestamp_count",
-        "known_timestamp_count",
-        "unknown_timestamp_count",
-        "future_timestamp_count",
-        "excluded_from_scoring_count",
-        "latest_article_age_hours",
-        "oldest_article_age_hours",
-        "news_range",
-        "freshest_headline",
-        "score_profile",
-        "score_regime",
-        "score_reasons",
-        "price",
-        "percent_change",
-        "volume",
-        "relative_volume",
-        "market_cap",
-        "sector",
-        "industry",
-        "user_notes",
-    ]
-    ensure_csv_fieldnames(ANALYSIS_CSV, fieldnames)
+    ensure_csv_fieldnames(ANALYSIS_CSV, ANALYSIS_FIELDNAMES)
     exists = ANALYSIS_CSV.exists()
     with ANALYSIS_CSV.open("a", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer = csv.DictWriter(file, fieldnames=ANALYSIS_FIELDNAMES)
         if not exists:
             writer.writeheader()
-        market = payload["market"]
         for candidate in payload["candidates"]:
-            writer.writerow(
-                {
-                    "capture_date": payload["capture_date"],
-                    "capture_time": payload["capture_time"],
-                    "session": payload["session"],
-                    "mode": payload["mode"],
-                    "provider": payload["provider"],
-                    "scanner": payload["scanner"]["name"],
-                    "market_regime": market["regime"],
-                    "market_symbol": market["symbol"],
-                    "market_close": market["close"],
-                    "market_sma_50": market["sma_50"],
-                    "market_sma_200": market["sma_200"],
-                    "rank": candidate["rank"],
-                    "selected": candidate["selected"],
-                    "reviewed": candidate["reviewed"],
-                    "ticker": candidate["ticker"],
-                    "company": candidate["company"],
-                    "score": candidate["score"],
-                    "news_hours_old": candidate.get("news_hours_old", ""),
-                    "freshness": candidate.get("freshness", "UNKNOWN"),
-                    "freshness_score": candidate.get("freshness_score", 0),
-                    "article_count": candidate.get("article_count", 0),
-                    "valid_timestamp_count": candidate.get("valid_timestamp_count", 0),
-                    "known_timestamp_count": candidate.get("known_timestamp_count", 0),
-                    "unknown_timestamp_count": candidate.get("unknown_timestamp_count", 0),
-                    "future_timestamp_count": candidate.get("future_timestamp_count", 0),
-                    "excluded_from_scoring_count": candidate.get("excluded_from_scoring_count", 0),
-                    "latest_article_age_hours": candidate.get("latest_article_age_hours", ""),
-                    "oldest_article_age_hours": candidate.get("oldest_article_age_hours", ""),
-                    "news_range": candidate.get("news_range", "unknown"),
-                    "freshest_headline": candidate.get("freshest_headline", ""),
-                    "score_profile": candidate.get("score_profile", ""),
-                    "score_regime": candidate.get("score_regime", ""),
-                    "score_reasons": "; ".join(candidate.get("score_reasons") or []),
-                    "price": candidate["price"],
-                    "percent_change": candidate["percent_change"],
-                    "volume": candidate["volume"],
-                    "relative_volume": candidate["relative_volume"],
-                    "market_cap": candidate["market_cap"],
-                    "sector": candidate["sector"],
-                    "industry": candidate["industry"],
-                    "user_notes": candidate.get("user_notes", ""),
-                }
-            )
+            writer.writerow(analysis_row_from_capture(payload, candidate))
+
+
+def write_analysis_rows(rows: list[dict], output_path: Path = ANALYSIS_CSV) -> None:
+    ensure_app_dirs()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=ANALYSIS_FIELDNAMES)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field, "") for field in ANALYSIS_FIELDNAMES})
+
+
+def analysis_row_from_capture(payload: dict, candidate: dict) -> dict:
+    market = payload.get("market", {})
+    scanner = payload.get("scanner", {})
+    scanner_name = scanner.get("name", "") if isinstance(scanner, dict) else str(scanner)
+    return {
+        "capture_date": payload.get("capture_date", ""),
+        "capture_time": payload.get("capture_time", ""),
+        "session": payload.get("session", ""),
+        "mode": payload.get("mode", ""),
+        "provider": payload.get("provider", ""),
+        "scanner": scanner_name,
+        "market_regime": market.get("regime", ""),
+        "market_symbol": market.get("symbol", ""),
+        "market_close": market.get("close", ""),
+        "market_sma_50": market.get("sma_50", ""),
+        "market_sma_200": market.get("sma_200", ""),
+        "rank": candidate.get("rank", ""),
+        "selected": candidate.get("selected", False),
+        "reviewed": candidate.get("reviewed", False),
+        "ticker": candidate.get("ticker", ""),
+        "company": candidate.get("company", ""),
+        "score": candidate.get("score", 0),
+        "news_hours_old": candidate.get("news_hours_old", ""),
+        "freshness": candidate.get("freshness", "UNKNOWN"),
+        "freshness_score": candidate.get("freshness_score", 0),
+        "article_count": candidate.get("article_count", 0),
+        "valid_timestamp_count": candidate.get("valid_timestamp_count", 0),
+        "known_timestamp_count": candidate.get("known_timestamp_count", 0),
+        "unknown_timestamp_count": candidate.get("unknown_timestamp_count", 0),
+        "future_timestamp_count": candidate.get("future_timestamp_count", 0),
+        "excluded_from_scoring_count": candidate.get("excluded_from_scoring_count", 0),
+        "latest_article_age_hours": candidate.get("latest_article_age_hours", ""),
+        "oldest_article_age_hours": candidate.get("oldest_article_age_hours", ""),
+        "news_range": candidate.get("news_range", "unknown"),
+        "freshest_headline": candidate.get("freshest_headline", ""),
+        "score_profile": candidate.get("score_profile", ""),
+        "score_regime": candidate.get("score_regime", ""),
+        "score_reasons": format_score_reasons(candidate.get("score_reasons")),
+        "price": candidate.get("price", 0),
+        "percent_change": candidate.get("percent_change", 0),
+        "volume": candidate.get("volume", 0),
+        "relative_volume": candidate.get("relative_volume", ""),
+        "market_cap": candidate.get("market_cap", ""),
+        "sector": candidate.get("sector", ""),
+        "industry": candidate.get("industry", ""),
+        "user_notes": candidate.get("user_notes", ""),
+    }
+
+
+def format_score_reasons(value) -> str:
+    if isinstance(value, list):
+        return "; ".join(str(item) for item in value)
+    return str(value or "")
 
 
 def ensure_csv_fieldnames(path: Path, fieldnames: list[str]) -> None:

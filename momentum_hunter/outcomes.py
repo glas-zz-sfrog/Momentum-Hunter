@@ -143,7 +143,10 @@ def fetch_price_bars(session: requests.Session, ticker: str) -> list[PriceBar]:
         f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
         f"?period1={period1}&period2={period2}&interval=1d&events=history"
     )
-    response = session.get(url, timeout=20)
+    try:
+        response = session.get(url, timeout=20)
+    except requests.RequestException:
+        return []
     if response.status_code != 200:
         return []
     payload = response.json()

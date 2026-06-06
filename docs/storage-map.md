@@ -104,6 +104,7 @@ Each manifest record stores:
 - `watchlist-*.json` and `watchlist-report-*.md`: user-facing derived watchlist artifacts
 - `integrity/capture_manifest.json`: external raw capture integrity metadata
 - `integrity/raw_capture_integrity_audit.*`: latest audit output
+- `backups/derived-rebuild/YYYYMMDD-HHMMSS/`: backed-up derived CSVs before rebuilds
 
 ## Integrity Validation
 
@@ -135,3 +136,23 @@ Overall statuses:
 - `MISSING`: restore the missing raw JSON/MD file from backup, or quarantine/delete derived rows that reference it.
 - `ORPHANED_DERIVED_RECORD`: rebuild derived CSV/outcome/review data from available raw captures, or remove the derived row if the raw source cannot be recovered.
 - `UNTRACKED`: legacy pre-manifest captures can still be viewed, but they cannot be proven immutable from creation time. Future captures will be tracked automatically.
+
+## Rebuilding Derived Data
+
+If `analysis-captures.csv` or `analysis-outcomes.csv` drifts from raw captures, rebuild them from source-of-truth captures:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.rebuild_derived_data
+```
+
+The rebuild command:
+
+- writes a before-rebuild audit report
+- backs up existing derived CSVs under `MomentumHunterData/data/backups/derived-rebuild/`
+- registers legacy untracked raw captures in the external manifest
+- rebuilds `analysis-captures.csv` only from raw capture JSON files
+- rebuilds `analysis-outcomes.csv` from the rebuilt analysis CSV
+- verifies raw capture hashes did not change during the rebuild
+- writes an after-rebuild audit report
+
+The backup directory is the quarantine area for old orphaned derived rows. Do not copy old rows back into live analysis files unless they can be traced to a raw capture.
