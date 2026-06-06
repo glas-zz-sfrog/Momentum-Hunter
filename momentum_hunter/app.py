@@ -36,6 +36,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from momentum_hunter.capture_health import (
+    CaptureFailureInfo,
+    CaptureSuccessInfo,
+    CsvStatus,
+    build_capture_health_snapshot,
+)
 from momentum_hunter.config import AppConfig, load_config, save_config
 from momentum_hunter.market import MarketRegimeSnapshot, detect_market_regime
 from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, SCANNER_PRESETS, TradingMode
@@ -56,7 +62,6 @@ from momentum_hunter.storage import (
     list_capture_sessions,
     load_capture_json,
     load_capture_report,
-    load_latest_capture_failure,
     load_latest_report,
     load_latest_watchlist,
     save_daily_capture,
@@ -342,13 +347,28 @@ class MomentumHunterWindow(QMainWindow):
         health_layout = QVBoxLayout(health_box)
         self.provider_status_label = QLabel(self.provider_status_text)
         self.provider_status_label.setWordWrap(True)
+        self.last_morning_capture_label = QLabel("Last morning capture: checking...")
+        self.last_morning_capture_label.setWordWrap(True)
+        self.last_evening_capture_label = QLabel("Last evening capture: checking...")
+        self.last_evening_capture_label.setWordWrap(True)
         self.capture_failure_label = QLabel("Scheduled captures: no failures recorded.")
         self.capture_failure_label.setWordWrap(True)
+        self.next_capture_label = QLabel("Next scheduled runs: checking...")
+        self.next_capture_label.setWordWrap(True)
+        self.csv_append_label = QLabel("CSV append: checking...")
+        self.csv_append_label.setWordWrap(True)
+        self.outcome_update_label = QLabel("Outcome update: checking...")
+        self.outcome_update_label.setWordWrap(True)
         self.retry_scan_button = QPushButton("Retry Scan")
         self.retry_scan_button.clicked.connect(self.run_scan)
         self.retry_scan_button.hide()
         health_layout.addWidget(self.provider_status_label)
+        health_layout.addWidget(self.last_morning_capture_label)
+        health_layout.addWidget(self.last_evening_capture_label)
         health_layout.addWidget(self.capture_failure_label)
+        health_layout.addWidget(self.next_capture_label)
+        health_layout.addWidget(self.csv_append_label)
+        health_layout.addWidget(self.outcome_update_label)
         health_layout.addWidget(self.retry_scan_button)
         layout.addWidget(health_box)
 
@@ -688,6 +708,7 @@ class MomentumHunterWindow(QMainWindow):
             market_regime=self.market_regime,
         )
         self._load_capture_history()
+        self._refresh_capture_health()
         if show_message:
             QMessageBox.information(
                 self,
@@ -711,6 +732,7 @@ class MomentumHunterWindow(QMainWindow):
         self.snapshot_timer.setInterval(60_000)
         self.snapshot_timer.timeout.connect(self._auto_snapshot_check)
         self.snapshot_timer.timeout.connect(self._refresh_current_freshness)
+        self.snapshot_timer.timeout.connect(self._refresh_capture_health)
         self.snapshot_timer.start()
 
     def _auto_snapshot_check(self) -> None:
@@ -762,23 +784,39 @@ class MomentumHunterWindow(QMainWindow):
     def _refresh_capture_health(self) -> None:
         if not hasattr(self, "provider_status_label"):
             return
+        health = build_capture_health_snapshot()
         self.provider_status_label.setText(self.provider_status_text)
         self.provider_status_label.setStyleSheet(
             "color: #a7f3d0; font-weight: 600;" if self.provider_status_ok else "color: #fecaca; font-weight: 700;"
         )
-        failure = load_latest_capture_failure()
-        if failure:
-            failure_time = failure.get("failure_time", "unknown time")
-            session = failure.get("session", "unknown")
-            provider = failure.get("provider", "unknown")
-            message = failure.get("error_message", "unknown failure")
-            self.capture_failure_label.setText(
-                f"WARNING - last scheduled capture failure: {failure_time} | {session} | {provider} | {message}"
-            )
+        self.last_morning_capture_label.setText(format_capture_success("Last successful morning", health.last_morning_capture))
+        self.last_evening_capture_label.setText(format_capture_success("Last successful evening", health.last_evening_capture))
+        if health.last_morning_capture.capture_time:
+            self.last_morning_capture_label.setStyleSheet("color: #cbd8e6;")
+        else:
+            self.last_morning_capture_label.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        if health.last_evening_capture.capture_time:
+            self.last_evening_capture_label.setStyleSheet("color: #cbd8e6;")
+        else:
+            self.last_evening_capture_label.setStyleSheet("color: #fcd34d; font-weight: 700;")
+
+        self.capture_failure_label.setText(format_capture_failure(health.last_failed_capture))
+        if health.last_failed_capture.failure_time:
             self.capture_failure_label.setStyleSheet("color: #fcd34d; font-weight: 700;")
         else:
-            self.capture_failure_label.setText("Scheduled captures: no failures recorded.")
             self.capture_failure_label.setStyleSheet("color: #cbd8e6;")
+        self.next_capture_label.setText(
+            "Next scheduled runs: "
+            f"Morning {format_central(health.next_morning_run)} | "
+            f"Evening {format_central(health.next_evening_run)}"
+        )
+        self.next_capture_label.setStyleSheet("color: #cbd8e6;")
+        self.csv_append_label.setText(format_csv_status("CSV append", health.csv_append_status))
+        self.csv_append_label.setStyleSheet("color: #cbd8e6;" if health.csv_append_status.exists else "color: #fcd34d; font-weight: 700;")
+        self.outcome_update_label.setText(format_csv_status("Outcome update", health.outcome_update_status))
+        self.outcome_update_label.setStyleSheet(
+            "color: #cbd8e6;" if health.outcome_update_status.exists else "color: #fcd34d; font-weight: 700;"
+        )
 
     def _load_capture_history(self) -> None:
         current_date = self.capture_date_combo.currentText()
@@ -1194,6 +1232,30 @@ def format_news(candidate: Candidate) -> str:
         url = f"\n  {item.url}" if item.url else ""
         blocks.append(f"- {item.headline}{source}{summary}{url}")
     return "\n\n".join(blocks)
+
+
+def format_capture_success(label: str, info: CaptureSuccessInfo) -> str:
+    if info.capture_time is None:
+        return f"{label}: missing"
+    scanner = f" | {info.scanner}" if info.scanner else ""
+    provider = f" | {info.provider}" if info.provider else ""
+    return f"{label}: {format_central(info.capture_time)} | {info.candidate_count} candidates{provider}{scanner}"
+
+
+def format_capture_failure(info: CaptureFailureInfo) -> str:
+    if info.failure_time is None:
+        return "Last failed capture: none recorded."
+    session = info.session or "unknown session"
+    provider = info.provider or "unknown provider"
+    message = info.error_message or "unknown failure"
+    return f"Last failed capture: {format_central(info.failure_time)} | {session} | {provider} | {message}"
+
+
+def format_csv_status(label: str, status: CsvStatus) -> str:
+    if not status.exists:
+        return f"{label}: missing"
+    updated = format_central(status.last_updated) if status.last_updated else "unknown time"
+    return f"{label}: OK | {status.row_count} rows | updated {updated}"
 
 
 def format_news_html(candidate: Candidate, now: datetime | None = None) -> str:

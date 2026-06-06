@@ -13,7 +13,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from momentum_hunter.app import MomentumHunterWindow
-from momentum_hunter.models import Candidate, NewsItem
+from momentum_hunter.capture_health import CaptureFailureInfo, CaptureHealthSnapshot, CaptureSuccessInfo, CsvStatus
+from momentum_hunter.models import Candidate, CaptureSession, NewsItem
 from momentum_hunter.news_age import apply_candidate_news_stack
 from momentum_hunter.recommendations import (
     RecommendationReport,
@@ -36,7 +37,7 @@ def main() -> int:
         stack.enter_context(patch.object(MomentumHunterWindow, "_ensure_windows_startup", lambda window: None))
         stack.enter_context(patch.object(MomentumHunterWindow, "_start_snapshot_timer", lambda window: None))
         stack.enter_context(patch.object(MomentumHunterWindow, "refresh_market_regime", lambda window, show_status=True: None))
-        stack.enter_context(patch("momentum_hunter.app.load_latest_capture_failure", return_value={}))
+        stack.enter_context(patch("momentum_hunter.app.build_capture_health_snapshot", return_value=sample_health_snapshot()))
 
         window = MomentumHunterWindow()
         window.resize(1280, 780)
@@ -92,6 +93,37 @@ def save_widget(app: QApplication, widget, filename: str) -> Path:
 def settle(app: QApplication) -> None:
     for _ in range(8):
         app.processEvents()
+
+
+def sample_health_snapshot() -> CaptureHealthSnapshot:
+    current = now_central()
+    today_morning = current.replace(hour=7, minute=0, second=0, microsecond=0)
+    today_evening = current.replace(hour=19, minute=0, second=0, microsecond=0)
+    last_morning = today_morning if current >= today_morning else today_morning - timedelta(days=1)
+    last_evening = today_evening if current >= today_evening else today_evening - timedelta(days=1)
+    next_morning = today_morning if current < today_morning else today_morning + timedelta(days=1)
+    next_evening = today_evening if current < today_evening else today_evening + timedelta(days=1)
+    return CaptureHealthSnapshot(
+        last_morning_capture=CaptureSuccessInfo(
+            session=CaptureSession.MORNING,
+            capture_time=last_morning,
+            candidate_count=18,
+            provider="finviz",
+            scanner="Base Momentum",
+        ),
+        last_evening_capture=CaptureSuccessInfo(
+            session=CaptureSession.EVENING,
+            capture_time=last_evening,
+            candidate_count=17,
+            provider="finviz",
+            scanner="Base Momentum",
+        ),
+        last_failed_capture=CaptureFailureInfo(),
+        next_morning_run=next_morning,
+        next_evening_run=next_evening,
+        csv_append_status=CsvStatus(path=PROJECT_ROOT / "MomentumHunterData" / "data" / "analysis-captures.csv", exists=True, row_count=245, last_updated=current),
+        outcome_update_status=CsvStatus(path=PROJECT_ROOT / "MomentumHunterData" / "data" / "analysis-outcomes.csv", exists=True, row_count=245, last_updated=current),
+    )
 
 
 def demo_candidates() -> list[Candidate]:
