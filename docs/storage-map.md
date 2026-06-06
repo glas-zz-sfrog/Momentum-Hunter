@@ -105,7 +105,7 @@ Each manifest record stores:
 - `integrity/capture_manifest.json`: external raw capture integrity metadata
 - `integrity/raw_capture_integrity_audit.*`: latest audit output
 - `backups/derived-rebuild/YYYYMMDD-HHMMSS/`: backed-up derived CSVs before rebuilds
-- `quarantine/raw-captures/YYYY-MM-DD/session/`: raw captures removed from active study use but retained for recovery/audit
+- `quarantine/raw-captures/YYYYMMDD-HHMMSS/`: raw captures removed from active study use but retained for recovery/audit
 
 ## Integrity Validation
 
@@ -139,6 +139,12 @@ Overall statuses:
 - `UNTRACKED`: legacy pre-manifest captures can still be viewed, but they cannot be proven immutable from creation time. Future captures will be tracked automatically.
 - `QUARANTINED`: a raw capture was deliberately removed from active source-of-truth use and retained outside `data/captures`.
 
+Modified raw captures must never be silently re-blessed. The recovery order is:
+
+1. Restore the original raw JSON/MD from backup, Git history, OneDrive history, or another trusted machine.
+2. If the original cannot be restored, quarantine the current modified files and rebuild derived data.
+3. Only re-baseline with an explicit signed recovery note that says who approved it, when, and why. Do not update `source_hash` just to make the audit pass.
+
 ## Rebuilding Derived Data
 
 If `analysis-captures.csv` or `analysis-outcomes.csv` drifts from raw captures, rebuild them from source-of-truth captures:
@@ -168,11 +174,18 @@ If a raw capture cannot be trusted, move it out of active captures:
 .\.venv\Scripts\python.exe -m momentum_hunter.rebuild_derived_data
 ```
 
+If the audit shows `MODIFIED`, use the modified-capture recovery command:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.recover_modified_captures --reason "Manifest hash mismatch; original unavailable; quarantined pending recovery review."
+```
+
 The quarantine command:
 
-- moves `{session}.json` and `{session}.md` from `data/captures/YYYY-MM-DD/` into `data/quarantine/raw-captures/YYYY-MM-DD/session/`
+- moves `{session}.json` and `{session}.md` from `data/captures/YYYY-MM-DD/` into `data/quarantine/raw-captures/YYYYMMDD-HHMMSS/`
 - moves active manifest records into `quarantined_records`
-- writes `recovery-note.md` and `recovery-note.json`
+- writes timestamped recovery notes with original manifest metadata, current file metadata, hash mismatch evidence, and the recovery decision
 - keeps the files available for investigation
 - keeps auditing the quarantine copies for existence and SHA-256 drift
+- preserves review decisions and marks decisions tied to quarantined captures as quarantined
 - excludes the snapshot from rebuilt analysis CSVs, outcome CSVs, and Study Engine results

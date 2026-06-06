@@ -60,6 +60,7 @@ def audit_raw_captures(
     rows.extend(
         audit_orphaned_derived_records(
             captures_dir=captures_dir,
+            manifest_path=manifest_path,
             analysis_csv=analysis_csv,
             outcomes_csv=outcomes_csv,
             review_decisions_path=review_decisions_path,
@@ -213,6 +214,7 @@ def audit_untracked_raw_captures(captures_dir: Path, known_rows: list[IntegrityA
 def audit_orphaned_derived_records(
     *,
     captures_dir: Path,
+    manifest_path: Path,
     analysis_csv: Path,
     outcomes_csv: Path,
     review_decisions_path: Path,
@@ -220,7 +222,7 @@ def audit_orphaned_derived_records(
     rows: list[IntegrityAuditRow] = []
     rows.extend(audit_derived_csv("analysis-captures", analysis_csv, captures_dir))
     rows.extend(audit_derived_csv("analysis-outcomes", outcomes_csv, captures_dir))
-    rows.extend(audit_review_decisions(review_decisions_path, captures_dir))
+    rows.extend(audit_review_decisions(review_decisions_path, captures_dir, manifest_path))
     return rows
 
 
@@ -260,7 +262,7 @@ def audit_derived_csv(label: str, path: Path, captures_dir: Path) -> list[Integr
     return rows
 
 
-def audit_review_decisions(path: Path, captures_dir: Path) -> list[IntegrityAuditRow]:
+def audit_review_decisions(path: Path, captures_dir: Path, manifest_path: Path = CAPTURE_INTEGRITY_MANIFEST) -> list[IntegrityAuditRow]:
     if not path.exists():
         return []
     try:
@@ -276,6 +278,7 @@ def audit_review_decisions(path: Path, captures_dir: Path) -> list[IntegrityAudi
             )
         ]
     decisions = payload.get("decisions", {})
+    quarantined_groups = quarantined_capture_groups(manifest_path)
     rows: list[IntegrityAuditRow] = []
     for key, decision in decisions.items():
         identity = decision.get("identity", {}) if isinstance(decision, dict) else {}
@@ -288,6 +291,17 @@ def audit_review_decisions(path: Path, captures_dir: Path) -> list[IntegrityAudi
             continue
         raw_path = captures_dir / capture_date / f"{session}.json"
         if not raw_path.exists():
+            if decision_is_quarantined(decision, identity, quarantined_groups):
+                rows.append(
+                    IntegrityAuditRow(
+                        path=f"{path.name}:{key}",
+                        kind="review_decision",
+                        status=QUARANTINED,
+                        severity=WARN,
+                        details=f"Review decision references quarantined raw capture {raw_path}.",
+                    )
+                )
+                continue
             rows.append(
                 IntegrityAuditRow(
                     path=f"{path.name}:{key}",
@@ -309,6 +323,39 @@ def audit_review_decisions(path: Path, captures_dir: Path) -> list[IntegrityAudi
                 )
             )
     return rows
+
+
+def quarantined_capture_groups(manifest_path: Path = CAPTURE_INTEGRITY_MANIFEST) -> set[tuple[str, str, str, str]]:
+    manifest = load_capture_integrity_manifest(manifest_path)
+    groups: set[tuple[str, str, str, str]] = set()
+    for record in manifest.get("quarantined_records", {}).values():
+        groups.add(
+            (
+                record.get("capture_date", ""),
+                record.get("session", ""),
+                record.get("provider", ""),
+                record.get("scanner", ""),
+            )
+        )
+    return groups
+
+
+def decision_is_quarantined(decision: dict, identity: dict, groups: set[tuple[str, str, str, str]]) -> bool:
+    if decision.get("capture_status") == "quarantined":
+        return True
+    capture_date = identity.get("capture_date", "")
+    session = identity.get("session", "")
+    provider = identity.get("provider", "")
+    scanner = identity.get("scanner", "")
+    for group_date, group_session, group_provider, group_scanner in groups:
+        if capture_date != group_date or session != group_session:
+            continue
+        if group_provider and provider and group_provider != provider:
+            continue
+        if group_scanner and scanner and group_scanner != scanner:
+            continue
+        return True
+    return False
 
 
 def overall_audit_status(rows: list[IntegrityAuditRow]) -> str:

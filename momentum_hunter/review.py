@@ -38,6 +38,9 @@ class ReviewDecision:
     review_status: ReviewStatus = ReviewStatus.UNREVIEWED
     decision_timestamp: datetime | None = None
     decision_note: str = ""
+    capture_status: str = ""
+    capture_quarantined_at: str = ""
+    capture_quarantine_reason: str = ""
 
 
 REVIEW_DECISIONS_PATH = DATA_DIR / "review-decisions.json"
@@ -94,12 +97,19 @@ def upsert_review_decision(
 
 
 def review_decision_to_dict(decision: ReviewDecision) -> dict:
-    return {
+    payload = {
         "identity": asdict(decision.identity),
         "review_status": decision.review_status.value,
         "decision_timestamp": decision.decision_timestamp.isoformat() if decision.decision_timestamp else None,
         "decision_note": decision.decision_note,
     }
+    if decision.capture_status:
+        payload["capture_status"] = decision.capture_status
+    if decision.capture_quarantined_at:
+        payload["capture_quarantined_at"] = decision.capture_quarantined_at
+    if decision.capture_quarantine_reason:
+        payload["capture_quarantine_reason"] = decision.capture_quarantine_reason
+    return payload
 
 
 def review_decision_from_dict(payload: dict) -> ReviewDecision:
@@ -122,4 +132,36 @@ def review_decision_from_dict(payload: dict) -> ReviewDecision:
         review_status=status,
         decision_timestamp=datetime.fromisoformat(timestamp) if timestamp else None,
         decision_note=payload.get("decision_note", ""),
+        capture_status=payload.get("capture_status", ""),
+        capture_quarantined_at=payload.get("capture_quarantined_at", ""),
+        capture_quarantine_reason=payload.get("capture_quarantine_reason", ""),
     )
+
+
+def mark_review_decisions_for_quarantined_capture(
+    *,
+    capture_date: str,
+    session: str,
+    provider: str = "",
+    scanner: str = "",
+    quarantined_at: str,
+    reason: str,
+    path: Path | None = None,
+) -> int:
+    decisions = load_review_decisions(path)
+    changed = 0
+    for decision in decisions.values():
+        identity = decision.identity
+        if identity.capture_date != capture_date or identity.session != session:
+            continue
+        if provider and identity.provider and identity.provider != provider:
+            continue
+        if scanner and identity.scanner and identity.scanner != scanner:
+            continue
+        decision.capture_status = "quarantined"
+        decision.capture_quarantined_at = quarantined_at
+        decision.capture_quarantine_reason = reason
+        changed += 1
+    if changed:
+        save_review_decisions(decisions, path=path)
+    return changed
