@@ -11,13 +11,25 @@ from unittest.mock import patch
 from PySide6.QtWidgets import QApplication
 
 from momentum_hunter.app import MomentumHunterWindow
-from momentum_hunter.integrity import MODIFIED, OK, audit_raw_captures, write_integrity_audit_report
+from momentum_hunter.integrity import (
+    FAIL,
+    MISSING,
+    MODIFIED,
+    OK,
+    ORPHANED_DERIVED_RECORD,
+    UNTRACKED,
+    WARN,
+    audit_raw_captures,
+    overall_audit_status,
+    write_integrity_audit_report,
+)
 from momentum_hunter.market import MarketRegimeSnapshot
 from momentum_hunter.models import BASE_MOMENTUM, Candidate, CaptureSession, MarketRegime, NewsItem, TradingMode
 from momentum_hunter.outcomes import update_outcomes
 from momentum_hunter.review import CandidateIdentity, ReviewStatus, make_capture_id, upsert_review_decision
 from momentum_hunter.scoring import score_candidates
-from momentum_hunter.storage import RawCaptureAlreadyExistsError, candidate_from_dict, file_sha256, save_daily_capture
+from momentum_hunter.storage import RawCaptureAlreadyExistsError, candidate_from_dict, file_sha256, save_daily_capture, save_watchlist_report
+from momentum_hunter.study import build_capture_study
 from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 
 
@@ -30,7 +42,7 @@ class RawCaptureIntegrityTests(unittest.TestCase):
         self.root = Path.cwd() / "MomentumHunterData" / "data" / "_test_raw_integrity"
         shutil.rmtree(self.root, ignore_errors=True)
         self.root.mkdir(parents=True)
-        self.manifest_path = self.root / "capture-integrity-manifest.json"
+        self.manifest_path = self.root / "integrity" / "capture_manifest.json"
         self.capture_time = datetime(2026, 6, 5, 7, 0, tzinfo=CENTRAL_TZ)
         self.json_path = self.root / "captures" / "2026-06-05" / "morning.json"
         self.report_path = self.root / "captures" / "2026-06-05" / "morning.md"
@@ -99,19 +111,35 @@ class RawCaptureIntegrityTests(unittest.TestCase):
 
         self.assert_raw_capture_unchanged()
 
+    def test_study_and_report_generation_do_not_modify_raw_captures(self) -> None:
+        capture_csv = self.root / "analysis-captures.csv"
+        report_path = self.root / "watchlist-report.md"
+        write_capture_csv(capture_csv)
+        payload = json.loads(self.saved_json.read_text(encoding="utf-8"))
+        candidates = [candidate_from_dict(item) for item in payload["candidates"]]
+
+        build_capture_study(path=capture_csv)
+        with patch("momentum_hunter.storage.report_path", return_value=report_path):
+            save_watchlist_report(candidates, for_date=self.capture_time)
+
+        self.assertTrue(report_path.exists())
+        self.assert_raw_capture_unchanged()
+
     def test_integrity_audit_detects_modified_raw_capture(self) -> None:
-        rows = audit_raw_captures(captures_dir=self.root / "captures", manifest_path=self.manifest_path)
+        rows = self.audit()
         self.assertTrue(rows)
         self.assertTrue(all(row.status == OK for row in rows))
+        self.assertEqual("PASS", overall_audit_status(rows))
 
         payload = json.loads(self.saved_json.read_text(encoding="utf-8"))
         payload["candidates"][0]["company"] = "Changed After Capture"
         self.saved_json.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
-        rows = audit_raw_captures(captures_dir=self.root / "captures", manifest_path=self.manifest_path)
+        rows = self.audit()
         statuses = {row.path: row.status for row in rows}
 
         self.assertEqual(MODIFIED, statuses[self.manifest_key(self.saved_json)])
+        self.assertEqual(FAIL, overall_audit_status(rows))
 
         csv_path, markdown_path = write_integrity_audit_report(
             rows,
@@ -120,6 +148,43 @@ class RawCaptureIntegrityTests(unittest.TestCase):
         )
         self.assertTrue(csv_path.exists())
         self.assertTrue(markdown_path.exists())
+        self.assertIn("Overall Status: FAIL", markdown_path.read_text(encoding="utf-8"))
+
+    def test_integrity_audit_detects_missing_raw_capture(self) -> None:
+        self.saved_json.unlink()
+
+        rows = self.audit()
+        statuses = {row.path: row.status for row in rows}
+
+        self.assertEqual(MISSING, statuses[self.manifest_key(self.saved_json)])
+        self.assertEqual(FAIL, overall_audit_status(rows))
+
+    def test_integrity_audit_warns_on_untracked_legacy_capture(self) -> None:
+        rows = audit_raw_captures(
+            captures_dir=self.root / "captures",
+            manifest_path=self.root / "integrity" / "missing_manifest.json",
+            analysis_csv=self.root / "missing-analysis.csv",
+            outcomes_csv=self.root / "missing-outcomes.csv",
+            review_decisions_path=self.root / "missing-review-decisions.json",
+        )
+
+        self.assertTrue(any(row.status == UNTRACKED for row in rows))
+        self.assertEqual(WARN, overall_audit_status(rows))
+
+    def test_integrity_audit_detects_orphaned_derived_records(self) -> None:
+        orphan_csv = self.root / "orphan-analysis-captures.csv"
+        write_capture_csv(orphan_csv, capture_date="2026-06-06")
+
+        rows = audit_raw_captures(
+            captures_dir=self.root / "captures",
+            manifest_path=self.manifest_path,
+            analysis_csv=orphan_csv,
+            outcomes_csv=self.root / "missing-outcomes.csv",
+            review_decisions_path=self.root / "missing-review-decisions.json",
+        )
+
+        self.assertTrue(any(row.status == ORPHANED_DERIVED_RECORD for row in rows))
+        self.assertEqual(FAIL, overall_audit_status(rows))
 
     def test_raw_capture_write_refuses_existing_capture_files(self) -> None:
         with self.assertRaises(RawCaptureAlreadyExistsError):
@@ -145,6 +210,15 @@ class RawCaptureIntegrityTests(unittest.TestCase):
                 market_regime=MarketRegimeSnapshot(MarketRegime.BULL, "SPY"),
                 capture_time=self.capture_time,
             )
+
+    def audit(self):
+        return audit_raw_captures(
+            captures_dir=self.root / "captures",
+            manifest_path=self.manifest_path,
+            analysis_csv=self.root / "missing-analysis.csv",
+            outcomes_csv=self.root / "missing-outcomes.csv",
+            review_decisions_path=self.root / "missing-review-decisions.json",
+        )
 
     def assert_raw_capture_unchanged(self) -> None:
         self.assertEqual(self.original_json_hash, file_sha256(self.saved_json))
@@ -177,7 +251,7 @@ def test_candidate() -> Candidate:
     )
 
 
-def write_capture_csv(path: Path) -> None:
+def write_capture_csv(path: Path, capture_date: str = "2026-06-05") -> None:
     fieldnames = [
         "capture_date",
         "capture_time",
@@ -217,8 +291,8 @@ def write_capture_csv(path: Path) -> None:
     row = {field: "" for field in fieldnames}
     row.update(
         {
-            "capture_date": "2026-06-05",
-            "capture_time": "2026-06-05T07:00:00-05:00",
+            "capture_date": capture_date,
+            "capture_time": f"{capture_date}T07:00:00-05:00",
             "session": "morning",
             "provider": "finviz",
             "scanner": "Base Momentum",

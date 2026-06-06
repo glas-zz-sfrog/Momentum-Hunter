@@ -94,6 +94,7 @@ class ReviewDecisionPersistenceTests(unittest.TestCase):
         self.assertNotIn("reviewed", candidate_payload)
         self.assertNotIn("user_notes", candidate_payload)
         self.assertNotIn("score_reasons", candidate_payload)
+        self.assertNotIn("integrity", payload)
         json_path.unlink()
         report_path.unlink()
         manifest_path.unlink()

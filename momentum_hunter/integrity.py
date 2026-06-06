@@ -1,28 +1,35 @@
 from __future__ import annotations
 
 import csv
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
+from momentum_hunter.outcomes import OUTCOMES_CSV
+from momentum_hunter.review import REVIEW_DECISIONS_PATH
 from momentum_hunter.storage import (
+    ANALYSIS_CSV,
     CAPTURE_INTEGRITY_MANIFEST,
     CAPTURES_DIR,
     capture_manifest_key,
-    capture_source_hash,
     file_sha256,
     load_capture_integrity_manifest,
 )
 
 
+PASS = "PASS"
+WARN = "WARN"
+FAIL = "FAIL"
+
 OK = "OK"
 MODIFIED = "MODIFIED"
 MISSING = "MISSING"
 UNTRACKED = "UNTRACKED"
-JSON_SOURCE_HASH_MISMATCH = "JSON_SOURCE_HASH_MISMATCH"
+ORPHANED_DERIVED_RECORD = "ORPHANED_DERIVED_RECORD"
 
-AUDIT_CSV = DATA_DIR / "raw-capture-integrity-audit.csv"
-AUDIT_MD = DATA_DIR / "raw-capture-integrity-audit.md"
+AUDIT_CSV = DATA_DIR / "integrity" / "raw_capture_integrity_audit.csv"
+AUDIT_MD = DATA_DIR / "integrity" / "raw_capture_integrity_audit.md"
 
 
 @dataclass(frozen=True)
@@ -30,7 +37,9 @@ class IntegrityAuditRow:
     path: str
     kind: str
     status: str
+    severity: str
     created_at: str = ""
+    capture_version: str = ""
     manifest_hash: str = ""
     current_hash: str = ""
     details: str = ""
@@ -40,15 +49,29 @@ def audit_raw_captures(
     *,
     captures_dir: Path = CAPTURES_DIR,
     manifest_path: Path = CAPTURE_INTEGRITY_MANIFEST,
+    analysis_csv: Path = ANALYSIS_CSV,
+    outcomes_csv: Path = OUTCOMES_CSV,
+    review_decisions_path: Path = REVIEW_DECISIONS_PATH,
 ) -> list[IntegrityAuditRow]:
+    rows = audit_manifest_records(manifest_path)
+    rows.extend(audit_untracked_raw_captures(captures_dir, rows))
+    rows.extend(
+        audit_orphaned_derived_records(
+            captures_dir=captures_dir,
+            analysis_csv=analysis_csv,
+            outcomes_csv=outcomes_csv,
+            review_decisions_path=review_decisions_path,
+        )
+    )
+    return rows
+
+
+def audit_manifest_records(manifest_path: Path = CAPTURE_INTEGRITY_MANIFEST) -> list[IntegrityAuditRow]:
     manifest = load_capture_integrity_manifest(manifest_path)
     records = manifest.get("records", {})
     rows: list[IntegrityAuditRow] = []
-    seen_paths: set[str] = set()
-
     for key, record in sorted(records.items()):
         path = resolve_manifest_path(key)
-        seen_paths.add(key)
         expected_hash = record.get("source_hash", "")
         if not path.exists():
             rows.append(
@@ -56,53 +79,172 @@ def audit_raw_captures(
                     path=key,
                     kind=record.get("kind", ""),
                     status=MISSING,
+                    severity=FAIL,
                     created_at=record.get("created_at", ""),
+                    capture_version=record.get("capture_version", ""),
                     manifest_hash=expected_hash,
                     details="Manifest references a raw capture file that no longer exists.",
                 )
             )
             continue
         current_hash = file_sha256(path)
-        status = OK if current_hash == expected_hash else MODIFIED
-        details = "" if status == OK else "Raw capture file hash differs from manifest."
-        json_status, json_details = json_source_hash_status(path)
-        if json_status == JSON_SOURCE_HASH_MISMATCH:
-            status = JSON_SOURCE_HASH_MISMATCH if status == OK else status
-            details = "; ".join(item for item in [details, json_details] if item)
+        if current_hash != expected_hash:
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind=record.get("kind", ""),
+                    status=MODIFIED,
+                    severity=FAIL,
+                    created_at=record.get("created_at", ""),
+                    capture_version=record.get("capture_version", ""),
+                    manifest_hash=expected_hash,
+                    current_hash=current_hash,
+                    details="Raw capture file hash differs from manifest.",
+                )
+            )
+            continue
         rows.append(
             IntegrityAuditRow(
                 path=key,
                 kind=record.get("kind", ""),
-                status=status,
+                status=OK,
+                severity=PASS,
                 created_at=record.get("created_at", ""),
+                capture_version=record.get("capture_version", ""),
                 manifest_hash=expected_hash,
                 current_hash=current_hash,
-                details=details,
             )
         )
+    return rows
 
+
+def audit_untracked_raw_captures(captures_dir: Path, known_rows: list[IntegrityAuditRow]) -> list[IntegrityAuditRow]:
+    known = {row.path for row in known_rows}
+    rows: list[IntegrityAuditRow] = []
     for path in sorted(raw_capture_files(captures_dir)):
         key = capture_manifest_key(path)
-        if key in seen_paths:
+        if key in known:
             continue
-        status, details = json_source_hash_status(path)
-        if status == OK:
-            status = UNTRACKED
-            details = "Raw capture file has embedded JSON integrity but is not listed in manifest."
-        elif status != JSON_SOURCE_HASH_MISMATCH:
-            status = UNTRACKED
-            details = "Raw capture file predates the integrity manifest or was not created through capture storage."
         rows.append(
             IntegrityAuditRow(
                 path=key,
                 kind=kind_for_path(path),
-                status=status,
+                status=UNTRACKED,
+                severity=WARN,
                 current_hash=file_sha256(path),
-                details=details,
+                details="Raw capture exists but is not listed in the external integrity manifest.",
             )
         )
-
     return rows
+
+
+def audit_orphaned_derived_records(
+    *,
+    captures_dir: Path,
+    analysis_csv: Path,
+    outcomes_csv: Path,
+    review_decisions_path: Path,
+) -> list[IntegrityAuditRow]:
+    rows: list[IntegrityAuditRow] = []
+    rows.extend(audit_derived_csv("analysis-captures", analysis_csv, captures_dir))
+    rows.extend(audit_derived_csv("analysis-outcomes", outcomes_csv, captures_dir))
+    rows.extend(audit_review_decisions(review_decisions_path, captures_dir))
+    return rows
+
+
+def audit_derived_csv(label: str, path: Path, captures_dir: Path) -> list[IntegrityAuditRow]:
+    if not path.exists():
+        return []
+    rows: list[IntegrityAuditRow] = []
+    with path.open(newline="", encoding="utf-8") as file:
+        for index, row in enumerate(csv.DictReader(file), 2):
+            capture_date = row.get("capture_date", "")
+            session = row.get("session", "")
+            ticker = row.get("ticker", "")
+            if not capture_date or not session:
+                continue
+            raw_path = captures_dir / capture_date / f"{session}.json"
+            if not raw_path.exists():
+                rows.append(
+                    IntegrityAuditRow(
+                        path=f"{path.name}:row:{index}",
+                        kind=f"derived_{label}",
+                        status=ORPHANED_DERIVED_RECORD,
+                        severity=FAIL,
+                        details=f"Derived row references missing raw capture {raw_path}.",
+                    )
+                )
+                continue
+            if ticker and not raw_capture_contains_ticker(raw_path, ticker):
+                rows.append(
+                    IntegrityAuditRow(
+                        path=f"{path.name}:row:{index}",
+                        kind=f"derived_{label}",
+                        status=ORPHANED_DERIVED_RECORD,
+                        severity=FAIL,
+                        details=f"Derived row references ticker {ticker}, which is not present in {raw_path}.",
+                    )
+                )
+    return rows
+
+
+def audit_review_decisions(path: Path, captures_dir: Path) -> list[IntegrityAuditRow]:
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return [
+            IntegrityAuditRow(
+                path=capture_manifest_key(path),
+                kind="review_decisions",
+                status=ORPHANED_DERIVED_RECORD,
+                severity=FAIL,
+                details="Review decision file is not valid JSON.",
+            )
+        ]
+    decisions = payload.get("decisions", {})
+    rows: list[IntegrityAuditRow] = []
+    for key, decision in decisions.items():
+        identity = decision.get("identity", {}) if isinstance(decision, dict) else {}
+        session = identity.get("session", "")
+        if session not in {"morning", "evening", "manual"}:
+            continue
+        capture_date = identity.get("capture_date", "")
+        ticker = identity.get("ticker", "")
+        if not capture_date:
+            continue
+        raw_path = captures_dir / capture_date / f"{session}.json"
+        if not raw_path.exists():
+            rows.append(
+                IntegrityAuditRow(
+                    path=f"{path.name}:{key}",
+                    kind="review_decision",
+                    status=ORPHANED_DERIVED_RECORD,
+                    severity=FAIL,
+                    details=f"Review decision references missing raw capture {raw_path}.",
+                )
+            )
+            continue
+        if ticker and not raw_capture_contains_ticker(raw_path, ticker):
+            rows.append(
+                IntegrityAuditRow(
+                    path=f"{path.name}:{key}",
+                    kind="review_decision",
+                    status=ORPHANED_DERIVED_RECORD,
+                    severity=FAIL,
+                    details=f"Review decision references ticker {ticker}, which is not present in {raw_path}.",
+                )
+            )
+    return rows
+
+
+def overall_audit_status(rows: list[IntegrityAuditRow]) -> str:
+    if any(row.severity == FAIL for row in rows):
+        return FAIL
+    if any(row.severity == WARN for row in rows):
+        return WARN
+    return PASS
 
 
 def write_integrity_audit_report(
@@ -113,7 +255,18 @@ def write_integrity_audit_report(
 ) -> tuple[Path, Path]:
     ensure_app_dirs()
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["path", "kind", "status", "created_at", "manifest_hash", "current_hash", "details"]
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "path",
+        "kind",
+        "status",
+        "severity",
+        "created_at",
+        "capture_version",
+        "manifest_hash",
+        "current_hash",
+        "details",
+    ]
     with csv_path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
@@ -127,10 +280,13 @@ def integrity_audit_markdown(rows: list[IntegrityAuditRow]) -> str:
     counts: dict[str, int] = {}
     for row in rows:
         counts[row.status] = counts.get(row.status, 0) + 1
+    overall = overall_audit_status(rows)
     lines = [
         "# Momentum Hunter Raw Capture Integrity Audit",
         "",
-        "Raw capture JSON/MD files are expected to remain immutable after creation.",
+        f"Overall Status: {overall}",
+        "",
+        "Raw capture JSON/MD files are expected to remain immutable after creation. Integrity metadata is stored outside raw captures.",
         "",
         "## Summary",
         "",
@@ -140,9 +296,17 @@ def integrity_audit_markdown(rows: list[IntegrityAuditRow]) -> str:
             lines.append(f"- {status}: {count}")
     else:
         lines.append("- No raw capture files found.")
-    lines.extend(["", "## Details", "", "| Status | Kind | Path | Details |", "| --- | --- | --- | --- |"])
+    lines.extend(
+        [
+            "",
+            "## Details",
+            "",
+            "| Severity | Status | Kind | Path | Details |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
     for row in rows:
-        lines.append(f"| {row.status} | {row.kind} | `{row.path}` | {row.details or ''} |")
+        lines.append(f"| {row.severity} | {row.status} | {row.kind} | `{row.path}` | {row.details or ''} |")
     return "\n".join(lines)
 
 
@@ -167,20 +331,9 @@ def kind_for_path(path: Path) -> str:
     return "raw_capture"
 
 
-def json_source_hash_status(path: Path) -> tuple[str, str]:
-    if path.suffix.lower() != ".json":
-        return "", ""
+def raw_capture_contains_ticker(path: Path, ticker: str) -> bool:
     try:
-        import json
-
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return "", ""
-    integrity = payload.get("integrity")
-    if not isinstance(integrity, dict) or not integrity.get("source_hash"):
-        return "", ""
-    actual = capture_source_hash(payload)
-    expected = integrity["source_hash"]
-    if actual != expected:
-        return JSON_SOURCE_HASH_MISMATCH, "Embedded JSON source_hash does not match payload content."
-    return OK, ""
+        return False
+    return ticker in {str(candidate.get("ticker", "")) for candidate in payload.get("candidates", [])}

@@ -19,7 +19,9 @@ from momentum_hunter.time_utils import now_central
 CAPTURES_DIR = DATA_DIR / "captures"
 ANALYSIS_CSV = DATA_DIR / "analysis-captures.csv"
 CAPTURE_FAILURES_DIR = DATA_DIR / "capture-failures"
-CAPTURE_INTEGRITY_MANIFEST = DATA_DIR / "capture-integrity-manifest.json"
+INTEGRITY_DIR = DATA_DIR / "integrity"
+CAPTURE_INTEGRITY_MANIFEST = INTEGRITY_DIR / "capture_manifest.json"
+CAPTURE_VERSION = "raw-capture-v2"
 
 
 class RawCaptureAlreadyExistsError(FileExistsError):
@@ -84,24 +86,10 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def capture_source_hash(payload: dict) -> str:
-    normalized = copy.deepcopy(payload)
-    integrity = normalized.get("integrity")
-    if isinstance(integrity, dict):
-        integrity.pop("source_hash", None)
-    encoded = json.dumps(
-        normalized,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
 def load_capture_integrity_manifest(path: Path | None = None) -> dict:
     path = path or CAPTURE_INTEGRITY_MANIFEST
     if not path.exists():
-        return {"schema_version": 1, "records": {}}
+        return {"schema_version": 2, "records": {}}
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -124,16 +112,19 @@ def record_raw_capture_integrity(
     created_at: datetime,
 ) -> None:
     manifest = load_capture_integrity_manifest()
+    manifest["schema_version"] = 2
     records = manifest.setdefault("records", {})
     for path, kind in ((json_path, "raw_capture_json"), (report_path, "raw_capture_markdown")):
         records[capture_manifest_key(path)] = {
             "kind": kind,
+            "capture_version": CAPTURE_VERSION,
             "created_at": created_at.isoformat(),
             "capture_time": capture_time.isoformat(),
             "capture_date": capture_time.strftime("%Y-%m-%d"),
             "session": session.value,
             "provider": provider,
             "scanner": scanner,
+            "hash_algorithm": "sha256",
             "source_hash": file_sha256(path),
         }
     manifest["updated_at"] = now_central().isoformat()
@@ -209,7 +200,7 @@ def save_daily_capture(
         candidate.news = filter_news_known_at_capture(candidate.news, capture_time)
         apply_candidate_news_stack(candidate, now=capture_time)
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "capture_time": capture_time.isoformat(),
         "capture_date": capture_time.strftime("%Y-%m-%d"),
         "session": session.value,
@@ -236,11 +227,6 @@ def save_daily_capture(
             for index, candidate in enumerate(sorted(candidates, key=lambda item: item.score, reverse=True), 1)
         ],
     }
-    payload["integrity"] = {
-        "created_at": created_at.isoformat(),
-        "source_hash": "",
-    }
-    payload["integrity"]["source_hash"] = capture_source_hash(payload)
     json_path = capture_json_path(capture_time, session)
     report_path_value = capture_report_path(capture_time, session)
     if json_path.exists() or report_path_value.exists():
@@ -279,8 +265,6 @@ def capture_to_markdown(payload: dict) -> str:
         f"- Scoring Profile: {payload.get('scoring', {}).get('profile') or 'unknown'}",
         f"- Market Regime: {market['regime'].title()} ({market['symbol']})",
         f"- Regime Reason: {market['reason']}",
-        f"- Created At: {payload.get('integrity', {}).get('created_at', 'unknown')}",
-        f"- Source Hash: {payload.get('integrity', {}).get('source_hash', 'unknown')}",
         "",
         "| Rank | Ticker | Score | Latest Article | Articles | Range | Freshness Score | Price | Change | Volume | Rel Vol | Sector |",
         "| ---: | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |",

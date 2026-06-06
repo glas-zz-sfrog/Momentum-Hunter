@@ -9,7 +9,15 @@ from unittest.mock import patch
 from momentum_hunter.market import MarketRegimeSnapshot
 from momentum_hunter.models import BASE_MOMENTUM, Candidate, CaptureSession, MarketRegime, NewsItem, TradingMode
 from momentum_hunter.news_age import apply_candidate_news_stack
-from momentum_hunter.storage import candidate_from_dict, candidate_to_dict, load_latest_capture_failure, save_capture_failure, save_daily_capture
+from momentum_hunter.storage import (
+    capture_manifest_key,
+    candidate_from_dict,
+    candidate_to_dict,
+    load_capture_integrity_manifest,
+    load_latest_capture_failure,
+    save_capture_failure,
+    save_daily_capture,
+)
 from momentum_hunter.time_utils import CENTRAL_TZ
 
 
@@ -81,6 +89,7 @@ class StorageSerializationTests(unittest.TestCase):
                 )
 
             payload = json.loads(saved_json_path.read_text(encoding="utf-8"))
+            manifest = load_capture_integrity_manifest(manifest_path)
         finally:
             json_path.unlink(missing_ok=True)
             report_path.unlink(missing_ok=True)
@@ -97,12 +106,17 @@ class StorageSerializationTests(unittest.TestCase):
         self.assertEqual(0, saved_candidate["future_timestamp_count"])
         self.assertEqual(1, saved_candidate["excluded_from_scoring_count"])
         self.assertEqual("Known premarket headline", saved_candidate["freshest_headline"])
-        self.assertIn("created_at", payload["integrity"])
-        self.assertRegex(payload["integrity"]["source_hash"], r"^[0-9a-f]{64}$")
+        self.assertNotIn("integrity", payload)
         self.assertNotIn("selected", saved_candidate)
         self.assertNotIn("reviewed", saved_candidate)
         self.assertNotIn("user_notes", saved_candidate)
         self.assertNotIn("score_reasons", saved_candidate)
+
+        record = manifest["records"][capture_manifest_key(json_path)]
+        self.assertIn("created_at", record)
+        self.assertEqual("raw-capture-v2", record["capture_version"])
+        self.assertEqual("sha256", record["hash_algorithm"])
+        self.assertRegex(record["source_hash"], r"^[0-9a-f]{64}$")
 
     def test_capture_failure_record_round_trips_for_dashboard_health(self) -> None:
         failure_dir = Path.cwd() / "MomentumHunterData" / "data" / "_test_capture_failures"
