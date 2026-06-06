@@ -183,6 +183,19 @@ Use the GUI `Why [score]?` button to inspect the component-by-component explanat
 .\.venv\Scripts\python.exe -m momentum_hunter.score_breakdown_audit
 ```
 
+## Candidate Timeline and Replay Mode
+
+Select a candidate and click `View Timeline` to see every trusted active capture containing that ticker. The timeline can sort oldest-first or newest-first and can optionally show quarantined captures with a warning.
+
+Replay Mode opens a read-only point-in-time view for a timeline row. It separates:
+
+- capture-time facts from raw captures
+- stored score explanations from `score-breakdowns.json`
+- later user review decisions from `review-decisions.json`
+- later outcome labels from `analysis-outcomes.csv`
+
+Replay Mode never fetches current market data and does not recalculate historical scores with newer logic. Missing score explanations, legacy/incomplete breakdowns, missing outcome labels, and quarantined captures are shown as warnings.
+
 ## Administrator Actions
 
 Normal dashboard use does not require Administrator rights.

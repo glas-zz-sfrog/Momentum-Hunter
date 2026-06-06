@@ -66,6 +66,26 @@ Study results should be treated as derived views. They are useful research outpu
 
 Persisted study reports, when added, should live under `MomentumHunterData/data/studies/` and should be safe to delete/rebuild.
 
+## Candidate Timeline and Replay Mode
+
+- UI entry: select a candidate and click `View Timeline`
+- Data layer: `momentum_hunter/replay.py`
+- Source inputs: active raw captures, `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`
+- Mutability: read-only view model; no replay operation modifies raw captures or derived stores
+
+Replay Mode classifies fields by source:
+
+- `raw capture`: point-in-time market/candidate facts known at capture time
+- `derived score explanation`: stored `Why [score]?` record tied to capture identity, ticker, and score engine version
+- `later review decision`: user decision and notes recorded after capture
+- `later outcome label`: post-capture performance labels from outcomes CSV
+
+Outcome values are always labeled as calculated after capture. Replay views must not present outcomes as information known at the replayed moment.
+
+Quarantined captures are excluded from timelines by default. If `Show quarantined captures` is enabled, replay rows are marked `Quarantined - Not Trusted for Study Use` and remain read-only. Quarantined captures are not re-added to active analysis CSVs or study results.
+
+Timeline/replay warnings include duplicate replay identities, missing score breakdowns, legacy/incomplete score breakdowns, missing outcome labels, and quarantined source references. Missing optional derived data is shown honestly instead of invented.
+
 ## Future optimizer results
 
 - Current status: not implemented

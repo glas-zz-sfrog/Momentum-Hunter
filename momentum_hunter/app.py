@@ -11,6 +11,7 @@ from PySide6.QtGui import QColor, QBrush, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QValueAxis
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -54,6 +55,7 @@ from momentum_hunter.news_age import (
 )
 from momentum_hunter.providers import ProviderUnavailableError, provider_from_name
 from momentum_hunter.recommendations import RecommendationReport, build_weight_recommendations
+from momentum_hunter.replay import TimelineRow, build_candidate_timeline, build_replay_view_model
 from momentum_hunter.review import (
     CandidateIdentity,
     ReviewDecision,
@@ -330,9 +332,12 @@ class MomentumHunterWindow(QMainWindow):
         self.mark_rejected_button.clicked.connect(self.mark_rejected_candidates)
         self.add_interested_button = QPushButton("Add Interested to Watchlist")
         self.add_interested_button.clicked.connect(self.add_interested_to_watchlist)
+        self.timeline_button = QPushButton("View Timeline")
+        self.timeline_button.clicked.connect(self.view_candidate_timeline)
         review_layout.addWidget(self.mark_interested_button)
         review_layout.addWidget(self.mark_rejected_button)
         review_layout.addWidget(self.add_interested_button)
+        review_layout.addWidget(self.timeline_button)
         review_layout.addStretch(1)
         layout.addWidget(review_bar)
 
@@ -803,6 +808,132 @@ class MomentumHunterWindow(QMainWindow):
 
         self._show_text_dialog("Latest Research List", "No saved research list found yet.")
         self._update_status("No saved research list found.")
+
+    def view_candidate_timeline(self) -> None:
+        candidate = self._selected_candidate()
+        if candidate is None:
+            self._update_status("Select a candidate before opening its timeline.")
+            return
+        self._show_timeline_dialog(candidate.ticker)
+
+    def _show_timeline_dialog(self, ticker: str) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Candidate Timeline - {ticker}")
+        dialog.resize(1280, 720)
+        layout = QVBoxLayout(dialog)
+
+        banner = QLabel(
+            "Candidate Timeline - active trusted captures by default. Outcomes and review notes are later-derived annotations."
+        )
+        banner.setObjectName("detailStateLabel")
+        banner.setWordWrap(True)
+        layout.addWidget(banner)
+
+        controls = QWidget()
+        controls_layout = QHBoxLayout(controls)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        sort_combo = QComboBox()
+        sort_combo.addItems(["Oldest First", "Newest First"])
+        show_quarantined = QCheckBox("Show quarantined captures")
+        replay_button = QPushButton("Replay Capture")
+        controls_layout.addWidget(QLabel("Sort"))
+        controls_layout.addWidget(sort_combo)
+        controls_layout.addWidget(show_quarantined)
+        controls_layout.addStretch(1)
+        controls_layout.addWidget(replay_button)
+        layout.addWidget(controls)
+
+        table = QTableWidget(0, 22)
+        headers = [
+            "Capture",
+            "Session",
+            "Provider",
+            "Scanner",
+            "Ticker",
+            "Price",
+            "% Chg",
+            "Volume",
+            "Rel Vol",
+            "Market Cap",
+            "Sector",
+            "Industry",
+            "Score",
+            "Profile",
+            "Regime",
+            "Review",
+            "Note",
+            "Outcome",
+            "Next Day",
+            "5 Day",
+            "Max Gain",
+            "Trust",
+        ]
+        table.setHorizontalHeaderLabels(headers)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        layout.addWidget(table, 1)
+
+        timeline_rows: list[TimelineRow] = []
+
+        def refresh() -> None:
+            nonlocal timeline_rows
+            timeline_rows = build_candidate_timeline(
+                ticker,
+                include_quarantined=show_quarantined.isChecked(),
+                newest_first=sort_combo.currentText() == "Newest First",
+            )
+            populate_timeline_table(table, timeline_rows)
+            replay_button.setEnabled(bool(timeline_rows))
+
+        def replay_selected() -> None:
+            if not timeline_rows:
+                return
+            row_index = table.currentRow()
+            if row_index < 0:
+                row_index = 0
+            self._show_replay_dialog(timeline_rows[row_index])
+
+        sort_combo.currentTextChanged.connect(refresh)
+        show_quarantined.stateChanged.connect(refresh)
+        replay_button.clicked.connect(replay_selected)
+        table.itemDoubleClicked.connect(lambda _item: replay_selected())
+        refresh()
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        dialog.setStyleSheet(STYLESHEET)
+        dialog.exec()
+
+    def _show_replay_dialog(self, timeline_row: TimelineRow) -> None:
+        view_model = build_replay_view_model(timeline_row)
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Historical Replay - {timeline_row.ticker} - {timeline_row.capture_time_text}")
+        dialog.resize(980, 760)
+        layout = QVBoxLayout(dialog)
+        browser = QTextBrowser()
+        browser.setHtml(format_replay_html(view_model))
+        layout.addWidget(browser, 1)
+
+        button_row = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        why_button = QPushButton(f"Why {timeline_row.fields['score'].value}?")
+        why_button.setEnabled(timeline_row.score_breakdown is not None)
+        button_row.addButton(why_button, QDialogButtonBox.ButtonRole.ActionRole)
+
+        def show_why() -> None:
+            if timeline_row.score_breakdown:
+                self._show_score_breakdown_dialog(timeline_row.score_breakdown)
+            else:
+                QMessageBox.information(self, "Score Breakdown Missing", "No stored score breakdown exists for this replay row.")
+
+        why_button.clicked.connect(show_why)
+        button_row.rejected.connect(dialog.reject)
+        button_row.accepted.connect(dialog.accept)
+        layout.addWidget(button_row)
+        dialog.setStyleSheet(STYLESHEET)
+        dialog.exec()
 
     def capture_daily_snapshot(self, session: CaptureSession | None = None, show_message: bool = True) -> None:
         candidates = self.candidates or list(self.saved_candidates.values())
@@ -1610,6 +1741,126 @@ def format_raw_inputs(raw_inputs: dict) -> str:
     if not isinstance(raw_inputs, dict):
         return str(raw_inputs)
     return "; ".join(f"{key}={value}" for key, value in raw_inputs.items())
+
+
+def populate_timeline_table(table: QTableWidget, rows: list[TimelineRow]) -> None:
+    table.setRowCount(len(rows))
+    for row_index, row in enumerate(rows):
+        values = [
+            row.capture_time_text,
+            row.session,
+            row.provider,
+            row.scanner,
+            row.ticker,
+            timeline_value(row, "price"),
+            timeline_value(row, "percent_change"),
+            timeline_value(row, "volume"),
+            timeline_value(row, "relative_volume"),
+            timeline_value(row, "market_cap"),
+            timeline_value(row, "sector"),
+            timeline_value(row, "industry"),
+            timeline_value(row, "score"),
+            timeline_value(row, "score_profile"),
+            timeline_value(row, "score_regime"),
+            timeline_value(row, "review_status"),
+            timeline_value(row, "note_indicator"),
+            timeline_value(row, "outcome_status"),
+            timeline_value(row, "next_day_return_pct"),
+            timeline_value(row, "five_day_return_pct"),
+            timeline_value(row, "max_gain_pct"),
+            row.trust_label,
+        ]
+        for column, value in enumerate(values):
+            item = QTableWidgetItem(str(value))
+            if row.quarantined:
+                item.setBackground(QBrush(QColor("#6d3030")))
+            elif row.warnings:
+                item.setBackground(QBrush(QColor("#735f24")))
+            table.setItem(row_index, column, item)
+    table.resizeColumnsToContents()
+    if rows:
+        table.selectRow(0)
+
+
+def timeline_value(row: TimelineRow, key: str) -> object:
+    value = row.fields.get(key)
+    return value.value if value else ""
+
+
+def format_replay_html(view_model) -> str:
+    row = view_model.row
+    warnings = "".join(f"<li>{escape(warning)}</li>" for warning in view_model.warnings)
+    warning_block = f"<ul style='color:#fcd34d;font-weight:700;'>{warnings}</ul>" if warnings else "<p>No replay warnings.</p>"
+    raw_rows = "".join(
+        "<tr>"
+        f"<td>{escape(label_for_field(key))}</td>"
+        f"<td>{escape(str(value.value))}</td>"
+        f"<td>{escape(value.source)}</td>"
+        "</tr>"
+        for key, value in row.fields.items()
+        if value.source == "raw capture"
+    )
+    review = row.review_decision
+    review_text = (
+        f"{review.review_status.value.title()} at {format_central(review.decision_timestamp) if review.decision_timestamp else 'unknown time'}"
+        if review
+        else "No review decision recorded."
+    )
+    review_note = escape(review.decision_note) if review and review.decision_note else "No note."
+    outcome = row.outcome or {}
+    score_status = row.score_breakdown.get("status", "unavailable") if row.score_breakdown else "missing"
+    return f"""
+    <html>
+    <body style="font-family: Segoe UI, Arial; color:#e7edf4; background:#0b1118;">
+      <h2>{escape(view_model.banner)}</h2>
+      <p>
+        <b>{escape(row.ticker)}</b> |
+        Captured: {escape(row.capture_time_text)} |
+        Age now: {escape(row.age_text)} |
+        Session: {escape(row.session)} |
+        Provider: {escape(row.provider)} |
+        Scanner: {escape(row.scanner)}
+      </p>
+      <p style="color:#9fb0c2;">Read-only replay. Raw capture facts are separated from later review decisions and later outcome labels.</p>
+      <h3>Warnings</h3>
+      {warning_block}
+      <h3>Capture-Time Facts</h3>
+      <table cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;">
+        <tr style="background:#182536;"><th align="left">Field</th><th align="left">Value</th><th align="left">Source</th></tr>
+        {raw_rows}
+      </table>
+      <h3>Stored Score Explanation</h3>
+      <p>Score breakdown status: <b>{escape(str(score_status))}</b>. This uses the stored score-breakdown record for the historical identity, not a fresh market-data fetch.</p>
+      <h3>Later Review Decision</h3>
+      <p>{escape(review_text)}<br>Note: {review_note}</p>
+      <h3>Outcome Calculated After Capture</h3>
+      <p style="color:#fcd34d;">Outcome values are labels calculated after the capture. They were not known during the replayed moment.</p>
+      <ul>
+        <li>Status: {escape(str(outcome.get('outcome_status', 'missing')))}</li>
+        <li>Next-day return: {escape(str(outcome.get('next_day_return_pct', '')))}</li>
+        <li>Five-day return: {escape(str(outcome.get('five_day_return_pct', '')))}</li>
+        <li>Max gain: {escape(str(outcome.get('max_gain_pct', '')))}</li>
+        <li>Max drawdown: {escape(str(outcome.get('max_drawdown_pct', '')))}</li>
+      </ul>
+    </body>
+    </html>
+    """
+
+
+def label_for_field(key: str) -> str:
+    labels = {
+        "price": "Price",
+        "percent_change": "% Change",
+        "volume": "Volume",
+        "relative_volume": "Relative Volume",
+        "market_cap": "Market Cap",
+        "sector": "Sector",
+        "industry": "Industry",
+        "score": "Momentum Score",
+        "score_profile": "Score Profile",
+        "score_regime": "Score Regime",
+    }
+    return labels.get(key, key.replace("_", " ").title())
 
 
 def session_date_from_path(path: Path) -> str:
