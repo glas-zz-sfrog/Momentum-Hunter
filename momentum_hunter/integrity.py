@@ -27,6 +27,7 @@ MODIFIED = "MODIFIED"
 MISSING = "MISSING"
 UNTRACKED = "UNTRACKED"
 ORPHANED_DERIVED_RECORD = "ORPHANED_DERIVED_RECORD"
+QUARANTINED = "QUARANTINED"
 
 AUDIT_CSV = DATA_DIR / "integrity" / "raw_capture_integrity_audit.csv"
 AUDIT_MD = DATA_DIR / "integrity" / "raw_capture_integrity_audit.md"
@@ -54,6 +55,7 @@ def audit_raw_captures(
     review_decisions_path: Path = REVIEW_DECISIONS_PATH,
 ) -> list[IntegrityAuditRow]:
     rows = audit_manifest_records(manifest_path)
+    rows.extend(audit_quarantined_manifest_records(manifest_path))
     rows.extend(audit_untracked_raw_captures(captures_dir, rows))
     rows.extend(
         audit_orphaned_derived_records(
@@ -113,6 +115,76 @@ def audit_manifest_records(manifest_path: Path = CAPTURE_INTEGRITY_MANIFEST) -> 
                 capture_version=record.get("capture_version", ""),
                 manifest_hash=expected_hash,
                 current_hash=current_hash,
+            )
+        )
+    return rows
+
+
+def audit_quarantined_manifest_records(manifest_path: Path = CAPTURE_INTEGRITY_MANIFEST) -> list[IntegrityAuditRow]:
+    manifest = load_capture_integrity_manifest(manifest_path)
+    records = manifest.get("quarantined_records", {})
+    rows: list[IntegrityAuditRow] = []
+    for key, record in sorted(records.items()):
+        quarantine_path = record.get("quarantine_path", "")
+        reason = record.get("quarantine_reason", "Raw capture has been quarantined and is excluded from studies.")
+        if not quarantine_path:
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind=record.get("kind", "raw_capture"),
+                    status=MISSING,
+                    severity=FAIL,
+                    created_at=record.get("created_at", ""),
+                    capture_version=record.get("capture_version", ""),
+                    manifest_hash=record.get("source_hash", ""),
+                    details=f"{reason} Quarantine record has no quarantine path.",
+                )
+            )
+            continue
+        path = resolve_manifest_path(quarantine_path)
+        if not path.exists():
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind=record.get("kind", "raw_capture"),
+                    status=MISSING,
+                    severity=FAIL,
+                    created_at=record.get("created_at", ""),
+                    capture_version=record.get("capture_version", ""),
+                    manifest_hash=record.get("quarantine_hash", ""),
+                    details=f"{reason} Quarantine file is missing: {quarantine_path}.",
+                )
+            )
+            continue
+        current_hash = file_sha256(path)
+        quarantine_hash = record.get("quarantine_hash", "")
+        if quarantine_hash and current_hash != quarantine_hash:
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind=record.get("kind", "raw_capture"),
+                    status=MODIFIED,
+                    severity=FAIL,
+                    created_at=record.get("created_at", ""),
+                    capture_version=record.get("capture_version", ""),
+                    manifest_hash=quarantine_hash,
+                    current_hash=current_hash,
+                    details=f"{reason} Quarantined raw capture hash differs from quarantine manifest: {quarantine_path}.",
+                )
+            )
+            continue
+        details = f"{reason} Quarantine path: {quarantine_path}."
+        rows.append(
+            IntegrityAuditRow(
+                path=key,
+                kind=record.get("kind", "raw_capture"),
+                status=QUARANTINED,
+                severity=WARN,
+                created_at=record.get("created_at", ""),
+                capture_version=record.get("capture_version", ""),
+                manifest_hash=record.get("source_hash", ""),
+                current_hash=current_hash,
+                details=details,
             )
         )
     return rows

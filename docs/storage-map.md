@@ -105,6 +105,7 @@ Each manifest record stores:
 - `integrity/capture_manifest.json`: external raw capture integrity metadata
 - `integrity/raw_capture_integrity_audit.*`: latest audit output
 - `backups/derived-rebuild/YYYYMMDD-HHMMSS/`: backed-up derived CSVs before rebuilds
+- `quarantine/raw-captures/YYYY-MM-DD/session/`: raw captures removed from active study use but retained for recovery/audit
 
 ## Integrity Validation
 
@@ -136,6 +137,7 @@ Overall statuses:
 - `MISSING`: restore the missing raw JSON/MD file from backup, or quarantine/delete derived rows that reference it.
 - `ORPHANED_DERIVED_RECORD`: rebuild derived CSV/outcome/review data from available raw captures, or remove the derived row if the raw source cannot be recovered.
 - `UNTRACKED`: legacy pre-manifest captures can still be viewed, but they cannot be proven immutable from creation time. Future captures will be tracked automatically.
+- `QUARANTINED`: a raw capture was deliberately removed from active source-of-truth use and retained outside `data/captures`.
 
 ## Rebuilding Derived Data
 
@@ -156,3 +158,21 @@ The rebuild command:
 - writes an after-rebuild audit report
 
 The backup directory is the quarantine area for old orphaned derived rows. Do not copy old rows back into live analysis files unless they can be traced to a raw capture.
+
+## Quarantining Bad Raw Captures
+
+If a raw capture cannot be trusted, move it out of active captures:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.quarantine_capture 2026-06-06 morning --reason "Manifest hash mismatch; excluded from studies."
+.\.venv\Scripts\python.exe -m momentum_hunter.rebuild_derived_data
+```
+
+The quarantine command:
+
+- moves `{session}.json` and `{session}.md` from `data/captures/YYYY-MM-DD/` into `data/quarantine/raw-captures/YYYY-MM-DD/session/`
+- moves active manifest records into `quarantined_records`
+- writes `recovery-note.md` and `recovery-note.json`
+- keeps the files available for investigation
+- keeps auditing the quarantine copies for existence and SHA-256 drift
+- excludes the snapshot from rebuilt analysis CSVs, outcome CSVs, and Study Engine results
