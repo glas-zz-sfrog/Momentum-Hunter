@@ -26,6 +26,8 @@ class GuiStateTests(unittest.TestCase):
             patch.object(MomentumHunterWindow, "_load_capture_history", lambda window: None),
             patch.object(MomentumHunterWindow, "_start_snapshot_timer", lambda window: None),
             patch.object(MomentumHunterWindow, "refresh_market_regime", lambda window, show_status=True: None),
+            patch("momentum_hunter.app.upsert_score_breakdowns_for_candidates", lambda *args, **kwargs: []),
+            patch("momentum_hunter.app.upsert_score_breakdowns_for_capture_payload", lambda *args, **kwargs: []),
         ]
         for patcher in self.patches:
             patcher.start()
@@ -49,6 +51,8 @@ class GuiStateTests(unittest.TestCase):
         self.assertIn("CURRENT DASHBOARD - LIVE REVIEW", self.window.view_state_label.text())
         self.assertEqual("LIVE REVIEW CANDIDATE", self.window.detail_state_label.text())
         self.assertEqual("LIVE - Top Momentum Candidates", self.window.chart_state_label.text())
+        self.assertEqual("Why 91?", self.window.why_score_button.text())
+        self.assertTrue(self.window.why_score_button.isEnabled())
         self.assertTrue(self.window.save_button.isEnabled())
         self.assertFalse(self.window.notes_edit.isReadOnly())
         self.assertTrue(self.window.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable)

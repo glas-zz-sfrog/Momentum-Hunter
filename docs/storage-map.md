@@ -38,13 +38,22 @@ Outcomes are labels computed after capture time. They can use future bars for la
 
 ## Score breakdowns
 
-- Current status: not yet persisted as a dedicated store
-- Future path: `MomentumHunterData/data/score-breakdowns.json` or SQLite equivalent
+- Path: `MomentumHunterData/data/score-breakdowns.json`
 - Owner: scoring engine
 - Mutability: rebuildable by engine version
-- Stores: score components, rule weights, and “Why this score?” explanations
+- Stores arithmetic reconciliation, caps, floors, bonuses, penalties, component raw inputs, and GUI `Why [score]?` explanations
 
-Score breakdowns must reference raw capture identity and engine version. They must not be written into raw captures.
+Score breakdowns reference raw capture identity and score engine version. They must not be written into raw captures.
+
+Current schema:
+
+- `schema_version`
+- `updated_at`
+- `score_engine_version`
+- `records`
+- each record includes `capture_id`, `capture_date`, `capture_time`, `session`, `provider`, `scanner`, `ticker`, `score_engine_version`, `score_profile`, `score_regime`, `final_score`, `computed_final_score`, `components`, `bonuses`, `penalties`, `caps`, `floors`, `overrides`, and `reconciliation_status`
+
+Historical records that cannot be fully reconstructed are marked `legacy` or `incomplete`; they are warnings, not clean current-engine proof. This is the foundation for future Replay Mode because the app can show what score explanation was available for a specific capture without changing the raw capture.
 
 ## Study reports
 
@@ -101,6 +110,7 @@ Each manifest record stores:
 - `review-decisions.json`: user decisions and notes
 - `analysis-captures.csv`: normalized derived analysis rows
 - `analysis-outcomes.csv`: future outcome labels
+- `score-breakdowns.json`: rebuildable score explanation records
 - `watchlist-*.json` and `watchlist-report-*.md`: user-facing derived watchlist artifacts
 - `integrity/capture_manifest.json`: external raw capture integrity metadata
 - `integrity/raw_capture_integrity_audit.*`: latest audit output
@@ -164,6 +174,30 @@ The rebuild command:
 - writes an after-rebuild audit report
 
 The backup directory is the quarantine area for old orphaned derived rows. Do not copy old rows back into live analysis files unless they can be traced to a raw capture.
+
+## Rebuilding Score Breakdowns
+
+If `score-breakdowns.json` is missing or stale, rebuild it from active raw captures:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.rebuild_score_breakdowns
+```
+
+The rebuild command:
+
+- reads only active raw capture JSON files under `data/captures`
+- excludes quarantined captures because they live outside `data/captures`
+- writes `MomentumHunterData/data/score-breakdowns.json` atomically
+- backs up any previous score-breakdown store under `MomentumHunterData/data/backups/score-breakdowns/`
+- reports counts for `complete`, `legacy`, `incomplete`, and `failed`
+
+Audit score breakdowns with:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.score_breakdown_audit
+```
+
+The score-breakdown audit detects missing breakdowns for active scored candidates, duplicate identities, missing engine versions, malformed component lists, arithmetic mismatches, unexplained cap/floor data, quarantined-source references, and legacy/incomplete records.
 
 ## Quarantining Bad Raw Captures
 

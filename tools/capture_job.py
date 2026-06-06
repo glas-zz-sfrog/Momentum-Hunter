@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import traceback
 from pathlib import Path
@@ -13,6 +14,7 @@ from momentum_hunter.market import detect_market_regime
 from momentum_hunter.models import CaptureSession, SCANNER_PRESETS
 from momentum_hunter.providers import ProviderUnavailableError, provider_from_name
 from momentum_hunter.scoring import score_candidates
+from momentum_hunter.score_breakdowns import upsert_score_breakdowns_for_capture_payload
 from momentum_hunter.storage import save_capture_failure, save_daily_capture
 from momentum_hunter.time_utils import now_central
 
@@ -75,6 +77,11 @@ def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
     print(f"Report: {report_path}")
     print(f"Candidates: {len(candidates)}")
     print(f"Market regime: {market_regime.regime.value}")
+    try:
+        upsert_score_breakdowns_for_capture_payload(json.loads(json_path.read_text(encoding="utf-8")))
+        print("Score breakdowns updated")
+    except Exception as exc:
+        print(f"Score breakdown update failed: {exc}", file=sys.stderr)
     return 0
 
 

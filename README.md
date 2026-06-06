@@ -170,6 +170,19 @@ This profile preserves the original scoring structure, then applies small market
 
 Each captured candidate records `score_profile` and `score_regime` for later study.
 
+Score explanations are stored outside raw captures in:
+
+```text
+MomentumHunterData\data\score-breakdowns.json
+```
+
+Use the GUI `Why [score]?` button to inspect the component-by-component explanation for a candidate. Rebuild the derived explanation store with:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.rebuild_score_breakdowns
+.\.venv\Scripts\python.exe -m momentum_hunter.score_breakdown_audit
+```
+
 ## Administrator Actions
 
 Normal dashboard use does not require Administrator rights.

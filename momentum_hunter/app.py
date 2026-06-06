@@ -63,6 +63,12 @@ from momentum_hunter.review import (
     upsert_review_decision,
 )
 from momentum_hunter.scoring import score_candidates
+from momentum_hunter.score_breakdowns import (
+    find_score_breakdown,
+    score_breakdown_identity,
+    upsert_score_breakdowns_for_candidates,
+    upsert_score_breakdowns_for_capture_payload,
+)
 from momentum_hunter.startup import install_startup_script, is_startup_installed
 from momentum_hunter.storage import (
     RawCaptureAlreadyExistsError,
@@ -164,6 +170,7 @@ class MomentumHunterWindow(QMainWindow):
         self.display_session_label = ""
         self.display_provider_label = self.config.provider
         self.display_scanner_label = next(iter(SCANNER_PRESETS))
+        self.display_mode_label = self.config.mode.value
         self.current_view_style: DataViewStyle | None = None
         self.provider_status_text = "Provider: not checked"
         self.provider_status_ok = True
@@ -372,19 +379,23 @@ class MomentumHunterWindow(QMainWindow):
         self.ticker_label.setObjectName("tickerLabel")
         self.company_label = QLabel("")
         self.score_label = QLabel("")
+        self.why_score_button = QPushButton("Why?")
+        self.why_score_button.clicked.connect(self.show_score_breakdown)
+        self.why_score_button.setEnabled(False)
         self.review_status_label = QLabel("Status: unreviewed")
         self.review_status_label.setObjectName("reviewStatusLabel")
         self.news_stack_label = QLabel("")
         self.news_stack_label.setWordWrap(True)
         self.reasons_label = QLabel("")
         self.reasons_label.setWordWrap(True)
-        identity_layout.addWidget(self.detail_state_label, 0, 0, 1, 2)
+        identity_layout.addWidget(self.detail_state_label, 0, 0, 1, 3)
         identity_layout.addWidget(self.ticker_label, 1, 0)
         identity_layout.addWidget(self.score_label, 1, 1)
-        identity_layout.addWidget(self.company_label, 2, 0, 1, 2)
-        identity_layout.addWidget(self.review_status_label, 3, 0, 1, 2)
-        identity_layout.addWidget(self.news_stack_label, 4, 0, 1, 2)
-        identity_layout.addWidget(self.reasons_label, 5, 0, 1, 2)
+        identity_layout.addWidget(self.why_score_button, 1, 2)
+        identity_layout.addWidget(self.company_label, 2, 0, 1, 3)
+        identity_layout.addWidget(self.review_status_label, 3, 0, 1, 3)
+        identity_layout.addWidget(self.news_stack_label, 4, 0, 1, 3)
+        identity_layout.addWidget(self.reasons_label, 5, 0, 1, 3)
         layout.addWidget(identity)
 
         health_box = QGroupBox("Capture Health")
@@ -520,6 +531,7 @@ class MomentumHunterWindow(QMainWindow):
             self.display_session_label = "live"
             self.display_provider_label = self.provider_combo.currentText()
             self.display_scanner_label = self.scanner_combo.currentText()
+            self.display_mode_label = self.config.mode.value
             self.data_view_state = DataViewState.CURRENT
             self.live_candidates = list(self.candidates)
             self.live_saved_candidates = dict(self.saved_candidates)
@@ -527,6 +539,7 @@ class MomentumHunterWindow(QMainWindow):
             self.provider_status_text = f"Provider: {self.provider_combo.currentText()} OK at {format_central(scan_time)}"
             self.provider_status_ok = True
             self.retry_scan_button.hide()
+            self._persist_score_breakdowns_for_candidates("live", scan_time)
             self._apply_data_view_state()
             self._refresh_capture_health()
             self._populate_table()
@@ -629,6 +642,8 @@ class MomentumHunterWindow(QMainWindow):
         self.score_label.setText(
             f"Momentum: {candidate.score} | Freshness: {candidate.news_stack.freshness_score} {candidate.news_stack.freshness}"
         )
+        self.why_score_button.setText(f"Why {candidate.score}?")
+        self.why_score_button.setEnabled(True)
         decision = self._candidate_review_decision(candidate)
         status = self._candidate_review_status(candidate)
         timestamp = format_central(decision.decision_timestamp) if decision and decision.decision_timestamp else "not decided"
@@ -649,6 +664,8 @@ class MomentumHunterWindow(QMainWindow):
         self.ticker_label.setText(message)
         self.company_label.setText("")
         self.score_label.setText("")
+        self.why_score_button.setText("Why?")
+        self.why_score_button.setEnabled(False)
         self.review_status_label.setText("Status: unreviewed")
         self.news_stack_label.setText("")
         self.reasons_label.setText("")
@@ -810,6 +827,10 @@ class MomentumHunterWindow(QMainWindow):
                 session=session,
                 market_regime=self.market_regime,
             )
+            try:
+                upsert_score_breakdowns_for_capture_payload(load_capture_json(session_date_from_path(json_path), session))
+            except Exception as exc:
+                self._update_status(f"Saved capture, but score breakdown persistence failed: {exc}")
         except RawCaptureAlreadyExistsError as exc:
             self._update_status(str(exc))
             if show_message:
@@ -866,6 +887,7 @@ class MomentumHunterWindow(QMainWindow):
                     self.provider_status_ok = True
                     self.retry_scan_button.hide()
                     self._refresh_capture_health()
+                    self._persist_score_breakdowns_for_candidates("live", self.current_capture_time)
                 self._populate_table()
             except ProviderUnavailableError as exc:
                 self.provider_status_text = f"Provider: {exc.user_message}"
@@ -984,6 +1006,7 @@ class MomentumHunterWindow(QMainWindow):
         self.display_capture_time = datetime.fromisoformat(payload["capture_time"]) if payload.get("capture_time") else None
         self.display_session_label = payload.get("session", "snapshot")
         self.display_provider_label = payload.get("provider", "")
+        self.display_mode_label = payload.get("mode", "")
         scanner_payload = payload.get("scanner", {})
         self.display_scanner_label = scanner_payload.get("name", "") if isinstance(scanner_payload, dict) else str(scanner_payload)
         self.candidates = [candidate_from_dict(item) for item in payload.get("candidates", [])]
@@ -1010,6 +1033,7 @@ class MomentumHunterWindow(QMainWindow):
         self.display_session_label = "live"
         self.display_provider_label = self.provider_combo.currentText()
         self.display_scanner_label = self.scanner_combo.currentText()
+        self.display_mode_label = self.config.mode.value
         self.candidates = list(self.live_candidates)
         self.saved_candidates = dict(self.live_saved_candidates)
         self.reviewed_tickers = set(self.live_reviewed_tickers)
@@ -1157,6 +1181,76 @@ class MomentumHunterWindow(QMainWindow):
             install_startup_script(Path(__file__).resolve().parents[1])
         except Exception as exc:
             self._update_status(f"Could not install Windows startup launcher: {exc}")
+
+    def _persist_score_breakdowns_for_candidates(self, session_label: str, capture_time: datetime) -> None:
+        if not self.candidates:
+            return
+        try:
+            upsert_score_breakdowns_for_candidates(
+                self.candidates,
+                capture_time=capture_time,
+                session=session_label,
+                provider=self.display_provider_label or self.provider_combo.currentText(),
+                scanner=self.display_scanner_label or self.scanner_combo.currentText(),
+                mode=self.display_mode_label or self.config.mode.value,
+                regime=self.market_regime.regime,
+            )
+        except Exception as exc:
+            self._update_status(f"Score breakdown persistence failed: {exc}")
+
+    def show_score_breakdown(self) -> None:
+        candidate = self._selected_candidate()
+        if candidate is None:
+            self._update_status("Select a candidate before opening score details.")
+            return
+        identity = self._score_breakdown_identity(candidate)
+        record = find_score_breakdown(identity)
+        if record is None and self.data_view_state == DataViewState.CURRENT:
+            capture_time = self.display_capture_time or self.current_capture_time or now_central()
+            generated = upsert_score_breakdowns_for_candidates(
+                [candidate],
+                capture_time=capture_time,
+                session=self.display_session_label or "live",
+                provider=self.display_provider_label or self.provider_combo.currentText(),
+                scanner=self.display_scanner_label or self.scanner_combo.currentText(),
+                mode=self.display_mode_label or self.config.mode.value,
+                regime=self.market_regime.regime,
+            )
+            record = generated[0] if generated else None
+        if record is None:
+            QMessageBox.information(
+                self,
+                "Score Breakdown Missing",
+                "No stored score breakdown was found for this historical candidate. Run rebuild_score_breakdowns before relying on this view.",
+            )
+            return
+        self._show_score_breakdown_dialog(record)
+
+    def _show_score_breakdown_dialog(self, record: dict) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Why {record.get('final_score', '')}? - {record.get('ticker', '')}")
+        dialog.resize(920, 720)
+        layout = QVBoxLayout(dialog)
+        browser = QTextBrowser()
+        browser.setHtml(format_score_breakdown_html(record))
+        layout.addWidget(browser)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        dialog.exec()
+
+    def _score_breakdown_identity(self, candidate: Candidate) -> dict:
+        capture_time = self.display_capture_time or self.current_capture_time or now_central()
+        return score_breakdown_identity(
+            capture_date=capture_time.strftime("%Y-%m-%d"),
+            capture_time=capture_time.isoformat(),
+            session=self.display_session_label or "live",
+            provider=self.display_provider_label or self.provider_combo.currentText(),
+            scanner=self.display_scanner_label or self.scanner_combo.currentText(),
+            ticker=candidate.ticker,
+            mode=self.display_mode_label or self.config.mode.value,
+        )
 
     def _selected_candidate(self) -> Candidate | None:
         if self.selected_ticker is None:
@@ -1443,6 +1537,83 @@ def format_news_html(candidate: Candidate, now: datetime | None = None) -> str:
         "</style>"
         f"<ul>{''.join(blocks)}</ul>"
     )
+
+
+def format_score_breakdown_html(record: dict) -> str:
+    status = record.get("status", "complete")
+    warning = ""
+    if status != "complete":
+        warning = (
+            "<p style='color:#fcd34d;font-weight:700;'>"
+            f"{escape(str(status).upper())}: this explanation is marked {escape(str(status))}. "
+            "Use it as historical context, not a clean current-engine reconciliation."
+            "</p>"
+        )
+    identity = record.get("identity", {})
+    component_rows = []
+    for component in record.get("components", []):
+        component_rows.append(
+            "<tr>"
+            f"<td>{escape(str(component.get('label', '')))}</td>"
+            f"<td>{escape(str(component.get('rule', '')))}</td>"
+            f"<td>{escape(format_raw_inputs(component.get('raw_inputs', {})))}</td>"
+            f"<td style='text-align:right;'>{escape(str(component.get('points_before_adjustment', '')))}</td>"
+            f"<td style='text-align:right;'>{escape(str(component.get('points_after_adjustment', '')))}</td>"
+            f"<td>{escape(str(component.get('explanation', '')))}</td>"
+            "</tr>"
+        )
+    reconciliation = record.get("reconciliation", {})
+    caps = record.get("caps", [])
+    floors = record.get("floors", [])
+    cap = caps[0] if caps else {}
+    floor = floors[0] if floors else {}
+    return f"""
+    <html>
+    <body style="font-family: Segoe UI, Arial; color: #e7edf4; background: #0b1118;">
+      <h2>Why {escape(str(record.get('final_score', '')))}? {escape(str(record.get('ticker', '')))}</h2>
+      {warning}
+      <p>
+        <b>Captured:</b> {escape(str(identity.get('capture_time', record.get('capture_time', ''))))}<br>
+        <b>Scanner:</b> {escape(str(identity.get('scanner', '')))} |
+        <b>Mode:</b> {escape(str(identity.get('mode', '')))} |
+        <b>Engine:</b> {escape(str(record.get('score_engine_version', '')))} |
+        <b>Schema:</b> {escape(str(record.get('explanation_schema_version', '')))}
+      </p>
+      <h3>Reconciliation</h3>
+      <pre style="background:#111b26;padding:10px;border:1px solid #2f4054;">
+Base component subtotal: {escape(str(record.get('subtotal_before_global_adjustments', '')))}
+Floor applied: {escape(str(floor.get('applied', False)))} | Floor output: {escape(str(floor.get('output', '')))}
+Pre-cap total: {escape(str(record.get('pre_cap_total', '')))}
+Global cap applied: {escape(str(cap.get('applied', False)))} | Cap output: {escape(str(cap.get('output', '')))}
+Computed final score: {escape(str(record.get('computed_final_score', '')))}
+Displayed final score: {escape(str(record.get('final_score', '')))}
+Reconciliation status: {escape(str(reconciliation.get('status', record.get('reconciliation_status', ''))))}
+      </pre>
+      <h3>Components</h3>
+      <table cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;">
+        <tr style="background:#182536;">
+          <th align="left">Component</th>
+          <th align="left">Rule</th>
+          <th align="left">Raw Inputs</th>
+          <th align="right">Before</th>
+          <th align="right">After</th>
+          <th align="left">Explanation</th>
+        </tr>
+        {''.join(component_rows)}
+      </table>
+    </body>
+    </html>
+    """
+
+
+def format_raw_inputs(raw_inputs: dict) -> str:
+    if not isinstance(raw_inputs, dict):
+        return str(raw_inputs)
+    return "; ".join(f"{key}={value}" for key, value in raw_inputs.items())
+
+
+def session_date_from_path(path: Path) -> str:
+    return path.parent.name
 
 
 def format_market_cap(value: int) -> str:

@@ -8,6 +8,12 @@ from pathlib import Path
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.outcomes import OUTCOMES_CSV
 from momentum_hunter.review import REVIEW_DECISIONS_PATH
+from momentum_hunter.score_breakdowns import (
+    SCORE_BREAKDOWNS_PATH,
+    expected_score_breakdown_identities,
+    load_score_breakdown_store,
+    score_breakdown_identity_key,
+)
 from momentum_hunter.storage import (
     ANALYSIS_CSV,
     CAPTURE_INTEGRITY_MANIFEST,
@@ -28,6 +34,11 @@ MISSING = "MISSING"
 UNTRACKED = "UNTRACKED"
 ORPHANED_DERIVED_RECORD = "ORPHANED_DERIVED_RECORD"
 QUARANTINED = "QUARANTINED"
+MISSING_SCORE_BREAKDOWN = "MISSING_SCORE_BREAKDOWN"
+DUPLICATE_SCORE_BREAKDOWN = "DUPLICATE_SCORE_BREAKDOWN"
+SCORE_BREAKDOWN_INVALID = "SCORE_BREAKDOWN_INVALID"
+SCORE_BREAKDOWN_LEGACY = "SCORE_BREAKDOWN_LEGACY"
+SCORE_BREAKDOWN_INCOMPLETE = "SCORE_BREAKDOWN_INCOMPLETE"
 
 AUDIT_CSV = DATA_DIR / "integrity" / "raw_capture_integrity_audit.csv"
 AUDIT_MD = DATA_DIR / "integrity" / "raw_capture_integrity_audit.md"
@@ -356,6 +367,180 @@ def decision_is_quarantined(decision: dict, identity: dict, groups: set[tuple[st
             continue
         return True
     return False
+
+
+def audit_score_breakdowns(
+    *,
+    captures_dir: Path = CAPTURES_DIR,
+    manifest_path: Path = CAPTURE_INTEGRITY_MANIFEST,
+    score_breakdowns_path: Path = SCORE_BREAKDOWNS_PATH,
+) -> list[IntegrityAuditRow]:
+    expected = expected_score_breakdown_identities(captures_dir)
+    store = load_score_breakdown_store(score_breakdowns_path)
+    records = store.get("records", {})
+    rows: list[IntegrityAuditRow] = []
+    record_identity_keys = {
+        record.get("identity_key") or score_breakdown_identity_key(record.get("identity", {}))
+        for record in records.values()
+        if isinstance(record, dict)
+    }
+
+    for key, identity in sorted(expected.items()):
+        if key not in record_identity_keys:
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind="score_breakdown",
+                    status=MISSING_SCORE_BREAKDOWN,
+                    severity=FAIL,
+                    details=f"Active raw capture candidate {identity.get('ticker', '')} has no score breakdown record.",
+                )
+            )
+
+    seen_identity_keys: dict[str, str] = {}
+    quarantined_groups = quarantined_capture_groups(manifest_path)
+    for key, record in sorted(records.items()):
+        identity = record.get("identity", {})
+        record_identity_key = record.get("identity_key") or score_breakdown_identity_key(identity)
+        duplicate_source = seen_identity_keys.get(record_identity_key)
+        if duplicate_source:
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind="score_breakdown",
+                    status=DUPLICATE_SCORE_BREAKDOWN,
+                    severity=FAIL,
+                    details=f"Duplicate score breakdown identity also appears at {duplicate_source}.",
+                )
+            )
+            continue
+        seen_identity_keys[record_identity_key] = key
+
+        source_kind = record.get("source", {}).get("kind", "")
+        if record_identity_key not in expected and source_kind != "live_or_app_capture":
+            if identity_group_is_quarantined(identity, quarantined_groups):
+                rows.append(
+                    IntegrityAuditRow(
+                        path=key,
+                        kind="score_breakdown",
+                        status=QUARANTINED,
+                        severity=WARN,
+                        details="Score breakdown references a quarantined raw capture and is excluded from active studies.",
+                    )
+                )
+                continue
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind="score_breakdown",
+                    status=ORPHANED_DERIVED_RECORD,
+                    severity=FAIL,
+                    details="Score breakdown references a missing active raw capture.",
+                )
+            )
+            continue
+
+        invalid_reason = score_breakdown_invalid_reason(record)
+        if invalid_reason:
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind="score_breakdown",
+                    status=SCORE_BREAKDOWN_INVALID,
+                    severity=FAIL,
+                    details=invalid_reason,
+                )
+            )
+            continue
+
+        status = record.get("status", "complete")
+        if status == "legacy":
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind="score_breakdown",
+                    status=SCORE_BREAKDOWN_LEGACY,
+                    severity=WARN,
+                    details="Legacy score breakdown does not reconcile to the current engine output.",
+                )
+            )
+        elif status == "incomplete":
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind="score_breakdown",
+                    status=SCORE_BREAKDOWN_INCOMPLETE,
+                    severity=WARN,
+                    details="Score breakdown was generated with incomplete historical inputs.",
+                )
+            )
+        else:
+            rows.append(
+                IntegrityAuditRow(
+                    path=key,
+                    kind="score_breakdown",
+                    status=OK,
+                    severity=PASS,
+                    details="Score breakdown is present and reconciled.",
+                )
+            )
+    return rows
+
+
+def identity_group_is_quarantined(identity: dict, groups: set[tuple[str, str, str, str]]) -> bool:
+    for capture_date, session, provider, scanner in groups:
+        if identity.get("capture_date", "") != capture_date or identity.get("session", "") != session:
+            continue
+        if provider and identity.get("provider") and identity.get("provider") != provider:
+            continue
+        if scanner and identity.get("scanner") and identity.get("scanner") != scanner:
+            continue
+        return True
+    return False
+
+
+def score_breakdown_invalid_reason(record: dict) -> str:
+    if not record.get("score_engine_version"):
+        return "Score engine version is missing."
+    components = record.get("components")
+    if not isinstance(components, list) or not components:
+        return "Component list is missing or malformed."
+    for component in components:
+        if not isinstance(component, dict):
+            return "Component list contains a non-object item."
+        for field in ("key", "label", "raw_inputs", "rule", "points_before_adjustment", "points_after_adjustment", "explanation"):
+            if field not in component:
+                return f"Component {component.get('key', '<unknown>')} is missing {field}."
+    if not record.get("caps"):
+        return "Global cap explanation is missing."
+    if not record.get("floors"):
+        return "Global floor explanation is missing."
+    try:
+        component_total = sum(int(component["points_after_adjustment"]) for component in components)
+        pre_floor_total = int(record.get("pre_floor_total"))
+        computed_final = int(record.get("computed_final_score"))
+    except (TypeError, ValueError):
+        return "Score breakdown arithmetic fields are not numeric."
+    if component_total != pre_floor_total:
+        return f"Component total {component_total} does not match pre_floor_total {pre_floor_total}."
+    floor_output = max(0, pre_floor_total)
+    cap_output = min(100, floor_output)
+    if computed_final != cap_output:
+        return f"Computed final score {computed_final} does not match floor/cap output {cap_output}."
+    if record.get("status", "complete") == "complete":
+        try:
+            final_score = int(record.get("final_score"))
+        except (TypeError, ValueError):
+            return "Final score is not numeric."
+        if final_score != computed_final:
+            return f"Final score {final_score} does not match computed final score {computed_final}."
+    caps = record.get("caps", [])
+    floors = record.get("floors", [])
+    if caps and bool(caps[0].get("applied")) != (floor_output > 100):
+        return "Global cap applied flag does not match arithmetic."
+    if floors and bool(floors[0].get("applied")) != (pre_floor_total < 0):
+        return "Global floor applied flag does not match arithmetic."
+    return ""
 
 
 def overall_audit_status(rows: list[IntegrityAuditRow]) -> str:
