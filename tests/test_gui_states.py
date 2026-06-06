@@ -82,7 +82,7 @@ class GuiStateTests(unittest.TestCase):
 
         self.assertEqual("NEW", self.window.ticker_label.text())
         self.assertEqual("Momentum: 94 | Freshness: 0 UNKNOWN", self.window.score_label.text())
-        self.assertEqual("NEW", self.window.table.item(0, 3).text())
+        self.assertEqual("NEW", self.window.table.item(0, 4).text())
         self.assertNotEqual("OLD", self.window.selected_ticker)
 
     def test_empty_scan_clears_candidate_detail_panel(self) -> None:
@@ -118,7 +118,7 @@ class GuiStateTests(unittest.TestCase):
         ):
             self.window.run_scan()
 
-        self.assertEqual("OLD", self.window.table.item(0, 3).text())
+        self.assertEqual("OLD", self.window.table.item(0, 4).text())
         self.assertIn("STALE DATA - REFRESH REQUIRED", self.window.view_state_label.text())
         self.assertFalse(self.window.retry_scan_button.isHidden())
         self.assertIn("DNS failure", self.window.provider_status_label.text())
@@ -147,13 +147,13 @@ class GuiStateTests(unittest.TestCase):
         self.assertEqual("HISTORICAL - Top Momentum Candidates", self.window.chart_state_label.text())
         self.assertFalse(self.window.save_button.isEnabled())
         self.assertTrue(self.window.notes_edit.isReadOnly())
-        self.assertEqual(Qt.CheckState.Checked, self.window.table.item(0, 0).checkState())
+        self.assertEqual("Watchlist", self.window.table.item(0, 1).text())
         self.assertFalse(self.window.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable)
 
         self.window.return_to_current_dashboard()
 
         self.assertIn("CURRENT DASHBOARD - LIVE REVIEW", self.window.view_state_label.text())
-        self.assertEqual("CURR", self.window.table.item(0, 3).text())
+        self.assertEqual("CURR", self.window.table.item(0, 4).text())
         self.assertTrue(self.window.save_button.isEnabled())
         self.assertFalse(self.window.notes_edit.isReadOnly())
 
