@@ -25,6 +25,7 @@ SCORE_EXPLANATION = "derived score explanation"
 REVIEW_DECISION = "later review decision"
 OUTCOME_LABEL = "later outcome label"
 SYSTEM_WARNING = "system warning"
+REPLAY_BANNER = "POINT-IN-TIME REPLAY — READ ONLY"
 
 
 @dataclass(frozen=True)
@@ -120,7 +121,7 @@ def build_candidate_timeline(
 
 def build_replay_view_model(row: TimelineRow) -> ReplayViewModel:
     return ReplayViewModel(
-        banner="Historical Replay - Point-in-Time Snapshot",
+        banner=REPLAY_BANNER,
         read_only=True,
         row=row,
         raw_capture_fields=row.fields,
@@ -167,13 +168,15 @@ def build_timeline_row(
         mode=mode,
     )
     score_breakdown = find_score_breakdown(score_identity, path=score_breakdowns_path)
+    score_breakdown_status = score_breakdown.get("status", "missing") if score_breakdown else "missing"
+    score_engine_version = score_breakdown.get("score_engine_version", "") if score_breakdown else ""
     review_decision = review_decisions.get(candidate_identity.key)
     outcome = outcomes.get(outcome_key(capture_date, capture_time_raw, session, provider, scanner, ticker))
     warnings: list[str] = []
     calendar_classification = classify_capture(capture_time_raw, session, capture_date=capture_date)
     calendar_text = calendar_label(calendar_classification)
     is_ordinary_non_trading_day = (
-        calendar_classification.capture_calendar_status == CaptureCalendarStatus.NON_MARKET_DAY.value
+        not calendar_classification.is_study_eligible
         and session != "preopen"
     )
     if quarantined:
@@ -181,7 +184,9 @@ def build_timeline_row(
     if calendar_classification.capture_calendar_status == CaptureCalendarStatus.PREOPEN_GAP_REVIEW_DAY.value:
         warnings.append("Pre-Open Gap Review - separate from ordinary study statistics")
     elif is_ordinary_non_trading_day:
-        warnings.append("Non-trading-day capture - hidden by default and excluded from ordinary study statistics")
+        warnings.append("Non-study capture - hidden by default and excluded from ordinary study statistics")
+    if not calendar_classification.is_study_eligible:
+        warnings.append("Non-study-eligible capture - excluded from ordinary study statistics")
     if score_breakdown is None:
         warnings.append("Missing stored score breakdown")
     elif score_breakdown.get("status") in {"legacy", "incomplete"}:
@@ -200,6 +205,9 @@ def build_timeline_row(
         "score": SourceValue(candidate_payload.get("score", ""), RAW_CAPTURE),
         "score_profile": SourceValue(candidate_payload.get("score_profile", capture_payload.get("scoring", {}).get("profile", "")), RAW_CAPTURE),
         "score_regime": SourceValue(candidate_payload.get("score_regime", capture_payload.get("scoring", {}).get("regime", "")), RAW_CAPTURE),
+        "score_engine_version": SourceValue(score_engine_version, SCORE_EXPLANATION if score_breakdown else SYSTEM_WARNING),
+        "score_breakdown_status": SourceValue(score_breakdown_status, SCORE_EXPLANATION if score_breakdown else SYSTEM_WARNING),
+        "market_regime": SourceValue(capture_payload.get("market", {}).get("regime", ""), RAW_CAPTURE),
         "capture_calendar_status": SourceValue(calendar_classification.capture_calendar_status, RAW_CAPTURE),
         "is_study_eligible": SourceValue(calendar_classification.is_study_eligible, RAW_CAPTURE),
         "next_market_session_date": SourceValue(calendar_classification.next_market_session_date, RAW_CAPTURE),
@@ -230,7 +238,7 @@ def build_timeline_row(
         calendar_classification=calendar_classification,
         calendar_label=calendar_text,
         is_ordinary_non_trading_day=is_ordinary_non_trading_day,
-        trust_label=trust_label(quarantined, calendar_classification),
+        trust_label=trust_label(quarantined, calendar_classification, score_breakdown_status),
         fields=fields,
         raw_candidate=dict(candidate_payload),
         capture_payload=dict(capture_payload),
@@ -241,13 +249,19 @@ def build_timeline_row(
     )
 
 
-def trust_label(quarantined: bool, classification: CaptureCalendarClassification) -> str:
+def trust_label(quarantined: bool, classification: CaptureCalendarClassification, score_breakdown_status: str) -> str:
     if quarantined:
         return "Quarantined - Not Trusted for Study Use"
     if classification.capture_calendar_status == CaptureCalendarStatus.PREOPEN_GAP_REVIEW_DAY.value:
         return "Pre-Open Gap Review"
     if classification.capture_calendar_status == CaptureCalendarStatus.NON_MARKET_DAY.value:
         return "Non-Trading-Day Observation"
+    if not classification.is_study_eligible:
+        return "Non-Study-Eligible Observation"
+    if score_breakdown_status == "legacy":
+        return "Legacy Score Breakdown"
+    if score_breakdown_status == "incomplete":
+        return "Incomplete Score Breakdown"
     return "Trusted active capture"
 
 

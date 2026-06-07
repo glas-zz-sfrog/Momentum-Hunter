@@ -8,10 +8,17 @@ from datetime import datetime
 from pathlib import Path
 
 from momentum_hunter.outcomes import OUTCOME_FIELDNAMES
-from momentum_hunter.replay import OUTCOME_LABEL, RAW_CAPTURE, REVIEW_DECISION, build_candidate_timeline, build_replay_view_model
+from momentum_hunter.replay import (
+    OUTCOME_LABEL,
+    RAW_CAPTURE,
+    REPLAY_BANNER,
+    REVIEW_DECISION,
+    build_candidate_timeline,
+    build_replay_view_model,
+)
 from momentum_hunter.review import CandidateIdentity, ReviewDecision, ReviewStatus, make_capture_id, save_review_decisions
 from momentum_hunter.score_breakdowns import SCORE_ENGINE_VERSION, build_score_breakdown_for_raw_candidate, score_breakdown_identity_key
-from momentum_hunter.storage import save_capture_integrity_manifest
+from momentum_hunter.storage import file_sha256, save_capture_integrity_manifest
 from momentum_hunter.time_utils import CENTRAL_TZ
 
 
@@ -54,6 +61,9 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(RAW_CAPTURE, rows[0].fields["price"].source)
         self.assertEqual(REVIEW_DECISION, rows[0].fields["review_status"].source)
         self.assertEqual(OUTCOME_LABEL, rows[0].fields["next_day_return_pct"].source)
+        self.assertEqual("bull", rows[0].fields["market_regime"].value)
+        self.assertEqual(SCORE_ENGINE_VERSION, rows[0].fields["score_engine_version"].value)
+        self.assertIn(rows[0].fields["score_breakdown_status"].value, {"complete", "legacy"})
         self.assertEqual("watchlist", rows[0].fields["review_status"].value)
         self.assertEqual("3.2500", rows[0].fields["next_day_return_pct"].value)
 
@@ -96,7 +106,7 @@ class ReplayTests(unittest.TestCase):
         self.assertTrue(any("Score breakdown is incomplete" in row.warnings for row in rows))
         view_model = build_replay_view_model(rows[0])
         self.assertTrue(view_model.read_only)
-        self.assertEqual("Historical Replay - Point-in-Time Snapshot", view_model.banner)
+        self.assertEqual(REPLAY_BANNER, view_model.banner)
 
     def test_missing_score_breakdown_and_duplicate_identity_warnings(self) -> None:
         payload = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", price=82.0, score=90)
@@ -176,9 +186,11 @@ class ReplayTests(unittest.TestCase):
         market_day = capture_payload("2026-06-08T07:00:00-05:00", "morning", "Base Momentum", price=82.0, score=90)
         weekend = capture_payload("2026-06-06T07:00:00-05:00", "morning", "Base Momentum", price=83.0, score=91)
         preopen = capture_payload("2026-06-07T19:00:00-05:00", "preopen", "Base Momentum", price=84.0, score=92)
+        manual = capture_payload("2026-06-08T10:00:00-05:00", "manual", "Base Momentum", price=85.0, score=93)
         write_capture(self.captures_dir / "2026-06-08" / "morning.json", market_day)
         write_capture(self.captures_dir / "2026-06-06" / "morning.json", weekend)
         write_capture(self.captures_dir / "2026-06-07" / "preopen.json", preopen)
+        write_capture(self.captures_dir / "2026-06-08" / "manual.json", manual)
 
         default_rows = build_candidate_timeline(
             "COO",
@@ -200,10 +212,87 @@ class ReplayTests(unittest.TestCase):
 
         self.assertEqual(["preopen", "morning"], [row.session for row in default_rows])
         self.assertEqual("Pre-Open Gap Review", default_rows[0].calendar_label)
-        self.assertEqual(3, len(all_rows))
+        self.assertEqual(4, len(all_rows))
         weekend_rows = [row for row in all_rows if row.capture_date == "2026-06-06"]
         self.assertEqual("Non-Trading-Day Observation", weekend_rows[0].calendar_label)
         self.assertTrue(weekend_rows[0].is_ordinary_non_trading_day)
+        manual_rows = [row for row in all_rows if row.session == "manual"]
+        self.assertEqual("Non-Study-Eligible Observation", manual_rows[0].trust_label)
+        self.assertTrue(manual_rows[0].is_ordinary_non_trading_day)
+
+    def test_replay_does_not_mutate_raw_capture_or_recalculate_scores(self) -> None:
+        payload = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", price=82.0, score=90)
+        capture_path = self.captures_dir / "2026-06-05" / "morning.json"
+        write_capture(capture_path, payload)
+        records = {}
+        record = build_score_breakdown_for_raw_candidate(payload, payload["candidates"][0])
+        record["final_score"] = 12
+        record["computed_final_score"] = 12
+        record["status"] = "complete"
+        records[record["identity_key"]] = record
+        self.score_path.write_text(
+            json.dumps({"schema_version": 1, "score_engine_version": SCORE_ENGINE_VERSION, "records": records}, indent=2),
+            encoding="utf-8",
+        )
+        before_hash = file_sha256(capture_path)
+
+        rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+        view_model = build_replay_view_model(rows[0])
+        after_hash = file_sha256(capture_path)
+
+        self.assertEqual(before_hash, after_hash)
+        self.assertTrue(view_model.read_only)
+        self.assertEqual(90, rows[0].fields["score"].value)
+        self.assertEqual(12, view_model.score_breakdown["final_score"])
+
+    def test_missing_derived_data_is_warned_not_invented(self) -> None:
+        payload = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", price=82.0, score=90)
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", payload)
+
+        rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        self.assertIsNone(rows[0].score_breakdown)
+        self.assertIsNone(rows[0].outcome)
+        self.assertEqual("missing", rows[0].fields["score_breakdown_status"].value)
+        self.assertEqual("missing", rows[0].fields["outcome_status"].value)
+        self.assertIn("Missing stored score breakdown", rows[0].warnings)
+        self.assertIn("Missing later outcome label", rows[0].warnings)
+
+    def test_replay_html_labels_outcomes_as_post_capture_data(self) -> None:
+        payload = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", price=82.0, score=90)
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", payload)
+        write_score_store(self.score_path, [payload])
+        write_outcomes(self.outcomes_csv, payload, "COO")
+        rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        from momentum_hunter.app import format_replay_html
+
+        html = format_replay_html(build_replay_view_model(rows[0]))
+
+        self.assertIn("POINT-IN-TIME REPLAY", html)
+        self.assertIn("Outcome Calculated After Capture", html)
+        self.assertIn("They were not known during the replayed moment", html)
 
 
 def capture_payload(capture_time: str, session: str, scanner: str, *, price: float, score: int) -> dict:

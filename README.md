@@ -213,9 +213,11 @@ The `Why [score]?` dialog has a compact summary and detailed component view. Com
 
 Select a candidate and click `View Timeline` to see every trusted active capture containing that ticker. The timeline can sort oldest-first or newest-first and can optionally show quarantined captures with a warning.
 
-Replay Mode shows `preopen` rows as `Pre-Open Gap Review`. Ordinary historical weekend or holiday captures are hidden from timelines by default; enable `Show non-trading-day captures` to inspect them with a warning. Older raw files are not edited to add calendar fields.
+Timeline rows show capture time, session, provider, scanner preset, score, score profile/version, market regime, review status, outcome status, score-breakdown status, and trust classification.
 
-Replay Mode opens a read-only point-in-time view for a timeline row. It separates:
+Replay Mode shows `preopen` rows as `Pre-Open Gap Review`. Ordinary historical weekend, holiday, and manual captures are hidden from timelines by default; enable `Show non-trading-day captures` to inspect them with a warning. Older raw files are not edited to add calendar fields.
+
+Replay Mode opens a read-only point-in-time view for a timeline row labeled `POINT-IN-TIME REPLAY — READ ONLY`. It separates:
 
 - capture-time facts from raw captures
 - stored score explanations from `score-breakdowns.json`

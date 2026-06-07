@@ -115,6 +115,8 @@ The Study Engine excludes rows where `is_study_eligible` is false by default. Th
 - Source inputs: active raw captures, `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`
 - Mutability: read-only view model; no replay operation modifies raw captures or derived stores
 
+Timeline rows expose capture time, session, provider, scanner preset, score, score profile/version, market regime, review status, outcome status, score-breakdown status, and trust classification. The replay detail dialog is labeled `POINT-IN-TIME REPLAY — READ ONLY`.
+
 Replay Mode classifies fields by source:
 
 - `raw capture`: point-in-time market/candidate facts known at capture time
@@ -124,7 +126,7 @@ Replay Mode classifies fields by source:
 
 Outcome values are always labeled as calculated after capture. Replay views must not present outcomes as information known at the replayed moment.
 
-Replay Mode labels `preopen` captures as `Pre-Open Gap Review`. Ordinary weekend or holiday captures are hidden from timelines by default; `Show non-trading-day captures` reveals them with a warning. Friday evening captures remain ordinary market-day evening captures.
+Replay Mode labels `preopen` captures as `Pre-Open Gap Review`. Ordinary weekend, holiday, or manual captures are hidden from timelines by default; `Show non-trading-day captures` reveals them with a warning. Friday evening captures remain ordinary market-day evening captures.
 
 Quarantined captures are excluded from timelines by default. If `Show quarantined captures` is enabled, replay rows are marked `Quarantined - Not Trusted for Study Use` and remain read-only. Quarantined captures are not re-added to active analysis CSVs or study results.
 

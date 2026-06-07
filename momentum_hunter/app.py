@@ -849,7 +849,7 @@ class MomentumHunterWindow(QMainWindow):
         controls_layout.addWidget(replay_button)
         layout.addWidget(controls)
 
-        table = QTableWidget(0, 23)
+        table = QTableWidget(0, 26)
         headers = [
             "Capture",
             "Session",
@@ -866,7 +866,10 @@ class MomentumHunterWindow(QMainWindow):
             "Industry",
             "Score",
             "Profile",
-            "Regime",
+            "Score Ver",
+            "Score Regime",
+            "Market Regime",
+            "Breakdown",
             "Review",
             "Note",
             "Outcome",
@@ -1858,7 +1861,10 @@ def populate_timeline_table(table: QTableWidget, rows: list[TimelineRow]) -> Non
             timeline_value(row, "industry"),
             timeline_value(row, "score"),
             timeline_value(row, "score_profile"),
+            timeline_value(row, "score_engine_version"),
             timeline_value(row, "score_regime"),
+            timeline_value(row, "market_regime"),
+            timeline_value(row, "score_breakdown_status"),
             timeline_value(row, "review_status"),
             timeline_value(row, "note_indicator"),
             timeline_value(row, "outcome_status"),
@@ -1926,7 +1932,17 @@ def format_replay_html(view_model) -> str:
         Market-open day: <b>{escape(str(row.calendar_classification.is_market_open_day))}</b> |
         Next market session: <b>{escape(row.calendar_classification.next_market_session_date)}</b>
       </p>
-      <p style="color:#9fb0c2;">Read-only replay. Raw capture facts are separated from later review decisions and later outcome labels.</p>
+      <p style="color:#9fb0c2;">
+        Read-only replay. Raw capture facts are separated from stored score explanations,
+        later review decisions, and later outcome labels.
+      </p>
+      <h3>Point-in-Time Boundaries</h3>
+      <ul>
+        <li>Raw facts are loaded from the immutable capture file at {escape(row.capture_path)}.</li>
+        <li>Score details are loaded from score-breakdowns.json for the stored historical identity.</li>
+        <li>Review decisions are later user annotations from review-decisions.json.</li>
+        <li>Outcomes are post-capture labels from analysis-outcomes.csv.</li>
+      </ul>
       <h3>Warnings</h3>
       {warning_block}
       <h3>Capture-Time Facts</h3>
@@ -1935,7 +1951,11 @@ def format_replay_html(view_model) -> str:
         {raw_rows}
       </table>
       <h3>Stored Score Explanation</h3>
-      <p>Score breakdown status: <b>{escape(str(score_status))}</b>. This uses the stored score-breakdown record for the historical identity, not a fresh market-data fetch.</p>
+      <p>
+        Score breakdown status: <b>{escape(str(score_status))}</b> |
+        Version: <b>{escape(str(timeline_value(row, 'score_engine_version')))}</b>.
+        This uses the stored score-breakdown record for the historical identity, not a fresh market-data fetch or score recalculation.
+      </p>
       <h3>Later Review Decision</h3>
       <p>{escape(review_text)}<br>Note: {review_note}</p>
       <h3>Outcome Calculated After Capture</h3>
@@ -1963,7 +1983,10 @@ def label_for_field(key: str) -> str:
         "industry": "Industry",
         "score": "Momentum Score",
         "score_profile": "Score Profile",
+        "score_engine_version": "Score Engine Version",
+        "score_breakdown_status": "Score Breakdown Status",
         "score_regime": "Score Regime",
+        "market_regime": "Market Regime",
         "capture_calendar_status": "Calendar Status",
         "is_study_eligible": "Study Eligible",
         "next_market_session_date": "Next Market Session",
