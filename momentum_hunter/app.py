@@ -44,6 +44,11 @@ from momentum_hunter.capture_health import (
     build_capture_health_snapshot,
 )
 from momentum_hunter.config import AppConfig, load_config, save_config
+from momentum_hunter.historical_clusters import (
+    CLUSTER_RESEARCH_LABEL,
+    HistoricalClusterReport,
+    build_historical_cluster_report,
+)
 from momentum_hunter.market import MarketRegimeSnapshot, detect_market_regime
 from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, SCANNER_PRESETS, TradingMode
 from momentum_hunter.news_age import (
@@ -92,6 +97,9 @@ from momentum_hunter.study import (
     FILTER_REVIEWED,
     FILTER_SELECTED,
     REGIME_ALL,
+    REVIEW_ALL,
+    SCANNER_ALL,
+    SECTOR_ALL,
     SESSION_ALL,
     StudyFilter,
     StudySummary,
@@ -1498,7 +1506,7 @@ class MomentumHunterWindow(QMainWindow):
     def _show_study_dialog(self, summary: StudySummary) -> None:
         dialog = QDialog(self)
         dialog.setWindowTitle("Momentum Hunter Study Engine")
-        dialog.resize(980, 760)
+        dialog.resize(1320, 820)
         layout = QVBoxLayout(dialog)
 
         style = get_data_view_style(
@@ -1540,6 +1548,29 @@ class MomentumHunterWindow(QMainWindow):
         filter_layout.addStretch(1)
         layout.addWidget(filter_row)
 
+        cluster_filter_row = QWidget()
+        cluster_filter_layout = QHBoxLayout(cluster_filter_row)
+        cluster_filter_layout.setContentsMargins(0, 0, 0, 0)
+        cluster_filter_layout.addWidget(QLabel("Scanner"))
+        scanner_edit = QLineEdit()
+        scanner_edit.setPlaceholderText("all scanners")
+        cluster_filter_layout.addWidget(scanner_edit)
+        cluster_filter_layout.addWidget(QLabel("Sector"))
+        sector_edit = QLineEdit()
+        sector_edit.setPlaceholderText("all sectors")
+        cluster_filter_layout.addWidget(sector_edit)
+        cluster_filter_layout.addWidget(QLabel("Min Score"))
+        minimum_score_edit = QLineEdit()
+        minimum_score_edit.setPlaceholderText("0")
+        minimum_score_edit.setMaximumWidth(70)
+        cluster_filter_layout.addWidget(minimum_score_edit)
+        cluster_filter_layout.addWidget(QLabel("Review"))
+        review_combo = QComboBox()
+        review_combo.addItems([REVIEW_ALL, "unreviewed", "interested", "rejected", "watchlist"])
+        cluster_filter_layout.addWidget(review_combo)
+        cluster_filter_layout.addStretch(1)
+        layout.addWidget(cluster_filter_row)
+
         stats = QLabel()
         stats.setObjectName("criteriaLabel")
         layout.addWidget(stats)
@@ -1568,6 +1599,11 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(splitter, 2)
 
         def current_study_filter() -> StudyFilter:
+            minimum_score = 0
+            try:
+                minimum_score = int(float(minimum_score_edit.text().strip() or "0"))
+            except ValueError:
+                minimum_score = 0
             return StudyFilter(
                 row_filter=filter_combo.currentText(),
                 start_date=start_date_edit.text().strip(),
@@ -1575,6 +1611,10 @@ class MomentumHunterWindow(QMainWindow):
                 session=session_combo.currentText(),
                 regime=regime_combo.currentText(),
                 include_non_study_eligible=include_non_study_checkbox.isChecked(),
+                scanner=scanner_edit.text().strip() or SCANNER_ALL,
+                sector=sector_edit.text().strip() or SECTOR_ALL,
+                minimum_score=minimum_score,
+                review_status=review_combo.currentText(),
             )
 
         def refresh_study_view() -> None:
@@ -1591,6 +1631,13 @@ class MomentumHunterWindow(QMainWindow):
             chart_tabs.clear()
             chart_tabs.addTab(build_study_chart(filtered, filtered_style), "Coverage")
             chart_tabs.addTab(build_outcome_chart(filtered, filtered_style), "Outcomes")
+            chart_tabs.addTab(
+                build_historical_cluster_panel(
+                    build_historical_cluster_report(study_filter=current_study_filter()),
+                    filtered_style,
+                ),
+                "Historical Clusters",
+            )
             chart_tabs.addTab(build_recommendation_panel(build_weight_recommendations(), filtered_style), "Recommendations")
 
             bucket_table.setRowCount(len(filtered.score_buckets))
@@ -1617,6 +1664,10 @@ class MomentumHunterWindow(QMainWindow):
         session_combo.currentTextChanged.connect(refresh_study_view)
         include_non_study_checkbox.stateChanged.connect(refresh_study_view)
         regime_combo.currentTextChanged.connect(refresh_study_view)
+        scanner_edit.editingFinished.connect(refresh_study_view)
+        sector_edit.editingFinished.connect(refresh_study_view)
+        minimum_score_edit.editingFinished.connect(refresh_study_view)
+        review_combo.currentTextChanged.connect(refresh_study_view)
         refresh_study_view()
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -2191,6 +2242,86 @@ def build_outcome_chart(summary: StudySummary, style: DataViewStyle) -> QChartVi
     view = QChartView(chart)
     view.setMinimumHeight(280)
     return view
+
+
+def build_historical_cluster_panel(report: HistoricalClusterReport, style: DataViewStyle) -> QWidget:
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    status = QLabel(
+        f"{style.chart_prefix}{CLUSTER_RESEARCH_LABEL} | "
+        f"Candidates: {report.total_candidates} | Source: {report.source}"
+    )
+    status.setObjectName("criteriaLabel")
+    status.setWordWrap(True)
+    layout.addWidget(status)
+
+    if report.warnings:
+        warning = QLabel(" | ".join(report.warnings))
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        layout.addWidget(warning)
+
+    table = QTableWidget(0, 13)
+    table.setHorizontalHeaderLabels(
+        [
+            "Cluster",
+            "Count",
+            "Tickers",
+            "Date Range",
+            "Avg Score",
+            "Avg Max Gain",
+            "Avg Max Drawdown",
+            "Win Rate",
+            "Top Winners",
+            "Worst Failures",
+            "Score Components",
+            "Catalyst Keywords",
+            "Warnings",
+        ]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+    table.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
+    table.setRowCount(max(1, len(report.clusters)))
+
+    if not report.clusters:
+        values = ["No clusters", "0", "", "", "n/a", "n/a", "n/a", "n/a", "", "", "", "", "No historical candidates matched the filters."]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, cluster in enumerate(report.clusters):
+            values = [
+                cluster.name,
+                str(cluster.candidate_count),
+                ", ".join(cluster.tickers),
+                cluster.date_range,
+                format_number(cluster.average_score),
+                format_percent(cluster.average_max_gain_pct),
+                format_percent(cluster.average_max_drawdown_pct),
+                format_percent(cluster.win_rate_pct),
+                ", ".join(cluster.top_winners) or "n/a",
+                ", ".join(cluster.worst_failures) or "n/a",
+                ", ".join(cluster.common_score_components) or "n/a",
+                ", ".join(cluster.common_catalyst_keywords) or "n/a",
+                " | ".join(cluster.warnings) or "",
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if cluster.candidate_count < 10:
+                    item.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, item)
+
+    table.resizeColumnsToContents()
+    layout.addWidget(table, 1)
+    return panel
+
+
+def format_number(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.2f}"
 
 
 def build_recommendation_panel(report: RecommendationReport, style: DataViewStyle) -> QWidget:

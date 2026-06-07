@@ -14,6 +14,9 @@ FILTER_SELECTED = "selected only"
 FILTER_REVIEWED = "reviewed only"
 SESSION_ALL = "all sessions"
 REGIME_ALL = "all regimes"
+SCANNER_ALL = "all scanners"
+SECTOR_ALL = "all sectors"
+REVIEW_ALL = "all review statuses"
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,10 @@ class StudyFilter:
     session: str = SESSION_ALL
     regime: str = REGIME_ALL
     include_non_study_eligible: bool = False
+    scanner: str = SCANNER_ALL
+    sector: str = SECTOR_ALL
+    minimum_score: int = 0
+    review_status: str = REVIEW_ALL
 
     def label(self) -> str:
         parts = [self.row_filter]
@@ -33,6 +40,14 @@ class StudyFilter:
             parts.append(self.session)
         if self.regime != REGIME_ALL:
             parts.append(self.regime)
+        if self.scanner != SCANNER_ALL:
+            parts.append(self.scanner)
+        if self.sector != SECTOR_ALL:
+            parts.append(self.sector)
+        if self.minimum_score:
+            parts.append(f"score >= {self.minimum_score}")
+        if self.review_status != REVIEW_ALL:
+            parts.append(self.review_status)
         if self.include_non_study_eligible:
             parts.append("including non-trading-day captures")
         return " | ".join(parts)
@@ -227,6 +242,14 @@ def filter_rows(rows: list[dict], study_filter: StudyFilter) -> list[dict]:
         filtered = [
             row for row in filtered if (row.get("market_regime") or "unknown").lower() == study_filter.regime
         ]
+    if study_filter.scanner != SCANNER_ALL:
+        filtered = [row for row in filtered if row.get("scanner", "") == study_filter.scanner]
+    if study_filter.sector != SECTOR_ALL:
+        filtered = [row for row in filtered if row.get("sector", "") == study_filter.sector]
+    if study_filter.minimum_score:
+        filtered = [row for row in filtered if parse_int(row.get("score", "0")) >= study_filter.minimum_score]
+    if study_filter.review_status != REVIEW_ALL:
+        filtered = [row for row in filtered if row_review_status(row) == study_filter.review_status]
     return filtered
 
 
@@ -239,6 +262,16 @@ def bucket_for_score(score: int) -> str:
 
 def parse_bool(value: str) -> bool:
     return str(value).strip().lower() in {"true", "1", "yes", "y"}
+
+
+def row_review_status(row: dict) -> str:
+    if row.get("review_status"):
+        return str(row.get("review_status", "")).lower()
+    if parse_bool(row.get("selected", "false")):
+        return "watchlist"
+    if parse_bool(row.get("reviewed", "false")):
+        return "interested"
+    return "unreviewed"
 
 
 def parse_int(value: str) -> int:

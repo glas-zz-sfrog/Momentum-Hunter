@@ -108,6 +108,21 @@ Persisted study reports, when added, should live under `MomentumHunterData/data/
 
 The Study Engine excludes rows where `is_study_eligible` is false by default. This keeps weekend, holiday, `preopen`, and manual observations out of ordinary market-session performance statistics unless the user explicitly enables non-trading-day/preopen inclusion.
 
+## Historical Cluster Display
+
+- UI location: Study Engine dialog, `Historical Clusters` tab
+- Data layer: `momentum_hunter/historical_clusters.py`
+- Source inputs: active immutable raw captures, `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`
+- Mutability: research-only view; cluster generation reads stored data and does not mutate raw captures or derived stores
+
+Historical clusters are labeled `HISTORICAL CLUSTERS — RESEARCH ONLY`.
+
+The v1 cluster engine is deterministic. It groups candidates with keyword and context rules only; it does not call AI services, fetch current market data, or recalculate historical scores. Score-component summaries come from stored score-breakdown records tied to the historical identity.
+
+Default cluster views exclude quarantined captures because quarantined files live outside active `captures/`, and they exclude rows where `is_study_eligible` is false. Non-study-eligible captures can be included explicitly for weekend, holiday, preopen, or manual-capture research.
+
+Cluster metrics use only available outcome labels. Missing outcome data and small sample sizes are warnings, not silently filled values.
+
 ## Candidate Timeline and Replay Mode
 
 - UI entry: select a candidate and click `View Timeline`

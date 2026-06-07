@@ -226,6 +226,16 @@ Replay Mode opens a read-only point-in-time view for a timeline row labeled `POI
 
 Replay Mode never fetches current market data and does not recalculate historical scores with newer logic. Missing score explanations, legacy/incomplete breakdowns, missing outcome labels, and quarantined captures are shown as warnings.
 
+## Historical Clusters
+
+The Study Engine includes a `Historical Clusters` tab labeled `HISTORICAL CLUSTERS — RESEARCH ONLY`.
+
+Historical clusters group stored candidates into deterministic themes such as earnings/guidance, analyst actions, AI infrastructure, healthcare/FDA/biotech, high-volume institutional momentum, sector sympathy, weak catalyst, and no clear catalyst.
+
+Cluster generation reads active raw captures plus separate derived stores: `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`. It does not fetch current market data, mutate raw captures, or recalculate historical scores with newer logic.
+
+Cluster filters include date range, market regime, scanner preset, sector, minimum score, review status, and the study-eligible-only default. Small samples and missing outcome data are shown as warnings.
+
 ## Administrator Actions
 
 Normal dashboard use does not require Administrator rights.
