@@ -4,6 +4,7 @@ import shutil
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from momentum_hunter.models import CaptureSession
 from momentum_hunter.scheduling import (
@@ -13,6 +14,7 @@ from momentum_hunter.scheduling import (
     evaluate_automatic_capture,
     is_market_open_day,
     is_preopen_gap_review_day,
+    next_automatic_run,
 )
 from momentum_hunter.time_utils import CENTRAL_TZ
 
@@ -138,6 +140,25 @@ class SchedulingPolicyTests(unittest.TestCase):
 
         self.assertIs(app.evaluate_automatic_capture, evaluate_automatic_capture)
         self.assertIs(capture_job.evaluate_automatic_capture, evaluate_automatic_capture)
+
+    def test_calendar_policy_is_not_hardcoded_to_2026(self) -> None:
+        decision = self.decision(CaptureSession.EVENING, "2035-09-03T19:00:00-05:00")
+
+        self.assertTrue(decision.should_capture)
+        self.assertEqual(CaptureSession.PREOPEN, decision.capture_session)
+        self.assertEqual("2035-09-04", decision.classification.next_market_session_date)
+
+    def test_next_run_fails_cleanly_if_search_horizon_is_exhausted(self) -> None:
+        with patch("momentum_hunter.scheduling.is_market_open_day", return_value=False):
+            with self.assertRaises(RuntimeError) as context:
+                next_automatic_run(
+                    CaptureSession.MORNING,
+                    after=datetime.fromisoformat("2026-06-08T06:00:00-05:00").astimezone(CENTRAL_TZ),
+                    captures_dir=self.captures_dir,
+                )
+
+        self.assertIn("exhausted", str(context.exception))
+        self.assertIn("market-calendar-v1", str(context.exception))
 
     def decision(self, session: CaptureSession, value: str):
         return evaluate_automatic_capture(

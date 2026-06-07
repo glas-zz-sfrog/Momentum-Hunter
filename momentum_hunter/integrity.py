@@ -294,7 +294,7 @@ def audit_review_decisions(path: Path, captures_dir: Path, manifest_path: Path =
     for key, decision in decisions.items():
         identity = decision.get("identity", {}) if isinstance(decision, dict) else {}
         session = identity.get("session", "")
-        if session not in {"morning", "evening", "manual"}:
+        if session not in {"morning", "evening", "preopen", "manual"}:
             continue
         capture_date = identity.get("capture_date", "")
         ticker = identity.get("ticker", "")

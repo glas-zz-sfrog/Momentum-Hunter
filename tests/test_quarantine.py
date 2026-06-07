@@ -179,19 +179,75 @@ class QuarantineCaptureTests(unittest.TestCase):
         self.assertTrue(any(row.kind == "review_decision" and row.status == QUARANTINED for row in after_rows))
         self.assertEqual(WARN, overall_audit_status(after_rows))
 
+    def test_recover_modified_evening_capture_rebuilds_from_remaining_valid_raw_capture(self) -> None:
+        evening_json = self.captures_dir / "2026-06-06" / "evening.json"
+        evening_md = self.captures_dir / "2026-06-06" / "evening.md"
+        write_raw_capture(
+            evening_json,
+            capture_time="2026-06-06T19:00:03-05:00",
+            scanner="Institutional Momentum",
+            session="evening",
+            ticker="EVE",
+        )
+        evening_md.write_text("# Institutional evening capture\n", encoding="utf-8")
+        register_legacy_raw_captures(captures_dir=self.captures_dir, manifest_path=self.manifest_path)
+        mutate_raw_capture_to_base_momentum(evening_json, evening_md)
+        write_analysis_rows(
+            self.analysis_csv,
+            [
+                {"capture_date": "2026-06-06", "session": "morning", "scanner": "Institutional Momentum", "ticker": "COO", "price": "67.34"},
+                {"capture_date": "2026-06-06", "session": "evening", "scanner": "Institutional Momentum", "ticker": "EVE", "price": "72.11"},
+                {"capture_date": "2026-06-06", "session": "evening", "scanner": "Institutional Momentum", "ticker": "DRIFT", "price": "10.00"},
+            ],
+        )
+        write_evening_review_decision(self.review_path)
 
-def write_raw_capture(path: Path, *, capture_time: str, scanner: str) -> None:
+        result = recover_modified_raw_captures(
+            reason="Evening raw capture hash differed from manifest; quarantine before rebuild.",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            quarantine_root=self.quarantine_root,
+            analysis_csv=self.analysis_csv,
+            outcomes_csv=self.outcomes_csv,
+            review_decisions_path=self.review_path,
+            rebuild_outcomes=False,
+            recovered_at=datetime(2026, 6, 6, 18, 0, 0, tzinfo=CENTRAL_TZ),
+            before_audit_csv=self.root / "integrity" / "evening-before.csv",
+            before_audit_report=self.root / "integrity" / "evening-before.md",
+            after_audit_csv=self.root / "integrity" / "evening-after.csv",
+            after_audit_report=self.root / "integrity" / "evening-after.md",
+        )
+
+        self.assertEqual(FAIL, result.before_status)
+        self.assertEqual(WARN, result.after_status)
+        self.assertEqual(1, result.rebuild_result.analysis_rows)
+        self.assertEqual(0, result.rebuild_result.outcome_rows)
+        self.assertFalse(evening_json.exists())
+        self.assertFalse(evening_md.exists())
+        quarantine_dir = result.quarantine_results[0].quarantine_dir
+        self.assertTrue((quarantine_dir / "2026-06-06-evening.json").exists())
+        self.assertTrue((quarantine_dir / "2026-06-06-evening.md").exists())
+
+        rows = list(csv.DictReader(self.analysis_csv.read_text(encoding="utf-8").splitlines()))
+        self.assertEqual(["COO"], [row["ticker"] for row in rows])
+        self.assertEqual(["morning"], [row["session"] for row in rows])
+        decisions = json.loads(self.review_path.read_text(encoding="utf-8"))["decisions"]
+        decision_payload = next(iter(decisions.values()))
+        self.assertEqual("quarantined", decision_payload["capture_status"])
+
+
+def write_raw_capture(path: Path, *, capture_time: str, scanner: str, session: str = "morning", ticker: str = "COO") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schema_version": 1,
         "capture_time": capture_time,
         "capture_date": "2026-06-06",
-        "session": "morning",
+        "session": session,
         "mode": "PAPER",
         "provider": "finviz",
         "scanner": {"name": scanner},
         "market": {"regime": "bull", "symbol": "SPY"},
-        "candidates": [{"rank": 1, "ticker": "COO", "price": 67.34, "score": 90}],
+        "candidates": [{"rank": 1, "ticker": ticker, "price": 67.34, "score": 90}],
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -227,6 +283,28 @@ def write_review_decision(path: Path) -> None:
     )
 
 
+def write_evening_review_decision(path: Path) -> None:
+    identity = CandidateIdentity(
+        capture_id=make_capture_id("2026-06-06", "evening", "finviz", "Institutional Momentum"),
+        capture_date="2026-06-06",
+        session="evening",
+        provider="finviz",
+        scanner="Institutional Momentum",
+        ticker="EVE",
+    )
+    save_review_decisions(
+        {
+            identity.key: ReviewDecision(
+                identity=identity,
+                review_status=ReviewStatus.WATCHLIST,
+                decision_timestamp=datetime(2026, 6, 6, 20, 0, 0, tzinfo=CENTRAL_TZ),
+                decision_note="Evening watch.",
+            )
+        },
+        path=path,
+    )
+
+
 def write_analysis_csv(path: Path, *, scanner: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as file:
@@ -235,6 +313,17 @@ def write_analysis_csv(path: Path, *, scanner: str) -> None:
         row = {field: "" for field in ANALYSIS_FIELDNAMES}
         row.update({"capture_date": "2026-06-06", "session": "morning", "scanner": scanner, "ticker": "COO", "price": "67.34"})
         writer.writerow(row)
+
+
+def write_analysis_rows(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=ANALYSIS_FIELDNAMES)
+        writer.writeheader()
+        for row_payload in rows:
+            row = {field: "" for field in ANALYSIS_FIELDNAMES}
+            row.update(row_payload)
+            writer.writerow(row)
 
 
 if __name__ == "__main__":

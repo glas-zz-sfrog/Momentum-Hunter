@@ -11,6 +11,7 @@ from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 
 SCHEDULING_POLICY_VERSION = "market-calendar-v1"
 TARGET_EXCHANGE = "XNYS"
+AUTOMATIC_RUN_SEARCH_DAYS = 370
 
 
 class CaptureCalendarStatus(str, Enum):
@@ -258,7 +259,7 @@ def next_automatic_run(
 ) -> datetime:
     current = normalize_central(after or now_central())
     target_time = time(7, 0) if session == CaptureSession.MORNING else time(19, 0)
-    for offset in range(0, 370):
+    for offset in range(0, AUTOMATIC_RUN_SEARCH_DAYS):
         candidate = datetime.combine(current.date() + timedelta(days=offset), target_time, tzinfo=CENTRAL_TZ)
         if candidate <= current:
             continue
@@ -270,7 +271,10 @@ def next_automatic_run(
         )
         if decision.should_capture and decision.capture_session == session:
             return candidate
-    raise RuntimeError(f"No next automatic run found for {session.value}.")
+    raise RuntimeError(
+        f"Scheduling policy {SCHEDULING_POLICY_VERSION} exhausted "
+        f"{AUTOMATIC_RUN_SEARCH_DAYS} day search horizon for {session.value}."
+    )
 
 
 def is_preopen_gap_review_day(value: date) -> bool:
@@ -288,9 +292,14 @@ def next_market_open_date(value: date | datetime | None = None, *, include_today
         current = value
     if not include_today:
         current += timedelta(days=1)
-    while not is_market_open_day(current):
+    for _ in range(AUTOMATIC_RUN_SEARCH_DAYS):
+        if is_market_open_day(current):
+            return current
         current += timedelta(days=1)
-    return current
+    raise RuntimeError(
+        f"Scheduling policy {SCHEDULING_POLICY_VERSION} exhausted "
+        f"{AUTOMATIC_RUN_SEARCH_DAYS} day market-open search horizon."
+    )
 
 
 def is_market_open_day(value: date) -> bool:
