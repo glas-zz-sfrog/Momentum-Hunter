@@ -236,6 +236,18 @@ Cluster generation reads active raw captures plus separate derived stores: `scor
 
 Cluster filters include date range, market regime, scanner preset, sector, minimum score, review status, and the study-eligible-only default. Small samples and missing outcome data are shown as warnings.
 
+## Catalyst Cluster Explorer
+
+The Study Engine includes a `Catalyst Explorer` tab labeled `CATALYST CLUSTERS — RESEARCH ONLY`.
+
+Catalyst Cluster Explorer groups the actual historical headlines stored inside raw captures into deterministic catalyst buckets such as earnings beat, guidance raise, analyst actions, AI infrastructure, AI partnership, contract wins, FDA/biotech events, merger/acquisition, macro-only, weak/vague catalyst, no clear catalyst, and unknown/uncategorized.
+
+The explorer reads active raw captures plus `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`. It does not fetch current market data, mutate raw captures, recalculate historical scores, start optimizer work, or treat post-capture outcomes as capture-time facts.
+
+Timestamp handling is explicit: known article timestamps get capture-time article age, missing timestamps remain `UNKNOWN_TIMESTAMP`, and future timestamps are excluded from catalyst clustering with a warning.
+
+Each catalyst cluster has a detail view listing matching stored headlines, ticker, capture time, source, timestamp status, headline age, freshness label, score, review status, outcome status, max gain/drawdown, and stored URL when available.
+
 ## Administrator Actions
 
 Normal dashboard use does not require Administrator rights.

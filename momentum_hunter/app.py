@@ -43,6 +43,11 @@ from momentum_hunter.capture_health import (
     CsvStatus,
     build_capture_health_snapshot,
 )
+from momentum_hunter.catalyst_clusters import (
+    CATALYST_RESEARCH_LABEL,
+    CatalystClusterReport,
+    build_catalyst_cluster_report,
+)
 from momentum_hunter.config import AppConfig, load_config, save_config
 from momentum_hunter.historical_clusters import (
     CLUSTER_RESEARCH_LABEL,
@@ -97,6 +102,7 @@ from momentum_hunter.study import (
     FILTER_REVIEWED,
     FILTER_SELECTED,
     REGIME_ALL,
+    HISTORICAL_THEME_ALL,
     REVIEW_ALL,
     SCANNER_ALL,
     SECTOR_ALL,
@@ -1568,6 +1574,22 @@ class MomentumHunterWindow(QMainWindow):
         review_combo = QComboBox()
         review_combo.addItems([REVIEW_ALL, "unreviewed", "interested", "rejected", "watchlist"])
         cluster_filter_layout.addWidget(review_combo)
+        cluster_filter_layout.addWidget(QLabel("Theme"))
+        theme_combo = QComboBox()
+        theme_combo.addItems(
+            [
+                HISTORICAL_THEME_ALL,
+                "Earnings / guidance",
+                "Analyst upgrade / downgrade",
+                "AI infrastructure",
+                "Healthcare / FDA / biotech",
+                "High volume institutional momentum",
+                "Low-quality hype / weak catalyst",
+                "Sector sympathy move",
+                "No clear catalyst",
+            ]
+        )
+        cluster_filter_layout.addWidget(theme_combo)
         cluster_filter_layout.addStretch(1)
         layout.addWidget(cluster_filter_row)
 
@@ -1615,6 +1637,7 @@ class MomentumHunterWindow(QMainWindow):
                 sector=sector_edit.text().strip() or SECTOR_ALL,
                 minimum_score=minimum_score,
                 review_status=review_combo.currentText(),
+                historical_cluster_theme=theme_combo.currentText(),
             )
 
         def refresh_study_view() -> None:
@@ -1637,6 +1660,13 @@ class MomentumHunterWindow(QMainWindow):
                     filtered_style,
                 ),
                 "Historical Clusters",
+            )
+            chart_tabs.addTab(
+                build_catalyst_cluster_panel(
+                    build_catalyst_cluster_report(study_filter=current_study_filter()),
+                    filtered_style,
+                ),
+                "Catalyst Explorer",
             )
             chart_tabs.addTab(build_recommendation_panel(build_weight_recommendations(), filtered_style), "Recommendations")
 
@@ -1668,6 +1698,7 @@ class MomentumHunterWindow(QMainWindow):
         sector_edit.editingFinished.connect(refresh_study_view)
         minimum_score_edit.editingFinished.connect(refresh_study_view)
         review_combo.currentTextChanged.connect(refresh_study_view)
+        theme_combo.currentTextChanged.connect(refresh_study_view)
         refresh_study_view()
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -2318,6 +2349,169 @@ def build_historical_cluster_panel(report: HistoricalClusterReport, style: DataV
     table.resizeColumnsToContents()
     layout.addWidget(table, 1)
     return panel
+
+
+def build_catalyst_cluster_panel(report: CatalystClusterReport, style: DataViewStyle) -> QWidget:
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    status = QLabel(
+        f"{style.chart_prefix}{CATALYST_RESEARCH_LABEL} | "
+        f"Headlines: {report.total_headlines} | Candidates: {report.total_candidates} | Source: {report.source}"
+    )
+    status.setObjectName("criteriaLabel")
+    status.setWordWrap(True)
+    layout.addWidget(status)
+
+    if report.warnings:
+        warning = QLabel(" | ".join(report.warnings))
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        layout.addWidget(warning)
+
+    splitter = QSplitter(Qt.Orientation.Vertical)
+    table = QTableWidget(0, 13)
+    table.setHorizontalHeaderLabels(
+        [
+            "Catalyst Cluster",
+            "Headlines",
+            "Candidates",
+            "Tickers",
+            "Date Range",
+            "Avg Score",
+            "Avg Max Gain",
+            "Avg Max Drawdown",
+            "Win Rate",
+            "Representative Headlines",
+            "Top Winners",
+            "Worst Failures",
+            "Warnings",
+        ]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+    table.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
+    table.setRowCount(max(1, len(report.clusters)))
+
+    if not report.clusters:
+        values = ["No catalyst clusters", "0", "0", "", "", "n/a", "n/a", "n/a", "n/a", "", "", "", "No stored headlines matched the filters."]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, cluster in enumerate(report.clusters):
+            values = [
+                cluster.name,
+                str(cluster.headline_count),
+                str(cluster.candidate_count),
+                ", ".join(cluster.tickers),
+                cluster.date_range,
+                format_number(cluster.average_score),
+                format_percent(cluster.average_max_gain_pct),
+                format_percent(cluster.average_max_drawdown_pct),
+                format_percent(cluster.win_rate_pct),
+                " | ".join(cluster.representative_headlines),
+                ", ".join(cluster.top_winners) or "n/a",
+                ", ".join(cluster.worst_failures) or "n/a",
+                " | ".join(cluster.warnings) or "",
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if cluster.candidate_count < 10:
+                    item.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, item)
+    table.resizeColumnsToContents()
+
+    detail = QTextBrowser()
+    detail.setOpenExternalLinks(True)
+    detail.setHtml(format_catalyst_cluster_detail_html(report.clusters[0]) if report.clusters else "<p>No catalyst cluster selected.</p>")
+
+    def update_detail() -> None:
+        if not report.clusters:
+            return
+        row = table.currentRow()
+        if row < 0:
+            row = 0
+        detail.setHtml(format_catalyst_cluster_detail_html(report.clusters[row]))
+
+    table.itemSelectionChanged.connect(update_detail)
+    if report.clusters:
+        table.selectRow(0)
+
+    splitter.addWidget(table)
+    splitter.addWidget(detail)
+    splitter.setSizes([360, 360])
+    layout.addWidget(splitter, 1)
+    return panel
+
+
+def format_catalyst_cluster_detail_html(cluster) -> str:
+    warnings = "".join(f"<li>{escape(warning)}</li>" for warning in cluster.warnings) or "<li>No cluster warnings.</li>"
+    rows = []
+    for headline in cluster.headlines:
+        url = f"<a href='{escape(headline.url)}'>{escape(headline.url)}</a>" if headline.url else ""
+        rows.append(
+            "<tr>"
+            f"<td>{escape(headline.ticker)}</td>"
+            f"<td>{escape(headline.capture_time)}</td>"
+            f"<td>{escape(headline.source)}</td>"
+            f"<td>{escape(headline.timestamp_status)}</td>"
+            f"<td>{escape(format_age_hours(headline.headline_age_hours))}</td>"
+            f"<td>{escape(headline.freshness_label)}</td>"
+            f"<td>{escape(str(headline.score))}</td>"
+            f"<td>{escape(headline.review_status)}</td>"
+            f"<td>{escape(headline.outcome_status)}</td>"
+            f"<td>{escape(format_percent(headline.max_gain_pct))}</td>"
+            f"<td>{escape(format_percent(headline.max_drawdown_pct))}</td>"
+            f"<td>{escape(headline.headline)}</td>"
+            f"<td>{url}</td>"
+            "</tr>"
+        )
+    return f"""
+    <html>
+    <body style="font-family: Segoe UI, Arial; color:#e7edf4; background:#0b1118;">
+      <h2>{escape(CATALYST_RESEARCH_LABEL)}</h2>
+      <h3>{escape(cluster.name)}</h3>
+      <p>
+        Headlines: <b>{cluster.headline_count}</b> |
+        Candidates: <b>{cluster.candidate_count}</b> |
+        Unique tickers: <b>{cluster.unique_ticker_count}</b> |
+        Date range: <b>{escape(cluster.date_range)}</b>
+      </p>
+      <p style="color:#9fb0c2;">
+        Detail rows use stored capture headlines only. Outcomes are post-capture labels and are not capture-time facts.
+        Missing timestamps remain unknown; future timestamps are excluded from clustering.
+      </p>
+      <h3>Warnings</h3>
+      <ul style="color:#fcd34d;font-weight:700;">{warnings}</ul>
+      <h3>Matching Stored Headlines</h3>
+      <table cellspacing="0" cellpadding="5" style="border-collapse:collapse;width:100%;">
+        <tr style="background:#182536;">
+          <th align="left">Ticker</th>
+          <th align="left">Capture Time</th>
+          <th align="left">Source</th>
+          <th align="left">Timestamp</th>
+          <th align="left">Age</th>
+          <th align="left">Freshness</th>
+          <th align="left">Score</th>
+          <th align="left">Review</th>
+          <th align="left">Outcome</th>
+          <th align="left">Max Gain</th>
+          <th align="left">Max Drawdown</th>
+          <th align="left">Headline</th>
+          <th align="left">URL</th>
+        </tr>
+        {''.join(rows)}
+      </table>
+    </body>
+    </html>
+    """
+
+
+def format_age_hours(value: float | None) -> str:
+    return "unknown" if value is None else f"{value:.2f}h"
 
 
 def format_number(value: float | None) -> str:

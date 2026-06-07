@@ -17,6 +17,7 @@ REGIME_ALL = "all regimes"
 SCANNER_ALL = "all scanners"
 SECTOR_ALL = "all sectors"
 REVIEW_ALL = "all review statuses"
+HISTORICAL_THEME_ALL = "all historical themes"
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class StudyFilter:
     sector: str = SECTOR_ALL
     minimum_score: int = 0
     review_status: str = REVIEW_ALL
+    historical_cluster_theme: str = HISTORICAL_THEME_ALL
 
     def label(self) -> str:
         parts = [self.row_filter]
@@ -48,6 +50,8 @@ class StudyFilter:
             parts.append(f"score >= {self.minimum_score}")
         if self.review_status != REVIEW_ALL:
             parts.append(self.review_status)
+        if self.historical_cluster_theme != HISTORICAL_THEME_ALL:
+            parts.append(self.historical_cluster_theme)
         if self.include_non_study_eligible:
             parts.append("including non-trading-day captures")
         return " | ".join(parts)

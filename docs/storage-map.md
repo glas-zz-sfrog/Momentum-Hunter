@@ -123,6 +123,27 @@ Default cluster views exclude quarantined captures because quarantined files liv
 
 Cluster metrics use only available outcome labels. Missing outcome data and small sample sizes are warnings, not silently filled values.
 
+## Catalyst Cluster Explorer
+
+- UI location: Study Engine dialog, `Catalyst Explorer` tab
+- Data layer: `momentum_hunter/catalyst_clusters.py`
+- Source inputs: active immutable raw captures, stored news/catalyst headlines in captures, `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`
+- Mutability: research-only view; catalyst clustering reads stored data and does not mutate raw captures or derived stores
+
+Catalyst clusters are labeled `CATALYST CLUSTERS — RESEARCH ONLY`.
+
+The v1 catalyst engine is deterministic. It uses rule-based headline classification only and does not call AI services, fetch current market data, recalculate historical scores, start optimizer work, write SQLite records, or touch broker APIs.
+
+Headline timestamps are interpreted only relative to the capture time:
+
+- known timestamp: article age is calculated at capture time
+- missing timestamp: freshness is `UNKNOWN_TIMESTAMP`
+- future timestamp: headline is excluded from catalyst clustering and counted in report warnings
+
+Outcome values in the catalyst detail view are post-capture labels from `analysis-outcomes.csv`. They are displayed for research context only and must not be treated as information known during the capture.
+
+Default catalyst views exclude quarantined captures because quarantined files live outside active `captures/`, and they exclude rows where `is_study_eligible` is false. Non-study-eligible captures can be included explicitly for weekend, holiday, preopen, or manual-capture research.
+
 ## Candidate Timeline and Replay Mode
 
 - UI entry: select a candidate and click `View Timeline`
