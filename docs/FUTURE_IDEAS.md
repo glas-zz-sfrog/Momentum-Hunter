@@ -22,6 +22,13 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 
 ## Historical Clustering
 
+- Catalyst Cluster Explorer v2:
+  - Refine Sector Sympathy classification
+  - Add confidence score per catalyst classification
+  - Show percentage of headlines matched by explicit rules
+  - Reduce catch-all cluster dominance
+  - Display cluster purity metric
+  - Example: AI Infrastructure purity 87%; Sector Sympathy purity 42%
 - Earnings beat + guidance raise subclusters
 - Earnings mention only subcluster
 - AI partnership subcluster
