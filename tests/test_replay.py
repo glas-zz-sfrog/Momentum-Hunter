@@ -71,12 +71,12 @@ class ReplayTests(unittest.TestCase):
     def test_replay_view_model_uses_stored_score_breakdown_statuses(self) -> None:
         complete = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", price=82.0, score=100)
         legacy = capture_payload("2026-06-05T19:00:00-05:00", "evening", "Base Momentum", price=83.0, score=1)
-        incomplete = capture_payload("2026-06-06T07:00:00-05:00", "morning", "Institutional Momentum", price=85.0, score=96)
+        incomplete = capture_payload("2026-06-08T07:00:00-05:00", "morning", "Institutional Momentum", price=85.0, score=96)
         incomplete["candidates"][0].pop("score_profile")
         incomplete["candidates"][0].pop("relative_volume")
         write_capture(self.captures_dir / "2026-06-05" / "morning.json", complete)
         write_capture(self.captures_dir / "2026-06-05" / "evening.json", legacy)
-        write_capture(self.captures_dir / "2026-06-06" / "morning.json", incomplete)
+        write_capture(self.captures_dir / "2026-06-08" / "morning.json", incomplete)
         write_score_store(self.score_path, [complete, legacy, incomplete])
 
         rows = build_candidate_timeline(
@@ -160,6 +160,7 @@ class ReplayTests(unittest.TestCase):
         visible_rows = build_candidate_timeline(
             "COO",
             include_quarantined=True,
+            include_non_trading_day=True,
             captures_dir=self.captures_dir,
             manifest_path=self.manifest_path,
             score_breakdowns_path=self.score_path,
@@ -170,6 +171,39 @@ class ReplayTests(unittest.TestCase):
         quarantined_rows = [row for row in visible_rows if row.quarantined]
         self.assertEqual("Quarantined - Not Trusted for Study Use", quarantined_rows[0].trust_label)
         self.assertIn("Quarantined - Not Trusted for Study Use", quarantined_rows[0].warnings)
+
+    def test_non_trading_day_rows_are_hidden_by_default_and_preopen_is_labeled(self) -> None:
+        market_day = capture_payload("2026-06-08T07:00:00-05:00", "morning", "Base Momentum", price=82.0, score=90)
+        weekend = capture_payload("2026-06-06T07:00:00-05:00", "morning", "Base Momentum", price=83.0, score=91)
+        preopen = capture_payload("2026-06-07T19:00:00-05:00", "preopen", "Base Momentum", price=84.0, score=92)
+        write_capture(self.captures_dir / "2026-06-08" / "morning.json", market_day)
+        write_capture(self.captures_dir / "2026-06-06" / "morning.json", weekend)
+        write_capture(self.captures_dir / "2026-06-07" / "preopen.json", preopen)
+
+        default_rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+        all_rows = build_candidate_timeline(
+            "COO",
+            include_non_trading_day=True,
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        self.assertEqual(["preopen", "morning"], [row.session for row in default_rows])
+        self.assertEqual("Pre-Open Gap Review", default_rows[0].calendar_label)
+        self.assertEqual(3, len(all_rows))
+        weekend_rows = [row for row in all_rows if row.capture_date == "2026-06-06"]
+        self.assertEqual("Non-Trading-Day Observation", weekend_rows[0].calendar_label)
+        self.assertTrue(weekend_rows[0].is_ordinary_non_trading_day)
 
 
 def capture_payload(capture_time: str, session: str, scanner: str, *, price: float, score: int) -> dict:

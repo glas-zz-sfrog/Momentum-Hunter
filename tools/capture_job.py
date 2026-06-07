@@ -13,9 +13,10 @@ from momentum_hunter.config import load_config
 from momentum_hunter.market import detect_market_regime
 from momentum_hunter.models import CaptureSession, SCANNER_PRESETS
 from momentum_hunter.providers import ProviderUnavailableError, provider_from_name
+from momentum_hunter.scheduling import evaluate_automatic_capture
 from momentum_hunter.scoring import score_candidates
 from momentum_hunter.score_breakdowns import upsert_score_breakdowns_for_capture_payload
-from momentum_hunter.storage import save_capture_failure, save_daily_capture
+from momentum_hunter.storage import CAPTURES_DIR, save_capture_failure, save_daily_capture
 from momentum_hunter.time_utils import now_central
 
 
@@ -52,10 +53,19 @@ def main() -> int:
 def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
     config = load_config()
     criteria = SCANNER_PRESETS[args.scanner] if args.scanner else SCANNER_PRESETS["Institutional Momentum"]
+    capture_time = now_central()
+    decision = evaluate_automatic_capture(session, current_time=capture_time, captures_dir=CAPTURES_DIR)
+    if decision.is_skip:
+        print(f"Capture skipped: {decision.skip_reason}")
+        print(f"Requested session: {decision.requested_session.value}")
+        print(f"Policy session: {decision.capture_session.value}")
+        print(f"Calendar status: {decision.classification.capture_calendar_status}")
+        print(f"Next market session: {decision.classification.next_market_session_date}")
+        print(f"Scheduling policy: {decision.classification.scheduling_policy_version}")
+        return 0
+
     provider = provider_from_name(args.provider or config.provider)
     market_regime = detect_market_regime()
-    capture_time = now_central()
-
     candidates = provider.scan(criteria)
     for candidate in candidates:
         if not candidate.news:
@@ -68,11 +78,13 @@ def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
         criteria=criteria,
         provider=provider.name,
         mode=config.mode,
-        session=session,
+        session=decision.capture_session,
         market_regime=market_regime,
         capture_time=capture_time,
     )
-    print(f"Saved {session.value} capture")
+    print(f"Saved {decision.capture_session.value} capture")
+    print(f"Requested session: {decision.requested_session.value}")
+    print(f"Calendar status: {decision.classification.capture_calendar_status}")
     print(f"JSON: {json_path}")
     print(f"Report: {report_path}")
     print(f"Candidates: {len(candidates)}")

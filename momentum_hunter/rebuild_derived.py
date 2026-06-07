@@ -273,7 +273,7 @@ def capture_date_from_time(value: str) -> str:
 
 
 def session_order(session: str) -> int:
-    return {"morning": 0, "evening": 1, "manual": 2}.get(session, 9)
+    return {"morning": 0, "evening": 1, "preopen": 2, "manual": 3}.get(session, 9)
 
 
 def int_or_zero(value) -> int:

@@ -4,8 +4,8 @@ Momentum Hunter separates immutable market observations from derived research ar
 
 ## Raw captures
 
-- Path: `MomentumHunterData/data/captures/YYYY-MM-DD/{morning|evening|manual}.json`
-- Path: `MomentumHunterData/data/captures/YYYY-MM-DD/{morning|evening|manual}.md`
+- Path: `MomentumHunterData/data/captures/YYYY-MM-DD/{morning|evening|preopen|manual}.json`
+- Path: `MomentumHunterData/data/captures/YYYY-MM-DD/{morning|evening|preopen|manual}.md`
 - Owner: capture engine
 - Mutability: immutable after creation
 - Purpose: point-in-time record of what Momentum Hunter knew at capture time
@@ -16,6 +16,38 @@ Raw capture files must not store later review decisions, outcomes, score recalcu
 New raw captures also exclude user decision fields (`selected`, `reviewed`, `review_status`), user notes, and score-breakdown text such as score reasons. Those belong in separate review/derived stores.
 
 Raw capture files must not be edited to add hashes or metadata after creation. Capture metadata lives outside the raw files.
+
+## Market-calendar scheduling
+
+- Shared policy module: `momentum_hunter/scheduling.py`
+- Policy version: `market-calendar-v1`
+- Target exchange: `XNYS`
+- Calendar implementation: built-in NYSE/Nasdaq full-day market calendar with weekends and standard full-day exchange holidays; early closes and unscheduled special closures are not modeled yet.
+
+Future automated captures follow this policy:
+
+- `morning`: 7:00 AM CT on market-open days only
+- `evening`: 7:00 PM CT after market-open days only, including Friday evening
+- `preopen`: 7:00 PM CT on the calendar day immediately before the next market-open day when the prior calendar day was not market-open
+- `manual`: allowed on any calendar day
+
+The Windows scheduled tasks can still fire daily. The headless capture job exits cleanly with a logged skip reason when no capture is appropriate:
+
+- `SKIP_NOT_MARKET_DAY`
+- `SKIP_NOT_PREOPEN_GAP_REVIEW_DAY`
+- `SKIP_DUPLICATE_CAPTURE`
+- `SKIP_OUTSIDE_CAPTURE_WINDOW`
+
+New raw captures store these calendar classification fields at creation time:
+
+- `capture_session`
+- `capture_calendar_status`
+- `is_market_open_day`
+- `is_study_eligible`
+- `next_market_session_date`
+- `scheduling_policy_version`
+
+Existing historical raw captures are not rewritten. Derived readers classify legacy captures from `capture_time`, `capture_date`, and `session` where possible. If a legacy record cannot be classified confidently, it is treated as `UNKNOWN` and excluded from ordinary study statistics.
 
 ## Review decisions
 
@@ -66,6 +98,8 @@ Study results should be treated as derived views. They are useful research outpu
 
 Persisted study reports, when added, should live under `MomentumHunterData/data/studies/` and should be safe to delete/rebuild.
 
+The Study Engine excludes rows where `is_study_eligible` is false by default. This keeps weekend, holiday, `preopen`, and manual observations out of ordinary market-session performance statistics unless the user explicitly enables non-trading-day/preopen inclusion.
+
 ## Candidate Timeline and Replay Mode
 
 - UI entry: select a candidate and click `View Timeline`
@@ -81,6 +115,8 @@ Replay Mode classifies fields by source:
 - `later outcome label`: post-capture performance labels from outcomes CSV
 
 Outcome values are always labeled as calculated after capture. Replay views must not present outcomes as information known at the replayed moment.
+
+Replay Mode labels `preopen` captures as `Pre-Open Gap Review`. Ordinary weekend or holiday captures are hidden from timelines by default; `Show non-trading-day captures` reveals them with a warning. Friday evening captures remain ordinary market-day evening captures.
 
 Quarantined captures are excluded from timelines by default. If `Show quarantined captures` is enabled, replay rows are marked `Quarantined - Not Trusted for Study Use` and remain read-only. Quarantined captures are not re-added to active analysis CSVs or study results.
 

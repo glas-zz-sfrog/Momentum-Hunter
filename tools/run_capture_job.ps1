@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("morning", "evening", "manual")]
+    [ValidateSet("morning", "evening", "preopen", "manual")]
     [string]$Session,
     [string]$ProjectRoot = "C:\Users\steve\OneDrive\Documents\Investing",
     [string]$PythonExe = "C:\Users\steve\OneDrive\Documents\Investing\.venv\Scripts\python.exe"

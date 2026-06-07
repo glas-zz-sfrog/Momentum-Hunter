@@ -147,6 +147,50 @@ class StudySummaryTests(unittest.TestCase):
         self.assertIn("evening", summary.source_range)
         self.assertIn("bull", summary.source_range)
 
+    def test_default_filter_excludes_non_study_eligible_captures(self) -> None:
+        rows = [
+            {
+                "capture_date": "2026-06-08",
+                "capture_time": "2026-06-08T07:00:00-05:00",
+                "session": "morning",
+                "market_regime": "bull",
+                "score": "90",
+                "selected": "false",
+                "reviewed": "false",
+                "is_study_eligible": "true",
+            },
+            {
+                "capture_date": "2026-06-07",
+                "capture_time": "2026-06-07T19:00:00-05:00",
+                "session": "preopen",
+                "market_regime": "bull",
+                "score": "90",
+                "selected": "false",
+                "reviewed": "false",
+                "is_study_eligible": "false",
+            },
+            {
+                "capture_date": "2026-06-06",
+                "capture_time": "2026-06-06T07:00:00-05:00",
+                "session": "manual",
+                "market_regime": "bull",
+                "score": "90",
+                "selected": "false",
+                "reviewed": "false",
+                "is_study_eligible": "false",
+            },
+        ]
+
+        default_summary = summarize_capture_rows(rows)
+        inclusive_summary = summarize_capture_rows(
+            rows,
+            study_filter=StudyFilter(include_non_study_eligible=True),
+        )
+
+        self.assertEqual(1, default_summary.candidate_count)
+        self.assertEqual(3, inclusive_summary.candidate_count)
+        self.assertIn("including non-trading-day captures", inclusive_summary.source_range)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.models import CaptureSession
+from momentum_hunter.scheduling import next_automatic_run
 from momentum_hunter.storage import ANALYSIS_CSV, CAPTURE_FAILURES_DIR, CAPTURES_DIR
 from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 
@@ -47,9 +48,11 @@ class CsvStatus:
 class CaptureHealthSnapshot:
     last_morning_capture: CaptureSuccessInfo
     last_evening_capture: CaptureSuccessInfo
+    last_preopen_capture: CaptureSuccessInfo
     last_failed_capture: CaptureFailureInfo
     next_morning_run: datetime
     next_evening_run: datetime
+    next_preopen_run: datetime
     csv_append_status: CsvStatus
     outcome_update_status: CsvStatus
 
@@ -66,9 +69,11 @@ def build_capture_health_snapshot(
     return CaptureHealthSnapshot(
         last_morning_capture=latest_successful_capture(CaptureSession.MORNING, captures_dir),
         last_evening_capture=latest_successful_capture(CaptureSession.EVENING, captures_dir),
+        last_preopen_capture=latest_successful_capture(CaptureSession.PREOPEN, captures_dir),
         last_failed_capture=latest_capture_failure(failures_dir),
-        next_morning_run=next_scheduled_run(time(7, 0), current),
-        next_evening_run=next_scheduled_run(time(19, 0), current),
+        next_morning_run=next_automatic_run(CaptureSession.MORNING, after=current, captures_dir=captures_dir),
+        next_evening_run=next_automatic_run(CaptureSession.EVENING, after=current, captures_dir=captures_dir),
+        next_preopen_run=next_automatic_run(CaptureSession.PREOPEN, after=current, captures_dir=captures_dir),
         csv_append_status=csv_status(analysis_csv),
         outcome_update_status=csv_status(outcomes_csv),
     )

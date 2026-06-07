@@ -13,6 +13,7 @@ from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.market import MarketRegimeSnapshot
 from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, NewsItem, NewsStack, ScannerCriteria, TradingMode
 from momentum_hunter.news_age import apply_candidate_news_stack, filter_news_known_at_capture, format_news_age, format_news_range
+from momentum_hunter.scheduling import classification_fields_for_payload, classify_capture
 from momentum_hunter.time_utils import now_central
 
 
@@ -26,6 +27,12 @@ ANALYSIS_FIELDNAMES = [
     "capture_date",
     "capture_time",
     "session",
+    "capture_session",
+    "capture_calendar_status",
+    "is_market_open_day",
+    "is_study_eligible",
+    "next_market_session_date",
+    "scheduling_policy_version",
     "mode",
     "provider",
     "scanner",
@@ -247,6 +254,7 @@ def save_daily_capture(
         "capture_time": capture_time.isoformat(),
         "capture_date": capture_time.strftime("%Y-%m-%d"),
         "session": session.value,
+        **classify_capture(capture_time, session).as_fields(),
         "mode": mode.value,
         "provider": provider,
         "scanner": asdict(criteria),
@@ -302,6 +310,10 @@ def capture_to_markdown(payload: dict) -> str:
         f"# Momentum Hunter {payload['session'].title()} Capture - {payload['capture_date']}",
         "",
         f"- Captured: {payload['capture_time']}",
+        f"- Calendar Status: {payload.get('capture_calendar_status', 'UNKNOWN')}",
+        f"- Study Eligible: {payload.get('is_study_eligible', False)}",
+        f"- Next Market Session: {payload.get('next_market_session_date', 'unknown')}",
+        f"- Scheduling Policy: {payload.get('scheduling_policy_version', 'unknown')}",
         f"- Mode: {payload['mode']}",
         f"- Provider: {payload['provider']}",
         f"- Scanner: {scanner['name']}",
@@ -352,10 +364,12 @@ def analysis_row_from_capture(payload: dict, candidate: dict) -> dict:
     market = payload.get("market", {})
     scanner = payload.get("scanner", {})
     scanner_name = scanner.get("name", "") if isinstance(scanner, dict) else str(scanner)
+    calendar_fields = classification_fields_for_payload(payload)
     return {
         "capture_date": payload.get("capture_date", ""),
         "capture_time": payload.get("capture_time", ""),
         "session": payload.get("session", ""),
+        **calendar_fields,
         "mode": payload.get("mode", ""),
         "provider": payload.get("provider", ""),
         "scanner": scanner_name,
@@ -567,7 +581,7 @@ def list_capture_sessions(date_text: str) -> list[CaptureSession]:
     if not base.exists():
         return []
     sessions: list[CaptureSession] = []
-    for session in (CaptureSession.MORNING, CaptureSession.EVENING, CaptureSession.MANUAL):
+    for session in (CaptureSession.MORNING, CaptureSession.EVENING, CaptureSession.PREOPEN, CaptureSession.MANUAL):
         if (base / f"{session.value}.json").exists() or (base / f"{session.value}.md").exists():
             sessions.append(session)
     return sessions

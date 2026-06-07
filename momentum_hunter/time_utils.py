@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 
@@ -21,7 +20,11 @@ def format_central(value: datetime | None = None) -> str:
 
 def next_market_session(value: datetime | None = None) -> datetime:
     session = value or now_central()
-    session = session.astimezone(CENTRAL_TZ) + timedelta(days=1)
-    while session.weekday() >= 5:
-        session += timedelta(days=1)
-    return session
+    from momentum_hunter.scheduling import next_market_open_date
+
+    next_date = next_market_open_date(session, include_today=False)
+    return session.astimezone(CENTRAL_TZ).replace(
+        year=next_date.year,
+        month=next_date.month,
+        day=next_date.day,
+    )

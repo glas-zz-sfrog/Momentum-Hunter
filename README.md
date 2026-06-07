@@ -20,7 +20,7 @@ Version 0.1 implements the V1/V3 foundation:
 - Candidate notes
 - Save selected candidates to a next-session watchlist JSON file
 - All displayed times use Central Time
-- Daily morning/evening capture files for point-in-time review
+- Market-calendar-aware morning/evening/preopen capture files for point-in-time review
 - Structured capture JSON plus a flat analysis CSV for future scoring review
 - Market regime label for each capture
 - Automatic Windows startup launcher
@@ -64,6 +64,8 @@ MomentumHunterData\data\captures\YYYY-MM-DD\morning.json
 MomentumHunterData\data\captures\YYYY-MM-DD\morning.md
 MomentumHunterData\data\captures\YYYY-MM-DD\evening.json
 MomentumHunterData\data\captures\YYYY-MM-DD\evening.md
+MomentumHunterData\data\captures\YYYY-MM-DD\preopen.json
+MomentumHunterData\data\captures\YYYY-MM-DD\preopen.md
 ```
 
 The analysis table is stored as:
@@ -96,8 +98,8 @@ The Study Engine includes score-weight recommendations once enough completed 5-d
 2. Review candidates and check the rows you want to track.
 3. Click `Add Selected` to stage the picks.
 4. Set or refresh the market regime.
-5. Momentum Hunter auto-captures morning and evening snapshots while the app is running.
-6. Use the date and session selectors to reopen a past morning or evening capture.
+5. Momentum Hunter auto-captures market-calendar-approved morning, evening, and preopen snapshots while the app is running.
+6. Use the date and session selectors to reopen a past morning, evening, preopen, or manual capture.
 
 Momentum Hunter installs a Windows startup launcher automatically so the app is available for scheduled captures after login.
 The startup launcher is written as `Momentum Hunter.vbs` and launches the GUI hidden through `pythonw.exe`, avoiding a visible command window.
@@ -110,6 +112,28 @@ Momentum Hunter also includes a headless capture job for Windows Task Scheduler:
 .\.venv\Scripts\python.exe tools\capture_job.py --session morning
 .\.venv\Scripts\python.exe tools\capture_job.py --session evening
 ```
+
+The Windows tasks may fire daily, but the shared scheduling policy decides whether to capture or skip. The target exchange calendar is `XNYS` using `market-calendar-v1`, a built-in NYSE/Nasdaq full-day calendar covering weekends and standard full-day exchange holidays. Early closes are not modeled yet.
+
+Policy behavior:
+
+- Morning captures run at 7:00 AM CT only on market-open days.
+- Evening captures run at 7:00 PM CT after each market-open day, including Friday evening.
+- Sunday 7:00 PM CT normally becomes a separate `preopen` capture before Monday trading.
+- If Monday is a market holiday, Sunday evening skips and Monday 7:00 PM CT becomes `preopen` before Tuesday trading.
+- Saturday, Sunday morning, ordinary holiday morning, and ordinary holiday evening runs skip with logged reasons such as `SKIP_NOT_MARKET_DAY`, `SKIP_NOT_PREOPEN_GAP_REVIEW_DAY`, or `SKIP_DUPLICATE_CAPTURE`.
+- Manual captures remain allowed on any day and keep the `manual` session identity.
+
+New captures and derived analysis rows include:
+
+- `capture_session`
+- `capture_calendar_status`
+- `is_market_open_day`
+- `is_study_eligible`
+- `next_market_session_date`
+- `scheduling_policy_version`
+
+Study Engine excludes non-study-eligible captures by default. Use the `Include non-trading-day/preopen` option when researching weekend or holiday-gap behavior.
 
 Install the daily scheduled tasks:
 
@@ -186,6 +210,8 @@ Use the GUI `Why [score]?` button to inspect the component-by-component explanat
 ## Candidate Timeline and Replay Mode
 
 Select a candidate and click `View Timeline` to see every trusted active capture containing that ticker. The timeline can sort oldest-first or newest-first and can optionally show quarantined captures with a warning.
+
+Replay Mode shows `preopen` rows as `Pre-Open Gap Review`. Ordinary historical weekend or holiday captures are hidden from timelines by default; enable `Show non-trading-day captures` to inspect them with a warning. Older raw files are not edited to add calendar fields.
 
 Replay Mode opens a read-only point-in-time view for a timeline row. It separates:
 

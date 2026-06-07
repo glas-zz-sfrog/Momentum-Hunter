@@ -71,6 +71,7 @@ from momentum_hunter.score_breakdowns import (
     upsert_score_breakdowns_for_candidates,
     upsert_score_breakdowns_for_capture_payload,
 )
+from momentum_hunter.scheduling import CaptureDecision, evaluate_automatic_capture
 from momentum_hunter.startup import install_startup_script, is_startup_installed
 from momentum_hunter.storage import (
     RawCaptureAlreadyExistsError,
@@ -411,6 +412,8 @@ class MomentumHunterWindow(QMainWindow):
         self.last_morning_capture_label.setWordWrap(True)
         self.last_evening_capture_label = QLabel("Last evening capture: checking...")
         self.last_evening_capture_label.setWordWrap(True)
+        self.last_preopen_capture_label = QLabel("Last preopen capture: checking...")
+        self.last_preopen_capture_label.setWordWrap(True)
         self.capture_failure_label = QLabel("Scheduled captures: no failures recorded.")
         self.capture_failure_label.setWordWrap(True)
         self.next_capture_label = QLabel("Next scheduled runs: checking...")
@@ -425,6 +428,7 @@ class MomentumHunterWindow(QMainWindow):
         health_layout.addWidget(self.provider_status_label)
         health_layout.addWidget(self.last_morning_capture_label)
         health_layout.addWidget(self.last_evening_capture_label)
+        health_layout.addWidget(self.last_preopen_capture_label)
         health_layout.addWidget(self.capture_failure_label)
         health_layout.addWidget(self.next_capture_label)
         health_layout.addWidget(self.csv_append_label)
@@ -835,18 +839,21 @@ class MomentumHunterWindow(QMainWindow):
         sort_combo = QComboBox()
         sort_combo.addItems(["Oldest First", "Newest First"])
         show_quarantined = QCheckBox("Show quarantined captures")
+        show_non_trading_day = QCheckBox("Show non-trading-day captures")
         replay_button = QPushButton("Replay Capture")
         controls_layout.addWidget(QLabel("Sort"))
         controls_layout.addWidget(sort_combo)
         controls_layout.addWidget(show_quarantined)
+        controls_layout.addWidget(show_non_trading_day)
         controls_layout.addStretch(1)
         controls_layout.addWidget(replay_button)
         layout.addWidget(controls)
 
-        table = QTableWidget(0, 22)
+        table = QTableWidget(0, 23)
         headers = [
             "Capture",
             "Session",
+            "Calendar",
             "Provider",
             "Scanner",
             "Ticker",
@@ -881,6 +888,7 @@ class MomentumHunterWindow(QMainWindow):
             timeline_rows = build_candidate_timeline(
                 ticker,
                 include_quarantined=show_quarantined.isChecked(),
+                include_non_trading_day=show_non_trading_day.isChecked(),
                 newest_first=sort_combo.currentText() == "Newest First",
             )
             populate_timeline_table(table, timeline_rows)
@@ -896,6 +904,7 @@ class MomentumHunterWindow(QMainWindow):
 
         sort_combo.currentTextChanged.connect(refresh)
         show_quarantined.stateChanged.connect(refresh)
+        show_non_trading_day.stateChanged.connect(refresh)
         replay_button.clicked.connect(replay_selected)
         table.itemDoubleClicked.connect(lambda _item: replay_selected())
         refresh()
@@ -935,7 +944,12 @@ class MomentumHunterWindow(QMainWindow):
         dialog.setStyleSheet(STYLESHEET)
         dialog.exec()
 
-    def capture_daily_snapshot(self, session: CaptureSession | None = None, show_message: bool = True) -> None:
+    def capture_daily_snapshot(
+        self,
+        session: CaptureSession | None = None,
+        show_message: bool = True,
+        capture_time: datetime | None = None,
+    ) -> None:
         candidates = self.candidates or list(self.saved_candidates.values())
         if not candidates:
             self._update_status("No scanned candidates available to capture.")
@@ -957,6 +971,7 @@ class MomentumHunterWindow(QMainWindow):
                 mode=self.config.mode,
                 session=session,
                 market_regime=self.market_regime,
+                capture_time=capture_time,
             )
             try:
                 upsert_score_breakdowns_for_capture_payload(load_capture_json(session_date_from_path(json_path), session))
@@ -997,15 +1012,15 @@ class MomentumHunterWindow(QMainWindow):
 
     def _auto_snapshot_check(self) -> None:
         current = now_central()
-        in_evening = current.hour == 19 or (current.hour == 20 and current.minute == 0)
-        in_morning = current.hour == 7 or (current.hour == 8 and current.minute == 0)
-        if in_evening:
-            self._auto_capture_once(CaptureSession.EVENING)
-        elif in_morning:
-            self._auto_capture_once(CaptureSession.MORNING)
+        for requested_session in (CaptureSession.MORNING, CaptureSession.EVENING):
+            decision = evaluate_automatic_capture(requested_session, current_time=current)
+            if decision.should_capture:
+                self._auto_capture_once(decision)
+                return
 
-    def _auto_capture_once(self, session: CaptureSession) -> None:
-        key = now_central().strftime("%Y-%m-%d") + f"-{session.value}"
+    def _auto_capture_once(self, decision: CaptureDecision) -> None:
+        session = decision.capture_session
+        key = decision.run_at.strftime("%Y-%m-%d") + f"-{session.value}"
         if key == self.last_snapshot_key:
             return
         if not self.candidates:
@@ -1031,7 +1046,7 @@ class MomentumHunterWindow(QMainWindow):
                 self._update_status(f"Auto scan failed before {session.value} capture: {exc}")
                 return
         if self.candidates or self.saved_candidates:
-            self.capture_daily_snapshot(session=session, show_message=False)
+            self.capture_daily_snapshot(session=session, show_message=False, capture_time=decision.run_at)
             self.last_snapshot_key = key
 
     def _refresh_current_freshness(self) -> None:
@@ -1052,6 +1067,7 @@ class MomentumHunterWindow(QMainWindow):
         )
         self.last_morning_capture_label.setText(format_capture_success("Last successful morning", health.last_morning_capture))
         self.last_evening_capture_label.setText(format_capture_success("Last successful evening", health.last_evening_capture))
+        self.last_preopen_capture_label.setText(format_capture_success("Last successful preopen", health.last_preopen_capture))
         if health.last_morning_capture.capture_time:
             self.last_morning_capture_label.setStyleSheet("color: #cbd8e6;")
         else:
@@ -1060,6 +1076,10 @@ class MomentumHunterWindow(QMainWindow):
             self.last_evening_capture_label.setStyleSheet("color: #cbd8e6;")
         else:
             self.last_evening_capture_label.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        if health.last_preopen_capture.capture_time:
+            self.last_preopen_capture_label.setStyleSheet("color: #cbd8e6;")
+        else:
+            self.last_preopen_capture_label.setStyleSheet("color: #9fb0c2;")
 
         self.capture_failure_label.setText(format_capture_failure(health.last_failed_capture))
         if health.last_failed_capture.failure_time:
@@ -1069,7 +1089,8 @@ class MomentumHunterWindow(QMainWindow):
         self.next_capture_label.setText(
             "Next scheduled runs: "
             f"Morning {format_central(health.next_morning_run)} | "
-            f"Evening {format_central(health.next_evening_run)}"
+            f"Evening {format_central(health.next_evening_run)} | "
+            f"Preopen {format_central(health.next_preopen_run)}"
         )
         self.next_capture_label.setStyleSheet("color: #cbd8e6;")
         self.csv_append_label.setText(format_csv_status("CSV append", health.csv_append_status))
@@ -1300,9 +1321,11 @@ class MomentumHunterWindow(QMainWindow):
     def _current_capture_session(self) -> CaptureSession:
         current = now_central()
         if 5 <= current.hour < 12:
-            return CaptureSession.MORNING
+            decision = evaluate_automatic_capture(CaptureSession.MORNING, current_time=current)
+            return decision.capture_session if decision.should_capture else CaptureSession.MANUAL
         if 12 <= current.hour <= 23:
-            return CaptureSession.EVENING
+            decision = evaluate_automatic_capture(CaptureSession.EVENING, current_time=current)
+            return decision.capture_session if decision.should_capture else CaptureSession.MANUAL
         return CaptureSession.MANUAL
 
     def _ensure_windows_startup(self) -> None:
@@ -1503,8 +1526,10 @@ class MomentumHunterWindow(QMainWindow):
         filter_layout.addWidget(end_date_edit)
         filter_layout.addWidget(QLabel("Session"))
         session_combo = QComboBox()
-        session_combo.addItems([SESSION_ALL, "morning", "evening", "manual"])
+        session_combo.addItems([SESSION_ALL, "morning", "evening", "preopen", "manual"])
         filter_layout.addWidget(session_combo)
+        include_non_study_checkbox = QCheckBox("Include non-trading-day/preopen")
+        filter_layout.addWidget(include_non_study_checkbox)
         filter_layout.addWidget(QLabel("Regime"))
         regime_combo = QComboBox()
         regime_combo.addItems([REGIME_ALL, "bull", "bear", "neutral", "unknown"])
@@ -1546,6 +1571,7 @@ class MomentumHunterWindow(QMainWindow):
                 end_date=end_date_edit.text().strip(),
                 session=session_combo.currentText(),
                 regime=regime_combo.currentText(),
+                include_non_study_eligible=include_non_study_checkbox.isChecked(),
             )
 
         def refresh_study_view() -> None:
@@ -1586,6 +1612,7 @@ class MomentumHunterWindow(QMainWindow):
         start_date_edit.editingFinished.connect(refresh_study_view)
         end_date_edit.editingFinished.connect(refresh_study_view)
         session_combo.currentTextChanged.connect(refresh_study_view)
+        include_non_study_checkbox.stateChanged.connect(refresh_study_view)
         regime_combo.currentTextChanged.connect(refresh_study_view)
         refresh_study_view()
 
@@ -1749,6 +1776,7 @@ def populate_timeline_table(table: QTableWidget, rows: list[TimelineRow]) -> Non
         values = [
             row.capture_time_text,
             row.session,
+            row.calendar_label,
             row.provider,
             row.scanner,
             row.ticker,
@@ -1774,6 +1802,8 @@ def populate_timeline_table(table: QTableWidget, rows: list[TimelineRow]) -> Non
             item = QTableWidgetItem(str(value))
             if row.quarantined:
                 item.setBackground(QBrush(QColor("#6d3030")))
+            elif row.calendar_classification.capture_calendar_status == "PREOPEN_GAP_REVIEW_DAY":
+                item.setBackground(QBrush(QColor("#244d63")))
             elif row.warnings:
                 item.setBackground(QBrush(QColor("#735f24")))
             table.setItem(row_index, column, item)
@@ -1818,8 +1848,14 @@ def format_replay_html(view_model) -> str:
         Captured: {escape(row.capture_time_text)} |
         Age now: {escape(row.age_text)} |
         Session: {escape(row.session)} |
+        Calendar: {escape(row.calendar_label)} |
         Provider: {escape(row.provider)} |
         Scanner: {escape(row.scanner)}
+      </p>
+      <p>
+        Study eligible: <b>{escape(str(row.calendar_classification.is_study_eligible))}</b> |
+        Market-open day: <b>{escape(str(row.calendar_classification.is_market_open_day))}</b> |
+        Next market session: <b>{escape(row.calendar_classification.next_market_session_date)}</b>
       </p>
       <p style="color:#9fb0c2;">Read-only replay. Raw capture facts are separated from later review decisions and later outcome labels.</p>
       <h3>Warnings</h3>
@@ -1859,6 +1895,9 @@ def label_for_field(key: str) -> str:
         "score": "Momentum Score",
         "score_profile": "Score Profile",
         "score_regime": "Score Regime",
+        "capture_calendar_status": "Calendar Status",
+        "is_study_eligible": "Study Eligible",
+        "next_market_session_date": "Next Market Session",
     }
     return labels.get(key, key.replace("_", " ").title())
 

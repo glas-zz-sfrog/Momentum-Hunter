@@ -9,6 +9,12 @@ from pathlib import Path
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.outcomes import OUTCOMES_CSV
 from momentum_hunter.review import CandidateIdentity, ReviewDecision, load_review_decisions, make_capture_id
+from momentum_hunter.scheduling import (
+    CaptureCalendarStatus,
+    CaptureCalendarClassification,
+    calendar_label,
+    classify_capture,
+)
 from momentum_hunter.score_breakdowns import SCORE_BREAKDOWNS_PATH, find_score_breakdown, score_breakdown_identity, score_breakdown_identity_key
 from momentum_hunter.storage import CAPTURE_INTEGRITY_MANIFEST, CAPTURES_DIR, load_capture_integrity_manifest
 from momentum_hunter.time_utils import format_central, now_central
@@ -43,6 +49,9 @@ class TimelineRow:
     mode: str
     ticker: str
     quarantined: bool
+    calendar_classification: CaptureCalendarClassification
+    calendar_label: str
+    is_ordinary_non_trading_day: bool
     trust_label: str
     fields: dict[str, SourceValue]
     raw_candidate: dict
@@ -69,6 +78,7 @@ def build_candidate_timeline(
     ticker: str,
     *,
     include_quarantined: bool = False,
+    include_non_trading_day: bool = False,
     newest_first: bool = False,
     captures_dir: Path = CAPTURES_DIR,
     manifest_path: Path = CAPTURE_INTEGRITY_MANIFEST,
@@ -91,17 +101,18 @@ def build_candidate_timeline(
         for candidate in payload.get("candidates", []):
             if str(candidate.get("ticker", "")).upper() != normalized_ticker:
                 continue
-            rows.append(
-                build_timeline_row(
-                    payload,
-                    candidate,
-                    capture_path=capture_path,
-                    quarantined=quarantined,
-                    score_breakdowns_path=score_breakdowns_path,
-                    review_decisions=review_decisions,
-                    outcomes=outcomes,
-                )
+            row = build_timeline_row(
+                payload,
+                candidate,
+                capture_path=capture_path,
+                quarantined=quarantined,
+                score_breakdowns_path=score_breakdowns_path,
+                review_decisions=review_decisions,
+                outcomes=outcomes,
             )
+            if row.is_ordinary_non_trading_day and not include_non_trading_day:
+                continue
+            rows.append(row)
     mark_duplicate_rows(rows)
     rows.sort(key=lambda row: (row.capture_time or datetime.min, row.session, row.scanner, row.provider), reverse=newest_first)
     return rows
@@ -159,8 +170,18 @@ def build_timeline_row(
     review_decision = review_decisions.get(candidate_identity.key)
     outcome = outcomes.get(outcome_key(capture_date, capture_time_raw, session, provider, scanner, ticker))
     warnings: list[str] = []
+    calendar_classification = classify_capture(capture_time_raw, session, capture_date=capture_date)
+    calendar_text = calendar_label(calendar_classification)
+    is_ordinary_non_trading_day = (
+        calendar_classification.capture_calendar_status == CaptureCalendarStatus.NON_MARKET_DAY.value
+        and session != "preopen"
+    )
     if quarantined:
         warnings.append("Quarantined - Not Trusted for Study Use")
+    if calendar_classification.capture_calendar_status == CaptureCalendarStatus.PREOPEN_GAP_REVIEW_DAY.value:
+        warnings.append("Pre-Open Gap Review - separate from ordinary study statistics")
+    elif is_ordinary_non_trading_day:
+        warnings.append("Non-trading-day capture - hidden by default and excluded from ordinary study statistics")
     if score_breakdown is None:
         warnings.append("Missing stored score breakdown")
     elif score_breakdown.get("status") in {"legacy", "incomplete"}:
@@ -179,6 +200,9 @@ def build_timeline_row(
         "score": SourceValue(candidate_payload.get("score", ""), RAW_CAPTURE),
         "score_profile": SourceValue(candidate_payload.get("score_profile", capture_payload.get("scoring", {}).get("profile", "")), RAW_CAPTURE),
         "score_regime": SourceValue(candidate_payload.get("score_regime", capture_payload.get("scoring", {}).get("regime", "")), RAW_CAPTURE),
+        "capture_calendar_status": SourceValue(calendar_classification.capture_calendar_status, RAW_CAPTURE),
+        "is_study_eligible": SourceValue(calendar_classification.is_study_eligible, RAW_CAPTURE),
+        "next_market_session_date": SourceValue(calendar_classification.next_market_session_date, RAW_CAPTURE),
         "review_status": SourceValue(review_decision.review_status.value if review_decision else "unreviewed", REVIEW_DECISION),
         "note_indicator": SourceValue("yes" if review_decision and review_decision.decision_note else "no", REVIEW_DECISION),
         "outcome_status": SourceValue(outcome.get("outcome_status", "missing") if outcome else "missing", OUTCOME_LABEL),
@@ -203,7 +227,10 @@ def build_timeline_row(
         mode=mode,
         ticker=ticker,
         quarantined=quarantined,
-        trust_label="Quarantined - Not Trusted for Study Use" if quarantined else "Trusted active capture",
+        calendar_classification=calendar_classification,
+        calendar_label=calendar_text,
+        is_ordinary_non_trading_day=is_ordinary_non_trading_day,
+        trust_label=trust_label(quarantined, calendar_classification),
         fields=fields,
         raw_candidate=dict(candidate_payload),
         capture_payload=dict(capture_payload),
@@ -212,6 +239,16 @@ def build_timeline_row(
         outcome=outcome,
         warnings=warnings,
     )
+
+
+def trust_label(quarantined: bool, classification: CaptureCalendarClassification) -> str:
+    if quarantined:
+        return "Quarantined - Not Trusted for Study Use"
+    if classification.capture_calendar_status == CaptureCalendarStatus.PREOPEN_GAP_REVIEW_DAY.value:
+        return "Pre-Open Gap Review"
+    if classification.capture_calendar_status == CaptureCalendarStatus.NON_MARKET_DAY.value:
+        return "Non-Trading-Day Observation"
+    return "Trusted active capture"
 
 
 def capture_sources(

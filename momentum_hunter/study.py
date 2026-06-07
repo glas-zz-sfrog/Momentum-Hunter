@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from momentum_hunter.outcomes import OUTCOMES_CSV
+from momentum_hunter.scheduling import row_is_study_eligible
 from momentum_hunter.storage import ANALYSIS_CSV
 
 
@@ -22,6 +23,7 @@ class StudyFilter:
     end_date: str = ""
     session: str = SESSION_ALL
     regime: str = REGIME_ALL
+    include_non_study_eligible: bool = False
 
     def label(self) -> str:
         parts = [self.row_filter]
@@ -31,6 +33,8 @@ class StudyFilter:
             parts.append(self.session)
         if self.regime != REGIME_ALL:
             parts.append(self.regime)
+        if self.include_non_study_eligible:
+            parts.append("including non-trading-day captures")
         return " | ".join(parts)
 
 
@@ -207,6 +211,8 @@ def empty_study(reason: str) -> StudySummary:
 
 def filter_rows(rows: list[dict], study_filter: StudyFilter) -> list[dict]:
     filtered = rows
+    if not study_filter.include_non_study_eligible:
+        filtered = [row for row in filtered if row_is_study_eligible(row)]
     if study_filter.row_filter == FILTER_SELECTED:
         filtered = [row for row in filtered if parse_bool(row.get("selected", "false"))]
     elif study_filter.row_filter == FILTER_REVIEWED:
