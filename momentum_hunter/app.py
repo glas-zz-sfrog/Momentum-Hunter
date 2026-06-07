@@ -1708,15 +1708,30 @@ def format_score_breakdown_html(record: dict) -> str:
             "</p>"
         )
     identity = record.get("identity", {})
+    compact_rows = []
+    compact_summary = record.get("compact_summary") or compact_score_summary_from_components(record.get("components", []))
+    for item in compact_summary:
+        contribution = int(item.get("contribution", 0))
+        compact_rows.append(
+            "<tr>"
+            f"<td>{escape(str(item.get('label', '')))}</td>"
+            f"<td style='text-align:right;font-weight:700;color:{'#a7f3d0' if contribution >= 0 else '#fecaca'};'>"
+            f"{format_signed_points(contribution)}</td>"
+            f"<td>{escape(format_raw_inputs(item.get('raw_inputs', {})))}</td>"
+            "</tr>"
+        )
     component_rows = []
     for component in record.get("components", []):
+        contribution = int(component.get("points_after_adjustment", 0))
         component_rows.append(
             "<tr>"
             f"<td>{escape(str(component.get('label', '')))}</td>"
+            f"<td>{escape(str(component.get('category', '')))}</td>"
             f"<td>{escape(str(component.get('rule', '')))}</td>"
             f"<td>{escape(format_raw_inputs(component.get('raw_inputs', {})))}</td>"
             f"<td style='text-align:right;'>{escape(str(component.get('points_before_adjustment', '')))}</td>"
-            f"<td style='text-align:right;'>{escape(str(component.get('points_after_adjustment', '')))}</td>"
+            f"<td style='text-align:right;font-weight:700;color:{'#a7f3d0' if contribution >= 0 else '#fecaca'};'>"
+            f"{escape(format_signed_points(contribution))}</td>"
             f"<td>{escape(str(component.get('explanation', '')))}</td>"
             "</tr>"
         )
@@ -1732,9 +1747,13 @@ def format_score_breakdown_html(record: dict) -> str:
       {warning}
       <p>
         <b>Captured:</b> {escape(str(identity.get('capture_time', record.get('capture_time', ''))))}<br>
+        <b>Session:</b> {escape(str(identity.get('session', '')))} |
+        <b>Provider:</b> {escape(str(identity.get('provider', '')))} |
         <b>Scanner:</b> {escape(str(identity.get('scanner', '')))} |
         <b>Mode:</b> {escape(str(identity.get('mode', '')))} |
-        <b>Engine:</b> {escape(str(record.get('score_engine_version', '')))} |
+        <b>Profile:</b> {escape(str(record.get('score_profile', '')))} |
+        <b>Regime:</b> {escape(str(record.get('score_regime', '')))}<br>
+        <b>Scoring Version:</b> {escape(str(record.get('score_engine_version', '')))} |
         <b>Schema:</b> {escape(str(record.get('explanation_schema_version', '')))}
       </p>
       <h3>Reconciliation</h3>
@@ -1747,14 +1766,24 @@ Computed final score: {escape(str(record.get('computed_final_score', '')))}
 Displayed final score: {escape(str(record.get('final_score', '')))}
 Reconciliation status: {escape(str(reconciliation.get('status', record.get('reconciliation_status', ''))))}
       </pre>
-      <h3>Components</h3>
+      <h3>Compact Summary</h3>
       <table cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;">
         <tr style="background:#182536;">
           <th align="left">Component</th>
+          <th align="right">Contribution</th>
+          <th align="left">Raw Value</th>
+        </tr>
+        {''.join(compact_rows)}
+      </table>
+      <h3>Detailed Components</h3>
+      <table cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;">
+        <tr style="background:#182536;">
+          <th align="left">Component</th>
+          <th align="left">Type</th>
           <th align="left">Rule</th>
           <th align="left">Raw Inputs</th>
           <th align="right">Before</th>
-          <th align="right">After</th>
+          <th align="right">Contribution</th>
           <th align="left">Explanation</th>
         </tr>
         {''.join(component_rows)}
@@ -1762,6 +1791,46 @@ Reconciliation status: {escape(str(reconciliation.get('status', record.get('reco
     </body>
     </html>
     """
+
+
+def compact_score_summary_from_components(components: list[dict]) -> list[dict]:
+    groups = [
+        ("base_score", "Base"),
+        ("volume", "Volume"),
+        ("relative_volume", "Relative Volume"),
+        ("market_cap", "Market Cap"),
+        ("price_momentum", "Price Move"),
+        ("positive_catalyst.", "Catalyst"),
+        ("freshness_context", "Freshness"),
+        ("risk_term.", "Risk Penalty"),
+        ("low_price", "Price Risk"),
+    ]
+    summary: list[dict] = []
+    for key_prefix, label in groups:
+        matching = [
+            component
+            for component in components
+            if str(component.get("key", "")) == key_prefix or str(component.get("key", "")).startswith(key_prefix)
+        ]
+        if matching:
+            summary.append(
+                {
+                    "label": label,
+                    "contribution": sum(int(component.get("points_after_adjustment", 0)) for component in matching),
+                    "raw_inputs": {
+                        key: value
+                        for component in matching
+                        for key, value in (component.get("raw_inputs", {}) if isinstance(component.get("raw_inputs"), dict) else {}).items()
+                    },
+                }
+            )
+    return summary
+
+
+def format_signed_points(value: int) -> str:
+    if value > 0:
+        return f"+{value}"
+    return str(value)
 
 
 def format_raw_inputs(raw_inputs: dict) -> str:

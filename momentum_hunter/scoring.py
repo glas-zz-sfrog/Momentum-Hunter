@@ -229,6 +229,26 @@ def build_score_breakdown(
             explanation="No configured positive catalyst keyword was found in news known at the scoring timestamp.",
         )
 
+    add_component(
+        components,
+        key="freshness_context",
+        label="Freshness Context",
+        raw_inputs={
+            "freshness": candidate.news_stack.freshness,
+            "freshness_score": candidate.news_stack.freshness_score,
+            "latest_article_age_hours": candidate.news_stack.latest_article_age_hours,
+            "article_count": candidate.news_stack.article_count,
+        },
+        rule="Current engine records freshness for explainability; freshness does not add or subtract points in momentum_score_v1.",
+        before=0,
+        after=0,
+        explanation=(
+            f"Latest valid article freshness is {candidate.news_stack.freshness} "
+            f"with score {candidate.news_stack.freshness_score}."
+        ),
+        category="context",
+    )
+
     matched_risk_term = False
     for keyword, points in profile.payload["risk_terms"].items():
         if keyword in catalyst_text:
@@ -319,6 +339,7 @@ def build_score_breakdown(
         "pre_floor_total": pre_floor_total,
         "pre_cap_total": floor_output,
         "components": components,
+        "compact_summary": compact_score_summary(components),
         "bonuses": [component["key"] for component in components if int(component["points_after_adjustment"]) > 0 and component["key"] != "base_score"],
         "penalties": [component["key"] for component in components if int(component["points_after_adjustment"]) < 0],
         "caps": [
@@ -355,6 +376,70 @@ def build_score_breakdown(
         "reconciliation_status": reconciliation_status,
     }
     return breakdown
+
+
+def compact_score_summary(components: list[dict]) -> list[dict]:
+    groups = [
+        ("base", "Base"),
+        ("volume", "Volume"),
+        ("relative_volume", "Relative Volume"),
+        ("market_cap", "Market Cap"),
+        ("price_momentum", "Price Move"),
+        ("positive_catalyst.", "Catalyst"),
+        ("freshness_context", "Freshness"),
+        ("risk_term.", "Risk Penalty"),
+        ("low_price", "Price Risk"),
+    ]
+    summary: list[dict] = []
+    used_keys: set[str] = set()
+    for key_prefix, label in groups:
+        matching = [
+            component
+            for component in components
+            if component.get("key", "") == key_prefix or component.get("key", "").startswith(key_prefix)
+        ]
+        if not matching:
+            continue
+        used_keys.update(str(component.get("key", "")) for component in matching)
+        contribution = sum(int(component.get("points_after_adjustment", 0)) for component in matching)
+        summary.append(
+            {
+                "key": key_prefix.rstrip("."),
+                "label": label,
+                "contribution": contribution,
+                "component_keys": [component.get("key", "") for component in matching],
+                "raw_inputs": merge_raw_inputs(matching),
+            }
+        )
+    other_components = [component for component in components if component.get("key", "") not in used_keys]
+    if other_components:
+        summary.append(
+            {
+                "key": "other",
+                "label": "Other",
+                "contribution": sum(int(component.get("points_after_adjustment", 0)) for component in other_components),
+                "component_keys": [component.get("key", "") for component in other_components],
+                "raw_inputs": merge_raw_inputs(other_components),
+            }
+        )
+    return summary
+
+
+def merge_raw_inputs(components: list[dict]) -> dict:
+    merged: dict = {}
+    for component in components:
+        raw_inputs = component.get("raw_inputs", {})
+        if not isinstance(raw_inputs, dict):
+            continue
+        for key, value in raw_inputs.items():
+            if key in merged and merged[key] != value:
+                existing = merged[key] if isinstance(merged[key], list) else [merged[key]]
+                if value not in existing:
+                    existing.append(value)
+                merged[key] = existing
+            else:
+                merged[key] = value
+    return merged
 
 
 def add_component(

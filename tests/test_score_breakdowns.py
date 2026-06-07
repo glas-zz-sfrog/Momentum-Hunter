@@ -22,10 +22,14 @@ from momentum_hunter.models import Candidate, MarketRegime, NewsItem
 from momentum_hunter.scoring import SCORE_ENGINE_VERSION, build_score_breakdown, score_candidate
 from momentum_hunter.score_breakdowns import (
     build_score_breakdown_for_raw_candidate,
+    find_score_breakdown,
+    load_score_breakdown_store,
     rebuild_score_breakdowns,
     score_breakdown_identity,
     score_breakdown_identity_key,
+    upsert_score_breakdowns_for_capture_payload,
 )
+from momentum_hunter.storage import file_sha256
 from momentum_hunter.storage import save_capture_integrity_manifest
 from momentum_hunter.time_utils import CENTRAL_TZ
 
@@ -58,6 +62,14 @@ class ScoreBreakdownTests(unittest.TestCase):
         self.assertEqual(breakdown["computed_final_score"], breakdown["final_score"])
         self.assertTrue(any(component["key"] == "market_cap" for component in breakdown["components"]))
         self.assertTrue(any(component["key"].startswith("positive_catalyst.") for component in breakdown["components"]))
+        self.assertTrue(any(component["key"] == "freshness_context" for component in breakdown["components"]))
+        self.assertTrue(any(item["label"] == "Volume" for item in breakdown["compact_summary"]))
+        self.assertTrue(any(item["label"] == "Catalyst" for item in breakdown["compact_summary"]))
+        self.assertTrue(any(item["label"] == "Freshness" for item in breakdown["compact_summary"]))
+        self.assertEqual(
+            sum(component["points_after_adjustment"] for component in breakdown["components"]),
+            sum(item["contribution"] for item in breakdown["compact_summary"]),
+        )
 
     def test_bonus_penalty_cap_and_floor_handling(self) -> None:
         now = datetime(2026, 6, 5, 7, 0, tzinfo=CENTRAL_TZ)
@@ -94,6 +106,72 @@ class ScoreBreakdownTests(unittest.TestCase):
         record = next(iter(store["records"].values()))
         self.assertEqual("COO", record["ticker"])
         self.assertEqual("complete", record["status"])
+        self.assertIn("compact_summary", record)
+
+    def test_generation_is_deterministic_and_does_not_mutate_raw_capture(self) -> None:
+        generated_at = datetime(2026, 6, 5, 8, 0, tzinfo=CENTRAL_TZ)
+        payload = raw_capture_payload(score=score_candidate(rich_candidate(datetime(2026, 6, 5, 7, 0, tzinfo=CENTRAL_TZ)), MarketRegime.BULL).score)
+        capture_path = self.captures_dir / "2026-06-05" / "morning.json"
+        write_raw_capture(capture_path, payload)
+        before_hash = file_sha256(capture_path)
+
+        first = build_score_breakdown_for_raw_candidate(payload, payload["candidates"][0], generated_at=generated_at)
+        second = build_score_breakdown_for_raw_candidate(payload, payload["candidates"][0], generated_at=generated_at)
+        upsert_score_breakdowns_for_capture_payload(payload, output_path=self.store_path)
+        after_hash = file_sha256(capture_path)
+
+        self.assertEqual(first, second)
+        self.assertEqual(before_hash, after_hash)
+        self.assertEqual(first["computed_final_score"], first["final_score"])
+        self.assertEqual(
+            first["computed_final_score"],
+            min(100, max(0, sum(component["points_after_adjustment"] for component in first["components"]))),
+        )
+
+    def test_recalculation_does_not_mutate_raw_capture(self) -> None:
+        payload = raw_capture_payload(score=90)
+        capture_path = self.captures_dir / "2026-06-05" / "morning.json"
+        write_raw_capture(capture_path, payload)
+        before_hash = file_sha256(capture_path)
+
+        rebuild_score_breakdowns(captures_dir=self.captures_dir, output_path=self.store_path)
+        rebuild_score_breakdowns(captures_dir=self.captures_dir, output_path=self.store_path)
+
+        self.assertEqual(before_hash, file_sha256(capture_path))
+
+    def test_future_engine_versions_can_coexist_for_same_capture_identity(self) -> None:
+        identity_v1 = score_breakdown_identity(
+            capture_date="2026-06-05",
+            capture_time="2026-06-05T07:00:00-05:00",
+            session="morning",
+            provider="finviz",
+            scanner="Base Momentum",
+            ticker="COO",
+            mode="PAPER",
+            score_engine_version="momentum_score_v1",
+        )
+        identity_v2 = {**identity_v1, "score_engine_version": "momentum_score_v2"}
+        record_v1 = {"identity": identity_v1, "identity_key": score_breakdown_identity_key(identity_v1), "score_engine_version": "momentum_score_v1"}
+        record_v2 = {"identity": identity_v2, "identity_key": score_breakdown_identity_key(identity_v2), "score_engine_version": "momentum_score_v2"}
+        self.store_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "records": {
+                        record_v1["identity_key"]: record_v1,
+                        record_v2["identity_key"]: record_v2,
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        store = load_score_breakdown_store(self.store_path)
+        self.assertEqual(2, len(store["records"]))
+        self.assertIsNotNone(find_score_breakdown(identity_v1, path=self.store_path))
+        self.assertIsNotNone(find_score_breakdown(identity_v2, path=self.store_path))
+        self.assertNotEqual(score_breakdown_identity_key(identity_v1), score_breakdown_identity_key(identity_v2))
 
     def test_score_breakdown_audit_detects_missing_and_duplicate_records(self) -> None:
         payload = raw_capture_payload(score=90)

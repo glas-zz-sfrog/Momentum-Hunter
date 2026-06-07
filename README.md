@@ -207,6 +207,8 @@ Use the GUI `Why [score]?` button to inspect the component-by-component explanat
 .\.venv\Scripts\python.exe -m momentum_hunter.score_breakdown_audit
 ```
 
+The `Why [score]?` dialog has a compact summary and detailed component view. Compact rows group the score into Base, Volume, Relative Volume, Market Cap, Price Move, Catalyst, Freshness, and Risk/Penalty lines. Detailed rows show raw values, rules, contribution math, and reconciliation to the displayed score. In `momentum_score_v1`, Freshness is recorded as zero-point context so it is visible for research without changing current score behavior.
+
 ## Candidate Timeline and Replay Mode
 
 Select a candidate and click `View Timeline` to see every trusted active capture containing that ticker. The timeline can sort oldest-first or newest-first and can optionally show quarantined captures with a warning.

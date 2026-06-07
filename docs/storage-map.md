@@ -75,7 +75,7 @@ Outcomes are labels computed after capture time. They can use future bars for la
 - Mutability: rebuildable by engine version
 - Stores arithmetic reconciliation, caps, floors, bonuses, penalties, component raw inputs, and GUI `Why [score]?` explanations
 
-Score breakdowns reference raw capture identity and score engine version. They must not be written into raw captures.
+Score breakdowns reference raw capture identity and score engine version. They must not be written into raw captures. The identity key includes `score_engine_version`, so future engines can store side-by-side records for the same capture and ticker without rewriting history.
 
 Current schema:
 
@@ -83,7 +83,15 @@ Current schema:
 - `updated_at`
 - `score_engine_version`
 - `records`
-- each record includes `capture_id`, `capture_date`, `capture_time`, `session`, `provider`, `scanner`, `ticker`, `score_engine_version`, `score_profile`, `score_regime`, `final_score`, `computed_final_score`, `components`, `bonuses`, `penalties`, `caps`, `floors`, `overrides`, and `reconciliation_status`
+- each record includes `capture_id`, `capture_date`, `capture_time`, `session`, `provider`, `scanner`, `ticker`, `score_engine_version`, `score_profile`, `score_regime`, `final_score`, `computed_final_score`, `compact_summary`, `components`, `bonuses`, `penalties`, `caps`, `floors`, `overrides`, and `reconciliation_status`
+
+The GUI `Why [score]?` dialog shows:
+
+- compact summary: grouped contribution lines such as Volume, Catalyst, Freshness, and Risk/Penalty
+- detailed components: raw inputs, rule text, before/after contribution, category, and explanation
+- reconciliation: subtotal, floor, cap, computed score, displayed score, and status
+
+In `momentum_score_v1`, Freshness is stored as a zero-point context component. This makes article freshness visible for analysis without changing the current scoring engine output.
 
 Historical records that cannot be fully reconstructed are marked `legacy` or `incomplete`; they are warnings, not clean current-engine proof. This is the foundation for future Replay Mode because the app can show what score explanation was available for a specific capture without changing the raw capture.
 
