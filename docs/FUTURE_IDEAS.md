@@ -20,6 +20,8 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 - Headline classification improvements
 - Headline deduplication across syndicated articles
 - Source-level timestamp reliability scoring
+- Use source reliability as a confidence factor in future freshness analysis
+- Use source reliability as an input to future catalyst quality, Opportunity Score, and research weighting
 - Earnings calendar integration
 - Analyst recommendation tracking
 - Newsletter ingestion
@@ -30,9 +32,11 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 - Catalyst Cluster Explorer v2:
   - Refine Sector Sympathy classification
   - Add confidence score per catalyst classification
+  - Catalyst classification confidence score trend analysis
   - Show percentage of headlines matched by explicit rules
   - Reduce catch-all cluster dominance
   - Display cluster purity metric
+  - Cluster purity metric trend analysis
   - Example: AI Infrastructure purity 87%; Sector Sympathy purity 42%
 - Earnings beat + guidance raise subclusters
 - Earnings mention only subcluster

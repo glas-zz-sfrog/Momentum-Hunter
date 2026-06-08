@@ -264,6 +264,18 @@ Future timestamps are not treated as fresh and are reported as warnings. Unknown
 
 The tab includes an audit summary, cluster-by-age summary, ticker-level summary, and headline detail rows. Filters include date range, ticker, catalyst cluster, market regime, scanner preset, timestamp status, age bucket, and the study-eligible-only default.
 
+## Headline Deduplication / Source Quality
+
+The Study Engine includes a `Headline Dedup` tab labeled `HEADLINE DEDUP / SOURCE QUALITY — RESEARCH ONLY`.
+
+Headline Dedup v1 groups stored historical headlines into deterministic catalyst events using normalized headline fingerprints. Normalization lowercases headlines, strips punctuation, removes source boilerplate, removes ticker prefixes where practical, collapses whitespace, and removes common filler words.
+
+The report shows duplicate event summaries, source reliability, cluster dedup impact, and ticker dedup impact. Event rows include event ID, representative headline, tickers, sources, first/latest seen capture times, earliest known publication time, timestamp status summary, duplicate count, unique source count, catalyst cluster, confidence, notes, and warnings.
+
+Source reliability reports exact timestamp percentage, unknown timestamp percentage, future timestamp percentage, invalid timestamp percentage, duplicate/syndicated rate, unique event count, and average headlines per event by provider/source. This is context only and does not affect Momentum Score, Opportunity Score, score profiles, or recommendations.
+
+No `headline-events.json` file is written in v1. The report is rebuilt from active immutable raw captures and derived stores each time, and quarantined/non-study captures remain excluded by default.
+
 ## Legacy Capture Cleanup
 
 If a non-market-day `morning` or `evening` raw capture is accidentally created beside a valid `preopen` capture, use the cleanup command to quarantine the unwanted raw files and rebuild/prune derived CSV rows without editing raw captures:

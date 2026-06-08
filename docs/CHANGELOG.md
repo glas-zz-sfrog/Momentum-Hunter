@@ -4,6 +4,24 @@
 
 ### Added
 
+- Added Headline Deduplication / Source Quality v1.
+- Added deterministic headline fingerprinting and in-memory catalyst event grouping.
+- Added `Headline Dedup` Study Engine tab with duplicate event summary, source reliability, cluster dedup impact, and ticker dedup impact views.
+- Added source/provider reliability metrics for exact, unknown, future, and invalid timestamp rates, duplicate/syndicated rate, unique event count, and average headlines per event.
+- Added source and minimum duplicate count filters.
+
+### Safety
+
+- Headline Dedup v1 is research-only and does not change Momentum Score, Opportunity Score, scoring profiles, optimizer behavior, broker behavior, SQLite storage, or raw captures.
+- Future timestamp headlines are warned in source-quality reporting and are not treated as fresh.
+- Dedup results are rebuilt in memory from stored data; no `headline-events.json` file is written in v1.
+
+### Tests
+
+- Added tests for deterministic fingerprinting, deterministic duplicate grouping, raw-capture immutability, quarantine exclusion, non-study default exclusion, preopen inclusion, future/unknown timestamp warnings, source reliability, and duplicate-count filtering.
+
+### Added
+
 - Added Catalyst Cluster Explorer v2 refinement.
 - Added deterministic catalyst classification confidence, rule names, explicit/fallback labels, fallback reasons, cluster purity, and explicit match statistics.
 - Added provider timestamp-quality summaries by provider, catalyst cluster, and ticker.

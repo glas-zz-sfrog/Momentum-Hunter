@@ -157,6 +157,32 @@ Outcome values in the catalyst detail view are post-capture labels from `analysi
 
 Default catalyst views exclude quarantined captures because quarantined files live outside active `captures/`, and they exclude rows where `is_study_eligible` is false. Non-study-eligible captures can be included explicitly for weekend, holiday, preopen, or manual-capture research.
 
+## Headline Deduplication / Source Quality
+
+- UI location: Study Engine dialog, `Headline Dedup` tab
+- Data layer: `momentum_hunter/headline_events.py`
+- Source inputs: active immutable raw captures, stored news/catalyst headlines in captures, catalyst cluster classifications, catalyst age/timestamp metrics, and `analysis-outcomes.csv` for display context only
+- Mutability: research-only view; dedup generation reads stored data and does not mutate raw captures or derived stores
+
+Headline Dedup is labeled `HEADLINE DEDUP / SOURCE QUALITY — RESEARCH ONLY`.
+
+Headline Dedup v1 creates in-memory derived catalyst event records at report time. It does not write `headline-events.json` yet. If persistence is added later, the file must live outside immutable raw captures and be treated as rebuildable derived data.
+
+Event grouping uses deterministic headline fingerprints:
+
+- lowercase
+- strip punctuation
+- remove source boilerplate where practical
+- remove ticker prefixes where practical
+- collapse whitespace
+- remove common filler words
+
+Each in-memory event includes event ID, representative headline, tickers, sources, first/latest seen capture times, earliest known publication timestamp, timestamp status summary, duplicate headline count, unique source count, catalyst cluster, confidence, notes, and warnings.
+
+Source reliability is derived by provider/source and reports exact, unknown, future, and invalid timestamp rates, duplicate/syndicated rate, unique event count, and average headlines per event. These reliability metrics are context only and do not affect Momentum Score, Opportunity Score, score profiles, or recommendations.
+
+Default Headline Dedup views exclude quarantined captures because quarantined files live outside active `captures/`, and they exclude rows where `is_study_eligible` is false. Preopen, weekend, holiday, and manual captures can be included explicitly.
+
 ## Catalyst Date / Age Engine
 
 - UI location: Study Engine dialog, `Catalyst Age` tab

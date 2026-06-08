@@ -43,6 +43,8 @@ class StudyFilter:
     minimum_confidence: int = 0
     minimum_purity: int = 0
     minimum_timestamp_quality: int = 0
+    source: str = ""
+    minimum_duplicate_count: int = 0
 
     def label(self) -> str:
         parts = [self.row_filter]
@@ -76,6 +78,10 @@ class StudyFilter:
             parts.append(f"purity >= {self.minimum_purity}%")
         if self.minimum_timestamp_quality:
             parts.append(f"exact timestamps >= {self.minimum_timestamp_quality}%")
+        if self.source:
+            parts.append(f"source contains {self.source}")
+        if self.minimum_duplicate_count:
+            parts.append(f"duplicates >= {self.minimum_duplicate_count}")
         if self.include_non_study_eligible:
             parts.append("including non-trading-day captures")
         return " | ".join(parts)

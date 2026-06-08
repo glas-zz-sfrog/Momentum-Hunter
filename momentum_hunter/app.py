@@ -61,6 +61,11 @@ from momentum_hunter.historical_clusters import (
     HistoricalClusterReport,
     build_historical_cluster_report,
 )
+from momentum_hunter.headline_events import (
+    HEADLINE_DEDUP_RESEARCH_LABEL,
+    HeadlineDedupReport,
+    build_headline_dedup_report,
+)
 from momentum_hunter.market import MarketRegimeSnapshot, detect_market_regime
 from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, SCANNER_PRESETS, TradingMode
 from momentum_hunter.news_age import (
@@ -1672,6 +1677,16 @@ class MomentumHunterWindow(QMainWindow):
         timestamp_quality_edit.setPlaceholderText("0")
         timestamp_quality_edit.setMaximumWidth(70)
         quality_filter_layout.addWidget(timestamp_quality_edit)
+        quality_filter_layout.addWidget(QLabel("Source"))
+        source_edit = QLineEdit()
+        source_edit.setPlaceholderText("all sources")
+        source_edit.setMaximumWidth(140)
+        quality_filter_layout.addWidget(source_edit)
+        quality_filter_layout.addWidget(QLabel("Min Duplicates"))
+        duplicate_edit = QLineEdit()
+        duplicate_edit.setPlaceholderText("0")
+        duplicate_edit.setMaximumWidth(70)
+        quality_filter_layout.addWidget(duplicate_edit)
         quality_filter_layout.addStretch(1)
         layout.addWidget(quality_filter_row)
 
@@ -1707,6 +1722,7 @@ class MomentumHunterWindow(QMainWindow):
             minimum_confidence = 0
             minimum_purity = 0
             minimum_timestamp_quality = 0
+            minimum_duplicate_count = 0
             try:
                 minimum_score = int(float(minimum_score_edit.text().strip() or "0"))
             except ValueError:
@@ -1723,6 +1739,10 @@ class MomentumHunterWindow(QMainWindow):
                 minimum_timestamp_quality = int(float(timestamp_quality_edit.text().strip() or "0"))
             except ValueError:
                 minimum_timestamp_quality = 0
+            try:
+                minimum_duplicate_count = int(float(duplicate_edit.text().strip() or "0"))
+            except ValueError:
+                minimum_duplicate_count = 0
             return StudyFilter(
                 row_filter=filter_combo.currentText(),
                 start_date=start_date_edit.text().strip(),
@@ -1742,6 +1762,8 @@ class MomentumHunterWindow(QMainWindow):
                 minimum_confidence=minimum_confidence,
                 minimum_purity=minimum_purity,
                 minimum_timestamp_quality=minimum_timestamp_quality,
+                source=source_edit.text().strip(),
+                minimum_duplicate_count=minimum_duplicate_count,
             )
 
         def refresh_study_view() -> None:
@@ -1778,6 +1800,13 @@ class MomentumHunterWindow(QMainWindow):
                     filtered_style,
                 ),
                 "Catalyst Age",
+            )
+            chart_tabs.addTab(
+                build_headline_dedup_panel(
+                    build_headline_dedup_report(study_filter=current_study_filter()),
+                    filtered_style,
+                ),
+                "Headline Dedup",
             )
             chart_tabs.addTab(build_recommendation_panel(build_weight_recommendations(), filtered_style), "Recommendations")
 
@@ -1817,6 +1846,8 @@ class MomentumHunterWindow(QMainWindow):
         confidence_edit.editingFinished.connect(refresh_study_view)
         purity_edit.editingFinished.connect(refresh_study_view)
         timestamp_quality_edit.editingFinished.connect(refresh_study_view)
+        source_edit.editingFinished.connect(refresh_study_view)
+        duplicate_edit.editingFinished.connect(refresh_study_view)
         refresh_study_view()
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -2649,6 +2680,166 @@ def build_catalyst_age_panel(report: CatalystAgeAuditReport, style: DataViewStyl
     tabs.addTab(build_catalyst_age_detail_table(report, style), "Headlines")
     layout.addWidget(tabs, 1)
     return panel
+
+
+def build_headline_dedup_panel(report: HeadlineDedupReport, style: DataViewStyle) -> QWidget:
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    status = QLabel(
+        f"{style.chart_prefix}{HEADLINE_DEDUP_RESEARCH_LABEL} | "
+        f"Raw Headlines: {report.total_raw_headlines} | Events: {report.total_events} | "
+        f"Duplicate Rate: {format_percent(report.duplicate_rate_pct)} | Source: {report.source}"
+    )
+    status.setObjectName("criteriaLabel")
+    status.setWordWrap(True)
+    layout.addWidget(status)
+
+    if report.warnings:
+        warning = QLabel(" | ".join(report.warnings))
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        layout.addWidget(warning)
+
+    tabs = QTabWidget()
+    tabs.addTab(build_headline_event_table(report, style), "Duplicate Events")
+    tabs.addTab(build_source_reliability_table(report, style), "Source Reliability")
+    tabs.addTab(build_dedup_impact_table(report.cluster_impact, style, "Cluster"), "Cluster Impact")
+    tabs.addTab(build_dedup_impact_table(report.ticker_impact, style, "Ticker"), "Ticker Impact")
+    layout.addWidget(tabs, 1)
+    return panel
+
+
+def build_headline_event_table(report: HeadlineDedupReport, style: DataViewStyle) -> QTableWidget:
+    table = QTableWidget(max(1, len(report.events)), 14)
+    table.setHorizontalHeaderLabels(
+        [
+            "Event ID",
+            "Cluster",
+            "Duplicate Count",
+            "Unique Sources",
+            "Tickers",
+            "Sources",
+            "First Seen",
+            "Latest Seen",
+            "Earliest Published",
+            "Timestamp Summary",
+            "Confidence",
+            "Representative Headline",
+            "Notes",
+            "Warnings",
+        ]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    if not report.events:
+        values = ["No events", "", "0", "0", "", "", "", "", "", "", "n/a", "", "", "No duplicate events matched the filters."]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, event in enumerate(report.events):
+            values = [
+                event.event_id,
+                event.catalyst_cluster,
+                str(event.duplicate_headline_count),
+                str(event.unique_source_count),
+                ", ".join(event.tickers),
+                ", ".join(event.sources),
+                event.first_seen_capture_time,
+                event.latest_seen_capture_time,
+                event.earliest_published_at or "unknown",
+                ", ".join(f"{status}:{count}" for status, count in event.timestamp_status_summary.items()),
+                f"{event.confidence} {event.confidence_score}",
+                event.representative_headline,
+                " | ".join(event.notes),
+                " | ".join(event.warnings),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if event.warnings:
+                    item.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, item)
+    table.resizeColumnsToContents()
+    return table
+
+
+def build_source_reliability_table(report: HeadlineDedupReport, style: DataViewStyle) -> QTableWidget:
+    table = QTableWidget(max(1, len(report.source_reliability)), 10)
+    table.setHorizontalHeaderLabels(
+        [
+            "Source / Provider",
+            "Headlines",
+            "Exact %",
+            "Unknown %",
+            "Future %",
+            "Invalid %",
+            "Duplicate Rate",
+            "Unique Events",
+            "Avg Headlines/Event",
+            "Warnings",
+        ]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    if not report.source_reliability:
+        values = ["No source rows", "0", "n/a", "n/a", "n/a", "n/a", "n/a", "0", "n/a", ""]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, summary in enumerate(report.source_reliability):
+            values = [
+                summary.source,
+                str(summary.total_headlines),
+                format_percent(summary.exact_pct),
+                format_percent(summary.unknown_pct),
+                format_percent(summary.future_pct),
+                format_percent(summary.invalid_pct),
+                format_percent(summary.duplicate_rate_pct),
+                str(summary.unique_event_count),
+                format_number(summary.average_headlines_per_event),
+                " | ".join(summary.warnings),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if summary.warnings:
+                    item.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, item)
+    table.resizeColumnsToContents()
+    return table
+
+
+def build_dedup_impact_table(summaries, style: DataViewStyle, label: str) -> QTableWidget:
+    table = QTableWidget(max(1, len(summaries)), 6)
+    table.setHorizontalHeaderLabels(
+        [label, "Raw Headlines", "Deduped Events", "Duplicate Rate", "Top Duplicated Stories", "Warnings"]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    if not summaries:
+        values = ["No impact rows", "0", "0", "n/a", "", ""]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, summary in enumerate(summaries):
+            values = [
+                summary.name,
+                str(summary.raw_headline_count),
+                str(summary.deduped_event_count),
+                format_percent(summary.duplicate_rate_pct),
+                " | ".join(summary.top_duplicated_stories),
+                " | ".join(summary.warnings),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if summary.warnings:
+                    item.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, item)
+    table.resizeColumnsToContents()
+    return table
 
 
 def build_catalyst_age_audit_table(report: CatalystAgeAuditReport, style: DataViewStyle) -> QTableWidget:
