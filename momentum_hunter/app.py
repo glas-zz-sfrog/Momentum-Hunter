@@ -1629,9 +1629,15 @@ class MomentumHunterWindow(QMainWindow):
                 "FDA binary event",
                 "Biotech clinical data",
                 "Merger / acquisition",
-                "Sector sympathy",
+                "Product / platform launch",
+                "Capital markets / financing",
+                "Legal / regulatory",
+                "Leadership / strategic update",
+                "Index / fund flow",
                 "Macro-only",
+                "Price action / no catalyst detail",
                 "Weak / vague catalyst",
+                "Sector sympathy",
                 "No clear catalyst",
                 "Unknown / uncategorized",
             ]
@@ -1647,6 +1653,27 @@ class MomentumHunterWindow(QMainWindow):
         age_filter_layout.addWidget(age_bucket_combo)
         age_filter_layout.addStretch(1)
         layout.addWidget(age_filter_row)
+
+        quality_filter_row = QWidget()
+        quality_filter_layout = QHBoxLayout(quality_filter_row)
+        quality_filter_layout.setContentsMargins(0, 0, 0, 0)
+        quality_filter_layout.addWidget(QLabel("Min Confidence"))
+        confidence_edit = QLineEdit()
+        confidence_edit.setPlaceholderText("0")
+        confidence_edit.setMaximumWidth(70)
+        quality_filter_layout.addWidget(confidence_edit)
+        quality_filter_layout.addWidget(QLabel("Min Purity %"))
+        purity_edit = QLineEdit()
+        purity_edit.setPlaceholderText("0")
+        purity_edit.setMaximumWidth(70)
+        quality_filter_layout.addWidget(purity_edit)
+        quality_filter_layout.addWidget(QLabel("Min Exact Timestamp %"))
+        timestamp_quality_edit = QLineEdit()
+        timestamp_quality_edit.setPlaceholderText("0")
+        timestamp_quality_edit.setMaximumWidth(70)
+        quality_filter_layout.addWidget(timestamp_quality_edit)
+        quality_filter_layout.addStretch(1)
+        layout.addWidget(quality_filter_row)
 
         stats = QLabel()
         stats.setObjectName("criteriaLabel")
@@ -1677,10 +1704,25 @@ class MomentumHunterWindow(QMainWindow):
 
         def current_study_filter() -> StudyFilter:
             minimum_score = 0
+            minimum_confidence = 0
+            minimum_purity = 0
+            minimum_timestamp_quality = 0
             try:
                 minimum_score = int(float(minimum_score_edit.text().strip() or "0"))
             except ValueError:
                 minimum_score = 0
+            try:
+                minimum_confidence = int(float(confidence_edit.text().strip() or "0"))
+            except ValueError:
+                minimum_confidence = 0
+            try:
+                minimum_purity = int(float(purity_edit.text().strip() or "0"))
+            except ValueError:
+                minimum_purity = 0
+            try:
+                minimum_timestamp_quality = int(float(timestamp_quality_edit.text().strip() or "0"))
+            except ValueError:
+                minimum_timestamp_quality = 0
             return StudyFilter(
                 row_filter=filter_combo.currentText(),
                 start_date=start_date_edit.text().strip(),
@@ -1697,6 +1739,9 @@ class MomentumHunterWindow(QMainWindow):
                 catalyst_cluster=catalyst_combo.currentText(),
                 timestamp_status=timestamp_combo.currentText(),
                 age_bucket=age_bucket_combo.currentText(),
+                minimum_confidence=minimum_confidence,
+                minimum_purity=minimum_purity,
+                minimum_timestamp_quality=minimum_timestamp_quality,
             )
 
         def refresh_study_view() -> None:
@@ -1769,6 +1814,9 @@ class MomentumHunterWindow(QMainWindow):
         catalyst_combo.currentTextChanged.connect(refresh_study_view)
         timestamp_combo.currentTextChanged.connect(refresh_study_view)
         age_bucket_combo.currentTextChanged.connect(refresh_study_view)
+        confidence_edit.editingFinished.connect(refresh_study_view)
+        purity_edit.editingFinished.connect(refresh_study_view)
+        timestamp_quality_edit.editingFinished.connect(refresh_study_view)
         refresh_study_view()
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -2440,8 +2488,9 @@ def build_catalyst_cluster_panel(report: CatalystClusterReport, style: DataViewS
         warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
         layout.addWidget(warning)
 
+    tabs = QTabWidget()
     splitter = QSplitter(Qt.Orientation.Vertical)
-    table = QTableWidget(0, 13)
+    table = QTableWidget(0, 19)
     table.setHorizontalHeaderLabels(
         [
             "Catalyst Cluster",
@@ -2449,6 +2498,13 @@ def build_catalyst_cluster_panel(report: CatalystClusterReport, style: DataViewS
             "Candidates",
             "Tickers",
             "Date Range",
+            "Confidence",
+            "Purity",
+            "Explicit",
+            "Fallback",
+            "Exact TS",
+            "Unknown TS",
+            "Future TS",
             "Avg Score",
             "Avg Max Gain",
             "Avg Max Drawdown",
@@ -2467,7 +2523,7 @@ def build_catalyst_cluster_panel(report: CatalystClusterReport, style: DataViewS
     table.setRowCount(max(1, len(report.clusters)))
 
     if not report.clusters:
-        values = ["No catalyst clusters", "0", "0", "", "", "n/a", "n/a", "n/a", "n/a", "", "", "", "No stored headlines matched the filters."]
+        values = ["No catalyst clusters", "0", "0", "", "", "n/a", "n/a", "0", "0", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "", "", "No stored headlines matched the filters."]
         for column, value in enumerate(values):
             table.setItem(0, column, QTableWidgetItem(value))
     else:
@@ -2478,6 +2534,13 @@ def build_catalyst_cluster_panel(report: CatalystClusterReport, style: DataViewS
                 str(cluster.candidate_count),
                 ", ".join(cluster.tickers),
                 cluster.date_range,
+                f"{cluster.dominant_confidence} {format_number(cluster.average_confidence_score)}",
+                format_percent(cluster.purity_pct),
+                str(cluster.explicit_match_count),
+                str(cluster.fallback_match_count),
+                format_percent(cluster.timestamp_quality.exact_pct),
+                format_percent(cluster.timestamp_quality.unknown_pct),
+                format_percent(cluster.timestamp_quality.future_pct),
                 format_number(cluster.average_score),
                 format_percent(cluster.average_max_gain_pct),
                 format_percent(cluster.average_max_drawdown_pct),
@@ -2489,7 +2552,7 @@ def build_catalyst_cluster_panel(report: CatalystClusterReport, style: DataViewS
             ]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                if cluster.candidate_count < 10:
+                if cluster.candidate_count < 10 or cluster.purity_pct < 60:
                     item.setBackground(QBrush(QColor("#735f24")))
                 table.setItem(row, column, item)
     table.resizeColumnsToContents()
@@ -2513,8 +2576,51 @@ def build_catalyst_cluster_panel(report: CatalystClusterReport, style: DataViewS
     splitter.addWidget(table)
     splitter.addWidget(detail)
     splitter.setSizes([360, 360])
-    layout.addWidget(splitter, 1)
+    cluster_tab = QWidget()
+    cluster_layout = QVBoxLayout(cluster_tab)
+    cluster_layout.setContentsMargins(0, 0, 0, 0)
+    cluster_layout.addWidget(splitter, 1)
+    tabs.addTab(cluster_tab, "Clusters")
+    tabs.addTab(build_timestamp_quality_table(report.provider_quality, style, "Provider"), "Provider Quality")
+    tabs.addTab(build_timestamp_quality_table(report.cluster_quality, style, "Cluster"), "Cluster Quality")
+    tabs.addTab(build_timestamp_quality_table(report.ticker_quality, style, "Ticker"), "Ticker Quality")
+    layout.addWidget(tabs, 1)
     return panel
+
+
+def build_timestamp_quality_table(summaries, style: DataViewStyle, label: str) -> QTableWidget:
+    table = QTableWidget(max(1, len(summaries)), 10)
+    table.setHorizontalHeaderLabels(
+        [label, "Headlines", "Exact", "Unknown", "Future", "Invalid", "Exact %", "Unknown %", "Future %", "Warnings"]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    if not summaries:
+        values = ["No timestamp quality rows", "0", "0", "0", "0", "0", "n/a", "n/a", "n/a", ""]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, summary in enumerate(summaries):
+            values = [
+                summary.group,
+                str(summary.headline_count),
+                str(summary.exact_count),
+                str(summary.unknown_count),
+                str(summary.future_count),
+                str(summary.invalid_count),
+                format_percent(summary.exact_pct),
+                format_percent(summary.unknown_pct),
+                format_percent(summary.future_pct),
+                " | ".join(summary.warnings),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if summary.warnings:
+                    item.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, item)
+    table.resizeColumnsToContents()
+    return table
 
 
 def build_catalyst_age_panel(report: CatalystAgeAuditReport, style: DataViewStyle) -> QWidget:
@@ -2672,6 +2778,10 @@ def format_catalyst_cluster_detail_html(cluster) -> str:
             f"<td>{escape(headline.capture_time)}</td>"
             f"<td>{escape(headline.source)}</td>"
             f"<td>{escape(headline.timestamp_status)}</td>"
+            f"<td>{escape(headline.classification_confidence)} {escape(str(headline.classification_confidence_score))}</td>"
+            f"<td>{escape(headline.classification_rule)}</td>"
+            f"<td>{escape(headline.classification_match_type)}</td>"
+            f"<td>{escape(headline.fallback_reason)}</td>"
             f"<td>{escape(format_age_hours(headline.headline_age_hours))}</td>"
             f"<td>{escape(headline.freshness_label)}</td>"
             f"<td>{escape(str(headline.score))}</td>"
@@ -2694,6 +2804,19 @@ def format_catalyst_cluster_detail_html(cluster) -> str:
         Unique tickers: <b>{cluster.unique_ticker_count}</b> |
         Date range: <b>{escape(cluster.date_range)}</b>
       </p>
+      <p>
+        Confidence: <b>{escape(cluster.dominant_confidence)} {escape(format_number(cluster.average_confidence_score))}</b> |
+        Purity: <b>{escape(format_percent(cluster.purity_pct))}</b> |
+        Explicit: <b>{cluster.explicit_match_count}</b> |
+        Fallback: <b>{cluster.fallback_match_count}</b> |
+        Exact timestamps: <b>{escape(format_percent(cluster.timestamp_quality.exact_pct))}</b> |
+        Unknown timestamps: <b>{escape(format_percent(cluster.timestamp_quality.unknown_pct))}</b> |
+        Future timestamps: <b>{escape(format_percent(cluster.timestamp_quality.future_pct))}</b>
+      </p>
+      <p style="color:#9fb0c2;">
+        Common rules: {escape(', '.join(cluster.common_rules) or 'n/a')}<br>
+        Fallback reasons: {escape(' | '.join(cluster.fallback_reasons) or 'n/a')}
+      </p>
       <p style="color:#9fb0c2;">
         Detail rows use stored capture headlines only. Outcomes are post-capture labels and are not capture-time facts.
         Missing timestamps remain unknown; future timestamps are excluded from clustering.
@@ -2707,6 +2830,10 @@ def format_catalyst_cluster_detail_html(cluster) -> str:
           <th align="left">Capture Time</th>
           <th align="left">Source</th>
           <th align="left">Timestamp</th>
+          <th align="left">Confidence</th>
+          <th align="left">Rule</th>
+          <th align="left">Match</th>
+          <th align="left">Fallback Reason</th>
           <th align="left">Age</th>
           <th align="left">Freshness</th>
           <th align="left">Score</th>

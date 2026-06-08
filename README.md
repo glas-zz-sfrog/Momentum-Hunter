@@ -242,11 +242,15 @@ The Study Engine includes a `Catalyst Explorer` tab labeled `CATALYST CLUSTERS â
 
 Catalyst Cluster Explorer groups the actual historical headlines stored inside raw captures into deterministic catalyst buckets such as earnings beat, guidance raise, analyst actions, AI infrastructure, AI partnership, contract wins, FDA/biotech events, merger/acquisition, macro-only, weak/vague catalyst, no clear catalyst, and unknown/uncategorized.
 
-The explorer reads active raw captures plus `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`. It does not fetch current market data, mutate raw captures, recalculate historical scores, start optimizer work, or treat post-capture outcomes as capture-time facts.
+The v2 explorer also splits more ambiguous stored headlines into additional deterministic buckets such as product/platform launch, capital markets/financing, legal/regulatory, leadership/strategic update, index/fund flow, and price-action/no-catalyst-detail. This reduces catch-all Sector Sympathy behavior without using AI.
+
+The explorer reads active raw captures plus `score-breakdowns.json`, `review-decisions.json`, `analysis-outcomes.csv`, and catalyst age metrics computed from stored headlines. It does not fetch current market data, mutate raw captures, recalculate historical scores, start optimizer work, or treat post-capture outcomes as capture-time facts.
 
 Timestamp handling is explicit: known article timestamps get capture-time article age, missing timestamps remain `UNKNOWN_TIMESTAMP`, and future timestamps are excluded from catalyst clustering with a warning.
 
-Each catalyst cluster has a detail view listing matching stored headlines, ticker, capture time, source, timestamp status, headline age, freshness label, score, review status, outcome status, max gain/drawdown, and stored URL when available.
+Each catalyst cluster shows deterministic confidence, purity, explicit-rule count, fallback count, exact timestamp rate, unknown timestamp rate, future timestamp rate, representative headlines, and warnings such as `LOW CONFIDENCE CLUSTER`, `LOW PURITY CLUSTER`, `HIGH UNKNOWN TIMESTAMP RATE`, and `HIGH FUTURE TIMESTAMP RATE`.
+
+The cluster detail view lists matching stored headlines, ticker, capture time, source, timestamp status, classification confidence, explicit rule used, fallback reason if applicable, headline age, freshness label, score, review status, outcome status, max gain/drawdown, and stored URL when available. A provider-quality research view summarizes exact, unknown, future, and invalid timestamp rates by provider, cluster, and ticker.
 
 ## Catalyst Date / Age Engine
 

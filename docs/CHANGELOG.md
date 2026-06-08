@@ -4,6 +4,23 @@
 
 ### Added
 
+- Added Catalyst Cluster Explorer v2 refinement.
+- Added deterministic catalyst classification confidence, rule names, explicit/fallback labels, fallback reasons, cluster purity, and explicit match statistics.
+- Added provider timestamp-quality summaries by provider, catalyst cluster, and ticker.
+- Added Catalyst Explorer quality filters for minimum confidence, minimum purity, and minimum exact timestamp percentage.
+- Added additional deterministic catalyst buckets for product/platform launch, capital markets/financing, legal/regulatory, leadership/strategic update, index/fund flow, and price-action/no-catalyst-detail.
+
+### Safety
+
+- Catalyst Cluster Explorer v2 remains research-only and does not change scores, scoring profiles, raw captures, optimizer behavior, broker behavior, or SQLite storage.
+- Future timestamp headlines remain excluded from clustering and freshness-style analysis while still appearing in timestamp-quality warnings.
+
+### Tests
+
+- Added tests for deterministic classification confidence, purity, provider timestamp quality, fallback labeling, threshold filters, future timestamp exclusion, and raw-capture immutability coverage.
+
+### Added
+
 - Added Catalyst Date / Age Engine v1 in the Study Engine.
 - Added `Catalyst Age` tab with audit totals, headline age bucket distribution, cluster-by-age summary, ticker-level summary, and headline-level details.
 - Added timestamp statuses: `EXACT_TIMESTAMP`, `DATE_ONLY`, `ESTIMATED`, `UNKNOWN_TIMESTAMP`, `FUTURE_TIMESTAMP`, and `INVALID_TIMESTAMP`.

@@ -23,12 +23,26 @@ from momentum_hunter.review import CandidateIdentity, load_review_decisions, mak
 from momentum_hunter.scheduling import classify_capture
 from momentum_hunter.score_breakdowns import SCORE_BREAKDOWNS_PATH, find_score_breakdown, score_breakdown_identity
 from momentum_hunter.storage import CAPTURES_DIR
-from momentum_hunter.study import REGIME_ALL, REVIEW_ALL, SESSION_ALL, StudyFilter, parse_optional_float
+from momentum_hunter.study import CATALYST_CLUSTER_ALL, REGIME_ALL, REVIEW_ALL, SESSION_ALL, StudyFilter, parse_optional_float
 
 
 CATALYST_RESEARCH_LABEL = "CATALYST CLUSTERS — RESEARCH ONLY"
 HISTORICAL_THEME_ALL = "all historical themes"
 SAMPLE_SIZE_WARNING_LIMIT = 10
+LOW_CONFIDENCE_WARNING_SCORE = 60
+LOW_PURITY_WARNING_PCT = 60.0
+HIGH_UNKNOWN_TIMESTAMP_WARNING_PCT = 40.0
+HIGH_FUTURE_TIMESTAMP_WARNING_PCT = 5.0
+
+
+@dataclass(frozen=True)
+class CatalystClassification:
+    cluster_name: str
+    confidence_score: int
+    confidence_label: str
+    rule_name: str
+    match_type: str
+    fallback_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -58,8 +72,28 @@ class CatalystHeadline:
     next_day_return_pct: float | None
     five_day_return_pct: float | None
     historical_theme: str
+    classification_confidence: str
+    classification_confidence_score: int
+    classification_rule: str
+    classification_match_type: str
+    fallback_reason: str
     score_components: list[str] = field(default_factory=list)
     is_study_eligible: bool = False
+
+
+@dataclass(frozen=True)
+class TimestampQualitySummary:
+    group: str
+    headline_count: int
+    exact_count: int
+    unknown_count: int
+    future_count: int
+    invalid_count: int
+    exact_pct: float
+    unknown_pct: float
+    future_pct: float
+    invalid_pct: float
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -77,6 +111,15 @@ class CatalystClusterSummary:
     representative_headlines: list[str]
     top_winners: list[str]
     worst_failures: list[str]
+    average_confidence_score: float | None
+    dominant_confidence: str
+    purity_pct: float
+    explicit_match_count: int
+    fallback_match_count: int
+    explicit_match_pct: float
+    timestamp_quality: TimestampQualitySummary
+    common_rules: list[str]
+    fallback_reasons: list[str]
     warnings: list[str] = field(default_factory=list)
     headlines: list[CatalystHeadline] = field(default_factory=list)
 
@@ -90,6 +133,9 @@ class CatalystClusterReport:
     excluded_future_headlines: int
     filters: StudyFilter
     clusters: list[CatalystClusterSummary]
+    provider_quality: list[TimestampQualitySummary]
+    cluster_quality: list[TimestampQualitySummary]
+    ticker_quality: list[TimestampQualitySummary]
     warnings: list[str] = field(default_factory=list)
 
 
@@ -102,36 +148,44 @@ def build_catalyst_cluster_report(
     outcomes_csv: Path = OUTCOMES_CSV,
 ) -> CatalystClusterReport:
     study_filter = study_filter or StudyFilter()
-    headlines, excluded_future_count = load_catalyst_headlines(
+    headlines, _future_count = load_catalyst_headlines(
         captures_dir=captures_dir,
         score_breakdowns_path=score_breakdowns_path,
         review_decisions_path=review_decisions_path,
         outcomes_csv=outcomes_csv,
     )
     filtered = filter_catalyst_headlines(headlines, study_filter)
+    excluded_future_count = sum(1 for headline in filtered if headline.timestamp_status == "future")
+    cluster_rows = [headline for headline in filtered if headline.timestamp_status != "future"]
     grouped: dict[str, list[CatalystHeadline]] = defaultdict(list)
-    for headline in filtered:
+    for headline in cluster_rows:
         grouped[headline.cluster_name].append(headline)
 
-    clusters = [
+    clusters = filter_cluster_summaries(
+        [
         summarize_catalyst_cluster(name, rows)
         for name, rows in sorted(grouped.items(), key=lambda item: (-len(item[1]), item[0]))
-    ]
+        ],
+        study_filter,
+    )
     warnings = []
     if excluded_future_count:
         warnings.append(f"Excluded {excluded_future_count} future-timestamp headline(s) from catalyst clustering.")
     if not headlines:
         warnings.append("No stored historical headlines found in active raw captures.")
-    if not filtered and headlines:
+    if not cluster_rows and headlines:
         warnings.append("Filters removed all stored historical headlines.")
     return CatalystClusterReport(
         label=CATALYST_RESEARCH_LABEL,
-        source="active raw captures + score-breakdowns.json + review-decisions.json + analysis-outcomes.csv",
-        total_headlines=len(filtered),
-        total_candidates=len({candidate_key(headline) for headline in filtered}),
+        source="active raw captures + score-breakdowns.json + review-decisions.json + analysis-outcomes.csv + catalyst age metrics",
+        total_headlines=sum(cluster.headline_count for cluster in clusters),
+        total_candidates=len({candidate_key(headline) for cluster in clusters for headline in cluster.headlines}),
         excluded_future_headlines=excluded_future_count,
         filters=study_filter,
         clusters=clusters,
+        provider_quality=summarize_timestamp_quality_by(filtered, "provider"),
+        cluster_quality=summarize_timestamp_quality_by(filtered, "cluster_name"),
+        ticker_quality=summarize_timestamp_quality_by(filtered, "ticker"),
         warnings=warnings,
     )
 
@@ -159,7 +213,7 @@ def load_catalyst_headlines(
         scanner = scanner_name(payload)
         mode = payload.get("mode", "")
         market_regime = (payload.get("market", {}).get("regime") or payload.get("scoring", {}).get("regime") or "unknown").lower()
-        classification = classify_capture(capture_time, session, capture_date=capture_date)
+        capture_classification = classify_capture(capture_time, session, capture_date=capture_date)
         sector_counts = Counter(str(item.get("sector", "") or "unknown") for item in payload.get("candidates", []))
         for candidate_payload in payload.get("candidates", []):
             ticker = str(candidate_payload.get("ticker", "")).upper()
@@ -195,7 +249,7 @@ def load_catalyst_headlines(
                 review_status=review.review_status.value if review else "unreviewed",
                 outcome=outcome,
                 score_components=common_component_labels(breakdown),
-                is_study_eligible=classification.is_study_eligible,
+                is_study_eligible=capture_classification.is_study_eligible,
                 sector_sympathy=sector_counts.get(sector, 0) >= 2,
             )
             candidate_news = candidate_payload.get("news", [])
@@ -209,10 +263,15 @@ def load_catalyst_headlines(
                 timestamp_status, age_hours = timestamp_status_and_age(news_item.get("published_at", ""), capture_dt)
                 if timestamp_status == "future":
                     future_count += 1
-                    continue
+                catalyst_classification = classify_catalyst_headline_detail(
+                    headline,
+                    sector=sector,
+                    industry=str(candidate_payload.get("industry", "")),
+                    sector_sympathy=sector_counts.get(sector, 0) >= 2,
+                )
                 rows.append(
                     CatalystHeadline(
-                        cluster_name=classify_catalyst_headline(headline, sector=sector, industry=str(candidate_payload.get("industry", "")), sector_sympathy=sector_counts.get(sector, 0) >= 2),
+                        cluster_name=catalyst_classification.cluster_name,
                         headline=headline,
                         ticker=ticker,
                         capture_time=capture_time,
@@ -237,8 +296,13 @@ def load_catalyst_headlines(
                         next_day_return_pct=parse_optional_float(outcome.get("next_day_return_pct", "")),
                         five_day_return_pct=parse_optional_float(outcome.get("five_day_return_pct", "")),
                         historical_theme=candidate_theme,
+                        classification_confidence=catalyst_classification.confidence_label,
+                        classification_confidence_score=catalyst_classification.confidence_score,
+                        classification_rule=catalyst_classification.rule_name,
+                        classification_match_type=catalyst_classification.match_type,
+                        fallback_reason=catalyst_classification.fallback_reason,
                         score_components=common_component_labels(breakdown),
-                        is_study_eligible=classification.is_study_eligible,
+                        is_study_eligible=capture_classification.is_study_eligible,
                     )
                 )
     return rows, future_count
@@ -266,6 +330,21 @@ def filter_catalyst_headlines(headlines: list[CatalystHeadline], study_filter: S
         filtered = [headline for headline in filtered if headline.review_status == study_filter.review_status]
     if study_filter.historical_cluster_theme != HISTORICAL_THEME_ALL:
         filtered = [headline for headline in filtered if headline.historical_theme == study_filter.historical_cluster_theme]
+    if study_filter.ticker:
+        filtered = [headline for headline in filtered if headline.ticker == study_filter.ticker.upper()]
+    if study_filter.catalyst_cluster != CATALYST_CLUSTER_ALL:
+        filtered = [headline for headline in filtered if headline.cluster_name == study_filter.catalyst_cluster]
+    if study_filter.minimum_confidence:
+        filtered = [headline for headline in filtered if headline.classification_confidence_score >= study_filter.minimum_confidence]
+    return filtered
+
+
+def filter_cluster_summaries(clusters: list[CatalystClusterSummary], study_filter: StudyFilter) -> list[CatalystClusterSummary]:
+    filtered = clusters
+    if study_filter.minimum_purity:
+        filtered = [cluster for cluster in filtered if cluster.purity_pct >= study_filter.minimum_purity]
+    if study_filter.minimum_timestamp_quality:
+        filtered = [cluster for cluster in filtered if cluster.timestamp_quality.exact_pct >= study_filter.minimum_timestamp_quality]
     return filtered
 
 
@@ -288,6 +367,19 @@ def summarize_catalyst_cluster(name: str, rows: list[CatalystHeadline]) -> Catal
     unknown_timestamps = sum(1 for row in rows if row.timestamp_status == "unknown")
     if unknown_timestamps:
         warnings.append(f"Timestamp unknown for {unknown_timestamps} headline(s); freshness not inferred.")
+    explicit_match_count = sum(1 for row in rows if row.classification_match_type == "explicit")
+    fallback_match_count = len(rows) - explicit_match_count
+    explicit_match_pct = percent(explicit_match_count, len(rows))
+    purity_pct = explicit_match_pct
+    timestamp_quality = summarize_timestamp_quality(name, rows)
+    confidence_scores = [row.classification_confidence_score for row in rows]
+    average_confidence_score = average(confidence_scores)
+    dominant_confidence = most_common_text([row.classification_confidence for row in rows], default="unknown")
+    if average_confidence_score is not None and average_confidence_score < LOW_CONFIDENCE_WARNING_SCORE:
+        warnings.append("LOW CONFIDENCE CLUSTER")
+    if purity_pct < LOW_PURITY_WARNING_PCT:
+        warnings.append("LOW PURITY CLUSTER")
+    warnings.extend(timestamp_quality.warnings)
     return CatalystClusterSummary(
         name=name,
         headline_count=len(rows),
@@ -302,6 +394,15 @@ def summarize_catalyst_cluster(name: str, rows: list[CatalystHeadline]) -> Catal
         representative_headlines=representative_headlines(rows),
         top_winners=ranked_tickers(rows, "gain"),
         worst_failures=ranked_tickers(rows, "drawdown"),
+        average_confidence_score=average_confidence_score,
+        dominant_confidence=dominant_confidence,
+        purity_pct=purity_pct,
+        explicit_match_count=explicit_match_count,
+        fallback_match_count=fallback_match_count,
+        explicit_match_pct=explicit_match_pct,
+        timestamp_quality=timestamp_quality,
+        common_rules=common_text_values([row.classification_rule for row in rows], limit=5),
+        fallback_reasons=common_text_values([row.fallback_reason for row in rows if row.fallback_reason], limit=5),
         warnings=warnings,
         headlines=sorted(rows, key=lambda row: (row.capture_time, row.ticker, row.headline)),
     )
@@ -356,42 +457,96 @@ def classify_candidate_theme(
 
 
 def classify_catalyst_headline(headline: str, *, sector: str, industry: str, sector_sympathy: bool) -> str:
+    return classify_catalyst_headline_detail(
+        headline,
+        sector=sector,
+        industry=industry,
+        sector_sympathy=sector_sympathy,
+    ).cluster_name
+
+
+def classify_catalyst_headline_detail(headline: str, *, sector: str, industry: str, sector_sympathy: bool) -> CatalystClassification:
     lowered = headline.lower()
-    if any(term in lowered for term in ["beats", "beat estimates", "tops estimates", "eps beat", "earnings beat", "record revenue"]):
-        return "Earnings beat"
-    if any(term in lowered for term in ["raises guidance", "raised guidance", "guidance raise", "raises outlook", "boosts outlook"]):
-        return "Guidance raise"
-    if any(term in lowered for term in ["earnings", "eps", "quarterly results", "guidance", "outlook"]):
-        return "Earnings/guidance general"
-    if any(term in lowered for term in ["upgrade", "upgraded", "initiated at buy", "initiates buy"]):
-        return "Analyst upgrade"
-    if any(term in lowered for term in ["price target", "target raise", "raised target", "target lifted"]):
-        return "Analyst target raise"
-    if any(term in lowered for term in ["downgrade", "downgraded", "cut to sell", "lowered rating"]):
-        return "Analyst downgrade"
-    if any(term in lowered for term in ["ai partnership", "artificial intelligence partnership"]):
-        return "AI partnership"
-    if any(term in f" {lowered} " for term in [" ai ", "artificial intelligence", "data center", "datacenter", "server", "gpu", "semiconductor"]):
-        return "AI infrastructure"
-    if any(term in lowered for term in ["contract", "customer win", "award", "partnership", "deal with", "selected by"]):
-        return "Contract / customer win"
-    if any(term in lowered for term in ["fda approval", "fda approves", "approved by fda", "clearance"]):
-        return "FDA approval"
-    if any(term in lowered for term in ["fda", "pdufa", "complete response", "resubmission"]):
-        return "FDA binary event"
-    if any(term in lowered for term in ["phase 3", "phase iii", "clinical", "trial data", "study results"]):
-        return "Biotech clinical data"
-    if any(term in lowered for term in ["acquisition", "acquires", "merger", "buyout", "takeover"]):
-        return "Merger / acquisition"
-    if any(term in lowered for term in ["fed", "inflation", "tariff", "jobs report", "cpi", "macro"]):
-        return "Macro-only"
-    if any(term in lowered for term in ["rumor", "speculation", "meme", "reddit", "short squeeze", "hype"]):
-        return "Weak / vague catalyst"
+    if any_term(lowered, ["beats", "beat estimates", "tops estimates", "eps beat", "earnings beat", "record revenue"]):
+        return explicit_classification("Earnings beat", 95, "earnings_beat")
+    if any_term(lowered, ["raises guidance", "raised guidance", "guidance raise", "raises outlook", "boosts outlook"]):
+        return explicit_classification("Guidance raise", 93, "guidance_raise")
+    if any_term(lowered, ["earnings", "eps", "quarterly results", "guidance", "outlook"]):
+        return explicit_classification("Earnings/guidance general", 78, "earnings_guidance_general")
+    if any_term(lowered, ["upgrade", "upgraded", "initiated at buy", "initiates buy"]):
+        return explicit_classification("Analyst upgrade", 90, "analyst_upgrade")
+    if any_term(lowered, ["price target", "target raise", "raised target", "target lifted", "raises target"]):
+        return explicit_classification("Analyst target raise", 86, "analyst_target_raise")
+    if any_term(lowered, ["downgrade", "downgraded", "cut to sell", "lowered rating"]):
+        return explicit_classification("Analyst downgrade", 90, "analyst_downgrade")
+    if any_term(lowered, ["ai partnership", "artificial intelligence partnership"]):
+        return explicit_classification("AI partnership", 92, "ai_partnership")
+    if any_term(f" {lowered} ", [" ai ", "artificial intelligence", "data center", "datacenter", "server", "gpu", "semiconductor", "accelerator chip"]):
+        return explicit_classification("AI infrastructure", 82, "ai_infrastructure")
+    if any_term(lowered, ["contract", "customer win", "award", "partnership", "deal with", "selected by", "multi-year agreement"]):
+        return explicit_classification("Contract / customer win", 84, "contract_customer_win")
+    if any_term(lowered, ["fda approval", "fda approves", "approved by fda", "clearance"]):
+        return explicit_classification("FDA approval", 95, "fda_approval")
+    if any_term(lowered, ["fda", "pdufa", "complete response", "resubmission"]):
+        return explicit_classification("FDA binary event", 88, "fda_binary_event")
+    if any_term(lowered, ["phase 3", "phase iii", "clinical", "trial data", "study results"]):
+        return explicit_classification("Biotech clinical data", 86, "biotech_clinical_data")
+    if any_term(lowered, ["acquisition", "acquires", "merger", "buyout", "takeover"]):
+        return explicit_classification("Merger / acquisition", 94, "merger_acquisition")
+    if any_term(lowered, ["launches", "launch", "unveils", "introduces", "rolls out", "new product", "platform"]):
+        return explicit_classification("Product / platform launch", 76, "product_platform_launch")
+    if any_term(lowered, ["offering", "share sale", "secondary", "convertible notes", "buyback", "repurchase", "debt offering"]):
+        return explicit_classification("Capital markets / financing", 78, "capital_markets_financing")
+    if any_term(lowered, ["lawsuit", "settlement", "sec investigation", "investigation", "antitrust", "regulatory probe"]):
+        return explicit_classification("Legal / regulatory", 78, "legal_regulatory")
+    if any_term(lowered, ["ceo", "cfo", "board", "restructuring", "layoffs", "strategic review"]):
+        return explicit_classification("Leadership / strategic update", 72, "leadership_strategic_update")
+    if any_term(lowered, ["joins s&p", "s&p 500", "nasdaq 100", "index inclusion", "added to index"]):
+        return explicit_classification("Index / fund flow", 80, "index_fund_flow")
+    if any_term(lowered, ["fed", "inflation", "tariff", "jobs report", "cpi", "macro"]):
+        return explicit_classification("Macro-only", 76, "macro_only")
+    if any_term(lowered, ["rumor", "speculation", "meme", "reddit", "short squeeze", "hype"]):
+        return explicit_classification("Weak / vague catalyst", 72, "weak_vague_explicit")
+    if any_term(lowered, ["stock jumps", "stock rises", "shares rise", "shares jump", "stock falls", "shares fall", "why", "moving today", "stock moves"]):
+        return explicit_classification("Price action / no catalyst detail", 58, "price_action_only")
     if sector_sympathy:
-        return "Sector sympathy"
+        return fallback_classification("Sector sympathy", 45, "sector_sympathy_fallback", "No explicit catalyst terms; ticker appeared with same-sector candidates.")
     if not headline or headline == "No stored headline":
-        return "No clear catalyst"
-    return "Unknown / uncategorized"
+        return fallback_classification("No clear catalyst", 20, "no_stored_headline", "No stored headline text was available.")
+    return fallback_classification("Unknown / uncategorized", 35, "unknown_uncategorized", "Headline did not match any explicit v2 rule.")
+
+
+def explicit_classification(cluster_name: str, score: int, rule_name: str) -> CatalystClassification:
+    return CatalystClassification(
+        cluster_name=cluster_name,
+        confidence_score=score,
+        confidence_label=confidence_label(score),
+        rule_name=rule_name,
+        match_type="explicit",
+    )
+
+
+def fallback_classification(cluster_name: str, score: int, rule_name: str, reason: str) -> CatalystClassification:
+    return CatalystClassification(
+        cluster_name=cluster_name,
+        confidence_score=score,
+        confidence_label=confidence_label(score),
+        rule_name=rule_name,
+        match_type="fallback",
+        fallback_reason=reason,
+    )
+
+
+def confidence_label(score: int) -> str:
+    if score >= 80:
+        return "HIGH"
+    if score >= 60:
+        return "MEDIUM"
+    return "LOW"
+
+
+def any_term(text: str, terms: list[str]) -> bool:
+    return any(term in text for term in terms)
 
 
 def catalyst_keywords_for_headline(text: str, *, sector_sympathy: bool) -> list[str]:
@@ -405,9 +560,16 @@ def catalyst_keywords_for_headline(text: str, *, sector_sympathy: bool) -> list[
         "Analyst downgrade": ["downgrade", "analyst"],
         "AI infrastructure": ["ai"],
         "AI partnership": ["ai"],
+        "Contract / customer win": ["contract"],
         "FDA approval": ["fda", "approval"],
         "FDA binary event": ["fda"],
         "Biotech clinical data": ["trial"],
+        "Product / platform launch": ["launch"],
+        "Capital markets / financing": ["financing"],
+        "Legal / regulatory": ["regulatory"],
+        "Leadership / strategic update": ["leadership"],
+        "Index / fund flow": ["index"],
+        "Price action / no catalyst detail": ["price action"],
         "Weak / vague catalyst": ["speculation"],
         "Sector sympathy": ["sector sympathy"],
     }
@@ -418,7 +580,9 @@ def timestamp_status_and_age(published_at: object, capture_dt: datetime | None) 
     if not published_at:
         return "unknown", None
     published_dt = parse_datetime(str(published_at))
-    if published_dt is None or capture_dt is None:
+    if published_dt is None:
+        return "invalid", None
+    if capture_dt is None:
         return "unknown", None
     if published_dt > capture_dt:
         return "future", None
@@ -444,6 +608,58 @@ def representative_headlines(rows: list[CatalystHeadline], limit: int = 3) -> li
         headline
         for headline, _count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
     ]
+
+
+def summarize_timestamp_quality_by(rows: list[CatalystHeadline], field_name: str) -> list[TimestampQualitySummary]:
+    grouped: dict[str, list[CatalystHeadline]] = defaultdict(list)
+    for row in rows:
+        grouped[getattr(row, field_name)].append(row)
+    summaries = [summarize_timestamp_quality(name or "unknown", grouped_rows) for name, grouped_rows in grouped.items()]
+    return sorted(summaries, key=lambda item: (-item.headline_count, item.group))
+
+
+def summarize_timestamp_quality(group: str, rows: list[CatalystHeadline]) -> TimestampQualitySummary:
+    total = len(rows)
+    exact_count = sum(1 for row in rows if row.timestamp_status == "known")
+    unknown_count = sum(1 for row in rows if row.timestamp_status == "unknown")
+    future_count = sum(1 for row in rows if row.timestamp_status == "future")
+    invalid_count = sum(1 for row in rows if row.timestamp_status == "invalid")
+    unknown_pct = percent(unknown_count, total)
+    future_pct = percent(future_count, total)
+    warnings = []
+    if unknown_pct >= HIGH_UNKNOWN_TIMESTAMP_WARNING_PCT and unknown_count:
+        warnings.append("HIGH UNKNOWN TIMESTAMP RATE")
+    if future_pct >= HIGH_FUTURE_TIMESTAMP_WARNING_PCT and future_count:
+        warnings.append("HIGH FUTURE TIMESTAMP RATE")
+    return TimestampQualitySummary(
+        group=group,
+        headline_count=total,
+        exact_count=exact_count,
+        unknown_count=unknown_count,
+        future_count=future_count,
+        invalid_count=invalid_count,
+        exact_pct=percent(exact_count, total),
+        unknown_pct=unknown_pct,
+        future_pct=future_pct,
+        invalid_pct=percent(invalid_count, total),
+        warnings=warnings,
+    )
+
+
+def common_text_values(values: list[str], limit: int = 5) -> list[str]:
+    counts = Counter(value for value in values if value)
+    return [value for value, _count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]]
+
+
+def most_common_text(values: list[str], *, default: str = "") -> str:
+    common = common_text_values(values, limit=1)
+    return common[0] if common else default
+
+
+def percent(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round((numerator / denominator) * 100, 2)
 
 
 def ranked_tickers(rows: list[CatalystHeadline], metric: str) -> list[str]:

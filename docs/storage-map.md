@@ -132,13 +132,26 @@ Cluster metrics use only available outcome labels. Missing outcome data and smal
 
 Catalyst clusters are labeled `CATALYST CLUSTERS — RESEARCH ONLY`.
 
-The v1 catalyst engine is deterministic. It uses rule-based headline classification only and does not call AI services, fetch current market data, recalculate historical scores, start optimizer work, write SQLite records, or touch broker APIs.
+The v2 catalyst engine is deterministic. It uses rule-based headline classification only and does not call AI services, fetch current market data, recalculate historical scores, start optimizer work, write SQLite records, or touch broker APIs.
+
+The v2 report adds derived in-memory research metrics:
+
+- classification confidence: deterministic `HIGH`, `MEDIUM`, or `LOW` plus a numeric rule score
+- explicit rule used: the matching rule name for explicitly classified headlines
+- fallback reason: why the engine fell back to Sector Sympathy, No Clear Catalyst, or Unknown/Uncategorized
+- purity: percent of cluster headlines supported by explicit rules instead of fallback classification
+- explicit/fallback match counts and explicit match percentage
+- provider timestamp quality: exact, unknown, future, and invalid timestamp rates by provider, catalyst cluster, and ticker
+
+These metrics are generated at view/report time from stored data and are not persisted into raw captures.
 
 Headline timestamps are interpreted only relative to the capture time:
 
 - known timestamp: article age is calculated at capture time
 - missing timestamp: freshness is `UNKNOWN_TIMESTAMP`
 - future timestamp: headline is excluded from catalyst clustering and counted in report warnings
+
+Future timestamp rows remain visible in timestamp-quality summaries, but they are excluded from the cluster rows used for catalyst research and freshness-style analysis.
 
 Outcome values in the catalyst detail view are post-capture labels from `analysis-outcomes.csv`. They are displayed for research context only and must not be treated as information known during the capture.
 

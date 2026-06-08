@@ -191,6 +191,131 @@ class CatalystClusterTests(unittest.TestCase):
         self.assertEqual("Known earnings beat article", report.clusters[0].headlines[0].headline)
         self.assertEqual("HOT", report.clusters[0].headlines[0].freshness_label)
 
+    def test_confidence_purity_and_fallback_labels_are_deterministic(self) -> None:
+        payload = capture_payload(
+            "2026-06-05T07:00:00-05:00",
+            "morning",
+            "Base Momentum",
+            "MDT",
+            "Healthcare",
+            "Medical Devices",
+            96,
+            [
+                news("Medtronic beats earnings", "2026-06-05T06:30:00-05:00"),
+                news("Medtronic stock moves today", "2026-06-05T06:45:00-05:00"),
+            ],
+        )
+        sector_peer = capture_payload(
+            "2026-06-05T07:00:00-05:00",
+            "morning",
+            "Base Momentum",
+            "ABCL",
+            "Healthcare",
+            "Biotechnology",
+            72,
+            [news("ABCL announces update", "2026-06-05T06:40:00-05:00")],
+        )
+        payload["candidates"].extend(sector_peer["candidates"])
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", payload)
+
+        first = build_catalyst_cluster_report(
+            captures_dir=self.captures_dir,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+        second = build_catalyst_cluster_report(
+            captures_dir=self.captures_dir,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+        first_metrics = [(cluster.name, cluster.purity_pct, cluster.average_confidence_score, cluster.explicit_match_count, cluster.fallback_match_count) for cluster in first.clusters]
+        second_metrics = [(cluster.name, cluster.purity_pct, cluster.average_confidence_score, cluster.explicit_match_count, cluster.fallback_match_count) for cluster in second.clusters]
+
+        self.assertEqual(first_metrics, second_metrics)
+        clusters = {cluster.name: cluster for cluster in first.clusters}
+        self.assertEqual(100.0, clusters["Earnings beat"].purity_pct)
+        self.assertEqual("HIGH", clusters["Earnings beat"].dominant_confidence)
+        self.assertEqual(0.0, clusters["Sector sympathy"].purity_pct)
+        self.assertEqual("LOW", clusters["Sector sympathy"].dominant_confidence)
+        self.assertEqual("fallback", clusters["Sector sympathy"].headlines[0].classification_match_type)
+        self.assertIn("No explicit catalyst terms", clusters["Sector sympathy"].headlines[0].fallback_reason)
+
+    def test_provider_timestamp_quality_is_deterministic_and_counts_future_rows(self) -> None:
+        payload = capture_payload(
+            "2026-06-05T07:00:00-05:00",
+            "morning",
+            "Base Momentum",
+            "MDT",
+            "Healthcare",
+            "Medical Devices",
+            96,
+            [
+                news("Known earnings beat article", "2026-06-05T06:30:00-05:00"),
+                news("Unknown earnings beat article", ""),
+                news("Future earnings beat article", "2026-06-05T08:30:00-05:00"),
+                news("Invalid earnings beat article", "not-a-date"),
+            ],
+        )
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", payload)
+
+        report = build_catalyst_cluster_report(
+            captures_dir=self.captures_dir,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+        provider_quality = report.provider_quality[0]
+
+        self.assertEqual("finviz", provider_quality.group)
+        self.assertEqual(4, provider_quality.headline_count)
+        self.assertEqual(1, provider_quality.exact_count)
+        self.assertEqual(1, provider_quality.unknown_count)
+        self.assertEqual(1, provider_quality.future_count)
+        self.assertEqual(1, provider_quality.invalid_count)
+        self.assertEqual(25.0, provider_quality.exact_pct)
+        self.assertEqual(1, report.excluded_future_headlines)
+        self.assertEqual(3, report.total_headlines)
+        self.assertTrue(any("future-timestamp" in warning for warning in report.warnings))
+
+    def test_confidence_purity_and_timestamp_quality_filters_are_applied(self) -> None:
+        payload = capture_payload(
+            "2026-06-05T07:00:00-05:00",
+            "morning",
+            "Base Momentum",
+            "MDT",
+            "Healthcare",
+            "Medical Devices",
+            96,
+            [
+                news("Medtronic beats earnings", "2026-06-05T06:30:00-05:00"),
+                news("Medtronic announces update", ""),
+            ],
+        )
+        peer = capture_payload(
+            "2026-06-05T07:00:00-05:00",
+            "morning",
+            "Base Momentum",
+            "ABCL",
+            "Healthcare",
+            "Biotechnology",
+            72,
+            [news("ABCL announces update", "")],
+        )
+        payload["candidates"].extend(peer["candidates"])
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", payload)
+
+        report = build_catalyst_cluster_report(
+            study_filter=StudyFilter(minimum_confidence=80, minimum_purity=90, minimum_timestamp_quality=90),
+            captures_dir=self.captures_dir,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        self.assertEqual(["Earnings beat"], [cluster.name for cluster in report.clusters])
+
 
 def capture_payload(capture_time: str, session: str, scanner: str, ticker: str, sector: str, industry: str, score: int, headlines: list[dict]) -> dict:
     return {

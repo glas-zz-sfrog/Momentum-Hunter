@@ -18,6 +18,8 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 - Historical replay overlay showing catalyst age beside original candidate score
 - News freshness weighting
 - Headline classification improvements
+- Headline deduplication across syndicated articles
+- Source-level timestamp reliability scoring
 - Earnings calendar integration
 - Analyst recommendation tracking
 - Newsletter ingestion
