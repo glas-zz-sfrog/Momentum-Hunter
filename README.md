@@ -288,6 +288,18 @@ Comparison tables show performance by score bucket, market regime, scanner, sect
 
 Outcome Explorer excludes quarantined captures and non-study-eligible captures by default. Enable non-trading-day/preopen inclusion only when deliberately researching those observations.
 
+## Opportunity Research
+
+The Study Engine includes an `Opportunity Research` tab labeled `OPPORTUNITY RESEARCH — RESEARCH ONLY`.
+
+Opportunity Research v1 is a measurement framework for discovering which stored conditions appear predictive after enough outcomes mature. It uses active raw captures and derived context from `analysis-captures.csv`, `analysis-outcomes.csv`, `score-breakdowns.json`, `review-decisions.json`, catalyst clusters, catalyst age metrics, and headline dedup/source reliability metrics.
+
+It does not create Opportunity Score, optimize weights, change `momentum_score_v1`, alter `scoring_profiles.json`, fetch current market data, mutate raw captures, start broker integration, or start SQLite migration.
+
+The tab groups post-capture outcomes by score bucket, market regime, scanner, sector, industry, catalyst cluster, catalyst confidence, cluster purity, catalyst age bucket, review status, source reliability bucket, duplicate-rate bucket, and selected combinations. Ranking tables show best performing, worst performing, most pending, highest max gain, and highest drawdown conditions.
+
+If completed outcomes are too low, the UI says `Insufficient completed outcomes for conclusions.` Pending outcomes are counted but are never treated as wins, losses, or completed-return observations.
+
 ## Legacy Capture Cleanup
 
 If a non-market-day `morning` or `evening` raw capture is accidentally created beside a valid `preopen` capture, use the cleanup command to quarantine the unwanted raw files and rebuild/prune derived CSV rows without editing raw captures:

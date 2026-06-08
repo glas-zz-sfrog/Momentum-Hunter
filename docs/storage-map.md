@@ -200,6 +200,25 @@ Outcome Explorer excludes quarantined captures by requiring each outcome row to 
 
 No new persisted outcome-explorer store is created in v1. The report is rebuilt from immutable raw captures and derived stores at view/report time.
 
+## Opportunity Research
+
+- UI location: Study Engine dialog, `Opportunity Research` tab
+- Data layer: `momentum_hunter/opportunity_research.py`
+- Source inputs: active immutable raw captures, `analysis-captures.csv`, `analysis-outcomes.csv`, `score-breakdowns.json`, `review-decisions.json`, catalyst cluster context, catalyst age context, and headline dedup/source reliability context
+- Mutability: research-only view; opportunity research reads stored data and does not mutate raw captures or derived stores
+
+Opportunity Research is labeled `OPPORTUNITY RESEARCH — RESEARCH ONLY`.
+
+Opportunity Research v1 creates no new persisted store. It is a report-time measurement framework over stored data and post-capture outcome labels.
+
+The framework groups outcomes by score bucket, market regime, scanner preset, sector, industry, catalyst cluster, catalyst confidence, cluster purity, catalyst age bucket, review status, source reliability bucket, duplicate-rate bucket, and selected combinations.
+
+Outcome values are post-capture labels from `analysis-outcomes.csv`, not capture-time facts. Pending outcomes are counted as pending but excluded from completed-return math and are never treated as wins or losses.
+
+Opportunity Research excludes quarantined captures by using active raw-capture identities inherited from Outcome Explorer. It excludes non-study-eligible captures by default unless the user explicitly enables non-trading-day/preopen inclusion.
+
+Opportunity Research v1 does not create Opportunity Score, optimize weights, alter scoring profiles, fetch current market data, mutate raw captures, start broker integration, or start SQLite migration.
+
 ## Catalyst Date / Age Engine
 
 - UI location: Study Engine dialog, `Catalyst Age` tab

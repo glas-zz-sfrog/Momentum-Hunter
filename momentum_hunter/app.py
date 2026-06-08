@@ -80,6 +80,11 @@ from momentum_hunter.outcome_explorer import (
     OutcomeExplorerReport,
     build_outcome_explorer_report,
 )
+from momentum_hunter.opportunity_research import (
+    OPPORTUNITY_RESEARCH_LABEL,
+    OpportunityResearchReport,
+    build_opportunity_research_report,
+)
 from momentum_hunter.providers import ProviderUnavailableError, provider_from_name
 from momentum_hunter.recommendations import RecommendationReport, build_weight_recommendations
 from momentum_hunter.replay import TimelineRow, build_candidate_timeline, build_replay_view_model
@@ -1831,6 +1836,13 @@ class MomentumHunterWindow(QMainWindow):
                 ),
                 "Outcome Explorer",
             )
+            chart_tabs.addTab(
+                build_opportunity_research_panel(
+                    build_opportunity_research_report(study_filter=current_study_filter()),
+                    filtered_style,
+                ),
+                "Opportunity Research",
+            )
             chart_tabs.addTab(build_recommendation_panel(build_weight_recommendations(), filtered_style), "Recommendations")
 
             bucket_table.setRowCount(len(filtered.score_buckets))
@@ -2769,6 +2781,135 @@ def build_outcome_explorer_panel(report: OutcomeExplorerReport, style: DataViewS
     tabs.addTab(build_outcome_candidate_table(report, style), "Candidates")
     layout.addWidget(tabs, 1)
     return panel
+
+
+def build_opportunity_research_panel(report: OpportunityResearchReport, style: DataViewStyle) -> QWidget:
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    status = QLabel(
+        f"{style.chart_prefix}{OPPORTUNITY_RESEARCH_LABEL} | "
+        f"Candidates: {report.summary.candidate_count} | Completed: {report.summary.completed_outcome_count} | "
+        f"Pending: {report.summary.pending_outcome_count} | Source: {report.source}"
+    )
+    status.setObjectName("criteriaLabel")
+    status.setWordWrap(True)
+    layout.addWidget(status)
+
+    if report.summary.completed_outcome_count < 30:
+        insufficient = QLabel("Insufficient completed outcomes for conclusions.")
+        insufficient.setWordWrap(True)
+        insufficient.setStyleSheet("color: #fcd34d; font-weight: 800;")
+        layout.addWidget(insufficient)
+
+    if report.warnings:
+        warning = QLabel(" | ".join(report.warnings))
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        layout.addWidget(warning)
+
+    tabs = QTabWidget()
+    tabs.addTab(build_opportunity_summary_table(report, style), "Summary")
+    tabs.addTab(build_opportunity_condition_table(report.condition_rows, style), "Conditions")
+    tabs.addTab(build_opportunity_condition_table(report.best_performing_conditions, style), "Best Performing")
+    tabs.addTab(build_opportunity_condition_table(report.worst_performing_conditions, style), "Worst Performing")
+    tabs.addTab(build_opportunity_condition_table(report.most_pending_conditions, style), "Most Pending")
+    tabs.addTab(build_opportunity_condition_table(report.highest_max_gain_conditions, style), "Highest Max Gain")
+    tabs.addTab(build_opportunity_condition_table(report.highest_drawdown_conditions, style), "Highest Drawdown")
+    tabs.addTab(build_opportunity_condition_table(report.combination_rows, style), "Combinations")
+    layout.addWidget(tabs, 1)
+    return panel
+
+
+def build_opportunity_summary_table(report: OpportunityResearchReport, style: DataViewStyle) -> QTableWidget:
+    summary = report.summary
+    rows = [
+        ("Label", report.label),
+        ("Candidate count", str(summary.candidate_count)),
+        ("Completed outcome count", str(summary.completed_outcome_count)),
+        ("Pending outcome count", str(summary.pending_outcome_count)),
+        ("Pending rate", format_percent((summary.pending_outcome_count / summary.candidate_count) * 100 if summary.candidate_count else None)),
+        ("Average next-day return", format_percent(summary.average_next_day_return_pct)),
+        ("Median next-day return", format_percent(summary.median_next_day_return_pct)),
+        ("Average five-day return", format_percent(summary.average_five_day_return_pct)),
+        ("Median five-day return", format_percent(summary.median_five_day_return_pct)),
+        ("Average max gain", format_percent(summary.average_max_gain_pct)),
+        ("Average max drawdown", format_percent(summary.average_max_drawdown_pct)),
+        ("Win rate", format_percent(summary.win_rate_pct)),
+        ("Best winner", summary.best_winner),
+        ("Worst loser", summary.worst_loser),
+        ("Warnings", " | ".join(report.warnings)),
+        ("Research note", "Post-capture outcomes only. Research-only. Do not use for trading decisions yet."),
+    ]
+    table = QTableWidget(len(rows), 2)
+    table.setHorizontalHeaderLabels(["Metric", "Value"])
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    for row, (metric, value) in enumerate(rows):
+        table.setItem(row, 0, QTableWidgetItem(metric))
+        item = QTableWidgetItem(value)
+        if metric == "Warnings" and value:
+            item.setBackground(QBrush(QColor("#735f24")))
+        table.setItem(row, 1, item)
+    return table
+
+
+def build_opportunity_condition_table(rows, style: DataViewStyle) -> QTableWidget:
+    table = QTableWidget(max(1, len(rows)), 15)
+    table.setHorizontalHeaderLabels(
+        [
+            "Dimension",
+            "Condition",
+            "Candidates",
+            "Completed",
+            "Pending",
+            "Pending Rate",
+            "Avg Next",
+            "Median Next",
+            "Avg 5-Day",
+            "Median 5-Day",
+            "Avg Max Gain",
+            "Avg Max Drawdown",
+            "Win Rate",
+            "Best / Worst",
+            "Warnings",
+        ]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    if not rows:
+        values = ["No rows", "", "0", "0", "0", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "Insufficient completed outcomes for conclusions."]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, item_summary in enumerate(rows):
+            values = [
+                item_summary.dimension,
+                item_summary.condition,
+                str(item_summary.candidate_count),
+                str(item_summary.completed_count),
+                str(item_summary.pending_count),
+                format_percent(item_summary.pending_rate_pct),
+                format_percent(item_summary.average_next_day_return_pct),
+                format_percent(item_summary.median_next_day_return_pct),
+                format_percent(item_summary.average_five_day_return_pct),
+                format_percent(item_summary.median_five_day_return_pct),
+                format_percent(item_summary.average_max_gain_pct),
+                format_percent(item_summary.average_max_drawdown_pct),
+                format_percent(item_summary.win_rate_pct),
+                f"{item_summary.best_winner} / {item_summary.worst_loser}",
+                " | ".join(item_summary.warnings),
+            ]
+            for column, value in enumerate(values):
+                cell = QTableWidgetItem(value)
+                if item_summary.warnings:
+                    cell.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, cell)
+    table.resizeColumnsToContents()
+    return table
 
 
 def build_outcome_summary_table(report: OutcomeExplorerReport, style: DataViewStyle) -> QTableWidget:

@@ -5,6 +5,10 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 ## Research Engine
 
 - Opportunity Score
+- Opportunity Score v1 should only be designed after sufficient completed outcomes exist
+- Walk-forward Opportunity Score validation
+- Regime-specific Opportunity Score research
+- Minimum sample-size thresholds before recommendations
 - Score Weight Optimization with walk-forward testing
 - Regime-specific scoring profiles
 - Engine version comparison

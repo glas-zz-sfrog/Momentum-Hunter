@@ -4,6 +4,24 @@
 
 ### Added
 
+- Added Opportunity Research Framework v1.
+- Added `Opportunity Research` Study Engine tab with summary, condition grouping, ranking, and combination-analysis views.
+- Added condition analysis by score bucket, market regime, scanner preset, sector, industry, catalyst cluster, catalyst confidence, cluster purity, catalyst age bucket, review status, source reliability bucket, and duplicate-rate bucket.
+- Added ranking tables for best performing, worst performing, most pending, highest max gain, and highest drawdown conditions.
+- Added combination analysis for regime+catalyst, score+catalyst confidence, score+cluster purity, and review+catalyst conditions.
+
+### Safety
+
+- Opportunity Research v1 is research-only and does not create Opportunity Score, optimize weights, alter `momentum_score_v1`, alter `scoring_profiles.json`, fetch current market data, mutate raw captures, start broker integration, or write SQLite records.
+- Pending outcomes are counted but excluded from completed-return math and are never treated as wins or losses.
+- The UI displays `Insufficient completed outcomes for conclusions.` when completed outcomes are too low.
+
+### Tests
+
+- Added tests for deterministic groupings/rankings, pending exclusion, low-sample warnings, raw-capture immutability, quarantined capture exclusion, non-study default exclusion, and post-capture outcome separation.
+
+### Added
+
 - Added Outcome Explorer v1.
 - Added `Outcome Explorer` Study Engine tab with summary, score bucket, regime, scanner, sector, review-status, catalyst-cluster, catalyst-age-bucket, cluster-purity, and candidate detail views.
 - Added outcome filters for score bucket and industry alongside existing date, ticker, score, regime, scanner, sector, review, cluster, confidence, purity, timestamp status, age bucket, and study-eligibility filters.
