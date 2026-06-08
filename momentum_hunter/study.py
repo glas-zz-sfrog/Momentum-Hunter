@@ -21,6 +21,7 @@ HISTORICAL_THEME_ALL = "all historical themes"
 CATALYST_CLUSTER_ALL = "all catalyst clusters"
 TIMESTAMP_STATUS_ALL = "all timestamp statuses"
 AGE_BUCKET_ALL = "all age buckets"
+SCORE_BUCKET_ALL = "all score buckets"
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,8 @@ class StudyFilter:
     minimum_timestamp_quality: int = 0
     source: str = ""
     minimum_duplicate_count: int = 0
+    score_bucket: str = SCORE_BUCKET_ALL
+    industry: str = ""
 
     def label(self) -> str:
         parts = [self.row_filter]
@@ -60,6 +63,10 @@ class StudyFilter:
             parts.append(self.sector)
         if self.minimum_score:
             parts.append(f"score >= {self.minimum_score}")
+        if self.score_bucket != SCORE_BUCKET_ALL:
+            parts.append(self.score_bucket)
+        if self.industry:
+            parts.append(f"industry contains {self.industry}")
         if self.review_status != REVIEW_ALL:
             parts.append(self.review_status)
         if self.historical_cluster_theme != HISTORICAL_THEME_ALL:

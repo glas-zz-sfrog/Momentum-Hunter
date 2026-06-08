@@ -22,6 +22,10 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 - Source-level timestamp reliability scoring
 - Use source reliability as a confidence factor in future freshness analysis
 - Use source reliability as an input to future catalyst quality, Opportunity Score, and research weighting
+- Semantic event clustering
+- Near-duplicate headline detection
+- Multi-source catalyst consolidation
+- Headline-to-event confidence scoring
 - Earnings calendar integration
 - Analyst recommendation tracking
 - Newsletter ingestion
@@ -51,7 +55,6 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 
 ## Study Engine
 
-- Outcome Explorer
 - Outcome distribution analysis
 - Trade expectancy analysis
 - Position sizing helper

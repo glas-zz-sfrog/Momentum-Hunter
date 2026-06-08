@@ -75,6 +75,11 @@ from momentum_hunter.news_age import (
     news_stack_badge,
     news_stack_summary,
 )
+from momentum_hunter.outcome_explorer import (
+    OUTCOME_EXPLORER_LABEL,
+    OutcomeExplorerReport,
+    build_outcome_explorer_report,
+)
 from momentum_hunter.providers import ProviderUnavailableError, provider_from_name
 from momentum_hunter.recommendations import RecommendationReport, build_weight_recommendations
 from momentum_hunter.replay import TimelineRow, build_candidate_timeline, build_replay_view_model
@@ -121,6 +126,7 @@ from momentum_hunter.study import (
     SCANNER_ALL,
     SECTOR_ALL,
     SESSION_ALL,
+    SCORE_BUCKET_ALL,
     StudyFilter,
     StudySummary,
     TIMESTAMP_STATUS_ALL,
@@ -1580,6 +1586,14 @@ class MomentumHunterWindow(QMainWindow):
         sector_edit = QLineEdit()
         sector_edit.setPlaceholderText("all sectors")
         cluster_filter_layout.addWidget(sector_edit)
+        cluster_filter_layout.addWidget(QLabel("Industry"))
+        industry_edit = QLineEdit()
+        industry_edit.setPlaceholderText("all industries")
+        cluster_filter_layout.addWidget(industry_edit)
+        cluster_filter_layout.addWidget(QLabel("Score Bucket"))
+        score_bucket_combo = QComboBox()
+        score_bucket_combo.addItems([SCORE_BUCKET_ALL, "0-49", "50-69", "70-84", "85-100"])
+        cluster_filter_layout.addWidget(score_bucket_combo)
         cluster_filter_layout.addWidget(QLabel("Min Score"))
         minimum_score_edit = QLineEdit()
         minimum_score_edit.setPlaceholderText("0")
@@ -1753,6 +1767,8 @@ class MomentumHunterWindow(QMainWindow):
                 scanner=scanner_edit.text().strip() or SCANNER_ALL,
                 sector=sector_edit.text().strip() or SECTOR_ALL,
                 minimum_score=minimum_score,
+                score_bucket=score_bucket_combo.currentText(),
+                industry=industry_edit.text().strip(),
                 review_status=review_combo.currentText(),
                 historical_cluster_theme=theme_combo.currentText(),
                 ticker=ticker_edit.text().strip().upper(),
@@ -1808,6 +1824,13 @@ class MomentumHunterWindow(QMainWindow):
                 ),
                 "Headline Dedup",
             )
+            chart_tabs.addTab(
+                build_outcome_explorer_panel(
+                    build_outcome_explorer_report(study_filter=current_study_filter()),
+                    filtered_style,
+                ),
+                "Outcome Explorer",
+            )
             chart_tabs.addTab(build_recommendation_panel(build_weight_recommendations(), filtered_style), "Recommendations")
 
             bucket_table.setRowCount(len(filtered.score_buckets))
@@ -1836,6 +1859,8 @@ class MomentumHunterWindow(QMainWindow):
         regime_combo.currentTextChanged.connect(refresh_study_view)
         scanner_edit.editingFinished.connect(refresh_study_view)
         sector_edit.editingFinished.connect(refresh_study_view)
+        industry_edit.editingFinished.connect(refresh_study_view)
+        score_bucket_combo.currentTextChanged.connect(refresh_study_view)
         minimum_score_edit.editingFinished.connect(refresh_study_view)
         review_combo.currentTextChanged.connect(refresh_study_view)
         theme_combo.currentTextChanged.connect(refresh_study_view)
@@ -2709,6 +2734,188 @@ def build_headline_dedup_panel(report: HeadlineDedupReport, style: DataViewStyle
     tabs.addTab(build_dedup_impact_table(report.ticker_impact, style, "Ticker"), "Ticker Impact")
     layout.addWidget(tabs, 1)
     return panel
+
+
+def build_outcome_explorer_panel(report: OutcomeExplorerReport, style: DataViewStyle) -> QWidget:
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    status = QLabel(
+        f"{style.chart_prefix}{OUTCOME_EXPLORER_LABEL} | "
+        f"Candidates: {report.summary.candidate_count} | Completed: {report.summary.completed_outcome_count} | "
+        f"Pending: {report.summary.pending_outcome_count} | Source: {report.source}"
+    )
+    status.setObjectName("criteriaLabel")
+    status.setWordWrap(True)
+    layout.addWidget(status)
+
+    if report.warnings:
+        warning = QLabel(" | ".join(report.warnings))
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        layout.addWidget(warning)
+
+    tabs = QTabWidget()
+    tabs.addTab(build_outcome_summary_table(report, style), "Summary")
+    tabs.addTab(build_outcome_performance_table(report.score_bucket_performance, style, "Score Bucket"), "Score Buckets")
+    tabs.addTab(build_outcome_performance_table(report.regime_performance, style, "Regime"), "Regimes")
+    tabs.addTab(build_outcome_performance_table(report.scanner_performance, style, "Scanner"), "Scanners")
+    tabs.addTab(build_outcome_performance_table(report.sector_performance, style, "Sector"), "Sectors")
+    tabs.addTab(build_outcome_performance_table(report.review_status_performance, style, "Review Status"), "Reviews")
+    tabs.addTab(build_outcome_performance_table(report.catalyst_cluster_performance, style, "Catalyst Cluster"), "Catalysts")
+    tabs.addTab(build_outcome_performance_table(report.catalyst_age_bucket_performance, style, "Age Bucket"), "Ages")
+    tabs.addTab(build_outcome_performance_table(report.cluster_purity_performance, style, "Purity Bucket"), "Purity")
+    tabs.addTab(build_outcome_candidate_table(report, style), "Candidates")
+    layout.addWidget(tabs, 1)
+    return panel
+
+
+def build_outcome_summary_table(report: OutcomeExplorerReport, style: DataViewStyle) -> QTableWidget:
+    summary = report.summary
+    rows = [
+        ("Label", report.label),
+        ("Candidate count", str(summary.candidate_count)),
+        ("Completed outcome count", str(summary.completed_outcome_count)),
+        ("Pending outcome count", str(summary.pending_outcome_count)),
+        ("Average next-day return", format_percent(summary.average_next_day_return_pct)),
+        ("Median next-day return", format_percent(summary.median_next_day_return_pct)),
+        ("Average five-day return", format_percent(summary.average_five_day_return_pct)),
+        ("Median five-day return", format_percent(summary.median_five_day_return_pct)),
+        ("Average max gain", format_percent(summary.average_max_gain_pct)),
+        ("Average max drawdown", format_percent(summary.average_max_drawdown_pct)),
+        ("Win rate", format_percent(summary.win_rate_pct)),
+        ("Best winner", summary.best_winner),
+        ("Worst loser", summary.worst_loser),
+        ("Warnings", " | ".join(summary.warnings)),
+        ("Post-capture data note", "Outcome values are labels from analysis-outcomes.csv, not capture-time facts."),
+    ]
+    table = QTableWidget(len(rows), 2)
+    table.setHorizontalHeaderLabels(["Metric", "Value"])
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    for row, (metric, value) in enumerate(rows):
+        item = QTableWidgetItem(value)
+        if metric == "Warnings" and value:
+            item.setBackground(QBrush(QColor("#735f24")))
+        table.setItem(row, 0, QTableWidgetItem(metric))
+        table.setItem(row, 1, item)
+    return table
+
+
+def build_outcome_performance_table(rows, style: DataViewStyle, label: str) -> QTableWidget:
+    table = QTableWidget(max(1, len(rows)), 13)
+    table.setHorizontalHeaderLabels(
+        [
+            label,
+            "Candidates",
+            "Completed",
+            "Pending",
+            "Avg Next",
+            "Median Next",
+            "Avg 5-Day",
+            "Median 5-Day",
+            "Avg Max Gain",
+            "Avg Max Drawdown",
+            "Win Rate",
+            "Best / Worst",
+            "Warnings",
+        ]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    if not rows:
+        values = ["No rows", "0", "0", "0", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", ""]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, item_summary in enumerate(rows):
+            values = [
+                item_summary.group,
+                str(item_summary.candidate_count),
+                str(item_summary.completed_count),
+                str(item_summary.pending_count),
+                format_percent(item_summary.average_next_day_return_pct),
+                format_percent(item_summary.median_next_day_return_pct),
+                format_percent(item_summary.average_five_day_return_pct),
+                format_percent(item_summary.median_five_day_return_pct),
+                format_percent(item_summary.average_max_gain_pct),
+                format_percent(item_summary.average_max_drawdown_pct),
+                format_percent(item_summary.win_rate_pct),
+                f"{item_summary.best_winner} / {item_summary.worst_loser}",
+                " | ".join(item_summary.warnings),
+            ]
+            for column, value in enumerate(values):
+                cell = QTableWidgetItem(value)
+                if item_summary.warnings:
+                    cell.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, cell)
+    table.resizeColumnsToContents()
+    return table
+
+
+def build_outcome_candidate_table(report: OutcomeExplorerReport, style: DataViewStyle) -> QTableWidget:
+    table = QTableWidget(max(1, len(report.candidates)), 18)
+    table.setHorizontalHeaderLabels(
+        [
+            "Capture",
+            "Ticker",
+            "Score",
+            "Bucket",
+            "Regime",
+            "Scanner",
+            "Sector",
+            "Industry",
+            "Review",
+            "Historical Cluster",
+            "Catalyst Cluster",
+            "Catalyst Confidence",
+            "Purity",
+            "Age Bucket",
+            "Outcome Status",
+            "Next",
+            "5-Day",
+            "Post-Capture Note",
+        ]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    if not report.candidates:
+        values = ["No candidates", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "Filters removed all outcome rows."]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, candidate in enumerate(report.candidates):
+            values = [
+                f"{candidate.capture_date} {candidate.session}",
+                candidate.ticker,
+                str(candidate.score),
+                candidate.score_bucket,
+                candidate.market_regime,
+                candidate.scanner,
+                candidate.sector,
+                candidate.industry,
+                candidate.review_status,
+                candidate.historical_cluster,
+                candidate.catalyst_cluster,
+                f"{candidate.catalyst_confidence} {format_number(candidate.catalyst_confidence_score)}",
+                format_percent(candidate.cluster_purity_pct),
+                candidate.age_bucket,
+                candidate.outcome_status,
+                format_percent(candidate.next_day_return_pct),
+                format_percent(candidate.five_day_return_pct),
+                "post-capture label",
+            ]
+            for column, value in enumerate(values):
+                cell = QTableWidgetItem(value)
+                if candidate.outcome_status != "complete":
+                    cell.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, cell)
+    table.resizeColumnsToContents()
+    return table
 
 
 def build_headline_event_table(report: HeadlineDedupReport, style: DataViewStyle) -> QTableWidget:

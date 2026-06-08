@@ -4,6 +4,23 @@
 
 ### Added
 
+- Added Outcome Explorer v1.
+- Added `Outcome Explorer` Study Engine tab with summary, score bucket, regime, scanner, sector, review-status, catalyst-cluster, catalyst-age-bucket, cluster-purity, and candidate detail views.
+- Added outcome filters for score bucket and industry alongside existing date, ticker, score, regime, scanner, sector, review, cluster, confidence, purity, timestamp status, age bucket, and study-eligibility filters.
+- Added completed/pending outcome separation and post-capture labeling.
+
+### Safety
+
+- Outcome Explorer v1 is research-only and does not fetch current market data, mutate raw captures, recalculate historical scores, alter scoring profiles, start Opportunity Score, optimize weights, use broker APIs, or write SQLite records.
+- Pending outcomes are counted but excluded from completed-return math and are not treated as wins or losses.
+- Quarantined captures are excluded by requiring outcome rows to match active raw-capture identities.
+
+### Tests
+
+- Added tests for deterministic filters, deterministic summary metrics, pending outcome exclusion, quarantined/orphan outcome exclusion, non-study default exclusion, preopen inclusion, raw-capture immutability, and post-capture label separation.
+
+### Added
+
 - Added Headline Deduplication / Source Quality v1.
 - Added deterministic headline fingerprinting and in-memory catalyst event grouping.
 - Added `Headline Dedup` Study Engine tab with duplicate event summary, source reliability, cluster dedup impact, and ticker dedup impact views.

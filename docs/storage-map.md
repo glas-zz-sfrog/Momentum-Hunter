@@ -183,6 +183,23 @@ Source reliability is derived by provider/source and reports exact, unknown, fut
 
 Default Headline Dedup views exclude quarantined captures because quarantined files live outside active `captures/`, and they exclude rows where `is_study_eligible` is false. Preopen, weekend, holiday, and manual captures can be included explicitly.
 
+## Outcome Explorer
+
+- UI location: Study Engine dialog, `Outcome Explorer` tab
+- Data layer: `momentum_hunter/outcome_explorer.py`
+- Source inputs: active immutable raw captures, `analysis-captures.csv`, `analysis-outcomes.csv`, `score-breakdowns.json`, `review-decisions.json`, catalyst cluster context, catalyst age context, and headline dedup/source quality context
+- Mutability: research-only view; outcome exploration reads stored data and does not mutate raw captures or derived stores
+
+Outcome Explorer is labeled `OUTCOME EXPLORER — POST-CAPTURE DATA`.
+
+Outcome rows are post-capture labels from `analysis-outcomes.csv`. They are separated from capture-time facts and must not be treated as information known during the original scan.
+
+Pending outcomes are counted as pending but excluded from completed-return math. They are not treated as wins or losses. Summary and comparison metrics use completed rows only for completed-return averages, medians, win rate, best winner, and worst loser.
+
+Outcome Explorer excludes quarantined captures by requiring each outcome row to match an active raw-capture identity. It excludes non-study-eligible captures by default unless the user explicitly enables non-trading-day/preopen inclusion.
+
+No new persisted outcome-explorer store is created in v1. The report is rebuilt from immutable raw captures and derived stores at view/report time.
+
 ## Catalyst Date / Age Engine
 
 - UI location: Study Engine dialog, `Catalyst Age` tab

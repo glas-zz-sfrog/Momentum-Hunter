@@ -276,6 +276,18 @@ Source reliability reports exact timestamp percentage, unknown timestamp percent
 
 No `headline-events.json` file is written in v1. The report is rebuilt from active immutable raw captures and derived stores each time, and quarantined/non-study captures remain excluded by default.
 
+## Outcome Explorer
+
+The Study Engine includes an `Outcome Explorer` tab labeled `OUTCOME EXPLORER — POST-CAPTURE DATA`.
+
+Outcome Explorer v1 compares stored candidate outcomes using only active raw captures and derived records such as `analysis-outcomes.csv`, `score-breakdowns.json`, `review-decisions.json`, catalyst clusters, catalyst age context, and headline dedup/source quality context. It does not fetch current market data, mutate raw captures, recalculate historical scores, alter scoring profiles, or build Opportunity Score.
+
+Summary metrics include candidate count, completed outcome count, pending outcome count, average and median next-day return, average and median five-day return, average max gain, average max drawdown, win rate, best winner, and worst loser. Pending outcomes are counted but are not treated as wins, losses, or completed-return observations.
+
+Comparison tables show performance by score bucket, market regime, scanner, sector, review status, catalyst cluster, catalyst age bucket, and cluster purity bucket. Candidate rows clearly mark outcome values as post-capture labels from `analysis-outcomes.csv`, not information known at capture time.
+
+Outcome Explorer excludes quarantined captures and non-study-eligible captures by default. Enable non-trading-day/preopen inclusion only when deliberately researching those observations.
+
 ## Legacy Capture Cleanup
 
 If a non-market-day `morning` or `evening` raw capture is accidentally created beside a valid `preopen` capture, use the cleanup command to quarantine the unwanted raw files and rebuild/prune derived CSV rows without editing raw captures:
