@@ -248,6 +248,18 @@ Timestamp handling is explicit: known article timestamps get capture-time articl
 
 Each catalyst cluster has a detail view listing matching stored headlines, ticker, capture time, source, timestamp status, headline age, freshness label, score, review status, outcome status, max gain/drawdown, and stored URL when available.
 
+## Catalyst Date / Age Engine
+
+The Study Engine includes a `Catalyst Age` tab labeled `CATALYST AGE / FRESHNESS — RESEARCH ONLY`.
+
+Catalyst Age measures stored headline timestamps at capture time. It reports `EXACT_TIMESTAMP`, `DATE_ONLY`, `ESTIMATED`, `UNKNOWN_TIMESTAMP`, `FUTURE_TIMESTAMP`, and `INVALID_TIMESTAMP` without changing any candidate score.
+
+Age buckets are context only: `<1h`, `1-4h`, `4-12h`, `12-24h`, `1-3d`, `3d+`, `unknown`, and `invalid_future`.
+
+Future timestamps are not treated as fresh and are reported as warnings. Unknown timestamps remain unknown and do not receive HOT/FRESH treatment.
+
+The tab includes an audit summary, cluster-by-age summary, ticker-level summary, and headline detail rows. Filters include date range, ticker, catalyst cluster, market regime, scanner preset, timestamp status, age bucket, and the study-eligible-only default.
+
 ## Legacy Capture Cleanup
 
 If a non-market-day `morning` or `evening` raw capture is accidentally created beside a valid `preopen` capture, use the cleanup command to quarantine the unwanted raw files and rebuild/prune derived CSV rows without editing raw captures:

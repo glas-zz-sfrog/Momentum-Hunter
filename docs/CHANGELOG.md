@@ -4,6 +4,24 @@
 
 ### Added
 
+- Added Catalyst Date / Age Engine v1 in the Study Engine.
+- Added `Catalyst Age` tab with audit totals, headline age bucket distribution, cluster-by-age summary, ticker-level summary, and headline-level details.
+- Added timestamp statuses: `EXACT_TIMESTAMP`, `DATE_ONLY`, `ESTIMATED`, `UNKNOWN_TIMESTAMP`, `FUTURE_TIMESTAMP`, and `INVALID_TIMESTAMP`.
+- Added age buckets: `<1h`, `1-4h`, `4-12h`, `12-24h`, `1-3d`, `3d+`, `unknown`, and `invalid_future`.
+- Added age filters for ticker, catalyst cluster, timestamp status, and age bucket.
+
+### Safety
+
+- Catalyst age is measurement-only and does not alter `momentum_score_v1`, score profiles, existing scores, or scoring output.
+- Future timestamps are warned and excluded from freshness-style analysis.
+- Unknown timestamps remain unknown and are not treated as fresh.
+
+### Tests
+
+- Added tests for exact/date-only/estimated/unknown/future/invalid timestamps, deterministic age buckets, raw-capture immutability, quarantine exclusion, preopen inclusion rules, and age filters.
+
+### Added
+
 - Added legacy non-study capture cleanup command for quarantining unwanted non-market-day `morning`/`evening` captures while preserving valid `preopen` captures.
 - Added derived CSV backup and prune behavior for legacy cleanup.
 

@@ -18,6 +18,9 @@ SCANNER_ALL = "all scanners"
 SECTOR_ALL = "all sectors"
 REVIEW_ALL = "all review statuses"
 HISTORICAL_THEME_ALL = "all historical themes"
+CATALYST_CLUSTER_ALL = "all catalyst clusters"
+TIMESTAMP_STATUS_ALL = "all timestamp statuses"
+AGE_BUCKET_ALL = "all age buckets"
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,10 @@ class StudyFilter:
     minimum_score: int = 0
     review_status: str = REVIEW_ALL
     historical_cluster_theme: str = HISTORICAL_THEME_ALL
+    ticker: str = ""
+    catalyst_cluster: str = CATALYST_CLUSTER_ALL
+    timestamp_status: str = TIMESTAMP_STATUS_ALL
+    age_bucket: str = AGE_BUCKET_ALL
 
     def label(self) -> str:
         parts = [self.row_filter]
@@ -52,6 +59,14 @@ class StudyFilter:
             parts.append(self.review_status)
         if self.historical_cluster_theme != HISTORICAL_THEME_ALL:
             parts.append(self.historical_cluster_theme)
+        if self.ticker:
+            parts.append(self.ticker.upper())
+        if self.catalyst_cluster != CATALYST_CLUSTER_ALL:
+            parts.append(self.catalyst_cluster)
+        if self.timestamp_status != TIMESTAMP_STATUS_ALL:
+            parts.append(self.timestamp_status)
+        if self.age_bucket != AGE_BUCKET_ALL:
+            parts.append(self.age_bucket)
         if self.include_non_study_eligible:
             parts.append("including non-trading-day captures")
         return " | ".join(parts)

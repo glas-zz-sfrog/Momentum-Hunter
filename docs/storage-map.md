@@ -144,6 +144,30 @@ Outcome values in the catalyst detail view are post-capture labels from `analysi
 
 Default catalyst views exclude quarantined captures because quarantined files live outside active `captures/`, and they exclude rows where `is_study_eligible` is false. Non-study-eligible captures can be included explicitly for weekend, holiday, preopen, or manual-capture research.
 
+## Catalyst Date / Age Engine
+
+- UI location: Study Engine dialog, `Catalyst Age` tab
+- Data layer: `momentum_hunter/catalyst_age.py`
+- Source inputs: active immutable raw captures, stored news/catalyst headlines in captures, `review-decisions.json`, and `analysis-outcomes.csv`
+- Mutability: research-only view; age calculation reads stored data and does not mutate raw captures or derived stores
+
+Catalyst Age is labeled `CATALYST AGE / FRESHNESS — RESEARCH ONLY`.
+
+The v1 age engine is measurement only. It does not fetch current market data, recalculate historical scores, write score changes, start Opportunity Score, start optimizer work, write SQLite records, or touch broker APIs.
+
+Timestamp status values:
+
+- `EXACT_TIMESTAMP`: full timestamp parsed from stored headline data
+- `DATE_ONLY`: date parsed without article time; confidence is partial
+- `ESTIMATED`: stored headline marked as estimated; confidence is estimated
+- `UNKNOWN_TIMESTAMP`: no usable stored timestamp
+- `FUTURE_TIMESTAMP`: stored timestamp is later than capture time; excluded from freshness-style analysis
+- `INVALID_TIMESTAMP`: stored timestamp could not be parsed
+
+Age buckets are `<1h`, `1-4h`, `4-12h`, `12-24h`, `1-3d`, `3d+`, `unknown`, and `invalid_future`.
+
+Unknown and invalid timestamps are counted separately and never receive HOT/FRESH treatment. Outcome values in the age tab are post-capture labels shown for research context only.
+
 ## Candidate Timeline and Replay Mode
 
 - UI entry: select a candidate and click `View Timeline`

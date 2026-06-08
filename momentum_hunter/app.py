@@ -43,6 +43,13 @@ from momentum_hunter.capture_health import (
     CsvStatus,
     build_capture_health_snapshot,
 )
+from momentum_hunter.catalyst_age import (
+    AGE_BUCKETS,
+    CATALYST_AGE_RESEARCH_LABEL,
+    TIMESTAMP_STATUSES,
+    CatalystAgeAuditReport,
+    build_catalyst_age_audit_report,
+)
 from momentum_hunter.catalyst_clusters import (
     CATALYST_RESEARCH_LABEL,
     CatalystClusterReport,
@@ -101,6 +108,8 @@ from momentum_hunter.study import (
     FILTER_ALL,
     FILTER_REVIEWED,
     FILTER_SELECTED,
+    AGE_BUCKET_ALL,
+    CATALYST_CLUSTER_ALL,
     REGIME_ALL,
     HISTORICAL_THEME_ALL,
     REVIEW_ALL,
@@ -109,6 +118,7 @@ from momentum_hunter.study import (
     SESSION_ALL,
     StudyFilter,
     StudySummary,
+    TIMESTAMP_STATUS_ALL,
     build_capture_study,
 )
 from momentum_hunter.time_utils import format_central, next_market_session, now_central
@@ -1593,6 +1603,51 @@ class MomentumHunterWindow(QMainWindow):
         cluster_filter_layout.addStretch(1)
         layout.addWidget(cluster_filter_row)
 
+        age_filter_row = QWidget()
+        age_filter_layout = QHBoxLayout(age_filter_row)
+        age_filter_layout.setContentsMargins(0, 0, 0, 0)
+        age_filter_layout.addWidget(QLabel("Ticker"))
+        ticker_edit = QLineEdit()
+        ticker_edit.setPlaceholderText("all tickers")
+        ticker_edit.setMaximumWidth(90)
+        age_filter_layout.addWidget(ticker_edit)
+        age_filter_layout.addWidget(QLabel("Catalyst"))
+        catalyst_combo = QComboBox()
+        catalyst_combo.addItems(
+            [
+                CATALYST_CLUSTER_ALL,
+                "Earnings beat",
+                "Guidance raise",
+                "Earnings/guidance general",
+                "Analyst upgrade",
+                "Analyst target raise",
+                "Analyst downgrade",
+                "AI infrastructure",
+                "AI partnership",
+                "Contract / customer win",
+                "FDA approval",
+                "FDA binary event",
+                "Biotech clinical data",
+                "Merger / acquisition",
+                "Sector sympathy",
+                "Macro-only",
+                "Weak / vague catalyst",
+                "No clear catalyst",
+                "Unknown / uncategorized",
+            ]
+        )
+        age_filter_layout.addWidget(catalyst_combo)
+        age_filter_layout.addWidget(QLabel("Timestamp"))
+        timestamp_combo = QComboBox()
+        timestamp_combo.addItems([TIMESTAMP_STATUS_ALL, *TIMESTAMP_STATUSES])
+        age_filter_layout.addWidget(timestamp_combo)
+        age_filter_layout.addWidget(QLabel("Age"))
+        age_bucket_combo = QComboBox()
+        age_bucket_combo.addItems([AGE_BUCKET_ALL, *AGE_BUCKETS])
+        age_filter_layout.addWidget(age_bucket_combo)
+        age_filter_layout.addStretch(1)
+        layout.addWidget(age_filter_row)
+
         stats = QLabel()
         stats.setObjectName("criteriaLabel")
         layout.addWidget(stats)
@@ -1638,6 +1693,10 @@ class MomentumHunterWindow(QMainWindow):
                 minimum_score=minimum_score,
                 review_status=review_combo.currentText(),
                 historical_cluster_theme=theme_combo.currentText(),
+                ticker=ticker_edit.text().strip().upper(),
+                catalyst_cluster=catalyst_combo.currentText(),
+                timestamp_status=timestamp_combo.currentText(),
+                age_bucket=age_bucket_combo.currentText(),
             )
 
         def refresh_study_view() -> None:
@@ -1667,6 +1726,13 @@ class MomentumHunterWindow(QMainWindow):
                     filtered_style,
                 ),
                 "Catalyst Explorer",
+            )
+            chart_tabs.addTab(
+                build_catalyst_age_panel(
+                    build_catalyst_age_audit_report(study_filter=current_study_filter()),
+                    filtered_style,
+                ),
+                "Catalyst Age",
             )
             chart_tabs.addTab(build_recommendation_panel(build_weight_recommendations(), filtered_style), "Recommendations")
 
@@ -1699,6 +1765,10 @@ class MomentumHunterWindow(QMainWindow):
         minimum_score_edit.editingFinished.connect(refresh_study_view)
         review_combo.currentTextChanged.connect(refresh_study_view)
         theme_combo.currentTextChanged.connect(refresh_study_view)
+        ticker_edit.editingFinished.connect(refresh_study_view)
+        catalyst_combo.currentTextChanged.connect(refresh_study_view)
+        timestamp_combo.currentTextChanged.connect(refresh_study_view)
+        age_bucket_combo.currentTextChanged.connect(refresh_study_view)
         refresh_study_view()
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -2445,6 +2515,150 @@ def build_catalyst_cluster_panel(report: CatalystClusterReport, style: DataViewS
     splitter.setSizes([360, 360])
     layout.addWidget(splitter, 1)
     return panel
+
+
+def build_catalyst_age_panel(report: CatalystAgeAuditReport, style: DataViewStyle) -> QWidget:
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    status = QLabel(
+        f"{style.chart_prefix}{CATALYST_AGE_RESEARCH_LABEL} | "
+        f"Headlines: {report.total_headlines} | Source: {report.source}"
+    )
+    status.setObjectName("criteriaLabel")
+    status.setWordWrap(True)
+    layout.addWidget(status)
+
+    if report.warnings:
+        warning = QLabel(" | ".join(report.warnings))
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        layout.addWidget(warning)
+
+    tabs = QTabWidget()
+    tabs.addTab(build_catalyst_age_audit_table(report, style), "Audit")
+    tabs.addTab(build_catalyst_age_summary_table(report.cluster_summaries, style, "Cluster"), "Clusters")
+    tabs.addTab(build_catalyst_age_summary_table(report.ticker_summaries, style, "Ticker"), "Tickers")
+    tabs.addTab(build_catalyst_age_detail_table(report, style), "Headlines")
+    layout.addWidget(tabs, 1)
+    return panel
+
+
+def build_catalyst_age_audit_table(report: CatalystAgeAuditReport, style: DataViewStyle) -> QTableWidget:
+    rows = [
+        ("Total headlines", str(report.total_headlines)),
+        ("Exact timestamp count", str(report.exact_timestamp_count)),
+        ("Date-only count", str(report.date_only_count)),
+        ("Estimated count", str(report.estimated_count)),
+        ("Unknown timestamp count", str(report.unknown_timestamp_count)),
+        ("Future timestamp count", str(report.future_timestamp_count)),
+        ("Invalid timestamp count", str(report.invalid_timestamp_count)),
+        ("Affected tickers", ", ".join(report.affected_tickers) or "none"),
+        ("Affected clusters", ", ".join(report.affected_clusters) or "none"),
+    ]
+    rows.extend((f"Age bucket {bucket}", str(report.age_bucket_distribution.get(bucket, 0))) for bucket in AGE_BUCKETS)
+    table = QTableWidget(len(rows), 2)
+    table.setHorizontalHeaderLabels(["Metric", "Value"])
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    for row, (metric, value) in enumerate(rows):
+        table.setItem(row, 0, QTableWidgetItem(metric))
+        table.setItem(row, 1, QTableWidgetItem(value))
+    return table
+
+
+def build_catalyst_age_summary_table(summaries, style: DataViewStyle, label: str) -> QTableWidget:
+    table = QTableWidget(max(1, len(summaries)), 9)
+    table.setHorizontalHeaderLabels(
+        [label, "Headlines", "Tickers", "Exact", "Unknown", "Future", "Invalid", "Avg Age", "Buckets"]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    if not summaries:
+        values = ["No data", "0", "", "0", "0", "0", "0", "n/a", ""]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, summary in enumerate(summaries):
+            bucket_text = ", ".join(
+                f"{bucket}:{count}"
+                for bucket, count in summary.bucket_distribution.items()
+                if count
+            )
+            values = [
+                summary.name,
+                str(summary.headline_count),
+                ", ".join(summary.tickers[:12]),
+                str(summary.exact_count),
+                str(summary.unknown_count),
+                str(summary.future_count),
+                str(summary.invalid_count),
+                format_age_hours(summary.average_age_hours),
+                bucket_text,
+            ]
+            for column, value in enumerate(values):
+                table.setItem(row, column, QTableWidgetItem(value))
+    table.resizeColumnsToContents()
+    return table
+
+
+def build_catalyst_age_detail_table(report: CatalystAgeAuditReport, style: DataViewStyle) -> QTableWidget:
+    table = QTableWidget(max(1, len(report.records)), 14)
+    table.setHorizontalHeaderLabels(
+        [
+            "Ticker",
+            "Cluster",
+            "Capture",
+            "Published",
+            "Timestamp Status",
+            "Confidence",
+            "Age",
+            "Bucket",
+            "Score",
+            "Review",
+            "Outcome",
+            "Max Gain",
+            "Max Drawdown",
+            "Headline",
+        ]
+    )
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    if not report.records:
+        values = ["No headlines", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, record in enumerate(report.records):
+            values = [
+                record.ticker,
+                record.catalyst_cluster,
+                record.capture_timestamp,
+                record.published_at or "unknown",
+                record.timestamp_status,
+                record.timestamp_confidence,
+                format_age_hours(record.age_at_capture_hours),
+                record.age_bucket,
+                str(record.score),
+                record.review_status,
+                record.outcome_status,
+                format_percent(record.max_gain_pct),
+                format_percent(record.max_drawdown_pct),
+                record.headline,
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if record.timestamp_status in {"FUTURE_TIMESTAMP", "INVALID_TIMESTAMP"}:
+                    item.setBackground(QBrush(QColor("#6d3030")))
+                elif record.timestamp_status == "UNKNOWN_TIMESTAMP":
+                    item.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, item)
+    table.resizeColumnsToContents()
+    return table
 
 
 def format_catalyst_cluster_detail_html(cluster) -> str:

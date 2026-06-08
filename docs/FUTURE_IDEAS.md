@@ -13,6 +13,9 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 
 - Catalyst quality scoring
 - Catalyst date/age engine
+- Catalyst age trend analysis by cluster and market regime
+- Catalyst timestamp provider-quality report
+- Historical replay overlay showing catalyst age beside original candidate score
 - News freshness weighting
 - Headline classification improvements
 - Earnings calendar integration
