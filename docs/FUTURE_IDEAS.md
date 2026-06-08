@@ -59,6 +59,7 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 - Multi-provider verification
 - Yahoo Finance provider
 - Raw news timestamp audit improvements
+- Runtime/version guard to detect stale GUI processes creating legacy captures without calendar metadata
 
 ## Data Platform
 

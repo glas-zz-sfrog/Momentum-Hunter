@@ -248,6 +248,16 @@ Timestamp handling is explicit: known article timestamps get capture-time articl
 
 Each catalyst cluster has a detail view listing matching stored headlines, ticker, capture time, source, timestamp status, headline age, freshness label, score, review status, outcome status, max gain/drawdown, and stored URL when available.
 
+## Legacy Capture Cleanup
+
+If a non-market-day `morning` or `evening` raw capture is accidentally created beside a valid `preopen` capture, use the cleanup command to quarantine the unwanted raw files and rebuild/prune derived CSV rows without editing raw captures:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.cleanup_legacy_captures 2026-06-07 --sessions morning evening
+```
+
+The command backs up `analysis-captures.csv` and `analysis-outcomes.csv`, quarantines matching legacy/non-study captures, preserves valid active captures such as `preopen`, rebuilds analysis rows from active raw captures, and prunes outcome rows to active analysis identities.
+
 ## Administrator Actions
 
 Normal dashboard use does not require Administrator rights.

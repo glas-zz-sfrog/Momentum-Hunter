@@ -316,6 +316,22 @@ If the audit shows `MODIFIED`, use the modified-capture recovery command:
 .\.venv\Scripts\python.exe -m momentum_hunter.recover_modified_captures --reason "Manifest hash mismatch; original unavailable; quarantined pending recovery review."
 ```
 
+If a non-market-day `morning` or `evening` capture is accidentally created beside a valid `preopen` capture, use the legacy cleanup command:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.cleanup_legacy_captures 2026-06-07 --sessions morning evening
+```
+
+The legacy cleanup command:
+
+- inspects only the requested date/session raw captures
+- quarantines captures that lack calendar metadata or are non-study-eligible
+- does not modify raw captures in place
+- preserves active captures that are not targeted, such as valid `preopen` files
+- backs up `analysis-captures.csv` and `analysis-outcomes.csv` under `MomentumHunterData/data/backups/legacy-cleanup/`
+- rebuilds `analysis-captures.csv` from remaining active raw captures
+- prunes `analysis-outcomes.csv` to active analysis identities without fetching current market data
+
 The quarantine command:
 
 - moves `{session}.json` and `{session}.md` from `data/captures/YYYY-MM-DD/` into `data/quarantine/raw-captures/YYYYMMDD-HHMMSS/`
