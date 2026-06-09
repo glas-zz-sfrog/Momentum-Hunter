@@ -69,6 +69,15 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 - Early close support
 - Special market closure support
 
+## Market Cycle Research
+
+- Automated Market-Cycle Classification
+  - Compute an objective long-term `market_cycle` label from S&P 500 closing-price history.
+  - Suggested labels: `bull`, `bear`, `transition`.
+  - Use conventional 20% thresholds: bear after a broad-market decline of at least 20% from the prior cycle high; bull after a broad-market rise of at least 20% from the bear-market low.
+  - Keep `market_cycle` distinct from the existing tactical `trading_regime` scoring overlay.
+  - News may later be stored as supporting context, but headlines should not be the authoritative source.
+
 ## Data Quality
 
 - Provider raw snapshot capture

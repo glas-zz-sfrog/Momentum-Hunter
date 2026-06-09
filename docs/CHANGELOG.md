@@ -4,6 +4,23 @@
 
 ### Added
 
+- Added Historical Cluster Display recurrence refinement.
+- Added ticker, sector, and scanner recurring cluster summaries using stored active captures and Replay Mode identities.
+- Added recurrence appearance detail support with capture-time fields separated from later-derived outcome labels.
+- Added Replay Mode handoff for individual historical appearances from recurring clusters.
+- Added documentation-only future idea for Automated Market-Cycle Classification.
+
+### Safety
+
+- Historical recurrence clustering does not fetch current market data, mutate raw captures, recalculate historical scores, start provider integrations, start optimizer work, or write SQLite records.
+- Quarantined captures remain excluded by default, and non-study-eligible captures remain filtered through the existing Study Engine controls.
+
+### Tests
+
+- Added tests for repeated ticker, sector, scanner clustering, chronological appearance ordering, recency/count sorting, average score calculation, score-breakdown status counts, outcome summaries, quarantine exclusion, Replay Mode handoff, and no current-data fetch.
+
+### Added
+
 - Added Outcome Maturity / Data Readiness Gate v1.
 - Added `Readiness Gate` Study Engine tab with readiness metrics and gate statuses for Outcome Explorer, Opportunity Research, Opportunity Score design, and Weight optimization.
 - Added completed next-day versus completed five-day outcome counting so pending five-day rows do not block next-day readiness measurement.

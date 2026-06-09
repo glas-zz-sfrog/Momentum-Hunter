@@ -8,11 +8,17 @@ from pathlib import Path
 
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.outcomes import OUTCOMES_CSV
-from momentum_hunter.replay import outcome_key
+from momentum_hunter.replay import (
+    TimelineRow,
+    build_timeline_row,
+    capture_sources,
+    load_capture_payload,
+    outcome_key,
+)
 from momentum_hunter.review import CandidateIdentity, load_review_decisions, make_capture_id
 from momentum_hunter.scheduling import classify_capture
-from momentum_hunter.score_breakdowns import SCORE_BREAKDOWNS_PATH, find_score_breakdown, score_breakdown_identity
-from momentum_hunter.storage import CAPTURES_DIR
+from momentum_hunter.score_breakdowns import COMPLETE, INCOMPLETE, LEGACY, SCORE_BREAKDOWNS_PATH, find_score_breakdown, score_breakdown_identity
+from momentum_hunter.storage import CAPTURE_INTEGRITY_MANIFEST, CAPTURES_DIR
 from momentum_hunter.study import REGIME_ALL, SESSION_ALL, StudyFilter, parse_optional_float
 
 
@@ -74,6 +80,66 @@ class HistoricalClusterReport:
     warnings: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class HistoricalAppearance:
+    cluster_type: str
+    cluster_key: str
+    ticker: str
+    capture_date: str
+    capture_time_text: str
+    session: str
+    provider: str
+    scanner: str
+    score: int
+    review_status: str
+    score_breakdown_status: str
+    outcome_status: str
+    next_day_return_pct: float | None
+    five_day_return_pct: float | None
+    max_gain_pct: float | None
+    max_drawdown_pct: float | None
+    trust_label: str
+    warnings: list[str]
+    timeline_row: TimelineRow
+
+
+@dataclass(frozen=True)
+class RecurrenceOutcomeSummary:
+    completed_count: int
+    pending_count: int
+    average_next_day_return_pct: float | None
+    average_five_day_return_pct: float | None
+    average_max_gain_pct: float | None
+    average_max_drawdown_pct: float | None
+
+
+@dataclass(frozen=True)
+class HistoricalRecurrenceCluster:
+    cluster_type: str
+    cluster_key: str
+    appearance_count: int
+    first_seen: str
+    most_recent_seen: str
+    scanners_involved: list[str]
+    sessions_involved: list[str]
+    average_score: float | None
+    complete_score_breakdown_count: int
+    incomplete_score_breakdown_count: int
+    legacy_score_breakdown_count: int
+    missing_score_breakdown_count: int
+    outcome_summary: RecurrenceOutcomeSummary
+    appearances: list[HistoricalAppearance]
+
+
+@dataclass(frozen=True)
+class HistoricalRecurrenceReport:
+    label: str
+    source: str
+    total_appearances: int
+    clusters: list[HistoricalRecurrenceCluster]
+    warnings: list[str] = field(default_factory=list)
+
+
 def build_historical_cluster_report(
     *,
     study_filter: StudyFilter | None = None,
@@ -112,6 +178,213 @@ def build_historical_cluster_report(
         clusters=clusters,
         warnings=warnings,
     )
+
+
+def build_historical_recurrence_report(
+    *,
+    study_filter: StudyFilter | None = None,
+    captures_dir: Path = CAPTURES_DIR,
+    manifest_path: Path = CAPTURE_INTEGRITY_MANIFEST,
+    score_breakdowns_path: Path = SCORE_BREAKDOWNS_PATH,
+    review_decisions_path: Path = DATA_DIR / "review-decisions.json",
+    outcomes_csv: Path = OUTCOMES_CSV,
+    include_quarantined: bool = False,
+) -> HistoricalRecurrenceReport:
+    study_filter = study_filter or StudyFilter()
+    appearances = load_historical_appearances(
+        captures_dir=captures_dir,
+        manifest_path=manifest_path,
+        score_breakdowns_path=score_breakdowns_path,
+        review_decisions_path=review_decisions_path,
+        outcomes_csv=outcomes_csv,
+        include_quarantined=include_quarantined,
+    )
+    filtered = filter_historical_appearances(appearances, study_filter)
+    clusters: list[HistoricalRecurrenceCluster] = []
+    for cluster_type in ["ticker", "sector", "scanner"]:
+        grouped: dict[str, list[HistoricalAppearance]] = defaultdict(list)
+        for appearance in filtered:
+            grouped[cluster_key_for_type(appearance, cluster_type)].append(
+                HistoricalAppearance(
+                    cluster_type=cluster_type,
+                    cluster_key=cluster_key_for_type(appearance, cluster_type),
+                    ticker=appearance.ticker,
+                    capture_date=appearance.capture_date,
+                    capture_time_text=appearance.capture_time_text,
+                    session=appearance.session,
+                    provider=appearance.provider,
+                    scanner=appearance.scanner,
+                    score=appearance.score,
+                    review_status=appearance.review_status,
+                    score_breakdown_status=appearance.score_breakdown_status,
+                    outcome_status=appearance.outcome_status,
+                    next_day_return_pct=appearance.next_day_return_pct,
+                    five_day_return_pct=appearance.five_day_return_pct,
+                    max_gain_pct=appearance.max_gain_pct,
+                    max_drawdown_pct=appearance.max_drawdown_pct,
+                    trust_label=appearance.trust_label,
+                    warnings=appearance.warnings,
+                    timeline_row=appearance.timeline_row,
+                )
+            )
+        for key, rows in grouped.items():
+            if len(rows) < 2:
+                continue
+            clusters.append(summarize_recurrence_cluster(cluster_type, key, rows))
+
+    clusters.sort(key=lambda cluster: (cluster.appearance_count, cluster.most_recent_seen, cluster.average_score or 0), reverse=True)
+    warnings = []
+    if not appearances:
+        warnings.append("No trusted historical appearances found.")
+    if appearances and not filtered:
+        warnings.append("Filters removed all historical appearances.")
+    if filtered and not clusters:
+        warnings.append("No repeated ticker, sector, or scanner clusters matched the filters.")
+    return HistoricalRecurrenceReport(
+        label="HISTORICAL CLUSTERS - RECURRING APPEARANCES",
+        source="active raw captures + replay identities + score-breakdowns.json + review-decisions.json + analysis-outcomes.csv",
+        total_appearances=len(filtered),
+        clusters=clusters,
+        warnings=warnings,
+    )
+
+
+def load_historical_appearances(
+    *,
+    captures_dir: Path,
+    manifest_path: Path,
+    score_breakdowns_path: Path,
+    review_decisions_path: Path,
+    outcomes_csv: Path,
+    include_quarantined: bool,
+) -> list[HistoricalAppearance]:
+    review_decisions = load_review_decisions(review_decisions_path)
+    outcomes = load_outcome_rows(outcomes_csv)
+    appearances: list[HistoricalAppearance] = []
+    for capture_path, quarantined in capture_sources(
+        captures_dir=captures_dir,
+        manifest_path=manifest_path,
+        include_quarantined=include_quarantined,
+    ):
+        payload = load_capture_payload(capture_path)
+        if not payload:
+            continue
+        for candidate in payload.get("candidates", []):
+            row = build_timeline_row(
+                payload,
+                candidate,
+                capture_path=capture_path,
+                quarantined=quarantined,
+                score_breakdowns_path=score_breakdowns_path,
+                review_decisions=review_decisions,
+                outcomes=outcomes,
+            )
+            appearances.append(appearance_from_timeline_row(row))
+    appearances.sort(key=lambda item: (item.timeline_row.capture_time or "", item.ticker, item.session, item.scanner))
+    return appearances
+
+
+def appearance_from_timeline_row(row: TimelineRow) -> HistoricalAppearance:
+    sector = str(row.fields.get("sector").value if row.fields.get("sector") else "unknown") or "unknown"
+    score = parse_int(row.fields.get("score").value if row.fields.get("score") else 0)
+    return HistoricalAppearance(
+        cluster_type="candidate",
+        cluster_key=sector,
+        ticker=row.ticker.upper(),
+        capture_date=row.capture_date,
+        capture_time_text=row.capture_time_text,
+        session=row.session,
+        provider=row.provider,
+        scanner=row.scanner,
+        score=score,
+        review_status=str(row.fields.get("review_status").value if row.fields.get("review_status") else "unreviewed"),
+        score_breakdown_status=str(row.fields.get("score_breakdown_status").value if row.fields.get("score_breakdown_status") else "missing"),
+        outcome_status=str(row.fields.get("outcome_status").value if row.fields.get("outcome_status") else "missing"),
+        next_day_return_pct=parse_optional_float(row.fields.get("next_day_return_pct").value if row.fields.get("next_day_return_pct") else ""),
+        five_day_return_pct=parse_optional_float(row.fields.get("five_day_return_pct").value if row.fields.get("five_day_return_pct") else ""),
+        max_gain_pct=parse_optional_float(row.fields.get("max_gain_pct").value if row.fields.get("max_gain_pct") else ""),
+        max_drawdown_pct=parse_optional_float(row.fields.get("max_drawdown_pct").value if row.fields.get("max_drawdown_pct") else ""),
+        trust_label=row.trust_label,
+        warnings=list(row.warnings),
+        timeline_row=row,
+    )
+
+
+def filter_historical_appearances(appearances: list[HistoricalAppearance], study_filter: StudyFilter) -> list[HistoricalAppearance]:
+    filtered = appearances
+    if not study_filter.include_non_study_eligible:
+        filtered = [appearance for appearance in filtered if appearance.timeline_row.calendar_classification.is_study_eligible]
+    if study_filter.start_date:
+        filtered = [appearance for appearance in filtered if appearance.capture_date >= study_filter.start_date]
+    if study_filter.end_date:
+        filtered = [appearance for appearance in filtered if appearance.capture_date <= study_filter.end_date]
+    if study_filter.session != SESSION_ALL:
+        filtered = [appearance for appearance in filtered if appearance.session == study_filter.session]
+    if study_filter.regime != REGIME_ALL:
+        filtered = [
+            appearance
+            for appearance in filtered
+            if str(appearance.timeline_row.fields.get("market_regime").value if appearance.timeline_row.fields.get("market_regime") else "unknown").lower() == study_filter.regime
+        ]
+    if study_filter.scanner != SCANNER_ALL:
+        filtered = [appearance for appearance in filtered if appearance.scanner == study_filter.scanner]
+    if study_filter.sector != SECTOR_ALL:
+        filtered = [appearance for appearance in filtered if cluster_key_for_type(appearance, "sector") == study_filter.sector]
+    if study_filter.minimum_score:
+        filtered = [appearance for appearance in filtered if appearance.score >= study_filter.minimum_score]
+    if study_filter.review_status != REVIEW_ALL:
+        filtered = [appearance for appearance in filtered if appearance.review_status == study_filter.review_status]
+    if study_filter.ticker:
+        filtered = [appearance for appearance in filtered if appearance.ticker == study_filter.ticker.upper()]
+    return filtered
+
+
+def cluster_key_for_type(appearance: HistoricalAppearance, cluster_type: str) -> str:
+    if cluster_type == "ticker":
+        return appearance.ticker
+    if cluster_type == "scanner":
+        return appearance.scanner or "unknown"
+    if cluster_type == "sector":
+        row = appearance.timeline_row
+        return str(row.fields.get("sector").value if row.fields.get("sector") else "unknown") or "unknown"
+    return "unknown"
+
+
+def summarize_recurrence_cluster(cluster_type: str, key: str, rows: list[HistoricalAppearance]) -> HistoricalRecurrenceCluster:
+    ordered = sorted(rows, key=lambda row: (row.timeline_row.capture_time or "", row.ticker, row.session, row.scanner))
+    status_counts = Counter(normalize_breakdown_status(row.score_breakdown_status) for row in ordered)
+    completed_rows = [row for row in ordered if row.outcome_status == "complete"]
+    pending_rows = [row for row in ordered if row.outcome_status != "complete"]
+    return HistoricalRecurrenceCluster(
+        cluster_type=cluster_type,
+        cluster_key=key,
+        appearance_count=len(ordered),
+        first_seen=ordered[0].capture_time_text,
+        most_recent_seen=ordered[-1].capture_time_text,
+        scanners_involved=sorted({row.scanner for row in ordered if row.scanner}),
+        sessions_involved=sorted({row.session for row in ordered if row.session}),
+        average_score=average([row.score for row in ordered]),
+        complete_score_breakdown_count=status_counts[COMPLETE],
+        incomplete_score_breakdown_count=status_counts[INCOMPLETE],
+        legacy_score_breakdown_count=status_counts[LEGACY],
+        missing_score_breakdown_count=status_counts["missing"],
+        outcome_summary=RecurrenceOutcomeSummary(
+            completed_count=len(completed_rows),
+            pending_count=len(pending_rows),
+            average_next_day_return_pct=average([row.next_day_return_pct for row in completed_rows if row.next_day_return_pct is not None]),
+            average_five_day_return_pct=average([row.five_day_return_pct for row in completed_rows if row.five_day_return_pct is not None]),
+            average_max_gain_pct=average([row.max_gain_pct for row in completed_rows if row.max_gain_pct is not None]),
+            average_max_drawdown_pct=average([row.max_drawdown_pct for row in completed_rows if row.max_drawdown_pct is not None]),
+        ),
+        appearances=ordered,
+    )
+
+
+def normalize_breakdown_status(value: str) -> str:
+    normalized = (value or "missing").lower()
+    if normalized in {COMPLETE, INCOMPLETE, LEGACY}:
+        return normalized
+    return "missing"
 
 
 def load_cluster_candidates(

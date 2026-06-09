@@ -119,9 +119,11 @@ Historical clusters are labeled `HISTORICAL CLUSTERS — RESEARCH ONLY`.
 
 The v1 cluster engine is deterministic. It groups candidates with keyword and context rules only; it does not call AI services, fetch current market data, or recalculate historical scores. Score-component summaries come from stored score-breakdown records tied to the historical identity.
 
+The `Recurring Clusters` view groups repeated historical appearances by ticker, sector, and scanner preset. It reuses Replay Mode identity rows and therefore keeps capture-time facts, stored score explanations, later review decisions, and later outcome labels separate. Selecting an appearance can open point-in-time Replay Mode without fetching current market data or recalculating historical scores.
+
 Default cluster views exclude quarantined captures because quarantined files live outside active `captures/`, and they exclude rows where `is_study_eligible` is false. Non-study-eligible captures can be included explicitly for weekend, holiday, preopen, or manual-capture research.
 
-Cluster metrics use only available outcome labels. Missing outcome data and small sample sizes are warnings, not silently filled values.
+Cluster metrics use only available outcome labels. Missing outcome data and small sample sizes are warnings, not silently filled values. Outcome fields are later-derived labels, not information known at the original capture time.
 
 ## Catalyst Cluster Explorer
 

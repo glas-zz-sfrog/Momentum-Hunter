@@ -6,11 +6,13 @@ import shutil
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
-from momentum_hunter.historical_clusters import CLUSTER_RESEARCH_LABEL, build_historical_cluster_report
+from momentum_hunter.historical_clusters import CLUSTER_RESEARCH_LABEL, build_historical_cluster_report, build_historical_recurrence_report
 from momentum_hunter.outcomes import OUTCOME_FIELDNAMES
+from momentum_hunter.replay import build_replay_view_model
 from momentum_hunter.review import CandidateIdentity, ReviewDecision, ReviewStatus, make_capture_id, save_review_decisions
-from momentum_hunter.score_breakdowns import SCORE_ENGINE_VERSION, build_score_breakdown_for_raw_candidate
+from momentum_hunter.score_breakdowns import INCOMPLETE, LEGACY, SCORE_ENGINE_VERSION, build_score_breakdown_for_raw_candidate
 from momentum_hunter.storage import file_sha256
 from momentum_hunter.study import StudyFilter
 from momentum_hunter.time_utils import CENTRAL_TZ
@@ -182,6 +184,119 @@ class HistoricalClusterTests(unittest.TestCase):
         self.assertEqual(1, first.total_candidates)
         self.assertEqual("Earnings / guidance", first.clusters[0].name)
 
+    def test_recurrence_clusters_group_repeated_ticker_sector_and_scanner(self) -> None:
+        mdt_one = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", "MDT", "Healthcare", "Medical Devices", 96, "Earnings beat")
+        mdt_two = capture_payload("2026-06-08T07:00:00-05:00", "morning", "Institutional Momentum", "MDT", "Healthcare", "Medical Devices", 88, "Guidance raise")
+        isrg = capture_payload("2026-06-08T19:00:00-05:00", "evening", "Base Momentum", "ISRG", "Healthcare", "Medical Devices", 84, "Earnings follow-through")
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", mdt_one)
+        write_capture(self.captures_dir / "2026-06-08" / "morning.json", mdt_two)
+        write_capture(self.captures_dir / "2026-06-08" / "evening.json", isrg)
+        write_outcomes(self.outcomes_csv, [mdt_one, mdt_two, isrg], max_gains=["8.0", "4.0", "2.0"], drawdowns=["-1.0", "-2.0", "-3.0"])
+
+        report = build_historical_recurrence_report(
+            captures_dir=self.captures_dir,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+        clusters = {(cluster.cluster_type, cluster.cluster_key): cluster for cluster in report.clusters}
+
+        self.assertIn(("ticker", "MDT"), clusters)
+        self.assertIn(("sector", "Healthcare"), clusters)
+        self.assertIn(("scanner", "Base Momentum"), clusters)
+        self.assertEqual(2, clusters[("ticker", "MDT")].appearance_count)
+        self.assertEqual(3, clusters[("sector", "Healthcare")].appearance_count)
+        self.assertEqual(92.0, clusters[("ticker", "MDT")].average_score)
+        self.assertEqual(["morning"], clusters[("ticker", "MDT")].sessions_involved)
+        self.assertEqual(["Base Momentum", "Institutional Momentum"], clusters[("ticker", "MDT")].scanners_involved)
+
+    def test_recurrence_appearances_are_chronological_and_clusters_sort_by_count_recency_and_score(self) -> None:
+        older = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", "MDT", "Healthcare", "Medical Devices", 96, "Earnings beat")
+        newer = capture_payload("2026-06-08T07:00:00-05:00", "morning", "Institutional Momentum", "MDT", "Healthcare", "Medical Devices", 88, "Guidance raise")
+        tech_one = capture_payload("2026-06-09T07:00:00-05:00", "morning", "Base Momentum", "NVDA", "Technology", "Semiconductors", 95, "AI server demand")
+        tech_two = capture_payload("2026-06-09T19:00:00-05:00", "evening", "Institutional Momentum", "PLTR", "Technology", "Software", 90, "AI contract")
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", older)
+        write_capture(self.captures_dir / "2026-06-08" / "morning.json", newer)
+        write_capture(self.captures_dir / "2026-06-09" / "morning.json", tech_one)
+        write_capture(self.captures_dir / "2026-06-09" / "evening.json", tech_two)
+
+        report = build_historical_recurrence_report(
+            captures_dir=self.captures_dir,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        self.assertEqual(("sector", "Technology"), (report.clusters[0].cluster_type, report.clusters[0].cluster_key))
+        mdt = next(cluster for cluster in report.clusters if cluster.cluster_type == "ticker" and cluster.cluster_key == "MDT")
+        self.assertEqual(["2026-06-05", "2026-06-08"], [appearance.capture_date for appearance in mdt.appearances])
+
+    def test_recurrence_score_breakdown_and_outcome_counts_are_summarized(self) -> None:
+        complete = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", "MDT", "Healthcare", "Medical Devices", 96, "Earnings beat")
+        legacy = capture_payload("2026-06-08T07:00:00-05:00", "morning", "Base Momentum", "MDT", "Healthcare", "Medical Devices", 88, "Guidance raise")
+        incomplete = capture_payload("2026-06-09T07:00:00-05:00", "morning", "Base Momentum", "MDT", "Healthcare", "Medical Devices", 84, "Revenue beat")
+        missing = capture_payload("2026-06-10T07:00:00-05:00", "morning", "Base Momentum", "MDT", "Healthcare", "Medical Devices", 80, "Momentum continuation")
+        captures = [complete, legacy, incomplete, missing]
+        for payload in captures:
+            write_capture(self.captures_dir / payload["capture_date"] / f"{payload['session']}.json", payload)
+        write_score_store_with_statuses(self.score_path, [(complete, "complete"), (legacy, LEGACY), (incomplete, INCOMPLETE)])
+        write_outcomes(self.outcomes_csv, [complete, legacy], max_gains=["8.0", "4.0"], drawdowns=["-1.0", "-2.0"])
+
+        report = build_historical_recurrence_report(
+            captures_dir=self.captures_dir,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+        ticker_cluster = next(cluster for cluster in report.clusters if cluster.cluster_type == "ticker" and cluster.cluster_key == "MDT")
+
+        self.assertEqual(1, ticker_cluster.complete_score_breakdown_count)
+        self.assertEqual(1, ticker_cluster.legacy_score_breakdown_count)
+        self.assertEqual(1, ticker_cluster.incomplete_score_breakdown_count)
+        self.assertEqual(1, ticker_cluster.missing_score_breakdown_count)
+        self.assertEqual(2, ticker_cluster.outcome_summary.completed_count)
+        self.assertEqual(2, ticker_cluster.outcome_summary.pending_count)
+        self.assertEqual(6.0, ticker_cluster.outcome_summary.average_max_gain_pct)
+
+    def test_recurrence_excludes_quarantined_and_preserves_replay_handoff(self) -> None:
+        active_one = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", "MDT", "Healthcare", "Medical Devices", 96, "Earnings beat")
+        active_two = capture_payload("2026-06-08T07:00:00-05:00", "morning", "Base Momentum", "MDT", "Healthcare", "Medical Devices", 88, "Guidance raise")
+        quarantined = capture_payload("2026-06-09T07:00:00-05:00", "morning", "Base Momentum", "BAD", "Healthcare", "Medical Devices", 99, "Quarantined headline")
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", active_one)
+        write_capture(self.captures_dir / "2026-06-08" / "morning.json", active_two)
+        write_capture(self.quarantine_dir / "2026-06-09-morning.json", quarantined)
+
+        report = build_historical_recurrence_report(
+            captures_dir=self.captures_dir,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+        tickers = {appearance.ticker for cluster in report.clusters for appearance in cluster.appearances}
+        mdt = next(cluster for cluster in report.clusters if cluster.cluster_type == "ticker" and cluster.cluster_key == "MDT")
+
+        self.assertNotIn("BAD", tickers)
+        self.assertEqual("MDT", mdt.appearances[0].timeline_row.ticker)
+        replay = build_replay_view_model(mdt.appearances[0].timeline_row)
+        self.assertTrue(replay.read_only)
+        self.assertIn("READ ONLY", replay.banner)
+
+    def test_recurrence_does_not_fetch_current_market_data(self) -> None:
+        one = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", "MDT", "Healthcare", "Medical Devices", 96, "Earnings beat")
+        two = capture_payload("2026-06-08T07:00:00-05:00", "morning", "Base Momentum", "MDT", "Healthcare", "Medical Devices", 88, "Guidance raise")
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", one)
+        write_capture(self.captures_dir / "2026-06-08" / "morning.json", two)
+
+        with patch("requests.sessions.Session.request", side_effect=AssertionError("current data fetch blocked")):
+            report = build_historical_recurrence_report(
+                captures_dir=self.captures_dir,
+                score_breakdowns_path=self.score_path,
+                review_decisions_path=self.review_path,
+                outcomes_csv=self.outcomes_csv,
+            )
+
+        self.assertTrue(report.clusters)
+
 
 def capture_payload(capture_time: str, session: str, scanner: str, ticker: str, sector: str, industry: str, score: int, headline: str) -> dict:
     return {
@@ -227,6 +342,15 @@ def write_score_store(path: Path, captures: list[dict], *, component_label: str)
         record["components"] = [
             {"key": "stored_only", "label": component_label, "points_after_adjustment": 5},
         ]
+        records[record["identity_key"]] = record
+    path.write_text(json.dumps({"schema_version": 1, "score_engine_version": SCORE_ENGINE_VERSION, "records": records}, indent=2), encoding="utf-8")
+
+
+def write_score_store_with_statuses(path: Path, captures_with_statuses: list[tuple[dict, str]]) -> None:
+    records = {}
+    for capture, status in captures_with_statuses:
+        record = build_score_breakdown_for_raw_candidate(capture, capture["candidates"][0])
+        record["status"] = status
         records[record["identity_key"]] = record
     path.write_text(json.dumps({"schema_version": 1, "score_engine_version": SCORE_ENGINE_VERSION, "records": records}, indent=2), encoding="utf-8")
 

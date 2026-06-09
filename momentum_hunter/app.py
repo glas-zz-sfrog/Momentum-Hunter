@@ -59,7 +59,9 @@ from momentum_hunter.config import AppConfig, load_config, save_config
 from momentum_hunter.historical_clusters import (
     CLUSTER_RESEARCH_LABEL,
     HistoricalClusterReport,
+    HistoricalRecurrenceReport,
     build_historical_cluster_report,
+    build_historical_recurrence_report,
 )
 from momentum_hunter.headline_events import (
     HEADLINE_DEDUP_RESEARCH_LABEL,
@@ -1810,6 +1812,8 @@ class MomentumHunterWindow(QMainWindow):
                 build_historical_cluster_panel(
                     build_historical_cluster_report(study_filter=current_study_filter()),
                     filtered_style,
+                    build_historical_recurrence_report(study_filter=current_study_filter()),
+                    replay_callback=self._show_replay_dialog,
                 ),
                 "Historical Clusters",
             )
@@ -2473,7 +2477,12 @@ def build_outcome_chart(summary: StudySummary, style: DataViewStyle) -> QChartVi
     return view
 
 
-def build_historical_cluster_panel(report: HistoricalClusterReport, style: DataViewStyle) -> QWidget:
+def build_historical_cluster_panel(
+    report: HistoricalClusterReport,
+    style: DataViewStyle,
+    recurrence_report: HistoricalRecurrenceReport | None = None,
+    replay_callback=None,
+) -> QWidget:
     panel = QWidget()
     layout = QVBoxLayout(panel)
     layout.setContentsMargins(0, 0, 0, 0)
@@ -2492,6 +2501,15 @@ def build_historical_cluster_panel(report: HistoricalClusterReport, style: DataV
         warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
         layout.addWidget(warning)
 
+    tabs = QTabWidget()
+    tabs.addTab(build_historical_theme_table(report, style), "Themes")
+    if recurrence_report is not None:
+        tabs.addTab(build_historical_recurrence_panel(recurrence_report, style, replay_callback), "Recurring Clusters")
+    layout.addWidget(tabs, 1)
+    return panel
+
+
+def build_historical_theme_table(report: HistoricalClusterReport, style: DataViewStyle) -> QTableWidget:
     table = QTableWidget(0, 13)
     table.setHorizontalHeaderLabels(
         [
@@ -2545,7 +2563,191 @@ def build_historical_cluster_panel(report: HistoricalClusterReport, style: DataV
                 table.setItem(row, column, item)
 
     table.resizeColumnsToContents()
-    layout.addWidget(table, 1)
+    table.setSortingEnabled(True)
+    return table
+
+
+def build_historical_recurrence_panel(report: HistoricalRecurrenceReport, style: DataViewStyle, replay_callback=None) -> QWidget:
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    status = QLabel(
+        f"{style.chart_prefix}{report.label} | "
+        f"Appearances: {report.total_appearances} | Source: {report.source}"
+    )
+    status.setObjectName("criteriaLabel")
+    status.setWordWrap(True)
+    layout.addWidget(status)
+
+    if report.warnings:
+        warning = QLabel(" | ".join(report.warnings))
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        layout.addWidget(warning)
+
+    splitter = QSplitter(Qt.Orientation.Vertical)
+    cluster_table = QTableWidget(max(1, len(report.clusters)), 13)
+    cluster_table.setHorizontalHeaderLabels(
+        [
+            "Cluster Type",
+            "Cluster Key",
+            "Appearances",
+            "First Seen",
+            "Most Recent",
+            "Scanners",
+            "Sessions",
+            "Avg Score",
+            "Score Breakdowns",
+            "Outcomes",
+            "Avg Next",
+            "Avg 5-Day",
+            "Avg Max / Drawdown",
+        ]
+    )
+    cluster_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    cluster_table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    cluster_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    cluster_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+    cluster_table.setSortingEnabled(False)
+
+    if not report.clusters:
+        values = ["No repeated clusters", "", "0", "", "", "", "", "n/a", "", "", "n/a", "n/a", "n/a"]
+        for column, value in enumerate(values):
+            cluster_table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, cluster in enumerate(report.clusters):
+            outcome = cluster.outcome_summary
+            values = [
+                cluster.cluster_type,
+                cluster.cluster_key,
+                str(cluster.appearance_count),
+                cluster.first_seen,
+                cluster.most_recent_seen,
+                ", ".join(cluster.scanners_involved),
+                ", ".join(cluster.sessions_involved),
+                format_number(cluster.average_score),
+                (
+                    f"complete {cluster.complete_score_breakdown_count} | "
+                    f"incomplete {cluster.incomplete_score_breakdown_count} | "
+                    f"legacy {cluster.legacy_score_breakdown_count} | "
+                    f"missing {cluster.missing_score_breakdown_count}"
+                ),
+                f"later-derived: complete {outcome.completed_count} | pending {outcome.pending_count}",
+                format_percent(outcome.average_next_day_return_pct),
+                format_percent(outcome.average_five_day_return_pct),
+                f"{format_percent(outcome.average_max_gain_pct)} / {format_percent(outcome.average_max_drawdown_pct)}",
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column == 0:
+                    item.setData(Qt.ItemDataRole.UserRole, row)
+                elif column == 2:
+                    item.setData(Qt.ItemDataRole.DisplayRole, cluster.appearance_count)
+                elif column == 7:
+                    item.setData(Qt.ItemDataRole.DisplayRole, cluster.average_score or 0)
+                if cluster.missing_score_breakdown_count or cluster.incomplete_score_breakdown_count or cluster.legacy_score_breakdown_count:
+                    item.setBackground(QBrush(QColor("#735f24")))
+                cluster_table.setItem(row, column, item)
+    cluster_table.resizeColumnsToContents()
+    cluster_table.setSortingEnabled(True)
+
+    detail_panel = QWidget()
+    detail_layout = QVBoxLayout(detail_panel)
+    detail_layout.setContentsMargins(0, 0, 0, 0)
+    detail_note = QLabel("Outcome columns are later-derived labels, not capture-time facts.")
+    detail_note.setObjectName("criteriaLabel")
+    detail_note.setWordWrap(True)
+    detail_layout.addWidget(detail_note)
+    detail_table = QTableWidget(0, 13)
+    detail_table.setHorizontalHeaderLabels(
+        [
+            "Ticker",
+            "Capture Time",
+            "Session",
+            "Scanner",
+            "Provider",
+            "Score",
+            "Review",
+            "Score Breakdown",
+            "Outcome",
+            "Next-Day",
+            "5-Day",
+            "Max Gain",
+            "Max Drawdown",
+        ]
+    )
+    detail_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    detail_table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    detail_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    detail_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+    detail_layout.addWidget(detail_table, 1)
+    replay_button = QPushButton("Replay Selected Appearance")
+    replay_button.setEnabled(False)
+    detail_layout.addWidget(replay_button)
+
+    current_appearances = []
+
+    def populate_detail() -> None:
+        nonlocal current_appearances
+        selected_row = cluster_table.currentRow()
+        index_item = cluster_table.item(selected_row, 0) if selected_row >= 0 else None
+        cluster_index = index_item.data(Qt.ItemDataRole.UserRole) if index_item is not None else None
+        if not isinstance(cluster_index, int) or cluster_index < 0 or cluster_index >= len(report.clusters):
+            current_appearances = []
+        else:
+            current_appearances = list(report.clusters[cluster_index].appearances)
+        detail_table.setRowCount(max(1, len(current_appearances)))
+        if not current_appearances:
+            values = ["No appearances", "", "", "", "", "", "", "", "", "", "", "", ""]
+            for column, value in enumerate(values):
+                detail_table.setItem(0, column, QTableWidgetItem(value))
+            replay_button.setEnabled(False)
+            return
+        for row, appearance in enumerate(current_appearances):
+            values = [
+                appearance.ticker,
+                appearance.capture_time_text,
+                appearance.session,
+                appearance.scanner,
+                appearance.provider,
+                str(appearance.score),
+                appearance.review_status,
+                appearance.score_breakdown_status,
+                f"later-derived: {appearance.outcome_status}",
+                format_percent(appearance.next_day_return_pct),
+                format_percent(appearance.five_day_return_pct),
+                format_percent(appearance.max_gain_pct),
+                format_percent(appearance.max_drawdown_pct),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if "Quarantined" in appearance.trust_label or appearance.score_breakdown_status in {"missing", "legacy", "incomplete"}:
+                    item.setBackground(QBrush(QColor("#735f24")))
+                detail_table.setItem(row, column, item)
+        detail_table.resizeColumnsToContents()
+        detail_table.selectRow(0)
+        replay_button.setEnabled(replay_callback is not None)
+
+    def replay_selected() -> None:
+        if replay_callback is None or not current_appearances:
+            return
+        row = detail_table.currentRow()
+        if row < 0 or row >= len(current_appearances):
+            row = 0
+        replay_callback(current_appearances[row].timeline_row)
+
+    cluster_table.itemSelectionChanged.connect(populate_detail)
+    replay_button.clicked.connect(replay_selected)
+    if report.clusters:
+        cluster_table.selectRow(0)
+    else:
+        populate_detail()
+
+    splitter.addWidget(cluster_table)
+    splitter.addWidget(detail_panel)
+    splitter.setSizes([330, 390])
+    layout.addWidget(splitter, 1)
     return panel
 
 

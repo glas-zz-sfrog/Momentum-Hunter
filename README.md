@@ -234,6 +234,10 @@ Historical clusters group stored candidates into deterministic themes such as ea
 
 Cluster generation reads active raw captures plus separate derived stores: `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`. It does not fetch current market data, mutate raw captures, or recalculate historical scores with newer logic.
 
+Historical Cluster Display v1 also includes a `Recurring Clusters` view for repeated ticker, sector, and scanner-preset appearances across trusted captures. Selecting a recurrence cluster shows the underlying historical appearances with ticker, Central Time capture timestamp, session, scanner, provider, score, review status, stored score-breakdown status, and later-derived outcome labels.
+
+Individual historical appearances can be opened in the existing point-in-time Replay Mode. Replay remains read-only, uses stored capture facts and stored score explanations, and does not fetch current market data or recompute historical scores.
+
 Cluster filters include date range, market regime, scanner preset, sector, minimum score, review status, and the study-eligible-only default. Small samples and missing outcome data are shown as warnings.
 
 ## Catalyst Cluster Explorer
