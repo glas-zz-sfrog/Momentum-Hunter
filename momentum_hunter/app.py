@@ -80,6 +80,11 @@ from momentum_hunter.outcome_explorer import (
     OutcomeExplorerReport,
     build_outcome_explorer_report,
 )
+from momentum_hunter.outcome_maturity import (
+    OUTCOME_MATURITY_LABEL,
+    OutcomeMaturityReport,
+    build_outcome_maturity_report,
+)
 from momentum_hunter.opportunity_research import (
     OPPORTUNITY_RESEARCH_LABEL,
     OpportunityResearchReport,
@@ -1837,6 +1842,13 @@ class MomentumHunterWindow(QMainWindow):
                 "Outcome Explorer",
             )
             chart_tabs.addTab(
+                build_outcome_maturity_panel(
+                    build_outcome_maturity_report(study_filter=current_study_filter()),
+                    filtered_style,
+                ),
+                "Readiness Gate",
+            )
+            chart_tabs.addTab(
                 build_opportunity_research_panel(
                     build_opportunity_research_report(study_filter=current_study_filter()),
                     filtered_style,
@@ -2781,6 +2793,96 @@ def build_outcome_explorer_panel(report: OutcomeExplorerReport, style: DataViewS
     tabs.addTab(build_outcome_candidate_table(report, style), "Candidates")
     layout.addWidget(tabs, 1)
     return panel
+
+
+def build_outcome_maturity_panel(report: OutcomeMaturityReport, style: DataViewStyle) -> QWidget:
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    status = QLabel(
+        f"{style.chart_prefix}{OUTCOME_MATURITY_LABEL} | "
+        f"Candidates: {report.total_candidates} | Next-Day Complete: {report.completed_next_day_outcomes} | "
+        f"5-Day Complete: {report.completed_five_day_outcomes} | Source: {report.source}"
+    )
+    status.setObjectName("criteriaLabel")
+    status.setWordWrap(True)
+    layout.addWidget(status)
+
+    if report.warnings:
+        warning = QLabel(" | ".join(report.warnings))
+        warning.setWordWrap(True)
+        warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        layout.addWidget(warning)
+
+    tabs = QTabWidget()
+    tabs.addTab(build_outcome_maturity_summary_table(report, style), "Summary")
+    tabs.addTab(build_outcome_maturity_gate_table(report, style), "Gates")
+    layout.addWidget(tabs, 1)
+    return panel
+
+
+def build_outcome_maturity_summary_table(report: OutcomeMaturityReport, style: DataViewStyle) -> QTableWidget:
+    rows = [
+        ("Label", report.label),
+        ("Total candidates", str(report.total_candidates)),
+        ("Study-eligible candidates", str(report.study_eligible_candidates)),
+        ("Completed next-day outcomes", str(report.completed_next_day_outcomes)),
+        ("Completed five-day outcomes", str(report.completed_five_day_outcomes)),
+        ("Pending next-day outcomes", str(report.pending_next_day_outcomes)),
+        ("Pending five-day outcomes", str(report.pending_five_day_outcomes)),
+        ("Completed outcome percentage", format_percent(report.completed_outcome_pct)),
+        ("Pending outcome percentage", format_percent(report.pending_outcome_pct)),
+        ("Earliest capture date", report.earliest_capture_date),
+        ("Latest capture date", report.latest_capture_date),
+        ("Earliest date with usable five-day outcomes", report.earliest_date_with_usable_five_day_outcomes),
+        ("Latest date with pending five-day outcomes", report.latest_date_with_pending_five_day_outcomes),
+        ("Warnings", " | ".join(report.warnings)),
+        ("Readiness note", "Readiness monitoring only. No Opportunity Score, optimizer logic, or trading recommendation is generated."),
+    ]
+    table = QTableWidget(len(rows), 2)
+    table.setHorizontalHeaderLabels(["Metric", "Value"])
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    for row, (metric, value) in enumerate(rows):
+        table.setItem(row, 0, QTableWidgetItem(metric))
+        item = QTableWidgetItem(value)
+        if metric == "Warnings" and value:
+            item.setBackground(QBrush(QColor("#735f24")))
+        table.setItem(row, 1, item)
+    return table
+
+
+def build_outcome_maturity_gate_table(report: OutcomeMaturityReport, style: DataViewStyle) -> QTableWidget:
+    table = QTableWidget(max(1, len(report.gates)), 6)
+    table.setHorizontalHeaderLabels(["Gate", "Status", "Current", "Required", "Reason", "Estimated Earliest Readiness"])
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    if not report.gates:
+        values = ["No gates", "LOCKED", "0", "0", "No outcome rows found.", "unknown - no captures"]
+        for column, value in enumerate(values):
+            table.setItem(0, column, QTableWidgetItem(value))
+    else:
+        for row, gate in enumerate(report.gates):
+            values = [
+                gate.name,
+                gate.status,
+                str(gate.current_count),
+                str(gate.required_count),
+                gate.reason,
+                gate.estimated_earliest_readiness_date,
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if gate.status == "LOCKED":
+                    item.setBackground(QBrush(QColor("#7f2d2d")))
+                elif gate.status == "DIAGNOSTIC":
+                    item.setBackground(QBrush(QColor("#735f24")))
+                table.setItem(row, column, item)
+    table.resizeColumnsToContents()
+    return table
 
 
 def build_opportunity_research_panel(report: OpportunityResearchReport, style: DataViewStyle) -> QWidget:

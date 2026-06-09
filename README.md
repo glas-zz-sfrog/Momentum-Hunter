@@ -300,6 +300,18 @@ The tab groups post-capture outcomes by score bucket, market regime, scanner, se
 
 If completed outcomes are too low, the UI says `Insufficient completed outcomes for conclusions.` Pending outcomes are counted but are never treated as wins, losses, or completed-return observations.
 
+## Outcome Maturity / Data Readiness
+
+The Study Engine includes a `Readiness Gate` tab labeled `OUTCOME MATURITY / DATA READINESS - MONITOR ONLY`.
+
+The readiness panel uses stored `analysis-captures.csv`, `analysis-outcomes.csv`, active raw capture identity, and review-decision context. It does not fetch current market data, mutate raw captures, alter `momentum_score_v1`, alter `scoring_profiles.json`, create Opportunity Score, optimize weights, start broker integration, or write SQLite records.
+
+Readiness metrics show total candidates, study-eligible candidates, completed next-day outcomes, completed five-day outcomes, pending next-day outcomes, pending five-day outcomes, completed/pending percentages, capture date range, earliest date with usable five-day outcomes, and latest date still pending five-day outcomes.
+
+Readiness gates are shown for Outcome Explorer, Opportunity Research, Opportunity Score design, and Weight optimization. Default thresholds are 20 completed next-day outcomes, 50 completed five-day outcomes, 100 completed five-day outcomes, and 300 completed five-day outcomes respectively. Each gate displays `LOCKED`, `DIAGNOSTIC`, or `READY`, with the current count, required count, reason, and estimated earliest readiness date when the estimate is calculable.
+
+Pending outcomes are never treated as completed. Quarantined captures and non-study-eligible captures remain excluded by default unless the Study Engine filter explicitly includes non-trading-day/preopen observations.
+
 ## Legacy Capture Cleanup
 
 If a non-market-day `morning` or `evening` raw capture is accidentally created beside a valid `preopen` capture, use the cleanup command to quarantine the unwanted raw files and rebuild/prune derived CSV rows without editing raw captures:

@@ -103,6 +103,7 @@ def sample_health_snapshot() -> CaptureHealthSnapshot:
     last_evening = today_evening if current >= today_evening else today_evening - timedelta(days=1)
     next_morning = today_morning if current < today_morning else today_morning + timedelta(days=1)
     next_evening = today_evening if current < today_evening else today_evening + timedelta(days=1)
+    next_preopen = today_evening if current < today_evening else today_evening + timedelta(days=1)
     return CaptureHealthSnapshot(
         last_morning_capture=CaptureSuccessInfo(
             session=CaptureSession.MORNING,
@@ -118,9 +119,17 @@ def sample_health_snapshot() -> CaptureHealthSnapshot:
             provider="finviz",
             scanner="Base Momentum",
         ),
+        last_preopen_capture=CaptureSuccessInfo(
+            session=CaptureSession.PREOPEN,
+            capture_time=last_evening - timedelta(days=2),
+            candidate_count=16,
+            provider="finviz",
+            scanner="Base Momentum",
+        ),
         last_failed_capture=CaptureFailureInfo(),
         next_morning_run=next_morning,
         next_evening_run=next_evening,
+        next_preopen_run=next_preopen,
         csv_append_status=CsvStatus(path=PROJECT_ROOT / "MomentumHunterData" / "data" / "analysis-captures.csv", exists=True, row_count=245, last_updated=current),
         outcome_update_status=CsvStatus(path=PROJECT_ROOT / "MomentumHunterData" / "data" / "analysis-outcomes.csv", exists=True, row_count=245, last_updated=current),
     )

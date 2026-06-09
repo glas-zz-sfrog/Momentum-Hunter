@@ -1,5 +1,24 @@
 # Momentum Hunter Changelog
 
+## 2026-06-09
+
+### Added
+
+- Added Outcome Maturity / Data Readiness Gate v1.
+- Added `Readiness Gate` Study Engine tab with readiness metrics and gate statuses for Outcome Explorer, Opportunity Research, Opportunity Score design, and Weight optimization.
+- Added completed next-day versus completed five-day outcome counting so pending five-day rows do not block next-day readiness measurement.
+- Added readiness warnings for insufficient completed outcomes, high pending rate, diagnostic-only state, and trading-decision safety.
+
+### Safety
+
+- Outcome Maturity v1 is monitor-only and does not create Opportunity Score, optimize weights, alter `momentum_score_v1`, alter `scoring_profiles.json`, fetch current market data, mutate raw captures, start broker integration, or write SQLite records.
+- Pending outcomes are counted as pending and are never treated as completed outcomes.
+- Quarantined captures and non-study-eligible captures remain excluded by default through the existing active-capture and Study Engine filters.
+
+### Tests
+
+- Added tests for deterministic readiness counts, pending exclusion, gate thresholds, quarantined capture exclusion, non-study default exclusion, raw-capture immutability, and graceful readiness-date estimates.
+
 ## 2026-06-07
 
 ### Added
