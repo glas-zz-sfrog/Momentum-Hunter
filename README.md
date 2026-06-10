@@ -57,6 +57,12 @@ Watchlists are saved as:
 MomentumHunterData\data\watchlist-YYYY-MM-DD.json
 ```
 
+Entry plans for watchlist candidates are stored separately as:
+
+```text
+MomentumHunterData\data\entry-plans.json
+```
+
 Daily captures are stored as:
 
 ```text
@@ -87,6 +93,12 @@ Outcome fields include:
 - `max_gain_pct`
 - `max_drawdown_pct`
 - `outcome_status`
+
+## Watchlist Discipline
+
+When a current/live candidate is moved to Watchlist, Momentum Hunter can store an entry plan with trigger, stop, thesis, invalidation, max loss, position size idea, planned hold time, and notes. Incomplete plans show warnings for missing trigger, stop, invalidation, and max loss.
+
+Entry plans are planning/journaling records only. Momentum Hunter does not place orders, route trades, or connect to a broker. Historical, Replay, and Study views are read-only for entry plans.
 
 Rows remain `pending_next_day` or `pending_five_day` until enough future daily price bars exist. Scheduled capture jobs run the outcome updater after each successful capture.
 

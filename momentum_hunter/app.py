@@ -56,6 +56,12 @@ from momentum_hunter.catalyst_clusters import (
     build_catalyst_cluster_report,
 )
 from momentum_hunter.config import AppConfig, load_config, save_config
+from momentum_hunter.entry_plans import (
+    EntryPlan,
+    entry_plan_warnings,
+    load_entry_plans,
+    upsert_entry_plan,
+)
 from momentum_hunter.historical_clusters import (
     CLUSTER_RESEARCH_LABEL,
     HistoricalClusterReport,
@@ -209,6 +215,8 @@ class MomentumHunterWindow(QMainWindow):
         self.saved_candidates: dict[str, Candidate] = {}
         self.reviewed_tickers: set[str] = set()
         self.review_decisions: dict[str, ReviewDecision] = load_review_decisions()
+        self.entry_plans: dict[str, EntryPlan] = load_entry_plans()
+        self._loading_entry_plan = False
         self.live_candidates: list[Candidate] = []
         self.live_saved_candidates: dict[str, Candidate] = {}
         self.live_reviewed_tickers: set[str] = set()
@@ -523,13 +531,50 @@ class MomentumHunterWindow(QMainWindow):
         entry_layout = QGridLayout(entry_box)
         self.entry_trigger = QLineEdit()
         self.stop_level = QLineEdit()
+        self.entry_thesis = QPlainTextEdit()
+        self.entry_thesis.setMaximumHeight(64)
+        self.entry_invalidation = QPlainTextEdit()
+        self.entry_invalidation.setMaximumHeight(64)
+        self.entry_max_loss = QLineEdit()
+        self.entry_position_size = QLineEdit()
+        self.entry_hold_time = QLineEdit()
+        self.entry_notes = QPlainTextEdit()
+        self.entry_notes.setMaximumHeight(64)
+        self.plan_complete_checkbox = QCheckBox("Plan Complete")
+        self.plan_warnings_label = QLabel("Plan warnings: missing trigger | missing stop | missing invalidation | missing max loss")
+        self.plan_warnings_label.setWordWrap(True)
         self.risk_note = QLabel("Suggested discipline: define entry, invalidation, and max loss before placing any trade.")
         self.risk_note.setWordWrap(True)
+        for widget in [
+            self.entry_trigger,
+            self.stop_level,
+            self.entry_max_loss,
+            self.entry_position_size,
+            self.entry_hold_time,
+        ]:
+            widget.editingFinished.connect(self._entry_plan_changed)
+        for widget in [self.entry_thesis, self.entry_invalidation, self.entry_notes]:
+            widget.textChanged.connect(self._entry_plan_changed)
+        self.plan_complete_checkbox.stateChanged.connect(self._entry_plan_changed)
         entry_layout.addWidget(QLabel("Trigger"), 0, 0)
         entry_layout.addWidget(self.entry_trigger, 0, 1)
         entry_layout.addWidget(QLabel("Stop"), 1, 0)
         entry_layout.addWidget(self.stop_level, 1, 1)
-        entry_layout.addWidget(self.risk_note, 2, 0, 1, 2)
+        entry_layout.addWidget(QLabel("Thesis"), 2, 0)
+        entry_layout.addWidget(self.entry_thesis, 2, 1)
+        entry_layout.addWidget(QLabel("Invalidation"), 3, 0)
+        entry_layout.addWidget(self.entry_invalidation, 3, 1)
+        entry_layout.addWidget(QLabel("Max Loss"), 4, 0)
+        entry_layout.addWidget(self.entry_max_loss, 4, 1)
+        entry_layout.addWidget(QLabel("Position Size"), 5, 0)
+        entry_layout.addWidget(self.entry_position_size, 5, 1)
+        entry_layout.addWidget(QLabel("Hold Time"), 6, 0)
+        entry_layout.addWidget(self.entry_hold_time, 6, 1)
+        entry_layout.addWidget(QLabel("Plan Notes"), 7, 0)
+        entry_layout.addWidget(self.entry_notes, 7, 1)
+        entry_layout.addWidget(self.plan_complete_checkbox, 8, 1)
+        entry_layout.addWidget(self.plan_warnings_label, 9, 0, 1, 2)
+        entry_layout.addWidget(self.risk_note, 10, 0, 1, 2)
         layout.addWidget(entry_box)
         return panel
 
@@ -709,6 +754,7 @@ class MomentumHunterWindow(QMainWindow):
         self.notes_edit.blockSignals(True)
         self.notes_edit.setPlainText(decision.decision_note if decision and decision.decision_note else candidate.user_notes)
         self.notes_edit.blockSignals(False)
+        self._load_entry_plan_for_candidate(candidate)
         self.news_text.setHtml(format_news_html(candidate, now=self.display_capture_time))
         self.reviewed_tickers.add(candidate.ticker)
         if self.data_view_state == DataViewState.CURRENT:
@@ -729,13 +775,85 @@ class MomentumHunterWindow(QMainWindow):
         self.notes_edit.clear()
         self.notes_edit.blockSignals(False)
         self.news_text.clear()
-        self.entry_trigger.clear()
-        self.stop_level.clear()
+        self._clear_entry_plan_fields()
 
     def _notes_changed(self) -> None:
         candidate = self._selected_candidate()
         if candidate is not None:
             candidate.user_notes = self.notes_edit.toPlainText()
+
+    def _load_entry_plan_for_candidate(self, candidate: Candidate) -> None:
+        identity = self._candidate_identity(candidate)
+        plan = self.entry_plans.get(identity.key)
+        self._loading_entry_plan = True
+        self.entry_trigger.setText(plan.trigger if plan else "")
+        self.stop_level.setText(plan.stop if plan else "")
+        self.entry_thesis.setPlainText(plan.thesis if plan else "")
+        self.entry_invalidation.setPlainText(plan.invalidation if plan else "")
+        self.entry_max_loss.setText(plan.max_loss if plan else "")
+        self.entry_position_size.setText(plan.position_size if plan else "")
+        self.entry_hold_time.setText(plan.planned_hold_time if plan else "")
+        self.entry_notes.setPlainText(plan.notes if plan else "")
+        self.plan_complete_checkbox.setChecked(bool(plan and plan.plan_complete))
+        self._loading_entry_plan = False
+        self._update_entry_plan_warnings(plan)
+
+    def _clear_entry_plan_fields(self) -> None:
+        self._loading_entry_plan = True
+        self.entry_trigger.clear()
+        self.stop_level.clear()
+        self.entry_thesis.clear()
+        self.entry_invalidation.clear()
+        self.entry_max_loss.clear()
+        self.entry_position_size.clear()
+        self.entry_hold_time.clear()
+        self.entry_notes.clear()
+        self.plan_complete_checkbox.setChecked(False)
+        self._loading_entry_plan = False
+        self._update_entry_plan_warnings(None)
+
+    def _entry_plan_changed(self) -> None:
+        if self._loading_entry_plan:
+            return
+        candidate = self._selected_candidate()
+        if candidate is None:
+            return
+        if self._is_read_only_view():
+            self._update_status("This view is read-only. Return to current data before editing entry plans.")
+            return
+        plan = self._save_entry_plan_for_candidate(candidate)
+        self._update_entry_plan_warnings(plan)
+
+    def _save_entry_plan_for_candidate(self, candidate: Candidate) -> EntryPlan:
+        identity = self._candidate_identity(candidate)
+        plan = upsert_entry_plan(
+            self.entry_plans,
+            identity,
+            trigger=self.entry_trigger.text(),
+            stop=self.stop_level.text(),
+            thesis=self.entry_thesis.toPlainText(),
+            invalidation=self.entry_invalidation.toPlainText(),
+            max_loss=self.entry_max_loss.text(),
+            position_size=self.entry_position_size.text(),
+            planned_hold_time=self.entry_hold_time.text(),
+            notes=self.entry_notes.toPlainText(),
+            plan_complete=self.plan_complete_checkbox.isChecked(),
+        )
+        self.entry_plans[identity.key] = plan
+        if self.plan_complete_checkbox.isChecked() != plan.plan_complete:
+            self._loading_entry_plan = True
+            self.plan_complete_checkbox.setChecked(plan.plan_complete)
+            self._loading_entry_plan = False
+        return plan
+
+    def _update_entry_plan_warnings(self, plan: EntryPlan | None) -> None:
+        warnings = entry_plan_warnings(plan) if plan else ["missing trigger", "missing stop", "missing invalidation", "missing max loss"]
+        if warnings:
+            self.plan_warnings_label.setText("Plan warnings: " + " | ".join(warnings))
+            self.plan_warnings_label.setStyleSheet("color: #fcd34d; font-weight: 700;")
+        else:
+            self.plan_warnings_label.setText("Plan complete.")
+            self.plan_warnings_label.setStyleSheet("color: #86efac; font-weight: 700;")
 
     def save_selected_candidates(self) -> None:
         self.mark_interested_candidates()
@@ -794,6 +912,12 @@ class MomentumHunterWindow(QMainWindow):
         if status == ReviewStatus.WATCHLIST:
             candidate.saved_at = decision.decision_timestamp
             self.saved_candidates[candidate.ticker] = candidate
+            if candidate.ticker == self.selected_ticker:
+                self._save_entry_plan_for_candidate(candidate)
+            else:
+                identity = self._candidate_identity(candidate)
+                if identity.key not in self.entry_plans:
+                    self.entry_plans[identity.key] = upsert_entry_plan(self.entry_plans, identity)
         else:
             self.saved_candidates.pop(candidate.ticker, None)
         if self.data_view_state == DataViewState.CURRENT:
@@ -825,8 +949,9 @@ class MomentumHunterWindow(QMainWindow):
             self._update_status("No watchlist candidates yet. Mark candidates interested, then add interested to watchlist.")
             return
         session_date = next_market_session()
+        entry_plans = self._entry_plans_for_candidates(watchlist_candidates)
         path = save_watchlist(watchlist_candidates, session_date)
-        report = save_watchlist_report(watchlist_candidates, session_date)
+        report = save_watchlist_report(watchlist_candidates, session_date, entry_plans=entry_plans)
         self.capture_daily_snapshot(session=CaptureSession.MANUAL, show_message=False)
         self._load_capture_history()
         QMessageBox.information(
@@ -1268,6 +1393,13 @@ class MomentumHunterWindow(QMainWindow):
         self.notes_edit.setReadOnly(read_only)
         self.entry_trigger.setReadOnly(read_only)
         self.stop_level.setReadOnly(read_only)
+        self.entry_thesis.setReadOnly(read_only)
+        self.entry_invalidation.setReadOnly(read_only)
+        self.entry_max_loss.setReadOnly(read_only)
+        self.entry_position_size.setReadOnly(read_only)
+        self.entry_hold_time.setReadOnly(read_only)
+        self.entry_notes.setReadOnly(read_only)
+        self.plan_complete_checkbox.setEnabled(not read_only)
         self.scan_button.setProperty("emphasized", style.state == DataViewState.STALE)
         self.scan_button.style().unpolish(self.scan_button)
         self.scan_button.style().polish(self.scan_button)
@@ -1491,6 +1623,16 @@ class MomentumHunterWindow(QMainWindow):
 
     def _watchlist_candidates(self) -> list[Candidate]:
         return [candidate for candidate in self.candidates if self._candidate_review_status(candidate) == ReviewStatus.WATCHLIST]
+
+    def _entry_plans_for_candidates(self, candidates: list[Candidate]) -> dict[str, EntryPlan]:
+        plans: dict[str, EntryPlan] = {}
+        for candidate in candidates:
+            identity = self._candidate_identity(candidate)
+            plan = self.entry_plans.get(identity.key)
+            if plan is None:
+                plan = upsert_entry_plan(self.entry_plans, identity)
+            plans[candidate.ticker] = plan
+        return plans
 
     def _marked_candidates(self) -> list[Candidate]:
         marked: list[Candidate] = []

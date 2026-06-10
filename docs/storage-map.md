@@ -59,6 +59,18 @@ Existing historical raw captures are not rewritten. Derived readers classify leg
 
 Review decisions are user journal records. They reference raw captures but do not modify them.
 
+## Entry plans
+
+- Path: `MomentumHunterData/data/entry-plans.json`
+- Owner: watchlist discipline workflow
+- Mutability: append/update by candidate identity
+- Stores: trigger, stop, thesis, invalidation, max loss, position size idea, planned hold time, plan notes, `plan_complete`, warnings, and update timestamp
+- Identity: `capture_id/date/session/provider/scanner/ticker`
+
+Entry plans are user planning records for candidates promoted to Watchlist. They reference raw captures but do not modify them. Current/live views can create or edit plans; historical, replay, and study views are read-only.
+
+Incomplete-plan warnings are derived from missing trigger, stop, invalidation, and max-loss fields. Watchlist reports include entry-plan fields as later user annotations.
+
 ## Derived outcomes
 
 - Path: `MomentumHunterData/data/analysis-outcomes.csv`

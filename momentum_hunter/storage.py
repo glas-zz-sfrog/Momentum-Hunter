@@ -433,9 +433,10 @@ def ensure_csv_fieldnames(path: Path, fieldnames: list[str]) -> None:
             writer.writerow({field: row.get(field, "") for field in fieldnames})
 
 
-def save_watchlist_report(candidates: list[Candidate], for_date: datetime | None = None) -> Path:
+def save_watchlist_report(candidates: list[Candidate], for_date: datetime | None = None, *, entry_plans: dict[str, object] | None = None) -> Path:
     path = report_path(for_date)
     value = for_date or now_central()
+    entry_plans = entry_plans or {}
     lines = [
         f"# Momentum Hunter Watchlist - {value.strftime('%Y-%m-%d')}",
         "",
@@ -443,6 +444,7 @@ def save_watchlist_report(candidates: list[Candidate], for_date: datetime | None
         "",
     ]
     for index, candidate in enumerate(sorted(candidates, key=lambda item: item.score, reverse=True), 1):
+        plan = entry_plans.get(candidate.ticker)
         lines.extend(
             [
                 f"## {index}. {candidate.ticker} - {candidate.company}",
@@ -465,6 +467,18 @@ def save_watchlist_report(candidates: list[Candidate], for_date: datetime | None
                 "### Notes",
                 candidate.user_notes.strip() or "No notes entered.",
                 "",
+                "### Entry Plan",
+                f"- Trigger: {plan_value(plan, 'trigger')}",
+                f"- Stop: {plan_value(plan, 'stop')}",
+                f"- Thesis: {plan_value(plan, 'thesis')}",
+                f"- Invalidation: {plan_value(plan, 'invalidation')}",
+                f"- Max Loss: {plan_value(plan, 'max_loss')}",
+                f"- Position Size Idea: {plan_value(plan, 'position_size')}",
+                f"- Planned Hold Time: {plan_value(plan, 'planned_hold_time')}",
+                f"- Plan Complete: {plan_value(plan, 'plan_complete', default='False')}",
+                f"- Plan Warnings: {plan_warnings_text(plan)}",
+                f"- Plan Notes: {plan_value(plan, 'notes')}",
+                "",
                 "### Headlines",
             ]
         )
@@ -477,6 +491,22 @@ def save_watchlist_report(candidates: list[Candidate], for_date: datetime | None
         lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
+
+
+def plan_value(plan: object | None, field_name: str, *, default: str = "n/a") -> str:
+    if plan is None:
+        return default
+    value = getattr(plan, field_name, default)
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    return str(value).strip() or default
+
+
+def plan_warnings_text(plan: object | None) -> str:
+    if plan is None:
+        return "missing trigger | missing stop | missing invalidation | missing max loss"
+    warnings = getattr(plan, "warnings", [])
+    return " | ".join(str(item) for item in warnings) if warnings else "none"
 
 
 def save_snapshot_report(

@@ -4,6 +4,23 @@
 
 ### Added
 
+- Added Watchlist Discipline / Entry Plan v1.
+- Added `entry-plans.json` as a separate user planning store keyed by candidate identity.
+- Expanded the Entry Plan UI with trigger, stop, thesis, invalidation, max loss, position size idea, planned hold time, notes, and Plan Complete status.
+- Added incomplete-plan warnings for missing trigger, stop, invalidation, and max loss.
+- Added entry-plan fields to Watchlist Report output.
+
+### Safety
+
+- Entry plans are planning/journaling records only and do not place orders, integrate brokers, create Opportunity Score, optimize weights, mutate raw captures, or write SQLite records.
+- Historical, Replay, and Study views remain read-only for entry-plan editing.
+
+### Tests
+
+- Added tests for entry-plan persistence, raw-capture immutability, read-only historical behavior, watchlist report output, and incomplete-plan warnings.
+
+### Added
+
 - Added Historical Cluster Display recurrence refinement.
 - Added ticker, sector, and scanner recurring cluster summaries using stored active captures and Replay Mode identities.
 - Added recurrence appearance detail support with capture-time fields separated from later-derived outcome labels.
