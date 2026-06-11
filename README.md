@@ -108,6 +108,14 @@ The selected candidate shows a compact Decision Card with ticker, score, catalys
 
 Quick actions support marking a candidate Interested or Rejected, adding it to Watchlist, opening the stored score explanation, and opening Timeline/Replay. Entry plans remain stored in `entry-plans.json`; the Morning Review workspace does not mutate raw captures and does not place trades.
 
+## Daily Workflow Checklist
+
+Use `Daily Checklist` from the main toolbar to check whether the daily Momentum Hunter routine is actually complete. The checklist shows capture health, review counts, watchlist and entry-plan completeness, outcome maturity counts, readiness-gate statuses, warnings, and a workflow-discipline score.
+
+The workflow score measures operational consistency only: candidate review completion, watchlist plan completion, capture success, and critical warning status. It does not evaluate trade quality, recommend trades, change scoring, or optimize weights.
+
+Quick actions can open Morning Review, Watchlist Report, Capture Health, and Readiness Gate. In stale, historical, or study contexts, edit/write actions remain disabled while read-only diagnostics stay available.
+
 Rows remain `pending_next_day` or `pending_five_day` until enough future daily price bars exist. Scheduled capture jobs run the outcome updater after each successful capture.
 
 The Study Engine includes score-weight recommendations once enough completed 5-day outcomes exist. Recommendations are advisory only; Momentum Hunter does not automatically rewrite `config\scoring_profiles.json`.

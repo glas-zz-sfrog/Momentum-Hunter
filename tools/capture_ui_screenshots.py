@@ -63,6 +63,14 @@ def main() -> int:
         with patch.object(QDialog, "exec", capture_morning_dialog):
             window.open_morning_review_workspace()
 
+        def capture_daily_workflow_dialog(dialog: QDialog) -> int:
+            saved.append(save_widget(app, dialog, "momentum_hunter_daily_workflow_checklist.png"))
+            dialog.close()
+            return 0
+
+        with patch.object(QDialog, "exec", capture_daily_workflow_dialog):
+            window.open_daily_workflow_checklist()
+
         window._load_historical_capture(historical_payload())
         saved.append(save_widget(app, window, "momentum_hunter_historical_snapshot.png"))
 

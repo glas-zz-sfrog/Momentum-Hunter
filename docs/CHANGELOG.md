@@ -4,6 +4,10 @@
 
 ### Added
 
+- Added Daily Workflow Checklist / Review Report v1.
+- Added a `Daily Checklist` toolbar action with capture status, review status, entry-plan status, outcome status, readiness status, workflow warnings, and a workflow-discipline score.
+- Added quick actions for Open Morning Review, Open Watchlist Report, Open Capture Health, and Open Readiness Gate.
+- Added Daily Workflow Checklist screenshot generation for documentation evidence.
 - Added Morning Review Workspace v1.
 - Added a `Morning Review` toolbar action with a focused candidate table, compact Decision Card, score/catalyst/freshness context, source and duplicate warning context, review actions, and entry-plan editing.
 - Added quick actions for Mark Interested, Mark Rejected, Add to Watchlist, Open Why Score, and Open Timeline/Replay.
@@ -11,12 +15,15 @@
 
 ### Safety
 
+- Daily Workflow Checklist is workflow tracking only and does not add scoring changes, Opportunity Score, optimization, broker integration, order placement, SQLite migration, or automated trading.
+- The workflow score measures daily process completion only and does not evaluate trade quality.
 - Morning Review is workflow/UI only and does not add broker integration, order placement, Opportunity Score, optimizer logic, scoring changes, SQLite migration, or automated trading.
 - Current/live data can be reviewed and edited; stale, historical, replay, and study-style views remain clearly warned and read-only.
 - Review decisions and entry plans continue to live in derived stores and do not mutate immutable raw captures.
 
 ### Tests
 
+- Added tests for deterministic Daily Workflow counts, workflow score math, warning triggers, raw-capture immutability, and read-only historical/study quick-action behavior.
 - Added tests for current Morning Review editing, stale-data warnings, historical/study read-only behavior, raw-capture immutability, selected-candidate Decision Card updates, and incomplete-plan warnings.
 
 ## 2026-06-09

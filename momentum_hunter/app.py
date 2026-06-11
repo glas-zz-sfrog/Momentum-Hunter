@@ -57,6 +57,7 @@ from momentum_hunter.catalyst_clusters import (
     classify_catalyst_headline_detail,
 )
 from momentum_hunter.config import AppConfig, load_config, save_config
+from momentum_hunter.daily_workflow import DailyWorkflowReport, build_daily_workflow_report
 from momentum_hunter.entry_plans import (
     EntryPlan,
     entry_plan_warnings,
@@ -336,6 +337,9 @@ class MomentumHunterWindow(QMainWindow):
         self.morning_review_button = QPushButton("Morning Review")
         self.morning_review_button.clicked.connect(self.open_morning_review_workspace)
 
+        self.daily_checklist_button = QPushButton("Daily Checklist")
+        self.daily_checklist_button.clicked.connect(self.open_daily_workflow_checklist)
+
         self.study_button = QPushButton("Study Engine")
         self.study_button.clicked.connect(self.open_study_engine)
 
@@ -374,9 +378,10 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(self.open_capture_button, 2, 7)
         layout.addWidget(self.current_button, 2, 8)
         layout.addWidget(self.morning_review_button, 2, 9)
-        layout.addWidget(self.study_button, 2, 10)
-        layout.addWidget(self.brand_logo, 0, 11, 3, 1)
-        layout.addWidget(self.criteria_label, 3, 0, 1, 12)
+        layout.addWidget(self.daily_checklist_button, 2, 10)
+        layout.addWidget(self.study_button, 2, 11)
+        layout.addWidget(self.brand_logo, 0, 12, 3, 1)
+        layout.addWidget(self.criteria_label, 3, 0, 1, 13)
         return box
 
     def _build_candidate_panel(self) -> QWidget:
@@ -1328,6 +1333,120 @@ class MomentumHunterWindow(QMainWindow):
         splitter.setSizes([760, 620])
         layout.addWidget(splitter, 1)
 
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        dialog.setStyleSheet(STYLESHEET)
+        dialog.exec()
+
+    def _build_daily_workflow_report(self) -> DailyWorkflowReport:
+        identities = {candidate.ticker: self._candidate_identity(candidate) for candidate in self.candidates}
+        review_statuses = {
+            identity.key: self._candidate_review_status(candidate)
+            for candidate in self.candidates
+            for identity in [identities[candidate.ticker]]
+        }
+        return build_daily_workflow_report(
+            candidates=self.candidates,
+            identities=identities,
+            review_statuses=review_statuses,
+            entry_plans=self.entry_plans,
+            capture_health=build_capture_health_snapshot(),
+            outcome_maturity=build_outcome_maturity_report(),
+        )
+
+    def open_daily_workflow_checklist(self) -> None:
+        report = self._build_daily_workflow_report()
+        style = self.current_view_style or get_data_view_style(
+            self.data_view_state,
+            captured_at=self.display_capture_time,
+            session_label=self.display_session_label,
+        )
+        read_only = style.read_only
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Daily Workflow Checklist")
+        dialog.resize(1060, 760)
+        layout = QVBoxLayout(dialog)
+
+        banner = QLabel(
+            "DAILY WORKFLOW CHECKLIST / REVIEW REPORT\n"
+            f"{style.banner_text}\n"
+            "Workflow discipline only. This does not evaluate trade quality, change scores, place orders, or optimize weights."
+        )
+        banner.setObjectName(style.object_name)
+        banner.setWordWrap(True)
+        layout.addWidget(banner)
+
+        score_label = QLabel(f"Today's Workflow Score: {report.workflow_score}%")
+        score_label.setObjectName("tickerLabel")
+        score_label.setWordWrap(True)
+        self.daily_workflow_score_label = score_label
+        layout.addWidget(score_label)
+
+        if report.warnings:
+            warning_label = QLabel("Warnings: " + " | ".join(report.warnings))
+            warning_label.setWordWrap(True)
+            warning_label.setStyleSheet("color: #fcd34d; font-weight: 700;")
+            layout.addWidget(warning_label)
+
+        tabs = QTabWidget()
+        summary_table = build_daily_workflow_summary_table(report, style)
+        self.daily_workflow_summary_table = summary_table
+        tabs.addTab(summary_table, "Checklist")
+        tabs.addTab(build_daily_workflow_warning_table(report, style), "Warnings")
+        layout.addWidget(tabs, 1)
+
+        action_row = QWidget()
+        action_layout = QHBoxLayout(action_row)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        morning_button = QPushButton("Open Morning Review")
+        watchlist_button = QPushButton("Open Watchlist Report")
+        capture_button = QPushButton("Open Capture Health")
+        readiness_button = QPushButton("Open Readiness Gate")
+        morning_button.setEnabled(not read_only and bool(self.candidates))
+        watchlist_button.setEnabled(not read_only)
+        morning_button.clicked.connect(self.open_morning_review_workspace)
+        watchlist_button.clicked.connect(self.save_tomorrow_watchlist)
+        capture_button.clicked.connect(self.open_capture_health_report)
+        readiness_button.clicked.connect(self.open_readiness_gate)
+        action_layout.addWidget(morning_button)
+        action_layout.addWidget(watchlist_button)
+        action_layout.addWidget(capture_button)
+        action_layout.addWidget(readiness_button)
+        action_layout.addStretch(1)
+        layout.addWidget(action_row)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        dialog.setStyleSheet(STYLESHEET)
+        dialog.exec()
+
+    def open_capture_health_report(self) -> None:
+        health = build_capture_health_snapshot()
+        lines = [
+            format_capture_success("Last successful morning", health.last_morning_capture),
+            format_capture_success("Last successful evening", health.last_evening_capture),
+            format_capture_success("Last successful preopen", health.last_preopen_capture),
+            format_capture_failure(health.last_failed_capture),
+            "Next scheduled runs: "
+            f"Morning {format_central(health.next_morning_run)} | "
+            f"Evening {format_central(health.next_evening_run)} | "
+            f"Preopen {format_central(health.next_preopen_run)}",
+            format_csv_status("CSV append", health.csv_append_status),
+            format_csv_status("Outcome update", health.outcome_update_status),
+        ]
+        self._show_text_dialog("Capture Health", "\n".join(lines))
+
+    def open_readiness_gate(self) -> None:
+        style = get_data_view_style(DataViewState.STUDY, captured_at=None, study_run_id="readiness-gate")
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Readiness Gate")
+        dialog.resize(980, 620)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(build_outcome_maturity_panel(build_outcome_maturity_report(), style), 1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
         buttons.accepted.connect(dialog.accept)
@@ -2395,6 +2514,67 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(buttons)
         dialog.setStyleSheet(STYLESHEET)
         dialog.exec()
+
+
+def build_daily_workflow_summary_table(report: DailyWorkflowReport, style: DataViewStyle) -> QTableWidget:
+    rows = [
+        ("Capture Status", "Capture health status", report.capture_health_status),
+        ("Review Status", "Total candidates today", str(report.review.total_candidates)),
+        ("Review Status", "Reviewed candidates", str(report.review.reviewed_candidates)),
+        ("Review Status", "Unreviewed candidates", str(report.review.unreviewed_candidates)),
+        ("Review Status", "Interested candidates", str(report.review.interested_candidates)),
+        ("Review Status", "Rejected candidates", str(report.review.rejected_candidates)),
+        ("Review Status", "Watchlist candidates", str(report.review.watchlist_candidates)),
+        ("Entry Plan Status", "Watchlist candidates", str(report.entry_plans.watchlist_candidates)),
+        ("Entry Plan Status", "Complete plans", str(report.entry_plans.complete_plans)),
+        ("Entry Plan Status", "Incomplete plans", str(report.entry_plans.incomplete_plans)),
+        ("Entry Plan Status", "Missing trigger", str(report.entry_plans.missing_trigger)),
+        ("Entry Plan Status", "Missing stop", str(report.entry_plans.missing_stop)),
+        ("Entry Plan Status", "Missing invalidation", str(report.entry_plans.missing_invalidation)),
+        ("Entry Plan Status", "Missing max loss", str(report.entry_plans.missing_max_loss)),
+        ("Outcome Status", "Completed next-day outcomes", str(report.completed_next_day_outcomes)),
+        ("Outcome Status", "Completed five-day outcomes", str(report.completed_five_day_outcomes)),
+        ("Outcome Status", "Pending outcomes", str(report.pending_outcomes)),
+    ]
+    for name, status in report.readiness_statuses.items():
+        rows.append(("Readiness Status", name, status))
+
+    table = QTableWidget(len(rows), 3)
+    table.setHorizontalHeaderLabels(["Section", "Metric", "Value"])
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    for row, (section, metric, value) in enumerate(rows):
+        table.setItem(row, 0, QTableWidgetItem(section))
+        table.setItem(row, 1, QTableWidgetItem(metric))
+        item = QTableWidgetItem(value)
+        if value in {"LOCKED", "warning - last scheduled capture failed"} or value.startswith("0") and "Complete" in metric:
+            item.setBackground(QBrush(QColor("#735f24")))
+        table.setItem(row, 2, item)
+    return table
+
+
+def build_daily_workflow_warning_table(report: DailyWorkflowReport, style: DataViewStyle) -> QTableWidget:
+    warnings = report.warnings or ["No critical workflow warnings."]
+    table = QTableWidget(len(warnings), 2)
+    table.setHorizontalHeaderLabels(["Warning", "Meaning"])
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    meanings = {
+        "REVIEWS INCOMPLETE": "One or more candidates still needs a human review decision.",
+        "WATCHLIST HAS NO ENTRY PLAN": "A watchlist candidate has no saved entry-plan record.",
+        "INCOMPLETE ENTRY PLAN": "A watchlist plan is missing trigger, stop, invalidation, or max-loss discipline.",
+        "CAPTURE FAILURE DETECTED": "A scheduled capture failure record exists and should be reviewed.",
+        "READINESS GATE LOCKED": "Research gates still need more completed outcome data.",
+    }
+    for row, warning in enumerate(warnings):
+        warning_item = QTableWidgetItem(warning)
+        if warning in meanings:
+            warning_item.setBackground(QBrush(QColor("#735f24")))
+        table.setItem(row, 0, warning_item)
+        table.setItem(row, 1, QTableWidgetItem(meanings.get(warning, "Workflow is clear for this checkpoint.")))
+    return table
 
 
 def format_news(candidate: Candidate) -> str:
