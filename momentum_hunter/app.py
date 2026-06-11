@@ -311,11 +311,17 @@ class MomentumHunterWindow(QMainWindow):
         self.clear_button = QPushButton("Clear Marks")
         self.clear_button.clicked.connect(self.clear_row_marks)
 
-        self.watchlist_button = QPushButton("Watchlist Report")
+        self.watchlist_button = QPushButton("Generate Watchlist")
         self.watchlist_button.clicked.connect(self.save_tomorrow_watchlist)
+        self.watchlist_button.setToolTip("Daily workflow: generate the next-session watchlist report. No orders are placed.")
 
-        self.view_button = QPushButton("Research List")
+        self.view_button = QPushButton("Latest Watchlist")
         self.view_button.clicked.connect(self.view_research_list)
+        self.view_button.setToolTip("Open the latest saved watchlist/report artifact. Read-only review.")
+
+        self.capture_health_button = QPushButton("Capture Health")
+        self.capture_health_button.clicked.connect(self.open_capture_health_report)
+        self.capture_health_button.setToolTip("Daily workflow: inspect capture/provider/CSV/outcome health. Read-only diagnostic.")
 
         self.regime_combo = QComboBox()
         self.regime_combo.addItems([item.value for item in MarketRegime])
@@ -328,20 +334,25 @@ class MomentumHunterWindow(QMainWindow):
         self.capture_date_combo.currentTextChanged.connect(self._capture_date_changed)
 
         self.capture_session_combo = QComboBox()
-        self.open_capture_button = QPushButton("Open Snapshot")
+        self.open_capture_button = QPushButton("Open Historical Snapshot")
         self.open_capture_button.clicked.connect(self.open_selected_capture)
+        self.open_capture_button.setToolTip("Historical/replay workflow: open a saved capture as read-only historical data.")
 
-        self.current_button = QPushButton("Current")
+        self.current_button = QPushButton("Current Dashboard")
         self.current_button.clicked.connect(self.return_to_current_dashboard)
+        self.current_button.setToolTip("Return to fresh/current dashboard state for live review.")
 
         self.morning_review_button = QPushButton("Morning Review")
         self.morning_review_button.clicked.connect(self.open_morning_review_workspace)
+        self.morning_review_button.setToolTip("Daily workflow: review candidates, mark status, and complete entry plans.")
 
         self.daily_checklist_button = QPushButton("Daily Checklist")
         self.daily_checklist_button.clicked.connect(self.open_daily_workflow_checklist)
+        self.daily_checklist_button.setToolTip("Daily workflow: check captures, reviews, watchlist plans, outcomes, and readiness.")
 
-        self.study_button = QPushButton("Study Engine")
+        self.study_button = QPushButton("Research Study")
         self.study_button.clicked.connect(self.open_study_engine)
+        self.study_button.setToolTip("Research-only workflow. Uses stored data and post-capture outcomes; no trade recommendations.")
 
         self.clock_label = QLabel(format_central())
         self.criteria_label = QLabel()
@@ -363,25 +374,28 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(self.scan_button, 0, 6)
         layout.addWidget(self.save_button, 0, 7)
         layout.addWidget(self.clear_button, 0, 8)
-        layout.addWidget(self.watchlist_button, 0, 9)
-        layout.addWidget(self.view_button, 0, 10)
         layout.addWidget(self.clock_label, 1, 0, 1, 2)
         layout.addWidget(QLabel("Evening review: 7:00 PM - 8:00 PM CT"), 1, 2, 1, 3)
         layout.addWidget(QLabel("Morning review: 7:00 AM - 8:00 AM CT"), 1, 5, 1, 4)
         layout.addWidget(QLabel("Market"), 2, 0)
         layout.addWidget(self.regime_combo, 2, 1)
         layout.addWidget(self.regime_button, 2, 2)
-        layout.addWidget(QLabel("History Date"), 2, 3)
+        layout.addWidget(QLabel("History"), 2, 3)
         layout.addWidget(self.capture_date_combo, 2, 4)
         layout.addWidget(QLabel("Session"), 2, 5)
         layout.addWidget(self.capture_session_combo, 2, 6)
-        layout.addWidget(self.open_capture_button, 2, 7)
-        layout.addWidget(self.current_button, 2, 8)
-        layout.addWidget(self.morning_review_button, 2, 9)
-        layout.addWidget(self.daily_checklist_button, 2, 10)
-        layout.addWidget(self.study_button, 2, 11)
+        layout.addWidget(self.open_capture_button, 2, 7, 1, 2)
+        layout.addWidget(self.current_button, 2, 9, 1, 2)
+        layout.addWidget(QLabel("Daily Workflow"), 3, 0)
+        layout.addWidget(self.daily_checklist_button, 3, 1, 1, 2)
+        layout.addWidget(self.morning_review_button, 3, 3, 1, 2)
+        layout.addWidget(self.capture_health_button, 3, 5, 1, 2)
+        layout.addWidget(self.watchlist_button, 3, 7, 1, 2)
+        layout.addWidget(self.view_button, 3, 9, 1, 2)
+        layout.addWidget(QLabel("Research"), 3, 11)
+        layout.addWidget(self.study_button, 3, 12)
         layout.addWidget(self.brand_logo, 0, 12, 3, 1)
-        layout.addWidget(self.criteria_label, 3, 0, 1, 13)
+        layout.addWidget(self.criteria_label, 4, 0, 1, 13)
         return box
 
     def _build_candidate_panel(self) -> QWidget:
@@ -1002,8 +1016,8 @@ class MomentumHunterWindow(QMainWindow):
     def view_research_list(self) -> None:
         report = load_latest_report()
         if report:
-            self._show_text_dialog("Latest Research List", report)
-            self._update_status("Opened latest saved research list.")
+            self._show_text_dialog("Latest Watchlist", report)
+            self._update_status("Opened latest saved watchlist/report.")
             return
 
         staged = load_latest_watchlist()
@@ -1020,8 +1034,8 @@ class MomentumHunterWindow(QMainWindow):
             self._update_status("Opened latest saved watchlist.")
             return
 
-        self._show_text_dialog("Latest Research List", "No saved research list found yet.")
-        self._update_status("No saved research list found.")
+        self._show_text_dialog("Latest Watchlist", "No saved watchlist or report found yet.")
+        self._update_status("No saved watchlist/report found.")
 
     def view_candidate_timeline(self) -> None:
         candidate = self._selected_candidate()
@@ -1401,7 +1415,7 @@ class MomentumHunterWindow(QMainWindow):
         action_layout = QHBoxLayout(action_row)
         action_layout.setContentsMargins(0, 0, 0, 0)
         morning_button = QPushButton("Open Morning Review")
-        watchlist_button = QPushButton("Open Watchlist Report")
+        watchlist_button = QPushButton("Generate Watchlist")
         capture_button = QPushButton("Open Capture Health")
         readiness_button = QPushButton("Open Readiness Gate")
         morning_button.setEnabled(not read_only and bool(self.candidates))
@@ -2149,7 +2163,7 @@ class MomentumHunterWindow(QMainWindow):
 
     def _show_study_dialog(self, summary: StudySummary) -> None:
         dialog = QDialog(self)
-        dialog.setWindowTitle("Momentum Hunter Study Engine")
+        dialog.setWindowTitle("Momentum Hunter Research Study")
         dialog.resize(1320, 820)
         layout = QVBoxLayout(dialog)
 
@@ -2411,8 +2425,8 @@ class MomentumHunterWindow(QMainWindow):
             stats.setText(study_stats_text(filtered))
 
             chart_tabs.clear()
-            chart_tabs.addTab(build_study_chart(filtered, filtered_style), "Coverage")
-            chart_tabs.addTab(build_outcome_chart(filtered, filtered_style), "Outcomes")
+            chart_tabs.addTab(build_study_chart(filtered, filtered_style), "Overview - Coverage")
+            chart_tabs.addTab(build_outcome_chart(filtered, filtered_style), "Overview - Outcomes")
             chart_tabs.addTab(
                 build_historical_cluster_panel(
                     build_historical_cluster_report(study_filter=current_study_filter()),
@@ -2420,51 +2434,51 @@ class MomentumHunterWindow(QMainWindow):
                     build_historical_recurrence_report(study_filter=current_study_filter()),
                     replay_callback=self._show_replay_dialog,
                 ),
-                "Historical Clusters",
+                "Catalyst - Historical Setups",
             )
             chart_tabs.addTab(
                 build_catalyst_cluster_panel(
                     build_catalyst_cluster_report(study_filter=current_study_filter()),
                     filtered_style,
                 ),
-                "Catalyst Explorer",
+                "Catalyst - Clusters",
             )
             chart_tabs.addTab(
                 build_catalyst_age_panel(
                     build_catalyst_age_audit_report(study_filter=current_study_filter()),
                     filtered_style,
                 ),
-                "Catalyst Age",
+                "Catalyst - Age",
             )
             chart_tabs.addTab(
                 build_headline_dedup_panel(
                     build_headline_dedup_report(study_filter=current_study_filter()),
                     filtered_style,
                 ),
-                "Headline Dedup",
+                "Catalyst - Headline Dedup",
             )
             chart_tabs.addTab(
                 build_outcome_explorer_panel(
                     build_outcome_explorer_report(study_filter=current_study_filter()),
                     filtered_style,
                 ),
-                "Outcome Explorer",
+                "Readiness - Outcome Explorer",
             )
             chart_tabs.addTab(
                 build_outcome_maturity_panel(
                     build_outcome_maturity_report(study_filter=current_study_filter()),
                     filtered_style,
                 ),
-                "Readiness Gate",
+                "Readiness - Gates",
             )
             chart_tabs.addTab(
                 build_opportunity_research_panel(
                     build_opportunity_research_report(study_filter=current_study_filter()),
                     filtered_style,
                 ),
-                "Opportunity Research",
+                "Readiness - Opportunity Research",
             )
-            chart_tabs.addTab(build_recommendation_panel(build_weight_recommendations(), filtered_style), "Recommendations")
+            chart_tabs.addTab(build_recommendation_panel(build_weight_recommendations(), filtered_style), "Locked Research Notes")
 
             bucket_table.setRowCount(len(filtered.score_buckets))
             for row, bucket in enumerate(filtered.score_buckets):
@@ -4407,7 +4421,7 @@ def build_recommendation_panel(report: RecommendationReport, style: DataViewStyl
     layout.setContentsMargins(0, 0, 0, 0)
 
     status = QLabel(
-        f"{style.chart_prefix}Score-Weight Recommendations | "
+        f"{style.chart_prefix}Locked Research Notes | "
         f"Completed Rows: {report.completed_rows} | Minimum Rows: {report.minimum_rows} | {report.status}"
     )
     status.setObjectName("criteriaLabel")
@@ -4416,7 +4430,7 @@ def build_recommendation_panel(report: RecommendationReport, style: DataViewStyl
 
     table = QTableWidget(0, 7)
     table.setHorizontalHeaderLabels(
-        ["Regime", "Bucket", "Rows", "5-Day Avg", "Win Rate", "Recommendation", "Rationale"]
+        ["Regime", "Bucket", "Rows", "5-Day Avg", "Win Rate", "Locked Note", "Rationale"]
     )
     table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     table.horizontalHeader().setStyleSheet(style.header_stylesheet)

@@ -8,12 +8,12 @@ Scope: documentation, workflow, UI purpose, roadmap status, duplicate functional
 
 Momentum Hunter has reached a useful research-foundation stage. The system now has two clear product modes:
 
-- Daily operator workflow: scanner dashboard, Morning Review, Daily Checklist, Watchlist Report, entry plans, capture health.
+- Daily operator workflow: scanner dashboard, Morning Review, Daily Checklist, Generate Watchlist, entry plans, capture health.
 - Research workflow: Replay, Study Engine, Historical Clusters, Catalyst Explorer, Catalyst Age, Headline Dedup, Outcome Explorer, Opportunity Research, Readiness Gate.
 
 The core architecture is consistent: raw captures are immutable, user decisions and plans are derived records, outcomes are post-capture labels, and research reports are rebuildable. The largest usability risk is now navigation overlap, not missing data architecture.
 
-Recommended next milestone: **Operator Navigation Cleanup v1**. Consolidate daily workflow entry points, rename confusing buttons, and make Study Engine tabs easier to understand before adding more analytical depth.
+Operator Navigation Cleanup v1 has now addressed the highest-signal label and grouping issues from this audit. The remaining navigation work is deeper layout polish, not a blocker for continued data collection.
 
 ## Major UI View Review
 
@@ -22,14 +22,14 @@ Recommended next milestone: **Operator Navigation Cleanup v1**. Consolidate dail
 | Scanner Dashboard | Run current scanner, inspect candidates, review one selected ticker, see capture health, save decisions. | Run scanner, select candidate, review news/score, mark status, add plans/watchlist. | Morning Review, Daily Checklist, Capture Health panel. | Keep as the primary live dashboard, but move deeper daily actions toward Morning Review/Daily Checklist. |
 | Candidate Detail Panel | Inspect selected candidate, news, score, notes, entry plan. | Click a row, read details, save notes/plan for current data. | Morning Review Decision Card and Entry Plan panel. | Treat as quick detail view; Morning Review should become the fuller daily workflow surface. |
 | Capture Health Panel | Confirm scheduled captures, provider status, CSV/outcome update status. | Check whether data collection is healthy. | Daily Checklist and Open Capture Health. | Keep compact panel on dashboard; Daily Checklist should summarize health, not duplicate every field. |
-| Morning Review Workspace | Focused current-data review and plan creation. | Select candidates, mark interested/rejected/watchlist, open Why Score/Timeline, write entry plan. | Scanner Dashboard candidate table, Entry Plan panel, Watchlist Report. | Strong candidate to become the primary daily review screen. |
-| Daily Workflow Checklist | Operational completion report for daily discipline. | Check captures, review counts, plan completeness, outcomes/readiness, then jump to missing work. | Capture Health, Morning Review, Watchlist Report, Readiness Gate. | Keep as the daily control panel. Add future persistence only when workflow analytics are needed. |
-| Watchlist Report | Generate next-session watchlist report with entry-plan annotations. | After review, output the actionable watchlist. | Research List, Daily Checklist quick action. | Rename around current status model: "Generate Watchlist Report" may be clearer. |
-| Research List | Opens latest saved research/watchlist artifacts. | Review saved output after it is generated. | Watchlist Report. | Likely consolidate with Watchlist Report into one "Watchlists" area. |
+| Morning Review Workspace | Focused current-data review and plan creation. | Select candidates, mark interested/rejected/watchlist, open Why Score/Timeline, write entry plan. | Scanner Dashboard candidate table, Entry Plan panel, Generate Watchlist. | Strong candidate to become the primary daily review screen. |
+| Daily Workflow Checklist | Operational completion report for daily discipline. | Check captures, review counts, plan completeness, outcomes/readiness, then jump to missing work. | Capture Health, Morning Review, Generate Watchlist, Readiness Gate. | Keep as the daily control panel. Add future persistence only when workflow analytics are needed. |
+| Generate Watchlist | Generate next-session watchlist report with entry-plan annotations. | After review, output the actionable watchlist. | Latest Watchlist, Daily Checklist quick action. | Future v2 could create a single Watchlist/report center. |
+| Latest Watchlist | Opens latest saved watchlist/report artifacts. | Review saved output after it is generated. | Generate Watchlist. | Future v2 could consolidate saved watchlists and generated reports. |
 | Historical Snapshot View | Load past capture into main table with read-only banner. | Select date/session, inspect what was captured. | Replay Mode, Candidate Timeline. | Keep as broad snapshot replay; Timeline/Replay handles ticker-specific detail. |
 | Candidate Timeline | Show all trusted active captures for a ticker. | Pick a ticker, inspect appearances across time, launch Replay. | Historical Snapshot, Historical Clusters recurrence view. | Keep as ticker drilldown; consider adding entry from Morning Review and Study rows consistently. |
 | Replay Mode | Point-in-time read-only view of one candidate in one capture. | Open from Timeline or cluster appearance, inspect capture-time facts plus later annotations. | Historical Snapshot. | Keep as the trust boundary view. It should remain read-only and clearly labeled. |
-| Study Engine Coverage/Outcomes | High-level study coverage and basic outcome charts. | Understand data coverage and pending/completed outcomes. | Outcome Explorer, Readiness Gate. | Keep as overview; avoid expanding it further. |
+| Research Study Overview | High-level study coverage and basic outcome charts. | Understand data coverage and pending/completed outcomes. | Outcome Explorer, Readiness Gate. | Keep as overview; avoid expanding it further. |
 | Historical Clusters | Theme/set-up grouping over historical candidates. | Find recurring setups and repeated tickers/sectors/scanners. | Catalyst Explorer, Opportunity Research. | Keep for setup recurrence, not catalyst precision. |
 | Catalyst Explorer | Classify stored headlines into catalyst buckets with confidence/purity. | Research catalyst quality and classification reliability. | Catalyst Age, Headline Dedup, Historical Clusters. | Consider a future unified "Catalyst Intelligence" section with subtabs. |
 | Catalyst Age | Measure headline timestamp age at capture time. | Audit freshness/timestamp quality without affecting scores. | Catalyst Explorer, Headline Dedup, news stack column. | Keep as timestamp audit; avoid presenting it as catalyst event age until Catalyst Dating exists. |
@@ -37,7 +37,7 @@ Recommended next milestone: **Operator Navigation Cleanup v1**. Consolidate dail
 | Outcome Explorer | Compare actual post-capture outcomes by filters. | Filter candidates and inspect completed vs pending outcomes. | Opportunity Research. | Keep as "what happened" view; Opportunity Research is "which conditions matter." |
 | Opportunity Research | Rank conditions and combinations once outcomes mature. | Study condition performance without generating scores. | Outcome Explorer, Recommendations tab. | Keep locked/diagnostic until enough outcomes mature. |
 | Readiness Gate | Decide whether there is enough completed outcome data for research conclusions. | Check whether Outcome Explorer, Opportunity Research, Opportunity Score, or Optimization are ready. | Daily Checklist, Outcome Explorer warnings. | Keep as the authority for blocking conclusions. |
-| Recommendations Tab | Existing advisory score-weight recommendation report. | Intended to show possible weight adjustments after enough outcomes. | Opportunity Research, Readiness Gate, Future optimizer. | Rename or demote. It looks too close to optimizer work and conflicts with the current "locked until mature" posture. |
+| Locked Research Notes | Existing advisory score-weight note report after minimum outcomes. | Intended to show diagnostic notes only after enough outcomes. | Opportunity Research, Readiness Gate, Future optimizer. | Future v2 could hide/disable until readiness thresholds are met. |
 
 ## Documentation Audit
 
@@ -49,15 +49,15 @@ Findings:
 
 - The workflow section previously said `Click Add Selected`, but the current UI uses status flow such as `Mark Interested`, `Add Interested to Watchlist`, and `Watchlist Report`. This audit updates the README workflow wording.
 - `Current Version` says "V1/V3 foundation", which is now too vague. The README should describe product areas instead of old version shorthand.
-- `Research List` and `Watchlist Report` are both mentioned indirectly through UI behavior but not clearly distinguished.
-- The README says score-weight recommendations are available once enough completed outcomes exist. This is true in code, but the label can be confusing because optimizer and Opportunity Score are intentionally locked.
+- `Latest Watchlist` and `Generate Watchlist` are now clearer, though a future Watchlist/report center may still be useful.
+- The README now describes this area as `Locked Research Notes`; future work may hide or disable it until readiness thresholds are met.
 - Several rendered docs contain mojibake for long dash characters in some `READ ONLY` labels. This is a documentation encoding issue, not a runtime logic issue.
 
 Recommended fixes:
 
 - Keep README workflow wording aligned with the current review-status workflow.
-- Add a short "How to use Momentum Hunter each day" section: Daily Checklist, Morning Review, Watchlist Report, then later Outcome Explorer.
-- Rename or explain the `Recommendations` tab as legacy/advisory/diagnostic until enough outcome data exists.
+- Add a short "How to use Momentum Hunter each day" section: Daily Checklist, Morning Review, Generate Watchlist, then later Outcome Explorer.
+- Keep `Locked Research Notes` diagnostic and readiness-gated so it cannot be mistaken for trading advice.
 
 ### CHANGELOG
 
@@ -85,10 +85,10 @@ Findings:
 
 Updates made:
 
-- Added Study Engine tab consolidation.
+- Added Research Study tab grouping.
 - Added Daily operator workflow consolidation.
-- Added Watchlist/Research List naming cleanup.
-- Added Recommendations tab rename/readiness gating.
+- Added Generate Watchlist / Latest Watchlist naming cleanup.
+- Added Locked Research Notes naming cleanup.
 - Added documentation encoding cleanup.
 
 ### storage-map
@@ -147,7 +147,7 @@ Recommended fixes:
 | Outcome Explorer | Complete | Outcome filtering/comparison exists, pending handled safely. |
 | Opportunity Research Framework | Complete | Research-only condition ranking exists. |
 | Outcome Maturity / Readiness Gate | Complete | Gates lock Opportunity Score and optimization until maturity. |
-| Watchlist Report | Complete | Includes entry-plan fields. |
+| Generate Watchlist | Complete | Includes entry-plan fields in the generated report. |
 | Documentation and storage map | In Progress | Broad coverage exists; cleanup and roadmap consolidation recommended. |
 | Catalyst Dating Engine | Deferred | Catalyst Age measures article age, not underlying event date. |
 | Opportunity Score | Deferred | Locked until sufficient completed five-day outcomes exist. |
@@ -173,7 +173,7 @@ Recommended fixes:
 | Quarantine/recovery | Remove untrusted captures from active study use. | Complete | Integrity audit and rebuild tools. |
 | Review statuses | Track human decision state. | Complete | `review-decisions.json`. |
 | Entry plans | Record trade plan discipline. | Complete | `entry-plans.json`, review identity. |
-| Watchlist Report | Produce next-session watchlist artifact. | Complete | Watchlist status, entry plans. |
+| Generate Watchlist | Produce next-session watchlist artifact. | Complete | Watchlist status, entry plans. |
 | Morning Review | Focus daily candidate decisions. | Complete | Current candidates, review decisions, entry plans. |
 | Daily Checklist | Track daily workflow completion. | Complete | Capture health, review statuses, entry plans, readiness report. |
 | Score breakdowns | Explain every displayed score. | Complete | Scoring engine, score-breakdowns store. |
@@ -186,7 +186,7 @@ Recommended fixes:
 | Outcome Explorer | Analyze post-capture results. | Complete | `analysis-outcomes.csv`, active capture identity. |
 | Opportunity Research | Research condition performance. | Complete | Mature outcomes, catalyst/source context. |
 | Readiness Gate | Prevent premature conclusions. | Complete | Outcome maturity metrics. |
-| Recommendations tab | Advisory score-weight output after minimum outcomes. | In Progress | Outcomes; needs rename/readiness alignment. |
+| Locked Research Notes | Advisory score-weight note output after minimum outcomes. | In Progress | Outcomes; future v2 should hide/disable until readiness thresholds. |
 | Catalyst Dating | Determine underlying event date, not article age. | Deferred | Better event clustering and timestamp confidence. |
 | Opportunity Score | Combine momentum/catalyst/freshness after evidence. | Deferred | Completed outcomes, validation, readiness gates. |
 | SQLite | Centralize data once model stabilizes. | Deferred | Stable schema and migration plan. |
@@ -199,8 +199,8 @@ Recommended fixes:
 2. Capture Health panel, Daily Checklist, and Open Capture Health overlap.
    - Recommendation: dashboard panel stays compact, checklist summarizes, Open Capture Health provides text detail.
 
-3. Watchlist Report and Research List overlap.
-   - Recommendation: consolidate into one Watchlists/Reports surface or rename Research List to `Latest Watchlist`.
+3. Generate Watchlist and Latest Watchlist overlap.
+   - Recommendation: future v2 could consolidate them into one Watchlist/report center.
 
 4. Outcome Explorer and Opportunity Research overlap in grouping outcome data.
    - Recommendation: Outcome Explorer answers "what happened"; Opportunity Research answers "which conditions might matter."
@@ -208,14 +208,14 @@ Recommended fixes:
 5. Catalyst Explorer, Catalyst Age, and Headline Dedup all describe news quality.
    - Recommendation: eventually consolidate under a Catalyst Intelligence section with subtabs.
 
-6. Recommendations tab overlaps with deferred optimizer/Opportunity Score posture.
-   - Recommendation: rename to `Diagnostic Weight Notes` or hide behind Readiness Gate until sufficient outcomes exist.
+6. Locked Research Notes overlaps with deferred optimizer/Opportunity Score posture.
+   - Recommendation: future v2 could hide or disable it behind Readiness Gate until sufficient outcomes exist.
 
 ## Orphaned, Unfinished, or Confusing Areas
 
-- `Research List` is likely a legacy label now that review statuses and Watchlist Report exist.
+- `Research List` has been renamed `Latest Watchlist`; future work may still consolidate watchlist artifacts.
 - Older workflow terminology such as `Add Selected` should stay out of user-facing docs.
-- `Recommendations` can be misread as optimizer work even though it is advisory and threshold gated.
+- `Locked Research Notes` is clearer than `Recommendations`, but future work should still enforce readiness gating visually.
 - `Catalyst Age` could be confused with catalyst event age. It currently measures article timestamp age at capture time.
 - `LIVE` mode remains a research mode only. That is documented, but the label may still invite broker assumptions.
 - Some documentation has encoding artifacts in long-dash labels.
@@ -248,24 +248,24 @@ Verified already present:
 
 Added by this audit:
 
-- Study Engine tab consolidation.
+- Research Study tab grouping.
 - Daily operator workflow consolidation.
-- Watchlist/Research List naming cleanup.
-- Recommendations tab rename/readiness gating.
+- Generate Watchlist / Latest Watchlist naming cleanup.
+- Locked Research Notes naming cleanup.
 - Documentation encoding cleanup.
 
 ## Recommended Next Roadmap Milestone
 
-**Operator Navigation Cleanup v1**
+**Recommended Next Roadmap Milestone: Research Study Navigation v2 or Watchlist/Report Center v1**
 
-Goal: make the daily app flow obvious before adding more analysis.
+Goal: continue reducing navigation crowding after the high-signal label cleanup.
 
 Suggested scope:
 
-- Rename stale buttons/terms such as `Research List` and clarify `Watchlist Report`.
-- Add a short "Daily flow" panel or menu order: Daily Checklist -> Morning Review -> Watchlist Report -> later Study.
-- Clarify `Recommendations` as locked/diagnostic or temporarily hide it behind Readiness Gate.
-- Reduce toolbar crowding by grouping study/replay/report actions.
+- Consider a sidebar or nested navigation for Research Study sections.
+- Consider a single Watchlist/report center for generated watchlists and latest artifacts.
+- Hide or disable Locked Research Notes until Readiness Gate thresholds are met.
+- Reduce toolbar crowding further if more top-level actions are added.
 - Fix documentation mojibake in README/storage-map labels.
 
 Do not include Opportunity Score, optimizer work, broker integration, scoring changes, or SQLite migration in that milestone.

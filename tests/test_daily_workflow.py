@@ -145,9 +145,21 @@ class DailyWorkflowTests(unittest.TestCase):
 
         self.assertIn("Today's Workflow Score:", self.window.daily_workflow_score_label.text())
         self.assertTrue(self.button(dialog, "Open Morning Review").isEnabled())
-        self.assertTrue(self.button(dialog, "Open Watchlist Report").isEnabled())
+        self.assertTrue(self.button(dialog, "Generate Watchlist").isEnabled())
         self.assertTrue(self.button(dialog, "Open Capture Health").isEnabled())
         self.assertTrue(self.button(dialog, "Open Readiness Gate").isEnabled())
+
+    def test_operator_navigation_labels_are_clear(self) -> None:
+        self.assertEqual("Daily Checklist", self.window.daily_checklist_button.text())
+        self.assertEqual("Morning Review", self.window.morning_review_button.text())
+        self.assertEqual("Capture Health", self.window.capture_health_button.text())
+        self.assertEqual("Generate Watchlist", self.window.watchlist_button.text())
+        self.assertEqual("Latest Watchlist", self.window.view_button.text())
+        self.assertEqual("Open Historical Snapshot", self.window.open_capture_button.text())
+        self.assertEqual("Current Dashboard", self.window.current_button.text())
+        self.assertEqual("Research Study", self.window.study_button.text())
+        self.assertIn("No orders", self.window.watchlist_button.toolTip())
+        self.assertIn("Research-only", self.window.study_button.toolTip())
 
     def test_historical_and_study_dialogs_are_read_only_for_edit_actions(self) -> None:
         self.window._load_historical_capture(
@@ -163,14 +175,14 @@ class DailyWorkflowTests(unittest.TestCase):
         self.window.open_daily_workflow_checklist()
         historical_dialog = self.dialogs[-1]
         self.assertFalse(self.button(historical_dialog, "Open Morning Review").isEnabled())
-        self.assertFalse(self.button(historical_dialog, "Open Watchlist Report").isEnabled())
+        self.assertFalse(self.button(historical_dialog, "Generate Watchlist").isEnabled())
 
         self.window.data_view_state = DataViewState.STUDY
         self.window._apply_data_view_state()
         self.window.open_daily_workflow_checklist()
         study_dialog = self.dialogs[-1]
         self.assertFalse(self.button(study_dialog, "Open Morning Review").isEnabled())
-        self.assertFalse(self.button(study_dialog, "Open Watchlist Report").isEnabled())
+        self.assertFalse(self.button(study_dialog, "Generate Watchlist").isEnabled())
 
     def test_raw_capture_is_not_mutated_by_daily_checklist(self) -> None:
         capture_time = datetime(2026, 6, 5, 7, 0, tzinfo=CENTRAL_TZ)

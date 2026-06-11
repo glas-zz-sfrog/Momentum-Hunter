@@ -114,11 +114,11 @@ Use `Daily Checklist` from the main toolbar to check whether the daily Momentum 
 
 The workflow score measures operational consistency only: candidate review completion, watchlist plan completion, capture success, and critical warning status. It does not evaluate trade quality, recommend trades, change scoring, or optimize weights.
 
-Quick actions can open Morning Review, Watchlist Report, Capture Health, and Readiness Gate. In stale, historical, or study contexts, edit/write actions remain disabled while read-only diagnostics stay available.
+Quick actions can open Morning Review, Generate Watchlist, Capture Health, and Readiness Gate. In stale, historical, or study contexts, edit/write actions remain disabled while read-only diagnostics stay available.
 
 Rows remain `pending_next_day` or `pending_five_day` until enough future daily price bars exist. Scheduled capture jobs run the outcome updater after each successful capture.
 
-The Study Engine includes score-weight recommendations once enough completed 5-day outcomes exist. Recommendations are advisory only; Momentum Hunter does not automatically rewrite `config\scoring_profiles.json`.
+The Research Study area includes `Locked Research Notes` once enough completed 5-day outcomes exist. These notes are diagnostic only; Momentum Hunter does not automatically rewrite `config\scoring_profiles.json`.
 
 ## Daily Review Workflow
 
@@ -126,7 +126,7 @@ The Study Engine includes score-weight recommendations once enough completed 5-d
 2. Open `Daily Checklist` to see what is incomplete.
 3. Open `Morning Review` to review candidates and mark them Interested, Rejected, or Watchlist.
 4. Complete entry plans for watchlist candidates.
-5. Generate the `Watchlist Report`.
+5. Click `Generate Watchlist`.
 6. Use the date and session selectors to reopen a past morning, evening, preopen, or manual capture.
 
 The broader roadmap and UI workflow audit is tracked in:
@@ -176,7 +176,7 @@ New captures and derived analysis rows include:
 - `next_market_session_date`
 - `scheduling_policy_version`
 
-Study Engine excludes non-study-eligible captures by default. Use the `Include non-trading-day/preopen` option when researching weekend or holiday-gap behavior.
+Research Study excludes non-study-eligible captures by default. Use the `Include non-trading-day/preopen` option when researching weekend or holiday-gap behavior.
 
 Install the daily scheduled tasks:
 
@@ -271,7 +271,7 @@ Replay Mode never fetches current market data and does not recalculate historica
 
 ## Historical Clusters
 
-The Study Engine includes a `Historical Clusters` tab labeled `HISTORICAL CLUSTERS — RESEARCH ONLY`.
+The Research Study area includes a `Catalyst - Historical Setups` tab labeled `HISTORICAL CLUSTERS — RESEARCH ONLY`.
 
 Historical clusters group stored candidates into deterministic themes such as earnings/guidance, analyst actions, AI infrastructure, healthcare/FDA/biotech, high-volume institutional momentum, sector sympathy, weak catalyst, and no clear catalyst.
 
@@ -285,7 +285,7 @@ Cluster filters include date range, market regime, scanner preset, sector, minim
 
 ## Catalyst Cluster Explorer
 
-The Study Engine includes a `Catalyst Explorer` tab labeled `CATALYST CLUSTERS — RESEARCH ONLY`.
+The Research Study area includes a `Catalyst - Clusters` tab labeled `CATALYST CLUSTERS — RESEARCH ONLY`.
 
 Catalyst Cluster Explorer groups the actual historical headlines stored inside raw captures into deterministic catalyst buckets such as earnings beat, guidance raise, analyst actions, AI infrastructure, AI partnership, contract wins, FDA/biotech events, merger/acquisition, macro-only, weak/vague catalyst, no clear catalyst, and unknown/uncategorized.
 
@@ -301,7 +301,7 @@ The cluster detail view lists matching stored headlines, ticker, capture time, s
 
 ## Catalyst Date / Age Engine
 
-The Study Engine includes a `Catalyst Age` tab labeled `CATALYST AGE / FRESHNESS — RESEARCH ONLY`.
+The Research Study area includes a `Catalyst - Age` tab labeled `CATALYST AGE / FRESHNESS — RESEARCH ONLY`.
 
 Catalyst Age measures stored headline timestamps at capture time. It reports `EXACT_TIMESTAMP`, `DATE_ONLY`, `ESTIMATED`, `UNKNOWN_TIMESTAMP`, `FUTURE_TIMESTAMP`, and `INVALID_TIMESTAMP` without changing any candidate score.
 
@@ -313,7 +313,7 @@ The tab includes an audit summary, cluster-by-age summary, ticker-level summary,
 
 ## Headline Deduplication / Source Quality
 
-The Study Engine includes a `Headline Dedup` tab labeled `HEADLINE DEDUP / SOURCE QUALITY — RESEARCH ONLY`.
+The Research Study area includes a `Catalyst - Headline Dedup` tab labeled `HEADLINE DEDUP / SOURCE QUALITY — RESEARCH ONLY`.
 
 Headline Dedup v1 groups stored historical headlines into deterministic catalyst events using normalized headline fingerprints. Normalization lowercases headlines, strips punctuation, removes source boilerplate, removes ticker prefixes where practical, collapses whitespace, and removes common filler words.
 
@@ -325,7 +325,7 @@ No `headline-events.json` file is written in v1. The report is rebuilt from acti
 
 ## Outcome Explorer
 
-The Study Engine includes an `Outcome Explorer` tab labeled `OUTCOME EXPLORER — POST-CAPTURE DATA`.
+The Research Study area includes a `Readiness - Outcome Explorer` tab labeled `OUTCOME EXPLORER — POST-CAPTURE DATA`.
 
 Outcome Explorer v1 compares stored candidate outcomes using only active raw captures and derived records such as `analysis-outcomes.csv`, `score-breakdowns.json`, `review-decisions.json`, catalyst clusters, catalyst age context, and headline dedup/source quality context. It does not fetch current market data, mutate raw captures, recalculate historical scores, alter scoring profiles, or build Opportunity Score.
 
@@ -337,7 +337,7 @@ Outcome Explorer excludes quarantined captures and non-study-eligible captures b
 
 ## Opportunity Research
 
-The Study Engine includes an `Opportunity Research` tab labeled `OPPORTUNITY RESEARCH — RESEARCH ONLY`.
+The Research Study area includes a `Readiness - Opportunity Research` tab labeled `OPPORTUNITY RESEARCH — RESEARCH ONLY`.
 
 Opportunity Research v1 is a measurement framework for discovering which stored conditions appear predictive after enough outcomes mature. It uses active raw captures and derived context from `analysis-captures.csv`, `analysis-outcomes.csv`, `score-breakdowns.json`, `review-decisions.json`, catalyst clusters, catalyst age metrics, and headline dedup/source reliability metrics.
 
@@ -349,7 +349,7 @@ If completed outcomes are too low, the UI says `Insufficient completed outcomes 
 
 ## Outcome Maturity / Data Readiness
 
-The Study Engine includes a `Readiness Gate` tab labeled `OUTCOME MATURITY / DATA READINESS - MONITOR ONLY`.
+The Research Study area includes a `Readiness - Gates` tab labeled `OUTCOME MATURITY / DATA READINESS - MONITOR ONLY`.
 
 The readiness panel uses stored `analysis-captures.csv`, `analysis-outcomes.csv`, active raw capture identity, and review-decision context. It does not fetch current market data, mutate raw captures, alter `momentum_score_v1`, alter `scoring_profiles.json`, create Opportunity Score, optimize weights, start broker integration, or write SQLite records.
 
@@ -357,7 +357,7 @@ Readiness metrics show total candidates, study-eligible candidates, completed ne
 
 Readiness gates are shown for Outcome Explorer, Opportunity Research, Opportunity Score design, and Weight optimization. Default thresholds are 20 completed next-day outcomes, 50 completed five-day outcomes, 100 completed five-day outcomes, and 300 completed five-day outcomes respectively. Each gate displays `LOCKED`, `DIAGNOSTIC`, or `READY`, with the current count, required count, reason, and estimated earliest readiness date when the estimate is calculable.
 
-Pending outcomes are never treated as completed. Quarantined captures and non-study-eligible captures remain excluded by default unless the Study Engine filter explicitly includes non-trading-day/preopen observations.
+Pending outcomes are never treated as completed. Quarantined captures and non-study-eligible captures remain excluded by default unless the Research Study filter explicitly includes non-trading-day/preopen observations.
 
 ## Legacy Capture Cleanup
 

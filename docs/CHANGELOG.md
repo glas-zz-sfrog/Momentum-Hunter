@@ -4,12 +4,15 @@
 
 ### Added
 
+- Added Operator Navigation Cleanup v1.
+- Renamed top-level workflow actions to `Daily Checklist`, `Morning Review`, `Capture Health`, `Generate Watchlist`, `Latest Watchlist`, `Open Historical Snapshot`, `Current Dashboard`, and `Research Study`.
+- Grouped Study tabs with purpose prefixes: `Overview`, `Catalyst`, `Readiness`, and `Locked Research Notes`.
 - Added Documentation, Workflow, and Roadmap Audit v1.
 - Added `docs/ROADMAP_AUDIT.md` with UI view purpose/workflow notes, roadmap status, feature inventory, duplicate-functionality findings, documentation findings, future-idea findings, and recommended next milestone.
 - Added deferred ideas for Study Engine consolidation, daily operator workflow consolidation, Watchlist/Research List naming cleanup, Recommendations readiness gating, and documentation encoding cleanup.
 - Added Daily Workflow Checklist / Review Report v1.
 - Added a `Daily Checklist` toolbar action with capture status, review status, entry-plan status, outcome status, readiness status, workflow warnings, and a workflow-discipline score.
-- Added quick actions for Open Morning Review, Open Watchlist Report, Open Capture Health, and Open Readiness Gate.
+- Added quick actions for Open Morning Review, Generate Watchlist, Open Capture Health, and Open Readiness Gate.
 - Added Daily Workflow Checklist screenshot generation for documentation evidence.
 - Added Morning Review Workspace v1.
 - Added a `Morning Review` toolbar action with a focused candidate table, compact Decision Card, score/catalyst/freshness context, source and duplicate warning context, review actions, and entry-plan editing.
@@ -18,6 +21,7 @@
 
 ### Safety
 
+- Operator Navigation Cleanup v1 is UI/navigation-only and does not add trading logic, scoring changes, Opportunity Score, optimizer work, broker integration, SQLite migration, or new research engines.
 - Documentation, Workflow, and Roadmap Audit v1 is documentation-only and does not add trading logic, scoring changes, optimizer work, broker integration, or SQLite migration.
 - Daily Workflow Checklist is workflow tracking only and does not add scoring changes, Opportunity Score, optimization, broker integration, order placement, SQLite migration, or automated trading.
 - The workflow score measures daily process completion only and does not evaluate trade quality.
