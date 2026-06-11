@@ -1,5 +1,24 @@
 # Momentum Hunter Changelog
 
+## 2026-06-11
+
+### Added
+
+- Added Morning Review Workspace v1.
+- Added a `Morning Review` toolbar action with a focused candidate table, compact Decision Card, score/catalyst/freshness context, source and duplicate warning context, review actions, and entry-plan editing.
+- Added quick actions for Mark Interested, Mark Rejected, Add to Watchlist, Open Why Score, and Open Timeline/Replay.
+- Added Morning Review screenshot generation for documentation evidence.
+
+### Safety
+
+- Morning Review is workflow/UI only and does not add broker integration, order placement, Opportunity Score, optimizer logic, scoring changes, SQLite migration, or automated trading.
+- Current/live data can be reviewed and edited; stale, historical, replay, and study-style views remain clearly warned and read-only.
+- Review decisions and entry plans continue to live in derived stores and do not mutate immutable raw captures.
+
+### Tests
+
+- Added tests for current Morning Review editing, stale-data warnings, historical/study read-only behavior, raw-capture immutability, selected-candidate Decision Card updates, and incomplete-plan warnings.
+
 ## 2026-06-09
 
 ### Added

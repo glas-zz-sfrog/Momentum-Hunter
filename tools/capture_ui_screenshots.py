@@ -55,6 +55,14 @@ def main() -> int:
         window._populate_table()
         saved = [save_widget(app, window, "momentum_hunter_current_dashboard.png")]
 
+        def capture_morning_dialog(dialog: QDialog) -> int:
+            saved.append(save_widget(app, dialog, "momentum_hunter_morning_review.png"))
+            dialog.close()
+            return 0
+
+        with patch.object(QDialog, "exec", capture_morning_dialog):
+            window.open_morning_review_workspace()
+
         window._load_historical_capture(historical_payload())
         saved.append(save_widget(app, window, "momentum_hunter_historical_snapshot.png"))
 

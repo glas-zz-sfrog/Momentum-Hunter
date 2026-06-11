@@ -54,6 +54,7 @@ from momentum_hunter.catalyst_clusters import (
     CATALYST_RESEARCH_LABEL,
     CatalystClusterReport,
     build_catalyst_cluster_report,
+    classify_catalyst_headline_detail,
 )
 from momentum_hunter.config import AppConfig, load_config, save_config
 from momentum_hunter.entry_plans import (
@@ -80,6 +81,7 @@ from momentum_hunter.news_age import (
     apply_candidate_news_stack,
     evaluate_news_freshness,
     format_news_age,
+    format_news_range,
     news_stack_badge,
     news_stack_summary,
 )
@@ -331,6 +333,9 @@ class MomentumHunterWindow(QMainWindow):
         self.current_button = QPushButton("Current")
         self.current_button.clicked.connect(self.return_to_current_dashboard)
 
+        self.morning_review_button = QPushButton("Morning Review")
+        self.morning_review_button.clicked.connect(self.open_morning_review_workspace)
+
         self.study_button = QPushButton("Study Engine")
         self.study_button.clicked.connect(self.open_study_engine)
 
@@ -368,7 +373,8 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(self.capture_session_combo, 2, 6)
         layout.addWidget(self.open_capture_button, 2, 7)
         layout.addWidget(self.current_button, 2, 8)
-        layout.addWidget(self.study_button, 2, 9, 1, 2)
+        layout.addWidget(self.morning_review_button, 2, 9)
+        layout.addWidget(self.study_button, 2, 10)
         layout.addWidget(self.brand_logo, 0, 11, 3, 1)
         layout.addWidget(self.criteria_label, 3, 0, 1, 12)
         return box
@@ -825,10 +831,8 @@ class MomentumHunterWindow(QMainWindow):
         self._update_entry_plan_warnings(plan)
 
     def _save_entry_plan_for_candidate(self, candidate: Candidate) -> EntryPlan:
-        identity = self._candidate_identity(candidate)
-        plan = upsert_entry_plan(
-            self.entry_plans,
-            identity,
+        return self._upsert_entry_plan_for_candidate(
+            candidate,
             trigger=self.entry_trigger.text(),
             stop=self.stop_level.text(),
             thesis=self.entry_thesis.toPlainText(),
@@ -839,8 +843,37 @@ class MomentumHunterWindow(QMainWindow):
             notes=self.entry_notes.toPlainText(),
             plan_complete=self.plan_complete_checkbox.isChecked(),
         )
+
+    def _upsert_entry_plan_for_candidate(
+        self,
+        candidate: Candidate,
+        *,
+        trigger: str = "",
+        stop: str = "",
+        thesis: str = "",
+        invalidation: str = "",
+        max_loss: str = "",
+        position_size: str = "",
+        planned_hold_time: str = "",
+        notes: str = "",
+        plan_complete: bool = False,
+    ) -> EntryPlan:
+        identity = self._candidate_identity(candidate)
+        plan = upsert_entry_plan(
+            self.entry_plans,
+            identity,
+            trigger=trigger,
+            stop=stop,
+            thesis=thesis,
+            invalidation=invalidation,
+            max_loss=max_loss,
+            position_size=position_size,
+            planned_hold_time=planned_hold_time,
+            notes=notes,
+            plan_complete=plan_complete,
+        )
         self.entry_plans[identity.key] = plan
-        if self.plan_complete_checkbox.isChecked() != plan.plan_complete:
+        if hasattr(self, "plan_complete_checkbox") and self.plan_complete_checkbox.isChecked() != plan.plan_complete:
             self._loading_entry_plan = True
             self.plan_complete_checkbox.setChecked(plan.plan_complete)
             self._loading_entry_plan = False
@@ -991,6 +1024,316 @@ class MomentumHunterWindow(QMainWindow):
             self._update_status("Select a candidate before opening its timeline.")
             return
         self._show_timeline_dialog(candidate.ticker)
+
+    def open_morning_review_workspace(self) -> None:
+        if not self.candidates:
+            self._update_status("No candidates loaded for Morning Review. Run Scanner or open a snapshot first.")
+            return
+        style = self.current_view_style or get_data_view_style(
+            self.data_view_state,
+            captured_at=self.display_capture_time,
+            session_label=self.display_session_label,
+        )
+        read_only = style.read_only
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Morning Review Workspace")
+        dialog.resize(1380, 820)
+        layout = QVBoxLayout(dialog)
+
+        banner = QLabel(
+            "MORNING REVIEW WORKSPACE\n"
+            f"{style.banner_text}\n"
+            "Workflow only. No broker connection, order placement, Opportunity Score, optimizer, or scoring changes."
+        )
+        banner.setObjectName(style.object_name)
+        banner.setWordWrap(True)
+        layout.addWidget(banner)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        table = QTableWidget(len(self.candidates), 8)
+        table.setHorizontalHeaderLabels(
+            ["Ticker", "Review", "Watchlist", "Score", "Catalyst", "Freshness", "Warnings", "Plan"]
+        )
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        table.horizontalHeader().setStyleSheet(style.header_stylesheet)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.morning_review_table = table
+
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+
+        decision_card = QTextBrowser()
+        decision_card.setOpenExternalLinks(True)
+        decision_card.setMinimumHeight(185)
+        self.morning_decision_card = decision_card
+        right_layout.addWidget(decision_card)
+
+        action_row = QWidget()
+        action_layout = QHBoxLayout(action_row)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        interested_button = QPushButton("Mark Interested")
+        rejected_button = QPushButton("Mark Rejected")
+        watchlist_button = QPushButton("Add to Watchlist")
+        why_button = QPushButton("Open Why Score")
+        timeline_button = QPushButton("Open Timeline/Replay")
+        for button in [interested_button, rejected_button, watchlist_button]:
+            button.setEnabled(not read_only)
+        action_layout.addWidget(interested_button)
+        action_layout.addWidget(rejected_button)
+        action_layout.addWidget(watchlist_button)
+        action_layout.addWidget(why_button)
+        action_layout.addWidget(timeline_button)
+        right_layout.addWidget(action_row)
+
+        entry_box = QGroupBox("Entry Plan")
+        entry_layout = QGridLayout(entry_box)
+        trigger_edit = QLineEdit()
+        stop_edit = QLineEdit()
+        thesis_edit = QPlainTextEdit()
+        thesis_edit.setMaximumHeight(66)
+        invalidation_edit = QPlainTextEdit()
+        invalidation_edit.setMaximumHeight(66)
+        max_loss_edit = QLineEdit()
+        position_size_edit = QLineEdit()
+        hold_time_edit = QLineEdit()
+        notes_edit = QPlainTextEdit()
+        notes_edit.setMaximumHeight(66)
+        plan_complete = QCheckBox("Plan Complete")
+        plan_warning = QLabel()
+        plan_warning.setWordWrap(True)
+        for widget in [
+            trigger_edit,
+            stop_edit,
+            thesis_edit,
+            invalidation_edit,
+            max_loss_edit,
+            position_size_edit,
+            hold_time_edit,
+            notes_edit,
+        ]:
+            widget.setReadOnly(read_only)
+        plan_complete.setEnabled(not read_only)
+        self.morning_entry_trigger = trigger_edit
+        self.morning_entry_stop = stop_edit
+        self.morning_entry_thesis = thesis_edit
+        self.morning_entry_invalidation = invalidation_edit
+        self.morning_entry_max_loss = max_loss_edit
+        self.morning_entry_position_size = position_size_edit
+        self.morning_entry_hold_time = hold_time_edit
+        self.morning_entry_notes = notes_edit
+        self.morning_plan_complete = plan_complete
+        self.morning_plan_warning = plan_warning
+
+        entry_layout.addWidget(QLabel("Trigger"), 0, 0)
+        entry_layout.addWidget(trigger_edit, 0, 1)
+        entry_layout.addWidget(QLabel("Stop"), 1, 0)
+        entry_layout.addWidget(stop_edit, 1, 1)
+        entry_layout.addWidget(QLabel("Thesis"), 2, 0)
+        entry_layout.addWidget(thesis_edit, 2, 1)
+        entry_layout.addWidget(QLabel("Invalidation"), 3, 0)
+        entry_layout.addWidget(invalidation_edit, 3, 1)
+        entry_layout.addWidget(QLabel("Max Loss"), 4, 0)
+        entry_layout.addWidget(max_loss_edit, 4, 1)
+        entry_layout.addWidget(QLabel("Position Size"), 5, 0)
+        entry_layout.addWidget(position_size_edit, 5, 1)
+        entry_layout.addWidget(QLabel("Hold Time"), 6, 0)
+        entry_layout.addWidget(hold_time_edit, 6, 1)
+        entry_layout.addWidget(QLabel("Plan Notes"), 7, 0)
+        entry_layout.addWidget(notes_edit, 7, 1)
+        entry_layout.addWidget(plan_complete, 8, 1)
+        entry_layout.addWidget(plan_warning, 9, 0, 1, 2)
+        save_plan_button = QPushButton("Create/Edit Entry Plan")
+        save_plan_button.setEnabled(not read_only)
+        entry_layout.addWidget(save_plan_button, 10, 1)
+        right_layout.addWidget(entry_box, 1)
+
+        selected_candidate: Candidate | None = None
+        loading_plan = False
+
+        def candidate_for_selected_row() -> Candidate | None:
+            rows = table.selectionModel().selectedRows()
+            if not rows:
+                return None
+            row_index = rows[0].row()
+            if row_index < 0 or row_index >= len(self.candidates):
+                return None
+            return self.candidates[row_index]
+
+        def load_plan(candidate: Candidate) -> None:
+            nonlocal loading_plan
+            plan = self.entry_plans.get(self._candidate_identity(candidate).key)
+            loading_plan = True
+            trigger_edit.setText(plan.trigger if plan else "")
+            stop_edit.setText(plan.stop if plan else "")
+            thesis_edit.setPlainText(plan.thesis if plan else "")
+            invalidation_edit.setPlainText(plan.invalidation if plan else "")
+            max_loss_edit.setText(plan.max_loss if plan else "")
+            position_size_edit.setText(plan.position_size if plan else "")
+            hold_time_edit.setText(plan.planned_hold_time if plan else "")
+            notes_edit.setPlainText(plan.notes if plan else "")
+            plan_complete.setChecked(bool(plan and plan.plan_complete))
+            loading_plan = False
+            update_plan_warning(plan)
+
+        def update_plan_warning(plan: EntryPlan | None) -> None:
+            warnings = entry_plan_warnings(plan) if plan else ["missing trigger", "missing stop", "missing invalidation", "missing max loss"]
+            if warnings:
+                plan_warning.setText("Plan warnings: " + " | ".join(warnings))
+                plan_warning.setStyleSheet("color: #fcd34d; font-weight: 700;")
+            else:
+                plan_warning.setText("Plan complete.")
+                plan_warning.setStyleSheet("color: #86efac; font-weight: 700;")
+
+        def save_plan() -> None:
+            nonlocal selected_candidate, loading_plan
+            if read_only:
+                self._update_status("Morning Review is read-only for stale, historical, replay, and study data.")
+                return
+            if selected_candidate is None:
+                return
+            plan = self._upsert_entry_plan_for_candidate(
+                selected_candidate,
+                trigger=trigger_edit.text(),
+                stop=stop_edit.text(),
+                thesis=thesis_edit.toPlainText(),
+                invalidation=invalidation_edit.toPlainText(),
+                max_loss=max_loss_edit.text(),
+                position_size=position_size_edit.text(),
+                planned_hold_time=hold_time_edit.text(),
+                notes=notes_edit.toPlainText(),
+                plan_complete=plan_complete.isChecked(),
+            )
+            if plan_complete.isChecked() != plan.plan_complete:
+                loading_plan = True
+                plan_complete.setChecked(plan.plan_complete)
+                loading_plan = False
+            update_plan_warning(plan)
+            refresh_table()
+            update_decision_card(selected_candidate)
+            self._update_status(f"Saved entry plan for {selected_candidate.ticker}.")
+
+        def refresh_table() -> None:
+            for row, candidate in enumerate(self.candidates):
+                if candidate.news and candidate.news_stack.article_count == 0:
+                    apply_candidate_news_stack(candidate, now=self.display_capture_time)
+                status = self._candidate_review_status(candidate)
+                context = morning_review_context(candidate)
+                plan = self.entry_plans.get(self._candidate_identity(candidate).key)
+                plan_warnings = entry_plan_warnings(plan) if plan else ["missing trigger", "missing stop", "missing invalidation", "missing max loss"]
+                values = [
+                    candidate.ticker,
+                    status.value.title(),
+                    "Yes" if status == ReviewStatus.WATCHLIST else "No",
+                    str(candidate.score),
+                    context["catalyst_cluster"],
+                    context["freshness"],
+                    " | ".join(context["warnings"]) or "none",
+                    "Complete" if plan and plan.plan_complete else "Incomplete",
+                ]
+                for column, value in enumerate(values):
+                    item = QTableWidgetItem(value)
+                    if column == 1:
+                        item.setBackground(review_status_color(status))
+                    if column == 3:
+                        item.setBackground(score_color(candidate.score))
+                    if column in {6, 7} and (context["warnings"] or plan_warnings):
+                        item.setBackground(QBrush(QColor("#735f24")))
+                    table.setItem(row, column, item)
+            table.resizeColumnsToContents()
+
+        def update_decision_card(candidate: Candidate | None) -> None:
+            nonlocal selected_candidate
+            selected_candidate = candidate
+            if candidate is None:
+                decision_card.setHtml("<p>No candidate selected.</p>")
+                return
+            context = morning_review_context(candidate)
+            status = self._candidate_review_status(candidate)
+            plan = self.entry_plans.get(self._candidate_identity(candidate).key)
+            plan_warnings = entry_plan_warnings(plan) if plan else ["missing trigger", "missing stop", "missing invalidation", "missing max loss"]
+            warnings = list(context["warnings"]) + plan_warnings
+            decision_card.setHtml(
+                "<h2>{ticker} <span style='font-size:14px;'>Score {score}</span></h2>"
+                "<p><b>Catalyst:</b> {summary}</p>"
+                "<p><b>Cluster:</b> {cluster} | <b>Confidence:</b> {confidence} | <b>Purity:</b> {purity}</p>"
+                "<p><b>Freshness:</b> {freshness} | <b>Review:</b> {status} | <b>Plan:</b> {plan_status}</p>"
+                "<p><b>Key warnings:</b> {warnings}</p>"
+                .format(
+                    ticker=escape(candidate.ticker),
+                    score=candidate.score,
+                    summary=escape(context["catalyst_summary"]),
+                    cluster=escape(context["catalyst_cluster"]),
+                    confidence=escape(context["catalyst_confidence"]),
+                    purity=escape(context["cluster_purity"]),
+                    freshness=escape(context["freshness"]),
+                    status=escape(status.value),
+                    plan_status=escape("complete" if plan and plan.plan_complete else "incomplete"),
+                    warnings=escape(" | ".join(warnings) if warnings else "none"),
+                )
+            )
+            load_plan(candidate)
+
+        def selection_changed() -> None:
+            update_decision_card(candidate_for_selected_row())
+
+        def mark_status(status: ReviewStatus) -> None:
+            if read_only:
+                self._update_status("Morning Review is read-only for stale, historical, replay, and study data.")
+                return
+            candidate = selected_candidate
+            if candidate is None:
+                return
+            previous_selected_ticker = self.selected_ticker
+            identity = self._candidate_identity(candidate)
+            try:
+                if status == ReviewStatus.WATCHLIST and identity.key in self.entry_plans:
+                    self.selected_ticker = ""
+                self._set_candidate_review_status(candidate, status)
+            finally:
+                self.selected_ticker = previous_selected_ticker
+            self._refresh_row_states()
+            refresh_table()
+            update_decision_card(candidate)
+
+        def open_why() -> None:
+            if selected_candidate is None:
+                return
+            previous = self.selected_ticker
+            self.selected_ticker = selected_candidate.ticker
+            self.show_score_breakdown()
+            self.selected_ticker = previous
+
+        def open_timeline() -> None:
+            if selected_candidate is None:
+                return
+            self._show_timeline_dialog(selected_candidate.ticker)
+
+        table.itemSelectionChanged.connect(selection_changed)
+        interested_button.clicked.connect(lambda: mark_status(ReviewStatus.INTERESTED))
+        rejected_button.clicked.connect(lambda: mark_status(ReviewStatus.REJECTED))
+        watchlist_button.clicked.connect(lambda: mark_status(ReviewStatus.WATCHLIST))
+        save_plan_button.clicked.connect(save_plan)
+        why_button.clicked.connect(open_why)
+        timeline_button.clicked.connect(open_timeline)
+
+        refresh_table()
+        if self.candidates:
+            table.selectRow(0)
+            update_decision_card(self.candidates[0])
+
+        splitter.addWidget(table)
+        splitter.addWidget(right_panel)
+        splitter.setSizes([760, 620])
+        layout.addWidget(splitter, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        dialog.setStyleSheet(STYLESHEET)
+        dialog.exec()
 
     def _show_timeline_dialog(self, ticker: str) -> None:
         dialog = QDialog(self)
@@ -1390,6 +1733,7 @@ class MomentumHunterWindow(QMainWindow):
         self.add_interested_button.setEnabled(not read_only)
         self.clear_button.setEnabled(not read_only)
         self.watchlist_button.setEnabled(not read_only)
+        self.morning_review_button.setEnabled(bool(self.candidates or self.live_candidates))
         self.notes_edit.setReadOnly(read_only)
         self.entry_trigger.setReadOnly(read_only)
         self.stop_level.setReadOnly(read_only)
@@ -2063,6 +2407,39 @@ def format_news(candidate: Candidate) -> str:
         url = f"\n  {item.url}" if item.url else ""
         blocks.append(f"- {item.headline}{source}{summary}{url}")
     return "\n\n".join(blocks)
+
+
+def morning_review_context(candidate: Candidate) -> dict[str, object]:
+    headlines = [item.headline for item in candidate.news if item.headline]
+    catalyst_text = candidate.news_stack.freshest_headline or (headlines[0] if headlines else "")
+    if not catalyst_text:
+        catalyst_text = ", ".join(candidate.score_reasons) or "No catalyst summary loaded."
+    classification = classify_catalyst_headline_detail(
+        catalyst_text,
+        sector=candidate.sector,
+        industry=candidate.industry,
+        sector_sympathy=False,
+    )
+    normalized_headlines = [headline.strip().lower() for headline in headlines if headline.strip()]
+    duplicate_count = len(normalized_headlines) - len(set(normalized_headlines))
+    warnings = []
+    if candidate.news_stack.unknown_timestamp_count:
+        warnings.append("UNKNOWN TIMESTAMP SOURCE ISSUE")
+    if candidate.news_stack.future_timestamp_count:
+        warnings.append("FUTURE TIMESTAMP SOURCE ISSUE")
+    if duplicate_count > 0:
+        warnings.append("DUPLICATE HEADLINE WARNING")
+    if classification.match_type != "explicit":
+        warnings.append("LOW CATALYST CONFIDENCE")
+    purity = "100%" if classification.match_type == "explicit" else "40% fallback"
+    return {
+        "catalyst_summary": catalyst_text,
+        "catalyst_cluster": classification.cluster_name,
+        "catalyst_confidence": f"{classification.confidence_label} {classification.confidence_score}",
+        "cluster_purity": purity,
+        "freshness": f"{candidate.news_stack.freshness} {candidate.news_stack.freshness_score} | {format_news_range(candidate.news_stack)}",
+        "warnings": warnings,
+    }
 
 
 def format_capture_success(label: str, info: CaptureSuccessInfo) -> str:

@@ -94,5 +94,7 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 ## Trading Workflow
 
 - Watchlist discipline enhancements
+- Trade Plan Outcome Analysis: compare watchlist vs non-watchlist, plan complete vs incomplete, triggered vs never triggered, planned hold time vs actual best hold time, planned risk vs actual drawdown, and human-reviewed vs scanner-only candidates
+- Entry Plan UI v2: compact mode, expand/edit mode, side-panel layout, and multi-monitor optimized morning layout
 - Broker integration only after research validation
 - Automated trading not planned until evidence exists

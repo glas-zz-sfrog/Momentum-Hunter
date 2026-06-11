@@ -100,6 +100,14 @@ When a current/live candidate is moved to Watchlist, Momentum Hunter can store a
 
 Entry plans are planning/journaling records only. Momentum Hunter does not place orders, route trades, or connect to a broker. Historical, Replay, and Study views are read-only for entry plans.
 
+## Morning Review Workspace
+
+Use `Morning Review` from the main toolbar for a focused review surface that combines the candidate table, review/watchlist status, score context, catalyst summary, headline freshness context, warning flags, and entry-plan editing in one workspace.
+
+The selected candidate shows a compact Decision Card with ticker, score, catalyst summary, confidence/purity context, review status, plan status, and key warnings. Current/live data can be reviewed and edited; stale, historical, replay, and study contexts are clearly warned and read-only.
+
+Quick actions support marking a candidate Interested or Rejected, adding it to Watchlist, opening the stored score explanation, and opening Timeline/Replay. Entry plans remain stored in `entry-plans.json`; the Morning Review workspace does not mutate raw captures and does not place trades.
+
 Rows remain `pending_next_day` or `pending_five_day` until enough future daily price bars exist. Scheduled capture jobs run the outcome updater after each successful capture.
 
 The Study Engine includes score-weight recommendations once enough completed 5-day outcomes exist. Recommendations are advisory only; Momentum Hunter does not automatically rewrite `config\scoring_profiles.json`.
