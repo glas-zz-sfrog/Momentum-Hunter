@@ -63,6 +63,8 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 - Trade expectancy analysis
 - Position sizing helper
 - Paper trade journal
+- Study Engine tab consolidation: group Catalyst Explorer, Catalyst Age, Headline Dedup, Outcome Explorer, Opportunity Research, and Readiness Gate into clearer research sections
+- Recommendations tab rename/readiness gating so advisory weight notes cannot be mistaken for optimizer output
 
 ## Market Calendar
 
@@ -94,8 +96,15 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 ## Trading Workflow
 
 - Watchlist discipline enhancements
+- Daily operator workflow consolidation: make Daily Checklist -> Morning Review -> Watchlist Report the obvious daily path
+- Watchlist/Research List naming cleanup
 - Workflow Discipline Analytics: compare reviewed vs unreviewed candidates, complete vs incomplete plans, watchlist vs non-watchlist, and workflow score vs actual outcomes
 - Trade Plan Outcome Analysis: compare watchlist vs non-watchlist, plan complete vs incomplete, triggered vs never triggered, planned hold time vs actual best hold time, planned risk vs actual drawdown, and human-reviewed vs scanner-only candidates
 - Entry Plan UI v2: compact mode, expand/edit mode, side-panel layout, and multi-monitor optimized morning layout
 - Broker integration only after research validation
 - Automated trading not planned until evidence exists
+
+## Documentation
+
+- Documentation encoding cleanup for mojibake in long-dash labels
+- Dedicated roadmap/status document maintained separately from README and CHANGELOG

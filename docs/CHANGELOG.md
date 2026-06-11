@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added Documentation, Workflow, and Roadmap Audit v1.
+- Added `docs/ROADMAP_AUDIT.md` with UI view purpose/workflow notes, roadmap status, feature inventory, duplicate-functionality findings, documentation findings, future-idea findings, and recommended next milestone.
+- Added deferred ideas for Study Engine consolidation, daily operator workflow consolidation, Watchlist/Research List naming cleanup, Recommendations readiness gating, and documentation encoding cleanup.
 - Added Daily Workflow Checklist / Review Report v1.
 - Added a `Daily Checklist` toolbar action with capture status, review status, entry-plan status, outcome status, readiness status, workflow warnings, and a workflow-discipline score.
 - Added quick actions for Open Morning Review, Open Watchlist Report, Open Capture Health, and Open Readiness Gate.
@@ -15,6 +18,7 @@
 
 ### Safety
 
+- Documentation, Workflow, and Roadmap Audit v1 is documentation-only and does not add trading logic, scoring changes, optimizer work, broker integration, or SQLite migration.
 - Daily Workflow Checklist is workflow tracking only and does not add scoring changes, Opportunity Score, optimization, broker integration, order placement, SQLite migration, or automated trading.
 - The workflow score measures daily process completion only and does not evaluate trade quality.
 - Morning Review is workflow/UI only and does not add broker integration, order placement, Opportunity Score, optimizer logic, scoring changes, SQLite migration, or automated trading.
@@ -23,6 +27,7 @@
 
 ### Tests
 
+- No tests were added for the documentation-only audit because no runtime behavior changed.
 - Added tests for deterministic Daily Workflow counts, workflow score math, warning triggers, raw-capture immutability, and read-only historical/study quick-action behavior.
 - Added tests for current Morning Review editing, stale-data warnings, historical/study read-only behavior, raw-capture immutability, selected-candidate Decision Card updates, and incomplete-plan warnings.
 

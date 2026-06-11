@@ -120,14 +120,29 @@ Rows remain `pending_next_day` or `pending_five_day` until enough future daily p
 
 The Study Engine includes score-weight recommendations once enough completed 5-day outcomes exist. Recommendations are advisory only; Momentum Hunter does not automatically rewrite `config\scoring_profiles.json`.
 
-## Daily Capture Workflow
+## Daily Review Workflow
 
 1. Run the scanner during the morning or evening review window.
-2. Review candidates and check the rows you want to track.
-3. Click `Add Selected` to stage the picks.
-4. Set or refresh the market regime.
-5. Momentum Hunter auto-captures market-calendar-approved morning, evening, and preopen snapshots while the app is running.
+2. Open `Daily Checklist` to see what is incomplete.
+3. Open `Morning Review` to review candidates and mark them Interested, Rejected, or Watchlist.
+4. Complete entry plans for watchlist candidates.
+5. Generate the `Watchlist Report`.
 6. Use the date and session selectors to reopen a past morning, evening, preopen, or manual capture.
+
+The broader roadmap and UI workflow audit is tracked in:
+
+```text
+docs\ROADMAP_AUDIT.md
+```
+
+Older raw captures remain available through snapshot/replay tools, but trading decisions should be made only from fresh current data.
+
+## Automated Capture Workflow
+
+1. Set or refresh the market regime when needed.
+2. Keep Momentum Hunter and/or the scheduled capture tasks running.
+3. Momentum Hunter auto-captures market-calendar-approved morning, evening, and preopen snapshots.
+4. Check `Capture Health` or `Daily Checklist` for failures.
 
 Momentum Hunter installs a Windows startup launcher automatically so the app is available for scheduled captures after login.
 The startup launcher is written as `Momentum Hunter.vbs` and launches the GUI hidden through `pythonw.exe`, avoiding a visible command window.
