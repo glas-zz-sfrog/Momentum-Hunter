@@ -107,7 +107,7 @@ class MorningReviewWorkspaceTests(unittest.TestCase):
         self.assertEqual(ReviewStatus.WATCHLIST, self.window._candidate_review_status(self.window.candidates[0]))
         self.assertTrue(self.button(dialog, "Add to Watchlist").isEnabled())
 
-    def test_stale_workspace_warns_and_blocks_actions(self) -> None:
+    def test_aged_workspace_warns_but_allows_actions(self) -> None:
         self.window.display_capture_time = now_central() - timedelta(days=1)
         self.window.current_capture_time = self.window.display_capture_time
         self.window._apply_data_view_state()
@@ -115,9 +115,9 @@ class MorningReviewWorkspaceTests(unittest.TestCase):
         dialog = self.dialogs[-1]
         labels = [label.text() for label in dialog.findChildren(QLabel)]
 
-        self.assertTrue(any("STALE DATA - REFRESH REQUIRED" in text for text in labels))
-        self.assertFalse(self.button(dialog, "Mark Interested").isEnabled())
-        self.assertFalse(self.button(dialog, "Create/Edit Entry Plan").isEnabled())
+        self.assertTrue(any("CURRENT MANUAL SCAN - AGED BUT REVIEWABLE" in text for text in labels))
+        self.assertTrue(self.button(dialog, "Mark Interested").isEnabled())
+        self.assertTrue(self.button(dialog, "Create/Edit Entry Plan").isEnabled())
 
     def test_historical_and_study_workspaces_block_edits(self) -> None:
         self.window._load_historical_capture(

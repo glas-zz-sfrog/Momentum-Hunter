@@ -63,7 +63,7 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 - Trade expectancy analysis
 - Position sizing helper
 - Paper trade journal
-- Research Study navigation v2: consider nested sections or a sidebar for Overview, Catalyst Research, Historical Review, and Data Readiness
+- Research Lab navigation v2: consider nested sections or a sidebar for Overview, Catalyst Research, Historical Review, and Data Readiness
 - Locked Research Notes gating v2: hide or disable locked notes until Readiness Gate thresholds are met
 
 ## Market Calendar
@@ -96,8 +96,14 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 ## Trading Workflow
 
 - Watchlist discipline enhancements
-- Daily operator workflow v2: consider a sidebar or guided flow for Daily Checklist -> Morning Review -> Generate Watchlist
+- Full Daily Review Dashboard merge
+- Daily operator workflow v2: consider a sidebar or guided flow for Daily Checklist -> Morning Review -> Generate Watchlist Report
+- Watchlist Center
 - Watchlist/report center v2 for saved watchlists, generated reports, and latest artifacts
+- Guided first-run walkthrough
+- Command palette / search actions
+- User-customizable workflow layout
+- Delayed Review Analytics
 - Workflow Discipline Analytics: compare reviewed vs unreviewed candidates, complete vs incomplete plans, watchlist vs non-watchlist, and workflow score vs actual outcomes
 - Trade Plan Outcome Analysis: compare watchlist vs non-watchlist, plan complete vs incomplete, triggered vs never triggered, planned hold time vs actual best hold time, planned risk vs actual drawdown, and human-reviewed vs scanner-only candidates
 - Entry Plan UI v2: compact mode, expand/edit mode, side-panel layout, and multi-monitor optimized morning layout

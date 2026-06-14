@@ -44,15 +44,39 @@ class DataViewStateTests(unittest.TestCase):
         self.assertTrue(style.is_warning)
         self.assertFalse(style.read_only)
 
-    def test_expired_current_capture_shows_stale_banner(self) -> None:
+    def test_aged_current_capture_stays_reviewable(self) -> None:
         style = get_data_view_style(
             DataViewState.CURRENT,
             captured_at=self.now - timedelta(minutes=25),
             now=self.now,
             settings=self.settings,
         )
-        self.assertIn("STALE DATA - REFRESH REQUIRED", style.banner_text)
-        self.assertEqual("STALE - ", style.chart_prefix)
+        self.assertIn("CURRENT MANUAL SCAN - AGED BUT REVIEWABLE", style.banner_text)
+        self.assertEqual("AGED - ", style.chart_prefix)
+        self.assertFalse(style.read_only)
+
+    def test_next_session_review_aged_capture_warns_but_allows_review(self) -> None:
+        style = get_data_view_style(
+            DataViewState.NEXT_SESSION_REVIEW,
+            captured_at=self.now - timedelta(minutes=25),
+            session_label="evening",
+            now=self.now,
+            settings=self.settings,
+        )
+        self.assertIn("AGING BUT REVIEWABLE", style.banner_text)
+        self.assertEqual("AGING REVIEW - ", style.chart_prefix)
+        self.assertFalse(style.read_only)
+
+    def test_expired_review_snapshot_is_read_only(self) -> None:
+        style = get_data_view_style(
+            DataViewState.EXPIRED_REVIEW,
+            captured_at=self.now - timedelta(days=1),
+            session_label="evening",
+            now=self.now,
+            settings=self.settings,
+        )
+        self.assertIn("EXPIRED REVIEW SNAPSHOT - READ ONLY", style.banner_text)
+        self.assertEqual("EXPIRED - ", style.chart_prefix)
         self.assertTrue(style.read_only)
 
     def test_historical_capture_is_read_only(self) -> None:

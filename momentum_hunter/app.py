@@ -96,6 +96,13 @@ from momentum_hunter.outcome_maturity import (
     OutcomeMaturityReport,
     build_outcome_maturity_report,
 )
+from momentum_hunter.operator_review import (
+    OperatorReviewContext,
+    OperatorReviewState,
+    blocked_context,
+    classify_current_manual_scan,
+    classify_scheduled_snapshot,
+)
 from momentum_hunter.opportunity_research import (
     OPPORTUNITY_RESEARCH_LABEL,
     OpportunityResearchReport,
@@ -154,11 +161,21 @@ from momentum_hunter.study import (
     build_capture_study,
 )
 from momentum_hunter.time_utils import format_central, next_market_session, now_central
-from momentum_hunter.ui.data_view_state import DataViewState, DataViewStyle, get_data_view_style
+from momentum_hunter.ui.data_view_state import (
+    DataViewState,
+    DataViewStyle,
+    get_data_view_style,
+    load_freshness_settings,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_LOGO_PATH = PROJECT_ROOT / "assets" / "momentum_hunter_logo.jpg"
+SCANNER_DISPLAY_NAMES = {
+    "Base Momentum": "Basic Momentum",
+    "Institutional Momentum": "Heavy Volume Momentum",
+}
+SCANNER_INTERNAL_NAMES = {value: key for key, value in SCANNER_DISPLAY_NAMES.items()}
 
 
 class WatermarkWidget(QWidget):
@@ -232,7 +249,11 @@ class MomentumHunterWindow(QMainWindow):
         self.display_provider_label = self.config.provider
         self.display_scanner_label = next(iter(SCANNER_PRESETS))
         self.display_mode_label = self.config.mode.value
+        self.display_calendar_status = ""
+        self.display_next_market_session_date = ""
+        self.display_quarantined = False
         self.current_view_style: DataViewStyle | None = None
+        self.current_operator_context: OperatorReviewContext | None = None
         self.provider_status_text = "Provider: not checked"
         self.provider_status_ok = True
         self.market_regime = MarketRegimeSnapshot(
@@ -299,7 +320,7 @@ class MomentumHunterWindow(QMainWindow):
         self.provider_combo.currentTextChanged.connect(self._provider_changed)
 
         self.scanner_combo = QComboBox()
-        self.scanner_combo.addItems(list(SCANNER_PRESETS.keys()))
+        self.scanner_combo.addItems([scanner_display_name(name) for name in SCANNER_PRESETS.keys()])
         self.scanner_combo.currentTextChanged.connect(self._scanner_changed)
 
         self.scan_button = QPushButton("Run Scanner")
@@ -308,14 +329,14 @@ class MomentumHunterWindow(QMainWindow):
         self.save_button = QPushButton("Mark Interested")
         self.save_button.clicked.connect(self.save_selected_candidates)
 
-        self.clear_button = QPushButton("Clear Marks")
+        self.clear_button = QPushButton("Clear Checkmarks")
         self.clear_button.clicked.connect(self.clear_row_marks)
 
-        self.watchlist_button = QPushButton("Generate Watchlist")
+        self.watchlist_button = QPushButton("Generate Watchlist Report")
         self.watchlist_button.clicked.connect(self.save_tomorrow_watchlist)
         self.watchlist_button.setToolTip("Daily workflow: generate the next-session watchlist report. No orders are placed.")
 
-        self.view_button = QPushButton("Latest Watchlist")
+        self.view_button = QPushButton("Open Latest Watchlist")
         self.view_button.clicked.connect(self.view_research_list)
         self.view_button.setToolTip("Open the latest saved watchlist/report artifact. Read-only review.")
 
@@ -350,13 +371,16 @@ class MomentumHunterWindow(QMainWindow):
         self.daily_checklist_button.clicked.connect(self.open_daily_workflow_checklist)
         self.daily_checklist_button.setToolTip("Daily workflow: check captures, reviews, watchlist plans, outcomes, and readiness.")
 
-        self.study_button = QPushButton("Research Study")
+        self.study_button = QPushButton("Research Lab")
         self.study_button.clicked.connect(self.open_study_engine)
         self.study_button.setToolTip("Research-only workflow. Uses stored data and post-capture outcomes; no trade recommendations.")
 
         self.clock_label = QLabel(format_central())
         self.criteria_label = QLabel()
         self.criteria_label.setObjectName("criteriaLabel")
+        self.operator_guidance_label = QLabel("What should I do next? Load a capture or run the scanner.")
+        self.operator_guidance_label.setObjectName("criteriaLabel")
+        self.operator_guidance_label.setWordWrap(True)
         self.brand_logo = QLabel()
         self.brand_logo.setObjectName("brandLogo")
         self.brand_logo.setToolTip("Momentum Hunter")
@@ -389,13 +413,15 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(QLabel("Daily Workflow"), 3, 0)
         layout.addWidget(self.daily_checklist_button, 3, 1, 1, 2)
         layout.addWidget(self.morning_review_button, 3, 3, 1, 2)
-        layout.addWidget(self.capture_health_button, 3, 5, 1, 2)
-        layout.addWidget(self.watchlist_button, 3, 7, 1, 2)
-        layout.addWidget(self.view_button, 3, 9, 1, 2)
+        layout.addWidget(self.watchlist_button, 3, 5, 1, 2)
+        layout.addWidget(self.view_button, 3, 7, 1, 2)
+        layout.addWidget(self.capture_health_button, 3, 9, 1, 2)
         layout.addWidget(QLabel("Research"), 3, 11)
         layout.addWidget(self.study_button, 3, 12)
         layout.addWidget(self.brand_logo, 0, 12, 3, 1)
         layout.addWidget(self.criteria_label, 4, 0, 1, 13)
+        layout.addWidget(QLabel("What should I do next?"), 5, 0, 1, 2)
+        layout.addWidget(self.operator_guidance_label, 5, 2, 1, 11)
         return box
 
     def _build_candidate_panel(self) -> QWidget:
@@ -411,9 +437,9 @@ class MomentumHunterWindow(QMainWindow):
         self.mark_interested_button.clicked.connect(self.mark_interested_candidates)
         self.mark_rejected_button = QPushButton("Mark Rejected")
         self.mark_rejected_button.clicked.connect(self.mark_rejected_candidates)
-        self.add_interested_button = QPushButton("Add Interested to Watchlist")
+        self.add_interested_button = QPushButton("Move Interested to Watchlist")
         self.add_interested_button.clicked.connect(self.add_interested_to_watchlist)
-        self.timeline_button = QPushButton("View Timeline")
+        self.timeline_button = QPushButton("Timeline / Replay")
         self.timeline_button.clicked.connect(self.view_candidate_timeline)
         review_layout.addWidget(self.mark_interested_button)
         review_layout.addWidget(self.mark_rejected_button)
@@ -606,6 +632,8 @@ class MomentumHunterWindow(QMainWindow):
     def _apply_config_to_controls(self) -> None:
         self.mode_combo.setCurrentText(self.config.mode.value)
         self.provider_combo.setCurrentText(self.config.provider)
+        if self.display_scanner_label:
+            self.scanner_combo.setCurrentText(scanner_display_name(self.display_scanner_label))
         self._scanner_changed(self.scanner_combo.currentText())
 
     def _mode_changed(self, value: str) -> None:
@@ -630,7 +658,7 @@ class MomentumHunterWindow(QMainWindow):
         self._update_status(f"Provider set to {value}.")
 
     def _scanner_changed(self, value: str) -> None:
-        criteria = SCANNER_PRESETS[value]
+        criteria = self._selected_scanner_criteria(value)
         self.criteria_label.setText(
             "Scanner thresholds: "
             f"Volume >= {criteria.min_volume:,} | "
@@ -656,8 +684,11 @@ class MomentumHunterWindow(QMainWindow):
             self.display_capture_time = self.current_capture_time
             self.display_session_label = "live"
             self.display_provider_label = self.provider_combo.currentText()
-            self.display_scanner_label = self.scanner_combo.currentText()
+            self.display_scanner_label = self._selected_scanner_key()
             self.display_mode_label = self.config.mode.value
+            self.display_calendar_status = ""
+            self.display_next_market_session_date = ""
+            self.display_quarantined = False
             self.data_view_state = DataViewState.CURRENT
             self.live_candidates = list(self.candidates)
             self.live_saved_candidates = dict(self.saved_candidates)
@@ -694,14 +725,21 @@ class MomentumHunterWindow(QMainWindow):
         if self.market_regime.regime == MarketRegime.UNKNOWN:
             self.refresh_market_regime(show_status=False)
         scan_time = now_central()
-        criteria = SCANNER_PRESETS[self.scanner_combo.currentText()]
+        criteria = self._selected_scanner_criteria()
         provider = provider_from_name(self.provider_combo.currentText())
-        self._update_status(f"Running {criteria.name} with {provider.name} provider...")
+        self._update_status(f"Running {scanner_display_name(criteria.name)} with {provider.name} provider...")
         candidates = provider.scan(criteria)
         for candidate in candidates:
             if not candidate.news:
                 candidate.news = provider.fetch_news(candidate.ticker, as_of=scan_time)
         return score_candidates(candidates, regime=self.market_regime.regime, now=scan_time), scan_time
+
+    def _selected_scanner_key(self, value: str | None = None) -> str:
+        selected = value if value is not None else self.scanner_combo.currentText()
+        return scanner_internal_name(selected)
+
+    def _selected_scanner_criteria(self, value: str | None = None):
+        return SCANNER_PRESETS[self._selected_scanner_key(value)]
 
     def _populate_table(self) -> None:
         read_only = self._is_read_only_view()
@@ -844,7 +882,7 @@ class MomentumHunterWindow(QMainWindow):
         if candidate is None:
             return
         if self._is_read_only_view():
-            self._update_status("This view is read-only. Return to current data before editing entry plans.")
+            self._show_action_blocked((self.current_operator_context or self._operator_review_context()).block_reason or "This view is read-only.")
             return
         plan = self._save_entry_plan_for_candidate(candidate)
         self._update_entry_plan_warnings(plan)
@@ -918,7 +956,7 @@ class MomentumHunterWindow(QMainWindow):
 
     def add_interested_to_watchlist(self) -> None:
         if self._is_read_only_view():
-            self._update_status("This view is read-only. Return to current data before changing review status.")
+            self._show_action_blocked((self.current_operator_context or self._operator_review_context()).block_reason or "This view is read-only.")
             return
         interested = [
             candidate
@@ -926,7 +964,7 @@ class MomentumHunterWindow(QMainWindow):
             if self._candidate_review_status(candidate) == ReviewStatus.INTERESTED
         ]
         if not interested:
-            self._update_status("No interested candidates are ready to add to the watchlist.")
+            self._show_action_blocked("No interested candidates found. Mark candidates as Interested first.")
             return
         for candidate in interested:
             self._set_candidate_review_status(candidate, ReviewStatus.WATCHLIST)
@@ -935,13 +973,13 @@ class MomentumHunterWindow(QMainWindow):
 
     def _mark_review_status_for_targets(self, status: ReviewStatus, message_template: str) -> None:
         if self._is_read_only_view():
-            self._update_status("This view is read-only. Return to current data before changing review status.")
+            self._show_action_blocked((self.current_operator_context or self._operator_review_context()).block_reason or "This view is read-only.")
             return
         marked = self._marked_candidates()
         if not marked:
             candidate = self._selected_candidate()
             if candidate is None:
-                self._update_status("Check one or more rows or select a candidate first.")
+                self._show_action_blocked("No candidate selected. Select a candidate first.")
                 return
             marked = [candidate]
         for candidate in marked:
@@ -953,11 +991,15 @@ class MomentumHunterWindow(QMainWindow):
         if candidate.ticker == self.selected_ticker:
             candidate.user_notes = self.notes_edit.toPlainText()
         identity = self._candidate_identity(candidate)
+        context = self.current_operator_context or self._operator_review_context()
         decision = upsert_review_decision(
             self.review_decisions,
             identity,
             status,
             note=candidate.user_notes,
+            delayed_review=context.acknowledgement_required,
+            review_delay_minutes=context.review_delay_minutes,
+            review_context_state=context.state.value,
         )
         self.review_decisions[identity.key] = decision
         self.reviewed_tickers.add(candidate.ticker)
@@ -984,7 +1026,7 @@ class MomentumHunterWindow(QMainWindow):
 
     def clear_row_marks(self) -> None:
         if self._is_read_only_view():
-            self._update_status("This view is read-only.")
+            self._show_action_blocked((self.current_operator_context or self._operator_review_context()).block_reason or "This view is read-only.")
             return
         for row in range(self.table.rowCount()):
             item = self.table.item(row, 0)
@@ -993,13 +1035,17 @@ class MomentumHunterWindow(QMainWindow):
         self._update_status("Cleared row marks.")
 
     def save_tomorrow_watchlist(self) -> None:
-        if self._is_read_only_view():
-            self._update_status("Run Scanner for fresh current data before generating a watchlist.")
+        if not self._can_generate_watchlist():
+            self._show_action_blocked((self.current_operator_context or self._operator_review_context()).block_reason or "This view cannot generate a watchlist.")
             return
         watchlist_candidates = self._watchlist_candidates()
         if not watchlist_candidates:
-            self._update_status("No watchlist candidates yet. Mark candidates interested, then add interested to watchlist.")
+            self._show_action_blocked("No watchlist candidates found. Mark candidates as Watchlist first.")
             return
+        if (self.current_operator_context or self._operator_review_context()).acknowledgement_required:
+            if not self._confirm_aging_review_watchlist():
+                self._update_status("Watchlist report generation cancelled.")
+                return
         session_date = next_market_session()
         entry_plans = self._entry_plans_for_candidates(watchlist_candidates)
         path = save_watchlist(watchlist_candidates, session_date)
@@ -1016,7 +1062,7 @@ class MomentumHunterWindow(QMainWindow):
     def view_research_list(self) -> None:
         report = load_latest_report()
         if report:
-            self._show_text_dialog("Latest Watchlist", report)
+            self._show_text_dialog("Open Latest Watchlist", report)
             self._update_status("Opened latest saved watchlist/report.")
             return
 
@@ -1030,30 +1076,31 @@ class MomentumHunterWindow(QMainWindow):
                     for index, candidate in enumerate(staged, 1)
                 ]
             )
-            self._show_text_dialog("Latest Watchlist", fallback)
+            self._show_text_dialog("Open Latest Watchlist", fallback)
             self._update_status("Opened latest saved watchlist.")
             return
 
-        self._show_text_dialog("Latest Watchlist", "No saved watchlist or report found yet.")
+        self._show_text_dialog("Open Latest Watchlist", "No saved watchlist or report found yet.")
         self._update_status("No saved watchlist/report found.")
 
     def view_candidate_timeline(self) -> None:
         candidate = self._selected_candidate()
         if candidate is None:
-            self._update_status("Select a candidate before opening its timeline.")
+            self._show_action_blocked("No candidate selected. Select a candidate first.")
             return
         self._show_timeline_dialog(candidate.ticker)
 
     def open_morning_review_workspace(self) -> None:
         if not self.candidates:
-            self._update_status("No candidates loaded for Morning Review. Run Scanner or open a snapshot first.")
+            self._show_action_blocked("No candidates loaded. Run Scanner or open the latest review snapshot first.")
             return
         style = self.current_view_style or get_data_view_style(
             self.data_view_state,
             captured_at=self.display_capture_time,
             session_label=self.display_session_label,
         )
-        read_only = style.read_only
+        context = self.current_operator_context or self._operator_review_context()
+        read_only = not context.can_review
         dialog = QDialog(self)
         dialog.setWindowTitle("Morning Review Workspace")
         dialog.resize(1380, 820)
@@ -1208,7 +1255,7 @@ class MomentumHunterWindow(QMainWindow):
         def save_plan() -> None:
             nonlocal selected_candidate, loading_plan
             if read_only:
-                self._update_status("Morning Review is read-only for stale, historical, replay, and study data.")
+                self._show_action_blocked(context.block_reason or "This view is read-only.")
                 return
             if selected_candidate is None:
                 return
@@ -1299,10 +1346,11 @@ class MomentumHunterWindow(QMainWindow):
 
         def mark_status(status: ReviewStatus) -> None:
             if read_only:
-                self._update_status("Morning Review is read-only for stale, historical, replay, and study data.")
+                self._show_action_blocked(context.block_reason or "This view is read-only.")
                 return
             candidate = selected_candidate
             if candidate is None:
+                self._show_action_blocked("No candidate selected. Select a candidate first.")
                 return
             previous_selected_ticker = self.selected_ticker
             identity = self._candidate_identity(candidate)
@@ -1318,6 +1366,7 @@ class MomentumHunterWindow(QMainWindow):
 
         def open_why() -> None:
             if selected_candidate is None:
+                self._show_action_blocked("No candidate selected. Select a candidate first.")
                 return
             previous = self.selected_ticker
             self.selected_ticker = selected_candidate.ticker
@@ -1326,6 +1375,7 @@ class MomentumHunterWindow(QMainWindow):
 
         def open_timeline() -> None:
             if selected_candidate is None:
+                self._show_action_blocked("No candidate selected. Select a candidate first.")
                 return
             self._show_timeline_dialog(selected_candidate.ticker)
 
@@ -1377,7 +1427,8 @@ class MomentumHunterWindow(QMainWindow):
             captured_at=self.display_capture_time,
             session_label=self.display_session_label,
         )
-        read_only = style.read_only
+        context = self.current_operator_context or self._operator_review_context()
+        read_only = not context.can_review
         dialog = QDialog(self)
         dialog.setWindowTitle("Daily Workflow Checklist")
         dialog.resize(1060, 760)
@@ -1415,11 +1466,11 @@ class MomentumHunterWindow(QMainWindow):
         action_layout = QHBoxLayout(action_row)
         action_layout.setContentsMargins(0, 0, 0, 0)
         morning_button = QPushButton("Open Morning Review")
-        watchlist_button = QPushButton("Generate Watchlist")
+        watchlist_button = QPushButton("Generate Watchlist Report")
         capture_button = QPushButton("Open Capture Health")
         readiness_button = QPushButton("Open Readiness Gate")
         morning_button.setEnabled(not read_only and bool(self.candidates))
-        watchlist_button.setEnabled(not read_only)
+        watchlist_button.setEnabled(context.can_generate_watchlist)
         morning_button.clicked.connect(self.open_morning_review_workspace)
         watchlist_button.clicked.connect(self.save_tomorrow_watchlist)
         capture_button.clicked.connect(self.open_capture_health_report)
@@ -1617,7 +1668,7 @@ class MomentumHunterWindow(QMainWindow):
                 candidates=candidates,
                 selected_tickers=selected,
                 reviewed_tickers=self.reviewed_tickers,
-                criteria=SCANNER_PRESETS[self.scanner_combo.currentText()],
+                criteria=self._selected_scanner_criteria(),
                 provider=self.provider_combo.currentText(),
                 mode=self.config.mode,
                 session=session,
@@ -1805,13 +1856,28 @@ class MomentumHunterWindow(QMainWindow):
         self._show_study_dialog(summary)
 
     def _load_historical_capture(self, payload: dict) -> None:
-        self.data_view_state = DataViewState.HISTORICAL
         self.display_capture_time = datetime.fromisoformat(payload["capture_time"]) if payload.get("capture_time") else None
         self.display_session_label = payload.get("session", "snapshot")
         self.display_provider_label = payload.get("provider", "")
         self.display_mode_label = payload.get("mode", "")
         scanner_payload = payload.get("scanner", {})
         self.display_scanner_label = scanner_payload.get("name", "") if isinstance(scanner_payload, dict) else str(scanner_payload)
+        self.display_calendar_status = payload.get("capture_calendar_status", "")
+        self.display_next_market_session_date = payload.get("next_market_session_date", "")
+        self.display_quarantined = str(payload.get("capture_status", "")).lower() == "quarantined"
+        context = classify_scheduled_snapshot(
+            capture_time=self.display_capture_time,
+            session=self.display_session_label,
+            next_market_session_date=self.display_next_market_session_date,
+            freshness_threshold_minutes=load_freshness_settings().current_dashboard_stale_minutes,
+            quarantined=self.display_quarantined,
+        )
+        if context.can_review:
+            self.data_view_state = DataViewState.NEXT_SESSION_REVIEW
+        elif context.state == OperatorReviewState.EXPIRED_REVIEW_SNAPSHOT:
+            self.data_view_state = DataViewState.EXPIRED_REVIEW
+        else:
+            self.data_view_state = DataViewState.HISTORICAL
         self.candidates = [candidate_from_dict(item) for item in payload.get("candidates", [])]
         for raw_candidate, candidate in zip(payload.get("candidates", []), self.candidates):
             if not raw_candidate.get("news_stack"):
@@ -1828,15 +1894,19 @@ class MomentumHunterWindow(QMainWindow):
         self._apply_data_view_state()
         self._populate_table()
         self._update_score_chart()
-        self._update_status("Loaded historical capture into the main table.")
+        loaded_context = self.current_operator_context or self._operator_review_context()
+        self._update_status(f"Loaded capture: {loaded_context.label}.")
 
     def return_to_current_dashboard(self) -> None:
         self.data_view_state = DataViewState.CURRENT
         self.display_capture_time = self.current_capture_time
         self.display_session_label = "live"
         self.display_provider_label = self.provider_combo.currentText()
-        self.display_scanner_label = self.scanner_combo.currentText()
+        self.display_scanner_label = self._selected_scanner_key()
         self.display_mode_label = self.config.mode.value
+        self.display_calendar_status = ""
+        self.display_next_market_session_date = ""
+        self.display_quarantined = False
         self.candidates = list(self.live_candidates)
         self.saved_candidates = dict(self.live_saved_candidates)
         self.reviewed_tickers = set(self.live_reviewed_tickers)
@@ -1853,34 +1923,37 @@ class MomentumHunterWindow(QMainWindow):
             session_label=self.display_session_label,
         )
         self.current_view_style = style
+        self.current_operator_context = self._operator_review_context()
         self.view_state_label.setObjectName(style.object_name)
         self.view_state_label.setText(style.banner_text)
         self.detail_state_label.setText(style.detail_label)
         self.chart_state_label.setText(f"{style.chart_prefix}Top Momentum Candidates")
         self._set_chart_watermark(style)
         self.table.horizontalHeader().setStyleSheet(style.header_stylesheet)
-        read_only = style.read_only
-        self.save_button.setEnabled(not read_only)
-        self.mark_interested_button.setEnabled(not read_only)
-        self.mark_rejected_button.setEnabled(not read_only)
-        self.add_interested_button.setEnabled(not read_only)
-        self.clear_button.setEnabled(not read_only)
-        self.watchlist_button.setEnabled(not read_only)
+        can_review = self.current_operator_context.can_review
+        can_generate = self.current_operator_context.can_generate_watchlist
+        self.save_button.setEnabled(can_review)
+        self.mark_interested_button.setEnabled(can_review)
+        self.mark_rejected_button.setEnabled(can_review)
+        self.add_interested_button.setEnabled(can_review)
+        self.clear_button.setEnabled(can_review)
+        self.watchlist_button.setEnabled(can_generate)
         self.morning_review_button.setEnabled(bool(self.candidates or self.live_candidates))
-        self.notes_edit.setReadOnly(read_only)
-        self.entry_trigger.setReadOnly(read_only)
-        self.stop_level.setReadOnly(read_only)
-        self.entry_thesis.setReadOnly(read_only)
-        self.entry_invalidation.setReadOnly(read_only)
-        self.entry_max_loss.setReadOnly(read_only)
-        self.entry_position_size.setReadOnly(read_only)
-        self.entry_hold_time.setReadOnly(read_only)
-        self.entry_notes.setReadOnly(read_only)
-        self.plan_complete_checkbox.setEnabled(not read_only)
-        self.scan_button.setProperty("emphasized", style.state == DataViewState.STALE)
+        self.notes_edit.setReadOnly(not can_review)
+        self.entry_trigger.setReadOnly(not can_review)
+        self.stop_level.setReadOnly(not can_review)
+        self.entry_thesis.setReadOnly(not can_review)
+        self.entry_invalidation.setReadOnly(not can_review)
+        self.entry_max_loss.setReadOnly(not can_review)
+        self.entry_position_size.setReadOnly(not can_review)
+        self.entry_hold_time.setReadOnly(not can_review)
+        self.entry_notes.setReadOnly(not can_review)
+        self.plan_complete_checkbox.setEnabled(can_review)
+        self.scan_button.setProperty("emphasized", not can_review)
         self.scan_button.style().unpolish(self.scan_button)
         self.scan_button.style().polish(self.scan_button)
         self._refresh_view_state_style()
+        self._update_operator_guidance()
         self._update_score_chart()
 
     def _refresh_view_state_style(self) -> None:
@@ -1888,7 +1961,78 @@ class MomentumHunterWindow(QMainWindow):
         self.view_state_label.style().polish(self.view_state_label)
 
     def _is_read_only_view(self) -> bool:
-        return bool(self.current_view_style and self.current_view_style.read_only)
+        context = self.current_operator_context or self._operator_review_context()
+        return not context.can_review
+
+    def _can_generate_watchlist(self) -> bool:
+        context = self.current_operator_context or self._operator_review_context()
+        return context.can_generate_watchlist
+
+    def _operator_review_context(self) -> OperatorReviewContext:
+        settings = load_freshness_settings()
+        if self.display_quarantined:
+            return blocked_context(
+                OperatorReviewState.QUARANTINED_BLOCKED,
+                "Quarantined Capture - Blocked",
+                "This capture is quarantined and blocked from review workflow.",
+            )
+        if self.data_view_state == DataViewState.STUDY:
+            return blocked_context(
+                OperatorReviewState.STUDY_READ_ONLY,
+                "Research View - Read Only",
+                "This view is research-only.",
+            )
+        if self.data_view_state == DataViewState.HISTORICAL:
+            return blocked_context(
+                OperatorReviewState.HISTORICAL_READ_ONLY,
+                "Historical Snapshot - Read Only",
+                "This capture is historical and cannot be used for a new watchlist.",
+            )
+        if self.data_view_state == DataViewState.EXPIRED_REVIEW:
+            return blocked_context(
+                OperatorReviewState.EXPIRED_REVIEW_SNAPSHOT,
+                "Expired Review Snapshot - Read Only",
+                "This snapshot is expired for trading workflow.",
+            )
+        if self.data_view_state == DataViewState.NEXT_SESSION_REVIEW:
+            return classify_scheduled_snapshot(
+                capture_time=self.display_capture_time,
+                session=self.display_session_label,
+                next_market_session_date=self.display_next_market_session_date,
+                freshness_threshold_minutes=settings.current_dashboard_stale_minutes,
+                quarantined=self.display_quarantined,
+            )
+        return classify_current_manual_scan(
+            capture_time=self.display_capture_time,
+            candidates_loaded=bool(self.candidates),
+            freshness_threshold_minutes=settings.current_dashboard_stale_minutes,
+        )
+
+    def _update_operator_guidance(self) -> None:
+        if not hasattr(self, "operator_guidance_label"):
+            return
+        context = self.current_operator_context or self._operator_review_context()
+        guidance = context.guidance
+        if context.can_review and self.candidates:
+            unreviewed = [
+                candidate
+                for candidate in self.candidates
+                if self._candidate_review_status(candidate) == ReviewStatus.UNREVIEWED
+            ]
+            watchlist = self._watchlist_candidates()
+            incomplete_plans = []
+            for candidate in watchlist:
+                identity = self._candidate_identity(candidate)
+                plan = self.entry_plans.get(identity.key)
+                if plan is None or entry_plan_warnings(plan):
+                    incomplete_plans.append(candidate)
+            if unreviewed:
+                guidance = "You have unreviewed candidates. Mark them Interested, Rejected, or Watchlist."
+            elif incomplete_plans:
+                guidance = "Watchlist candidates are missing entry plans."
+            elif watchlist:
+                guidance = "Watchlist report is ready to generate."
+        self.operator_guidance_label.setText(guidance)
 
     def _update_score_chart(self) -> None:
         if not hasattr(self, "score_chart"):
@@ -1942,6 +2086,8 @@ class MomentumHunterWindow(QMainWindow):
         label = {
             DataViewState.CURRENT: "LIVE DATA" if not style.is_warning else "AGING DATA",
             DataViewState.STALE: "STALE DATA",
+            DataViewState.NEXT_SESSION_REVIEW: "REVIEW" if not style.is_warning else "AGING REVIEW",
+            DataViewState.EXPIRED_REVIEW: "EXPIRED",
             DataViewState.HISTORICAL: "HISTORICAL",
             DataViewState.STUDY: "SIMULATED",
         }[style.state]
@@ -2004,7 +2150,7 @@ class MomentumHunterWindow(QMainWindow):
                 capture_time=capture_time,
                 session=session_label,
                 provider=self.display_provider_label or self.provider_combo.currentText(),
-                scanner=self.display_scanner_label or self.scanner_combo.currentText(),
+                scanner=self.display_scanner_label or self._selected_scanner_key(),
                 mode=self.display_mode_label or self.config.mode.value,
                 regime=self.market_regime.regime,
             )
@@ -2014,7 +2160,7 @@ class MomentumHunterWindow(QMainWindow):
     def show_score_breakdown(self) -> None:
         candidate = self._selected_candidate()
         if candidate is None:
-            self._update_status("Select a candidate before opening score details.")
+            self._show_action_blocked("No candidate selected. Select a candidate first.")
             return
         identity = self._score_breakdown_identity(candidate)
         record = find_score_breakdown(identity)
@@ -2025,7 +2171,7 @@ class MomentumHunterWindow(QMainWindow):
                 capture_time=capture_time,
                 session=self.display_session_label or "live",
                 provider=self.display_provider_label or self.provider_combo.currentText(),
-                scanner=self.display_scanner_label or self.scanner_combo.currentText(),
+                scanner=self.display_scanner_label or self._selected_scanner_key(),
                 mode=self.display_mode_label or self.config.mode.value,
                 regime=self.market_regime.regime,
             )
@@ -2060,7 +2206,7 @@ class MomentumHunterWindow(QMainWindow):
             capture_time=capture_time.isoformat(),
             session=self.display_session_label or "live",
             provider=self.display_provider_label or self.provider_combo.currentText(),
-            scanner=self.display_scanner_label or self.scanner_combo.currentText(),
+            scanner=self.display_scanner_label or self._selected_scanner_key(),
             ticker=candidate.ticker,
             mode=self.display_mode_label or self.config.mode.value,
         )
@@ -2075,7 +2221,7 @@ class MomentumHunterWindow(QMainWindow):
         capture_date = capture_time.strftime("%Y-%m-%d")
         session = self.display_session_label or "live"
         provider = self.display_provider_label or self.provider_combo.currentText()
-        scanner = self.display_scanner_label or self.scanner_combo.currentText()
+        scanner = self.display_scanner_label or self._selected_scanner_key()
         capture_id = make_capture_id(capture_date, session, provider, scanner)
         return CandidateIdentity(
             capture_id=capture_id,
@@ -2136,10 +2282,27 @@ class MomentumHunterWindow(QMainWindow):
                         cell.setBackground(
                             QBrush(QColor("#20394a" if self.data_view_state == DataViewState.CURRENT else "#3a314d"))
                         )
+        self._update_operator_guidance()
 
     def _update_status(self, message: str) -> None:
         self.clock_label.setText(format_central())
         self.status_label.setText(message)
+
+    def _show_action_blocked(self, message: str, title: str = "Action Not Available") -> None:
+        QMessageBox.information(self, title, message)
+        self._update_status(message)
+
+    def _confirm_aging_review_watchlist(self) -> bool:
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setWindowTitle("Aging but Reviewable")
+        dialog.setText(
+            "This capture is older, but it is still the active review snapshot for the next market session. Continue?"
+        )
+        continue_button = dialog.addButton("Continue", QMessageBox.ButtonRole.AcceptRole)
+        dialog.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        dialog.exec()
+        return dialog.clickedButton() == continue_button
 
     def _set_table_widths(self) -> None:
         widths = [48, 112, 62, 190, 72, 88, 78, 116, 86, 104, 128, 180]
@@ -2163,7 +2326,7 @@ class MomentumHunterWindow(QMainWindow):
 
     def _show_study_dialog(self, summary: StudySummary) -> None:
         dialog = QDialog(self)
-        dialog.setWindowTitle("Momentum Hunter Research Study")
+        dialog.setWindowTitle("Momentum Hunter Research Lab")
         dialog.resize(1320, 820)
         layout = QVBoxLayout(dialog)
 
@@ -3005,6 +3168,14 @@ def format_market_cap(value: int) -> str:
     return "n/a"
 
 
+def scanner_display_name(internal_name: str) -> str:
+    return SCANNER_DISPLAY_NAMES.get(internal_name, internal_name)
+
+
+def scanner_internal_name(display_name: str) -> str:
+    return SCANNER_INTERNAL_NAMES.get(display_name, display_name)
+
+
 def score_color(score: int) -> QColor:
     if score >= 85:
         return QColor("#1f6f4a")
@@ -3040,7 +3211,7 @@ def chart_bar_color(state: DataViewState) -> QColor:
         return QColor("#8f6bb5")
     if state == DataViewState.STUDY:
         return QColor("#5f86d9")
-    if state == DataViewState.STALE:
+    if state in {DataViewState.STALE, DataViewState.EXPIRED_REVIEW}:
         return QColor("#c24d4d")
     return QColor("#2f9d68")
 
@@ -3050,7 +3221,7 @@ def chart_badge_color(state: DataViewState, is_warning: bool = False) -> QColor:
         return QColor("#f4ecff")
     if state == DataViewState.STUDY:
         return QColor("#eaf1ff")
-    if state == DataViewState.STALE:
+    if state in {DataViewState.STALE, DataViewState.EXPIRED_REVIEW}:
         return QColor("#ffe1e1")
     if is_warning:
         return QColor("#fff0bd")

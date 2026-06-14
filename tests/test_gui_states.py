@@ -5,7 +5,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QLabel, QDialog, QTableWidget
+from PySide6.QtWidgets import QApplication, QLabel, QDialog, QTableWidget, QWidget
 
 from momentum_hunter.app import MomentumHunterWindow
 from momentum_hunter.models import Candidate, NewsItem
@@ -57,7 +57,7 @@ class GuiStateTests(unittest.TestCase):
         self.assertFalse(self.window.notes_edit.isReadOnly())
         self.assertTrue(self.window.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable)
 
-    def test_stale_current_dashboard_blocks_staging_actions(self) -> None:
+    def test_aged_current_dashboard_warns_but_allows_staging_actions(self) -> None:
         self.window.data_view_state = DataViewState.CURRENT
         self.window.display_capture_time = now_central() - timedelta(days=1)
         self.window.display_session_label = "live"
@@ -65,14 +65,12 @@ class GuiStateTests(unittest.TestCase):
 
         self.window._apply_data_view_state()
         self.window._populate_table()
-        self.window.save_selected_candidates()
 
-        self.assertIn("STALE DATA - REFRESH REQUIRED", self.window.view_state_label.text())
-        self.assertEqual("STALE - Top Momentum Candidates", self.window.chart_state_label.text())
-        self.assertFalse(self.window.save_button.isEnabled())
-        self.assertTrue(self.window.notes_edit.isReadOnly())
-        self.assertFalse(self.window.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable)
-        self.assertIn("read-only", self.window.status_label.text())
+        self.assertIn("CURRENT MANUAL SCAN - AGED BUT REVIEWABLE", self.window.view_state_label.text())
+        self.assertEqual("AGED - Top Momentum Candidates", self.window.chart_state_label.text())
+        self.assertTrue(self.window.save_button.isEnabled())
+        self.assertFalse(self.window.notes_edit.isReadOnly())
+        self.assertTrue(self.window.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable)
 
     def test_run_scan_replaces_stale_candidate_detail_panel(self) -> None:
         self.window.candidates = [candidate("OLD", score=72)]
@@ -123,7 +121,7 @@ class GuiStateTests(unittest.TestCase):
             self.window.run_scan()
 
         self.assertEqual("OLD", self.window.table.item(0, 4).text())
-        self.assertIn("STALE DATA - REFRESH REQUIRED", self.window.view_state_label.text())
+        self.assertIn("CURRENT MANUAL SCAN - AGED BUT REVIEWABLE", self.window.view_state_label.text())
         self.assertFalse(self.window.retry_scan_button.isHidden())
         self.assertIn("DNS failure", self.window.provider_status_label.text())
 
@@ -171,6 +169,24 @@ class GuiStateTests(unittest.TestCase):
         with (
             patch.object(QDialog, "exec", capture_dialog),
             patch("momentum_hunter.app.build_capture_study", return_value=study_summary()),
+            patch("momentum_hunter.app.build_study_chart", return_value=QWidget()),
+            patch("momentum_hunter.app.build_outcome_chart", return_value=QWidget()),
+            patch("momentum_hunter.app.build_historical_cluster_report"),
+            patch("momentum_hunter.app.build_historical_recurrence_report"),
+            patch("momentum_hunter.app.build_catalyst_cluster_report"),
+            patch("momentum_hunter.app.build_catalyst_age_audit_report"),
+            patch("momentum_hunter.app.build_headline_dedup_report"),
+            patch("momentum_hunter.app.build_outcome_explorer_report"),
+            patch("momentum_hunter.app.build_outcome_maturity_report"),
+            patch("momentum_hunter.app.build_opportunity_research_report"),
+            patch("momentum_hunter.app.build_historical_cluster_panel", return_value=QWidget()),
+            patch("momentum_hunter.app.build_catalyst_cluster_panel", return_value=QWidget()),
+            patch("momentum_hunter.app.build_catalyst_age_panel", return_value=QWidget()),
+            patch("momentum_hunter.app.build_headline_dedup_panel", return_value=QWidget()),
+            patch("momentum_hunter.app.build_outcome_explorer_panel", return_value=QWidget()),
+            patch("momentum_hunter.app.build_outcome_maturity_panel", return_value=QWidget()),
+            patch("momentum_hunter.app.build_opportunity_research_panel", return_value=QWidget()),
+            patch("momentum_hunter.app.build_recommendation_panel", return_value=QWidget()),
             patch("momentum_hunter.app.build_weight_recommendations"),
         ):
             self.window._show_study_dialog(study_summary())

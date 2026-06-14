@@ -1,5 +1,31 @@
 # Momentum Hunter Changelog
 
+## 2026-06-14
+
+### Added
+
+- Added Operator Workflow Redesign v1 Phase 1.
+- Added operator review states that separate market-data freshness from next-session review validity.
+- Added `Ready for Next Session Review`, `Aging but Reviewable`, `Current Manual Scan`, and `Expired Review Snapshot` UI language.
+- Added a `What should I do next?` guidance area for review, entry-plan, watchlist, capture-failure, and research-only contexts.
+- Added delayed-review metadata to `review-decisions.json` for aged-but-valid review decisions.
+- Renamed scanner display labels to `Basic Momentum` and `Heavy Volume Momentum` while keeping internal preset keys compatible.
+- Renamed visible workflow actions to `Generate Watchlist Report`, `Open Latest Watchlist`, `Research Lab`, `Clear Checkmarks`, `Move Interested to Watchlist`, and `Timeline / Replay`.
+
+### Safety
+
+- Aged evening/preopen captures remain reviewable until 8:30 AM CT on their next market session date.
+- Watchlist report generation from aged-but-reviewable snapshots requires acknowledgement.
+- Expired, historical, replay, research, quarantined, missing, and failed contexts block trading workflow actions with visible explanations.
+- Raw captures remain immutable; review decisions, delayed-review metadata, entry plans, and watchlist artifacts remain derived/user records.
+- No Opportunity Score, optimizer, broker integration, SQLite migration, automated trading, or new research engine was added.
+
+### Tests
+
+- Added operator-review state tests for aged evening/preopen review, expiration, and quarantine blocking.
+- Updated data-view, review workflow, Morning Review, Daily Workflow, and GUI state tests for warning-but-reviewable aged snapshots.
+- Added tests for acknowledgement-controlled watchlist generation and delayed-review metadata storage.
+
 ## 2026-06-11
 
 ### Added

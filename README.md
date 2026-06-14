@@ -10,7 +10,7 @@ Version 0.1 implements the V1/V3 foundation:
 
 - PySide6 desktop GUI
 - PAPER/LIVE mode switch with no trading execution
-- Base Momentum and Institutional Momentum scanner presets
+- Basic Momentum and Heavy Volume Momentum scanner presets
 - Swappable data-provider architecture
 - Sample provider for offline use
 - Finviz provider scaffold for screener/news parsing
@@ -98,13 +98,21 @@ Outcome fields include:
 
 When a current/live candidate is moved to Watchlist, Momentum Hunter can store an entry plan with trigger, stop, thesis, invalidation, max loss, position size idea, planned hold time, and notes. Incomplete plans show warnings for missing trigger, stop, invalidation, and max loss.
 
-Entry plans are planning/journaling records only. Momentum Hunter does not place orders, route trades, or connect to a broker. Historical, Replay, and Study views are read-only for entry plans.
+Entry plans are planning/journaling records only. Momentum Hunter does not place orders, route trades, or connect to a broker. Historical, Replay, Research Lab, expired, and quarantined views are read-only for entry plans.
+
+## Operator Review Validity
+
+Momentum Hunter separates market-data freshness from operator-review validity. A 7:00 PM CT evening or preopen capture may be older than the freshness threshold when you review it later that night, but it remains reviewable until 8:30 AM CT on the next market session date.
+
+Review decisions, watchlist creation, entry plans, and watchlist report generation are allowed for `Ready for Next Session Review`, `Aging but Reviewable`, and `Current Manual Scan` contexts. Aged reviewable snapshots keep strong warnings visible; generating a watchlist report from aged but valid data requires an acknowledgement.
+
+Expired review snapshots, historical snapshots, Replay, Research Lab, quarantined captures, missing captures, and failed captures block the trading workflow. Delayed review metadata is stored with review decisions, not in immutable raw captures.
 
 ## Morning Review Workspace
 
 Use `Morning Review` from the main toolbar for a focused review surface that combines the candidate table, review/watchlist status, score context, catalyst summary, headline freshness context, warning flags, and entry-plan editing in one workspace.
 
-The selected candidate shows a compact Decision Card with ticker, score, catalyst summary, confidence/purity context, review status, plan status, and key warnings. Current/live data can be reviewed and edited; stale, historical, replay, and study contexts are clearly warned and read-only.
+The selected candidate shows a compact Decision Card with ticker, score, catalyst summary, confidence/purity context, review status, plan status, and key warnings. Current/manual data and next-session evening/preopen review snapshots can be reviewed and edited; expired, historical, replay, research, and quarantined contexts are clearly warned and read-only.
 
 Quick actions support marking a candidate Interested or Rejected, adding it to Watchlist, opening the stored score explanation, and opening Timeline/Replay. Entry plans remain stored in `entry-plans.json`; the Morning Review workspace does not mutate raw captures and does not place trades.
 
@@ -114,19 +122,19 @@ Use `Daily Checklist` from the main toolbar to check whether the daily Momentum 
 
 The workflow score measures operational consistency only: candidate review completion, watchlist plan completion, capture success, and critical warning status. It does not evaluate trade quality, recommend trades, change scoring, or optimize weights.
 
-Quick actions can open Morning Review, Generate Watchlist, Capture Health, and Readiness Gate. In stale, historical, or study contexts, edit/write actions remain disabled while read-only diagnostics stay available.
+Quick actions can open Morning Review, Generate Watchlist Report, Capture Health, and Readiness Gate. In expired, historical, replay, research, quarantined, missing, or failed contexts, edit/write actions remain disabled while read-only diagnostics stay available.
 
 Rows remain `pending_next_day` or `pending_five_day` until enough future daily price bars exist. Scheduled capture jobs run the outcome updater after each successful capture.
 
-The Research Study area includes `Locked Research Notes` once enough completed 5-day outcomes exist. These notes are diagnostic only; Momentum Hunter does not automatically rewrite `config\scoring_profiles.json`.
+The Research Lab area includes `Locked Research Notes` once enough completed 5-day outcomes exist. These notes are diagnostic only; Momentum Hunter does not automatically rewrite `config\scoring_profiles.json`.
 
 ## Daily Review Workflow
 
-1. Run the scanner during the morning or evening review window.
+1. Let the scheduled morning/evening/preopen capture run, or run the scanner manually.
 2. Open `Daily Checklist` to see what is incomplete.
 3. Open `Morning Review` to review candidates and mark them Interested, Rejected, or Watchlist.
 4. Complete entry plans for watchlist candidates.
-5. Click `Generate Watchlist`.
+5. Click `Generate Watchlist Report`.
 6. Use the date and session selectors to reopen a past morning, evening, preopen, or manual capture.
 
 The broader roadmap and UI workflow audit is tracked in:
@@ -135,7 +143,7 @@ The broader roadmap and UI workflow audit is tracked in:
 docs\ROADMAP_AUDIT.md
 ```
 
-Older raw captures remain available through snapshot/replay tools, but trading decisions should be made only from fresh current data.
+Older raw captures remain available through snapshot/replay tools. Trading workflow is allowed only from current/manual scans and valid next-session review snapshots; historical/research views remain read-only.
 
 ## Automated Capture Workflow
 
@@ -212,7 +220,7 @@ Current thresholds:
 - Aging current data: more than `10` minutes old
 - Stale data: more than `20` minutes old
 
-Momentum Hunter uses visible banners, timestamps, age text, read-only state, and table-header styling so current, stale, historical, and study data cannot be quietly confused.
+Momentum Hunter uses visible banners, timestamps, age text, operator-review state, and table-header styling so current, aged-but-reviewable, expired, historical, and research data cannot be quietly confused.
 
 ## Scoring Profiles
 
@@ -254,7 +262,7 @@ The `Why [score]?` dialog has a compact summary and detailed component view. Com
 
 ## Candidate Timeline and Replay Mode
 
-Select a candidate and click `View Timeline` to see every trusted active capture containing that ticker. The timeline can sort oldest-first or newest-first and can optionally show quarantined captures with a warning.
+Select a candidate and click `Timeline / Replay` to see every trusted active capture containing that ticker. The timeline can sort oldest-first or newest-first and can optionally show quarantined captures with a warning.
 
 Timeline rows show capture time, session, provider, scanner preset, score, score profile/version, market regime, review status, outcome status, score-breakdown status, and trust classification.
 
@@ -271,7 +279,7 @@ Replay Mode never fetches current market data and does not recalculate historica
 
 ## Historical Clusters
 
-The Research Study area includes a `Catalyst - Historical Setups` tab labeled `HISTORICAL CLUSTERS — RESEARCH ONLY`.
+The Research Lab area includes a `Catalyst - Historical Setups` tab labeled `HISTORICAL CLUSTERS — RESEARCH ONLY`.
 
 Historical clusters group stored candidates into deterministic themes such as earnings/guidance, analyst actions, AI infrastructure, healthcare/FDA/biotech, high-volume institutional momentum, sector sympathy, weak catalyst, and no clear catalyst.
 
@@ -285,7 +293,7 @@ Cluster filters include date range, market regime, scanner preset, sector, minim
 
 ## Catalyst Cluster Explorer
 
-The Research Study area includes a `Catalyst - Clusters` tab labeled `CATALYST CLUSTERS — RESEARCH ONLY`.
+The Research Lab area includes a `Catalyst - Clusters` tab labeled `CATALYST CLUSTERS — RESEARCH ONLY`.
 
 Catalyst Cluster Explorer groups the actual historical headlines stored inside raw captures into deterministic catalyst buckets such as earnings beat, guidance raise, analyst actions, AI infrastructure, AI partnership, contract wins, FDA/biotech events, merger/acquisition, macro-only, weak/vague catalyst, no clear catalyst, and unknown/uncategorized.
 
@@ -301,7 +309,7 @@ The cluster detail view lists matching stored headlines, ticker, capture time, s
 
 ## Catalyst Date / Age Engine
 
-The Research Study area includes a `Catalyst - Age` tab labeled `CATALYST AGE / FRESHNESS — RESEARCH ONLY`.
+The Research Lab area includes a `Catalyst - Age` tab labeled `CATALYST AGE / FRESHNESS — RESEARCH ONLY`.
 
 Catalyst Age measures stored headline timestamps at capture time. It reports `EXACT_TIMESTAMP`, `DATE_ONLY`, `ESTIMATED`, `UNKNOWN_TIMESTAMP`, `FUTURE_TIMESTAMP`, and `INVALID_TIMESTAMP` without changing any candidate score.
 
@@ -313,7 +321,7 @@ The tab includes an audit summary, cluster-by-age summary, ticker-level summary,
 
 ## Headline Deduplication / Source Quality
 
-The Research Study area includes a `Catalyst - Headline Dedup` tab labeled `HEADLINE DEDUP / SOURCE QUALITY — RESEARCH ONLY`.
+The Research Lab area includes a `Catalyst - Headline Dedup` tab labeled `HEADLINE DEDUP / SOURCE QUALITY — RESEARCH ONLY`.
 
 Headline Dedup v1 groups stored historical headlines into deterministic catalyst events using normalized headline fingerprints. Normalization lowercases headlines, strips punctuation, removes source boilerplate, removes ticker prefixes where practical, collapses whitespace, and removes common filler words.
 
@@ -325,7 +333,7 @@ No `headline-events.json` file is written in v1. The report is rebuilt from acti
 
 ## Outcome Explorer
 
-The Research Study area includes a `Readiness - Outcome Explorer` tab labeled `OUTCOME EXPLORER — POST-CAPTURE DATA`.
+The Research Lab area includes a `Readiness - Outcome Explorer` tab labeled `OUTCOME EXPLORER — POST-CAPTURE DATA`.
 
 Outcome Explorer v1 compares stored candidate outcomes using only active raw captures and derived records such as `analysis-outcomes.csv`, `score-breakdowns.json`, `review-decisions.json`, catalyst clusters, catalyst age context, and headline dedup/source quality context. It does not fetch current market data, mutate raw captures, recalculate historical scores, alter scoring profiles, or build Opportunity Score.
 
@@ -337,7 +345,7 @@ Outcome Explorer excludes quarantined captures and non-study-eligible captures b
 
 ## Opportunity Research
 
-The Research Study area includes a `Readiness - Opportunity Research` tab labeled `OPPORTUNITY RESEARCH — RESEARCH ONLY`.
+The Research Lab area includes a `Readiness - Opportunity Research` tab labeled `OPPORTUNITY RESEARCH — RESEARCH ONLY`.
 
 Opportunity Research v1 is a measurement framework for discovering which stored conditions appear predictive after enough outcomes mature. It uses active raw captures and derived context from `analysis-captures.csv`, `analysis-outcomes.csv`, `score-breakdowns.json`, `review-decisions.json`, catalyst clusters, catalyst age metrics, and headline dedup/source reliability metrics.
 
@@ -349,7 +357,7 @@ If completed outcomes are too low, the UI says `Insufficient completed outcomes 
 
 ## Outcome Maturity / Data Readiness
 
-The Research Study area includes a `Readiness - Gates` tab labeled `OUTCOME MATURITY / DATA READINESS - MONITOR ONLY`.
+The Research Lab area includes a `Readiness - Gates` tab labeled `OUTCOME MATURITY / DATA READINESS - MONITOR ONLY`.
 
 The readiness panel uses stored `analysis-captures.csv`, `analysis-outcomes.csv`, active raw capture identity, and review-decision context. It does not fetch current market data, mutate raw captures, alter `momentum_score_v1`, alter `scoring_profiles.json`, create Opportunity Score, optimize weights, start broker integration, or write SQLite records.
 
@@ -357,7 +365,7 @@ Readiness metrics show total candidates, study-eligible candidates, completed ne
 
 Readiness gates are shown for Outcome Explorer, Opportunity Research, Opportunity Score design, and Weight optimization. Default thresholds are 20 completed next-day outcomes, 50 completed five-day outcomes, 100 completed five-day outcomes, and 300 completed five-day outcomes respectively. Each gate displays `LOCKED`, `DIAGNOSTIC`, or `READY`, with the current count, required count, reason, and estimated earliest readiness date when the estimate is calculable.
 
-Pending outcomes are never treated as completed. Quarantined captures and non-study-eligible captures remain excluded by default unless the Research Study filter explicitly includes non-trading-day/preopen observations.
+Pending outcomes are never treated as completed. Quarantined captures and non-study-eligible captures remain excluded by default unless the Research Lab filter explicitly includes non-trading-day/preopen observations.
 
 ## Legacy Capture Cleanup
 

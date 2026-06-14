@@ -38,6 +38,9 @@ class ReviewDecision:
     review_status: ReviewStatus = ReviewStatus.UNREVIEWED
     decision_timestamp: datetime | None = None
     decision_note: str = ""
+    delayed_review: bool = False
+    review_delay_minutes: int | None = None
+    review_context_state: str = ""
     capture_status: str = ""
     capture_quarantined_at: str = ""
     capture_quarantine_reason: str = ""
@@ -83,6 +86,9 @@ def upsert_review_decision(
     *,
     note: str = "",
     decision_timestamp: datetime | None = None,
+    delayed_review: bool = False,
+    review_delay_minutes: int | None = None,
+    review_context_state: str = "",
     path: Path | None = None,
 ) -> ReviewDecision:
     decision = ReviewDecision(
@@ -90,6 +96,9 @@ def upsert_review_decision(
         review_status=status,
         decision_timestamp=decision_timestamp or now_central(),
         decision_note=note,
+        delayed_review=delayed_review,
+        review_delay_minutes=review_delay_minutes,
+        review_context_state=review_context_state,
     )
     decisions[identity.key] = decision
     save_review_decisions(decisions, path=path)
@@ -103,6 +112,12 @@ def review_decision_to_dict(decision: ReviewDecision) -> dict:
         "decision_timestamp": decision.decision_timestamp.isoformat() if decision.decision_timestamp else None,
         "decision_note": decision.decision_note,
     }
+    if decision.delayed_review:
+        payload["delayed_review"] = decision.delayed_review
+    if decision.review_delay_minutes is not None:
+        payload["review_delay_minutes"] = decision.review_delay_minutes
+    if decision.review_context_state:
+        payload["review_context_state"] = decision.review_context_state
     if decision.capture_status:
         payload["capture_status"] = decision.capture_status
     if decision.capture_quarantined_at:
@@ -132,10 +147,22 @@ def review_decision_from_dict(payload: dict) -> ReviewDecision:
         review_status=status,
         decision_timestamp=datetime.fromisoformat(timestamp) if timestamp else None,
         decision_note=payload.get("decision_note", ""),
+        delayed_review=bool(payload.get("delayed_review", False)),
+        review_delay_minutes=parse_optional_int(payload.get("review_delay_minutes")),
+        review_context_state=payload.get("review_context_state", ""),
         capture_status=payload.get("capture_status", ""),
         capture_quarantined_at=payload.get("capture_quarantined_at", ""),
         capture_quarantine_reason=payload.get("capture_quarantine_reason", ""),
     )
+
+
+def parse_optional_int(value: object) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def mark_review_decisions_for_quarantined_capture(

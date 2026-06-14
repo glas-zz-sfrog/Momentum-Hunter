@@ -175,12 +175,123 @@ class ReviewWorkflowGuiTests(unittest.TestCase):
             }
         )
 
-        self.window.table.item(0, 0).setCheckState(Qt.CheckState.Checked)
-        self.window.mark_interested_candidates()
+        blocked_messages: list[str] = []
+        with patch.object(self.window, "_show_action_blocked", lambda message, title="Action Not Available": blocked_messages.append(message)):
+            self.window.table.item(0, 0).setCheckState(Qt.CheckState.Checked)
+            self.window.mark_interested_candidates()
 
         self.assertEqual("Unreviewed", self.window.table.item(0, 1).text())
         self.assertFalse(load_review_decisions(path=self.review_path))
-        self.assertIn("read-only", self.window.status_label.text())
+        self.assertTrue(any("historical" in message.lower() for message in blocked_messages))
+
+    def test_aged_valid_evening_snapshot_allows_review_and_stores_delayed_metadata(self) -> None:
+        capture_time = datetime(2026, 6, 8, 19, 0, tzinfo=CENTRAL_TZ)
+        review_time = datetime(2026, 6, 9, 0, 30, tzinfo=CENTRAL_TZ)
+
+        with (
+            patch("momentum_hunter.operator_review.now_central", return_value=review_time),
+            patch("momentum_hunter.ui.data_view_state.now_central", return_value=review_time),
+        ):
+            self.window._load_historical_capture(
+                reviewable_payload("MDT", 96, capture_time, "evening", "2026-06-09")
+            )
+
+        self.assertIn("AGING BUT REVIEWABLE", self.window.view_state_label.text())
+        self.assertTrue(self.window.save_button.isEnabled())
+        self.assertFalse(self.window.entry_trigger.isReadOnly())
+
+        self.window.table.item(0, 0).setCheckState(Qt.CheckState.Checked)
+        self.window.mark_interested_candidates()
+
+        decisions = load_review_decisions(path=self.review_path)
+        decision = next(iter(decisions.values()))
+        self.assertEqual(ReviewStatus.INTERESTED, decision.review_status)
+        self.assertTrue(decision.delayed_review)
+        self.assertEqual("AGING_BUT_REVIEWABLE", decision.review_context_state)
+        self.assertGreaterEqual(decision.review_delay_minutes or 0, 300)
+
+    def test_aged_valid_preopen_snapshot_allows_entry_plan_fields(self) -> None:
+        capture_time = datetime(2026, 6, 7, 19, 0, tzinfo=CENTRAL_TZ)
+        review_time = datetime(2026, 6, 8, 1, 0, tzinfo=CENTRAL_TZ)
+
+        with (
+            patch("momentum_hunter.operator_review.now_central", return_value=review_time),
+            patch("momentum_hunter.ui.data_view_state.now_central", return_value=review_time),
+        ):
+            self.window._load_historical_capture(
+                reviewable_payload("GAP", 91, capture_time, "preopen", "2026-06-08")
+            )
+
+        self.assertIn("AGING BUT REVIEWABLE", self.window.view_state_label.text())
+        self.assertFalse(self.window.entry_trigger.isReadOnly())
+        self.assertTrue(self.window.plan_complete_checkbox.isEnabled())
+
+    def test_aged_review_watchlist_report_requires_acknowledgement(self) -> None:
+        capture_time = datetime(2026, 6, 8, 19, 0, tzinfo=CENTRAL_TZ)
+        review_time = datetime(2026, 6, 9, 0, 30, tzinfo=CENTRAL_TZ)
+
+        with (
+            patch("momentum_hunter.operator_review.now_central", return_value=review_time),
+            patch("momentum_hunter.ui.data_view_state.now_central", return_value=review_time),
+        ):
+            self.window._load_historical_capture(
+                reviewable_payload("MDT", 96, capture_time, "evening", "2026-06-09")
+            )
+        self.window._set_candidate_review_status(self.window.candidates[0], ReviewStatus.WATCHLIST)
+
+        with (
+            patch.object(self.window, "_confirm_aging_review_watchlist", return_value=True) as confirm,
+            patch("momentum_hunter.app.save_watchlist", return_value=Path("watchlist.json")) as save_watchlist_mock,
+            patch("momentum_hunter.app.save_watchlist_report", return_value=Path("watchlist.md")),
+            patch.object(self.window, "capture_daily_snapshot", lambda *args, **kwargs: None),
+            patch("momentum_hunter.app.QMessageBox.information"),
+        ):
+            self.window.save_tomorrow_watchlist()
+
+        confirm.assert_called_once()
+        save_watchlist_mock.assert_called_once()
+
+    def test_cancelled_aged_review_acknowledgement_prevents_watchlist_report(self) -> None:
+        capture_time = datetime(2026, 6, 8, 19, 0, tzinfo=CENTRAL_TZ)
+        review_time = datetime(2026, 6, 9, 0, 30, tzinfo=CENTRAL_TZ)
+
+        with (
+            patch("momentum_hunter.operator_review.now_central", return_value=review_time),
+            patch("momentum_hunter.ui.data_view_state.now_central", return_value=review_time),
+        ):
+            self.window._load_historical_capture(
+                reviewable_payload("MDT", 96, capture_time, "evening", "2026-06-09")
+            )
+        self.window._set_candidate_review_status(self.window.candidates[0], ReviewStatus.WATCHLIST)
+
+        with (
+            patch.object(self.window, "_confirm_aging_review_watchlist", return_value=False),
+            patch("momentum_hunter.app.save_watchlist") as save_watchlist_mock,
+        ):
+            self.window.save_tomorrow_watchlist()
+
+        save_watchlist_mock.assert_not_called()
+
+    def test_expired_review_snapshot_blocks_trading_workflow_with_reason(self) -> None:
+        capture_time = datetime(2026, 6, 8, 19, 0, tzinfo=CENTRAL_TZ)
+        review_time = datetime(2026, 6, 9, 8, 31, tzinfo=CENTRAL_TZ)
+        blocked_messages: list[str] = []
+
+        with (
+            patch("momentum_hunter.operator_review.now_central", return_value=review_time),
+            patch("momentum_hunter.ui.data_view_state.now_central", return_value=review_time),
+        ):
+            self.window._load_historical_capture(
+                reviewable_payload("MDT", 96, capture_time, "evening", "2026-06-09")
+            )
+
+        self.assertIn("EXPIRED REVIEW SNAPSHOT - READ ONLY", self.window.view_state_label.text())
+        self.assertFalse(self.window.save_button.isEnabled())
+        with patch.object(self.window, "_show_action_blocked", lambda message, title="Action Not Available": blocked_messages.append(message)):
+            self.window.table.selectRow(0)
+            self.window.mark_interested_candidates()
+
+        self.assertTrue(any("expired" in message.lower() for message in blocked_messages))
 
     def test_watchlist_report_defaults_to_watchlist_candidates(self) -> None:
         self.window._set_candidate_review_status(self.window.candidates[0], ReviewStatus.WATCHLIST)
@@ -236,6 +347,31 @@ def candidate_payload(ticker: str, score: int) -> dict:
         "score_regime": "bull",
         "user_notes": "",
         "saved_at": None,
+    }
+
+
+def reviewable_payload(
+    ticker: str,
+    score: int,
+    capture_time: datetime,
+    session: str,
+    next_market_session_date: str,
+) -> dict:
+    return {
+        "schema_version": 2,
+        "capture_time": capture_time.isoformat(),
+        "capture_date": capture_time.strftime("%Y-%m-%d"),
+        "session": session,
+        "capture_session": session,
+        "capture_calendar_status": "PREOPEN_GAP_REVIEW_DAY" if session == "preopen" else "MARKET_OPEN_DAY",
+        "is_market_open_day": session != "preopen",
+        "is_study_eligible": session == "evening",
+        "next_market_session_date": next_market_session_date,
+        "scheduling_policy_version": "market-calendar-v1",
+        "mode": "PAPER",
+        "provider": "finviz",
+        "scanner": {"name": "Base Momentum"},
+        "candidates": [candidate_payload(ticker, score)],
     }
 
 

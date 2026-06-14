@@ -54,10 +54,18 @@ Existing historical raw captures are not rewritten. Derived readers classify leg
 - Path: `MomentumHunterData/data/review-decisions.json`
 - Owner: candidate review workflow
 - Mutability: append/update by candidate identity
-- Stores: `review_status`, decision timestamp, optional decision note
+- Stores: `review_status`, decision timestamp, optional decision note, delayed-review metadata, quarantine metadata
 - Identity: `capture_id/date/session/provider/scanner/ticker`
 
 Review decisions are user journal records. They reference raw captures but do not modify them.
+
+Delayed-review metadata is stored here when a decision is made after the freshness threshold but while the capture is still valid for next-session review. Fields may include:
+
+- `delayed_review`
+- `review_delay_minutes`
+- `review_context_state`
+
+These are later user-action facts, not capture-time facts, and must not be written into raw captures.
 
 ## Entry plans
 
@@ -67,7 +75,7 @@ Review decisions are user journal records. They reference raw captures but do no
 - Stores: trigger, stop, thesis, invalidation, max loss, position size idea, planned hold time, plan notes, `plan_complete`, warnings, and update timestamp
 - Identity: `capture_id/date/session/provider/scanner/ticker`
 
-Entry plans are user planning records for candidates promoted to Watchlist. They reference raw captures but do not modify them. Current/live views can create or edit plans; historical, replay, and study views are read-only.
+Entry plans are user planning records for candidates promoted to Watchlist. They reference raw captures but do not modify them. Current/manual scans and valid next-session review snapshots can create or edit plans; expired, historical, replay, research, and quarantined views are read-only.
 
 Incomplete-plan warnings are derived from missing trigger, stop, invalidation, and max-loss fields. Watchlist reports include entry-plan fields as later user annotations.
 
@@ -110,7 +118,7 @@ Historical records that cannot be fully reconstructed are marked `legacy` or `in
 ## Study reports
 
 - Source paths: `MomentumHunterData/data/analysis-captures.csv`, `MomentumHunterData/data/analysis-outcomes.csv`
-- UI location: Research Study dialog
+- UI location: Research Lab dialog
 - Mutability: disposable/rebuildable
 - Stores: aggregate summaries, score buckets, filtered historical summaries
 
@@ -118,11 +126,11 @@ Study results should be treated as derived views. They are useful research outpu
 
 Persisted study reports, when added, should live under `MomentumHunterData/data/studies/` and should be safe to delete/rebuild.
 
-The Research Study area excludes rows where `is_study_eligible` is false by default. This keeps weekend, holiday, `preopen`, and manual observations out of ordinary market-session performance statistics unless the user explicitly enables non-trading-day/preopen inclusion.
+The Research Lab area excludes rows where `is_study_eligible` is false by default. This keeps weekend, holiday, `preopen`, and manual observations out of ordinary market-session performance statistics unless the user explicitly enables non-trading-day/preopen inclusion.
 
 ## Historical Cluster Display
 
-- UI location: Research Study dialog, `Catalyst - Historical Setups` tab
+- UI location: Research Lab dialog, `Catalyst - Historical Setups` tab
 - Data layer: `momentum_hunter/historical_clusters.py`
 - Source inputs: active immutable raw captures, `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`
 - Mutability: research-only view; cluster generation reads stored data and does not mutate raw captures or derived stores
@@ -139,7 +147,7 @@ Cluster metrics use only available outcome labels. Missing outcome data and smal
 
 ## Catalyst Cluster Explorer
 
-- UI location: Research Study dialog, `Catalyst - Clusters` tab
+- UI location: Research Lab dialog, `Catalyst - Clusters` tab
 - Data layer: `momentum_hunter/catalyst_clusters.py`
 - Source inputs: active immutable raw captures, stored news/catalyst headlines in captures, `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`
 - Mutability: research-only view; catalyst clustering reads stored data and does not mutate raw captures or derived stores
@@ -173,7 +181,7 @@ Default catalyst views exclude quarantined captures because quarantined files li
 
 ## Headline Deduplication / Source Quality
 
-- UI location: Research Study dialog, `Catalyst - Headline Dedup` tab
+- UI location: Research Lab dialog, `Catalyst - Headline Dedup` tab
 - Data layer: `momentum_hunter/headline_events.py`
 - Source inputs: active immutable raw captures, stored news/catalyst headlines in captures, catalyst cluster classifications, catalyst age/timestamp metrics, and `analysis-outcomes.csv` for display context only
 - Mutability: research-only view; dedup generation reads stored data and does not mutate raw captures or derived stores
@@ -199,7 +207,7 @@ Default Headline Dedup views exclude quarantined captures because quarantined fi
 
 ## Outcome Explorer
 
-- UI location: Research Study dialog, `Readiness - Outcome Explorer` tab
+- UI location: Research Lab dialog, `Readiness - Outcome Explorer` tab
 - Data layer: `momentum_hunter/outcome_explorer.py`
 - Source inputs: active immutable raw captures, `analysis-captures.csv`, `analysis-outcomes.csv`, `score-breakdowns.json`, `review-decisions.json`, catalyst cluster context, catalyst age context, and headline dedup/source quality context
 - Mutability: research-only view; outcome exploration reads stored data and does not mutate raw captures or derived stores
@@ -216,7 +224,7 @@ No new persisted outcome-explorer store is created in v1. The report is rebuilt 
 
 ## Opportunity Research
 
-- UI location: Research Study dialog, `Readiness - Opportunity Research` tab
+- UI location: Research Lab dialog, `Readiness - Opportunity Research` tab
 - Data layer: `momentum_hunter/opportunity_research.py`
 - Source inputs: active immutable raw captures, `analysis-captures.csv`, `analysis-outcomes.csv`, `score-breakdowns.json`, `review-decisions.json`, catalyst cluster context, catalyst age context, and headline dedup/source reliability context
 - Mutability: research-only view; opportunity research reads stored data and does not mutate raw captures or derived stores
@@ -235,7 +243,7 @@ Opportunity Research v1 does not create Opportunity Score, optimize weights, alt
 
 ## Catalyst Date / Age Engine
 
-- UI location: Research Study dialog, `Catalyst - Age` tab
+- UI location: Research Lab dialog, `Catalyst - Age` tab
 - Data layer: `momentum_hunter/catalyst_age.py`
 - Source inputs: active immutable raw captures, stored news/catalyst headlines in captures, `review-decisions.json`, and `analysis-outcomes.csv`
 - Mutability: research-only view; age calculation reads stored data and does not mutate raw captures or derived stores
@@ -259,7 +267,7 @@ Unknown and invalid timestamps are counted separately and never receive HOT/FRES
 
 ## Candidate Timeline and Replay Mode
 
-- UI entry: select a candidate and click `View Timeline`
+- UI entry: select a candidate and click `Timeline / Replay`
 - Data layer: `momentum_hunter/replay.py`
 - Source inputs: active raw captures, `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`
 - Mutability: read-only view model; no replay operation modifies raw captures or derived stores

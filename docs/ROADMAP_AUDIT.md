@@ -8,12 +8,12 @@ Scope: documentation, workflow, UI purpose, roadmap status, duplicate functional
 
 Momentum Hunter has reached a useful research-foundation stage. The system now has two clear product modes:
 
-- Daily operator workflow: scanner dashboard, Morning Review, Daily Checklist, Generate Watchlist, entry plans, capture health.
-- Research workflow: Replay, Study Engine, Historical Clusters, Catalyst Explorer, Catalyst Age, Headline Dedup, Outcome Explorer, Opportunity Research, Readiness Gate.
+- Daily operator workflow: scanner dashboard, Morning Review, Daily Checklist, Generate Watchlist Report, entry plans, capture health.
+- Research workflow: Replay, Research Lab, Historical Clusters, Catalyst Explorer, Catalyst Age, Headline Dedup, Outcome Explorer, Opportunity Research, Readiness Gate.
 
 The core architecture is consistent: raw captures are immutable, user decisions and plans are derived records, outcomes are post-capture labels, and research reports are rebuildable. The largest usability risk is now navigation overlap, not missing data architecture.
 
-Operator Navigation Cleanup v1 has now addressed the highest-signal label and grouping issues from this audit. The remaining navigation work is deeper layout polish, not a blocker for continued data collection.
+Operator Navigation Cleanup v1 addressed the highest-signal label and grouping issues from this audit. Operator Workflow Redesign v1 Phase 1 now separates market-data freshness from operator-review validity: aged evening/preopen snapshots can remain reviewable for next-session planning while historical, research, expired, and quarantined contexts stay blocked.
 
 ## Major UI View Review
 
@@ -22,14 +22,14 @@ Operator Navigation Cleanup v1 has now addressed the highest-signal label and gr
 | Scanner Dashboard | Run current scanner, inspect candidates, review one selected ticker, see capture health, save decisions. | Run scanner, select candidate, review news/score, mark status, add plans/watchlist. | Morning Review, Daily Checklist, Capture Health panel. | Keep as the primary live dashboard, but move deeper daily actions toward Morning Review/Daily Checklist. |
 | Candidate Detail Panel | Inspect selected candidate, news, score, notes, entry plan. | Click a row, read details, save notes/plan for current data. | Morning Review Decision Card and Entry Plan panel. | Treat as quick detail view; Morning Review should become the fuller daily workflow surface. |
 | Capture Health Panel | Confirm scheduled captures, provider status, CSV/outcome update status. | Check whether data collection is healthy. | Daily Checklist and Open Capture Health. | Keep compact panel on dashboard; Daily Checklist should summarize health, not duplicate every field. |
-| Morning Review Workspace | Focused current-data review and plan creation. | Select candidates, mark interested/rejected/watchlist, open Why Score/Timeline, write entry plan. | Scanner Dashboard candidate table, Entry Plan panel, Generate Watchlist. | Strong candidate to become the primary daily review screen. |
-| Daily Workflow Checklist | Operational completion report for daily discipline. | Check captures, review counts, plan completeness, outcomes/readiness, then jump to missing work. | Capture Health, Morning Review, Generate Watchlist, Readiness Gate. | Keep as the daily control panel. Add future persistence only when workflow analytics are needed. |
-| Generate Watchlist | Generate next-session watchlist report with entry-plan annotations. | After review, output the actionable watchlist. | Latest Watchlist, Daily Checklist quick action. | Future v2 could create a single Watchlist/report center. |
-| Latest Watchlist | Opens latest saved watchlist/report artifacts. | Review saved output after it is generated. | Generate Watchlist. | Future v2 could consolidate saved watchlists and generated reports. |
+| Morning Review Workspace | Focused current or next-session review and plan creation. | Select candidates, mark interested/rejected/watchlist, open Why Score/Timeline, write entry plan. | Scanner Dashboard candidate table, Entry Plan panel, Generate Watchlist Report. | Strong candidate to become the primary daily review screen. |
+| Daily Workflow Checklist | Operational completion report for daily discipline. | Check captures, review counts, plan completeness, outcomes/readiness, then jump to missing work. | Capture Health, Morning Review, Generate Watchlist Report, Readiness Gate. | Keep as the daily control panel. Add future persistence only when workflow analytics are needed. |
+| Generate Watchlist Report | Generate next-session watchlist report with entry-plan annotations. | After review, output the actionable watchlist. | Open Latest Watchlist, Daily Checklist quick action. | Future v2 could create a single Watchlist Center. |
+| Open Latest Watchlist | Opens latest saved watchlist/report artifacts. | Review saved output after it is generated. | Generate Watchlist Report. | Future v2 could consolidate saved watchlists and generated reports. |
 | Historical Snapshot View | Load past capture into main table with read-only banner. | Select date/session, inspect what was captured. | Replay Mode, Candidate Timeline. | Keep as broad snapshot replay; Timeline/Replay handles ticker-specific detail. |
 | Candidate Timeline | Show all trusted active captures for a ticker. | Pick a ticker, inspect appearances across time, launch Replay. | Historical Snapshot, Historical Clusters recurrence view. | Keep as ticker drilldown; consider adding entry from Morning Review and Study rows consistently. |
 | Replay Mode | Point-in-time read-only view of one candidate in one capture. | Open from Timeline or cluster appearance, inspect capture-time facts plus later annotations. | Historical Snapshot. | Keep as the trust boundary view. It should remain read-only and clearly labeled. |
-| Research Study Overview | High-level study coverage and basic outcome charts. | Understand data coverage and pending/completed outcomes. | Outcome Explorer, Readiness Gate. | Keep as overview; avoid expanding it further. |
+| Research Lab Overview | High-level study coverage and basic outcome charts. | Understand data coverage and pending/completed outcomes. | Outcome Explorer, Readiness Gate. | Keep as overview; avoid expanding it further. |
 | Historical Clusters | Theme/set-up grouping over historical candidates. | Find recurring setups and repeated tickers/sectors/scanners. | Catalyst Explorer, Opportunity Research. | Keep for setup recurrence, not catalyst precision. |
 | Catalyst Explorer | Classify stored headlines into catalyst buckets with confidence/purity. | Research catalyst quality and classification reliability. | Catalyst Age, Headline Dedup, Historical Clusters. | Consider a future unified "Catalyst Intelligence" section with subtabs. |
 | Catalyst Age | Measure headline timestamp age at capture time. | Audit freshness/timestamp quality without affecting scores. | Catalyst Explorer, Headline Dedup, news stack column. | Keep as timestamp audit; avoid presenting it as catalyst event age until Catalyst Dating exists. |
@@ -148,6 +148,7 @@ Recommended fixes:
 | Opportunity Research Framework | Complete | Research-only condition ranking exists. |
 | Outcome Maturity / Readiness Gate | Complete | Gates lock Opportunity Score and optimization until maturity. |
 | Generate Watchlist | Complete | Includes entry-plan fields in the generated report. |
+| Operator Workflow Redesign v1 Phase 1 | Complete | Aged next-session captures warn but remain reviewable; expired/historical/research/quarantined contexts block workflow. |
 | Documentation and storage map | In Progress | Broad coverage exists; cleanup and roadmap consolidation recommended. |
 | Catalyst Dating Engine | Deferred | Catalyst Age measures article age, not underlying event date. |
 | Opportunity Score | Deferred | Locked until sufficient completed five-day outcomes exist. |
