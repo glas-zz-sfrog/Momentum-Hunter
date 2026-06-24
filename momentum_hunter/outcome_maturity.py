@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import csv
+import json
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
 from momentum_hunter.config import DATA_DIR
-from momentum_hunter.outcome_explorer import OutcomeCandidate, build_outcome_explorer_report, percent
 from momentum_hunter.outcomes import OUTCOMES_CSV
 from momentum_hunter.score_breakdowns import SCORE_BREAKDOWNS_PATH
 from momentum_hunter.storage import ANALYSIS_CSV, CAPTURES_DIR
-from momentum_hunter.study import StudyFilter
+from momentum_hunter.study import StudyFilter, filter_rows, parse_optional_float
+from momentum_hunter.scheduling import row_is_study_eligible
 
 
 OUTCOME_MATURITY_LABEL = "OUTCOME MATURITY / DATA READINESS - MONITOR ONLY"
@@ -70,22 +72,15 @@ def build_outcome_maturity_report(
 ) -> OutcomeMaturityReport:
     study_filter = study_filter or StudyFilter()
     thresholds = thresholds or ReadinessThresholds()
-    outcome_report = build_outcome_explorer_report(
-        study_filter=study_filter,
-        outcomes_csv=outcomes_csv,
-        captures_dir=captures_dir,
-        score_breakdowns_path=score_breakdowns_path,
-        review_decisions_path=review_decisions_path,
-    )
-    candidates = outcome_report.candidates
-    dates = sorted({candidate.capture_date for candidate in candidates if candidate.capture_date})
-    completed_next_day = [candidate for candidate in candidates if candidate.next_day_return_pct is not None]
-    completed_five_day = [candidate for candidate in candidates if candidate.five_day_return_pct is not None]
-    pending_next_day = [candidate for candidate in candidates if candidate.next_day_return_pct is None]
-    pending_five_day = [candidate for candidate in candidates if candidate.five_day_return_pct is None]
+    rows = filter_rows(active_outcome_rows(load_outcome_rows(outcomes_csv), captures_dir), study_filter)
+    dates = sorted({row.get("capture_date", "") for row in rows if row.get("capture_date")})
+    completed_next_day = [row for row in rows if parse_optional_float(row.get("next_day_return_pct", "")) is not None]
+    completed_five_day = [row for row in rows if parse_optional_float(row.get("five_day_return_pct", "")) is not None]
+    pending_next_day = [row for row in rows if parse_optional_float(row.get("next_day_return_pct", "")) is None]
+    pending_five_day = [row for row in rows if parse_optional_float(row.get("five_day_return_pct", "")) is None]
 
-    earliest_five_day_dates = sorted({candidate.capture_date for candidate in completed_five_day if candidate.capture_date})
-    pending_five_day_dates = sorted({candidate.capture_date for candidate in pending_five_day if candidate.capture_date})
+    earliest_five_day_dates = sorted({row.get("capture_date", "") for row in completed_five_day if row.get("capture_date")})
+    pending_five_day_dates = sorted({row.get("capture_date", "") for row in pending_five_day if row.get("capture_date")})
     span = date_span(dates)
     latest_capture = dates[-1] if dates else ""
 
@@ -124,7 +119,7 @@ def build_outcome_maturity_report(
         ),
     ]
     warnings = readiness_warnings(
-        total_candidates=len(candidates),
+        total_candidates=len(rows),
         completed_five_day_count=len(completed_five_day),
         pending_five_day_count=len(pending_five_day),
         gates=gates,
@@ -138,14 +133,14 @@ def build_outcome_maturity_report(
         label=OUTCOME_MATURITY_LABEL,
         source="analysis-captures.csv + analysis-outcomes.csv + active raw capture identity + review-decisions.json context",
         filters=study_filter,
-        total_candidates=len(candidates),
-        study_eligible_candidates=sum(1 for candidate in candidates if candidate.is_study_eligible),
+        total_candidates=len(rows),
+        study_eligible_candidates=sum(1 for row in rows if row_is_study_eligible(row)),
         completed_next_day_outcomes=len(completed_next_day),
         completed_five_day_outcomes=len(completed_five_day),
         pending_next_day_outcomes=len(pending_next_day),
         pending_five_day_outcomes=len(pending_five_day),
-        completed_outcome_pct=percent(len(completed_five_day), len(candidates)),
-        pending_outcome_pct=percent(len(pending_five_day), len(candidates)),
+        completed_outcome_pct=percent(len(completed_five_day), len(rows)),
+        pending_outcome_pct=percent(len(pending_five_day), len(rows)),
         earliest_capture_date=dates[0] if dates else "n/a",
         latest_capture_date=latest_capture or "n/a",
         earliest_date_with_usable_five_day_outcomes=earliest_five_day_dates[0] if earliest_five_day_dates else "n/a",
@@ -153,6 +148,72 @@ def build_outcome_maturity_report(
         gates=gates,
         warnings=unique_preserve_order(warnings),
     )
+
+
+def load_outcome_rows(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    with path.open(newline="", encoding="utf-8") as file:
+        return list(csv.DictReader(file))
+
+
+def active_outcome_rows(rows: list[dict], captures_dir: Path) -> list[dict]:
+    active_keys = active_capture_candidate_keys(captures_dir)
+    if not active_keys:
+        return rows
+    return [row for row in rows if outcome_row_key(row) in active_keys]
+
+
+def active_capture_candidate_keys(captures_dir: Path) -> set[str]:
+    keys: set[str] = set()
+    if not captures_dir.exists():
+        return keys
+    for path in captures_dir.rglob("*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        capture_time = str(payload.get("capture_time", ""))
+        capture_date = str(payload.get("capture_date", "")) or capture_time[:10]
+        session = str(payload.get("session", ""))
+        provider = str(payload.get("provider", ""))
+        scanner_payload = payload.get("scanner", {})
+        scanner = scanner_payload.get("name", "") if isinstance(scanner_payload, dict) else str(scanner_payload)
+        for candidate in payload.get("candidates", []):
+            if not isinstance(candidate, dict):
+                continue
+            keys.add(
+                "|".join(
+                    [
+                        capture_date,
+                        capture_time,
+                        session,
+                        provider,
+                        scanner,
+                        str(candidate.get("ticker", "")),
+                    ]
+                ).upper()
+            )
+    return keys
+
+
+def outcome_row_key(row: dict) -> str:
+    return "|".join(
+        [
+            str(row.get("capture_date", "")),
+            str(row.get("capture_time", "")),
+            str(row.get("session", "")),
+            str(row.get("provider", "")),
+            str(row.get("scanner", "")),
+            str(row.get("ticker", "")),
+        ]
+    ).upper()
+
+
+def percent(part: int, whole: int) -> float:
+    if whole <= 0:
+        return 0.0
+    return round(part * 100 / whole, 2)
 
 
 def build_gate(

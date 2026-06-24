@@ -150,6 +150,11 @@ Recommended fixes:
 | Generate Watchlist | Complete | Includes entry-plan fields in the generated report. |
 | Operator Workflow Redesign v1 Phase 1 | Complete | Aged next-session captures warn but remain reviewable; expired/historical/research/quarantined contexts block workflow. |
 | Documentation and storage map | In Progress | Broad coverage exists; cleanup and roadmap consolidation recommended. |
+| Active Alert Engine | In Progress | Initial monitor/alert foundation exists; priority is reliable live tape and actionable opportunity detection. |
+| Alert Outcome Tracking | In Progress | Derived alert outcomes exist; priority is trustworthy minute bars and completed alert evidence. |
+| Position Management / Exit Logic | Future Idea | High-priority post-entry workflow: answer `HOLD`, `TRIM`, or `EXIT` using leadership, support, relative strength, volume, and exhaustion evidence. |
+| Relative Strength Engine | Future Idea | Needed to distinguish leaders from stocks merely moving with QQQ or sector ETFs. |
+| Liquidity Sweep / Market Structure Detection | Future Idea | Needed to block abnormal prints, liquidity events, and market-wide sweeps from producing execution-ready signals. |
 | Catalyst Dating Engine | Deferred | Catalyst Age measures article age, not underlying event date. |
 | Opportunity Score | Deferred | Locked until sufficient completed five-day outcomes exist. |
 | Weight optimization | Deferred | Locked until sufficient completed outcomes and walk-forward validation. |
@@ -188,6 +193,11 @@ Recommended fixes:
 | Opportunity Research | Research condition performance. | Complete | Mature outcomes, catalyst/source context. |
 | Readiness Gate | Prevent premature conclusions. | Complete | Outcome maturity metrics. |
 | Locked Research Notes | Advisory score-weight note output after minimum outcomes. | In Progress | Outcomes; future v2 should hide/disable until readiness thresholds. |
+| Active Alert Engine | Detect emerging opportunities from monitored symbols. | In Progress | Live tape, trade-planning reports, monitor targets. |
+| Alert Outcome Tracking | Measure whether timestamped alerts produced tradable movement. | In Progress | Minute bars, opportunity alerts, outcome updater. |
+| Position Management / Exit Logic | Manage open short-term positions after entry with `HOLD`, `TRIM`, or `EXIT`. | Future Idea | Reliable live tape, relative strength, sector ETF mapping, position records. |
+| Relative Strength Engine | Compare symbol leadership versus QQQ and sector ETFs. | Future Idea | ETF mapping, current/historical quote data. |
+| Liquidity Sweep / Market Structure Detection | Distinguish genuine moves from abnormal price events. | Future Idea | Minute bars, bid/ask tape, volume confirmation, ETF/sector correlations. |
 | Catalyst Dating | Determine underlying event date, not article age. | Deferred | Better event clustering and timestamp confidence. |
 | Opportunity Score | Combine momentum/catalyst/freshness after evidence. | Deferred | Completed outcomes, validation, readiness gates. |
 | SQLite | Centralize data once model stabilizes. | Deferred | Stable schema and migration plan. |
@@ -257,16 +267,19 @@ Added by this audit:
 
 ## Recommended Next Roadmap Milestone
 
-**Recommended Next Roadmap Milestone: Research Study Navigation v2 or Watchlist/Report Center v1**
+**Recommended Next Roadmap Milestone: 1B Stabilization / Operator Command Center**
 
-Goal: continue reducing navigation crowding after the high-signal label cleanup.
+Goal: move from Pre-1B cleanup into a calmer daily operator workflow without changing trading logic.
+
+The active stabilization contract is `docs/ONE_B_STABILIZATION_PLAN.md`.
 
 Suggested scope:
 
-- Consider a sidebar or nested navigation for Research Study sections.
-- Consider a single Watchlist/report center for generated watchlists and latest artifacts.
-- Hide or disable Locked Research Notes until Readiness Gate thresholds are met.
-- Reduce toolbar crowding further if more top-level actions are added.
-- Fix documentation mojibake in README/storage-map labels.
+- Make the Dashboard the command center for snapshot state, next action, candidates, and selected-candidate details.
+- Make Watchlist Center the natural home for Interested/Watchlist candidates, entry plans, generated reports, and latest artifacts.
+- Keep Evidence Console grouped around Monitor + Health, Execution Ready, Alerts + Outcomes, and Performance without crowding the Dashboard.
+- Keep Research Lab lazy-loaded and research-only.
+- Preserve Timeline / Replay compact presets and audit depth.
+- Fix documentation mojibake in README/storage-map labels when touched nearby.
 
-Do not include Opportunity Score, optimizer work, broker integration, scoring changes, or SQLite migration in that milestone.
+Do not include Opportunity Score, optimizer work, broker integration, scoring changes, alert threshold changes, readiness-rule changes, trade-planning-rule changes, or SQLite migration in that milestone.

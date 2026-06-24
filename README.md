@@ -402,7 +402,7 @@ Remove-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Momentum
 
 ## Scanner Presets
 
-Base Momentum:
+Basic Momentum:
 
 - Volume: 1,000,000
 - Percent Change: 5%
@@ -410,13 +410,15 @@ Base Momentum:
 - Price: $5
 - Relative Volume: 150%
 
-Institutional Momentum:
+Heavy Volume Momentum:
 
 - Volume: 3,000,000
 - Percent Change: 3%
 - Market Cap: $5B
 - Price: $10
 - Relative Volume: 120%
+
+`Heavy Volume Momentum` intentionally emphasizes higher absolute liquidity, larger market cap, and institutional participation. Its relative-volume threshold is lower than `Basic Momentum`; that is not a typo.
 
 ## Trading Safety
 
@@ -429,7 +431,160 @@ Momentum Hunter is a research tool only.
 - One active mode at a time
 - LIVE mode is reserved for future broker-connected research workflows
 
+## Opportunity Detection Engine
+
+Momentum Hunter now includes an early active-alert foundation that turns trade-planning report changes into timestamped opportunity alerts.
+
+Before polling or alerting, Momentum Hunter can resolve the active monitor universe from watchlist decisions, interested decisions, entry plans, execution-ready trade-planning rows, and user-defined symbols:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.monitor_targets --trade-report "MomentumHunterData\data\reports\event-trade-plan-briefing-YYYY-MM-DD-session.json"
+```
+
+This writes `opportunity-monitor-targets-*.csv`, `.json`, and `.md` reports. User-defined monitor symbols live in `opportunity-monitor-symbols.json`; they are derived operator preferences and never modify raw captures.
+
+Run an active monitor cycle after a trade-planning report exists:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.active_monitor
+```
+
+The active monitor cycle resolves the current watch universe, filters alert detection to that universe, runs the opportunity alert engine, and writes `active-monitor-cycle-*.csv`, `.json`, and `.md` summaries. If a watchlist or user-defined symbol is missing from the source trade-planning report, the cycle adds a `MONITORING_ONLY` coverage row so the symbol remains visible instead of silently disappearing.
+
+Coverage rows are clearly marked as monitor artifacts. Without live quote fetching they show `COVERAGE_ROWS_WITHOUT_MARKET_DATA`; with quote fetching they can contribute price/RVOL observations for alert detection.
+
+It can also refresh a trade-planning report from the latest raw capture before monitoring:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.active_monitor --latest-capture --fetch-market-data --event-mode
+```
+
+To fetch quote tape only for missing watch targets:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.active_monitor --fetch-missing-market-data
+```
+
+To refresh quote tape for every active monitor target into a derived monitor report:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.active_monitor --refresh-target-market-data
+```
+
+To run a short polling loop:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.active_monitor --cycles 4 --interval-seconds 300
+```
+
+Loop status is written to `MomentumHunterData\data\active-monitor-status.json`, including current state, completed cycles, next run time, last report path, warnings, and any failure message.
+
+The refresh mode may use external quote providers and can fail cleanly if provider data is unavailable. Monitor-cycle artifacts are derived records; they do not rewrite raw captures or create broker orders.
+
+The main dashboard shows an `Active Monitor` summary above execution-ready trades. It displays target count, matched/covered symbols, coverage rows, warning state, active/new alert counts, and the latest generated monitor artifact.
+
+Use `Run Monitor Cycle` in that panel to generate one fresh derived monitor cycle from the latest trade-planning report. Leave `Fetch missing quotes` unchecked for a fast local-only cycle; check it when you want Momentum Hunter to try quote-tape fetches for watchlist/user-defined symbols missing from the latest trade-planning report. Use `Refresh target quotes` when you want fresh quote tape for every active monitor target; this writes a separate `active-monitor-refresh-*.json` artifact, recalculates readiness in that derived artifact, and preserves the original trade-planning report.
+
+Use the `Symbol` / `Monitor note` controls in the same panel to add extra user-defined symbols to the active monitor universe. `Remove Selected` deletes selected user-defined symbols from `opportunity-monitor-symbols.json`; these are operator preferences and do not modify raw captures.
+
+Use `Start Monitor Loop` to launch active monitoring in a background Python process, and `Stop Monitor` to terminate it. The background runner writes `MomentumHunterData\data\active-monitor-runner.json` with the process id, command, interval, fetch mode, and current runner state.
+
+Run it after generating a trade-planning report:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.opportunity_alerts --trade-report "MomentumHunterData\data\reports\event-trade-plan-briefing-YYYY-MM-DD-session.json"
+```
+
+The alert engine compares the latest trade-planning report against `opportunity-monitor-state.json` and records alerts in `opportunity-alerts.json` when it detects:
+
+- trade state changes, such as `PLANNING_SCAFFOLD` to `EXECUTION_READY_TRADE`
+- RVOL threshold crosses at `0.5`, `1.0`, `1.2`, and `2.0`
+- breakouts above previous-day high or planned entry
+- support reclaims
+- catalyst/news summary changes, stored as `BREAKING_NEWS_CATALYST`
+- short-window price expansion when consecutive reports are close enough in time
+
+Every alert stores the timestamp, symbol, alert type, current readiness state, entry/stop/targets, bid/ask/spread, volume, RVOL context, catalyst text, market regime, event-mode flag, and source report path. Alerts are derived validation records; they do not mutate raw captures and do not place trades.
+
+The dashboard shows compact `Active Alerts` and `State Transitions` panels from the latest derived alert/trade-planning stores. Each alert-engine run also stores price observations in `opportunity-price-observations.json` and updates pending alerts once enough post-alert observations exist. Current outcome metrics include 5/15/30/60-minute returns, 15/30/60-minute MFE and MAE, target/stop hits, stop-before-target ordering, and deterministic alert classification.
+
+Alert outcomes are separated into three evidence buckets:
+
+- completed scored outcomes: `SUCCESSFUL`, `FAILED`, `NOISE`, or `LATE`
+- pending outcomes: alerts still waiting for recoverable post-alert market data
+- unscorable data-quality outcomes: terminal records such as `UNSCORABLE_MISSING_ENTRY_PRICE` or `UNSCORABLE_INVALID_TIMESTAMP`
+
+Unscorable alerts stay in `opportunity-alerts.json` for auditability, but they are excluded from pending counts, win-rate math, completed-outcome thresholds, and optimization gates.
+
+For stronger validation, update alert outcomes from one-minute bars:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.alert_outcome_updater --fetch-missing-bars
+```
+
+This writes one-minute bars to `opportunity-minute-bars.json` and updates `opportunity-alerts.json`. It is derived validation data only; it does not mutate raw captures, place orders, or change scanner scores.
+
+The dashboard also includes `Update Alert Outcomes` and `Fetch minute bars` controls in the `Execution Ready` panel. The last update status is stored in `alert-outcome-update-status.json` and displayed above the Alert Outcome Tracker.
+
+Generate the standalone alert-performance analytics report with:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.alert_performance
+```
+
+This writes `alert-performance-report-*.json` and `alert-performance-report-*.md` under `MomentumHunterData\data\reports`. The report uses existing alert outcomes only and summarizes performance by alert type, symbol, and readiness state. Each group shows alert count, completed/pending/unscorable counts, win rate, 5/15/30/60-minute average returns, average MFE/MAE, and `SUCCESSFUL` / `FAILED` / `NOISE` / `LATE` rates.
+
+The dashboard surfaces Active Alerts, State Transitions, the Alert Outcome Tracker, and an `Alert Performance` section with best/worst alert types, best/worst symbols, and current sample size. Small samples are explicitly diagnostic only.
+
+Generate evidence-health and reliability reports with:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.evidence_health
+```
+
+This writes `evidence-health-report-*.json`, `evidence-health-report-*.md`, `reliability-report-*.json`, and `reliability-report-*.md` under `MomentumHunterData\data\reports`.
+
+To install scheduled evidence reports:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "C:\Users\steve\OneDrive\Documents\Investing\tools\install_evidence_report_tasks.ps1" -RunWhetherLoggedOn
+```
+
+That installs:
+
+- `Momentum Hunter Evidence Health Daily`, defaulting to 8:30 PM CT
+- `Momentum Hunter Reliability Weekly`, defaulting to Friday at 8:45 PM CT
+
+Evidence Health tracks the alert funnel:
+
+```text
+Alerts Generated -> Alerts Captured -> Alerts Classified -> Completed Outcomes
+```
+
+It also reports pending alerts, terminal unscorable alerts, stale pending alerts, missing minute bars, missing outcome data, incomplete outcome calculations, missing readiness states, missing news snapshots, and whether the evidence threshold is still locked. Strategy optimization stays locked until at least 100 completed scored alerts exist, and no strategy changes should be recommended below the evidence thresholds.
+
+Run Evidence Autopilot once from the command line:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.evidence_autopilot
+```
+
+Evidence Autopilot executes the existing monitor cycle, alert outcome updater, Evidence Health report, and daily evidence brief. It writes status to `MomentumHunterData\data\evidence-autopilot-status.json` and a brief like `MomentumHunterData\data\reports\daily-evidence-brief-YYYY-MM-DD.md`.
+
+The dashboard `Run Evidence Autopilot` button performs the same orchestration. It is evidence infrastructure only; it does not change alert generation, scoring, readiness logic, ranking, or trade-planning rules.
+
 ## Roadmap
+
+Strategic priority order:
+
+1. Fix live market tape and minute-bar reliability so monitor evidence can become measurable.
+2. Harden the Active Alert Engine so it detects emerging opportunities from watchlist, interested, execution-ready, and user-defined symbols.
+3. Mature Alert Outcome Tracking so every alert can answer what happened after it fired.
+4. Add Position Management / Exit Logic so open short-term trades can be managed with `HOLD`, `TRIM`, or `EXIT` decisions.
+5. Add a Relative Strength Engine to separate true leaders from stocks merely moving with QQQ or their sector ETF.
+6. Add Liquidity Sweep and Market Structure Detection to prevent abnormal prints, low-liquidity moves, and ETF-wide anomalies from producing execution-ready signals.
+
+Position Management / Exit Logic should not say "sell just because I am up." It should answer whether the same position would still be opened today at the current price, whether leadership is intact, whether the symbol is still outperforming QQQ and its sector ETF, what evidence would justify selling, and whether the current action is `HOLD`, `TRIM`, or `EXIT`.
 
 Planned V2 fields:
 

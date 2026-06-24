@@ -15,6 +15,7 @@ from momentum_hunter.scheduling import (
     calendar_label,
     classify_capture,
 )
+from momentum_hunter.models import SCANNER_PRESETS
 from momentum_hunter.score_breakdowns import SCORE_BREAKDOWNS_PATH, find_score_breakdown, score_breakdown_identity, score_breakdown_identity_key
 from momentum_hunter.storage import CAPTURE_INTEGRITY_MANIFEST, CAPTURES_DIR, load_capture_integrity_manifest
 from momentum_hunter.time_utils import format_central, now_central
@@ -193,12 +194,15 @@ def build_timeline_row(
         warnings.append(f"Score breakdown is {score_breakdown.get('status')}")
     if outcome is None:
         warnings.append("Missing later outcome label")
+    relative_volume_value = replay_relative_volume_value(candidate_payload, scanner)
+    if relative_volume_value.source == SYSTEM_WARNING:
+        warnings.append("Relative volume unavailable in raw capture - displayed as N/A, not 0.0")
 
     fields = {
         "price": SourceValue(candidate_payload.get("price", ""), RAW_CAPTURE),
         "percent_change": SourceValue(candidate_payload.get("percent_change", ""), RAW_CAPTURE),
         "volume": SourceValue(candidate_payload.get("volume", ""), RAW_CAPTURE),
-        "relative_volume": SourceValue(candidate_payload.get("relative_volume", ""), RAW_CAPTURE),
+        "relative_volume": relative_volume_value,
         "market_cap": SourceValue(candidate_payload.get("market_cap", ""), RAW_CAPTURE),
         "sector": SourceValue(candidate_payload.get("sector", ""), RAW_CAPTURE),
         "industry": SourceValue(candidate_payload.get("industry", ""), RAW_CAPTURE),
@@ -247,6 +251,19 @@ def build_timeline_row(
         outcome=outcome,
         warnings=warnings,
     )
+
+
+def replay_relative_volume_value(candidate_payload: dict, scanner: str) -> SourceValue:
+    raw_value = candidate_payload.get("relative_volume", None)
+    if raw_value is None or str(raw_value).strip().lower() in {"", "n/a", "na", "none"}:
+        return SourceValue("N/A (not captured)", SYSTEM_WARNING)
+    try:
+        numeric_value = float(raw_value)
+    except (TypeError, ValueError):
+        return SourceValue(raw_value, RAW_CAPTURE)
+    if numeric_value == 0.0 and scanner in SCANNER_PRESETS:
+        return SourceValue("N/A (legacy zero)", SYSTEM_WARNING)
+    return SourceValue(raw_value, RAW_CAPTURE)
 
 
 def trust_label(quarantined: bool, classification: CaptureCalendarClassification, score_breakdown_status: str) -> str:
@@ -321,9 +338,24 @@ def mark_duplicate_rows(rows: list[TimelineRow]) -> None:
     counts: dict[str, int] = {}
     for row in rows:
         counts[row.identity_key] = counts.get(row.identity_key, 0) + 1
+    signal_counts: dict[str, int] = {}
+    for row in rows:
+        key = signal_fingerprint_key(row)
+        signal_counts[key] = signal_counts.get(key, 0) + 1
     for row in rows:
         if counts.get(row.identity_key, 0) > 1:
             row.warnings.append("Duplicate replay identity")
+        if signal_counts.get(signal_fingerprint_key(row), 0) > 1:
+            row.warnings.append("Repeated signal fingerprint across captures - timestamp distinguishes this row")
+
+
+def signal_fingerprint_key(row: TimelineRow) -> str:
+    keys = ["ticker", "price", "percent_change", "volume", "relative_volume", "score"]
+    values = [row.scanner]
+    for key in keys:
+        value = row.fields.get(key)
+        values.append(str(value.value if value else "").strip().upper())
+    return "|".join(values)
 
 
 def scanner_name(payload: dict) -> str:

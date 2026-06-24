@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import csv
+import json
+import re
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
 from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QBrush, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QValueAxis
 from PySide6.QtWidgets import (
@@ -28,6 +33,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QScrollArea,
     QSplitter,
+    QStackedWidget,
     QAbstractScrollArea,
     QTableWidget,
     QTableWidgetItem,
@@ -43,6 +49,25 @@ from momentum_hunter.capture_health import (
     CsvStatus,
     build_capture_health_snapshot,
 )
+from momentum_hunter.active_monitor import ACTIVE_MONITOR_STATUS_PATH, load_active_monitor_status, run_monitor_cycle
+from momentum_hunter.alert_performance import build_alert_performance_report
+from momentum_hunter.alert_outcome_updater import (
+    ALERT_OUTCOME_UPDATE_STATUS_PATH,
+    load_update_report,
+    update_alert_store_from_minute_bars,
+)
+from momentum_hunter.active_monitor_runner import (
+    ACTIVE_MONITOR_RUNNER_PATH,
+    load_active_monitor_runner_state,
+    start_active_monitor_background,
+    stop_active_monitor_background,
+)
+from momentum_hunter.monitor_targets import (
+    MONITOR_SYMBOLS_PATH,
+    load_user_defined_symbols,
+    remove_user_defined_symbol,
+    upsert_user_defined_symbol,
+)
 from momentum_hunter.catalyst_age import (
     AGE_BUCKETS,
     CATALYST_AGE_RESEARCH_LABEL,
@@ -56,13 +81,19 @@ from momentum_hunter.catalyst_clusters import (
     build_catalyst_cluster_report,
     classify_catalyst_headline_detail,
 )
-from momentum_hunter.config import AppConfig, load_config, save_config
+from momentum_hunter.config import DATA_DIR, AppConfig, load_config, save_config
 from momentum_hunter.daily_workflow import DailyWorkflowReport, build_daily_workflow_report
 from momentum_hunter.entry_plans import (
     EntryPlan,
     entry_plan_warnings,
     load_entry_plans,
     upsert_entry_plan,
+)
+from momentum_hunter.evidence_health import build_evidence_health_report, format_reason_counts
+from momentum_hunter.evidence_autopilot import (
+    EVIDENCE_AUTOPILOT_STATUS_PATH,
+    load_evidence_autopilot_status,
+    run_evidence_autopilot,
 )
 from momentum_hunter.historical_clusters import (
     CLUSTER_RESEARCH_LABEL,
@@ -81,6 +112,7 @@ from momentum_hunter.models import Candidate, CaptureSession, MarketRegime, SCAN
 from momentum_hunter.news_age import (
     apply_candidate_news_stack,
     evaluate_news_freshness,
+    filter_news_known_at_capture,
     format_news_age,
     format_news_range,
     news_stack_badge,
@@ -176,6 +208,13 @@ SCANNER_DISPLAY_NAMES = {
     "Institutional Momentum": "Heavy Volume Momentum",
 }
 SCANNER_INTERNAL_NAMES = {value: key for key, value in SCANNER_DISPLAY_NAMES.items()}
+SCANNER_DISPLAY_DESCRIPTIONS = {
+    "Base Momentum": "Basic Momentum: broader scan with a stronger relative-volume spike requirement.",
+    "Institutional Momentum": (
+        "Heavy Volume Momentum: emphasizes higher absolute liquidity, larger market cap, "
+        "and institutional participation; relative-volume threshold is intentionally lower."
+    ),
+}
 
 
 class WatermarkWidget(QWidget):
@@ -227,6 +266,24 @@ class WatermarkTableWidget(QTableWidget):
         painter.drawPixmap(x, y, scaled)
 
 
+class ReportLoaderWorker(QObject):
+    finished = Signal(object, float)
+    failed = Signal(str, str, float)
+
+    def __init__(self, loader: Callable[[], object]) -> None:
+        super().__init__()
+        self.loader = loader
+
+    def run(self) -> None:
+        started = time.perf_counter()
+        try:
+            result = self.loader()
+        except Exception as exc:
+            self.failed.emit(type(exc).__name__, str(exc), time.perf_counter() - started)
+        else:
+            self.finished.emit(result, time.perf_counter() - started)
+
+
 class MomentumHunterWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -256,6 +313,7 @@ class MomentumHunterWindow(QMainWindow):
         self.current_operator_context: OperatorReviewContext | None = None
         self.provider_status_text = "Provider: not checked"
         self.provider_status_ok = True
+        self._report_loader_refs: list[tuple[QThread, ReportLoaderWorker, QDialog]] = []
         self.market_regime = MarketRegimeSnapshot(
             regime=MarketRegime.UNKNOWN,
             symbol="SPY",
@@ -272,14 +330,77 @@ class MomentumHunterWindow(QMainWindow):
         self._ensure_windows_startup()
         self._load_capture_history()
         self._refresh_capture_health()
+        self._refresh_execution_ready_panel()
         self._start_snapshot_timer()
         self._apply_data_view_state()
         self._update_status("Ready. Human review required before any trading decision.")
 
     def _build_ui(self) -> None:
         root = WatermarkWidget(APP_LOGO_PATH)
-        layout = QVBoxLayout(root)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout = QHBoxLayout(root)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        layout.addWidget(self._build_navigation_rail())
+
+        self.page_stack = QStackedWidget()
+        self.page_stack.addWidget(self._build_dashboard_page())
+        self.page_stack.addWidget(self._build_watchlist_center_page())
+        self.page_stack.addWidget(self._build_evidence_console_page())
+        self.page_stack.addWidget(self._build_research_lab_page())
+        self.page_stack.addWidget(self._build_timeline_replay_page())
+        self.page_stack.addWidget(self._build_capture_health_page())
+        layout.addWidget(self.page_stack, 1)
+
+        self.setCentralWidget(root)
+        self.setStyleSheet(STYLESHEET)
+        self._navigate_to_page(0)
+
+    def _build_navigation_rail(self) -> QWidget:
+        rail = QGroupBox("Momentum")
+        rail.setMaximumWidth(174)
+        layout = QVBoxLayout(rail)
+        layout.setContentsMargins(8, 12, 8, 12)
+        layout.setSpacing(8)
+
+        self.nav_buttons: list[QPushButton] = []
+        nav_items = [
+            ("Dashboard", "Daily command center: scanner, candidates, next action.", 0),
+            ("Watchlist", "Watchlist candidates, entry plans, and saved reports.", 1),
+            ("Evidence", "Active Monitor, Evidence Autopilot, alerts, outcomes, and performance.", 2),
+            ("Research", "Research Lab and readiness gates. Research-only.", 3),
+            ("Replay", "Historical snapshots, candidate timeline, and point-in-time replay.", 4),
+            ("Health", "Capture/provider/CSV/outcome diagnostics.", 5),
+        ]
+        for label, tooltip, index in nav_items:
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setToolTip(tooltip)
+            button.clicked.connect(lambda _checked=False, page=index: self._navigate_to_page(page))
+            layout.addWidget(button)
+            self.nav_buttons.append(button)
+
+        if APP_LOGO_PATH.exists():
+            logo = QLabel()
+            logo.setPixmap(contained_logo_pixmap(APP_LOGO_PATH, 92, 92))
+            logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(logo)
+        layout.addStretch(1)
+        return rail
+
+    def _navigate_to_page(self, index: int) -> None:
+        if not hasattr(self, "page_stack"):
+            return
+        self.page_stack.setCurrentIndex(index)
+        for button_index, button in enumerate(getattr(self, "nav_buttons", [])):
+            button.setChecked(button_index == index)
+        if index == 1:
+            self._refresh_watchlist_center()
+
+    def _build_dashboard_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
         layout.addWidget(self._build_top_bar())
@@ -287,6 +408,8 @@ class MomentumHunterWindow(QMainWindow):
         self.view_state_label = QLabel()
         self.view_state_label.setObjectName("viewStateCurrent")
         layout.addWidget(self.view_state_label)
+
+        layout.addWidget(self._build_command_status_strip())
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_candidate_panel())
@@ -303,8 +426,881 @@ class MomentumHunterWindow(QMainWindow):
         self.status_label = QLabel()
         self.status_label.setObjectName("statusLabel")
         layout.addWidget(self.status_label)
-        self.setCentralWidget(root)
-        self.setStyleSheet(STYLESHEET)
+        return page
+
+    def _build_command_status_strip(self) -> QWidget:
+        strip = QGroupBox("Command Status")
+        layout = QGridLayout(strip)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+        self.status_market_card = QLabel("Market: checking...")
+        self.status_snapshot_card = QLabel("Snapshot: checking...")
+        self.status_evidence_card = QLabel("Evidence: checking...")
+        self.status_alerts_card = QLabel("Alerts: checking...")
+        self.status_outcomes_card = QLabel("Outcomes: checking...")
+        self.status_execution_card = QLabel("Execution Ready: checking...")
+        self.status_autopilot_card = QLabel("Autopilot: checking...")
+        cards = [
+            self.status_market_card,
+            self.status_snapshot_card,
+            self.status_evidence_card,
+            self.status_alerts_card,
+            self.status_outcomes_card,
+            self.status_execution_card,
+            self.status_autopilot_card,
+        ]
+        for index, card in enumerate(cards):
+            card.setObjectName("criteriaLabel")
+            card.setWordWrap(True)
+            layout.addWidget(card, 0, index)
+        return strip
+
+    def _build_watchlist_center_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        header = QLabel(
+            "WATCHLIST CENTER\n"
+            "Review interested/watchlist candidates, complete entry plans, and generate read-only watchlist reports. "
+            "No orders are placed."
+        )
+        header.setObjectName("detailStateLabel")
+        header.setWordWrap(True)
+        layout.addWidget(header)
+
+        action_box = QGroupBox("Watchlist Actions")
+        action_layout = QGridLayout(action_box)
+        self.watchlist_center_move_button = QPushButton("Move Interested to Watchlist")
+        self.watchlist_center_move_button.clicked.connect(self.add_interested_to_watchlist)
+        self.watchlist_center_move_button.setToolTip("Promote all current Interested candidates to Watchlist status.")
+        generate_button = QPushButton("Generate Watchlist Report")
+        generate_button.clicked.connect(self.save_tomorrow_watchlist)
+        latest_button = QPushButton("Open Latest Watchlist")
+        latest_button.clicked.connect(self.view_research_list)
+        morning_button = QPushButton("Open Morning Review")
+        morning_button.clicked.connect(self.open_morning_review_workspace)
+        action_layout.addWidget(self.watchlist_center_move_button, 0, 0)
+        action_layout.addWidget(generate_button, 0, 1)
+        action_layout.addWidget(latest_button, 0, 2)
+        action_layout.addWidget(morning_button, 0, 3)
+        layout.addWidget(action_box)
+
+        self.watchlist_center_summary_label = QLabel("Watchlist Center: no candidates loaded.")
+        self.watchlist_center_summary_label.setObjectName("criteriaLabel")
+        self.watchlist_center_summary_label.setWordWrap(True)
+        layout.addWidget(self.watchlist_center_summary_label)
+
+        self.watchlist_center_table = QTableWidget(0, 6)
+        self.watchlist_center_table.setHorizontalHeaderLabels(["Ticker", "Status", "Score", "Trade Plan", "Missing Fields", "Action"])
+        self.watchlist_center_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.watchlist_center_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.watchlist_center_table.verticalHeader().setVisible(False)
+        self.watchlist_center_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.watchlist_center_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.watchlist_center_table.itemDoubleClicked.connect(self._watchlist_center_item_open_plan)
+        layout.addWidget(self.watchlist_center_table, 1)
+
+        guidance = QLabel(
+            "Use Edit Plan from any incomplete row to jump directly to the Dashboard entry-plan editor for that candidate."
+        )
+        guidance.setObjectName("criteriaLabel")
+        guidance.setWordWrap(True)
+        layout.addWidget(guidance)
+        return page
+
+    def _build_evidence_console_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        header = QLabel(
+            "EVIDENCE CONSOLE\n"
+            "Active Monitor, Evidence Autopilot, alerts, outcomes, performance, and state transitions. "
+            "Evidence infrastructure only; no trading rules are changed."
+        )
+        header.setObjectName("detailStateLabel")
+        header.setWordWrap(True)
+        layout.addWidget(header)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(self._build_execution_ready_panel())
+        layout.addWidget(scroll, 1)
+        return page
+
+    def _build_research_lab_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        header = QLabel(
+            "RESEARCH LAB\n"
+            "Stored-data studies, catalyst research, outcome research, and readiness gates. Research-only."
+        )
+        header.setObjectName("detailStateLabel")
+        header.setWordWrap(True)
+        layout.addWidget(header)
+        action_box = QGroupBox("Research Actions")
+        action_layout = QHBoxLayout(action_box)
+        open_research = QPushButton("Open Research Lab")
+        open_research.clicked.connect(self.open_study_engine)
+        readiness = QPushButton("Open Readiness Gate")
+        readiness.clicked.connect(self.open_readiness_gate)
+        action_layout.addWidget(open_research)
+        action_layout.addWidget(readiness)
+        action_layout.addStretch(1)
+        layout.addWidget(action_box)
+        note = QLabel(
+            "Research views use stored data and post-capture outcomes. They remain read-only for trading workflow decisions."
+        )
+        note.setObjectName("criteriaLabel")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        layout.addStretch(1)
+        return page
+
+    def _build_timeline_replay_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        header = QLabel(
+            "TIMELINE / REPLAY\n"
+            "Open historical snapshots and point-in-time candidate replay. Replay is read-only."
+        )
+        header.setObjectName("detailStateLabel")
+        header.setWordWrap(True)
+        layout.addWidget(header)
+
+        controls = QGroupBox("Historical Snapshot")
+        grid = QGridLayout(controls)
+        grid.addWidget(QLabel("History Date"), 0, 0)
+        grid.addWidget(self.capture_date_combo, 0, 1)
+        grid.addWidget(QLabel("Session"), 0, 2)
+        grid.addWidget(self.capture_session_combo, 0, 3)
+        grid.addWidget(self.open_capture_button, 0, 4)
+        grid.addWidget(self.current_button, 0, 5)
+        layout.addWidget(controls)
+
+        action_box = QGroupBox("Candidate Timeline")
+        action_layout = QHBoxLayout(action_box)
+        timeline_button = QPushButton("Open Timeline / Replay For Selected Candidate")
+        timeline_button.clicked.connect(self.view_candidate_timeline)
+        action_layout.addWidget(timeline_button)
+        action_layout.addStretch(1)
+        layout.addWidget(action_box)
+        layout.addStretch(1)
+        return page
+
+    def _build_capture_health_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        header = QLabel(
+            "CAPTURE HEALTH\n"
+            "Provider, scheduled capture, CSV, and outcome-update diagnostics. Read-only except Retry Scan."
+        )
+        header.setObjectName("detailStateLabel")
+        header.setWordWrap(True)
+        layout.addWidget(header)
+
+        health_box = QGroupBox("Capture Health")
+        health_layout = QVBoxLayout(health_box)
+        self.provider_status_label = QLabel(self.provider_status_text)
+        self.provider_status_label.setWordWrap(True)
+        self.last_morning_capture_label = QLabel("Last morning capture: checking...")
+        self.last_morning_capture_label.setWordWrap(True)
+        self.last_evening_capture_label = QLabel("Last evening capture: checking...")
+        self.last_evening_capture_label.setWordWrap(True)
+        self.last_preopen_capture_label = QLabel("Last preopen capture: checking...")
+        self.last_preopen_capture_label.setWordWrap(True)
+        self.capture_failure_label = QLabel("Scheduled captures: no failures recorded.")
+        self.capture_failure_label.setWordWrap(True)
+        self.next_capture_label = QLabel("Next scheduled runs: checking...")
+        self.next_capture_label.setWordWrap(True)
+        self.csv_append_label = QLabel("CSV append: checking...")
+        self.csv_append_label.setWordWrap(True)
+        self.outcome_update_label = QLabel("Outcome update: checking...")
+        self.outcome_update_label.setWordWrap(True)
+        self.retry_scan_button = QPushButton("Retry Scan")
+        self.retry_scan_button.clicked.connect(self.run_scan)
+        self.retry_scan_button.hide()
+        health_layout.addWidget(self.provider_status_label)
+        health_layout.addWidget(self.last_morning_capture_label)
+        health_layout.addWidget(self.last_evening_capture_label)
+        health_layout.addWidget(self.last_preopen_capture_label)
+        health_layout.addWidget(self.capture_failure_label)
+        health_layout.addWidget(self.next_capture_label)
+        health_layout.addWidget(self.csv_append_label)
+        health_layout.addWidget(self.outcome_update_label)
+        health_layout.addWidget(self.retry_scan_button)
+        layout.addWidget(health_box)
+
+        details_button = QPushButton("Open Capture Health Details")
+        details_button.clicked.connect(self.open_capture_health_report)
+        layout.addWidget(details_button)
+        layout.addStretch(1)
+        return page
+
+    def _build_execution_ready_panel(self) -> QWidget:
+        box = QGroupBox("Evidence Console")
+        layout = QVBoxLayout(box)
+        self.active_monitor_summary_label = QLabel("ACTIVE MONITOR: checking latest cycle...")
+        self.active_monitor_summary_label.setWordWrap(True)
+        monitor_controls = QHBoxLayout()
+        self.run_monitor_button = QPushButton("Run Monitor Cycle")
+        self.run_monitor_button.setToolTip("Run one derived active-monitor cycle from the latest trade-planning report. No orders are placed.")
+        self.run_monitor_button.clicked.connect(self.run_active_monitor_cycle)
+        self.start_monitor_loop_button = QPushButton("Start Monitor Loop")
+        self.start_monitor_loop_button.setToolTip("Start background active monitoring. No orders are placed.")
+        self.start_monitor_loop_button.clicked.connect(self.start_active_monitor_loop)
+        self.stop_monitor_loop_button = QPushButton("Stop Monitor")
+        self.stop_monitor_loop_button.setToolTip("Stop the background active monitor process.")
+        self.stop_monitor_loop_button.clicked.connect(self.stop_active_monitor_loop)
+        self.monitor_interval_combo = QComboBox()
+        self.monitor_interval_combo.addItem("5 min", 300)
+        self.monitor_interval_combo.addItem("15 min", 900)
+        self.monitor_interval_combo.addItem("1 min", 60)
+        self.monitor_interval_combo.setToolTip("Background monitor interval.")
+        self.fetch_missing_quotes_checkbox = QCheckBox("Fetch missing quotes")
+        self.fetch_missing_quotes_checkbox.setToolTip("Optionally fetch quote tape for watchlist/user-defined symbols missing from the latest trade-planning report.")
+        self.refresh_target_quotes_checkbox = QCheckBox("Refresh target quotes")
+        self.refresh_target_quotes_checkbox.setToolTip("Fetch fresh quote tape for every active monitor target into a derived monitoring report.")
+        monitor_controls.addWidget(self.run_monitor_button)
+        monitor_controls.addWidget(self.start_monitor_loop_button)
+        monitor_controls.addWidget(self.stop_monitor_loop_button)
+        monitor_controls.addWidget(self.monitor_interval_combo)
+        monitor_controls.addWidget(self.fetch_missing_quotes_checkbox)
+        monitor_controls.addWidget(self.refresh_target_quotes_checkbox)
+        monitor_controls.addStretch(1)
+        symbol_controls = QHBoxLayout()
+        self.monitor_symbol_input = QLineEdit()
+        self.monitor_symbol_input.setPlaceholderText("Symbol")
+        self.monitor_symbol_input.setMaximumWidth(110)
+        self.monitor_symbol_note_input = QLineEdit()
+        self.monitor_symbol_note_input.setPlaceholderText("Monitor note")
+        self.add_monitor_symbol_button = QPushButton("Add Symbol")
+        self.add_monitor_symbol_button.setToolTip("Add a user-defined symbol to the active monitor universe.")
+        self.add_monitor_symbol_button.clicked.connect(self.add_user_monitor_symbol)
+        self.remove_monitor_symbol_button = QPushButton("Remove Selected")
+        self.remove_monitor_symbol_button.setToolTip("Remove selected user-defined monitor symbol(s).")
+        self.remove_monitor_symbol_button.clicked.connect(self.remove_selected_user_monitor_symbols)
+        symbol_controls.addWidget(self.monitor_symbol_input)
+        symbol_controls.addWidget(self.monitor_symbol_note_input, 1)
+        symbol_controls.addWidget(self.add_monitor_symbol_button)
+        symbol_controls.addWidget(self.remove_monitor_symbol_button)
+        self.active_monitor_table = QTableWidget(0, 3)
+        self.active_monitor_table.setHorizontalHeaderLabels(["Metric", "Value", "Note"])
+        self.active_monitor_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.active_monitor_table.verticalHeader().setVisible(False)
+        self.active_monitor_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.active_monitor_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.active_monitor_table.setMaximumHeight(115)
+        autopilot_controls = QHBoxLayout()
+        self.run_evidence_autopilot_button = QPushButton("Run Evidence Autopilot")
+        self.run_evidence_autopilot_button.setToolTip("Run monitor cycle, outcome updater, evidence health report, and daily evidence brief. No trading rules are changed.")
+        self.run_evidence_autopilot_button.clicked.connect(self.run_evidence_autopilot_once)
+        autopilot_controls.addWidget(self.run_evidence_autopilot_button)
+        autopilot_controls.addStretch(1)
+        self.evidence_autopilot_summary_label = QLabel("EVIDENCE AUTOPILOT: checking latest run...")
+        self.evidence_autopilot_summary_label.setWordWrap(True)
+        self.evidence_autopilot_table = QTableWidget(0, 3)
+        self.evidence_autopilot_table.setHorizontalHeaderLabels(["Metric", "Value", "Note"])
+        self.evidence_autopilot_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.evidence_autopilot_table.verticalHeader().setVisible(False)
+        self.evidence_autopilot_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.evidence_autopilot_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.evidence_autopilot_table.setMaximumHeight(120)
+        self.evidence_health_summary_label = QLabel("EVIDENCE HEALTH: checking alert evidence pipeline...")
+        self.evidence_health_summary_label.setWordWrap(True)
+        self.evidence_health_table = QTableWidget(0, 3)
+        self.evidence_health_table.setHorizontalHeaderLabels(["Metric", "Value", "Note"])
+        self.evidence_health_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.evidence_health_table.verticalHeader().setVisible(False)
+        self.evidence_health_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.evidence_health_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.evidence_health_table.setMaximumHeight(120)
+        self.user_monitor_symbols_table = QTableWidget(0, 3)
+        self.user_monitor_symbols_table.setHorizontalHeaderLabels(["Symbol", "Enabled", "Notes"])
+        self.user_monitor_symbols_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.user_monitor_symbols_table.verticalHeader().setVisible(False)
+        self.user_monitor_symbols_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.user_monitor_symbols_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.user_monitor_symbols_table.setMaximumHeight(95)
+        self.execution_ready_summary_label = QLabel("EXECUTION READY: checking latest trade-planning report...")
+        self.execution_ready_summary_label.setWordWrap(True)
+        self.execution_ready_table = QTableWidget(0, 15)
+        self.execution_ready_table.setHorizontalHeaderLabels(
+            [
+                "Symbol",
+                "State",
+                "Price",
+                "Bid",
+                "Ask",
+                "Spread %",
+                "Premkt %",
+                "Premkt Vol",
+                "RVOL Type",
+                "RVOL",
+                "Entry",
+                "Stop",
+                "Target 1",
+                "Target 2",
+                "Reason",
+            ]
+        )
+        self.execution_ready_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.execution_ready_table.verticalHeader().setVisible(False)
+        self.execution_ready_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.execution_ready_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.execution_ready_table.setMaximumHeight(150)
+        self.state_transition_summary_label = QLabel("STATE TRANSITIONS: checking latest event report...")
+        self.state_transition_summary_label.setWordWrap(True)
+        self.state_transition_table = QTableWidget(0, 5)
+        self.state_transition_table.setHorizontalHeaderLabels(["Timestamp", "Symbol", "Old State", "New State", "Reason"])
+        self.state_transition_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.state_transition_table.verticalHeader().setVisible(False)
+        self.state_transition_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.state_transition_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.state_transition_table.setMaximumHeight(105)
+        self.active_alerts_summary_label = QLabel("ACTIVE ALERTS: checking alert store...")
+        self.active_alerts_summary_label.setWordWrap(True)
+        self.active_alerts_table = QTableWidget(0, 8)
+        self.active_alerts_table.setHorizontalHeaderLabels(["Time", "Symbol", "Alert Type", "State", "Price", "RVOL", "Entry", "Reason"])
+        self.active_alerts_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.active_alerts_table.verticalHeader().setVisible(False)
+        self.active_alerts_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.active_alerts_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.active_alerts_table.setMaximumHeight(120)
+        outcome_controls = QHBoxLayout()
+        self.update_alert_outcomes_button = QPushButton("Update Alert Outcomes")
+        self.update_alert_outcomes_button.setToolTip("Update pending alert outcomes from one-minute bars. No orders are placed.")
+        self.update_alert_outcomes_button.clicked.connect(self.run_alert_outcome_update)
+        self.fetch_minute_bars_checkbox = QCheckBox("Fetch minute bars")
+        self.fetch_minute_bars_checkbox.setToolTip("Fetch missing one-minute Yahoo chart bars for pending alerts.")
+        outcome_controls.addWidget(self.update_alert_outcomes_button)
+        outcome_controls.addWidget(self.fetch_minute_bars_checkbox)
+        outcome_controls.addStretch(1)
+        self.alert_outcome_update_status_label = QLabel("OUTCOME UPDATE: not run yet")
+        self.alert_outcome_update_status_label.setWordWrap(True)
+        self.alert_outcome_summary_label = QLabel("ALERT OUTCOME TRACKER: checking alert store...")
+        self.alert_outcome_summary_label.setWordWrap(True)
+        self.alert_outcome_table = QTableWidget(0, 8)
+        self.alert_outcome_table.setHorizontalHeaderLabels(["Time", "Symbol", "Alert Type", "Status", "Class", "15m", "MFE 30m", "MAE 30m"])
+        self.alert_outcome_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.alert_outcome_table.verticalHeader().setVisible(False)
+        self.alert_outcome_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.alert_outcome_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.alert_outcome_table.setMaximumHeight(120)
+        self.alert_performance_summary_label = QLabel("ALERT PERFORMANCE: checking historical alert outcomes...")
+        self.alert_performance_summary_label.setWordWrap(True)
+        self.alert_performance_table = QTableWidget(0, 8)
+        self.alert_performance_table.setHorizontalHeaderLabels(
+            ["Section", "Group", "Alerts", "Completed", "Win %", "Avg 60m", "Avg MFE", "Avg MAE"]
+        )
+        self.alert_performance_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.alert_performance_table.verticalHeader().setVisible(False)
+        self.alert_performance_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.alert_performance_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.alert_performance_table.setMaximumHeight(145)
+        self.evidence_next_action_label = QLabel("Evidence Console: checking what needs attention...")
+        self.evidence_next_action_label.setObjectName("detailStateLabel")
+        self.evidence_next_action_label.setWordWrap(True)
+        layout.addWidget(self.evidence_next_action_label)
+
+        tabs = QTabWidget()
+        monitor_tab = QWidget()
+        monitor_layout = QVBoxLayout(monitor_tab)
+        monitor_layout.addWidget(self.active_monitor_summary_label)
+        monitor_layout.addLayout(monitor_controls)
+        monitor_layout.addLayout(symbol_controls)
+        monitor_layout.addWidget(self.user_monitor_symbols_table)
+        monitor_layout.addWidget(self.active_monitor_table)
+        monitor_layout.addLayout(autopilot_controls)
+        monitor_layout.addWidget(self.evidence_autopilot_summary_label)
+        monitor_layout.addWidget(self.evidence_autopilot_table)
+        monitor_layout.addWidget(self.evidence_health_summary_label)
+        monitor_layout.addWidget(self.evidence_health_table)
+
+        execution_tab = QWidget()
+        execution_layout = QVBoxLayout(execution_tab)
+        execution_layout.addWidget(self.execution_ready_summary_label)
+        execution_layout.addWidget(self.execution_ready_table)
+        execution_layout.addWidget(self.state_transition_summary_label)
+        execution_layout.addWidget(self.state_transition_table)
+        execution_layout.addStretch(1)
+
+        alerts_tab = QWidget()
+        alerts_layout = QVBoxLayout(alerts_tab)
+        alerts_layout.addWidget(self.active_alerts_summary_label)
+        alerts_layout.addWidget(self.active_alerts_table)
+        alerts_layout.addLayout(outcome_controls)
+        alerts_layout.addWidget(self.alert_outcome_update_status_label)
+        alerts_layout.addWidget(self.alert_outcome_summary_label)
+        alerts_layout.addWidget(self.alert_outcome_table)
+        alerts_layout.addStretch(1)
+
+        performance_tab = QWidget()
+        performance_layout = QVBoxLayout(performance_tab)
+        performance_layout.addWidget(self.alert_performance_summary_label)
+        performance_layout.addWidget(self.alert_performance_table)
+        performance_layout.addStretch(1)
+
+        tabs.addTab(monitor_tab, "Monitor + Health")
+        tabs.addTab(execution_tab, "Execution Ready")
+        tabs.addTab(alerts_tab, "Alerts + Outcomes")
+        tabs.addTab(performance_tab, "Performance")
+        layout.addWidget(tabs)
+        return box
+
+    def _refresh_execution_ready_panel(self) -> None:
+        if not hasattr(self, "execution_ready_table"):
+            return
+        monitor_path = latest_active_monitor_cycle_json_path()
+        monitor_rows = load_active_monitor_dashboard_rows(monitor_path)
+        self.active_monitor_table.setRowCount(len(monitor_rows))
+        for row_index, row in enumerate(monitor_rows):
+            values = [row.get("metric", ""), row.get("value", ""), row.get("note", "")]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if row.get("severity") == "warn":
+                    item.setBackground(QColor("#735f24"))
+                elif row.get("severity") == "good":
+                    item.setBackground(QColor("#1f6f4a"))
+                self.active_monitor_table.setItem(row_index, col, item)
+        if monitor_path and monitor_rows:
+            self.active_monitor_summary_label.setText(active_monitor_summary_text(monitor_path))
+            self.active_monitor_table.show()
+        else:
+            self.active_monitor_summary_label.setText("ACTIVE MONITOR: NO CYCLE REPORT YET")
+            self.active_monitor_table.hide()
+        autopilot_rows = load_evidence_autopilot_dashboard_rows()
+        self.evidence_autopilot_table.setRowCount(len(autopilot_rows))
+        for row_index, row in enumerate(autopilot_rows):
+            values = [row.get("metric", ""), row.get("value", ""), row.get("note", "")]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if row.get("severity") == "warn":
+                    item.setBackground(QColor("#735f24"))
+                elif row.get("severity") == "good":
+                    item.setBackground(QColor("#1f6f4a"))
+                self.evidence_autopilot_table.setItem(row_index, col, item)
+        self.evidence_autopilot_summary_label.setText(evidence_autopilot_summary_text())
+        if autopilot_rows:
+            self.evidence_autopilot_table.show()
+        else:
+            self.evidence_autopilot_table.hide()
+        evidence_rows = load_evidence_health_dashboard_rows()
+        self.evidence_health_table.setRowCount(len(evidence_rows))
+        for row_index, row in enumerate(evidence_rows):
+            values = [row.get("metric", ""), row.get("value", ""), row.get("note", "")]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if row.get("severity") == "warn":
+                    item.setBackground(QColor("#735f24"))
+                elif row.get("severity") == "good":
+                    item.setBackground(QColor("#1f6f4a"))
+                self.evidence_health_table.setItem(row_index, col, item)
+        self.evidence_health_summary_label.setText(evidence_health_summary_text())
+        if evidence_rows:
+            self.evidence_health_table.show()
+        else:
+            self.evidence_health_table.hide()
+        user_symbol_rows = load_user_monitor_symbol_rows()
+        self.user_monitor_symbols_table.setRowCount(len(user_symbol_rows))
+        for row_index, row in enumerate(user_symbol_rows):
+            values = [row.get("symbol", ""), row.get("enabled", ""), row.get("notes", "")]
+            for col, value in enumerate(values):
+                self.user_monitor_symbols_table.setItem(row_index, col, QTableWidgetItem(str(value)))
+        if user_symbol_rows:
+            self.user_monitor_symbols_table.show()
+        else:
+            self.user_monitor_symbols_table.hide()
+        path = latest_trade_plan_csv_path()
+        rows = load_execution_ready_rows(path) if path else []
+        self.execution_ready_table.setRowCount(len(rows))
+        for row_index, row in enumerate(rows):
+            values = [
+                row.get("Symbol", ""),
+                row.get("Readiness", ""),
+                execution_ready_display_price(row),
+                row.get("Current Bid", ""),
+                row.get("Current Ask", ""),
+                row.get("Spread %", ""),
+                row.get("Premarket %", ""),
+                row.get("Premarket Volume", ""),
+                row.get("RVOL Type", ""),
+                row.get("Relative Volume", ""),
+                row.get("Bullish Entry", ""),
+                row.get("Bullish Stop", ""),
+                row.get("Bullish Target 1", ""),
+                row.get("Bullish Target 2", ""),
+                execution_ready_reason(row),
+            ]
+            for col, value in enumerate(values):
+                self.execution_ready_table.setItem(row_index, col, QTableWidgetItem(str(value)))
+        if rows:
+            self.execution_ready_summary_label.setText(f"EXECUTION READY: {len(rows)} trade(s) from {path.name}")
+            self.execution_ready_table.show()
+        else:
+            source = f" Latest report: {path.name}" if path else " No trade-planning report found."
+            self.execution_ready_summary_label.setText(f"EXECUTION READY: NONE.{source}")
+            self.execution_ready_table.hide()
+        transition_path = latest_trade_plan_json_path(path)
+        transitions = load_state_transition_rows(transition_path)
+        self.state_transition_table.setRowCount(len(transitions))
+        for row_index, row in enumerate(transitions):
+            values = [
+                row.get("timestamp", ""),
+                row.get("symbol", ""),
+                row.get("old_state", ""),
+                row.get("new_state", ""),
+                row.get("reason", ""),
+            ]
+            for col, value in enumerate(values):
+                self.state_transition_table.setItem(row_index, col, QTableWidgetItem(str(value)))
+        if transitions:
+            self.state_transition_summary_label.setText(f"STATE TRANSITIONS: {len(transitions)} change(s) from {transition_path.name if transition_path else 'latest report'}")
+            self.state_transition_table.show()
+        else:
+            self.state_transition_summary_label.setText("STATE TRANSITIONS: NONE YET")
+            self.state_transition_table.hide()
+        alerts = load_active_alert_rows()
+        self.active_alerts_table.setRowCount(len(alerts))
+        for row_index, row in enumerate(alerts):
+            values = [
+                row.get("timestamp", ""),
+                row.get("symbol", ""),
+                row.get("alert_type", ""),
+                row.get("current_state", ""),
+                row.get("price", ""),
+                row.get("rvol", ""),
+                row.get("suggested_entry", ""),
+                row.get("reason", ""),
+            ]
+            for col, value in enumerate(values):
+                self.active_alerts_table.setItem(row_index, col, QTableWidgetItem(str(value)))
+        if alerts:
+            self.active_alerts_summary_label.setText(f"ACTIVE ALERTS: {len(alerts)} pending validation alert(s)")
+            self.active_alerts_table.show()
+        else:
+            self.active_alerts_summary_label.setText("ACTIVE ALERTS: NONE")
+            self.active_alerts_table.hide()
+        if hasattr(self, "alert_outcome_update_status_label"):
+            self.alert_outcome_update_status_label.setText(alert_outcome_update_status_text())
+        outcome_rows = load_alert_outcome_rows()
+        self.alert_outcome_table.setRowCount(len(outcome_rows))
+        for row_index, row in enumerate(outcome_rows):
+            outcome = row.get("outcome") if isinstance(row.get("outcome"), dict) else {}
+            values = [
+                row.get("timestamp", ""),
+                row.get("symbol", ""),
+                row.get("alert_type", ""),
+                outcome.get("status", ""),
+                outcome.get("classification", ""),
+                outcome.get("fifteen_minute_return_pct", ""),
+                outcome.get("mfe_30m_pct", ""),
+                outcome.get("mae_30m_pct", ""),
+            ]
+            for col, value in enumerate(values):
+                self.alert_outcome_table.setItem(row_index, col, QTableWidgetItem(str(value)))
+        if outcome_rows:
+            completed = sum(1 for row in outcome_rows if isinstance(row.get("outcome"), dict) and row["outcome"].get("status") == "COMPLETED")
+            self.alert_outcome_summary_label.setText(f"ALERT OUTCOME TRACKER: {len(outcome_rows)} recent alert(s), {completed} completed")
+            self.alert_outcome_table.show()
+        else:
+            self.alert_outcome_summary_label.setText("ALERT OUTCOME TRACKER: NO ALERTS TRACKED YET")
+            self.alert_outcome_table.hide()
+        performance_rows = load_alert_performance_dashboard_rows()
+        self.alert_performance_table.setRowCount(len(performance_rows))
+        for row_index, row in enumerate(performance_rows):
+            values = [
+                row.get("section", ""),
+                row.get("group", ""),
+                row.get("alert_count", ""),
+                row.get("completed_count", ""),
+                row.get("win_rate_pct", ""),
+                row.get("average_60m_return_pct", ""),
+                row.get("average_mfe_pct", ""),
+                row.get("average_mae_pct", ""),
+            ]
+            for col, value in enumerate(values):
+                self.alert_performance_table.setItem(row_index, col, QTableWidgetItem(str(value)))
+        if performance_rows:
+            self.alert_performance_summary_label.setText(alert_performance_summary_text())
+            self.alert_performance_table.show()
+        else:
+            self.alert_performance_summary_label.setText(alert_performance_summary_text())
+            self.alert_performance_table.hide()
+        if hasattr(self, "evidence_next_action_label"):
+            self.evidence_next_action_label.setText(
+                evidence_next_action_text(
+                    execution_ready_count=len(rows),
+                    active_alert_count=len(alerts),
+                    outcome_count=len(outcome_rows),
+                    performance_count=len(performance_rows),
+                    monitor_summary=self.active_monitor_summary_label.text(),
+                    evidence_summary=self.evidence_health_summary_label.text(),
+                )
+            )
+        self._refresh_command_status_cards()
+
+    def _refresh_command_status_cards(self) -> None:
+        if not hasattr(self, "status_market_card"):
+            return
+
+        context = self.current_operator_context or self._operator_review_context()
+        self.status_market_card.setText(f"Market: {self.market_regime.regime.value.upper()}")
+        self.status_snapshot_card.setText(f"Snapshot: {context.label}")
+        self.status_evidence_card.setText(
+            compact_status_text(getattr(self, "evidence_health_summary_label", None), "Evidence: checking...")
+        )
+        self.status_alerts_card.setText(
+            compact_status_text(getattr(self, "active_alerts_summary_label", None), "Alerts: checking...")
+        )
+        self.status_outcomes_card.setText(
+            compact_status_text(getattr(self, "alert_outcome_summary_label", None), "Outcomes: checking...")
+        )
+        self.status_execution_card.setText(
+            compact_status_text(getattr(self, "execution_ready_summary_label", None), "Execution Ready: checking...")
+        )
+        self.status_autopilot_card.setText(
+            compact_status_text(getattr(self, "evidence_autopilot_summary_label", None), "Autopilot: checking...")
+        )
+
+    def _refresh_watchlist_center(self) -> None:
+        if not hasattr(self, "watchlist_center_table"):
+            return
+        interested = [
+            candidate
+            for candidate in self.candidates
+            if self._candidate_review_status(candidate) == ReviewStatus.INTERESTED
+        ]
+        watchlist = self._watchlist_candidates()
+        rows = interested + [candidate for candidate in watchlist if candidate not in interested]
+        self.watchlist_center_table.setRowCount(len(rows))
+        for row_index, candidate in enumerate(rows):
+            status = self._candidate_review_status(candidate)
+            identity = self._candidate_identity(candidate)
+            plan = self.entry_plans.get(identity.key)
+            plan_warnings = entry_plan_warnings(plan) if plan else ["missing trigger", "missing stop", "missing invalidation", "missing max loss"]
+            plan_progress = entry_plan_progress_text(plan_warnings)
+            values = [
+                candidate.ticker,
+                status.value.title(),
+                str(candidate.score),
+                "Complete 4/4" if plan and plan.plan_complete and not plan_warnings else f"Incomplete {plan_progress}",
+                " | ".join(plan_warnings) if plan_warnings else "none",
+                "",
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column == 1:
+                    item.setBackground(review_status_color(status))
+                if column == 2:
+                    item.setBackground(score_color(candidate.score))
+                if column in {3, 4} and plan_warnings:
+                    item.setBackground(QBrush(QColor("#735f24")))
+                if column in {3, 4}:
+                    item.setToolTip("Complete entry plan fields: trigger, stop, invalidation, and max loss.")
+                if column == 4:
+                    item.setToolTip("Missing: " + (" | ".join(plan_warnings) if plan_warnings else "none"))
+                self.watchlist_center_table.setItem(row_index, column, item)
+            button = QPushButton("Edit Plan" if plan_warnings else "View Plan")
+            button.setProperty("ticker", candidate.ticker)
+            button.setToolTip("Open this candidate in the Dashboard entry-plan editor.")
+            button.clicked.connect(self._watchlist_center_open_plan_from_button)
+            self.watchlist_center_table.setCellWidget(row_index, 5, button)
+        self.watchlist_center_table.setVisible(bool(rows))
+        self.watchlist_center_summary_label.setText(
+            f"Interested: {len(interested)} | Watchlist: {len(watchlist)} | "
+            f"{'Move Interested to Watchlist when ready.' if interested else 'No interested candidates waiting to move.'}"
+        )
+
+    def _watchlist_center_open_plan_from_button(self) -> None:
+        sender = self.sender()
+        ticker = str(sender.property("ticker")) if sender is not None and sender.property("ticker") else ""
+        self._open_entry_plan_editor_for_ticker(ticker)
+
+    def _watchlist_center_item_open_plan(self, item: QTableWidgetItem) -> None:
+        ticker_item = self.watchlist_center_table.item(item.row(), 0)
+        ticker = ticker_item.text() if ticker_item else ""
+        self._open_entry_plan_editor_for_ticker(ticker)
+
+    def _open_entry_plan_editor_for_ticker(self, ticker: str) -> None:
+        if not ticker:
+            self._show_action_blocked("No watchlist candidate selected.")
+            return
+        candidate = next((item for item in self.candidates if item.ticker.upper() == ticker.upper()), None)
+        if candidate is None:
+            self._show_action_blocked(f"{ticker} is not loaded in the current candidate set.")
+            return
+        self._navigate_to_page(0)
+        for row, loaded in enumerate(self.candidates):
+            if loaded.ticker.upper() == ticker.upper():
+                self.table.selectRow(row)
+                break
+        self._show_candidate_details(candidate)
+        self.entry_trigger.setFocus()
+        self._update_status(f"Editing entry plan for {ticker}.")
+
+    def run_active_monitor_cycle(self) -> None:
+        if hasattr(self, "run_monitor_button"):
+            self.run_monitor_button.setEnabled(False)
+        fetch_missing_quotes = bool(
+            hasattr(self, "fetch_missing_quotes_checkbox") and self.fetch_missing_quotes_checkbox.isChecked()
+        )
+        refresh_target_quotes = bool(
+            hasattr(self, "refresh_target_quotes_checkbox") and self.refresh_target_quotes_checkbox.isChecked()
+        )
+        try:
+            self._update_status("Running active monitor cycle...")
+            report = run_monitor_cycle(
+                fetch_missing_market_data=fetch_missing_quotes,
+                refresh_target_market_data=refresh_target_quotes,
+                status_path=ACTIVE_MONITOR_STATUS_PATH,
+            )
+            self._refresh_execution_ready_panel()
+            warning_note = f" Warnings: {len(report.warnings)}." if report.warnings else ""
+            self._update_status(
+                f"Active monitor cycle complete: {report.target_count} target(s), "
+                f"{report.new_alert_count} new alert(s), {report.active_alert_count} active alert(s).{warning_note}"
+            )
+        except Exception as exc:
+            message = f"Active monitor cycle failed: {type(exc).__name__}: {exc}"
+            self._show_action_blocked(message)
+            self._update_status(message)
+        finally:
+            if hasattr(self, "run_monitor_button"):
+                self.run_monitor_button.setEnabled(True)
+
+    def run_evidence_autopilot_once(self) -> None:
+        if hasattr(self, "run_evidence_autopilot_button"):
+            self.run_evidence_autopilot_button.setEnabled(False)
+        try:
+            self._update_status("Running Evidence Autopilot...")
+            status = run_evidence_autopilot()
+            self._refresh_execution_ready_panel()
+            warning_note = f" Warnings: {status.warning_count}." if status.warning_count else ""
+            self._update_status(
+                f"Evidence Autopilot complete: {status.new_alert_count} new alert(s), "
+                f"{status.completed_outcome_count} completed outcome(s), "
+                f"{status.pending_alert_count} pending alert(s).{warning_note}"
+            )
+        except Exception as exc:
+            message = f"Evidence Autopilot failed: {type(exc).__name__}: {exc}"
+            self._show_action_blocked(message)
+            self._update_status(message)
+            self._refresh_execution_ready_panel()
+        finally:
+            if hasattr(self, "run_evidence_autopilot_button"):
+                self.run_evidence_autopilot_button.setEnabled(True)
+
+    def run_alert_outcome_update(self) -> None:
+        if hasattr(self, "update_alert_outcomes_button"):
+            self.update_alert_outcomes_button.setEnabled(False)
+        fetch_minute_bars = bool(
+            hasattr(self, "fetch_minute_bars_checkbox") and self.fetch_minute_bars_checkbox.isChecked()
+        )
+        try:
+            self._update_status("Updating alert outcomes from minute bars...")
+            report = update_alert_store_from_minute_bars(
+                fetch_missing_bars=fetch_minute_bars,
+                status_path=ALERT_OUTCOME_UPDATE_STATUS_PATH,
+            )
+            self._refresh_execution_ready_panel()
+            warning_note = f" Warnings: {len(report.warnings)}." if report.warnings else ""
+            self._update_status(
+                f"Alert outcomes updated: {report.updated_alert_count} changed, "
+                f"{report.completed_alert_count} completed, {report.pending_alert_count} pending, "
+                f"{report.unscorable_alert_count} unscorable.{warning_note}"
+            )
+        except Exception as exc:
+            message = f"Alert outcome update failed: {type(exc).__name__}: {exc}"
+            self._show_action_blocked(message)
+            self._update_status(message)
+        finally:
+            if hasattr(self, "update_alert_outcomes_button"):
+                self.update_alert_outcomes_button.setEnabled(True)
+
+    def start_active_monitor_loop(self) -> None:
+        fetch_missing_quotes = bool(
+            hasattr(self, "fetch_missing_quotes_checkbox") and self.fetch_missing_quotes_checkbox.isChecked()
+        )
+        refresh_target_quotes = bool(
+            hasattr(self, "refresh_target_quotes_checkbox") and self.refresh_target_quotes_checkbox.isChecked()
+        )
+        interval_seconds = 300
+        if hasattr(self, "monitor_interval_combo"):
+            value = self.monitor_interval_combo.currentData()
+            try:
+                interval_seconds = int(value)
+            except (TypeError, ValueError):
+                interval_seconds = 300
+        try:
+            state = start_active_monitor_background(
+                interval_seconds=interval_seconds,
+                fetch_missing_market_data=fetch_missing_quotes,
+                refresh_target_market_data=refresh_target_quotes,
+            )
+            self._update_status(
+                f"Active monitor loop running: PID {state.pid}, every {state.interval_seconds} seconds."
+            )
+            self._refresh_execution_ready_panel()
+        except Exception as exc:
+            message = f"Active monitor loop failed to start: {type(exc).__name__}: {exc}"
+            self._show_action_blocked(message)
+            self._update_status(message)
+
+    def stop_active_monitor_loop(self) -> None:
+        try:
+            state = stop_active_monitor_background()
+            self._update_status(f"Active monitor loop {state.state.lower()}: PID {state.pid}.")
+            self._refresh_execution_ready_panel()
+        except Exception as exc:
+            message = f"Active monitor loop failed to stop: {type(exc).__name__}: {exc}"
+            self._show_action_blocked(message)
+            self._update_status(message)
+
+    def add_user_monitor_symbol(self) -> None:
+        symbol = self.monitor_symbol_input.text().strip() if hasattr(self, "monitor_symbol_input") else ""
+        note = self.monitor_symbol_note_input.text().strip() if hasattr(self, "monitor_symbol_note_input") else ""
+        if not symbol:
+            self._show_action_blocked("No symbol entered. Type a symbol to add to the active monitor.")
+            return
+        try:
+            record = upsert_user_defined_symbol(symbol, notes=note)
+            if hasattr(self, "monitor_symbol_input"):
+                self.monitor_symbol_input.clear()
+            if hasattr(self, "monitor_symbol_note_input"):
+                self.monitor_symbol_note_input.clear()
+            self._refresh_execution_ready_panel()
+            self._update_status(f"Added {record.symbol} to user-defined active monitor symbols.")
+        except Exception as exc:
+            message = f"Could not add monitor symbol: {type(exc).__name__}: {exc}"
+            self._show_action_blocked(message)
+            self._update_status(message)
+
+    def remove_selected_user_monitor_symbols(self) -> None:
+        if not hasattr(self, "user_monitor_symbols_table"):
+            return
+        rows = sorted({index.row() for index in self.user_monitor_symbols_table.selectedIndexes()}, reverse=True)
+        if not rows:
+            self._show_action_blocked("No monitor symbol selected.")
+            return
+        removed: list[str] = []
+        for row in rows:
+            item = self.user_monitor_symbols_table.item(row, 0)
+            symbol = item.text().strip() if item else ""
+            if symbol and remove_user_defined_symbol(symbol):
+                removed.append(symbol)
+        self._refresh_execution_ready_panel()
+        if removed:
+            self._update_status(f"Removed {', '.join(sorted(removed))} from user-defined monitor symbols.")
+        else:
+            self._show_action_blocked("Selected monitor symbol was not found in the user-defined monitor list.")
 
     def _build_top_bar(self) -> QWidget:
         box = QGroupBox("Session")
@@ -321,16 +1317,16 @@ class MomentumHunterWindow(QMainWindow):
 
         self.scanner_combo = QComboBox()
         self.scanner_combo.addItems([scanner_display_name(name) for name in SCANNER_PRESETS.keys()])
+        for index, internal_name in enumerate(SCANNER_PRESETS.keys()):
+            self.scanner_combo.setItemData(
+                index,
+                SCANNER_DISPLAY_DESCRIPTIONS.get(internal_name, scanner_display_name(internal_name)),
+                Qt.ItemDataRole.ToolTipRole,
+            )
         self.scanner_combo.currentTextChanged.connect(self._scanner_changed)
 
         self.scan_button = QPushButton("Run Scanner")
         self.scan_button.clicked.connect(self.run_scan)
-
-        self.save_button = QPushButton("Mark Interested")
-        self.save_button.clicked.connect(self.save_selected_candidates)
-
-        self.clear_button = QPushButton("Clear Checkmarks")
-        self.clear_button.clicked.connect(self.clear_row_marks)
 
         self.watchlist_button = QPushButton("Generate Watchlist Report")
         self.watchlist_button.clicked.connect(self.save_tomorrow_watchlist)
@@ -350,6 +1346,7 @@ class MomentumHunterWindow(QMainWindow):
 
         self.regime_button = QPushButton("Refresh Regime")
         self.regime_button.clicked.connect(self.refresh_market_regime)
+        self.regime_button.setToolTip("Refresh market regime context. This does not change scores or raw captures.")
 
         self.capture_date_combo = QComboBox()
         self.capture_date_combo.currentTextChanged.connect(self._capture_date_changed)
@@ -396,32 +1393,16 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(QLabel("Scanner"), 0, 4)
         layout.addWidget(self.scanner_combo, 0, 5)
         layout.addWidget(self.scan_button, 0, 6)
-        layout.addWidget(self.save_button, 0, 7)
-        layout.addWidget(self.clear_button, 0, 8)
         layout.addWidget(self.clock_label, 1, 0, 1, 2)
         layout.addWidget(QLabel("Evening review: 7:00 PM - 8:00 PM CT"), 1, 2, 1, 3)
         layout.addWidget(QLabel("Morning review: 7:00 AM - 8:00 AM CT"), 1, 5, 1, 4)
         layout.addWidget(QLabel("Market"), 2, 0)
         layout.addWidget(self.regime_combo, 2, 1)
         layout.addWidget(self.regime_button, 2, 2)
-        layout.addWidget(QLabel("History"), 2, 3)
-        layout.addWidget(self.capture_date_combo, 2, 4)
-        layout.addWidget(QLabel("Session"), 2, 5)
-        layout.addWidget(self.capture_session_combo, 2, 6)
-        layout.addWidget(self.open_capture_button, 2, 7, 1, 2)
-        layout.addWidget(self.current_button, 2, 9, 1, 2)
-        layout.addWidget(QLabel("Daily Workflow"), 3, 0)
-        layout.addWidget(self.daily_checklist_button, 3, 1, 1, 2)
-        layout.addWidget(self.morning_review_button, 3, 3, 1, 2)
-        layout.addWidget(self.watchlist_button, 3, 5, 1, 2)
-        layout.addWidget(self.view_button, 3, 7, 1, 2)
-        layout.addWidget(self.capture_health_button, 3, 9, 1, 2)
-        layout.addWidget(QLabel("Research"), 3, 11)
-        layout.addWidget(self.study_button, 3, 12)
-        layout.addWidget(self.brand_logo, 0, 12, 3, 1)
-        layout.addWidget(self.criteria_label, 4, 0, 1, 13)
-        layout.addWidget(QLabel("What should I do next?"), 5, 0, 1, 2)
-        layout.addWidget(self.operator_guidance_label, 5, 2, 1, 11)
+        layout.addWidget(self.brand_logo, 0, 9, 3, 1)
+        layout.addWidget(self.criteria_label, 3, 0, 1, 10)
+        layout.addWidget(QLabel("What should I do next?"), 4, 0, 1, 2)
+        layout.addWidget(self.operator_guidance_label, 4, 2, 1, 8)
         return box
 
     def _build_candidate_panel(self) -> QWidget:
@@ -435,15 +1416,23 @@ class MomentumHunterWindow(QMainWindow):
         review_layout.setSpacing(6)
         self.mark_interested_button = QPushButton("Mark Interested")
         self.mark_interested_button.clicked.connect(self.mark_interested_candidates)
+        self.mark_interested_button.setToolTip("Mark checked rows Interested. If none are checked, marks the selected row.")
         self.mark_rejected_button = QPushButton("Mark Rejected")
         self.mark_rejected_button.clicked.connect(self.mark_rejected_candidates)
+        self.mark_rejected_button.setToolTip("Mark checked rows Rejected. If none are checked, marks the selected row.")
         self.add_interested_button = QPushButton("Move Interested to Watchlist")
         self.add_interested_button.clicked.connect(self.add_interested_to_watchlist)
+        self.add_interested_button.setToolTip("Promote all Interested candidates to Watchlist status.")
+        self.clear_button = QPushButton("Clear Checkmarks")
+        self.clear_button.clicked.connect(self.clear_row_marks)
+        self.clear_button.setToolTip("Clear table checkmarks only. Review decisions are not changed.")
         self.timeline_button = QPushButton("Timeline / Replay")
         self.timeline_button.clicked.connect(self.view_candidate_timeline)
+        self.timeline_button.setToolTip("Open read-only point-in-time history for the selected candidate.")
         review_layout.addWidget(self.mark_interested_button)
         review_layout.addWidget(self.mark_rejected_button)
         review_layout.addWidget(self.add_interested_button)
+        review_layout.addWidget(self.clear_button)
         review_layout.addWidget(self.timeline_button)
         review_layout.addStretch(1)
         layout.addWidget(review_bar)
@@ -509,38 +1498,6 @@ class MomentumHunterWindow(QMainWindow):
         identity_layout.addWidget(self.news_stack_label, 4, 0, 1, 3)
         identity_layout.addWidget(self.reasons_label, 5, 0, 1, 3)
         layout.addWidget(identity)
-
-        health_box = QGroupBox("Capture Health")
-        health_layout = QVBoxLayout(health_box)
-        self.provider_status_label = QLabel(self.provider_status_text)
-        self.provider_status_label.setWordWrap(True)
-        self.last_morning_capture_label = QLabel("Last morning capture: checking...")
-        self.last_morning_capture_label.setWordWrap(True)
-        self.last_evening_capture_label = QLabel("Last evening capture: checking...")
-        self.last_evening_capture_label.setWordWrap(True)
-        self.last_preopen_capture_label = QLabel("Last preopen capture: checking...")
-        self.last_preopen_capture_label.setWordWrap(True)
-        self.capture_failure_label = QLabel("Scheduled captures: no failures recorded.")
-        self.capture_failure_label.setWordWrap(True)
-        self.next_capture_label = QLabel("Next scheduled runs: checking...")
-        self.next_capture_label.setWordWrap(True)
-        self.csv_append_label = QLabel("CSV append: checking...")
-        self.csv_append_label.setWordWrap(True)
-        self.outcome_update_label = QLabel("Outcome update: checking...")
-        self.outcome_update_label.setWordWrap(True)
-        self.retry_scan_button = QPushButton("Retry Scan")
-        self.retry_scan_button.clicked.connect(self.run_scan)
-        self.retry_scan_button.hide()
-        health_layout.addWidget(self.provider_status_label)
-        health_layout.addWidget(self.last_morning_capture_label)
-        health_layout.addWidget(self.last_evening_capture_label)
-        health_layout.addWidget(self.last_preopen_capture_label)
-        health_layout.addWidget(self.capture_failure_label)
-        health_layout.addWidget(self.next_capture_label)
-        health_layout.addWidget(self.csv_append_label)
-        health_layout.addWidget(self.outcome_update_label)
-        health_layout.addWidget(self.retry_scan_button)
-        layout.addWidget(health_box)
 
         chart_box = QGroupBox("Momentum Chart")
         chart_layout = QVBoxLayout(chart_box)
@@ -659,7 +1616,10 @@ class MomentumHunterWindow(QMainWindow):
 
     def _scanner_changed(self, value: str) -> None:
         criteria = self._selected_scanner_criteria(value)
+        description = SCANNER_DISPLAY_DESCRIPTIONS.get(criteria.name, scanner_display_name(criteria.name))
+        self.scanner_combo.setToolTip(description)
         self.criteria_label.setText(
+            f"{description} | "
             "Scanner thresholds: "
             f"Volume >= {criteria.min_volume:,} | "
             f"Change >= {criteria.min_percent_change:.1f}% | "
@@ -791,6 +1751,7 @@ class MomentumHunterWindow(QMainWindow):
         else:
             self._clear_candidate_details()
         self._update_score_chart()
+        self._refresh_watchlist_center()
 
     def _selection_changed(self) -> None:
         rows = self.table.selectionModel().selectedRows()
@@ -819,9 +1780,6 @@ class MomentumHunterWindow(QMainWindow):
         self.notes_edit.blockSignals(False)
         self._load_entry_plan_for_candidate(candidate)
         self.news_text.setHtml(format_news_html(candidate, now=self.display_capture_time))
-        self.reviewed_tickers.add(candidate.ticker)
-        if self.data_view_state == DataViewState.CURRENT:
-            self.live_reviewed_tickers.add(candidate.ticker)
         self._refresh_row_states()
 
     def _clear_candidate_details(self, message: str = "No candidate selected") -> None:
@@ -964,11 +1922,18 @@ class MomentumHunterWindow(QMainWindow):
             if self._candidate_review_status(candidate) == ReviewStatus.INTERESTED
         ]
         if not interested:
-            self._show_action_blocked("No interested candidates found. Mark candidates as Interested first.")
+            watchlist_count = len(self._watchlist_candidates())
+            if watchlist_count:
+                self._show_action_blocked(
+                    f"No interested candidates remain. {watchlist_count} candidate(s) are already on the Watchlist."
+                )
+            else:
+                self._show_action_blocked("No interested candidates found. Mark candidates as Interested first.")
             return
         for candidate in interested:
             self._set_candidate_review_status(candidate, ReviewStatus.WATCHLIST)
-        self._refresh_row_states()
+        self._refresh_row_states(clear_checks=True)
+        self._refresh_watchlist_center()
         self._update_status(f"Added {len(interested)} interested candidate(s) to watchlist status.")
 
     def _mark_review_status_for_targets(self, status: ReviewStatus, message_template: str) -> None:
@@ -984,7 +1949,8 @@ class MomentumHunterWindow(QMainWindow):
             marked = [candidate]
         for candidate in marked:
             self._set_candidate_review_status(candidate, status)
-        self._refresh_row_states()
+        self._refresh_row_states(clear_checks=True)
+        self._refresh_watchlist_center()
         self._update_status(message_template.format(count=len(marked)))
 
     def _set_candidate_review_status(self, candidate: Candidate, status: ReviewStatus) -> None:
@@ -1144,6 +2110,11 @@ class MomentumHunterWindow(QMainWindow):
         watchlist_button = QPushButton("Add to Watchlist")
         why_button = QPushButton("Open Why Score")
         timeline_button = QPushButton("Open Timeline/Replay")
+        interested_button.setToolTip("Mark the selected Morning Review candidate Interested.")
+        rejected_button.setToolTip("Mark the selected Morning Review candidate Rejected.")
+        watchlist_button.setToolTip("Move the selected Morning Review candidate directly to Watchlist.")
+        why_button.setToolTip("Open the stored score explanation for the selected candidate.")
+        timeline_button.setToolTip("Open read-only Timeline / Replay for the selected candidate.")
         for button in [interested_button, rejected_button, watchlist_button]:
             button.setEnabled(not read_only)
         action_layout.addWidget(interested_button)
@@ -1258,6 +2229,7 @@ class MomentumHunterWindow(QMainWindow):
                 self._show_action_blocked(context.block_reason or "This view is read-only.")
                 return
             if selected_candidate is None:
+                self._show_action_blocked("No candidate selected. Select a candidate before saving an entry plan.")
                 return
             plan = self._upsert_entry_plan_for_candidate(
                 selected_candidate,
@@ -1361,8 +2333,13 @@ class MomentumHunterWindow(QMainWindow):
             finally:
                 self.selected_ticker = previous_selected_ticker
             self._refresh_row_states()
+            self._refresh_watchlist_center()
             refresh_table()
             update_decision_card(candidate)
+            if status == ReviewStatus.WATCHLIST:
+                self._update_status(f"{candidate.ticker} moved to Watchlist from Morning Review.")
+            else:
+                self._update_status(f"{candidate.ticker} marked {status.value.title()} from Morning Review.")
 
         def open_why() -> None:
             if selected_candidate is None:
@@ -1506,17 +2483,36 @@ class MomentumHunterWindow(QMainWindow):
         self._show_text_dialog("Capture Health", "\n".join(lines))
 
     def open_readiness_gate(self) -> None:
+        def show_readiness(report: object, elapsed_seconds: float) -> None:
+            if not isinstance(report, OutcomeMaturityReport):
+                self._show_action_blocked("Readiness Gate returned an unexpected report type.", "Readiness Gate Error")
+                return
+            self._show_readiness_gate_dialog(report, elapsed_seconds)
+
+        self._run_report_loader(
+            title="Readiness Gate",
+            loading_message="Loading Readiness Gate without blocking the dashboard...",
+            loader=build_outcome_maturity_report,
+            on_success=show_readiness,
+            error_title="Readiness Gate Error",
+        )
+
+    def _show_readiness_gate_dialog(self, report: OutcomeMaturityReport, elapsed_seconds: float) -> None:
         style = get_data_view_style(DataViewState.STUDY, captured_at=None, study_run_id="readiness-gate")
         dialog = QDialog(self)
         dialog.setWindowTitle("Readiness Gate")
         dialog.resize(980, 620)
         layout = QVBoxLayout(dialog)
-        layout.addWidget(build_outcome_maturity_panel(build_outcome_maturity_report(), style), 1)
+        load_label = QLabel(f"Loaded in {elapsed_seconds:.2f} seconds. Research/readiness data is read-only.")
+        load_label.setObjectName("criteriaLabel")
+        layout.addWidget(load_label)
+        layout.addWidget(build_outcome_maturity_panel(report, style), 1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
         buttons.accepted.connect(dialog.accept)
         layout.addWidget(buttons)
         dialog.setStyleSheet(STYLESHEET)
+        self._update_status(f"Readiness Gate opened in {elapsed_seconds:.2f} seconds.")
         dialog.exec()
 
     def _show_timeline_dialog(self, ticker: str) -> None:
@@ -1537,11 +2533,16 @@ class MomentumHunterWindow(QMainWindow):
         controls_layout.setContentsMargins(0, 0, 0, 0)
         sort_combo = QComboBox()
         sort_combo.addItems(["Oldest First", "Newest First"])
+        preset_combo = QComboBox()
+        preset_combo.addItems(["Signal", "Outcome", "Audit"])
+        preset_combo.setToolTip("Signal shows capture-time facts. Outcome shows later annotations. Audit shows every column.")
         show_quarantined = QCheckBox("Show quarantined captures")
         show_non_trading_day = QCheckBox("Show non-trading-day captures")
         replay_button = QPushButton("Replay Capture")
         controls_layout.addWidget(QLabel("Sort"))
         controls_layout.addWidget(sort_combo)
+        controls_layout.addWidget(QLabel("View"))
+        controls_layout.addWidget(preset_combo)
         controls_layout.addWidget(show_quarantined)
         controls_layout.addWidget(show_non_trading_day)
         controls_layout.addStretch(1)
@@ -1582,8 +2583,20 @@ class MomentumHunterWindow(QMainWindow):
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         layout.addWidget(table, 1)
+        detail_browser = QTextBrowser()
+        detail_browser.setMaximumHeight(190)
+        layout.addWidget(detail_browser)
 
         timeline_rows: list[TimelineRow] = []
+
+        def update_detail() -> None:
+            if not timeline_rows:
+                detail_browser.setHtml(format_timeline_detail_html(None))
+                return
+            row_index = table.currentRow()
+            if row_index < 0:
+                row_index = 0
+            detail_browser.setHtml(format_timeline_detail_html(timeline_rows[row_index]))
 
         def refresh() -> None:
             nonlocal timeline_rows
@@ -1594,7 +2607,9 @@ class MomentumHunterWindow(QMainWindow):
                 newest_first=sort_combo.currentText() == "Newest First",
             )
             populate_timeline_table(table, timeline_rows)
+            apply_timeline_preset(table, preset_combo.currentText())
             replay_button.setEnabled(bool(timeline_rows))
+            update_detail()
 
         def replay_selected() -> None:
             if not timeline_rows:
@@ -1605,9 +2620,11 @@ class MomentumHunterWindow(QMainWindow):
             self._show_replay_dialog(timeline_rows[row_index])
 
         sort_combo.currentTextChanged.connect(refresh)
+        preset_combo.currentTextChanged.connect(lambda value: (apply_timeline_preset(table, value), update_detail()))
         show_quarantined.stateChanged.connect(refresh)
         show_non_trading_day.stateChanged.connect(refresh)
         replay_button.clicked.connect(replay_selected)
+        table.itemSelectionChanged.connect(update_detail)
         table.itemDoubleClicked.connect(lambda _item: replay_selected())
         refresh()
 
@@ -1801,6 +2818,7 @@ class MomentumHunterWindow(QMainWindow):
         self.outcome_update_label.setStyleSheet(
             "color: #cbd8e6;" if health.outcome_update_status.exists else "color: #fcd34d; font-weight: 700;"
         )
+        self._refresh_command_status_cards()
 
     def _load_capture_history(self) -> None:
         current_date = self.capture_date_combo.currentText()
@@ -1852,8 +2870,87 @@ class MomentumHunterWindow(QMainWindow):
         self._show_text_dialog(f"{date_text} {session_text.title()} Capture", report)
 
     def open_study_engine(self) -> None:
-        summary = build_capture_study()
+        def show_research(summary: object, elapsed_seconds: float) -> None:
+            if not isinstance(summary, StudySummary):
+                self._show_action_blocked("Research Lab returned an unexpected study summary type.", "Research Lab Error")
+                return
+            self._update_status(f"Research Lab opened in {elapsed_seconds:.2f} seconds.")
+            self._show_study_dialog(summary)
+
+        self._run_report_loader(
+            title="Research Lab",
+            loading_message="Loading Research Lab without blocking the dashboard...",
+            loader=build_capture_study,
+            on_success=show_research,
+            error_title="Research Lab Error",
+        )
+
+    def _show_study_engine_dialog(self, summary: StudySummary, elapsed_seconds: float) -> None:
+        self._update_status(f"Research Lab opened in {elapsed_seconds:.2f} seconds.")
         self._show_study_dialog(summary)
+
+    def _run_report_loader(
+        self,
+        *,
+        title: str,
+        loading_message: str,
+        loader: Callable[[], object],
+        on_success: Callable[[object, float], None],
+        error_title: str,
+    ) -> None:
+        progress = self._show_loading_dialog(title, loading_message)
+        thread = QThread(self)
+        worker = ReportLoaderWorker(loader)
+        worker.moveToThread(thread)
+        ref = (thread, worker, progress)
+        self._report_loader_refs.append(ref)
+        self._update_status(loading_message)
+
+        def cleanup() -> None:
+            if ref in self._report_loader_refs:
+                self._report_loader_refs.remove(ref)
+            thread.quit()
+            thread.wait(1500)
+            worker.deleteLater()
+            thread.deleteLater()
+
+        def finish(result: object, elapsed_seconds: float) -> None:
+            progress.close()
+            cleanup()
+            try:
+                on_success(result, elapsed_seconds)
+            except Exception as exc:
+                self._show_action_blocked(
+                    f"{title} loaded data but failed while opening the UI: {type(exc).__name__}: {exc}",
+                    error_title,
+                )
+
+        def fail(error_type: str, message: str, elapsed_seconds: float) -> None:
+            progress.close()
+            cleanup()
+            self._show_action_blocked(
+                f"{title} failed after {elapsed_seconds:.2f} seconds: {error_type}: {message}",
+                error_title,
+            )
+
+        thread.started.connect(worker.run)
+        worker.finished.connect(finish)
+        worker.failed.connect(fail)
+        thread.start()
+
+    def _show_loading_dialog(self, title: str, message: str) -> QDialog:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setModal(False)
+        layout = QVBoxLayout(dialog)
+        label = QLabel(message)
+        label.setObjectName("criteriaLabel")
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        dialog.resize(460, 120)
+        dialog.setStyleSheet(STYLESHEET)
+        dialog.show()
+        return dialog
 
     def _load_historical_capture(self, payload: dict) -> None:
         self.display_capture_time = datetime.fromisoformat(payload["capture_time"]) if payload.get("capture_time") else None
@@ -1932,11 +3029,12 @@ class MomentumHunterWindow(QMainWindow):
         self.table.horizontalHeader().setStyleSheet(style.header_stylesheet)
         can_review = self.current_operator_context.can_review
         can_generate = self.current_operator_context.can_generate_watchlist
-        self.save_button.setEnabled(can_review)
         self.mark_interested_button.setEnabled(can_review)
         self.mark_rejected_button.setEnabled(can_review)
         self.add_interested_button.setEnabled(can_review)
         self.clear_button.setEnabled(can_review)
+        if hasattr(self, "watchlist_center_move_button"):
+            self.watchlist_center_move_button.setEnabled(can_review)
         self.watchlist_button.setEnabled(can_generate)
         self.morning_review_button.setEnabled(bool(self.candidates or self.live_candidates))
         self.notes_edit.setReadOnly(not can_review)
@@ -1955,6 +3053,8 @@ class MomentumHunterWindow(QMainWindow):
         self._refresh_view_state_style()
         self._update_operator_guidance()
         self._update_score_chart()
+        self._refresh_command_status_cards()
+        self._refresh_watchlist_center()
 
     def _refresh_view_state_style(self) -> None:
         self.view_state_label.style().unpolish(self.view_state_label)
@@ -2183,15 +3283,15 @@ class MomentumHunterWindow(QMainWindow):
                 "No stored score breakdown was found for this historical candidate. Run rebuild_score_breakdowns before relying on this view.",
             )
             return
-        self._show_score_breakdown_dialog(record)
+        self._show_score_breakdown_dialog(record, candidate=candidate)
 
-    def _show_score_breakdown_dialog(self, record: dict) -> None:
+    def _show_score_breakdown_dialog(self, record: dict, candidate: Candidate | None = None) -> None:
         dialog = QDialog(self)
         dialog.setWindowTitle(f"Why {record.get('final_score', '')}? - {record.get('ticker', '')}")
         dialog.resize(920, 720)
         layout = QVBoxLayout(dialog)
         browser = QTextBrowser()
-        browser.setHtml(format_score_breakdown_html(record))
+        browser.setHtml(format_score_breakdown_html(record, candidate=candidate))
         layout.addWidget(browser)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
@@ -2265,10 +3365,10 @@ class MomentumHunterWindow(QMainWindow):
                 marked.append(candidate)
         return marked
 
-    def _refresh_row_states(self) -> None:
+    def _refresh_row_states(self, *, clear_checks: bool = False) -> None:
         for row, candidate in enumerate(self.candidates):
             item = self.table.item(row, 0)
-            if item is not None:
+            if item is not None and clear_checks:
                 item.setCheckState(Qt.CheckState.Unchecked)
             status_item = self.table.item(row, 1)
             if status_item is not None:
@@ -2576,90 +3676,186 @@ class MomentumHunterWindow(QMainWindow):
                 minimum_duplicate_count=minimum_duplicate_count,
             )
 
+        def make_lazy_research_tab(title: str, description: str, builder: Callable[[], QWidget]) -> QWidget:
+            panel = QWidget()
+            panel_layout = QVBoxLayout(panel)
+            panel_layout.setContentsMargins(12, 12, 12, 12)
+
+            label = QLabel(description)
+            label.setObjectName("criteriaLabel")
+            label.setWordWrap(True)
+            panel_layout.addWidget(label)
+
+            load_button = QPushButton(f"Load {title}")
+            load_button.setToolTip("Build this research panel on demand so opening Research Lab does not freeze the app.")
+            panel_layout.addWidget(load_button)
+            panel_layout.addStretch(1)
+
+            def load_panel() -> None:
+                started = time.perf_counter()
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+                load_button.setEnabled(False)
+                label.setText(f"Loading {title}...")
+                QApplication.processEvents()
+                try:
+                    widget = builder()
+                    while panel_layout.count():
+                        item = panel_layout.takeAt(0)
+                        child = item.widget()
+                        if child is not None:
+                            child.deleteLater()
+                    panel_layout.addWidget(widget, 1)
+                    elapsed = time.perf_counter() - started
+                    self._update_status(f"{title} loaded in {elapsed:.2f} seconds.")
+                except Exception as exc:
+                    load_button.setEnabled(True)
+                    label.setText(f"{title} failed safely: {type(exc).__name__}: {exc}")
+                    self._update_status(f"{title} failed safely: {type(exc).__name__}: {exc}")
+                finally:
+                    QApplication.restoreOverrideCursor()
+
+            load_button.clicked.connect(load_panel)
+            return panel
+
         def refresh_study_view() -> None:
-            filtered = build_capture_study(study_filter=current_study_filter())
-            filtered_style = get_data_view_style(
-                DataViewState.STUDY,
-                captured_at=None,
-                study_run_id=filtered.run_id,
-                source_range=filtered.source_range,
-            )
-            banner.setText(filtered_style.banner_text)
-            stats.setText(study_stats_text(filtered))
+            started = time.perf_counter()
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                active_filter = current_study_filter()
+                filtered = build_capture_study(study_filter=active_filter)
+                filtered_style = get_data_view_style(
+                    DataViewState.STUDY,
+                    captured_at=None,
+                    study_run_id=filtered.run_id,
+                    source_range=filtered.source_range,
+                )
+                banner.setText(filtered_style.banner_text)
+                stats.setText(f"{study_stats_text(filtered)} | Research panels are available on demand.")
 
-            chart_tabs.clear()
-            chart_tabs.addTab(build_study_chart(filtered, filtered_style), "Overview - Coverage")
-            chart_tabs.addTab(build_outcome_chart(filtered, filtered_style), "Overview - Outcomes")
-            chart_tabs.addTab(
-                build_historical_cluster_panel(
-                    build_historical_cluster_report(study_filter=current_study_filter()),
-                    filtered_style,
-                    build_historical_recurrence_report(study_filter=current_study_filter()),
-                    replay_callback=self._show_replay_dialog,
-                ),
-                "Catalyst - Historical Setups",
-            )
-            chart_tabs.addTab(
-                build_catalyst_cluster_panel(
-                    build_catalyst_cluster_report(study_filter=current_study_filter()),
-                    filtered_style,
-                ),
-                "Catalyst - Clusters",
-            )
-            chart_tabs.addTab(
-                build_catalyst_age_panel(
-                    build_catalyst_age_audit_report(study_filter=current_study_filter()),
-                    filtered_style,
-                ),
-                "Catalyst - Age",
-            )
-            chart_tabs.addTab(
-                build_headline_dedup_panel(
-                    build_headline_dedup_report(study_filter=current_study_filter()),
-                    filtered_style,
-                ),
-                "Catalyst - Headline Dedup",
-            )
-            chart_tabs.addTab(
-                build_outcome_explorer_panel(
-                    build_outcome_explorer_report(study_filter=current_study_filter()),
-                    filtered_style,
-                ),
-                "Readiness - Outcome Explorer",
-            )
-            chart_tabs.addTab(
-                build_outcome_maturity_panel(
-                    build_outcome_maturity_report(study_filter=current_study_filter()),
-                    filtered_style,
-                ),
-                "Readiness - Gates",
-            )
-            chart_tabs.addTab(
-                build_opportunity_research_panel(
-                    build_opportunity_research_report(study_filter=current_study_filter()),
-                    filtered_style,
-                ),
-                "Readiness - Opportunity Research",
-            )
-            chart_tabs.addTab(build_recommendation_panel(build_weight_recommendations(), filtered_style), "Locked Research Notes")
+                chart_tabs.clear()
+                chart_tabs.addTab(build_study_chart(filtered, filtered_style), "Overview - Coverage")
+                chart_tabs.addTab(build_outcome_chart(filtered, filtered_style), "Overview - Outcomes")
+                chart_tabs.addTab(
+                    make_lazy_research_tab(
+                        "Historical Setups",
+                        "Historical setup clustering is research-only and can take time. Load it when you need that panel.",
+                        lambda active_filter=active_filter, filtered_style=filtered_style: build_historical_cluster_panel(
+                            build_historical_cluster_report(study_filter=active_filter),
+                            filtered_style,
+                            build_historical_recurrence_report(study_filter=active_filter),
+                            replay_callback=self._show_replay_dialog,
+                        ),
+                    ),
+                    "Catalyst - Historical Setups",
+                )
+                chart_tabs.addTab(
+                    make_lazy_research_tab(
+                        "Catalyst Clusters",
+                        "Catalyst Cluster Explorer is loaded on demand to keep the Research Lab responsive.",
+                        lambda active_filter=active_filter, filtered_style=filtered_style: build_catalyst_cluster_panel(
+                            build_catalyst_cluster_report(study_filter=active_filter),
+                            filtered_style,
+                        ),
+                    ),
+                    "Catalyst - Clusters",
+                )
+                chart_tabs.addTab(
+                    make_lazy_research_tab(
+                        "Catalyst Age",
+                        "Catalyst age and timestamp-quality analysis is loaded only when requested.",
+                        lambda active_filter=active_filter, filtered_style=filtered_style: build_catalyst_age_panel(
+                            build_catalyst_age_audit_report(study_filter=active_filter),
+                            filtered_style,
+                        ),
+                    ),
+                    "Catalyst - Age",
+                )
+                chart_tabs.addTab(
+                    make_lazy_research_tab(
+                        "Headline Dedup",
+                        "Headline deduplication and source quality can be heavy, so it is loaded on demand.",
+                        lambda active_filter=active_filter, filtered_style=filtered_style: build_headline_dedup_panel(
+                            build_headline_dedup_report(study_filter=active_filter),
+                            filtered_style,
+                        ),
+                    ),
+                    "Catalyst - Headline Dedup",
+                )
+                chart_tabs.addTab(
+                    make_lazy_research_tab(
+                        "Outcome Explorer",
+                        "Outcome Explorer is post-capture research data. Load it when you want outcome tables.",
+                        lambda active_filter=active_filter, filtered_style=filtered_style: build_outcome_explorer_panel(
+                            build_outcome_explorer_report(study_filter=active_filter),
+                            filtered_style,
+                        ),
+                    ),
+                    "Readiness - Outcome Explorer",
+                )
+                chart_tabs.addTab(
+                    make_lazy_research_tab(
+                        "Readiness Gates",
+                        "Readiness Gate checks completed outcomes and keeps optimization locked until enough evidence exists.",
+                        lambda active_filter=active_filter, filtered_style=filtered_style: build_outcome_maturity_panel(
+                            build_outcome_maturity_report(study_filter=active_filter),
+                            filtered_style,
+                        ),
+                    ),
+                    "Readiness - Gates",
+                )
+                chart_tabs.addTab(
+                    make_lazy_research_tab(
+                        "Opportunity Research",
+                        "Opportunity Research is diagnostic only and remains locked from trading recommendations.",
+                        lambda active_filter=active_filter, filtered_style=filtered_style: build_opportunity_research_panel(
+                            build_opportunity_research_report(study_filter=active_filter),
+                            filtered_style,
+                        ),
+                    ),
+                    "Readiness - Opportunity Research",
+                )
+                chart_tabs.addTab(
+                    make_lazy_research_tab(
+                        "Locked Research Notes",
+                        "Locked Research Notes explain why recommendations remain disabled until evidence thresholds mature.",
+                        lambda filtered_style=filtered_style: build_recommendation_panel(
+                            build_weight_recommendations(),
+                            filtered_style,
+                        ),
+                    ),
+                    "Locked Research Notes",
+                )
 
-            bucket_table.setRowCount(len(filtered.score_buckets))
-            for row, bucket in enumerate(filtered.score_buckets):
-                values = [
-                    bucket.label,
-                    str(bucket.count),
-                    str(bucket.selected_count),
-                    str(bucket.reviewed_count),
-                    format_percent(bucket.avg_next_day_return_pct),
-                    format_percent(bucket.avg_five_day_return_pct),
-                ]
-                for column, value in enumerate(values):
-                    bucket_table.setItem(row, column, QTableWidgetItem(value))
+                bucket_table.setRowCount(len(filtered.score_buckets))
+                for row, bucket in enumerate(filtered.score_buckets):
+                    values = [
+                        bucket.label,
+                        str(bucket.count),
+                        str(bucket.selected_count),
+                        str(bucket.reviewed_count),
+                        format_percent(bucket.avg_next_day_return_pct),
+                        format_percent(bucket.avg_five_day_return_pct),
+                    ]
+                    for column, value in enumerate(values):
+                        bucket_table.setItem(row, column, QTableWidgetItem(value))
 
-            regime_table.setRowCount(len(filtered.regimes))
-            for row, regime in enumerate(filtered.regimes):
-                regime_table.setItem(row, 0, QTableWidgetItem(regime.regime))
-                regime_table.setItem(row, 1, QTableWidgetItem(str(regime.count)))
+                regime_table.setRowCount(len(filtered.regimes))
+                for row, regime in enumerate(filtered.regimes):
+                    regime_table.setItem(row, 0, QTableWidgetItem(regime.regime))
+                    regime_table.setItem(row, 1, QTableWidgetItem(str(regime.count)))
+                elapsed = time.perf_counter() - started
+                stats.setText(f"{study_stats_text(filtered)} | Initial panels loaded in {elapsed:.2f}s. Heavy panels load on demand.")
+                self._update_status(f"Research Lab initial panels loaded in {elapsed:.2f} seconds.")
+            except Exception as exc:
+                chart_tabs.clear()
+                error = QLabel(f"Research panel failed safely: {type(exc).__name__}: {exc}")
+                error.setObjectName("detailStateLabel")
+                error.setWordWrap(True)
+                chart_tabs.addTab(error, "Research Error")
+                stats.setText("Research panel failed safely. Main app remains available.")
+                self._update_status(f"Research Lab panel failed safely: {type(exc).__name__}: {exc}")
+            finally:
+                QApplication.restoreOverrideCursor()
 
         filter_combo.currentTextChanged.connect(refresh_study_view)
         start_date_edit.editingFinished.connect(refresh_study_view)
@@ -2683,7 +3879,8 @@ class MomentumHunterWindow(QMainWindow):
         timestamp_quality_edit.editingFinished.connect(refresh_study_view)
         source_edit.editingFinished.connect(refresh_study_view)
         duplicate_edit.editingFinished.connect(refresh_study_view)
-        refresh_study_view()
+        stats.setText("Research Lab opened. Building panels...")
+        QTimer.singleShot(0, refresh_study_view)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
@@ -2823,6 +4020,44 @@ def format_csv_status(label: str, status: CsvStatus) -> str:
     return f"{label}: OK | {status.row_count} rows | updated {updated}"
 
 
+def compact_status_text(label: QLabel | None, fallback: str) -> str:
+    if label is None:
+        return fallback
+    text = " ".join(label.text().split())
+    if not text:
+        return fallback
+    return text.split(". ", 1)[0]
+
+
+def evidence_next_action_text(
+    *,
+    execution_ready_count: int,
+    active_alert_count: int,
+    outcome_count: int,
+    performance_count: int,
+    monitor_summary: str,
+    evidence_summary: str,
+) -> str:
+    if execution_ready_count:
+        return f"Next evidence action: review {execution_ready_count} execution-ready trade(s) in the Execution Ready tab."
+    if active_alert_count:
+        return f"Next evidence action: inspect {active_alert_count} active alert(s), then update outcomes when enough bars exist."
+    if "NO CYCLE REPORT" in monitor_summary.upper():
+        return "Next evidence action: run an Active Monitor cycle from Monitor + Health."
+    if outcome_count and not performance_count:
+        return "Next evidence action: update alert performance after outcomes complete."
+    if "LOCKED" in evidence_summary.upper() or "COLLECTING" in evidence_summary.upper():
+        return "Next evidence action: keep collecting evidence; optimization remains locked until enough completed outcomes exist."
+    return "Next evidence action: review Monitor + Health first, then use detail tabs only when something needs attention."
+
+
+def entry_plan_progress_text(warnings: list[str]) -> str:
+    required_count = 4
+    missing_count = len([warning for warning in warnings if warning.startswith("missing ")])
+    complete_count = max(0, required_count - missing_count)
+    return f"{complete_count}/{required_count}"
+
+
 def format_news_html(candidate: Candidate, now: datetime | None = None) -> str:
     if not candidate.news:
         return "<p>No headlines loaded. Review news manually before trading.</p>"
@@ -2860,7 +4095,7 @@ def format_news_html(candidate: Candidate, now: datetime | None = None) -> str:
     )
 
 
-def format_score_breakdown_html(record: dict) -> str:
+def format_score_breakdown_html(record: dict, candidate: Candidate | None = None) -> str:
     status = record.get("status", "complete")
     warning = ""
     if status != "complete":
@@ -2886,16 +4121,17 @@ def format_score_breakdown_html(record: dict) -> str:
     component_rows = []
     for component in record.get("components", []):
         contribution = int(component.get("points_after_adjustment", 0))
+        explanation = score_component_explanation(component)
         component_rows.append(
             "<tr>"
             f"<td>{escape(str(component.get('label', '')))}</td>"
             f"<td>{escape(str(component.get('category', '')))}</td>"
-            f"<td>{escape(str(component.get('rule', '')))}</td>"
+            f"<td>{escape(format_score_rule(str(component.get('rule', '')), str(component.get('key', ''))))}</td>"
             f"<td>{escape(format_raw_inputs(component.get('raw_inputs', {})))}</td>"
             f"<td style='text-align:right;'>{escape(str(component.get('points_before_adjustment', '')))}</td>"
             f"<td style='text-align:right;font-weight:700;color:{'#a7f3d0' if contribution >= 0 else '#fecaca'};'>"
             f"{escape(format_signed_points(contribution))}</td>"
-            f"<td>{escape(str(component.get('explanation', '')))}</td>"
+            f"<td>{escape(explanation)}</td>"
             "</tr>"
         )
     reconciliation = record.get("reconciliation", {})
@@ -2905,10 +4141,25 @@ def format_score_breakdown_html(record: dict) -> str:
     floor = floors[0] if floors else {}
     return f"""
     <html>
-    <body style="font-family: Segoe UI, Arial; color: #e7edf4; background: #0b1118;">
+    <head>
+      <style>
+        body {{ font-family: Segoe UI, Arial; color: #e7edf4; background: #0b1118; }}
+        h2 {{ margin-bottom: 4px; }}
+        h3 {{ margin-top: 18px; margin-bottom: 8px; color: #bfdbfe; }}
+        .meta {{ background: #111b26; border: 1px solid #2f4054; padding: 10px; line-height: 1.45; }}
+        pre {{ white-space: pre-wrap; }}
+        table {{ border-collapse: collapse; width: 100%; }}
+        th {{ background: #182536; color: #dbeafe; border-bottom: 1px solid #3b5168; }}
+        td {{ border-bottom: 1px solid #223247; vertical-align: top; }}
+        th, td {{ padding: 7px; }}
+        tr:nth-child(even) td {{ background: #0f1823; }}
+        .points {{ text-align: right; font-weight: 700; white-space: nowrap; }}
+      </style>
+    </head>
+    <body>
       <h2>Why {escape(str(record.get('final_score', '')))}? {escape(str(record.get('ticker', '')))}</h2>
       {warning}
-      <p>
+      <p class="meta">
         <b>Captured:</b> {escape(str(identity.get('capture_time', record.get('capture_time', ''))))}<br>
         <b>Session:</b> {escape(str(identity.get('session', '')))} |
         <b>Provider:</b> {escape(str(identity.get('provider', '')))} |
@@ -2930,8 +4181,14 @@ Displayed final score: {escape(str(record.get('final_score', '')))}
 Reconciliation status: {escape(str(reconciliation.get('status', record.get('reconciliation_status', ''))))}
       </pre>
       <h3>Compact Summary</h3>
-      <table cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;">
-        <tr style="background:#182536;">
+      <p class="meta">
+        Contributions are the points actually counted by <b>momentum_score_v1</b>. Context rows can show important
+        information, such as HOT freshness, while still contributing 0 points when the current scoring engine is
+        measurement-only for that signal.
+      </p>
+      {latest_article_context_html(candidate, identity.get('capture_time', record.get('capture_time', '')))}
+      <table cellspacing="0" cellpadding="6">
+        <tr>
           <th align="left">Component</th>
           <th align="right">Contribution</th>
           <th align="left">Raw Value</th>
@@ -2939,14 +4196,18 @@ Reconciliation status: {escape(str(reconciliation.get('status', record.get('reco
         {''.join(compact_rows)}
       </table>
       <h3>Detailed Components</h3>
-      <table cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;">
-        <tr style="background:#182536;">
+      <p class="meta">
+        <b>Base Points</b> are the rule result before local/regime adjustments. <b>Applied Impact</b> is what actually
+        contributes to the subtotal before global floor/cap handling.
+      </p>
+      <table cellspacing="0" cellpadding="6">
+        <tr>
           <th align="left">Component</th>
           <th align="left">Type</th>
           <th align="left">Rule</th>
           <th align="left">Raw Inputs</th>
-          <th align="right">Before</th>
-          <th align="right">Contribution</th>
+          <th align="right">Base Points</th>
+          <th align="right">Applied Impact</th>
           <th align="left">Explanation</th>
         </tr>
         {''.join(component_rows)}
@@ -2999,7 +4260,120 @@ def format_signed_points(value: int) -> str:
 def format_raw_inputs(raw_inputs: dict) -> str:
     if not isinstance(raw_inputs, dict):
         return str(raw_inputs)
-    return "; ".join(f"{key}={value}" for key, value in raw_inputs.items())
+    return "; ".join(f"{humanize_score_key(key)}={format_score_value(key, value)}" for key, value in raw_inputs.items())
+
+
+def humanize_score_key(key: object) -> str:
+    return str(key).replace("_", " ").title()
+
+
+def format_score_value(key: object, value: object) -> str:
+    key_text = str(key).lower()
+    if value is None:
+        return "unknown"
+    if key_text == "market_cap":
+        return format_market_cap(int_or_zero(value))
+    if "volume" in key_text and "relative" not in key_text:
+        return format_compact_number(value)
+    if "relative_volume" in key_text:
+        try:
+            return f"{float(value):.2f}x"
+        except (TypeError, ValueError):
+            return str(value)
+    if "percent" in key_text or key_text in {"change", "percent_change"}:
+        try:
+            return f"{float(value):.1f}%"
+        except (TypeError, ValueError):
+            return str(value)
+    if key_text == "freshness_score":
+        return str(value)
+    return str(value)
+
+
+def format_compact_number(value: object) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    absolute = abs(number)
+    if absolute >= 1_000_000_000:
+        return f"{number / 1_000_000_000:.1f}B"
+    if absolute >= 1_000_000:
+        return f"{number / 1_000_000:.1f}M"
+    if absolute >= 1_000:
+        return f"{number / 1_000:.1f}K"
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.2f}"
+
+
+def format_score_rule(rule: str, component_key: str) -> str:
+    if not rule:
+        return ""
+
+    def replace_number(match: re.Match[str]) -> str:
+        raw = match.group(0)
+        value = int(raw.replace(",", ""))
+        if component_key == "market_cap":
+            return format_market_cap(value)
+        if component_key == "volume":
+            return format_compact_number(value)
+        return raw
+
+    return re.sub(r"(?<![\w.])\d{1,3}(?:,\d{3})+(?![\w.])", replace_number, rule)
+
+
+def score_component_explanation(component: dict) -> str:
+    explanation = str(component.get("explanation", ""))
+    if component.get("key") == "freshness_context":
+        context_note = (
+            "Freshness is recorded for research/explainability only in momentum_score_v1, "
+            "so HOT/high freshness can still have Applied Impact 0."
+        )
+        return f"{explanation} {context_note}".strip()
+    return explanation
+
+
+def latest_article_context_html(candidate: Candidate | None, capture_time_text: object) -> str:
+    if candidate is None:
+        return ""
+    capture_time = parse_iso_datetime(str(capture_time_text))
+    known_news = filter_news_known_at_capture(candidate.news, capture_time)
+    valid_news = [item for item in known_news if item.published_at is not None]
+    if not valid_news:
+        return "<p class='meta'><b>Latest valid article:</b> unavailable in the stored candidate context.</p>"
+    latest = max(valid_news, key=lambda item: article_time_for_display(item.published_at, capture_time) or datetime.min)
+    age = "unknown"
+    latest_published_at = article_time_for_display(latest.published_at, capture_time)
+    if capture_time and latest_published_at:
+        age_hours = max(0.0, (capture_time - latest_published_at).total_seconds() / 3600)
+        age = format_news_age(age_hours)
+    source = latest.source or "unknown source"
+    return (
+        "<p class='meta'>"
+        f"<b>Latest valid article:</b> {escape(latest.headline)}<br>"
+        f"<b>Source:</b> {escape(source)} | <b>Age at capture:</b> {escape(age)}"
+        "</p>"
+    )
+
+
+def article_time_for_display(value: datetime | None, capture_time: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if capture_time is None or capture_time.tzinfo is None:
+        return value.replace(tzinfo=None)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=capture_time.tzinfo)
+    return value.astimezone(capture_time.tzinfo)
+
+
+def parse_iso_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def populate_timeline_table(table: QTableWidget, rows: list[TimelineRow]) -> None:
@@ -3035,6 +4409,8 @@ def populate_timeline_table(table: QTableWidget, rows: list[TimelineRow]) -> Non
         ]
         for column, value in enumerate(values):
             item = QTableWidgetItem(str(value))
+            if row.warnings:
+                item.setToolTip(" | ".join(row.warnings))
             if row.quarantined:
                 item.setBackground(QBrush(QColor("#6d3030")))
             elif row.calendar_classification.capture_calendar_status == "PREOPEN_GAP_REVIEW_DAY":
@@ -3045,6 +4421,58 @@ def populate_timeline_table(table: QTableWidget, rows: list[TimelineRow]) -> Non
     table.resizeColumnsToContents()
     if rows:
         table.selectRow(0)
+
+
+TIMELINE_PRESET_COLUMNS = {
+    "Signal": {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 25},
+    "Outcome": {0, 1, 5, 13, 19, 20, 21, 22, 23, 24, 25},
+    "Audit": set(range(26)),
+}
+
+
+def apply_timeline_preset(table: QTableWidget, preset: str) -> None:
+    visible_columns = TIMELINE_PRESET_COLUMNS.get(preset, TIMELINE_PRESET_COLUMNS["Signal"])
+    for column in range(table.columnCount()):
+        table.setColumnHidden(column, column not in visible_columns)
+    table.resizeColumnsToContents()
+
+
+def format_timeline_detail_html(row: TimelineRow | None) -> str:
+    style = "font-family: Segoe UI, Arial; color:#e7edf4; background:#0b1118; font-size:10pt;"
+    if row is None:
+        return f"<body style='{style}'><p>No timeline row selected.</p></body>"
+    warnings = "".join(f"<li>{escape(warning)}</li>" for warning in row.warnings) or "<li>No warnings.</li>"
+    capture_facts = [
+        ("Captured", row.capture_time_text),
+        ("Session", row.session),
+        ("Provider", row.provider),
+        ("Scanner", row.scanner),
+        ("Price", timeline_value(row, "price")),
+        ("% Change", timeline_value(row, "percent_change")),
+        ("Volume", timeline_value(row, "volume")),
+        ("Relative Volume", timeline_value(row, "relative_volume")),
+        ("Score", timeline_value(row, "score")),
+    ]
+    later_facts = [
+        ("Review", timeline_value(row, "review_status")),
+        ("Outcome", timeline_value(row, "outcome_status")),
+        ("Next Day", timeline_value(row, "next_day_return_pct")),
+        ("5 Day", timeline_value(row, "five_day_return_pct")),
+        ("Max Gain", timeline_value(row, "max_gain_pct")),
+    ]
+    return f"""
+    <body style="{style}">
+      <b>{escape(row.ticker)}</b> | {escape(row.trust_label)}
+      <table cellspacing="0" cellpadding="4" style="width:100%; margin-top:6px;">
+        <tr><th align="left">Capture-Time Signal</th><th align="left">Later Annotations</th><th align="left">Warnings</th></tr>
+        <tr>
+          <td valign="top">{'<br>'.join(f'<b>{escape(label)}:</b> {escape(str(value))}' for label, value in capture_facts)}</td>
+          <td valign="top">{'<br>'.join(f'<b>{escape(label)}:</b> {escape(str(value))}' for label, value in later_facts)}</td>
+          <td valign="top"><ul style="margin-top:0; color:#fcd34d;">{warnings}</ul></td>
+        </tr>
+      </table>
+    </body>
+    """
 
 
 def timeline_value(row: TimelineRow, key: str) -> object:
@@ -3170,6 +4598,497 @@ def format_market_cap(value: int) -> str:
 
 def scanner_display_name(internal_name: str) -> str:
     return SCANNER_DISPLAY_NAMES.get(internal_name, internal_name)
+
+
+def latest_trade_plan_csv_path() -> Path | None:
+    reports_dir = DATA_DIR / "reports"
+    if not reports_dir.exists():
+        return None
+    files = list(reports_dir.glob("event-trade-plan-briefing-*.csv"))
+    if not files:
+        files = list(reports_dir.glob("trade-plan-briefing-*.csv"))
+    if not files:
+        return None
+    return max(files, key=lambda path: path.stat().st_mtime)
+
+
+def latest_trade_plan_json_path(csv_path: Path | None = None) -> Path | None:
+    if csv_path is not None:
+        candidate = csv_path.with_suffix(".json")
+        if candidate.exists():
+            return candidate
+    reports_dir = DATA_DIR / "reports"
+    if not reports_dir.exists():
+        return None
+    files = list(reports_dir.glob("event-trade-plan-briefing-*.json"))
+    if not files:
+        files = list(reports_dir.glob("trade-plan-briefing-*.json"))
+    if not files:
+        return None
+    return max(files, key=lambda path: path.stat().st_mtime)
+
+
+def load_execution_ready_rows(path: Path | None) -> list[dict[str, str]]:
+    if path is None or not path.exists():
+        return []
+    with path.open(newline="", encoding="utf-8") as file:
+        rows = list(csv.DictReader(file))
+    ready_states = {"EXECUTION_READY_PREMARKET", "EXECUTION_READY_TRADE"}
+    return [row for row in rows if row.get("Readiness") in ready_states]
+
+
+def execution_ready_reason(row: dict[str, str]) -> str:
+    if row.get("Readiness") == "EXECUTION_READY_PREMARKET":
+        return (
+            f"premkt vol {row.get('Premarket Volume', 'n/a')} > 500k; "
+            f"spread {row.get('Spread %', 'n/a')}% < 0.25%; "
+            f"premkt {row.get('Premarket %', 'n/a')}% > 1%"
+        )
+    return (
+        f"RVOL {row.get('Relative Volume', 'n/a')} > 1.2; "
+        f"spread {row.get('Spread %', 'n/a')}% < 0.25%; "
+        f"{row.get('RVOL Type', '')}"
+    )
+
+
+def execution_ready_display_price(row: dict[str, str]) -> str:
+    if row.get("Readiness") == "EXECUTION_READY_PREMARKET":
+        return row.get("Premarket Price") or row.get("Last Price", "")
+    return row.get("Last Price", "")
+
+
+def load_state_transition_rows(path: Path | None) -> list[dict[str, str]]:
+    if path is None or not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    return [
+        {
+            "timestamp": str(item.get("timestamp", "")),
+            "symbol": str(item.get("symbol", "")),
+            "old_state": str(item.get("old_state", "")),
+            "new_state": str(item.get("new_state", "")),
+            "reason": str(item.get("reason", "")),
+        }
+        for item in payload.get("state_transition_log", [])
+        if isinstance(item, dict)
+    ]
+
+
+def load_active_alert_rows(path: Path | None = None, *, limit: int = 10) -> list[dict[str, object]]:
+    path = path or DATA_DIR / "opportunity-alerts.json"
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    rows = []
+    for item in payload.get("alerts", []):
+        if not isinstance(item, dict):
+            continue
+        outcome = item.get("outcome") or {}
+        if outcome.get("status", "PENDING_OUTCOME") not in {"PENDING_OUTCOME", "ACTIVE"}:
+            continue
+        rows.append(item)
+    return sorted(rows, key=lambda item: str(item.get("timestamp", "")), reverse=True)[:limit]
+
+
+def load_alert_outcome_rows(path: Path | None = None, *, limit: int = 10) -> list[dict[str, object]]:
+    path = path or DATA_DIR / "opportunity-alerts.json"
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    rows = [item for item in payload.get("alerts", []) if isinstance(item, dict)]
+    return sorted(rows, key=lambda item: str(item.get("timestamp", "")), reverse=True)[:limit]
+
+
+def load_alert_leaderboard_rows(path: Path | None = None, *, limit: int = 5) -> list[dict[str, object]]:
+    path = path or latest_opportunity_alert_json_path()
+    if path is None or not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    rows = []
+    for side, key in (("Best", "best_performing_alert_types"), ("Worst", "worst_performing_alert_types")):
+        for item in payload.get(key, [])[:limit]:
+            if isinstance(item, dict):
+                row = dict(item)
+                row["side"] = side
+                rows.append(row)
+    return rows
+
+
+def alert_performance_summary_text(path: Path | None = None) -> str:
+    try:
+        report = build_alert_performance_report(path or (DATA_DIR / "opportunity-alerts.json"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return "ALERT PERFORMANCE: unable to read alert outcome data"
+    if report.total_alerts == 0:
+        return "ALERT PERFORMANCE: no alerts recorded yet"
+    warning = " Diagnostic only." if report.current_sample_size < 20 else ""
+    return (
+        f"ALERT PERFORMANCE: {report.total_alerts} alert(s), "
+        f"{report.completed_alerts} completed, {report.pending_alerts} pending, "
+        f"{report.unscorable_alerts} unscorable. "
+        f"Sample size: {report.current_sample_size}. Edge status: {report.measurable_edge_status}.{warning}"
+    )
+
+
+def load_alert_performance_dashboard_rows(path: Path | None = None, *, limit: int = 3) -> list[dict[str, object]]:
+    try:
+        report = build_alert_performance_report(path or (DATA_DIR / "opportunity-alerts.json"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return []
+    rows: list[dict[str, object]] = []
+    for section, source_rows in (
+        ("Best Alert Types", report.best_alert_types),
+        ("Worst Alert Types", report.worst_alert_types),
+        ("Best Symbols", report.best_symbols),
+        ("Worst Symbols", report.worst_symbols),
+    ):
+        for item in source_rows[:limit]:
+            row = {
+                "section": section,
+                "group": item.group,
+                "alert_count": item.alert_count,
+                "completed_count": item.completed_count,
+                "win_rate_pct": item.win_rate_pct,
+                "average_60m_return_pct": item.average_60m_return_pct,
+                "average_mfe_pct": item.average_mfe_pct,
+                "average_mae_pct": item.average_mae_pct,
+            }
+            rows.append(row)
+    return rows
+
+
+def evidence_autopilot_summary_text(path: Path | None = None) -> str:
+    status = load_evidence_autopilot_status(path or EVIDENCE_AUTOPILOT_STATUS_PATH)
+    if status is None:
+        return "EVIDENCE AUTOPILOT: no run yet"
+    if status.state == "FAILED":
+        return f"EVIDENCE AUTOPILOT: FAILED. {status.last_error}"
+    if status.state == "RUNNING":
+        return f"EVIDENCE AUTOPILOT: RUNNING since {status.started_at}"
+    return (
+        f"EVIDENCE AUTOPILOT: {status.state}. "
+        f"{status.new_alert_count} new alert(s), {status.completed_outcome_count} completed outcome(s), "
+        f"{status.pending_alert_count} pending, {status.unscorable_alert_count} unscorable. Updated {status.updated_at}."
+    )
+
+
+def load_evidence_autopilot_dashboard_rows(path: Path | None = None) -> list[dict[str, str]]:
+    status = load_evidence_autopilot_status(path or EVIDENCE_AUTOPILOT_STATUS_PATH)
+    if status is None:
+        return []
+    return [
+        {
+            "metric": "State",
+            "value": status.state,
+            "note": status.last_error or status.updated_at,
+            "severity": "warn" if status.state == "FAILED" else "good",
+        },
+        {
+            "metric": "Pipeline",
+            "value": (
+                f"M:{yes_no(status.monitor_cycle_completed)} "
+                f"O:{yes_no(status.outcome_update_completed)} "
+                f"E:{yes_no(status.evidence_report_generated)} "
+                f"B:{yes_no(status.daily_brief_generated)}"
+            ),
+            "note": "monitor / outcome / evidence / brief",
+            "severity": "good"
+            if (
+                status.monitor_cycle_completed
+                and status.outcome_update_completed
+                and status.evidence_report_generated
+                and status.daily_brief_generated
+            )
+            else "warn",
+        },
+        {
+            "metric": "Alerts",
+            "value": f"{status.new_alert_count} new / {status.active_alert_count} active / {status.tracked_alert_count} tracked",
+            "note": (
+                f"{status.completed_outcome_count} completed; "
+                f"{status.pending_alert_count} pending; {status.unscorable_alert_count} unscorable"
+            ),
+            "severity": "warn" if status.pending_alert_count else "good",
+        },
+        {
+            "metric": "Data Issues",
+            "value": f"{status.warning_count} warning(s)",
+            "note": "; ".join(status.warnings[:2]) if status.warnings else "none",
+            "severity": "warn" if status.warning_count else "good",
+        },
+        {
+            "metric": "Daily Brief",
+            "value": Path(status.daily_brief_path).name if status.daily_brief_path else "none",
+            "note": status.daily_brief_path,
+            "severity": "good" if status.daily_brief_path else "warn",
+        },
+    ]
+
+
+def evidence_health_summary_text(path: Path | None = None) -> str:
+    try:
+        report = build_evidence_health_report(alerts_path=path or (DATA_DIR / "opportunity-alerts.json"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return "EVIDENCE HEALTH: unable to read alert evidence data"
+    gate = report.evidence_gate
+    return (
+        f"EVIDENCE HEALTH: {report.completed_alerts}/{gate.required_alerts} completed alert(s), "
+        f"{report.pending_alerts} pending, {report.unscorable_alerts} unscorable. Status: {gate.evidence_status}. "
+        f"Optimization: {gate.strategy_optimization_status}."
+    )
+
+
+def load_evidence_health_dashboard_rows(path: Path | None = None) -> list[dict[str, str]]:
+    try:
+        report = build_evidence_health_report(alerts_path=path or (DATA_DIR / "opportunity-alerts.json"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return []
+    gate = report.evidence_gate
+    warning_count = len(report.warnings)
+    return [
+        {
+            "metric": "Completed Alerts",
+            "value": f"{report.completed_alerts} / {gate.required_alerts}",
+            "note": gate.allowed_action,
+            "severity": "good" if report.completed_alerts >= gate.required_alerts else "warn",
+        },
+        {
+            "metric": "Completion Rate",
+            "value": "n/a" if report.completion_rate_pct is None else f"{report.completion_rate_pct}%",
+            "note": f"{report.total_alerts} total; {report.pending_alerts} pending; {report.unscorable_alerts} unscorable",
+            "severity": "good" if report.pending_alerts == 0 and report.total_alerts else "warn",
+        },
+        {
+            "metric": "Unscorable Alerts",
+            "value": str(report.unscorable_alerts),
+            "note": format_reason_counts(report.unscorable_by_reason),
+            "severity": "warn" if report.unscorable_alerts else "good",
+        },
+        {
+            "metric": "Alert Funnel",
+            "value": f"{report.alerts_generated} -> {report.alerts_captured} -> {report.alerts_classified} -> {report.completed_outcomes}",
+            "note": "generated -> captured -> classified -> completed",
+            "severity": "good" if report.alerts_generated == report.completed_outcomes and report.alerts_generated else "warn",
+        },
+        {
+            "metric": "Data Issues",
+            "value": str(warning_count),
+            "note": "; ".join(report.warnings[:2]) if report.warnings else "none",
+            "severity": "warn" if warning_count else "good",
+        },
+        {
+            "metric": "Optimization Gate",
+            "value": gate.strategy_optimization_status,
+            "note": gate.reason,
+            "severity": "warn" if gate.strategy_optimization_status == "LOCKED" else "good",
+        },
+    ]
+
+
+def yes_no(value: bool) -> str:
+    return "yes" if value else "no"
+
+
+def alert_outcome_update_status_text(path: Path | None = None) -> str:
+    report = load_update_report(path or ALERT_OUTCOME_UPDATE_STATUS_PATH)
+    if report is None:
+        return "OUTCOME UPDATE: not run yet"
+    warning_note = f", {len(report.warnings)} warning(s)" if report.warnings else ""
+    return (
+        f"OUTCOME UPDATE: {report.updated_alert_count} changed, "
+        f"{report.completed_alert_count} completed, {report.pending_alert_count} pending, "
+        f"{report.unscorable_alert_count} unscorable, "
+        f"{report.bars_loaded_count} minute bar(s){warning_note}"
+    )
+
+
+def latest_opportunity_alert_json_path() -> Path | None:
+    reports_dir = DATA_DIR / "reports"
+    if not reports_dir.exists():
+        return None
+    files = list(reports_dir.glob("opportunity-alerts-*.json"))
+    if not files:
+        return None
+    return max(files, key=lambda path: path.stat().st_mtime)
+
+
+def latest_active_monitor_cycle_json_path() -> Path | None:
+    reports_dir = DATA_DIR / "reports"
+    if not reports_dir.exists():
+        return None
+    files = list(reports_dir.glob("active-monitor-cycle-*.json"))
+    if not files:
+        return None
+    return max(files, key=lambda path: path.stat().st_mtime)
+
+
+def load_active_monitor_cycle(path: Path | None = None) -> dict[str, object]:
+    path = path or latest_active_monitor_cycle_json_path()
+    if path is None or not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    cycle = payload.get("monitor_cycle", {})
+    return cycle if isinstance(cycle, dict) else {}
+
+
+def active_monitor_summary_text(path: Path | None = None) -> str:
+    cycle = load_active_monitor_cycle(path)
+    if not cycle:
+        return "ACTIVE MONITOR: NO CYCLE REPORT YET"
+    target_count = int_or_zero(cycle.get("target_count"))
+    active_alerts = int_or_zero(cycle.get("active_alert_count"))
+    new_alerts = int_or_zero(cycle.get("new_alert_count"))
+    coverage_rows = int_or_zero(cycle.get("coverage_row_count"))
+    warnings = cycle.get("warnings") if isinstance(cycle.get("warnings"), list) else []
+    if active_alerts or new_alerts:
+        return f"ACTIVE MONITOR: {active_alerts} active alert(s), {new_alerts} new alert(s), {target_count} target(s)"
+    if "COVERAGE_ROWS_WITHOUT_MARKET_DATA" in warnings:
+        return f"ACTIVE MONITOR: {target_count} target(s), {coverage_rows} coverage row(s) need market tape"
+    return f"ACTIVE MONITOR: {target_count} target(s), no active alerts"
+
+
+def load_active_monitor_dashboard_rows(path: Path | None = None) -> list[dict[str, str]]:
+    cycle = load_active_monitor_cycle(path)
+    runtime_rows = active_monitor_runtime_rows() if path is None else []
+    if not cycle:
+        return runtime_rows
+    warnings = cycle.get("warnings") if isinstance(cycle.get("warnings"), list) else []
+    missing = list_of_strings(cycle.get("missing_target_symbols"))
+    covered = list_of_strings(cycle.get("covered_missing_symbols"))
+    uncovered = list_of_strings(cycle.get("uncovered_missing_symbols"))
+    rows = runtime_rows + [
+        {
+            "metric": "Generated",
+            "value": str(cycle.get("generated_at", "")),
+            "note": Path(str(cycle.get("trade_report_path", ""))).name if cycle.get("trade_report_path") else "",
+            "severity": "good",
+        },
+        {
+            "metric": "Targets",
+            "value": str(cycle.get("target_count", 0)),
+            "note": ", ".join(list_of_strings(cycle.get("target_symbols"))) or "none",
+            "severity": "good" if int_or_zero(cycle.get("target_count")) else "warn",
+        },
+        {
+            "metric": "Matched / Covered",
+            "value": f"{cycle.get('matched_target_count', 0)} / {cycle.get('target_count', 0)}",
+            "note": f"coverage rows: {cycle.get('coverage_row_count', 0)}",
+            "severity": "warn" if uncovered else "good",
+        },
+        {
+            "metric": "Missing Source Rows",
+            "value": str(len(missing)),
+            "note": ", ".join(missing) if missing else "none",
+            "severity": "warn" if missing else "good",
+        },
+        {
+            "metric": "Covered Missing",
+            "value": str(len(covered)),
+            "note": ", ".join(covered) if covered else "none",
+            "severity": "warn" if "COVERAGE_ROWS_WITHOUT_MARKET_DATA" in warnings else "good",
+        },
+        {
+            "metric": "Refreshed Targets",
+            "value": str(cycle.get("refreshed_target_count", 0)),
+            "note": (
+                f"readiness changed: {cycle.get('readiness_changed_count', 0)}; "
+                f"{Path(str(cycle.get('market_data_refresh_report_path', ''))).name if cycle.get('market_data_refresh_report_path') else 'none'}"
+            ),
+            "severity": "warn" if int_or_zero(cycle.get("readiness_changed_count")) else ("good" if int_or_zero(cycle.get("refreshed_target_count")) else ""),
+        },
+        {
+            "metric": "Alerts",
+            "value": f"{cycle.get('active_alert_count', 0)} active / {cycle.get('new_alert_count', 0)} new",
+            "note": f"{cycle.get('tracked_alert_count', 0)} tracked; {cycle.get('state_transition_count', 0)} state transition(s)",
+            "severity": "warn" if int_or_zero(cycle.get("active_alert_count")) or int_or_zero(cycle.get("new_alert_count")) else "good",
+        },
+    ]
+    if warnings:
+        rows.append(
+            {
+                "metric": "Warnings",
+                "value": str(len(warnings)),
+                "note": "; ".join(str(item) for item in warnings[:3]),
+                "severity": "warn",
+            }
+        )
+    return rows
+
+
+def active_monitor_runtime_rows() -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    runner = load_active_monitor_runner_state(ACTIVE_MONITOR_RUNNER_PATH)
+    status = load_active_monitor_status(ACTIVE_MONITOR_STATUS_PATH)
+    if runner:
+        rows.append(
+            {
+                "metric": "Background",
+                "value": f"{runner.state} PID {runner.pid}",
+                "note": (
+                    f"every {runner.interval_seconds}s; missing quotes "
+                    f"{'on' if runner.fetch_missing_market_data else 'off'}; target refresh "
+                    f"{'on' if runner.refresh_target_market_data else 'off'}"
+                ),
+                "severity": "good" if runner.state == "RUNNING" else ("warn" if runner.state == "FAILED" else ""),
+            }
+        )
+    if status:
+        note = status.last_error or f"cycles {status.cycles_completed}/{status.cycles_requested}"
+        if status.next_cycle_at:
+            note = f"next {status.next_cycle_at}; {note}"
+        rows.append(
+            {
+                "metric": "Loop Status",
+                "value": status.state,
+                "note": note,
+                "severity": "warn" if status.state == "FAILED" else ("good" if status.state in {"RUNNING", "IDLE"} else ""),
+            }
+        )
+    return rows
+
+
+def load_user_monitor_symbol_rows(path: Path | None = None) -> list[dict[str, str]]:
+    try:
+        symbols = load_user_defined_symbols(path or MONITOR_SYMBOLS_PATH)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return []
+    return [
+        {
+            "symbol": item.symbol,
+            "enabled": "yes" if item.enabled else "no",
+            "notes": item.notes,
+            "added_at": item.added_at,
+        }
+        for item in sorted(symbols.values(), key=lambda record: record.symbol)
+    ]
+
+
+def int_or_zero(value: object) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def list_of_strings(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item)]
 
 
 def scanner_internal_name(display_name: str) -> str:

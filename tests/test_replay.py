@@ -133,6 +133,44 @@ class ReplayTests(unittest.TestCase):
         )
         self.assertTrue(all("Duplicate replay identity" in row.warnings for row in rows))
 
+    def test_timeline_marks_legacy_zero_relative_volume_as_unavailable(self) -> None:
+        payload = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", price=82.0, score=90)
+        payload["candidates"][0]["relative_volume"] = 0.0
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", payload)
+
+        rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        self.assertEqual("N/A (legacy zero)", rows[0].fields["relative_volume"].value)
+        self.assertIn("Relative volume unavailable in raw capture - displayed as N/A, not 0.0", rows[0].warnings)
+
+    def test_timeline_warns_on_repeated_signal_fingerprint_across_captures(self) -> None:
+        first = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", price=82.0, score=90)
+        second = capture_payload("2026-06-05T19:00:00-05:00", "evening", "Base Momentum", price=82.0, score=90)
+        write_capture(self.captures_dir / "2026-06-05" / "morning.json", first)
+        write_capture(self.captures_dir / "2026-06-05" / "evening.json", second)
+
+        rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        self.assertEqual(2, len(rows))
+        self.assertTrue(
+            all("Repeated signal fingerprint across captures - timestamp distinguishes this row" in row.warnings for row in rows)
+        )
+        self.assertNotEqual(rows[0].capture_time_text, rows[1].capture_time_text)
+
     def test_quarantined_captures_are_excluded_by_default_and_warn_when_visible(self) -> None:
         active = capture_payload("2026-06-05T07:00:00-05:00", "morning", "Base Momentum", price=82.0, score=90)
         quarantined = capture_payload("2026-06-06T07:00:00-05:00", "morning", "Base Momentum", price=88.0, score=91)

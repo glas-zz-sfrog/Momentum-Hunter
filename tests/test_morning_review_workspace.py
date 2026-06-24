@@ -107,6 +107,18 @@ class MorningReviewWorkspaceTests(unittest.TestCase):
         self.assertEqual(ReviewStatus.WATCHLIST, self.window._candidate_review_status(self.window.candidates[0]))
         self.assertTrue(self.button(dialog, "Add to Watchlist").isEnabled())
 
+    def test_workspace_entry_plan_save_requires_selected_candidate_feedback(self) -> None:
+        messages: list[str] = []
+        self.window.open_morning_review_workspace()
+        dialog = self.dialogs[-1]
+        self.window.morning_review_table.clearSelection()
+
+        with patch.object(self.window, "_show_action_blocked", lambda message, title="Action Not Available": messages.append(message)):
+            self.click_button(dialog, "Create/Edit Entry Plan")
+
+        self.assertTrue(messages)
+        self.assertIn("No candidate selected", messages[0])
+
     def test_aged_workspace_warns_but_allows_actions(self) -> None:
         self.window.display_capture_time = now_central() - timedelta(days=1)
         self.window.current_capture_time = self.window.display_capture_time

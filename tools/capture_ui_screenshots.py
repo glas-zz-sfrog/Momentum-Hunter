@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from contextlib import ExitStack
 from datetime import timedelta
@@ -53,7 +54,21 @@ def main() -> int:
         window.data_view_state = DataViewState.CURRENT
         window._apply_data_view_state()
         window._populate_table()
+        window.table.selectRow(0)
+        window._show_candidate_details(window.candidates[0])
         saved = [save_widget(app, window, "momentum_hunter_current_dashboard.png")]
+        saved.extend(
+            [
+                save_widget_area(app, window.active_monitor_table, "momentum_hunter_evidence_active_monitor_panel.png"),
+                save_widget_area(app, window.evidence_autopilot_table, "momentum_hunter_evidence_autopilot_section.png"),
+                save_widget_area(app, window.evidence_health_table, "momentum_hunter_evidence_health_section.png"),
+                save_widget_area(app, window.execution_ready_table, "momentum_hunter_execution_ready_section.png"),
+                save_widget_area(app, window.state_transition_table, "momentum_hunter_state_transitions_section.png"),
+                save_widget_area(app, window.active_alerts_table, "momentum_hunter_active_alerts_section.png"),
+                save_widget_area(app, window.alert_outcome_table, "momentum_hunter_alert_outcome_tracker_section.png"),
+                save_widget_area(app, window.alert_performance_table, "momentum_hunter_alert_performance_section.png"),
+            ]
+        )
 
         def capture_morning_dialog(dialog: QDialog) -> int:
             saved.append(save_widget(app, dialog, "momentum_hunter_morning_review.png"))
@@ -71,6 +86,30 @@ def main() -> int:
         with patch.object(QDialog, "exec", capture_daily_workflow_dialog):
             window.open_daily_workflow_checklist()
 
+        def capture_latest_watchlist_dialog(dialog: QDialog) -> int:
+            saved.append(save_widget(app, dialog, "momentum_hunter_latest_watchlist.png"))
+            dialog.close()
+            return 0
+
+        with patch.object(QDialog, "exec", capture_latest_watchlist_dialog):
+            window.view_research_list()
+
+        def capture_health_dialog(dialog: QDialog) -> int:
+            saved.append(save_widget(app, dialog, "momentum_hunter_capture_health.png"))
+            dialog.close()
+            return 0
+
+        with patch.object(QDialog, "exec", capture_health_dialog):
+            window.open_capture_health_report()
+
+        def capture_timeline_dialog(dialog: QDialog) -> int:
+            saved.append(save_widget(app, dialog, "momentum_hunter_timeline_replay.png"))
+            dialog.close()
+            return 0
+
+        with patch.object(QDialog, "exec", capture_timeline_dialog):
+            window.view_candidate_timeline()
+
         window._load_historical_capture(historical_payload())
         saved.append(save_widget(app, window, "momentum_hunter_historical_snapshot.png"))
 
@@ -85,17 +124,33 @@ def main() -> int:
         window._show_study_dialog(study_summary())
 
         window.close()
+        for widget in app.topLevelWidgets():
+            widget.close()
+        settle(app)
+        app.quit()
 
     print("Saved UI screenshots:")
     for path in saved:
         print(f" - {path}")
-    return 0
+    sys.stdout.flush()
+    os._exit(0)
 
 
 def save_widget(app: QApplication, widget, filename: str) -> Path:
     widget.show()
     widget.raise_()
     widget.activateWindow()
+    settle(app)
+    path = OUTPUT_DIR / filename
+    pixmap = widget.grab()
+    if pixmap.isNull():
+        raise RuntimeError(f"Could not capture screenshot for {filename}")
+    if not pixmap.save(str(path), "PNG"):
+        raise RuntimeError(f"Could not save screenshot to {path}")
+    return path
+
+
+def save_widget_area(app: QApplication, widget, filename: str) -> Path:
     settle(app)
     path = OUTPUT_DIR / filename
     pixmap = widget.grab()

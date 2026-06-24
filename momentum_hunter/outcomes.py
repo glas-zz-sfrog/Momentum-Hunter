@@ -19,6 +19,7 @@ class PriceBar:
     high: float
     low: float
     close: float
+    volume: int | None = None
 
 
 @dataclass(frozen=True)
@@ -168,6 +169,8 @@ def fetch_price_bars(session: requests.Session, ticker: str) -> list[PriceBar]:
             raw_close = quote["close"][index]
             raw_high = quote["high"][index]
             raw_low = quote["low"][index]
+            volumes = quote.get("volume") or []
+            raw_volume = volumes[index] if index < len(volumes) else None
             adjusted_close = adjclose[index] if index < len(adjclose) else raw_close
         except (KeyError, IndexError):
             continue
@@ -180,6 +183,7 @@ def fetch_price_bars(session: requests.Session, ticker: str) -> list[PriceBar]:
                 high=float(raw_high) * adjustment_ratio,
                 low=float(raw_low) * adjustment_ratio,
                 close=float(adjusted_close),
+                volume=int(raw_volume) if raw_volume is not None else None,
             )
         )
     return bars
@@ -187,6 +191,7 @@ def fetch_price_bars(session: requests.Session, ticker: str) -> list[PriceBar]:
 
 def build_http_session() -> requests.Session:
     session = requests.Session()
+    session.trust_env = False
     session.headers.update(
         {
             "User-Agent": (

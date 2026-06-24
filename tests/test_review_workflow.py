@@ -157,6 +157,24 @@ class ReviewWorkflowGuiTests(unittest.TestCase):
         self.assertEqual(ReviewStatus.WATCHLIST, statuses["MDT"])
         self.assertEqual(ReviewStatus.REJECTED, statuses["RXT"])
 
+    def test_dashboard_interested_candidate_updates_watchlist_center_immediately(self) -> None:
+        self.window.table.item(0, 0).setCheckState(Qt.CheckState.Checked)
+        self.window.mark_interested_candidates()
+
+        self.window._navigate_to_page(1)
+        self.assertIn("Interested: 1", self.window.watchlist_center_summary_label.text())
+        self.assertEqual("MDT", self.window.watchlist_center_table.item(0, 0).text())
+        self.assertEqual("Interested", self.window.watchlist_center_table.item(0, 1).text())
+
+        self.window.add_interested_to_watchlist()
+
+        self.assertIn("Interested: 0", self.window.watchlist_center_summary_label.text())
+        self.assertIn("Watchlist: 1", self.window.watchlist_center_summary_label.text())
+        self.assertEqual("Watchlist", self.window.watchlist_center_table.item(0, 1).text())
+        decisions = load_review_decisions(path=self.review_path)
+        statuses = {decision.identity.ticker: decision.review_status for decision in decisions.values()}
+        self.assertEqual(ReviewStatus.WATCHLIST, statuses["MDT"])
+
     def test_historical_view_is_read_only_for_review_status(self) -> None:
         self.window._load_historical_capture(
             {
@@ -197,7 +215,7 @@ class ReviewWorkflowGuiTests(unittest.TestCase):
             )
 
         self.assertIn("AGING BUT REVIEWABLE", self.window.view_state_label.text())
-        self.assertTrue(self.window.save_button.isEnabled())
+        self.assertTrue(self.window.mark_interested_button.isEnabled())
         self.assertFalse(self.window.entry_trigger.isReadOnly())
 
         self.window.table.item(0, 0).setCheckState(Qt.CheckState.Checked)
@@ -286,7 +304,7 @@ class ReviewWorkflowGuiTests(unittest.TestCase):
             )
 
         self.assertIn("EXPIRED REVIEW SNAPSHOT - READ ONLY", self.window.view_state_label.text())
-        self.assertFalse(self.window.save_button.isEnabled())
+        self.assertFalse(self.window.mark_interested_button.isEnabled())
         with patch.object(self.window, "_show_action_blocked", lambda message, title="Action Not Available": blocked_messages.append(message)):
             self.window.table.selectRow(0)
             self.window.mark_interested_candidates()

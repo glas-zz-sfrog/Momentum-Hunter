@@ -241,6 +241,110 @@ Opportunity Research excludes quarantined captures by using active raw-capture i
 
 Opportunity Research v1 does not create Opportunity Score, optimize weights, alter scoring profiles, fetch current market data, mutate raw captures, start broker integration, or start SQLite migration.
 
+## Opportunity Monitor Targets
+
+- Data layer: `momentum_hunter/monitor_targets.py`
+- User-defined symbol store: `MomentumHunterData/data/opportunity-monitor-symbols.json`
+- Report output: `MomentumHunterData/data/reports/opportunity-monitor-targets-*.csv`, `.json`, and `.md`
+- Source inputs: `review-decisions.json`, `entry-plans.json`, trade-planning report JSON files under `MomentumHunterData/data/reports/`
+- Mutability: derived operator preference/report store; may be updated by operator actions or target-resolver runs; must not mutate raw captures
+
+Opportunity Monitor Targets v1 resolves the active watch universe from watchlist decisions, interested decisions, saved entry plans, execution-ready trade-planning rows, and user-defined symbols. It deduplicates by symbol and records source reasons such as `watchlist`, `interested`, `entry_plan`, `execution_ready`, and `user_defined`.
+
+The main dashboard can add and remove user-defined monitor symbols. Those edits update `opportunity-monitor-symbols.json` only; they do not modify raw captures, review decisions, entry plans, score breakdowns, or historical reports.
+
+This layer does not fetch market data, create alerts, place orders, recalculate scores, or modify historical raw captures. It exists so a future continuous polling loop has a deterministic list of symbols to monitor.
+
+## Active Monitor Cycles
+
+- Data layer: `momentum_hunter/active_monitor.py`
+- Status store: `MomentumHunterData/data/active-monitor-status.json`
+- Background runner store: `MomentumHunterData/data/active-monitor-runner.json`
+- Report output: `MomentumHunterData/data/reports/active-monitor-cycle-*.csv`, `.json`, and `.md`
+- Refreshed target tape output: `MomentumHunterData/data/reports/active-monitor-refresh-*.json`
+- Source inputs: monitor target reports, trade-planning report JSON files, optional raw capture JSON when explicitly refreshing a trade-planning report
+- Derived outputs: monitor target reports, opportunity alert reports, active monitor cycle summaries
+- Mutability: derived monitoring artifacts only; must not mutate raw captures
+
+Active Monitor Cycle v1 ties together target resolution and alert detection. It resolves the active monitoring universe, filters opportunity alert detection to that universe, records missing target symbols that are not present in the current trade-planning report, and writes a cycle summary showing target counts, matched trade rows, new alerts, active alerts, tracked alerts, and state transitions.
+
+The cycle runner can optionally refresh a trade-planning report from a raw capture using existing trade-planning logic. That refresh may fetch quote data when explicitly requested, but any fetched values are written only to derived trade-planning reports and monitor-cycle artifacts.
+
+When a monitor target is missing from the source trade-planning report, the cycle runner writes a derived `active-monitor-coverage-*.json` report containing `MONITORING_ONLY` coverage rows. Coverage rows are not scanner candidates, do not contain capture-time raw facts, and must remain labeled with `COVERAGE_ROW_NOT_FROM_SCANNER` / `MISSING_SCANNER_CONTEXT` warnings. If quote tape is supplied or explicitly fetched, coverage rows may include price, bid/ask, spread, volume, premarket data, and RVOL policy fields for alert monitoring.
+
+When `--refresh-target-market-data` or the dashboard `Refresh target quotes` option is enabled, the cycle runner writes a derived `active-monitor-refresh-*.json` report that refreshes market tape for active monitor targets already present in the source trade-planning report. The report metadata records the source report, refreshed symbols, readiness recalculation count, readiness change count, and the warning that readiness was recalculated only in the derived monitor artifact. This gives alert detection fresher price/RVOL/readiness inputs without rewriting raw captures or silently changing the source trade-planning report.
+
+Loop runs update `active-monitor-status.json` before each cycle, after successful cycles, and after failures. The status file records `RUNNING`, `IDLE`, or `FAILED`, completed cycle count, interval, last cycle time, next cycle time, last report path, warnings, and last error. This file is derived runtime state and may be overwritten by monitor runs.
+
+The GUI can launch the loop as a background Python process via `momentum_hunter/active_monitor_runner.py`. Runner state is stored in `active-monitor-runner.json` with PID, command, interval, quote-fetch setting, state, and last error. This store is process-control metadata only and may be overwritten by Start/Stop Monitor actions.
+
+The GUI reads the latest `active-monitor-cycle-*.json` file for the main-dashboard Active Monitor panel. This is a read-only display of derived monitoring state.
+
+## Opportunity Alerts
+
+- UI location: main dashboard, `Execution Ready` group with `Active Alerts` and `State Transitions`
+- Data layer: `momentum_hunter/opportunity_alerts.py`
+- Alert store: `MomentumHunterData/data/opportunity-alerts.json`
+- Monitor state: `MomentumHunterData/data/opportunity-monitor-state.json`
+- Observation history: `MomentumHunterData/data/opportunity-price-observations.json`
+- Minute-bar validation store: `MomentumHunterData/data/opportunity-minute-bars.json`
+- Minute-bar updater status: `MomentumHunterData/data/alert-outcome-update-status.json`
+- Report output: `MomentumHunterData/data/reports/opportunity-alerts-*.csv`, `.json`, and `.md`
+- Source inputs: trade-planning report JSON files under `MomentumHunterData/data/reports/`
+- Mutability: derived validation store; may be appended/updated by alert-engine runs; must not mutate raw captures
+
+Opportunity Alert Engine v1 compares the latest trade-planning report to the prior monitor state and records timestamped alerts for state transitions, RVOL threshold crosses, breakout/reclaim events, and short-window price expansion. Each alert stores the exact market/planning context known at alert time, including bid, ask, spread, volume, RVOL, suggested entry, stop, targets, catalyst text, market regime, event-mode flag, and source report.
+
+Catalyst/news summary changes create `BREAKING_NEWS_CATALYST` alerts when the current monitored catalyst text changes from the previous monitor snapshot. These alerts are deterministic string-change alerts from stored monitor data; they do not call an AI service or fetch news directly.
+
+Each alert-engine run also appends timestamped price observations derived from the trade-planning report. Pending alerts are evaluated from observation history using fixed-time returns, 15/30/60-minute MFE and MAE, target/stop hits, stop-before-target ordering, and a deterministic classification of `SUCCESSFUL`, `FAILED`, `NOISE`, `LATE`, or `PENDING`. Permanently unscorable alerts receive terminal data-quality classifications such as `UNSCORABLE_MISSING_ENTRY_PRICE` or `UNSCORABLE_INVALID_TIMESTAMP` with `outcome.status = UNSCORABLE_OUTCOME`. Outcome updates modify only the derived alert store; they must not rewrite original alert facts or raw captures.
+
+`momentum_hunter/alert_outcome_updater.py` can update pending alert outcomes from one-minute bars. It persists bars in `opportunity-minute-bars.json` and updates `opportunity-alerts.json` with 5/15/30/60-minute returns, MFE/MAE from high/low bars, target/stop hits, stop-before-target ordering, and deterministic classification. This is derived validation data only; it must not mutate raw captures, scanner records, score breakdowns, or source trade-planning artifacts.
+
+The dashboard `Update Alert Outcomes` control writes the latest updater summary to `alert-outcome-update-status.json`, including alert counts, completed/pending/unscorable counts, symbols processed, bar count, and warnings. This status file is derived operator metadata and may be overwritten by future updater runs.
+
+Learning summaries are generated from derived alert records by alert type, symbol, readiness state, and market regime. Summaries include win rate, average returns, average MFE/MAE, target hit rate, and stop hit rate. These summaries are research evidence only; they must not be treated as trade recommendations.
+
+### Alert Performance Analytics
+
+- Data layer: `momentum_hunter/alert_performance.py`
+- Source input: `MomentumHunterData/data/opportunity-alerts.json`
+- Report output: `MomentumHunterData/data/reports/alert-performance-report-*.json` and `.md`
+- UI location: main dashboard, `Execution Ready` group, `Alert Performance` section
+- Mutability: derived read-only analytics; report generation does not mutate raw captures, trade plans, readiness rules, monitor state, or alert-generation logic
+
+Alert Performance Analytics v1 groups completed, pending, and unscorable alert outcomes by alert type, symbol, and readiness state. It reports alert count, completed/pending/unscorable counts, win rate, 5/15/30/60-minute returns, average MFE/MAE, and `SUCCESSFUL` / `FAILED` / `NOISE` / `LATE` rates. Pending and unscorable alerts are excluded from completed-return math. Small samples are labeled diagnostic only.
+
+### Evidence Health And Reliability
+
+- Data layer: `momentum_hunter/evidence_health.py`
+- Autopilot layer: `momentum_hunter/evidence_autopilot.py`
+- Scheduled runner: `tools/run_evidence_report_job.ps1`
+- Scheduled task installer: `tools/install_evidence_report_tasks.ps1`
+- Source inputs: `opportunity-alerts.json`, `opportunity-minute-bars.json`, `alert-outcome-update-status.json`, `active-monitor-status.json`, and `active-monitor-cycle-*.json`
+- Autopilot status store: `MomentumHunterData/data/evidence-autopilot-status.json`
+- Report output: `MomentumHunterData/data/reports/evidence-health-report-*.json`, `.md`, `reliability-report-*.json`, and `.md`
+- Daily brief output: `MomentumHunterData/data/reports/daily-evidence-brief-YYYY-MM-DD.md`
+- UI location: main dashboard, `Execution Ready` group, `Evidence Health` section
+- Mutability: derived reporting only; must not mutate raw captures, alert facts, minute bars, trade plans, scoring, readiness logic, ranking, or monitoring rules
+
+Evidence Health v1 measures whether the alert evidence pipeline is complete. It tracks alerts generated, alerts captured, alerts classified, completed outcomes, pending alerts, terminal unscorable alerts, stale pending alerts, missing minute bars, missing outcome data, incomplete outcome calculations, missing readiness states, and missing news snapshots. Terminal unscorable alerts are preserved for auditability but excluded from pending counts, completed outcome counts, and evidence thresholds.
+
+Reliability reporting measures monitor-cycle count, successful cycles, failed cycles when the active-monitor status records failure, warning cycles, cycle reliability, alert completion rate, outcome job status, and missing-data incident count. The optional Windows scheduled tasks generate daily Evidence Health and weekly Reliability reports; installing those tasks does not change capture, alert, readiness, scoring, ranking, or trade-planning behavior.
+
+Evidence thresholds are enforced as reporting gates only:
+
+| Completed Alerts | Allowed Action |
+| ---: | --- |
+| `<25` | Collect evidence only |
+| `25-49` | Identify patterns |
+| `50-99` | Recommend investigations |
+| `100+` | Recommend strategy modifications |
+
+These gates do not change signal generation. They prevent premature optimization language in reports and dashboard summaries.
+
+Evidence Autopilot v1 is orchestration only. It runs the existing monitor cycle, existing alert outcome updater, existing Evidence Health report, and daily evidence brief writer. It stores run status separately in `evidence-autopilot-status.json`. It must not duplicate or alter alert-generation rules, score calculations, readiness classification, ranking, or trade-planning logic.
+
 ## Catalyst Date / Age Engine
 
 - UI location: Research Lab dialog, `Catalyst - Age` tab
@@ -334,6 +438,9 @@ Each manifest record stores:
 - `analysis-captures.csv`: normalized derived analysis rows
 - `analysis-outcomes.csv`: future outcome labels
 - `score-breakdowns.json`: rebuildable score explanation records
+- `opportunity-alerts.json`: derived alert validation records
+- `opportunity-monitor-state.json`: latest per-symbol alert-engine comparison state
+- `opportunity-price-observations.json`: derived monitor observation history used to update alert outcomes
 - `watchlist-*.json` and `watchlist-report-*.md`: user-facing derived watchlist artifacts
 - `integrity/capture_manifest.json`: external raw capture integrity metadata
 - `integrity/raw_capture_integrity_audit.*`: latest audit output

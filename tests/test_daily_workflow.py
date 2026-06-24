@@ -150,6 +150,7 @@ class DailyWorkflowTests(unittest.TestCase):
         self.assertTrue(self.button(dialog, "Open Readiness Gate").isEnabled())
 
     def test_operator_navigation_labels_are_clear(self) -> None:
+        self.assertFalse(hasattr(self.window, "save_button"))
         self.assertEqual("Daily Checklist", self.window.daily_checklist_button.text())
         self.assertEqual("Morning Review", self.window.morning_review_button.text())
         self.assertEqual("Capture Health", self.window.capture_health_button.text())
@@ -158,6 +159,7 @@ class DailyWorkflowTests(unittest.TestCase):
         self.assertEqual("Open Historical Snapshot", self.window.open_capture_button.text())
         self.assertEqual("Current Dashboard", self.window.current_button.text())
         self.assertEqual("Research Lab", self.window.study_button.text())
+        self.assertIn("checked rows", self.window.mark_interested_button.toolTip())
         self.assertIn("No orders", self.window.watchlist_button.toolTip())
         self.assertIn("Research-only", self.window.study_button.toolTip())
 

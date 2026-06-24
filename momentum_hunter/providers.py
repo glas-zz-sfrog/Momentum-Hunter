@@ -140,6 +140,7 @@ class FinvizProvider(MarketDataProvider):
     def __init__(self, *, sleeper=time.sleep, backoff_seconds: tuple[int, ...] = FINVIZ_BACKOFF_SECONDS) -> None:
         self.sleeper = sleeper
         self.backoff_seconds = backoff_seconds
+        self._quote_html_cache: dict[str, str] = {}
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -180,15 +181,19 @@ class FinvizProvider(MarketDataProvider):
                 )
             )
 
+        for candidate in candidates:
+            try:
+                self._apply_quote_snapshot_fields(candidate)
+            except Exception:
+                continue
+
         return filter_candidates(candidates, criteria)
 
     def fetch_news(self, ticker: str, as_of: datetime | None = None) -> list[NewsItem]:
         from bs4 import BeautifulSoup
 
         cutoff = as_of or now_central()
-        url = f"{self.base_url}/quote.ashx?t={ticker}"
-        response = self._get_with_retries(url, action=f"news for {ticker}")
-        soup = BeautifulSoup(response.text, "lxml")
+        soup = BeautifulSoup(self._quote_html(ticker), "lxml")
         news_table = soup.find(id="news-table")
         if news_table is None:
             return []
@@ -212,6 +217,27 @@ class FinvizProvider(MarketDataProvider):
                 )
             )
         return items
+
+    def _apply_quote_snapshot_fields(self, candidate: Candidate) -> None:
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(self._quote_html(candidate.ticker), "lxml")
+        snapshot_table = soup.find("table", class_=lambda value: value and "snapshot-table" in value)
+        if snapshot_table is None:
+            return
+        cells = [cell.get_text(" ", strip=True) for cell in snapshot_table.find_all("td")]
+        values = parse_finviz_snapshot_values(cells)
+        relative_volume = parse_float(values.get("rel volume", "").replace("x", ""))
+        if relative_volume > 0:
+            candidate.relative_volume = relative_volume
+
+    def _quote_html(self, ticker: str) -> str:
+        normalized = ticker.upper().strip()
+        if normalized not in self._quote_html_cache:
+            url = f"{self.base_url}/quote.ashx?t={normalized}"
+            response = self._get_with_retries(url, action=f"quote snapshot for {normalized}")
+            self._quote_html_cache[normalized] = response.text
+        return self._quote_html_cache[normalized]
 
     def _screener_url(self, criteria: ScannerCriteria) -> str:
         cap_filter = "cap_midover" if criteria.min_market_cap >= 2_000_000_000 else "cap_smallover"
@@ -349,6 +375,14 @@ def parse_int(value: str) -> int:
         return int(float(value.replace(",", "")))
     except ValueError:
         return 0
+
+
+def parse_finviz_snapshot_values(cells: list[str]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for index in range(0, len(cells) - 1, 2):
+        label = " ".join(cells[index].lower().split())
+        values[label] = cells[index + 1]
+    return values
 
 
 def _loose_criteria() -> ScannerCriteria:

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import unittest
+import time
 from datetime import timedelta
 from unittest.mock import patch
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel, QDialog, QTableWidget, QWidget
 
-from momentum_hunter.app import MomentumHunterWindow
+from momentum_hunter.app import MomentumHunterWindow, format_score_breakdown_html
 from momentum_hunter.models import Candidate, NewsItem
 from momentum_hunter.providers import ProviderUnavailableError
 from momentum_hunter.study import RegimeSummary, ScoreBucketSummary, StudySummary
@@ -39,6 +40,169 @@ class GuiStateTests(unittest.TestCase):
         for patcher in reversed(self.patches):
             patcher.stop()
 
+    def wait_until(self, condition, timeout: float = 2.0) -> bool:
+        deadline = time.perf_counter() + timeout
+        while time.perf_counter() < deadline:
+            self.app.processEvents()
+            if condition():
+                return True
+            time.sleep(0.01)
+        return False
+
+    def test_command_center_navigation_pages_exist(self) -> None:
+        self.assertEqual(6, self.window.page_stack.count())
+        self.assertEqual(
+            ["Dashboard", "Watchlist", "Evidence", "Research", "Replay", "Health"],
+            [button.text() for button in self.window.nav_buttons],
+        )
+        self.assertEqual(0, self.window.page_stack.currentIndex())
+
+        self.window._navigate_to_page(2)
+
+        self.assertEqual(2, self.window.page_stack.currentIndex())
+        self.assertTrue(self.window.nav_buttons[2].isChecked())
+        self.assertFalse(self.window.nav_buttons[0].isChecked())
+        self.assertTrue(hasattr(self.window, "execution_ready_table"))
+        self.assertTrue(hasattr(self.window, "provider_status_label"))
+
+    def test_selecting_candidate_does_not_mark_it_reviewed(self) -> None:
+        self.window.data_view_state = DataViewState.CURRENT
+        self.window.display_capture_time = now_central() - timedelta(seconds=30)
+        self.window.display_session_label = "live"
+        self.window.candidates = [candidate("LOOK", score=88)]
+
+        self.window._apply_data_view_state()
+        self.window._populate_table()
+
+        self.assertEqual("LOOK", self.window.selected_ticker)
+        self.assertNotIn("LOOK", self.window.reviewed_tickers)
+        self.assertNotIn("LOOK", self.window.live_reviewed_tickers)
+        self.assertEqual("Unreviewed", self.window.table.item(0, 1).text())
+
+    def test_checked_rows_survive_row_selection_and_detail_refresh(self) -> None:
+        self.window.data_view_state = DataViewState.CURRENT
+        self.window.display_capture_time = now_central() - timedelta(seconds=30)
+        self.window.display_session_label = "live"
+        self.window.candidates = [candidate("KEEP", score=88), candidate("VIEW", score=84)]
+
+        self.window._apply_data_view_state()
+        self.window._populate_table()
+        self.window.table.item(0, 0).setCheckState(Qt.CheckState.Checked)
+        self.window.table.selectRow(1)
+        self.window._show_candidate_details(self.window.candidates[1])
+
+        self.assertEqual(Qt.CheckState.Checked, self.window.table.item(0, 0).checkState())
+        self.assertEqual("VIEW", self.window.selected_ticker)
+
+    def test_readiness_gate_failure_shows_visible_feedback(self) -> None:
+        messages: list[tuple[str, str]] = []
+
+        def blocked(message: str, title: str = "Action Not Available") -> None:
+            messages.append((title, message))
+
+        with (
+            patch("momentum_hunter.app.build_outcome_maturity_report", side_effect=RuntimeError("boom")),
+            patch.object(self.window, "_show_action_blocked", blocked),
+        ):
+            self.window.open_readiness_gate()
+
+        self.assertTrue(self.wait_until(lambda: bool(messages)))
+        self.assertEqual("Readiness Gate Error", messages[0][0])
+        self.assertIn("RuntimeError", messages[0][1])
+        self.assertIn("boom", messages[0][1])
+
+    def test_research_lab_failure_shows_visible_feedback(self) -> None:
+        messages: list[tuple[str, str]] = []
+
+        def blocked(message: str, title: str = "Action Not Available") -> None:
+            messages.append((title, message))
+
+        with (
+            patch("momentum_hunter.app.build_capture_study", side_effect=RuntimeError("boom")),
+            patch.object(self.window, "_show_action_blocked", blocked),
+        ):
+            self.window.open_study_engine()
+
+        self.assertTrue(self.wait_until(lambda: bool(messages)))
+        self.assertEqual("Research Lab Error", messages[0][0])
+        self.assertIn("RuntimeError", messages[0][1])
+        self.assertIn("boom", messages[0][1])
+
+    def test_research_lab_open_returns_control_before_slow_report_finishes(self) -> None:
+        opened: list[object] = []
+
+        def slow_study():
+            time.sleep(0.25)
+            return study_summary()
+
+        with (
+            patch("momentum_hunter.app.build_capture_study", slow_study),
+            patch.object(self.window, "_show_study_dialog", lambda summary: opened.append(summary)),
+        ):
+            started = time.perf_counter()
+            self.window.open_study_engine()
+            elapsed = time.perf_counter() - started
+
+        self.assertLess(elapsed, 0.15)
+        self.assertTrue(self.wait_until(lambda: bool(opened), timeout=3.0))
+
+    def test_score_breakdown_html_uses_readable_units_and_freshness_note(self) -> None:
+        capture_time = now_central()
+        candidate_with_news = candidate("UNIT", score=96)
+        candidate_with_news.news = [
+            NewsItem(
+                headline="Unit Corp posts strong earnings beat",
+                source="Finviz",
+                published_at=capture_time - timedelta(minutes=32),
+            )
+        ]
+        record = {
+            "ticker": "UNIT",
+            "final_score": 96,
+            "identity": {"capture_time": capture_time.isoformat(), "session": "live", "provider": "finviz", "scanner": "Base Momentum", "mode": "PAPER"},
+            "components": [
+                {
+                    "key": "market_cap",
+                    "label": "Market Cap",
+                    "category": "bonus",
+                    "rule": ">= 50,000,000,000 => +12; >= 5,000,000,000 => +9",
+                    "raw_inputs": {"market_cap": 40_000_000_000},
+                    "points_before_adjustment": 9,
+                    "points_after_adjustment": 9,
+                    "explanation": "mid/large cap participation",
+                },
+                {
+                    "key": "volume",
+                    "label": "Volume",
+                    "category": "bonus",
+                    "rule": ">= 25,000,000 => +12; >= 3,000,000 => +8",
+                    "raw_inputs": {"volume": 20_000_000},
+                    "points_before_adjustment": 8,
+                    "points_after_adjustment": 8,
+                    "explanation": "20,000,000 volume",
+                },
+                {
+                    "key": "freshness_context",
+                    "label": "Freshness Context",
+                    "category": "context",
+                    "rule": "Current engine records freshness for explainability; freshness does not add or subtract points in momentum_score_v1.",
+                    "raw_inputs": {"freshness": "HOT", "freshness_score": 99, "article_count": 1},
+                    "points_before_adjustment": 0,
+                    "points_after_adjustment": 0,
+                    "explanation": "Latest valid article freshness is HOT with score 99.",
+                },
+            ],
+        }
+
+        html = format_score_breakdown_html(record, candidate=candidate_with_news)
+
+        self.assertIn("$40.0B", html)
+        self.assertIn("20.0M", html)
+        self.assertIn("Base Points", html)
+        self.assertIn("Applied Impact", html)
+        self.assertIn("Freshness is recorded", html)
+        self.assertIn("Unit Corp posts strong earnings beat", html)
+
     def test_fresh_current_dashboard_allows_decisions(self) -> None:
         self.window.data_view_state = DataViewState.CURRENT
         self.window.display_capture_time = now_central() - timedelta(seconds=30)
@@ -53,7 +217,7 @@ class GuiStateTests(unittest.TestCase):
         self.assertEqual("LIVE - Top Momentum Candidates", self.window.chart_state_label.text())
         self.assertEqual("Why 91?", self.window.why_score_button.text())
         self.assertTrue(self.window.why_score_button.isEnabled())
-        self.assertTrue(self.window.save_button.isEnabled())
+        self.assertTrue(self.window.mark_interested_button.isEnabled())
         self.assertFalse(self.window.notes_edit.isReadOnly())
         self.assertTrue(self.window.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable)
 
@@ -68,7 +232,7 @@ class GuiStateTests(unittest.TestCase):
 
         self.assertIn("CURRENT MANUAL SCAN - AGED BUT REVIEWABLE", self.window.view_state_label.text())
         self.assertEqual("AGED - Top Momentum Candidates", self.window.chart_state_label.text())
-        self.assertTrue(self.window.save_button.isEnabled())
+        self.assertTrue(self.window.mark_interested_button.isEnabled())
         self.assertFalse(self.window.notes_edit.isReadOnly())
         self.assertTrue(self.window.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable)
 
@@ -147,7 +311,7 @@ class GuiStateTests(unittest.TestCase):
 
         self.assertIn("HISTORICAL SNAPSHOT - READ ONLY", self.window.view_state_label.text())
         self.assertEqual("HISTORICAL - Top Momentum Candidates", self.window.chart_state_label.text())
-        self.assertFalse(self.window.save_button.isEnabled())
+        self.assertFalse(self.window.mark_interested_button.isEnabled())
         self.assertTrue(self.window.notes_edit.isReadOnly())
         self.assertEqual("Watchlist", self.window.table.item(0, 1).text())
         self.assertFalse(self.window.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable)
@@ -156,7 +320,7 @@ class GuiStateTests(unittest.TestCase):
 
         self.assertIn("CURRENT DASHBOARD - LIVE REVIEW", self.window.view_state_label.text())
         self.assertEqual("CURR", self.window.table.item(0, 4).text())
-        self.assertTrue(self.window.save_button.isEnabled())
+        self.assertTrue(self.window.mark_interested_button.isEnabled())
         self.assertFalse(self.window.notes_edit.isReadOnly())
 
     def test_study_dialog_shows_simulated_read_only_context(self) -> None:
