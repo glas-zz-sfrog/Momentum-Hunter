@@ -11,8 +11,8 @@ from datetime import datetime
 from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QBrush, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QMargins, QObject, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QColor, QBrush, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QLineSeries, QScatterSeries, QValueAxis
 from PySide6.QtWidgets import (
     QApplication,
@@ -5064,26 +5064,103 @@ def populate_candidate_story_rows(table: QTableWidget, summary: CandidateStorySu
         table.selectRow(0)
 
 
+STORY_PRICE_COLOR = "#38bdf8"
+STORY_SCORE_COLOR = "#f59e0b"
+STORY_CAPTURE_COLOR = "#e2e8f0"
+STORY_FIRST_COLOR = "#a78bfa"
+STORY_PEAK_COLOR = "#fb7185"
+STORY_LATEST_COLOR = "#22d3ee"
+
+
+def story_legend_label(color: str, label: str, detail: str = "") -> QLabel:
+    detail_html = f"<span style='color:#9fb0c2;'> {escape(detail)}</span>" if detail else ""
+    label_widget = QLabel(
+        "<span style='font-size:12pt; font-weight:700;'>"
+        f"<span style='color:{color};'>■</span> {escape(label)}"
+        f"{detail_html}</span>"
+    )
+    label_widget.setTextFormat(Qt.TextFormat.RichText)
+    label_widget.setMinimumHeight(28)
+    return label_widget
+
+
+def format_story_marker_detail(summary: CandidateStorySummary, label: str, index: int) -> str:
+    point = summary.points[index]
+    if label.startswith("First"):
+        return f"{point.capture_label} {point.session_marker} {format_story_price(point.price)}"
+    if label.startswith("Peak"):
+        return f"{point.capture_label} {point.session_marker} score {format_story_score(point.score)}"
+    if label.startswith("Latest"):
+        return f"{point.capture_label} {point.session_marker} {format_story_price(point.price)}"
+    return f"{point.capture_label} {point.session_marker}"
+
+
+def story_marker_color(label: str) -> str:
+    if label.startswith("First"):
+        return STORY_FIRST_COLOR
+    if label.startswith("Peak"):
+        return STORY_PEAK_COLOR
+    if label.startswith("Latest"):
+        return STORY_LATEST_COLOR
+    return STORY_CAPTURE_COLOR
+
+
 def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
     if not summary.points:
         return story_placeholder("No trusted captures found for this ticker.")
     if not summary.chartable_price_points:
         return story_placeholder("Capture trail cannot be charted because stored prices are missing.")
 
+    container = QWidget()
+    container_layout = QVBoxLayout(container)
+    container_layout.setContentsMargins(0, 0, 0, 0)
+    container_layout.setSpacing(8)
+
+    legend_row = QWidget()
+    legend_layout = QHBoxLayout(legend_row)
+    legend_layout.setContentsMargins(10, 4, 10, 0)
+    legend_layout.setSpacing(16)
+    legend_layout.addWidget(story_legend_label(STORY_PRICE_COLOR, "Price", "left axis"))
+    legend_layout.addWidget(story_legend_label(STORY_SCORE_COLOR, "Score", "right axis"))
+    legend_layout.addWidget(story_legend_label(STORY_CAPTURE_COLOR, "Capture point"))
+    legend_layout.addStretch(1)
+    container_layout.addWidget(legend_row)
+
+    marker_row = QWidget()
+    marker_layout = QHBoxLayout(marker_row)
+    marker_layout.setContentsMargins(10, 0, 10, 0)
+    marker_layout.setSpacing(12)
+    for label, index in story_marker_specs(summary):
+        marker_layout.addWidget(
+            story_legend_label(
+                story_marker_color(label),
+                label,
+                format_story_marker_detail(summary, label, index),
+            )
+        )
+    marker_layout.addStretch(1)
+    container_layout.addWidget(marker_row)
+
     chart = QChart()
-    chart.setTitle("Capture Trail: Price and Momentum Score")
-    chart.setBackgroundBrush(QBrush(QColor("#0b1118")))
-    chart.setPlotAreaBackgroundBrush(QBrush(QColor("#101b29")))
+    chart.setTitle("Capture Trail")
+    chart.setTitleBrush(QBrush(QColor("#dbeafe")))
+    chart.setBackgroundBrush(QBrush(QColor("#07111d")))
+    chart.setPlotAreaBackgroundBrush(QBrush(QColor("#0f1c2c")))
     chart.setPlotAreaBackgroundVisible(True)
-    chart.legend().setVisible(True)
+    chart.setMargins(QMargins(10, 10, 10, 10))
+    chart.legend().setVisible(False)
 
     price_series = QLineSeries()
     price_series.setName("Price")
+    price_series.setPen(QPen(QColor(STORY_PRICE_COLOR), 3))
     price_markers = QScatterSeries()
     price_markers.setName("Capture points")
     price_markers.setMarkerSize(10)
+    price_markers.setColor(QColor(STORY_CAPTURE_COLOR))
+    price_markers.setBorderColor(QColor("#f8fafc"))
     score_series = QLineSeries()
     score_series.setName("Score")
+    score_series.setPen(QPen(QColor(STORY_SCORE_COLOR), 3))
 
     price_values: list[float] = []
     score_values: list[float] = []
@@ -5106,6 +5183,7 @@ def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
     axis_x.setLabelFormat("%d")
     axis_x.setRange(0, max(1, len(summary.points) - 1))
     axis_x.setTickCount(max(2, min(8, len(summary.points))))
+    style_story_axis(axis_x)
 
     min_price = min(price_values)
     max_price = max(price_values)
@@ -5114,6 +5192,7 @@ def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
     axis_price.setTitleText("Price")
     axis_price.setLabelFormat("$%.2f")
     axis_price.setRange(max(0, min_price - padding), max_price + padding)
+    style_story_axis(axis_price)
 
     chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
     chart.addAxis(axis_price, Qt.AlignmentFlag.AlignLeft)
@@ -5127,6 +5206,7 @@ def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
         axis_score.setTitleText("Score")
         axis_score.setLabelFormat("%.0f")
         axis_score.setRange(0, max(100, max(score_values) + 5))
+        style_story_axis(axis_score)
         chart.addAxis(axis_score, Qt.AlignmentFlag.AlignRight)
         score_series.attachAxis(axis_x)
         score_series.attachAxis(axis_score)
@@ -5138,7 +5218,9 @@ def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
             continue
         marker = QScatterSeries()
         marker.setName(label)
-        marker.setMarkerSize(15)
+        marker.setMarkerSize(17)
+        marker.setColor(QColor(story_marker_color(label)))
+        marker.setBorderColor(QColor("#f8fafc"))
         marker.append(index, point.price)
         chart.addSeries(marker)
         marker.attachAxis(axis_x)
@@ -5146,8 +5228,18 @@ def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
 
     chart_view = QChartView(chart)
     chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
-    chart_view.setMinimumHeight(320)
-    return chart_view
+    chart_view.setMinimumHeight(340)
+    container_layout.addWidget(chart_view, 1)
+    container.setMinimumHeight(410)
+    return container
+
+
+def style_story_axis(axis: QValueAxis) -> None:
+    axis.setLabelsColor(QColor("#dbeafe"))
+    axis.setTitleBrush(QBrush(QColor("#dbeafe")))
+    axis.setLinePen(QPen(QColor("#94a3b8"), 1))
+    axis.setGridLineColor(QColor("#334155"))
+    axis.setMinorGridLineColor(QColor("#1e293b"))
 
 
 def story_marker_specs(summary: CandidateStorySummary) -> list[tuple[str, int]]:
