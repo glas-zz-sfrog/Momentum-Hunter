@@ -125,6 +125,22 @@ MomentumHunterData\data\reports\system-readiness-latest.md
 
 These reports are diagnostic only. They do not change scanner logic, scoring, readiness states, alert thresholds, trade-planning rules, raw captures, broker behavior, or automated trading behavior.
 
+## SQLite Foundation
+
+Momentum Hunter has an additive SQLite foundation for future storage migration work. It does not replace the current JSON/CSV files yet.
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration
+```
+
+This initializes:
+
+```text
+MomentumHunterData\data\momentum-hunter.sqlite3
+```
+
+The first low-risk vertical slice imports provider/data-quality report rows into `provider_quality_checks`. Existing report files remain the current operator-facing artifacts.
+
 ## Watchlist Discipline
 
 When a current/live candidate is moved to Watchlist, Momentum Hunter can store an entry plan with trigger, stop, thesis, invalidation, max loss, position size idea, planned hold time, and notes. Incomplete plans show warnings for missing trigger, stop, invalidation, and max loss.

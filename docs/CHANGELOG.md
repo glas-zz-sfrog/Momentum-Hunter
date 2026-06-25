@@ -4,6 +4,10 @@
 
 ### Added
 
+- Added SQLite Migration Foundation v1 documentation with current storage audit, risk classification, and initial schema proposal.
+- Added additive SQLite adapter and migration CLI for `MomentumHunterData/data/momentum-hunter.sqlite3`.
+- Added idempotent schema initialization and first low-risk vertical slice importing provider/data-quality report rows into `provider_quality_checks`.
+- Added focused SQLite tests for schema initialization, idempotent migrations, import round trip, duplicate handling, DB creation, report generation, and source-file immutability.
 - Added Autonomous Reliability Sprint v1 report layer with `momentum_hunter.data_quality`, `momentum_hunter.evidence_autopilot_reliability`, and `momentum_hunter.system_readiness`.
 - Added latest derived reports for provider/data-quality audit, Evidence Autopilot reliability, and system readiness under `MomentumHunterData/data/reports/`.
 - Added explicit timestamp-quality accounting to the data-quality report so unavailable quote timestamps are marked unknown rather than treated as fresh.
@@ -14,6 +18,7 @@
 ### Safety
 
 - Reliability reports are read-only diagnostics. They do not change scanner logic, scoring math, readiness thresholds, alert generation, ranking, trade-planning rules, raw captures, broker behavior, or automated trading behavior.
+- SQLite is additive only. Existing JSON/CSV/Markdown outputs remain active, and raw captures plus user-authored review/watchlist/entry-plan state remain file-based.
 
 ## 2026-06-24
 

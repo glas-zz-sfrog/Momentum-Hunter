@@ -157,6 +157,17 @@ The Research Lab area excludes rows where `is_study_eligible` is false by defaul
 
 Reliability reports are derived operator trust artifacts. They read existing raw captures, derived stores, monitor status, evidence status, and watchlist state, then write latest report files. They must not mutate raw captures, rewrite score values, change readiness rules, alter alert thresholds, or modify trade-planning rules.
 
+## SQLite foundation
+
+- Path: `MomentumHunterData/data/momentum-hunter.sqlite3`
+- Owner: `momentum_hunter/sqlite_store.py`, `momentum_hunter/sqlite_migration.py`
+- Mutability: additive derived mirror only
+- Current first slice: `provider_quality_checks` imported from `MomentumHunterData/data/reports/data-quality-latest.json`
+
+SQLite is not the runtime source of truth yet. Existing raw captures, CSVs, JSON state stores, Markdown reports, and status files remain in place. The SQLite foundation currently provides schema initialization, idempotent migration tracking, and a low-risk import path for provider/data-quality report rows.
+
+Do not migrate raw captures, review decisions, watchlist state, or entry plans into SQLite as the only source of truth until backup, conflict handling, hash validation, and recovery behavior are designed and tested.
+
 ## Historical Cluster Display
 
 - UI location: Research Lab dialog, `Catalyst - Historical Setups` tab
