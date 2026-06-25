@@ -84,9 +84,20 @@ Incomplete-plan warnings are derived from missing trigger, stop, invalidation, a
 - Path: `MomentumHunterData/data/analysis-outcomes.csv`
 - Owner: outcome updater
 - Mutability: rebuildable
-- Stores: future return labels, outcome windows, max gain/drawdown
+- Stores: future return labels, outcome windows, max gain/drawdown, expected outcome session dates, per-horizon outcome states, reason codes, and outcome calculation version
 
 Outcomes are labels computed after capture time. They can use future bars for labeling, but they must not be written back into raw captures.
+
+Outcome rows distinguish maturity/data-quality states for each horizon:
+
+- `pending_not_mature`: the expected market session has not matured yet
+- `complete`: the expected market session has a usable price bar and return label
+- `provider_data_missing`: the expected market session has matured, but the provider did not return a usable bar
+- `calculation_failed`: the row cannot be calculated because required capture inputs are missing or invalid
+- `ineligible_capture`: the source capture is excluded from ordinary study outcome calculations
+- `calendar_mapping_error`: the expected outcome session could not be mapped to a valid market-open day
+
+The outcome updater uses `expected_next_day_session_date` and `expected_five_day_session_date` so holiday/weekend gaps are explicit. For example, a June 18, 2026 capture has an expected next-day outcome session of June 22, 2026 because June 19 was Juneteenth and the market was closed.
 
 ## Score breakdowns
 
@@ -369,14 +380,22 @@ Age buckets are `<1h`, `1-4h`, `4-12h`, `12-24h`, `1-3d`, `3d+`, `unknown`, and 
 
 Unknown and invalid timestamps are counted separately and never receive HOT/FRESH treatment. Outcome values in the age tab are post-capture labels shown for research context only.
 
-## Candidate Timeline and Replay Mode
+## Candidate Story, Timeline, and Replay Mode
 
 - UI entry: select a candidate and click `Timeline / Replay`
 - Data layer: `momentum_hunter/replay.py`
 - Source inputs: active raw captures, `score-breakdowns.json`, `review-decisions.json`, and `analysis-outcomes.csv`
-- Mutability: read-only view model; no replay operation modifies raw captures or derived stores
+- Mutability: read-only view model; no story/timeline/replay operation modifies raw captures or derived stores
+
+Candidate Story is the default operator presentation for Timeline / Replay. It builds a graph-first view from existing `TimelineRow` data: first/latest capture, first/latest price, move since first seen, score movement, peak score, trusted capture count, plain-language status, a capture-trail price/score chart, and simplified capture rows.
+
+Candidate Story does not create a new persisted data store. It is derived display state built from raw captures and existing derived stores. Missing prices, relative volume, minute bars, 5D context, review annotations, and outcome labels are shown as missing instead of invented.
+
+The dense metadata table remains available as `Advanced Capture Audit`.
 
 Timeline rows expose capture time, session, provider, scanner preset, score, score profile/version, market regime, review status, outcome status, score-breakdown status, and trust classification. The replay detail dialog is labeled `POINT-IN-TIME REPLAY — READ ONLY`.
+
+Timeline and Replay views also expose a visible audit identity strip for the selected row. It includes selected capture timestamp, capture ID, selected symbol, candidate row ID, candidate fingerprint, outcome record ID, source capture file/path, and the last refresh time for the row view. These identity fields are derived display metadata and do not modify raw captures.
 
 Replay Mode classifies fields by source:
 

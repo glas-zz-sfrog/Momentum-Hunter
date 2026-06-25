@@ -2,15 +2,25 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import requests
 
+from momentum_hunter.scheduling import is_market_open_day, next_market_open_date
 from momentum_hunter.storage import ANALYSIS_CSV, DATA_DIR, ensure_app_dirs
+from momentum_hunter.time_utils import now_central
 
 
 OUTCOMES_CSV = DATA_DIR / "analysis-outcomes.csv"
+OUTCOME_CALCULATION_VERSION = "outcome-session-v1"
+
+OUTCOME_STATE_PENDING_NOT_MATURE = "pending_not_mature"
+OUTCOME_STATE_COMPLETE = "complete"
+OUTCOME_STATE_PROVIDER_DATA_MISSING = "provider_data_missing"
+OUTCOME_STATE_CALCULATION_FAILED = "calculation_failed"
+OUTCOME_STATE_INELIGIBLE_CAPTURE = "ineligible_capture"
+OUTCOME_STATE_CALENDAR_MAPPING_ERROR = "calendar_mapping_error"
 
 
 @dataclass(frozen=True)
@@ -31,6 +41,12 @@ class CandidateOutcome:
     max_drawdown_pct: float | None
     outcome_start_date: str = ""
     outcome_end_date: str = ""
+    expected_next_day_session_date: str = ""
+    expected_five_day_session_date: str = ""
+    next_day_outcome_state: str = ""
+    five_day_outcome_state: str = ""
+    outcome_reason: str = ""
+    outcome_calculation_version: str = OUTCOME_CALCULATION_VERSION
 
 
 OUTCOME_FIELDNAMES = [
@@ -80,6 +96,12 @@ OUTCOME_FIELDNAMES = [
     "max_drawdown_pct",
     "outcome_start_date",
     "outcome_end_date",
+    "expected_next_day_session_date",
+    "expected_five_day_session_date",
+    "next_day_outcome_state",
+    "five_day_outcome_state",
+    "outcome_reason",
+    "outcome_calculation_version",
     "outcome_status",
 ]
 
@@ -111,24 +133,119 @@ def update_outcomes(
     return output_path, len(outcome_rows)
 
 
-def calculate_outcome(row: dict, bars: list[PriceBar]) -> CandidateOutcome:
+def calculate_outcome(row: dict, bars: list[PriceBar], *, as_of_date: date | None = None) -> CandidateOutcome:
     capture_date = row.get("capture_date", "")
     capture_price = parse_float(row.get("price", "0"))
+    current_date = as_of_date or now_central().date()
+    try:
+        expected_next_day, expected_five_day = expected_outcome_session_dates(capture_date)
+    except ValueError as exc:
+        return CandidateOutcome(
+            "calendar_mapping_error",
+            None,
+            None,
+            None,
+            None,
+            next_day_outcome_state=OUTCOME_STATE_CALENDAR_MAPPING_ERROR,
+            five_day_outcome_state=OUTCOME_STATE_CALENDAR_MAPPING_ERROR,
+            outcome_reason=f"calendar_mapping_error: {exc}",
+        )
+    expected_next_text = expected_next_day.isoformat()
+    expected_five_text = expected_five_day.isoformat()
+    if not is_market_open_day(expected_next_day) or not is_market_open_day(expected_five_day):
+        return CandidateOutcome(
+            "calendar_mapping_error",
+            None,
+            None,
+            None,
+            None,
+            expected_next_day_session_date=expected_next_text,
+            expected_five_day_session_date=expected_five_text,
+            next_day_outcome_state=OUTCOME_STATE_CALENDAR_MAPPING_ERROR,
+            five_day_outcome_state=OUTCOME_STATE_CALENDAR_MAPPING_ERROR,
+            outcome_reason="calendar_mapping_error: expected outcome session is not a market-open day",
+        )
+    if is_explicit_false(row.get("is_study_eligible", "")):
+        return CandidateOutcome(
+            "ineligible_capture",
+            None,
+            None,
+            None,
+            None,
+            expected_next_day_session_date=expected_next_text,
+            expected_five_day_session_date=expected_five_text,
+            next_day_outcome_state=OUTCOME_STATE_INELIGIBLE_CAPTURE,
+            five_day_outcome_state=OUTCOME_STATE_INELIGIBLE_CAPTURE,
+            outcome_reason="ineligible_capture: capture is excluded from ordinary study outcome calculations",
+        )
     if not capture_date or capture_price <= 0:
-        return CandidateOutcome("missing_capture_price", None, None, None, None)
+        return CandidateOutcome(
+            "missing_capture_price",
+            None,
+            None,
+            None,
+            None,
+            expected_next_day_session_date=expected_next_text,
+            expected_five_day_session_date=expected_five_text,
+            next_day_outcome_state=OUTCOME_STATE_CALCULATION_FAILED,
+            five_day_outcome_state=OUTCOME_STATE_CALCULATION_FAILED,
+            outcome_reason="calculation_failed: missing or non-positive capture price",
+        )
 
-    future_bars = [bar for bar in bars if bar.day > capture_date]
-    if len(future_bars) < 1:
-        return CandidateOutcome("pending_next_day", None, None, None, None)
+    bars_by_day = {bar.day: bar for bar in sorted(bars, key=lambda bar: bar.day)}
+    first_bar = bars_by_day.get(expected_next_text)
+    if first_bar is None:
+        state = (
+            OUTCOME_STATE_PENDING_NOT_MATURE
+            if current_date <= expected_next_day
+            else OUTCOME_STATE_PROVIDER_DATA_MISSING
+        )
+        status = "pending_next_day" if state == OUTCOME_STATE_PENDING_NOT_MATURE else "provider_data_missing"
+        return CandidateOutcome(
+            status,
+            None,
+            None,
+            None,
+            None,
+            expected_next_day_session_date=expected_next_text,
+            expected_five_day_session_date=expected_five_text,
+            next_day_outcome_state=state,
+            five_day_outcome_state=state,
+            outcome_reason=f"{state}: no price bar for expected next-day session {expected_next_text}",
+        )
 
-    first_bar = future_bars[0]
-    five_bar = future_bars[4] if len(future_bars) >= 5 else None
+    future_bars = [bar for bar in sorted(bars, key=lambda bar: bar.day) if expected_next_text <= bar.day <= expected_five_text]
+    five_bar = bars_by_day.get(expected_five_text)
     window = future_bars[:5]
+    if not window:
+        return CandidateOutcome(
+            "calculation_failed",
+            None,
+            None,
+            None,
+            None,
+            expected_next_day_session_date=expected_next_text,
+            expected_five_day_session_date=expected_five_text,
+            next_day_outcome_state=OUTCOME_STATE_CALCULATION_FAILED,
+            five_day_outcome_state=OUTCOME_STATE_CALCULATION_FAILED,
+            outcome_reason="calculation_failed: no usable outcome window after expected next-day session",
+        )
     next_day_return = percent_return(first_bar.close, capture_price)
     five_day_return = percent_return(five_bar.close, capture_price) if five_bar else None
     max_gain = percent_return(max(bar.high for bar in window), capture_price)
     max_drawdown = percent_return(min(bar.low for bar in window), capture_price)
-    status = "complete" if five_bar else "pending_five_day"
+    if five_bar:
+        status = "complete"
+        five_day_state = OUTCOME_STATE_COMPLETE
+        reason = "complete: next-day and five-day outcome sessions are populated"
+    else:
+        five_day_state = (
+            OUTCOME_STATE_PENDING_NOT_MATURE
+            if current_date <= expected_five_day
+            else OUTCOME_STATE_PROVIDER_DATA_MISSING
+        )
+        status = "pending_five_day" if five_day_state == OUTCOME_STATE_PENDING_NOT_MATURE else "provider_data_missing"
+        reason = f"{five_day_state}: no price bar for expected five-day session {expected_five_text}"
     return CandidateOutcome(
         status=status,
         next_day_return_pct=round(next_day_return, 4),
@@ -137,6 +254,11 @@ def calculate_outcome(row: dict, bars: list[PriceBar]) -> CandidateOutcome:
         max_drawdown_pct=round(max_drawdown, 4),
         outcome_start_date=first_bar.day,
         outcome_end_date=(five_bar.day if five_bar else window[-1].day),
+        expected_next_day_session_date=expected_next_text,
+        expected_five_day_session_date=expected_five_text,
+        next_day_outcome_state=OUTCOME_STATE_COMPLETE,
+        five_day_outcome_state=five_day_state,
+        outcome_reason=reason,
     )
 
 
@@ -213,6 +335,12 @@ def row_to_outcome(row: dict, outcome: CandidateOutcome) -> dict:
             "max_drawdown_pct": format_optional(outcome.max_drawdown_pct),
             "outcome_start_date": outcome.outcome_start_date,
             "outcome_end_date": outcome.outcome_end_date,
+            "expected_next_day_session_date": outcome.expected_next_day_session_date,
+            "expected_five_day_session_date": outcome.expected_five_day_session_date,
+            "next_day_outcome_state": outcome.next_day_outcome_state,
+            "five_day_outcome_state": outcome.five_day_outcome_state,
+            "outcome_reason": outcome.outcome_reason,
+            "outcome_calculation_version": outcome.outcome_calculation_version,
             "outcome_status": outcome.status,
         }
     )
@@ -240,3 +368,19 @@ def parse_float(value: str) -> float:
         return float(str(value).replace(",", ""))
     except (TypeError, ValueError):
         return 0.0
+
+
+def expected_outcome_session_dates(capture_date: str) -> tuple[date, date]:
+    try:
+        capture_day = date.fromisoformat(capture_date)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid capture_date {capture_date!r}") from exc
+    expected_next = next_market_open_date(capture_day, include_today=False)
+    expected_five = expected_next
+    for _ in range(4):
+        expected_five = next_market_open_date(expected_five, include_today=False)
+    return expected_next, expected_five
+
+
+def is_explicit_false(value: object) -> bool:
+    return str(value).strip().lower() in {"false", "0", "no"}

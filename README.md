@@ -92,7 +92,15 @@ Outcome fields include:
 - `five_day_return_pct`
 - `max_gain_pct`
 - `max_drawdown_pct`
+- `expected_next_day_session_date`
+- `expected_five_day_session_date`
+- `next_day_outcome_state`
+- `five_day_outcome_state`
+- `outcome_reason`
+- `outcome_calculation_version`
 - `outcome_status`
+
+Outcome states distinguish `pending_not_mature`, `complete`, `provider_data_missing`, `calculation_failed`, `ineligible_capture`, and `calendar_mapping_error`. Market holidays and weekends are handled by expected market-session dates; for example, a June 18, 2026 capture uses June 22, 2026 as the next outcome session because June 19 was Juneteenth.
 
 ## Watchlist Discipline
 
@@ -124,7 +132,7 @@ The workflow score measures operational consistency only: candidate review compl
 
 Quick actions can open Morning Review, Generate Watchlist Report, Capture Health, and Readiness Gate. In expired, historical, replay, research, quarantined, missing, or failed contexts, edit/write actions remain disabled while read-only diagnostics stay available.
 
-Rows remain `pending_next_day` or `pending_five_day` until enough future daily price bars exist. Scheduled capture jobs run the outcome updater after each successful capture.
+Rows remain `pending_next_day` or `pending_five_day` only while the expected market session has not matured. Once a horizon matures, the row is either populated, marked complete, or marked with a data-quality reason such as `provider_data_missing` or `calculation_failed`. Scheduled capture jobs run the outcome updater after each successful capture.
 
 The Research Lab area includes `Locked Research Notes` once enough completed 5-day outcomes exist. These notes are diagnostic only; Momentum Hunter does not automatically rewrite `config\scoring_profiles.json`.
 
@@ -260,11 +268,15 @@ Use the GUI `Why [score]?` button to inspect the component-by-component explanat
 
 The `Why [score]?` dialog has a compact summary and detailed component view. Compact rows group the score into Base, Volume, Relative Volume, Market Cap, Price Move, Catalyst, Freshness, and Risk/Penalty lines. Detailed rows show raw values, rules, contribution math, and reconciliation to the displayed score. In `momentum_score_v1`, Freshness is recorded as zero-point context so it is visible for research without changing current score behavior.
 
-## Candidate Timeline and Replay Mode
+## Candidate Story, Timeline, and Replay Mode
 
-Select a candidate and click `Timeline / Replay` to see every trusted active capture containing that ticker. The timeline can sort oldest-first or newest-first and can optionally show quarantined captures with a warning.
+Select a candidate and click `Timeline / Replay` to open the graph-first Candidate Story for that ticker. The default `Trail` mode shows every trusted active capture containing that ticker as a stored-capture story: first seen, latest capture, first/latest price, move since first seen, score movement, peak score, trusted capture count, and a plain-language status such as Building, Holding, Fading, Peaked, Stale, or Insufficient data.
 
-Timeline rows show capture time, session, provider, scanner preset, score, score profile/version, market regime, review status, outcome status, score-breakdown status, and trust classification.
+Candidate Story uses stored capture facts only. Its chart shows capture-sequence price and score points from raw captures; it does not fetch current market data, invent missing price points, or recalculate historical scores. Simplified story rows below the chart show month/day, session marker, price, move since previous/first capture, score change, relative volume, volume, capture notes, and clearly labeled later annotations.
+
+`Intraday` and `5D` modes currently show explicit missing-data placeholders unless reliable stored data exists. `Audit` mode preserves the dense capture table as `Advanced Capture Audit`.
+
+Advanced Capture Audit rows show capture time, session, provider, scanner preset, score, score profile/version, market regime, review status, outcome status, score-breakdown status, and trust classification. The timeline can sort oldest-first or newest-first and can optionally show quarantined captures with a warning.
 
 Replay Mode shows `preopen` rows as `Pre-Open Gap Review`. Ordinary historical weekend, holiday, and manual captures are hidden from timelines by default; enable `Show non-trading-day captures` to inspect them with a warning. Older raw files are not edited to add calendar fields.
 
@@ -276,6 +288,14 @@ Replay Mode opens a read-only point-in-time view for a timeline row labeled `POI
 - later outcome labels from `analysis-outcomes.csv`
 
 Replay Mode never fetches current market data and does not recalculate historical scores with newer logic. Missing score explanations, legacy/incomplete breakdowns, missing outcome labels, and quarantined captures are shown as warnings.
+
+Replay details also show expected next-day and five-day outcome session dates, per-horizon outcome state, outcome reason, max gain/drawdown, and the outcome calculation version. These are later-derived labels and are never presented as information known at capture time.
+
+Timeline and Replay views include a `Replay Audit Identity` strip so similar-looking captures can be verified before analysis. The strip shows the selected capture timestamp, capture ID, selected symbol, candidate row ID/fingerprint, outcome record ID, source file path, and last refresh time. If no Replay rows match the selected candidate or filters, the UI shows an explicit reason instead of silently falling back to another capture.
+
+The left navigation rail includes `Back` so operators can return to the previous Momentum Hunter screen after jumping into Replay, Watchlist, Evidence, Research, or Health.
+
+On the Replay page, `Open Historical Snapshot` loads the selected date/session into a read-only candidate table and detail pane. Selecting a candidate there drives `Open Timeline / Replay For Selected Candidate`, so the workflow no longer requires jumping back through the Dashboard just to inspect a historical capture.
 
 ## Historical Clusters
 

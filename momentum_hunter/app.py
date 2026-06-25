@@ -6,14 +6,14 @@ import re
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QBrush, QFont, QIcon, QPainter, QPixmap
-from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QValueAxis
+from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QLineSeries, QScatterSeries, QValueAxis
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -309,11 +309,14 @@ class MomentumHunterWindow(QMainWindow):
         self.display_calendar_status = ""
         self.display_next_market_session_date = ""
         self.display_quarantined = False
+        self.replay_snapshot_candidates: list[Candidate] = []
+        self.replay_snapshot_payload: dict | None = None
         self.current_view_style: DataViewStyle | None = None
         self.current_operator_context: OperatorReviewContext | None = None
         self.provider_status_text = "Provider: not checked"
         self.provider_status_ok = True
         self._report_loader_refs: list[tuple[QThread, ReportLoaderWorker, QDialog]] = []
+        self._page_history: list[int] = []
         self.market_regime = MarketRegimeSnapshot(
             regime=MarketRegime.UNKNOWN,
             symbol="SPY",
@@ -354,7 +357,7 @@ class MomentumHunterWindow(QMainWindow):
 
         self.setCentralWidget(root)
         self.setStyleSheet(STYLESHEET)
-        self._navigate_to_page(0)
+        self._navigate_to_page(0, record_history=False)
 
     def _build_navigation_rail(self) -> QWidget:
         rail = QGroupBox("Momentum")
@@ -364,6 +367,12 @@ class MomentumHunterWindow(QMainWindow):
         layout.setSpacing(8)
 
         self.nav_buttons: list[QPushButton] = []
+        self.back_button = QPushButton("Back")
+        self.back_button.setEnabled(False)
+        self.back_button.setToolTip("Return to the previous Momentum Hunter screen.")
+        self.back_button.clicked.connect(self._go_back_page)
+        layout.addWidget(self.back_button)
+
         nav_items = [
             ("Dashboard", "Daily command center: scanner, candidates, next action.", 0),
             ("Watchlist", "Watchlist candidates, entry plans, and saved reports.", 1),
@@ -388,14 +397,49 @@ class MomentumHunterWindow(QMainWindow):
         layout.addStretch(1)
         return rail
 
-    def _navigate_to_page(self, index: int) -> None:
+    def _navigate_to_page(self, index: int, *, record_history: bool = True) -> None:
         if not hasattr(self, "page_stack"):
             return
+        if index < 0 or index >= self.page_stack.count():
+            self._update_status(f"Navigation target {index} is not available.")
+            return
+        current_index = self.page_stack.currentIndex()
+        if record_history and current_index != index and current_index >= 0:
+            self._page_history.append(current_index)
+            self._page_history = self._page_history[-25:]
         self.page_stack.setCurrentIndex(index)
         for button_index, button in enumerate(getattr(self, "nav_buttons", [])):
             button.setChecked(button_index == index)
+        self._update_back_button()
         if index == 1:
             self._refresh_watchlist_center()
+        if index == 4:
+            QTimer.singleShot(0, self._autoload_replay_snapshot)
+
+    def _go_back_page(self) -> None:
+        if not getattr(self, "_page_history", []):
+            self._update_status("No previous Momentum Hunter screen is available.")
+            self._update_back_button()
+            return
+        previous = self._page_history.pop()
+        self._navigate_to_page(previous, record_history=False)
+        self._update_status(f"Returned to {self._page_name(previous)}.")
+
+    def _update_back_button(self) -> None:
+        if not hasattr(self, "back_button"):
+            return
+        enabled = bool(getattr(self, "_page_history", []))
+        self.back_button.setEnabled(enabled)
+        if enabled:
+            self.back_button.setToolTip(f"Return to {self._page_name(self._page_history[-1])}.")
+        else:
+            self.back_button.setToolTip("No previous Momentum Hunter screen yet.")
+
+    def _page_name(self, index: int) -> str:
+        names = ["Dashboard", "Watchlist", "Evidence", "Research", "Replay", "Health"]
+        if 0 <= index < len(names):
+            return names[index]
+        return f"page {index}"
 
     def _build_dashboard_page(self) -> QWidget:
         page = QWidget()
@@ -590,7 +634,33 @@ class MomentumHunterWindow(QMainWindow):
         action_layout.addWidget(timeline_button)
         action_layout.addStretch(1)
         layout.addWidget(action_box)
-        layout.addStretch(1)
+
+        snapshot_box = QGroupBox("Snapshot Candidates")
+        snapshot_layout = QVBoxLayout(snapshot_box)
+        self.replay_snapshot_status_label = QLabel(
+            "Open a historical snapshot to load candidates, or use the selected historical date/session above."
+        )
+        self.replay_snapshot_status_label.setObjectName("criteriaLabel")
+        self.replay_snapshot_status_label.setWordWrap(True)
+        snapshot_layout.addWidget(self.replay_snapshot_status_label)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.replay_snapshot_table = QTableWidget(0, 7)
+        self.replay_snapshot_table.setHorizontalHeaderLabels(["Ticker", "Score", "Price", "% Chg", "Volume", "Rel Vol", "Market Cap"])
+        self.replay_snapshot_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.replay_snapshot_table.horizontalHeader().setStretchLastSection(True)
+        self.replay_snapshot_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.replay_snapshot_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.replay_snapshot_table.setMinimumHeight(260)
+        self.replay_snapshot_table.itemSelectionChanged.connect(self._replay_snapshot_selection_changed)
+        splitter.addWidget(self.replay_snapshot_table)
+        self.replay_snapshot_detail = QTextBrowser()
+        self.replay_snapshot_detail.setHtml(format_replay_snapshot_detail_html(None, reason="Open a historical snapshot to inspect its candidates."))
+        splitter.addWidget(self.replay_snapshot_detail)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
+        snapshot_layout.addWidget(splitter, 1)
+        layout.addWidget(snapshot_box, 1)
         return page
 
     def _build_capture_health_page(self) -> QWidget:
@@ -2050,9 +2120,13 @@ class MomentumHunterWindow(QMainWindow):
         self._update_status("No saved watchlist/report found.")
 
     def view_candidate_timeline(self) -> None:
-        candidate = self._selected_candidate()
+        candidate = None
+        if hasattr(self, "replay_snapshot_table") and self.page_stack.currentIndex() == 4:
+            candidate = self._selected_replay_snapshot_candidate()
         if candidate is None:
-            self._show_action_blocked("No candidate selected. Select a candidate first.")
+            candidate = self._selected_candidate()
+        if candidate is None:
+            self._show_action_blocked("No candidate selected. Select a dashboard or Replay snapshot candidate first.")
             return
         self._show_timeline_dialog(candidate.ticker)
 
@@ -2517,12 +2591,12 @@ class MomentumHunterWindow(QMainWindow):
 
     def _show_timeline_dialog(self, ticker: str) -> None:
         dialog = QDialog(self)
-        dialog.setWindowTitle(f"Candidate Timeline - {ticker}")
-        dialog.resize(1280, 720)
+        dialog.setWindowTitle(f"Candidate Story - {ticker}")
+        dialog.resize(1320, 820)
         layout = QVBoxLayout(dialog)
 
         banner = QLabel(
-            "Candidate Timeline - active trusted captures by default. Outcomes and review notes are later-derived annotations."
+            "Candidate Story - graph-first capture trail. Audit data is preserved separately. Outcomes and review notes are later-derived annotations."
         )
         banner.setObjectName("detailStateLabel")
         banner.setWordWrap(True)
@@ -2533,22 +2607,50 @@ class MomentumHunterWindow(QMainWindow):
         controls_layout.setContentsMargins(0, 0, 0, 0)
         sort_combo = QComboBox()
         sort_combo.addItems(["Oldest First", "Newest First"])
-        preset_combo = QComboBox()
-        preset_combo.addItems(["Signal", "Outcome", "Audit"])
-        preset_combo.setToolTip("Signal shows capture-time facts. Outcome shows later annotations. Audit shows every column.")
+        mode_combo = QComboBox()
+        mode_combo.addItems(["Trail", "Intraday", "5D", "Audit"])
+        mode_combo.setToolTip("Trail is the graph-first capture story. Audit shows the dense replay identity table.")
         show_quarantined = QCheckBox("Show quarantined captures")
         show_non_trading_day = QCheckBox("Show non-trading-day captures")
         replay_button = QPushButton("Replay Capture")
         controls_layout.addWidget(QLabel("Sort"))
         controls_layout.addWidget(sort_combo)
-        controls_layout.addWidget(QLabel("View"))
-        controls_layout.addWidget(preset_combo)
+        controls_layout.addWidget(QLabel("Mode"))
+        controls_layout.addWidget(mode_combo)
         controls_layout.addWidget(show_quarantined)
         controls_layout.addWidget(show_non_trading_day)
         controls_layout.addStretch(1)
         controls_layout.addWidget(replay_button)
         layout.addWidget(controls)
 
+        story_header = QTextBrowser()
+        story_header.setMaximumHeight(178)
+        layout.addWidget(story_header)
+
+        chart_holder = QWidget()
+        chart_layout = QVBoxLayout(chart_holder)
+        chart_layout.setContentsMargins(0, 0, 0, 0)
+        chart_layout.setSpacing(0)
+        chart_widget: list[QWidget | None] = [None]
+        layout.addWidget(chart_holder, 2)
+
+        mode_placeholder = story_placeholder("")
+        mode_placeholder.hide()
+        layout.addWidget(mode_placeholder, 1)
+
+        story_table = QTableWidget(0, 9)
+        story_table.setHorizontalHeaderLabels(
+            ["Capture", "Price", "Move", "Score", "Score Δ", "Rel Vol", "Volume", "Note", "Later Annotation"]
+        )
+        story_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        story_table.horizontalHeader().setStretchLastSection(True)
+        story_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        story_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        story_table.setMinimumHeight(190)
+        layout.addWidget(story_table, 1)
+
+        audit_box = QGroupBox("Advanced Capture Audit")
+        audit_layout = QVBoxLayout(audit_box)
         table = QTableWidget(0, 26)
         headers = [
             "Capture",
@@ -2582,50 +2684,101 @@ class MomentumHunterWindow(QMainWindow):
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        layout.addWidget(table, 1)
+        audit_layout.addWidget(table, 1)
         detail_browser = QTextBrowser()
         detail_browser.setMaximumHeight(190)
-        layout.addWidget(detail_browser)
+        audit_layout.addWidget(detail_browser)
+        layout.addWidget(audit_box, 2)
 
         timeline_rows: list[TimelineRow] = []
+        story_summary: CandidateStorySummary = build_candidate_story_summary([])
+
+        def replace_chart(widget: QWidget) -> None:
+            if chart_widget[0] is not None:
+                old_widget = chart_widget[0]
+                chart_layout.removeWidget(old_widget)
+                old_widget.deleteLater()
+            chart_widget[0] = widget
+            chart_layout.addWidget(widget)
 
         def update_detail() -> None:
             if not timeline_rows:
-                detail_browser.setHtml(format_timeline_detail_html(None))
+                detail_browser.setHtml(
+                    format_timeline_detail_html(
+                        None,
+                        reason=(
+                            f"No Replay rows found for {ticker}. "
+                            "The selected filters may hide non-trading-day or quarantined captures, "
+                            "or this symbol may not exist in stored captures."
+                        ),
+                    )
+                )
                 return
-            row_index = table.currentRow()
+            selected_row = selected_timeline_row(timeline_rows, table.currentRow())
+            if selected_row is None:
+                detail_browser.setHtml(format_timeline_detail_html(None, reason="No Replay row selected. Select a row to inspect its identity."))
+                return
+            detail_browser.setHtml(format_timeline_detail_html(selected_row))
+
+        def selected_story_row() -> TimelineRow | None:
+            row_index = story_table.currentRow()
             if row_index < 0:
                 row_index = 0
-            detail_browser.setHtml(format_timeline_detail_html(timeline_rows[row_index]))
+            if row_index < 0 or row_index >= len(story_summary.points):
+                return None
+            return story_summary.points[row_index].row
+
+        def update_mode() -> None:
+            mode = mode_combo.currentText()
+            audit_mode = mode == "Audit"
+            trail_mode = mode == "Trail"
+            story_header.setVisible(True)
+            chart_holder.setVisible(trail_mode)
+            story_table.setVisible(trail_mode)
+            audit_box.setVisible(audit_mode)
+            mode_placeholder.setVisible(mode in {"Intraday", "5D"})
+            if mode == "Intraday":
+                mode_placeholder.setText("No minute bars available for this symbol/date in Candidate Story v1. Capture-only trail is available in Trail mode.")
+            elif mode == "5D":
+                mode_placeholder.setText("No 5D stored price context is available in Candidate Story v1. Capture-only trail is available in Trail mode.")
+            replay_button.setEnabled(bool(timeline_rows))
 
         def refresh() -> None:
-            nonlocal timeline_rows
+            nonlocal timeline_rows, story_summary
             timeline_rows = build_candidate_timeline(
                 ticker,
                 include_quarantined=show_quarantined.isChecked(),
                 include_non_trading_day=show_non_trading_day.isChecked(),
                 newest_first=sort_combo.currentText() == "Newest First",
             )
+            story_summary = build_candidate_story_summary(timeline_rows)
+            story_header.setHtml(format_candidate_story_header_html(story_summary))
+            replace_chart(build_candidate_story_chart(story_summary))
+            populate_candidate_story_rows(story_table, story_summary)
             populate_timeline_table(table, timeline_rows)
-            apply_timeline_preset(table, preset_combo.currentText())
+            apply_timeline_preset(table, "Audit")
             replay_button.setEnabled(bool(timeline_rows))
             update_detail()
+            update_mode()
 
         def replay_selected() -> None:
             if not timeline_rows:
+                self._show_action_blocked(f"No Replay rows found for {ticker}. Change filters or choose a different candidate.")
                 return
-            row_index = table.currentRow()
-            if row_index < 0:
-                row_index = 0
-            self._show_replay_dialog(timeline_rows[row_index])
+            selected_row = selected_timeline_row(timeline_rows, table.currentRow()) if mode_combo.currentText() == "Audit" else selected_story_row()
+            if selected_row is None:
+                self._show_action_blocked("No Replay row selected. Select a capture row before opening Replay.")
+                return
+            self._show_replay_dialog(selected_row)
 
         sort_combo.currentTextChanged.connect(refresh)
-        preset_combo.currentTextChanged.connect(lambda value: (apply_timeline_preset(table, value), update_detail()))
+        mode_combo.currentTextChanged.connect(lambda _value: update_mode())
         show_quarantined.stateChanged.connect(refresh)
         show_non_trading_day.stateChanged.connect(refresh)
         replay_button.clicked.connect(replay_selected)
         table.itemSelectionChanged.connect(update_detail)
         table.itemDoubleClicked.connect(lambda _item: replay_selected())
+        story_table.itemDoubleClicked.connect(lambda _item: replay_selected())
         refresh()
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -2852,6 +3005,75 @@ class MomentumHunterWindow(QMainWindow):
             self.capture_session_combo.setCurrentText(current_session)
         self.capture_session_combo.blockSignals(False)
 
+    def _autoload_replay_snapshot(self) -> None:
+        if not hasattr(self, "page_stack") or self.page_stack.currentIndex() != 4:
+            return
+        if getattr(self, "replay_snapshot_candidates", None):
+            return
+
+        selected_payload = self._selected_capture_payload()
+        if selected_payload and selected_payload.get("candidates"):
+            self._load_historical_capture(selected_payload)
+            self._load_replay_snapshot(selected_payload)
+            return
+
+        latest_payload = self._latest_capture_payload_with_candidates()
+        if latest_payload:
+            date_text = str(latest_payload.get("capture_date") or "")
+            session_text = str(latest_payload.get("session") or "")
+            if date_text:
+                if self.capture_date_combo.findText(date_text) < 0:
+                    self.capture_date_combo.addItem(date_text)
+                self.capture_date_combo.setCurrentText(date_text)
+                self._capture_date_changed(date_text)
+            if session_text:
+                if self.capture_session_combo.findText(session_text) < 0:
+                    self.capture_session_combo.addItem(session_text)
+                self.capture_session_combo.setCurrentText(session_text)
+            self._load_historical_capture(latest_payload)
+            self._load_replay_snapshot(latest_payload)
+            return
+
+        if selected_payload:
+            self._load_historical_capture(selected_payload)
+            self._load_replay_snapshot(selected_payload)
+            return
+
+        if hasattr(self, "replay_snapshot_status_label"):
+            self.replay_snapshot_status_label.setText(
+                "No historical snapshot candidates are available yet. Choose another date/session or run a capture."
+            )
+
+    def _selected_capture_payload(self) -> dict:
+        date_text = self.capture_date_combo.currentText()
+        session_text = self.capture_session_combo.currentText()
+        if not date_text or not session_text or date_text == "No captures yet" or session_text == "No sessions yet":
+            return {}
+        try:
+            session = CaptureSession(session_text)
+        except ValueError:
+            return {}
+        payload = load_capture_json(date_text, session)
+        if payload:
+            payload = dict(payload)
+            payload.setdefault("capture_date", date_text)
+            payload.setdefault("session", session.value)
+            payload["_source_path"] = str(DATA_DIR / "captures" / date_text / f"{session.value}.json")
+        return payload
+
+    def _latest_capture_payload_with_candidates(self) -> dict:
+        for date_text in list_capture_dates():
+            for session in list_capture_sessions(date_text):
+                payload = load_capture_json(date_text, session)
+                if not payload or not payload.get("candidates"):
+                    continue
+                payload = dict(payload)
+                payload.setdefault("capture_date", date_text)
+                payload.setdefault("session", session.value)
+                payload["_source_path"] = str(DATA_DIR / "captures" / date_text / f"{session.value}.json")
+                return payload
+        return {}
+
     def open_selected_capture(self) -> None:
         date_text = self.capture_date_combo.currentText()
         session_text = self.capture_session_combo.currentText()
@@ -2859,9 +3081,10 @@ class MomentumHunterWindow(QMainWindow):
             self._show_text_dialog("Daily Capture", "No daily capture is available yet.")
             return
         session = CaptureSession(session_text)
-        payload = load_capture_json(date_text, session)
+        payload = self._selected_capture_payload()
         if payload:
             self._load_historical_capture(payload)
+            self._load_replay_snapshot(payload)
             return
         report = load_capture_report(date_text, session)
         if not report:
@@ -2992,7 +3215,100 @@ class MomentumHunterWindow(QMainWindow):
         self._populate_table()
         self._update_score_chart()
         loaded_context = self.current_operator_context or self._operator_review_context()
-        self._update_status(f"Loaded capture: {loaded_context.label}.")
+        candidate_count = len(self.candidates)
+        suffix = f"{candidate_count} candidate(s) loaded." if candidate_count else "No candidates found in this capture."
+        self._update_status(f"Loaded capture: {loaded_context.label}. {suffix}")
+
+    def _load_replay_snapshot(self, payload: dict) -> None:
+        self.replay_snapshot_payload = dict(payload)
+        self.replay_snapshot_candidates = [candidate_from_dict(item) for item in payload.get("candidates", [])]
+        for raw_candidate, candidate in zip(payload.get("candidates", []), self.replay_snapshot_candidates):
+            if not raw_candidate.get("news_stack"):
+                apply_candidate_news_stack(candidate, now=self.display_capture_time)
+        self._populate_replay_snapshot_table()
+
+    def _populate_replay_snapshot_table(self) -> None:
+        if not hasattr(self, "replay_snapshot_table"):
+            return
+        table = self.replay_snapshot_table
+        candidate_count = len(self.replay_snapshot_candidates)
+        date_text = ""
+        session_text = ""
+        if isinstance(self.replay_snapshot_payload, dict):
+            date_text = str(self.replay_snapshot_payload.get("capture_date") or "")
+            session_text = str(self.replay_snapshot_payload.get("session") or "")
+        if hasattr(self, "replay_snapshot_status_label"):
+            if candidate_count:
+                source_label = " ".join(part for part in [date_text, session_text] if part).strip()
+                suffix = f" from {source_label}" if source_label else ""
+                self.replay_snapshot_status_label.setText(
+                    f"Loaded {candidate_count} candidate(s){suffix}. Select a row, then open Timeline / Replay."
+                )
+            else:
+                source_label = " ".join(part for part in [date_text, session_text] if part).strip()
+                suffix = f" for {source_label}" if source_label else ""
+                self.replay_snapshot_status_label.setText(
+                    f"Selected historical snapshot{suffix} has no candidates. Choose another date/session."
+                )
+        table.blockSignals(True)
+        table.clearSelection()
+        table.setRowCount(candidate_count)
+        for row, candidate in enumerate(self.replay_snapshot_candidates):
+            values = [
+                candidate.ticker,
+                str(candidate.score),
+                f"${candidate.price:,.2f}",
+                f"{candidate.percent_change:.1f}%",
+                f"{candidate.volume:,}",
+                f"{candidate.relative_volume:.2f}x" if candidate.relative_volume else "n/a",
+                format_market_cap(candidate.market_cap),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column == 1:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    item.setBackground(score_color(candidate.score))
+                table.setItem(row, column, item)
+        table.resizeColumnsToContents()
+        table.blockSignals(False)
+        if self.replay_snapshot_candidates:
+            table.selectRow(0)
+            self._replay_snapshot_selection_changed()
+        else:
+            self.replay_snapshot_detail.setHtml(
+                format_replay_snapshot_detail_html(
+                    None,
+                    payload=self.replay_snapshot_payload,
+                    reason="Selected capture has no candidates.",
+                )
+            )
+
+    def _selected_replay_snapshot_candidate(self) -> Candidate | None:
+        if not hasattr(self, "replay_snapshot_table"):
+            return None
+        rows = self.replay_snapshot_table.selectionModel().selectedRows()
+        if not rows:
+            return None
+        row = rows[0].row()
+        if row < 0 or row >= len(self.replay_snapshot_candidates):
+            return None
+        return self.replay_snapshot_candidates[row]
+
+    def _replay_snapshot_selection_changed(self) -> None:
+        candidate = self._selected_replay_snapshot_candidate()
+        if not hasattr(self, "replay_snapshot_detail"):
+            return
+        selected_index = -1
+        if hasattr(self, "replay_snapshot_table"):
+            rows = self.replay_snapshot_table.selectionModel().selectedRows()
+            selected_index = rows[0].row() if rows else -1
+        self.replay_snapshot_detail.setHtml(
+            format_replay_snapshot_detail_html(
+                candidate,
+                payload=self.replay_snapshot_payload,
+                selected_index=selected_index,
+            )
+        )
 
     def return_to_current_dashboard(self) -> None:
         self.data_view_state = DataViewState.CURRENT
@@ -3012,6 +3328,7 @@ class MomentumHunterWindow(QMainWindow):
         self._populate_table()
         self._update_score_chart()
         self._update_status("Returned to current dashboard. Run Scanner for fresh data.")
+        self._navigate_to_page(0)
 
     def _apply_data_view_state(self) -> None:
         style = get_data_view_style(
@@ -4376,6 +4693,492 @@ def parse_iso_datetime(value: str) -> datetime | None:
         return None
 
 
+@dataclass(frozen=True)
+class CandidateStoryPoint:
+    row: TimelineRow
+    capture_label: str
+    session_marker: str
+    price: float | None
+    score: float | None
+    volume: int | None
+    relative_volume: float | None
+    price_change_previous_pct: float | None
+    price_change_first_pct: float | None
+    score_change_previous: float | None
+    note: str
+    later_annotation: str
+
+
+@dataclass(frozen=True)
+class CandidateStorySummary:
+    ticker: str
+    company: str
+    sector: str
+    industry: str
+    first_seen_text: str
+    latest_seen_text: str
+    first_price: float | None
+    latest_price: float | None
+    move_since_first_pct: float | None
+    first_score: float | None
+    latest_score: float | None
+    peak_score: float | None
+    peak_score_text: str
+    trusted_capture_count: int
+    status: str
+    status_detail: str
+    points: list[CandidateStoryPoint]
+    warnings: list[str]
+
+    @property
+    def chartable_price_points(self) -> list[CandidateStoryPoint]:
+        return [point for point in self.points if point.price is not None]
+
+    @property
+    def chartable_score_points(self) -> list[CandidateStoryPoint]:
+        return [point for point in self.points if point.score is not None]
+
+
+def build_candidate_story_summary(rows: list[TimelineRow]) -> CandidateStorySummary:
+    if not rows:
+        return CandidateStorySummary(
+            ticker="",
+            company="",
+            sector="",
+            industry="",
+            first_seen_text="No trusted captures found",
+            latest_seen_text="No trusted captures found",
+            first_price=None,
+            latest_price=None,
+            move_since_first_pct=None,
+            first_score=None,
+            latest_score=None,
+            peak_score=None,
+            peak_score_text="n/a",
+            trusted_capture_count=0,
+            status="Insufficient data",
+            status_detail="No trusted captures found for this ticker.",
+            points=[],
+            warnings=["No trusted captures found for this ticker."],
+        )
+
+    ordered_rows = sorted(rows, key=lambda row: (row.capture_time or datetime.min, row.session, row.scanner, row.provider))
+    first_row = ordered_rows[0]
+    latest_row = ordered_rows[-1]
+    ticker = first_row.ticker
+    company = str(first_row.raw_candidate.get("company", ""))
+    sector = str(timeline_value(latest_row, "sector") or timeline_value(first_row, "sector") or "")
+    industry = str(timeline_value(latest_row, "industry") or timeline_value(first_row, "industry") or "")
+
+    first_price = first_non_none(timeline_float(row, "price") for row in ordered_rows)
+    latest_price = last_non_none(timeline_float(row, "price") for row in ordered_rows)
+    first_score = first_non_none(timeline_float(row, "score") for row in ordered_rows)
+    latest_score = last_non_none(timeline_float(row, "score") for row in ordered_rows)
+    score_pairs = [(timeline_float(row, "score"), row) for row in ordered_rows]
+    score_pairs = [(score, row) for score, row in score_pairs if score is not None]
+    peak_score, peak_row = max(score_pairs, key=lambda pair: pair[0]) if score_pairs else (None, None)
+    move_since_first = percent_change(first_price, latest_price)
+    trusted_count = sum(1 for row in ordered_rows if not row.quarantined)
+
+    points: list[CandidateStoryPoint] = []
+    previous_price: float | None = None
+    previous_score: float | None = None
+    for row in ordered_rows:
+        price = timeline_float(row, "price")
+        score = timeline_float(row, "score")
+        price_change_previous = percent_change(previous_price, price)
+        price_change_first = percent_change(first_price, price)
+        score_change_previous = None if previous_score is None or score is None else score - previous_score
+        note_parts: list[str] = []
+        if row is first_row:
+            note_parts.append("First seen")
+        if peak_row is row and peak_score is not None:
+            note_parts.append("Peak score")
+        if row is latest_row:
+            note_parts.append("Latest capture")
+        if timeline_float(row, "relative_volume") is None:
+            note_parts.append("Rel Vol unavailable for legacy capture")
+        later_parts: list[str] = []
+        review_status = str(timeline_value(row, "review_status") or "")
+        outcome_status = str(timeline_value(row, "outcome_status") or "")
+        if review_status and review_status != "unreviewed":
+            later_parts.append(f"Later review: {review_status}")
+        if outcome_status and outcome_status != "missing":
+            later_parts.append(f"Post-capture outcome: {outcome_status}")
+        points.append(
+            CandidateStoryPoint(
+                row=row,
+                capture_label=format_story_capture_label(row),
+                session_marker=format_story_session_marker(row.session),
+                price=price,
+                score=score,
+                volume=timeline_int(row, "volume"),
+                relative_volume=timeline_float(row, "relative_volume"),
+                price_change_previous_pct=price_change_previous,
+                price_change_first_pct=price_change_first,
+                score_change_previous=score_change_previous,
+                note=", ".join(note_parts) or "Capture-only trail point",
+                later_annotation="; ".join(later_parts) or "No later annotation available yet",
+            )
+        )
+        if price is not None:
+            previous_price = price
+        if score is not None:
+            previous_score = score
+
+    status, status_detail = classify_candidate_story_status(
+        point_count=len(points),
+        first_price=first_price,
+        latest_price=latest_price,
+        first_score=first_score,
+        latest_score=latest_score,
+        peak_score=peak_score,
+        peak_row=peak_row,
+        latest_row=latest_row,
+    )
+    warnings: list[str] = []
+    if len(points) < 2:
+        warnings.append("Only one capture is available; trend status is limited.")
+    if first_price is None or latest_price is None:
+        warnings.append("Capture trail cannot be charted because stored prices are missing.")
+    if any(point.relative_volume is None for point in points):
+        warnings.append("Rel Vol unavailable for at least one legacy capture.")
+    if any(point.later_annotation == "No later annotation available yet" for point in points):
+        warnings.append("Some captures have no later-derived outcome/review annotation yet.")
+
+    return CandidateStorySummary(
+        ticker=ticker,
+        company=company,
+        sector=sector,
+        industry=industry,
+        first_seen_text=format_story_capture_time(first_row),
+        latest_seen_text=format_story_capture_time(latest_row),
+        first_price=first_price,
+        latest_price=latest_price,
+        move_since_first_pct=move_since_first,
+        first_score=first_score,
+        latest_score=latest_score,
+        peak_score=peak_score,
+        peak_score_text=format_story_capture_time(peak_row) if peak_row else "n/a",
+        trusted_capture_count=trusted_count,
+        status=status,
+        status_detail=status_detail,
+        points=points,
+        warnings=warnings,
+    )
+
+
+def classify_candidate_story_status(
+    *,
+    point_count: int,
+    first_price: float | None,
+    latest_price: float | None,
+    first_score: float | None,
+    latest_score: float | None,
+    peak_score: float | None,
+    peak_row: TimelineRow | None,
+    latest_row: TimelineRow,
+) -> tuple[str, str]:
+    if point_count < 2 or first_price is None or latest_price is None or first_score is None or latest_score is None:
+        return "Insufficient data", "More trusted captures are needed before the stock story can be classified."
+    move = percent_change(first_price, latest_price)
+    score_delta = latest_score - first_score
+    cooling_from_peak = peak_score is not None and latest_score <= peak_score - 5
+    peak_is_latest = peak_row is latest_row
+    if move is not None and move > 3.0 and score_delta > 3.0 and peak_is_latest:
+        return "Building", "Price and score are both improving into the latest capture."
+    if cooling_from_peak and move is not None and move >= 0:
+        return "Holding", "Price remains above first seen level, but score is cooling from its peak."
+    if cooling_from_peak and move is not None and move < 0:
+        return "Fading", "Score has cooled from peak and price is below the first seen level."
+    if peak_score is not None and peak_row is not latest_row and latest_score < peak_score:
+        return "Peaked", "The score peak occurred before the latest capture."
+    if move is not None and abs(move) <= 2.0:
+        return "Stale", "Price has not moved much across trusted captures."
+    return "Holding", "The capture trail remains active without a clear acceleration or breakdown."
+
+
+def first_non_none(values: object) -> object | None:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def last_non_none(values: object) -> object | None:
+    found = None
+    for value in values:
+        if value is not None:
+            found = value
+    return found
+
+
+def percent_change(start: float | None, end: float | None) -> float | None:
+    if start is None or end is None or start == 0:
+        return None
+    return ((end - start) / start) * 100.0
+
+
+def timeline_float(row: TimelineRow, key: str) -> float | None:
+    value = timeline_value(row, key)
+    if value in ("", None, "n/a", "N/A"):
+        return None
+    try:
+        if isinstance(value, str):
+            value = value.replace("$", "").replace(",", "").replace("%", "").replace("x", "").strip()
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def timeline_int(row: TimelineRow, key: str) -> int | None:
+    value = timeline_value(row, key)
+    if value in ("", None, "n/a", "N/A"):
+        return None
+    try:
+        if isinstance(value, str):
+            value = value.replace(",", "").strip()
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def format_story_capture_label(row: TimelineRow) -> str:
+    if row.capture_time is None:
+        return row.capture_date or row.capture_time_text
+    return f"{row.capture_time.strftime('%b')} {row.capture_time.day}"
+
+
+def format_story_capture_time(row: TimelineRow | None) -> str:
+    if row is None:
+        return "n/a"
+    if row.capture_time is None:
+        return row.capture_time_text or row.capture_date or "n/a"
+    time_text = row.capture_time.strftime("%I:%M %p").lstrip("0")
+    return f"{row.capture_time.strftime('%b')} {row.capture_time.day}, {row.capture_time.year} {time_text} CT"
+
+
+def format_story_session_marker(session: str) -> str:
+    mapping = {
+        "morning": "AM",
+        "evening": "PM",
+        "preopen": "PRE",
+        "manual": "MAN",
+    }
+    return mapping.get(str(session).lower(), str(session).upper()[:4] or "CAP")
+
+
+def format_story_price(value: float | None) -> str:
+    return "n/a" if value is None else f"${value:,.2f}"
+
+
+def format_story_score(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.0f}"
+
+
+def format_story_percent(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    sign = "+" if value > 0 else ""
+    return f"{sign}{value:.1f}%"
+
+
+def format_story_score_delta(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    sign = "+" if value > 0 else ""
+    return f"{sign}{value:.0f}"
+
+
+def format_compact_volume(value: int | None) -> str:
+    if value is None:
+        return "n/a"
+    abs_value = abs(value)
+    if abs_value >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.1f}B"
+    if abs_value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if abs_value >= 1_000:
+        return f"{value / 1_000:.1f}K"
+    return str(value)
+
+
+def format_story_rel_vol(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.2f}x"
+
+
+def format_candidate_story_header_html(summary: CandidateStorySummary) -> str:
+    style = "font-family: Segoe UI, Arial; color:#e7edf4; background:#0b1118; font-size:10pt;"
+    title_bits = [summary.ticker]
+    if summary.company:
+        title_bits.append(summary.company)
+    subtitle_bits = [bit for bit in [summary.sector, summary.industry] if bit]
+    warnings = "".join(f"<li>{escape(warning)}</li>" for warning in summary.warnings)
+    warning_block = f"<ul style='margin:4px 0 0 18px; color:#fcd34d;'>{warnings}</ul>" if warnings else ""
+    return f"""
+    <body style="{style}">
+      <h2 style="margin:0 0 4px 0;">{escape(' · '.join(title_bits) or 'Candidate Story')}</h2>
+      <p style="margin:0 0 8px 0; color:#9fb0c2;">{escape(' · '.join(subtitle_bits) or 'Sector/industry unavailable')}</p>
+      <table cellspacing="0" cellpadding="6" style="width:100%; border-collapse:collapse;">
+        <tr>
+          <td><b>First seen</b><br>{escape(summary.first_seen_text)}<br>{escape(format_story_price(summary.first_price))}</td>
+          <td><b>Latest</b><br>{escape(summary.latest_seen_text)}<br>{escape(format_story_price(summary.latest_price))}</td>
+          <td><b>Move since first seen</b><br>{escape(format_story_percent(summary.move_since_first_pct))}</td>
+          <td><b>Score</b><br>{escape(format_story_score(summary.first_score))} -> {escape(format_story_score(summary.latest_score))}<br>Peak {escape(format_story_score(summary.peak_score))} on {escape(summary.peak_score_text)}</td>
+          <td><b>Trusted captures</b><br>{summary.trusted_capture_count}</td>
+          <td><b>Status</b><br>{escape(summary.status)}<br><span style="color:#9fb0c2;">{escape(summary.status_detail)}</span></td>
+        </tr>
+      </table>
+      {warning_block}
+      <p style="margin-top:8px; color:#9fb0c2;">Capture-time facts are shown first. Later review/outcome annotations are labeled separately.</p>
+    </body>
+    """
+
+
+def populate_candidate_story_rows(table: QTableWidget, summary: CandidateStorySummary) -> None:
+    table.setRowCount(len(summary.points))
+    for row_index, point in enumerate(summary.points):
+        values = [
+            f"{point.capture_label} {point.session_marker}",
+            format_story_price(point.price),
+            f"Prev {format_story_percent(point.price_change_previous_pct)} | First {format_story_percent(point.price_change_first_pct)}",
+            format_story_score(point.score),
+            format_story_score_delta(point.score_change_previous),
+            format_story_rel_vol(point.relative_volume),
+            format_compact_volume(point.volume),
+            point.note,
+            point.later_annotation,
+        ]
+        for column, value in enumerate(values):
+            item = QTableWidgetItem(str(value))
+            item.setToolTip(point.row.capture_time_text)
+            if "Peak score" in point.note:
+                item.setBackground(QBrush(QColor("#244d63")))
+            elif "Latest capture" in point.note:
+                item.setBackground(QBrush(QColor("#1f4d35")))
+            elif "First seen" in point.note:
+                item.setBackground(QBrush(QColor("#3d3a26")))
+            table.setItem(row_index, column, item)
+    table.resizeColumnsToContents()
+    if summary.points:
+        table.selectRow(0)
+
+
+def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
+    if not summary.points:
+        return story_placeholder("No trusted captures found for this ticker.")
+    if not summary.chartable_price_points:
+        return story_placeholder("Capture trail cannot be charted because stored prices are missing.")
+
+    chart = QChart()
+    chart.setTitle("Capture Trail: Price and Momentum Score")
+    chart.setBackgroundBrush(QBrush(QColor("#0b1118")))
+    chart.setPlotAreaBackgroundBrush(QBrush(QColor("#101b29")))
+    chart.setPlotAreaBackgroundVisible(True)
+    chart.legend().setVisible(True)
+
+    price_series = QLineSeries()
+    price_series.setName("Price")
+    price_markers = QScatterSeries()
+    price_markers.setName("Capture points")
+    price_markers.setMarkerSize(10)
+    score_series = QLineSeries()
+    score_series.setName("Score")
+
+    price_values: list[float] = []
+    score_values: list[float] = []
+    for index, point in enumerate(summary.points):
+        if point.price is not None:
+            price_series.append(index, point.price)
+            price_markers.append(index, point.price)
+            price_values.append(point.price)
+        if point.score is not None:
+            score_series.append(index, point.score)
+            score_values.append(point.score)
+
+    chart.addSeries(price_series)
+    chart.addSeries(price_markers)
+    if score_values:
+        chart.addSeries(score_series)
+
+    axis_x = QValueAxis()
+    axis_x.setTitleText("Capture sequence (details below)")
+    axis_x.setLabelFormat("%d")
+    axis_x.setRange(0, max(1, len(summary.points) - 1))
+    axis_x.setTickCount(max(2, min(8, len(summary.points))))
+
+    min_price = min(price_values)
+    max_price = max(price_values)
+    padding = max((max_price - min_price) * 0.12, max_price * 0.02, 0.5)
+    axis_price = QValueAxis()
+    axis_price.setTitleText("Price")
+    axis_price.setLabelFormat("$%.2f")
+    axis_price.setRange(max(0, min_price - padding), max_price + padding)
+
+    chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
+    chart.addAxis(axis_price, Qt.AlignmentFlag.AlignLeft)
+    price_series.attachAxis(axis_x)
+    price_series.attachAxis(axis_price)
+    price_markers.attachAxis(axis_x)
+    price_markers.attachAxis(axis_price)
+
+    if score_values:
+        axis_score = QValueAxis()
+        axis_score.setTitleText("Score")
+        axis_score.setLabelFormat("%.0f")
+        axis_score.setRange(0, max(100, max(score_values) + 5))
+        chart.addAxis(axis_score, Qt.AlignmentFlag.AlignRight)
+        score_series.attachAxis(axis_x)
+        score_series.attachAxis(axis_score)
+
+    marker_specs = story_marker_specs(summary)
+    for label, index in marker_specs:
+        point = summary.points[index]
+        if point.price is None:
+            continue
+        marker = QScatterSeries()
+        marker.setName(label)
+        marker.setMarkerSize(15)
+        marker.append(index, point.price)
+        chart.addSeries(marker)
+        marker.attachAxis(axis_x)
+        marker.attachAxis(axis_price)
+
+    chart_view = QChartView(chart)
+    chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+    chart_view.setMinimumHeight(320)
+    return chart_view
+
+
+def story_marker_specs(summary: CandidateStorySummary) -> list[tuple[str, int]]:
+    specs: list[tuple[str, int]] = []
+    price_indices = [index for index, point in enumerate(summary.points) if point.price is not None]
+    if not price_indices:
+        return specs
+    first_index = price_indices[0]
+    latest_index = price_indices[-1]
+    specs.append(("First seen", first_index))
+    score_indices = [index for index, point in enumerate(summary.points) if point.score is not None and point.price is not None]
+    if score_indices:
+        peak_index = max(score_indices, key=lambda index: summary.points[index].score or 0)
+        if peak_index not in {first_index, latest_index}:
+            specs.append(("Peak score", peak_index))
+        elif peak_index == latest_index:
+            specs.append(("Peak score / latest", peak_index))
+    if latest_index != first_index:
+        specs.append(("Latest capture", latest_index))
+    return specs
+
+
+def story_placeholder(message: str) -> QLabel:
+    label = QLabel(message)
+    label.setObjectName("detailStateLabel")
+    label.setWordWrap(True)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    label.setMinimumHeight(220)
+    return label
+
+
 def populate_timeline_table(table: QTableWidget, rows: list[TimelineRow]) -> None:
     table.setRowCount(len(rows))
     for row_index, row in enumerate(rows):
@@ -4430,6 +5233,14 @@ TIMELINE_PRESET_COLUMNS = {
 }
 
 
+def selected_timeline_row(rows: list[TimelineRow], row_index: int) -> TimelineRow | None:
+    if not rows:
+        return None
+    if row_index < 0 or row_index >= len(rows):
+        return None
+    return rows[row_index]
+
+
 def apply_timeline_preset(table: QTableWidget, preset: str) -> None:
     visible_columns = TIMELINE_PRESET_COLUMNS.get(preset, TIMELINE_PRESET_COLUMNS["Signal"])
     for column in range(table.columnCount()):
@@ -4437,11 +5248,12 @@ def apply_timeline_preset(table: QTableWidget, preset: str) -> None:
     table.resizeColumnsToContents()
 
 
-def format_timeline_detail_html(row: TimelineRow | None) -> str:
+def format_timeline_detail_html(row: TimelineRow | None, *, reason: str = "No timeline row selected.") -> str:
     style = "font-family: Segoe UI, Arial; color:#e7edf4; background:#0b1118; font-size:10pt;"
     if row is None:
-        return f"<body style='{style}'><p>No timeline row selected.</p></body>"
+        return f"<body style='{style}'><p>{escape(reason)}</p></body>"
     warnings = "".join(f"<li>{escape(warning)}</li>" for warning in row.warnings) or "<li>No warnings.</li>"
+    audit_strip = format_replay_audit_identity_html(row)
     capture_facts = [
         ("Captured", row.capture_time_text),
         ("Session", row.session),
@@ -4456,13 +5268,22 @@ def format_timeline_detail_html(row: TimelineRow | None) -> str:
     later_facts = [
         ("Review", timeline_value(row, "review_status")),
         ("Outcome", timeline_value(row, "outcome_status")),
+        ("Next Day State", timeline_value(row, "next_day_outcome_state")),
+        ("Expected Next Day", timeline_value(row, "expected_next_day_session_date")),
         ("Next Day", timeline_value(row, "next_day_return_pct")),
+        ("5 Day State", timeline_value(row, "five_day_outcome_state")),
+        ("Expected 5 Day", timeline_value(row, "expected_five_day_session_date")),
         ("5 Day", timeline_value(row, "five_day_return_pct")),
         ("Max Gain", timeline_value(row, "max_gain_pct")),
+        ("Max Drawdown", timeline_value(row, "max_drawdown_pct")),
+        ("Outcome Window", f"{timeline_value(row, 'outcome_start_date')} -> {timeline_value(row, 'outcome_end_date')}"),
+        ("Outcome Reason", timeline_value(row, "outcome_reason")),
+        ("Outcome Version", timeline_value(row, "outcome_calculation_version")),
     ]
     return f"""
     <body style="{style}">
       <b>{escape(row.ticker)}</b> | {escape(row.trust_label)}
+      {audit_strip}
       <table cellspacing="0" cellpadding="4" style="width:100%; margin-top:6px;">
         <tr><th align="left">Capture-Time Signal</th><th align="left">Later Annotations</th><th align="left">Warnings</th></tr>
         <tr>
@@ -4472,6 +5293,95 @@ def format_timeline_detail_html(row: TimelineRow | None) -> str:
         </tr>
       </table>
     </body>
+    """
+
+
+def format_replay_snapshot_detail_html(
+    candidate: Candidate | None,
+    *,
+    payload: dict | None = None,
+    selected_index: int = -1,
+    reason: str = "No Replay snapshot candidate selected.",
+) -> str:
+    style = "font-family: Segoe UI, Arial; color:#e7edf4; background:#0b1118; font-size:10pt;"
+    payload = payload or {}
+    scanner_payload = payload.get("scanner", {})
+    scanner = scanner_payload.get("name", "") if isinstance(scanner_payload, dict) else str(scanner_payload or "")
+    capture_date = str(payload.get("capture_date", ""))
+    session = str(payload.get("session", ""))
+    provider = str(payload.get("provider", ""))
+    source_path = str(payload.get("_source_path", ""))
+    capture_id = make_capture_id(capture_date, session, provider, scanner) if capture_date or session or provider or scanner else ""
+    capture_time = str(payload.get("capture_time", ""))
+    if candidate is None:
+        return f"""
+        <body style="{style}">
+          <h3>Historical Snapshot</h3>
+          <p>{escape(reason)}</p>
+          <div style="margin-top:6px; padding:6px; border:1px solid #33506b; background:#111d2a; color:#d7e8ff;">
+            <b>Snapshot Audit Identity</b><br>
+            Selected capture timestamp: {escape(capture_time or 'n/a')} |
+            Capture ID: {escape(capture_id or 'n/a')}<br>
+            Source file/path: {escape(source_path or 'n/a')}<br>
+            Last refresh time: {escape(format_central())}
+          </div>
+        </body>
+        """
+    candidate_row_id = f"{capture_date}|{session}|{provider}|{scanner}|row:{selected_index}|{candidate.ticker}".upper()
+    candidate_fingerprint = "|".join(
+        [
+            scanner,
+            candidate.ticker,
+            f"{candidate.price}",
+            f"{candidate.percent_change}",
+            f"{candidate.volume}",
+            f"{candidate.relative_volume}",
+            f"{candidate.score}",
+        ]
+    ).upper()
+    news_summary = " | ".join(news_stack_summary(candidate))
+    return f"""
+    <body style="{style}">
+      <h3>{escape(candidate.ticker)} Historical Snapshot Candidate</h3>
+      <div style="margin-top:6px; padding:6px; border:1px solid #33506b; background:#111d2a; color:#d7e8ff;">
+        <b>Snapshot Audit Identity</b><br>
+        Selected capture timestamp: {escape(capture_time)} |
+        Capture ID: {escape(capture_id)} |
+        Selected symbol: {escape(candidate.ticker)}<br>
+        Candidate row ID: {escape(candidate_row_id)}<br>
+        Candidate fingerprint: {escape(candidate_fingerprint)}<br>
+        Source file/path: {escape(source_path)}<br>
+        Last refresh time: {escape(format_central())}
+      </div>
+      <table cellspacing="0" cellpadding="5" style="width:100%; margin-top:8px;">
+        <tr><td><b>Score</b></td><td>{escape(str(candidate.score))}</td></tr>
+        <tr><td><b>Price</b></td><td>${candidate.price:,.2f}</td></tr>
+        <tr><td><b>% Change</b></td><td>{candidate.percent_change:.1f}%</td></tr>
+        <tr><td><b>Volume</b></td><td>{candidate.volume:,}</td></tr>
+        <tr><td><b>Relative Volume</b></td><td>{escape(f'{candidate.relative_volume:.2f}x' if candidate.relative_volume else 'n/a')}</td></tr>
+        <tr><td><b>Market Cap</b></td><td>{escape(format_market_cap(candidate.market_cap))}</td></tr>
+        <tr><td><b>Sector</b></td><td>{escape(candidate.sector)}</td></tr>
+        <tr><td><b>Industry</b></td><td>{escape(candidate.industry)}</td></tr>
+        <tr><td><b>News Stack</b></td><td>{escape(news_summary or 'No stored news context.')}</td></tr>
+      </table>
+      <p style="color:#9fb0c2;">Use Open Timeline / Replay For Selected Candidate to inspect all captures for this ticker and its later outcome labels.</p>
+    </body>
+    """
+
+
+def format_replay_audit_identity_html(row: TimelineRow) -> str:
+    return f"""
+      <div style="margin-top:6px; padding:6px; border:1px solid #33506b; background:#111d2a; color:#d7e8ff;">
+        <b>Replay Audit Identity</b><br>
+        Selected capture timestamp: {escape(row.capture_time_text)} |
+        Capture ID: {escape(row.capture_id)} |
+        Selected symbol: {escape(row.ticker)}<br>
+        Candidate row ID: {escape(row.candidate_row_id)}<br>
+        Candidate fingerprint: {escape(row.candidate_fingerprint)}<br>
+        Outcome record ID: {escape(row.outcome_record_id)}<br>
+        Source file/path: {escape(row.capture_path)}<br>
+        Last refresh time: {escape(row.last_refresh_time_text)}
+      </div>
     """
 
 
@@ -4515,6 +5425,7 @@ def format_replay_html(view_model) -> str:
         Provider: {escape(row.provider)} |
         Scanner: {escape(row.scanner)}
       </p>
+      {format_replay_audit_identity_html(row)}
       <p>
         Study eligible: <b>{escape(str(row.calendar_classification.is_study_eligible))}</b> |
         Market-open day: <b>{escape(str(row.calendar_classification.is_market_open_day))}</b> |
@@ -4550,10 +5461,16 @@ def format_replay_html(view_model) -> str:
       <p style="color:#fcd34d;">Outcome values are labels calculated after the capture. They were not known during the replayed moment.</p>
       <ul>
         <li>Status: {escape(str(outcome.get('outcome_status', 'missing')))}</li>
+        <li>Expected next-day session: {escape(str(timeline_value(row, 'expected_next_day_session_date')))}</li>
+        <li>Next-day state: {escape(str(timeline_value(row, 'next_day_outcome_state')))}</li>
         <li>Next-day return: {escape(str(outcome.get('next_day_return_pct', '')))}</li>
+        <li>Expected five-day session: {escape(str(timeline_value(row, 'expected_five_day_session_date')))}</li>
+        <li>Five-day state: {escape(str(timeline_value(row, 'five_day_outcome_state')))}</li>
         <li>Five-day return: {escape(str(outcome.get('five_day_return_pct', '')))}</li>
         <li>Max gain: {escape(str(outcome.get('max_gain_pct', '')))}</li>
         <li>Max drawdown: {escape(str(outcome.get('max_drawdown_pct', '')))}</li>
+        <li>Outcome reason: {escape(str(timeline_value(row, 'outcome_reason')))}</li>
+        <li>Outcome calculation version: {escape(str(timeline_value(row, 'outcome_calculation_version')))}</li>
       </ul>
     </body>
     </html>

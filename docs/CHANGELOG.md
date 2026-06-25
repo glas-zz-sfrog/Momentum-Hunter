@@ -1,5 +1,39 @@
 # Momentum Hunter Changelog
 
+## 2026-06-24
+
+### Fixed
+
+- Added Phase 2A Candidate Story design documentation and changed the default Timeline / Replay dialog from a dense table-first timeline to a graph-first Candidate Story.
+- Candidate Story now shows a compact story header with first/latest capture, price move, score movement, peak score, trusted capture count, and plain-language status before the audit table.
+- Added a prominent stored-capture trail chart for price and score, simplified capture story rows, and missing-data placeholders for Intraday and 5D modes.
+- Preserved the existing dense Timeline table as `Advanced Capture Audit` under Audit mode so capture identity, provider, scanner, source path, and replay audit details remain available.
+- Added deterministic Candidate Story helper tests for first/latest/peak summary, insufficient single-capture stories, and missing stored-price warnings.
+- Fixed Replay page navigation no-ops so `Current Dashboard` returns the operator to the live/current dashboard, while `Open Historical Snapshot` now opens the selected historical snapshot inside the Replay page.
+- Added Replay Selection Integrity guardrails: Timeline detail and full Replay views now show a visible audit identity strip with selected capture timestamp, capture ID, symbol, candidate row ID/fingerprint, outcome record ID, source file path, and last refresh time.
+- Replay row switching now avoids silent first-row fallback when no row is selected; empty timelines and invalid selections show explicit reasons.
+- Added regression coverage proving June 17 and June 18 Replay rows produce distinct detail/replay identities and that different selected candidate symbols produce different Timeline rows.
+- Added a left-rail Back button with page-history tracking so operators can return to the previous screen after jumping between Dashboard, Watchlist, Evidence, Research, Replay, and Health.
+- Fixed the empty Replay page workflow: `Open Historical Snapshot` now populates a read-only snapshot candidate table and detail/audit pane directly on the Replay page instead of leaving the page blank or forcing a one-way loop through Dashboard.
+- The Replay page `Open Timeline / Replay For Selected Candidate` action now uses the selected Replay snapshot row when the operator is on the Replay page.
+- Added explicit derived outcome maturity fields for next-day and five-day outcome sessions, including expected session dates, per-horizon states, reason text, and calculation version.
+- Timeline / Replay now shows expected next-day and five-day maturity dates, outcome states, outcome reason, max drawdown, and outcome calculation version in the detail panel.
+- Legacy outcome rows without the new maturity fields are interpreted safely in Replay: if next-day return is present but five-day has not matured, Replay shows the next-day result as complete and the five-day result as `pending_not_mature` instead of silently looking blank.
+- Verified the Juneteenth 2026 case: June 18 captures use June 22 as the expected next outcome session and June 26 as the expected five-day outcome session.
+
+### Safety
+
+- Outcome maturity fields are derived labels in `analysis-outcomes.csv`; they are not written into immutable raw captures.
+- The outcome engine uses market-open session dates for labels and does not change scanner, scoring, alert, readiness, ranking, trade-planning, or broker behavior.
+- Existing top-score / five-day-hold analysis should remain blocked until mature outcomes are proven with expected session dates, calculation version, and duplicate-inflation checks.
+
+### Tests
+
+- Added Juneteenth outcome tests proving June 19 is skipped and June 22 is the expected next outcome session.
+- Added scheduling tests for Juneteenth holiday skips, market-day premarket/intraday/post-close classification, and early-close-as-market-open behavior.
+- Added Replay tests for explicit and legacy outcome maturity context.
+- Added targeted Replay navigation tests for historical snapshot selection, empty-capture no-fallback handling, and current-dashboard restoration.
+
 ## 2026-06-23
 
 ### Fixed

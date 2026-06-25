@@ -6,6 +6,7 @@ import shutil
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from momentum_hunter.outcomes import OUTCOME_FIELDNAMES
 from momentum_hunter.replay import (
@@ -332,6 +333,295 @@ class ReplayTests(unittest.TestCase):
         self.assertIn("Outcome Calculated After Capture", html)
         self.assertIn("They were not known during the replayed moment", html)
 
+    def test_timeline_exposes_outcome_maturity_dates_and_reason(self) -> None:
+        payload = capture_payload("2026-06-18T19:00:00-05:00", "evening", "Base Momentum", price=100.0, score=90)
+        write_capture(self.captures_dir / "2026-06-18" / "evening.json", payload)
+        write_outcomes(
+            self.outcomes_csv,
+            payload,
+            "COO",
+            extra={
+                "next_day_return_pct": "4.0000",
+                "five_day_return_pct": "",
+                "max_gain_pct": "8.0000",
+                "max_drawdown_pct": "-2.0000",
+                "outcome_start_date": "2026-06-22",
+                "outcome_end_date": "2026-06-23",
+                "expected_next_day_session_date": "2026-06-22",
+                "expected_five_day_session_date": "2026-06-26",
+                "next_day_outcome_state": "complete",
+                "five_day_outcome_state": "pending_not_mature",
+                "outcome_reason": "pending_not_mature: no price bar for expected five-day session 2026-06-26",
+                "outcome_calculation_version": "outcome-session-v1",
+                "outcome_status": "pending_five_day",
+            },
+        )
+        rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        self.assertEqual("2026-06-22", rows[0].fields["expected_next_day_session_date"].value)
+        self.assertEqual("2026-06-26", rows[0].fields["expected_five_day_session_date"].value)
+        self.assertEqual("complete", rows[0].fields["next_day_outcome_state"].value)
+        self.assertEqual("pending_not_mature", rows[0].fields["five_day_outcome_state"].value)
+
+        from momentum_hunter.app import format_timeline_detail_html
+
+        detail = format_timeline_detail_html(rows[0])
+        self.assertIn("Expected Next Day", detail)
+        self.assertIn("2026-06-22", detail)
+        self.assertIn("pending_not_mature", detail)
+
+    def test_legacy_juneteenth_outcome_rows_infer_maturity_context(self) -> None:
+        payload = capture_payload("2026-06-18T19:00:00-05:00", "evening", "Base Momentum", price=100.0, score=90)
+        write_capture(self.captures_dir / "2026-06-18" / "evening.json", payload)
+        write_outcomes(
+            self.outcomes_csv,
+            payload,
+            "COO",
+            extra={
+                "next_day_return_pct": "4.0000",
+                "five_day_return_pct": "",
+                "max_gain_pct": "8.0000",
+                "max_drawdown_pct": "-2.0000",
+                "outcome_start_date": "2026-06-22",
+                "outcome_end_date": "2026-06-23",
+                "outcome_status": "pending_five_day",
+            },
+        )
+
+        with patch("momentum_hunter.replay.now_central", return_value=datetime(2026, 6, 24, 12, 0, tzinfo=CENTRAL_TZ)):
+            rows = build_candidate_timeline(
+                "COO",
+                captures_dir=self.captures_dir,
+                manifest_path=self.manifest_path,
+                score_breakdowns_path=self.score_path,
+                review_decisions_path=self.review_path,
+                outcomes_csv=self.outcomes_csv,
+            )
+
+        self.assertEqual("2026-06-22", rows[0].fields["expected_next_day_session_date"].value)
+        self.assertEqual("2026-06-26", rows[0].fields["expected_five_day_session_date"].value)
+        self.assertEqual("complete", rows[0].fields["next_day_outcome_state"].value)
+        self.assertEqual("pending_not_mature", rows[0].fields["five_day_outcome_state"].value)
+        self.assertEqual(
+            "next-day complete for 2026-06-22; five-day pending until 2026-06-26",
+            rows[0].fields["outcome_reason"].value,
+        )
+
+    def test_replay_selection_identity_changes_between_june_17_and_june_18(self) -> None:
+        june17 = capture_payload("2026-06-17T19:00:00-05:00", "evening", "Base Momentum", price=90.0, score=81)
+        june18 = capture_payload("2026-06-18T19:00:00-05:00", "evening", "Base Momentum", price=100.0, score=92)
+        write_capture(self.captures_dir / "2026-06-17" / "evening.json", june17)
+        write_capture(self.captures_dir / "2026-06-18" / "evening.json", june18)
+        write_outcome_rows(
+            self.outcomes_csv,
+            [
+                outcome_row(
+                    june17,
+                    "COO",
+                    next_day_return_pct="2.0000",
+                    outcome_start_date="2026-06-18",
+                    outcome_end_date="2026-06-22",
+                    expected_next_day_session_date="2026-06-18",
+                    expected_five_day_session_date="2026-06-24",
+                    next_day_outcome_state="complete",
+                    five_day_outcome_state="pending_not_mature",
+                    outcome_reason="june17 row",
+                    outcome_status="pending_five_day",
+                ),
+                outcome_row(
+                    june18,
+                    "COO",
+                    next_day_return_pct="4.0000",
+                    outcome_start_date="2026-06-22",
+                    outcome_end_date="2026-06-23",
+                    expected_next_day_session_date="2026-06-22",
+                    expected_five_day_session_date="2026-06-26",
+                    next_day_outcome_state="complete",
+                    five_day_outcome_state="pending_not_mature",
+                    outcome_reason="june18 row",
+                    outcome_status="pending_five_day",
+                ),
+            ],
+        )
+
+        rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        self.assertEqual(["2026-06-17", "2026-06-18"], [row.capture_date for row in rows])
+        self.assertNotEqual(rows[0].capture_id, rows[1].capture_id)
+        self.assertNotEqual(rows[0].candidate_row_id, rows[1].candidate_row_id)
+        self.assertNotEqual(rows[0].outcome_record_id, rows[1].outcome_record_id)
+        self.assertIn("2026-06-17", rows[0].capture_path)
+        self.assertIn("2026-06-18", rows[1].capture_path)
+
+        from momentum_hunter.app import format_replay_html, format_timeline_detail_html, selected_timeline_row
+
+        first_detail = format_timeline_detail_html(selected_timeline_row(rows, 0))
+        second_detail = format_timeline_detail_html(selected_timeline_row(rows, 1))
+        self.assertIn("Replay Audit Identity", first_detail)
+        self.assertIn("2026-06-17", first_detail)
+        self.assertIn("june17 row", first_detail)
+        self.assertIn("2026-06-18", second_detail)
+        self.assertIn("june18 row", second_detail)
+        self.assertNotEqual(first_detail, second_detail)
+
+        first_replay = format_replay_html(build_replay_view_model(rows[0]))
+        second_replay = format_replay_html(build_replay_view_model(rows[1]))
+        self.assertIn(rows[0].candidate_row_id, first_replay)
+        self.assertIn(rows[1].candidate_row_id, second_replay)
+        self.assertNotEqual(first_replay, second_replay)
+        self.assertIsNone(selected_timeline_row(rows, 99))
+
+        switch_sequence = [
+            format_timeline_detail_html(selected_timeline_row(rows, index))
+            for index in [0, 1, 0, 1]
+        ]
+        self.assertIn("2026-06-17", switch_sequence[0])
+        self.assertIn("2026-06-18", switch_sequence[1])
+        self.assertEqual(switch_sequence[0], switch_sequence[2])
+        self.assertEqual(switch_sequence[1], switch_sequence[3])
+        self.assertNotEqual(switch_sequence[2], switch_sequence[3])
+
+    def test_replay_ticker_selection_uses_selected_candidate_symbol(self) -> None:
+        payload = capture_payload("2026-06-18T19:00:00-05:00", "evening", "Base Momentum", price=100.0, score=90)
+        other = dict(payload["candidates"][0])
+        other["ticker"] = "FROG"
+        other["price"] = 42.0
+        other["score"] = 77
+        payload["candidates"].append(other)
+        write_capture(self.captures_dir / "2026-06-18" / "evening.json", payload)
+
+        coo_rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+        frog_rows = build_candidate_timeline(
+            "FROG",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        self.assertEqual("COO", coo_rows[0].ticker)
+        self.assertEqual("FROG", frog_rows[0].ticker)
+        self.assertNotEqual(coo_rows[0].candidate_row_id, frog_rows[0].candidate_row_id)
+
+        from momentum_hunter.app import format_timeline_detail_html
+
+        self.assertIn("Selected symbol: COO", format_timeline_detail_html(coo_rows[0]))
+        self.assertIn("Selected symbol: FROG", format_timeline_detail_html(frog_rows[0]))
+
+    def test_empty_replay_selection_shows_reason_instead_of_defaulting(self) -> None:
+        from momentum_hunter.app import format_timeline_detail_html, selected_timeline_row
+
+        self.assertIsNone(selected_timeline_row([], 0))
+        html = format_timeline_detail_html(None, reason="No Replay rows found for XYZ.")
+
+        self.assertIn("No Replay rows found for XYZ.", html)
+        self.assertNotIn("2026-06-17", html)
+
+    def test_candidate_story_summary_tracks_first_latest_and_peak(self) -> None:
+        first = capture_payload("2026-06-17T07:00:00-05:00", "morning", "Base Momentum", price=100.0, score=80)
+        peak = capture_payload("2026-06-18T19:00:00-05:00", "evening", "Base Momentum", price=112.0, score=96)
+        latest = capture_payload("2026-06-22T07:00:00-05:00", "morning", "Base Momentum", price=110.0, score=89)
+        write_capture(self.captures_dir / "2026-06-17" / "morning.json", first)
+        write_capture(self.captures_dir / "2026-06-18" / "evening.json", peak)
+        write_capture(self.captures_dir / "2026-06-22" / "morning.json", latest)
+
+        rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        from momentum_hunter.app import build_candidate_story_summary, format_candidate_story_header_html, story_marker_specs
+
+        summary = build_candidate_story_summary(rows)
+        header = format_candidate_story_header_html(summary)
+
+        self.assertEqual("COO", summary.ticker)
+        self.assertEqual("Cool Corp", summary.company)
+        self.assertEqual(3, summary.trusted_capture_count)
+        self.assertEqual(100.0, summary.first_price)
+        self.assertEqual(110.0, summary.latest_price)
+        self.assertAlmostEqual(10.0, summary.move_since_first_pct or 0.0)
+        self.assertEqual(80.0, summary.first_score)
+        self.assertEqual(89.0, summary.latest_score)
+        self.assertEqual(96.0, summary.peak_score)
+        self.assertEqual("Holding", summary.status)
+        self.assertIn("Jun 18", summary.peak_score_text)
+        self.assertIn("Score", header)
+        self.assertIn("$100.00", header)
+        self.assertIn("+10.0%", header)
+        self.assertIn("Holding", header)
+        self.assertIn("First seen", summary.points[0].note)
+        self.assertIn("Peak score", summary.points[1].note)
+        self.assertIn("Latest capture", summary.points[2].note)
+        self.assertEqual([("First seen", 0), ("Peak score", 1), ("Latest capture", 2)], story_marker_specs(summary))
+
+    def test_candidate_story_single_capture_is_insufficient_data(self) -> None:
+        payload = capture_payload("2026-06-17T07:00:00-05:00", "morning", "Base Momentum", price=100.0, score=80)
+        write_capture(self.captures_dir / "2026-06-17" / "morning.json", payload)
+        rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        from momentum_hunter.app import build_candidate_story_summary
+
+        summary = build_candidate_story_summary(rows)
+
+        self.assertEqual("Insufficient data", summary.status)
+        self.assertEqual(1, len(summary.points))
+        self.assertTrue(any("Only one capture" in warning for warning in summary.warnings))
+
+    def test_candidate_story_missing_prices_warns_without_inventing_points(self) -> None:
+        payload = capture_payload("2026-06-17T07:00:00-05:00", "morning", "Base Momentum", price=100.0, score=80)
+        payload["candidates"][0]["price"] = ""
+        write_capture(self.captures_dir / "2026-06-17" / "morning.json", payload)
+        rows = build_candidate_timeline(
+            "COO",
+            captures_dir=self.captures_dir,
+            manifest_path=self.manifest_path,
+            score_breakdowns_path=self.score_path,
+            review_decisions_path=self.review_path,
+            outcomes_csv=self.outcomes_csv,
+        )
+
+        from momentum_hunter.app import build_candidate_story_summary
+
+        summary = build_candidate_story_summary(rows)
+
+        self.assertIsNone(summary.first_price)
+        self.assertEqual([], summary.chartable_price_points)
+        self.assertTrue(any("stored prices are missing" in warning for warning in summary.warnings))
+
 
 def capture_payload(capture_time: str, session: str, scanner: str, *, price: float, score: int) -> dict:
     return {
@@ -409,8 +699,15 @@ def write_review_decision(path: Path, capture: dict, ticker: str) -> None:
     )
 
 
-def write_outcomes(path: Path, capture: dict, ticker: str) -> None:
+def write_outcomes(path: Path, capture: dict, ticker: str, extra: dict | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    row = outcome_row(capture, ticker)
+    if extra:
+        row.update(extra)
+    write_outcome_rows(path, [row])
+
+
+def outcome_row(capture: dict, ticker: str, **extra: str) -> dict:
     row = {field: "" for field in OUTCOME_FIELDNAMES}
     row.update(
         {
@@ -428,10 +725,16 @@ def write_outcomes(path: Path, capture: dict, ticker: str) -> None:
             "outcome_status": "complete",
         }
     )
+    row.update(extra)
+    return row
+
+
+def write_outcome_rows(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=OUTCOME_FIELDNAMES)
         writer.writeheader()
-        writer.writerow(row)
+        writer.writerows(rows)
 
 
 if __name__ == "__main__":

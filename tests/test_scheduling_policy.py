@@ -91,6 +91,32 @@ class SchedulingPolicyTests(unittest.TestCase):
         self.assertFalse(thanksgiving.should_capture)
         self.assertEqual(SkipReason.SKIP_NOT_PREOPEN_GAP_REVIEW_DAY.value, thanksgiving.skip_reason)
 
+    def test_juneteenth_2026_morning_and_ordinary_evening_are_skipped(self) -> None:
+        morning = self.decision(CaptureSession.MORNING, "2026-06-19T07:00:00-05:00")
+        evening = self.decision(CaptureSession.EVENING, "2026-06-19T19:00:00-05:00")
+
+        self.assertFalse(is_market_open_day(datetime.fromisoformat("2026-06-19").date()))
+        self.assertFalse(morning.should_capture)
+        self.assertEqual(SkipReason.SKIP_NOT_MARKET_DAY.value, morning.skip_reason)
+        self.assertFalse(evening.should_capture)
+        self.assertEqual(SkipReason.SKIP_NOT_PREOPEN_GAP_REVIEW_DAY.value, evening.skip_reason)
+
+    def test_market_day_time_blocks_and_early_close_are_classified_correctly(self) -> None:
+        premarket = classify_capture("2026-06-18T07:00:00-05:00", "morning", capture_date="2026-06-18")
+        intraday_manual = classify_capture("2026-06-18T12:00:00-05:00", "manual", capture_date="2026-06-18")
+        post_close = classify_capture("2026-06-18T19:00:00-05:00", "evening", capture_date="2026-06-18")
+        early_close = classify_capture("2026-11-27T19:00:00-06:00", "evening", capture_date="2026-11-27")
+
+        self.assertEqual(CaptureCalendarStatus.MARKET_OPEN_DAY.value, premarket.capture_calendar_status)
+        self.assertTrue(premarket.is_study_eligible)
+        self.assertEqual(CaptureCalendarStatus.MARKET_OPEN_DAY.value, intraday_manual.capture_calendar_status)
+        self.assertFalse(intraday_manual.is_study_eligible)
+        self.assertEqual(CaptureCalendarStatus.MARKET_OPEN_DAY.value, post_close.capture_calendar_status)
+        self.assertTrue(post_close.is_study_eligible)
+        self.assertTrue(is_market_open_day(datetime.fromisoformat("2026-11-27").date()))
+        self.assertEqual(CaptureCalendarStatus.MARKET_OPEN_DAY.value, early_close.capture_calendar_status)
+        self.assertTrue(early_close.is_study_eligible)
+
     def test_manual_weekend_capture_is_allowed(self) -> None:
         decision = self.decision(CaptureSession.MANUAL, "2026-06-06T12:00:00-05:00")
 

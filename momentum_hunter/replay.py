@@ -3,11 +3,11 @@ from __future__ import annotations
 import csv
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from momentum_hunter.config import DATA_DIR
-from momentum_hunter.outcomes import OUTCOMES_CSV
+from momentum_hunter.outcomes import OUTCOMES_CSV, expected_outcome_session_dates
 from momentum_hunter.review import CandidateIdentity, ReviewDecision, load_review_decisions, make_capture_id
 from momentum_hunter.scheduling import (
     CaptureCalendarStatus,
@@ -41,6 +41,7 @@ class TimelineRow:
     candidate_identity: CandidateIdentity
     score_identity: dict
     capture_path: str
+    capture_id: str
     capture_date: str
     capture_time: datetime | None
     capture_time_text: str
@@ -55,6 +56,10 @@ class TimelineRow:
     calendar_label: str
     is_ordinary_non_trading_day: bool
     trust_label: str
+    candidate_row_id: str
+    candidate_fingerprint: str
+    outcome_record_id: str
+    last_refresh_time_text: str
     fields: dict[str, SourceValue]
     raw_candidate: dict
     capture_payload: dict
@@ -100,12 +105,13 @@ def build_candidate_timeline(
         payload = load_capture_payload(capture_path)
         if not payload:
             continue
-        for candidate in payload.get("candidates", []):
+        for candidate_index, candidate in enumerate(payload.get("candidates", [])):
             if str(candidate.get("ticker", "")).upper() != normalized_ticker:
                 continue
             row = build_timeline_row(
                 payload,
                 candidate,
+                candidate_index=candidate_index,
                 capture_path=capture_path,
                 quarantined=quarantined,
                 score_breakdowns_path=score_breakdowns_path,
@@ -137,6 +143,7 @@ def build_timeline_row(
     capture_payload: dict,
     candidate_payload: dict,
     *,
+    candidate_index: int = 0,
     capture_path: Path,
     quarantined: bool,
     score_breakdowns_path: Path,
@@ -172,7 +179,8 @@ def build_timeline_row(
     score_breakdown_status = score_breakdown.get("status", "missing") if score_breakdown else "missing"
     score_engine_version = score_breakdown.get("score_engine_version", "") if score_breakdown else ""
     review_decision = review_decisions.get(candidate_identity.key)
-    outcome = outcomes.get(outcome_key(capture_date, capture_time_raw, session, provider, scanner, ticker))
+    outcome_record_id = outcome_key(capture_date, capture_time_raw, session, provider, scanner, ticker)
+    outcome = outcomes.get(outcome_record_id)
     warnings: list[str] = []
     calendar_classification = classify_capture(capture_time_raw, session, capture_date=capture_date)
     calendar_text = calendar_label(calendar_classification)
@@ -194,6 +202,7 @@ def build_timeline_row(
         warnings.append(f"Score breakdown is {score_breakdown.get('status')}")
     if outcome is None:
         warnings.append("Missing later outcome label")
+    outcome_context = replay_outcome_context(outcome, capture_date)
     relative_volume_value = replay_relative_volume_value(candidate_payload, scanner)
     if relative_volume_value.source == SYSTEM_WARNING:
         warnings.append("Relative volume unavailable in raw capture - displayed as N/A, not 0.0")
@@ -222,13 +231,23 @@ def build_timeline_row(
         "five_day_return_pct": SourceValue(outcome.get("five_day_return_pct", "") if outcome else "", OUTCOME_LABEL),
         "max_gain_pct": SourceValue(outcome.get("max_gain_pct", "") if outcome else "", OUTCOME_LABEL),
         "max_drawdown_pct": SourceValue(outcome.get("max_drawdown_pct", "") if outcome else "", OUTCOME_LABEL),
+        "outcome_start_date": SourceValue(outcome.get("outcome_start_date", "") if outcome else "", OUTCOME_LABEL),
+        "outcome_end_date": SourceValue(outcome.get("outcome_end_date", "") if outcome else "", OUTCOME_LABEL),
+        "expected_next_day_session_date": SourceValue(outcome_context["expected_next_day_session_date"], OUTCOME_LABEL),
+        "expected_five_day_session_date": SourceValue(outcome_context["expected_five_day_session_date"], OUTCOME_LABEL),
+        "next_day_outcome_state": SourceValue(outcome_context["next_day_outcome_state"], OUTCOME_LABEL),
+        "five_day_outcome_state": SourceValue(outcome_context["five_day_outcome_state"], OUTCOME_LABEL),
+        "outcome_reason": SourceValue(outcome_context["outcome_reason"], OUTCOME_LABEL),
+        "outcome_calculation_version": SourceValue(outcome_context["outcome_calculation_version"], OUTCOME_LABEL),
     }
     identity_key = score_breakdown_identity_key(score_identity)
+    candidate_row_id = f"{capture_date}|{session}|{provider}|{scanner}|row:{candidate_index}|{ticker}".upper()
     return TimelineRow(
         identity_key=identity_key,
         candidate_identity=candidate_identity,
         score_identity=score_identity,
         capture_path=capture_path.as_posix(),
+        capture_id=candidate_identity.capture_id,
         capture_date=capture_date,
         capture_time=capture_time,
         capture_time_text=format_central(capture_time) if capture_time else capture_time_raw,
@@ -243,6 +262,10 @@ def build_timeline_row(
         calendar_label=calendar_text,
         is_ordinary_non_trading_day=is_ordinary_non_trading_day,
         trust_label=trust_label(quarantined, calendar_classification, score_breakdown_status),
+        candidate_row_id=candidate_row_id,
+        candidate_fingerprint=signal_candidate_fingerprint(candidate_payload, scanner),
+        outcome_record_id=outcome_record_id if outcome else "missing",
+        last_refresh_time_text=format_central(now_central()),
         fields=fields,
         raw_candidate=dict(candidate_payload),
         capture_payload=dict(capture_payload),
@@ -264,6 +287,85 @@ def replay_relative_volume_value(candidate_payload: dict, scanner: str) -> Sourc
     if numeric_value == 0.0 and scanner in SCANNER_PRESETS:
         return SourceValue("N/A (legacy zero)", SYSTEM_WARNING)
     return SourceValue(raw_value, RAW_CAPTURE)
+
+
+def replay_outcome_context(outcome: dict | None, capture_date: str) -> dict[str, str]:
+    expected_next = ""
+    expected_five = ""
+    try:
+        next_day, five_day = expected_outcome_session_dates(capture_date)
+        expected_next = next_day.isoformat()
+        expected_five = five_day.isoformat()
+    except ValueError:
+        pass
+    if outcome is None:
+        return {
+            "expected_next_day_session_date": expected_next,
+            "expected_five_day_session_date": expected_five,
+            "next_day_outcome_state": "missing",
+            "five_day_outcome_state": "missing",
+            "outcome_reason": "missing later outcome label",
+            "outcome_calculation_version": "",
+        }
+    next_day_return = str(outcome.get("next_day_return_pct", "")).strip()
+    five_day_return = str(outcome.get("five_day_return_pct", "")).strip()
+    outcome_status = str(outcome.get("outcome_status", "")).strip()
+    expected_next_outcome = outcome.get("expected_next_day_session_date", "") or expected_next
+    expected_five_outcome = outcome.get("expected_five_day_session_date", "") or expected_five
+    next_day_state = outcome.get("next_day_outcome_state", "") or legacy_outcome_state(
+        next_day_return,
+        outcome_status,
+        expected_next_outcome,
+    )
+    five_day_state = outcome.get("five_day_outcome_state", "") or legacy_outcome_state(
+        five_day_return,
+        outcome_status,
+        expected_five_outcome,
+    )
+    return {
+        "expected_next_day_session_date": expected_next_outcome,
+        "expected_five_day_session_date": expected_five_outcome,
+        "next_day_outcome_state": next_day_state,
+        "five_day_outcome_state": five_day_state,
+        "outcome_reason": outcome.get("outcome_reason", "") or legacy_outcome_reason(
+            outcome_status,
+            next_day_return,
+            five_day_return,
+            expected_next_outcome,
+            expected_five_outcome,
+        ),
+        "outcome_calculation_version": outcome.get("outcome_calculation_version", ""),
+    }
+
+
+def legacy_outcome_state(return_value: str, status: str, expected_date: str) -> str:
+    if return_value:
+        return "complete"
+    try:
+        expected_day = date.fromisoformat(expected_date)
+    except (TypeError, ValueError):
+        return status or "missing"
+    if now_central().date() <= expected_day:
+        return "pending_not_mature"
+    if status in {"pending_next_day", "pending_five_day"}:
+        return "provider_data_missing"
+    return status or "missing"
+
+
+def legacy_outcome_reason(status: str, next_day_return: str, five_day_return: str, expected_next: str, expected_five: str) -> str:
+    if next_day_return and five_day_return:
+        return "complete: legacy outcome row has next-day and five-day returns"
+    if next_day_return:
+        try:
+            expected_five_day = date.fromisoformat(expected_five)
+        except (TypeError, ValueError):
+            expected_five_day = None
+        if expected_five_day and now_central().date() > expected_five_day:
+            return f"next-day complete for {expected_next}; five-day provider data missing for {expected_five}"
+        return f"next-day complete for {expected_next}; five-day pending until {expected_five}"
+    if status:
+        return f"legacy outcome status: {status}"
+    return "missing outcome state"
 
 
 def trust_label(quarantined: bool, classification: CaptureCalendarClassification, score_breakdown_status: str) -> str:
@@ -355,6 +457,14 @@ def signal_fingerprint_key(row: TimelineRow) -> str:
     for key in keys:
         value = row.fields.get(key)
         values.append(str(value.value if value else "").strip().upper())
+    return "|".join(values)
+
+
+def signal_candidate_fingerprint(candidate_payload: dict, scanner: str) -> str:
+    keys = ["ticker", "price", "percent_change", "volume", "relative_volume", "score"]
+    values = [scanner]
+    for key in keys:
+        values.append(str(candidate_payload.get(key, "")).strip().upper())
     return "|".join(values)
 
 
