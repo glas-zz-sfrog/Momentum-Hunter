@@ -162,9 +162,18 @@ Reliability reports are derived operator trust artifacts. They read existing raw
 - Path: `MomentumHunterData/data/momentum-hunter.sqlite3`
 - Owner: `momentum_hunter/sqlite_store.py`, `momentum_hunter/sqlite_migration.py`
 - Mutability: additive derived mirror only
-- Current first slice: `provider_quality_checks` imported from `MomentumHunterData/data/reports/data-quality-latest.json`
+- Current additive slices: `provider_quality_checks` imported from `MomentumHunterData/data/reports/data-quality-latest.json`; `opportunity_alerts` and `alert_outcomes` imported from `MomentumHunterData/data/opportunity-alerts.json`
 
-SQLite is not the runtime source of truth yet. Existing raw captures, CSVs, JSON state stores, Markdown reports, and status files remain in place. The SQLite foundation currently provides schema initialization, idempotent migration tracking, and a low-risk import path for provider/data-quality report rows.
+SQLite is not the runtime source of truth yet. Existing raw captures, CSVs, JSON state stores, Markdown reports, and status files remain in place. The SQLite foundation currently provides schema initialization, idempotent migration tracking, a low-risk import path for provider/data-quality report rows, and an additive evidence mirror for opportunity alerts and embedded alert outcomes.
+
+Evidence slice reports are written to:
+
+```text
+MomentumHunterData/data/reports/sqlite-evidence-import-latest.json
+MomentumHunterData/data/reports/sqlite-evidence-import-latest.md
+```
+
+The evidence slice preserves pending, completed, and terminal unscorable alert outcomes exactly as they appear in `opportunity-alerts.json`. It does not import `opportunity-minute-bars.json` yet; minute bars are the recommended next SQLite evidence slice.
 
 Do not migrate raw captures, review decisions, watchlist state, or entry plans into SQLite as the only source of truth until backup, conflict handling, hash validation, and recovery behavior are designed and tested.
 

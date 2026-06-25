@@ -4,6 +4,11 @@
 
 ### Added
 
+- Added SQLite Evidence Slice v1 documentation for mirroring `opportunity-alerts.json` and embedded alert outcomes into SQLite while preserving JSON as source of truth.
+- Extended the SQLite schema to version 2 with richer `opportunity_alerts` and `alert_outcomes` fields, source file hashes, source paths, and import timestamps.
+- Added idempotent SQLite import/upsert support for opportunity alerts and alert outcomes, including pending, completed, and terminal unscorable classifications.
+- Added `python -m momentum_hunter.sqlite_migration --slice evidence` and generated latest evidence import reports under `MomentumHunterData/data/reports/sqlite-evidence-import-latest.*`.
+- Added focused SQLite evidence tests for alert/outcome round trips, idempotent imports, pending-to-completed updates, unscorable preservation, missing optional fields, and source-file immutability.
 - Added SQLite Migration Foundation v1 documentation with current storage audit, risk classification, and initial schema proposal.
 - Added additive SQLite adapter and migration CLI for `MomentumHunterData/data/momentum-hunter.sqlite3`.
 - Added idempotent schema initialization and first low-risk vertical slice importing provider/data-quality report rows into `provider_quality_checks`.
