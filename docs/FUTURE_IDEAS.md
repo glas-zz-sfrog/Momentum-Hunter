@@ -21,6 +21,8 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 
 - Continuous watchlist polling loop for watchlist, interested, execution-ready, and user-defined symbols
 - Active monitor scheduler service with GUI start/stop/status controls
+- Automated daily system-readiness dispatch after scheduled captures and Evidence Autopilot runs
+- Reliability trend dashboard showing provider health, monitor-cycle reliability, and evidence completion rates over time
 - Active monitor cycle dashboard with current target coverage and missing-symbol warnings
 - Live market-data backed alert outcome updater beyond trade-planning observation snapshots
 - Tick-level MFE/MAE refinement beyond one-minute bars

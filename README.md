@@ -102,6 +102,29 @@ Outcome fields include:
 
 Outcome states distinguish `pending_not_mature`, `complete`, `provider_data_missing`, `calculation_failed`, `ineligible_capture`, and `calendar_mapping_error`. Market holidays and weekends are handled by expected market-session dates; for example, a June 18, 2026 capture uses June 22, 2026 as the next outcome session because June 19 was Juneteenth.
 
+## Reliability Reports
+
+Momentum Hunter includes read-only reliability reports for checking whether the system can be trusted before review or evidence analysis.
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.data_quality
+.\.venv\Scripts\python.exe -m momentum_hunter.evidence_autopilot_reliability
+.\.venv\Scripts\python.exe -m momentum_hunter.system_readiness
+```
+
+These write:
+
+```text
+MomentumHunterData\data\reports\data-quality-latest.json
+MomentumHunterData\data\reports\data-quality-latest.md
+MomentumHunterData\data\reports\evidence-autopilot-latest.json
+MomentumHunterData\data\reports\evidence-autopilot-latest.md
+MomentumHunterData\data\reports\system-readiness-latest.json
+MomentumHunterData\data\reports\system-readiness-latest.md
+```
+
+These reports are diagnostic only. They do not change scanner logic, scoring, readiness states, alert thresholds, trade-planning rules, raw captures, broker behavior, or automated trading behavior.
+
 ## Watchlist Discipline
 
 When a current/live candidate is moved to Watchlist, Momentum Hunter can store an entry plan with trigger, stop, thesis, invalidation, max loss, position size idea, planned hold time, and notes. Incomplete plans show warnings for missing trigger, stop, invalidation, and max loss.

@@ -1,5 +1,18 @@
 # Momentum Hunter Changelog
 
+## 2026-06-25
+
+### Added
+
+- Added Autonomous Reliability Sprint v1 report layer with `momentum_hunter.data_quality`, `momentum_hunter.evidence_autopilot_reliability`, and `momentum_hunter.system_readiness`.
+- Added latest derived reports for provider/data-quality audit, Evidence Autopilot reliability, and system readiness under `MomentumHunterData/data/reports/`.
+- Added documentation for provider audit, Evidence Autopilot reliability, system-readiness data layer, and the Autonomous Reliability Sprint safety contract.
+- Added focused non-Qt tests for data-quality reporting, Evidence Autopilot reliability reporting, and readiness-section status behavior.
+
+### Safety
+
+- Reliability reports are read-only diagnostics. They do not change scanner logic, scoring math, readiness thresholds, alert generation, ranking, trade-planning rules, raw captures, broker behavior, or automated trading behavior.
+
 ## 2026-06-24
 
 ### Fixed

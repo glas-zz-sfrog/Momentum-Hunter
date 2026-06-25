@@ -139,6 +139,24 @@ Persisted study reports, when added, should live under `MomentumHunterData/data/
 
 The Research Lab area excludes rows where `is_study_eligible` is false by default. This keeps weekend, holiday, `preopen`, and manual observations out of ordinary market-session performance statistics unless the user explicitly enables non-trading-day/preopen inclusion.
 
+## Reliability reports
+
+- Paths:
+  - `MomentumHunterData/data/reports/data-quality-latest.json`
+  - `MomentumHunterData/data/reports/data-quality-latest.md`
+  - `MomentumHunterData/data/reports/evidence-autopilot-latest.json`
+  - `MomentumHunterData/data/reports/evidence-autopilot-latest.md`
+  - `MomentumHunterData/data/reports/system-readiness-latest.json`
+  - `MomentumHunterData/data/reports/system-readiness-latest.md`
+- Owners:
+  - `momentum_hunter/data_quality.py`
+  - `momentum_hunter/evidence_autopilot_reliability.py`
+  - `momentum_hunter/system_readiness.py`
+- Mutability: disposable/rebuildable latest reports
+- Stores: provider/market-tape quality, scanner field reliability, evidence-autopilot status, outcome evidence health, and section-level system readiness
+
+Reliability reports are derived operator trust artifacts. They read existing raw captures, derived stores, monitor status, evidence status, and watchlist state, then write latest report files. They must not mutate raw captures, rewrite score values, change readiness rules, alter alert thresholds, or modify trade-planning rules.
+
 ## Historical Cluster Display
 
 - UI location: Research Lab dialog, `Catalyst - Historical Setups` tab
