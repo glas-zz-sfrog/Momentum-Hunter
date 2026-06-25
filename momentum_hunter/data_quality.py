@@ -31,6 +31,7 @@ TAPE_FIELDS = [
     "spread_percent",
     "premarket_volume",
     "intraday_volume",
+    "average_daily_volume_20",
     "relative_volume",
     "rvol_numerator",
     "rvol_denominator",
@@ -64,6 +65,7 @@ class DataQualityReport:
     provider_summary: dict[str, dict[str, int]]
     symbol_rows: list[DataQualitySymbol]
     field_summary: dict[str, dict[str, int]]
+    timestamp_summary: dict[str, Any]
     scanner_field_reliability: dict[str, dict[str, int]]
     capture_summary: dict[str, Any]
     minute_bar_coverage: dict[str, Any]
@@ -113,6 +115,7 @@ def build_data_quality_report(
         provider_summary=market_tape_report.provider_summary if market_tape_report else {},
         symbol_rows=symbol_rows,
         field_summary=field_summary,
+        timestamp_summary=timestamp_summary(clean_symbols),
         scanner_field_reliability=scanner_reliability,
         capture_summary=capture_summary(capture_rows),
         minute_bar_coverage=minute_coverage,
@@ -347,6 +350,20 @@ def minute_bar_coverage(symbols: list[str], minute_bars_path: Path) -> dict[str,
     }
 
 
+def timestamp_summary(symbols: list[str]) -> dict[str, Any]:
+    return {
+        "source_timestamp_supported": False,
+        "known_timestamp_count": 0,
+        "unknown_timestamp_count": len(symbols),
+        "stale_timestamp_count": 0,
+        "invalid_timestamp_count": 0,
+        "note": (
+            "MarketTape does not currently normalize provider quote timestamps; "
+            "stale quote detection is therefore unknown, not assumed fresh."
+        ),
+    }
+
+
 def build_warnings(
     *,
     symbols: list[str],
@@ -365,6 +382,8 @@ def build_warnings(
         warnings.append("SYMBOLS_WITHOUT_USABLE_MARKET_TAPE")
     if market_tape_report:
         warnings.extend(market_tape_report.warnings)
+    if symbols:
+        warnings.append("MARKET_TAPE_TIMESTAMP_UNAVAILABLE")
     for field_name in ["bid", "ask", "spread_percent", "relative_volume"]:
         row = field_summary.get(field_name, {})
         if row.get("missing", 0):
@@ -451,6 +470,7 @@ def data_quality_report_from_dict(raw: dict[str, Any]) -> DataQualityReport:
             if isinstance(item, dict)
         ],
         field_summary=raw.get("field_summary", {}) if isinstance(raw.get("field_summary"), dict) else {},
+        timestamp_summary=raw.get("timestamp_summary", {}) if isinstance(raw.get("timestamp_summary"), dict) else {},
         scanner_field_reliability=raw.get("scanner_field_reliability", {})
         if isinstance(raw.get("scanner_field_reliability"), dict)
         else {},
@@ -481,6 +501,9 @@ def format_data_quality_markdown(report: DataQualityReport) -> str:
         f"- Capture candidate rows scanned: {report.capture_summary.get('candidate_row_count', 0)}",
         f"- Duplicate ticker anomalies: {len(report.duplicate_capture_anomalies)}",
         f"- Repeated identical candidate anomalies: {len(report.repeated_ticker_anomalies)}",
+        f"- Known quote timestamps: {report.timestamp_summary.get('known_timestamp_count', 0)}",
+        f"- Unknown quote timestamps: {report.timestamp_summary.get('unknown_timestamp_count', 0)}",
+        f"- Stale quote timestamps: {report.timestamp_summary.get('stale_timestamp_count', 0)}",
         f"- Warnings: {'; '.join(report.warnings) if report.warnings else 'none'}",
         "",
         "## Market Tape By Symbol",
@@ -509,6 +532,13 @@ def format_data_quality_markdown(report: DataQualityReport) -> str:
             f"| {provider} | {row.get('attempts', 0)} | {row.get('successes', 0)} | "
             f"{row.get('usable_for_alerting', 0)} | {row.get('failures', 0)} |"
         )
+    lines.extend(["", "## Timestamp Quality", ""])
+    lines.append(str(report.timestamp_summary.get("note", "Timestamp quality was not evaluated.")))
+    lines.append("")
+    lines.append(f"- Known timestamps: {report.timestamp_summary.get('known_timestamp_count', 0)}")
+    lines.append(f"- Unknown timestamps: {report.timestamp_summary.get('unknown_timestamp_count', 0)}")
+    lines.append(f"- Stale timestamps: {report.timestamp_summary.get('stale_timestamp_count', 0)}")
+    lines.append(f"- Invalid timestamps: {report.timestamp_summary.get('invalid_timestamp_count', 0)}")
     lines.extend(["", "## Minute Bar Coverage", ""])
     lines.append(f"- Source: `{report.minute_bar_coverage.get('source_path', '')}`")
     lines.append(f"- Symbols with bars: {report.minute_bar_coverage.get('symbols_with_bars', 0)}")

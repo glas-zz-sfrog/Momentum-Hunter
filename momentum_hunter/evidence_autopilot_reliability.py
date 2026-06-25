@@ -30,6 +30,8 @@ class EvidenceAutopilotReliabilityReport:
     latest_run_completed_at: str
     latest_run_duration_seconds: float | None
     execution_mode: str
+    background_status: str
+    app_closed_behavior: str
     monitor_cycle_completed: bool
     outcome_update_completed: bool
     evidence_report_generated: bool
@@ -94,6 +96,8 @@ def build_evidence_autopilot_reliability_report(
         latest_run_completed_at=status.completed_at if status else "",
         latest_run_duration_seconds=run_duration_seconds(status.started_at, status.completed_at) if status else None,
         execution_mode=execution_mode,
+        background_status=background_status(status, active_status),
+        app_closed_behavior=app_closed_behavior(status, active_status),
         monitor_cycle_completed=bool(status and status.monitor_cycle_completed),
         outcome_update_completed=bool(status and status.outcome_update_completed),
         evidence_report_generated=bool(status and status.evidence_report_generated),
@@ -139,6 +143,25 @@ def infer_execution_mode(status: object, active_status: object) -> str:
     if active_status is not None and getattr(active_status, "state", "") == "RUNNING":
         return "ACTIVE_MONITOR_LOOP_RUNNING"
     return "ON_DEMAND_CLI_OR_DASHBOARD_RUN"
+
+
+def background_status(status: object, active_status: object) -> str:
+    if active_status is not None and getattr(active_status, "state", "") == "RUNNING":
+        return "ACTIVE_MONITOR_LOOP_RUNNING"
+    if status is not None and getattr(status, "state", "") == "RUNNING":
+        return "AUTOPILOT_RUN_IN_PROGRESS"
+    return "NO_BACKGROUND_AUTOPILOT_CONFIRMED"
+
+
+def app_closed_behavior(status: object, active_status: object) -> str:
+    if active_status is not None and getattr(active_status, "state", "") == "RUNNING":
+        return "Monitor loop status is RUNNING, but this report cannot prove it survives app closure."
+    if status is not None:
+        return (
+            "Evidence Autopilot has a latest run record only. If the app is closed, no continuous autopilot "
+            "work is proven unless an external scheduler or CLI process starts it."
+        )
+    return "No autopilot run is recorded; app-closed behavior is unknown."
 
 
 def next_action(status: object, health: EvidenceHealthReport, targets_checked: int) -> str:
@@ -196,6 +219,8 @@ def load_latest_evidence_autopilot_reliability_report(
         latest_run_completed_at=str(raw.get("latest_run_completed_at", "")),
         latest_run_duration_seconds=parse_optional_float(raw.get("latest_run_duration_seconds")),
         execution_mode=str(raw.get("execution_mode", "")),
+        background_status=str(raw.get("background_status", "")),
+        app_closed_behavior=str(raw.get("app_closed_behavior", "")),
         monitor_cycle_completed=bool(raw.get("monitor_cycle_completed", False)),
         outcome_update_completed=bool(raw.get("outcome_update_completed", False)),
         evidence_report_generated=bool(raw.get("evidence_report_generated", False)),
@@ -231,6 +256,8 @@ def format_evidence_autopilot_markdown(report: EvidenceAutopilotReliabilityRepor
         "",
         f"- State: {report.latest_run_state}",
         f"- Execution mode: {report.execution_mode}",
+        f"- Background status: {report.background_status}",
+        f"- App-closed behavior: {report.app_closed_behavior}",
         f"- Started: {report.latest_run_started_at or 'n/a'}",
         f"- Completed: {report.latest_run_completed_at or 'n/a'}",
         f"- Duration seconds: {fmt(report.latest_run_duration_seconds)}",

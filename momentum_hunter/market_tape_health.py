@@ -37,6 +37,7 @@ REPORT_COLUMNS = [
     "Premarket Price",
     "Premarket Volume",
     "Intraday Volume",
+    "20-Day Average Daily Volume",
     "Bid",
     "Ask",
     "Spread %",
@@ -62,6 +63,7 @@ class MarketTapeHealthAttempt:
     premarket_price: float | None = None
     premarket_volume: int | None = None
     intraday_volume: int | None = None
+    average_daily_volume_20: int | None = None
     bid: float | None = None
     ask: float | None = None
     spread_percent: float | None = None
@@ -154,6 +156,7 @@ def health_attempt(
         premarket_price=tape.premarket_price,
         premarket_volume=tape.premarket_volume,
         intraday_volume=tape.intraday_volume,
+        average_daily_volume_20=tape.average_daily_volume_20,
         bid=tape.current_bid,
         ask=tape.current_ask,
         spread_percent=tape.spread_percent,
@@ -169,6 +172,7 @@ def tape_fields(tape: MarketTape) -> dict[str, object]:
         "premarket_price": tape.premarket_price,
         "premarket_volume": tape.premarket_volume,
         "intraday_volume": tape.intraday_volume,
+        "average_daily_volume_20": tape.average_daily_volume_20,
         "bid": tape.current_bid,
         "ask": tape.current_ask,
         "spread_percent": tape.spread_percent,
@@ -303,6 +307,7 @@ def row_to_csv(attempt: MarketTapeHealthAttempt) -> dict[str, object]:
         "Premarket Price": optional(attempt.premarket_price),
         "Premarket Volume": optional(attempt.premarket_volume),
         "Intraday Volume": optional(attempt.intraday_volume),
+        "20-Day Average Daily Volume": optional(attempt.average_daily_volume_20),
         "Bid": optional(attempt.bid),
         "Ask": optional(attempt.ask),
         "Spread %": optional(attempt.spread_percent),

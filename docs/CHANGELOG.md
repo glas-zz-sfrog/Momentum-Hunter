@@ -6,6 +6,8 @@
 
 - Added Autonomous Reliability Sprint v1 report layer with `momentum_hunter.data_quality`, `momentum_hunter.evidence_autopilot_reliability`, and `momentum_hunter.system_readiness`.
 - Added latest derived reports for provider/data-quality audit, Evidence Autopilot reliability, and system readiness under `MomentumHunterData/data/reports/`.
+- Added explicit timestamp-quality accounting to the data-quality report so unavailable quote timestamps are marked unknown rather than treated as fresh.
+- Added Evidence Autopilot background/app-closed behavior fields so a completed run is not mistaken for a verified daemon.
 - Added documentation for provider audit, Evidence Autopilot reliability, system-readiness data layer, and the Autonomous Reliability Sprint safety contract.
 - Added focused non-Qt tests for data-quality reporting, Evidence Autopilot reliability reporting, and readiness-section status behavior.
 

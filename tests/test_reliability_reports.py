@@ -67,6 +67,8 @@ class ReliabilityReportTests(unittest.TestCase):
         self.assertEqual(1, report.usable_market_tape_count)
         self.assertEqual(1, report.missing_market_tape_count)
         self.assertIn("SCANNER_RELATIVE_VOLUME_GAPS", report.warnings)
+        self.assertIn("MARKET_TAPE_TIMESTAMP_UNAVAILABLE", report.warnings)
+        self.assertEqual(2, report.timestamp_summary["unknown_timestamp_count"])
         self.assertIn("DUPLICATE_TICKERS_WITHIN_CAPTURE", report.warnings)
         self.assertEqual(1, len(report.duplicate_capture_anomalies))
         self.assertTrue(paths["json"].exists())
@@ -107,6 +109,8 @@ class ReliabilityReportTests(unittest.TestCase):
         self.assertEqual(1, report.completed_alerts)
         self.assertEqual(0, report.pending_alerts)
         self.assertEqual(1, report.unscorable_alerts)
+        self.assertEqual("NO_BACKGROUND_AUTOPILOT_CONFIRMED", report.background_status)
+        self.assertIn("no continuous autopilot work is proven", report.app_closed_behavior)
         self.assertIn("NO_ALERT_OUTCOME_UPDATE_STATUS", report.warnings)
 
     def test_system_readiness_sections_surface_warnings_without_strategy_changes(self) -> None:
