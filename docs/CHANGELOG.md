@@ -14,6 +14,7 @@
 - Added App Modularization Audit v1 and extracted score explanation HTML/view-model formatting from `app.py` into `momentum_hunter/score_explanation_view_model.py`.
 - Added focused non-Qt score explanation view-model tests for human-readable score values, rule threshold formatting, compact component grouping, freshness context, and latest article display.
 - Polished Candidate Story chart readability with chip-style legends, clearer marker labels, stronger chart contrast, and more readable axis/title fonts.
+- Added the Roadmap Reconciliation & Autonomous Closure Sprint v1 final report with commits, validation results, safety status, remaining work, and recommended next sprints.
 
 ### Fixed
 
