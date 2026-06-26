@@ -15,6 +15,8 @@
 - Added focused non-Qt score explanation view-model tests for human-readable score values, rule threshold formatting, compact component grouping, freshness context, and latest article display.
 - Polished Candidate Story chart readability with chip-style legends, clearer marker labels, stronger chart contrast, and more readable axis/title fonts.
 - Added the Roadmap Reconciliation & Autonomous Closure Sprint v1 final report with commits, validation results, safety status, remaining work, and recommended next sprints.
+- Added Night Shift Offline Platform Hardening Sprint v1 kickoff documentation and extracted Candidate Story summary/header/marker view-model helpers from `app.py` into `momentum_hunter/candidate_story_view_model.py`.
+- Added focused Candidate Story view-model tests and included them in the bounded backend-safe test group.
 
 ### Fixed
 
@@ -30,6 +32,7 @@
 - Test Harness Reliability v1 changes test execution policy/tooling only. It does not change application behavior, scanner logic, scoring, readiness, alerts, outcomes, trade planning, SQLite authority, or raw captures.
 - Score explanation extraction is formatting-only. It does not recalculate score values, alter scoring weights, change readiness/alert/outcome/trade-planning logic, mutate raw captures, or make SQLite authoritative.
 - Candidate Story chart polish changes presentation only. It does not add intraday/5D charting, change stored timeline data, recalculate outcomes, change scoring, or mutate captures.
+- Candidate Story view-model extraction preserves existing `app.py` import compatibility and does not change capture data, replay data, scoring, outcomes, alerts, readiness, or trade-planning behavior.
 
 ## 2026-06-25
 

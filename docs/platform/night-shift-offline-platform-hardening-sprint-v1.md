@@ -154,3 +154,49 @@ Starting state is acceptable for offline platform work:
 - SQLite read models PASS/OK.
 - System Readiness WARNING due to known operational/evidence state, not data-integrity failure.
 - No raw capture or user-authored state mutation detected.
+
+## Phase 1 Result
+
+Phase 1 is complete.
+
+Goal:
+
+- Continue reducing `app.py` responsibility without visual redesign or behavior changes.
+
+Implemented:
+
+- Added `momentum_hunter/candidate_story_view_model.py`.
+- Moved pure Candidate Story data/view-model helpers out of `app.py`:
+  - `CandidateStoryPoint`
+  - `CandidateStorySummary`
+  - `build_candidate_story_summary`
+  - Candidate Story status classification
+  - capture/story formatting helpers
+  - marker detail/spec preparation
+- Left Qt table/chart construction in `app.py`.
+- Preserved existing `momentum_hunter.app` import compatibility by importing the moved helpers back into `app.py`.
+- Added `tests/test_candidate_story_view_model.py`.
+- Added the new test module to `tools/run_bounded_tests.py` backend group.
+
+Validation:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_candidate_story_view_model tests.test_replay
+.\.venv\Scripts\python.exe -B -m py_compile momentum_hunter\app.py momentum_hunter\candidate_story_view_model.py tests\test_candidate_story_view_model.py
+```
+
+Result:
+
+```text
+22 tests passed
+Syntax check passed
+```
+
+Safety:
+
+- No visual layout change.
+- No scoring change.
+- No readiness change.
+- No alert/outcome/trade-planning change.
+- No raw capture or user-authored file mutation.
+- `app.py` became smaller and less responsible.
