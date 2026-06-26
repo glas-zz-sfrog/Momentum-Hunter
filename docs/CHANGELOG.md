@@ -4,6 +4,11 @@
 
 ### Added
 
+- Added SQLite Evidence Backbone Program v1 roadmap documentation with completed slices, planned slices, table ownership, cutover rules, risks, and current preflight counts.
+- Extended SQLite schema to version 3 with minute-bar source metadata for `minute_bars`.
+- Added idempotent SQLite import/upsert support for `opportunity-minute-bars.json`, including per-symbol counts, first/latest timestamps, duplicate detection, invalid-row warnings, source hashing, and source-file immutability.
+- Added `python -m momentum_hunter.sqlite_migration --slice minute-bars` and generated latest minute-bar import reports under `MomentumHunterData/data/reports/sqlite-minute-bars-import-latest.*`.
+- Added focused SQLite minute-bar tests for round trip import, idempotency, updates, duplicate handling, invalid row handling, per-symbol counts, earliest/latest timestamps, and source-file immutability.
 - Added SQLite Evidence Slice v1 documentation for mirroring `opportunity-alerts.json` and embedded alert outcomes into SQLite while preserving JSON as source of truth.
 - Extended the SQLite schema to version 2 with richer `opportunity_alerts` and `alert_outcomes` fields, source file hashes, source paths, and import timestamps.
 - Added idempotent SQLite import/upsert support for opportunity alerts and alert outcomes, including pending, completed, and terminal unscorable classifications.

@@ -139,10 +139,11 @@ This initializes:
 MomentumHunterData\data\momentum-hunter.sqlite3
 ```
 
-The first low-risk vertical slice imports provider/data-quality report rows into `provider_quality_checks`. The second additive slice mirrors opportunity alerts and alert outcomes while keeping `opportunity-alerts.json` as the active derived source of truth.
+The first low-risk vertical slice imports provider/data-quality report rows into `provider_quality_checks`. The second additive slice mirrors opportunity alerts and alert outcomes while keeping `opportunity-alerts.json` as the active derived source of truth. The third additive slice mirrors one-minute alert-validation bars while keeping `opportunity-minute-bars.json` as the active minute-bar cache.
 
 ```powershell
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice evidence
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice minute-bars
 ```
 
 Evidence import reports are written to:
@@ -150,6 +151,8 @@ Evidence import reports are written to:
 ```text
 MomentumHunterData\data\reports\sqlite-evidence-import-latest.json
 MomentumHunterData\data\reports\sqlite-evidence-import-latest.md
+MomentumHunterData\data\reports\sqlite-minute-bars-import-latest.json
+MomentumHunterData\data\reports\sqlite-minute-bars-import-latest.md
 ```
 
 SQLite imports are mirrors only. Existing report files remain the current operator-facing artifacts.

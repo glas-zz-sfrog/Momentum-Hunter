@@ -162,18 +162,20 @@ Reliability reports are derived operator trust artifacts. They read existing raw
 - Path: `MomentumHunterData/data/momentum-hunter.sqlite3`
 - Owner: `momentum_hunter/sqlite_store.py`, `momentum_hunter/sqlite_migration.py`
 - Mutability: additive derived mirror only
-- Current additive slices: `provider_quality_checks` imported from `MomentumHunterData/data/reports/data-quality-latest.json`; `opportunity_alerts` and `alert_outcomes` imported from `MomentumHunterData/data/opportunity-alerts.json`
+- Current additive slices: `provider_quality_checks` imported from `MomentumHunterData/data/reports/data-quality-latest.json`; `opportunity_alerts` and `alert_outcomes` imported from `MomentumHunterData/data/opportunity-alerts.json`; `minute_bars` imported from `MomentumHunterData/data/opportunity-minute-bars.json`
 
-SQLite is not the runtime source of truth yet. Existing raw captures, CSVs, JSON state stores, Markdown reports, and status files remain in place. The SQLite foundation currently provides schema initialization, idempotent migration tracking, a low-risk import path for provider/data-quality report rows, and an additive evidence mirror for opportunity alerts and embedded alert outcomes.
+SQLite is not the runtime source of truth yet. Existing raw captures, CSVs, JSON state stores, Markdown reports, and status files remain in place. The SQLite foundation currently provides schema initialization, idempotent migration tracking, a low-risk import path for provider/data-quality report rows, an additive evidence mirror for opportunity alerts and embedded alert outcomes, and an additive minute-bar mirror for alert-validation market data.
 
 Evidence slice reports are written to:
 
 ```text
 MomentumHunterData/data/reports/sqlite-evidence-import-latest.json
 MomentumHunterData/data/reports/sqlite-evidence-import-latest.md
+MomentumHunterData/data/reports/sqlite-minute-bars-import-latest.json
+MomentumHunterData/data/reports/sqlite-minute-bars-import-latest.md
 ```
 
-The evidence slice preserves pending, completed, and terminal unscorable alert outcomes exactly as they appear in `opportunity-alerts.json`. It does not import `opportunity-minute-bars.json` yet; minute bars are the recommended next SQLite evidence slice.
+The evidence slice preserves pending, completed, and terminal unscorable alert outcomes exactly as they appear in `opportunity-alerts.json`. The minute-bars slice preserves OHLCV rows from `opportunity-minute-bars.json` keyed by symbol, timestamp, and source. The JSON cache remains authoritative; SQLite is a read-only analytics mirror.
 
 Do not migrate raw captures, review decisions, watchlist state, or entry plans into SQLite as the only source of truth until backup, conflict handling, hash validation, and recovery behavior are designed and tested.
 

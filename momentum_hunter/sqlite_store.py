@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from momentum_hunter.alert_outcome_updater import (
+    OPPORTUNITY_MINUTE_BARS_PATH,
+    MinutePriceBar,
+    minute_bar_from_dict,
+)
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.data_quality import DATA_QUALITY_LATEST_JSON
 from momentum_hunter.opportunity_alerts import (
@@ -17,13 +22,14 @@ from momentum_hunter.opportunity_alerts import (
     is_pending_alert,
     is_unscorable_alert,
     load_alerts,
+    parse_datetime,
 )
 from momentum_hunter.storage import file_sha256
 from momentum_hunter.time_utils import now_central
 
 
 SQLITE_DB_PATH = DATA_DIR / "momentum-hunter.sqlite3"
-SQLITE_SCHEMA_VERSION = 2
+SQLITE_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -58,6 +64,28 @@ class EvidenceImportResult:
     pending_outcomes: int
     completed_outcomes: int
     unscorable_outcomes: int
+    warnings: list[str]
+    database_path: str
+
+
+@dataclass(frozen=True)
+class MinuteBarsImportResult:
+    source_path: str
+    source_hash: str
+    imported_at: str
+    symbols_seen: int
+    bars_seen: int
+    valid_bars: int
+    invalid_bars: int
+    duplicate_bars: int
+    bars_inserted: int
+    bars_updated: int
+    bars_skipped: int
+    table_row_count: int
+    source_rows_in_sqlite: int
+    symbol_counts: dict[str, int]
+    first_timestamps: dict[str, str]
+    latest_timestamps: dict[str, str]
     warnings: list[str]
     database_path: str
 
@@ -125,6 +153,19 @@ def apply_schema_migrations(connection: sqlite3.Connection, *, applied_at: str |
         VALUES (?, ?, ?)
         """,
         (2, "sqlite_evidence_slice_v1", applied_at),
+    )
+
+    ensure_column(connection, "minute_bars", "granularity", "TEXT")
+    ensure_column(connection, "minute_bars", "source_file_path", "TEXT")
+    ensure_column(connection, "minute_bars", "source_file_hash", "TEXT")
+    ensure_column(connection, "minute_bars", "imported_at", "TEXT")
+    ensure_column(connection, "minute_bars", "updated_at", "TEXT")
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO schema_migrations(version, name, applied_at)
+        VALUES (?, ?, ?)
+        """,
+        (3, "sqlite_minute_bars_slice_v1", applied_at),
     )
 
 
@@ -360,6 +401,207 @@ def import_opportunity_alerts(
     )
 
 
+def import_minute_bars(
+    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    *,
+    db_path: Path | None = None,
+) -> MinuteBarsImportResult:
+    source = minute_bars_path
+    imported_at = now_central().isoformat()
+    if not source.exists():
+        warnings = [f"SOURCE_MINUTE_BARS_FILE_MISSING:{source}"]
+        with connect_database(db_path) as connection:
+            initialize_schema(connection)
+            return MinuteBarsImportResult(
+                source_path=str(source),
+                source_hash="",
+                imported_at=imported_at,
+                symbols_seen=0,
+                bars_seen=0,
+                valid_bars=0,
+                invalid_bars=0,
+                duplicate_bars=0,
+                bars_inserted=0,
+                bars_updated=0,
+                bars_skipped=0,
+                table_row_count=minute_bar_count(connection),
+                source_rows_in_sqlite=0,
+                symbol_counts={},
+                first_timestamps={},
+                latest_timestamps={},
+                warnings=warnings,
+                database_path=str(db_path or SQLITE_DB_PATH),
+            )
+
+    source_hash = file_sha256(source)
+    parsed = parse_minute_bar_source(source)
+    rows_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
+    duplicate_count = 0
+    for bar in parsed["bars"]:
+        row = minute_bar_row(
+            bar,
+            source_path=source,
+            source_hash=source_hash,
+            imported_at=imported_at,
+        )
+        key = (row["symbol"], row["timestamp"], row["source"])
+        if key in rows_by_key:
+            duplicate_count += 1
+        rows_by_key[key] = row
+
+    inserted = 0
+    updated = 0
+    skipped = 0
+    with connect_database(db_path) as connection:
+        initialize_schema(connection)
+        for row in rows_by_key.values():
+            action = upsert_row_by_key(
+                connection,
+                "minute_bars",
+                ("symbol", "timestamp", "source"),
+                row,
+                compare_exclude={"imported_at", "updated_at"},
+            )
+            if action == "inserted":
+                inserted += 1
+            elif action == "updated":
+                updated += 1
+            else:
+                skipped += 1
+        connection.commit()
+        table_count = minute_bar_count(connection)
+        source_count = count_minute_bars_for_source(connection, source)
+
+    symbol_counts, first_timestamps, latest_timestamps = summarize_minute_bar_rows(rows_by_key.values())
+    warnings = list(parsed["warnings"])
+    if duplicate_count:
+        warnings.append(f"DUPLICATE_MINUTE_BARS_IN_SOURCE:{duplicate_count}")
+    if source_count != len(rows_by_key):
+        warnings.append(f"SQLITE_MINUTE_BAR_SOURCE_COUNT_MISMATCH:{source_count}!={len(rows_by_key)}")
+
+    return MinuteBarsImportResult(
+        source_path=str(source),
+        source_hash=source_hash,
+        imported_at=imported_at,
+        symbols_seen=int(parsed["symbols_seen"]),
+        bars_seen=int(parsed["bars_seen"]),
+        valid_bars=len(parsed["bars"]),
+        invalid_bars=int(parsed["invalid_bars"]),
+        duplicate_bars=duplicate_count,
+        bars_inserted=inserted,
+        bars_updated=updated,
+        bars_skipped=skipped,
+        table_row_count=table_count,
+        source_rows_in_sqlite=source_count,
+        symbol_counts=symbol_counts,
+        first_timestamps=first_timestamps,
+        latest_timestamps=latest_timestamps,
+        warnings=dedupe(warnings),
+        database_path=str(db_path or SQLITE_DB_PATH),
+    )
+
+
+def parse_minute_bar_source(path: Path) -> dict[str, object]:
+    warnings: list[str] = []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return {
+            "bars": [],
+            "symbols_seen": 0,
+            "bars_seen": 0,
+            "invalid_bars": 0,
+            "warnings": [f"MINUTE_BAR_SOURCE_READ_FAILED:{type(exc).__name__}"],
+        }
+    raw_bars = payload.get("bars", payload) if isinstance(payload, dict) else {}
+    if not isinstance(raw_bars, dict):
+        return {
+            "bars": [],
+            "symbols_seen": 0,
+            "bars_seen": 0,
+            "invalid_bars": 0,
+            "warnings": ["MINUTE_BAR_SOURCE_HAS_NO_BARS_OBJECT"],
+        }
+
+    bars: list[MinutePriceBar] = []
+    bars_seen = 0
+    invalid_bars = 0
+    for symbol, items in raw_bars.items():
+        if not isinstance(items, list):
+            warnings.append(f"MINUTE_BAR_SYMBOL_ROWS_NOT_LIST:{symbol}")
+            invalid_bars += 1
+            continue
+        for index, item in enumerate(items):
+            bars_seen += 1
+            if not isinstance(item, dict):
+                invalid_bars += 1
+                warnings.append(f"INVALID_MINUTE_BAR_ROW:{symbol}:{index}:NOT_OBJECT")
+                continue
+            bar = minute_bar_from_dict(item, fallback_symbol=str(symbol))
+            if bar is None:
+                invalid_bars += 1
+                warnings.append(f"INVALID_MINUTE_BAR_ROW:{symbol}:{index}:PARSE_FAILED")
+                continue
+            if parse_datetime(bar.timestamp) is None:
+                invalid_bars += 1
+                warnings.append(f"INVALID_MINUTE_BAR_TIMESTAMP:{bar.symbol}:{bar.timestamp}")
+                continue
+            bars.append(bar)
+    return {
+        "bars": bars,
+        "symbols_seen": len(raw_bars),
+        "bars_seen": bars_seen,
+        "invalid_bars": invalid_bars,
+        "warnings": warnings,
+    }
+
+
+def minute_bar_row(
+    bar: MinutePriceBar,
+    *,
+    source_path: Path,
+    source_hash: str,
+    imported_at: str,
+) -> dict[str, Any]:
+    return {
+        "symbol": bar.symbol,
+        "timestamp": bar.timestamp,
+        "open": optional_float(bar.open),
+        "high": optional_float(bar.high),
+        "low": optional_float(bar.low),
+        "close": optional_float(bar.close),
+        "volume": optional_int(bar.volume),
+        "source": bar.source,
+        "granularity": infer_minute_bar_granularity(bar.source),
+        "source_file_path": str(source_path),
+        "source_file_hash": source_hash,
+        "imported_at": imported_at,
+        "updated_at": imported_at,
+    }
+
+
+def infer_minute_bar_granularity(source: str) -> str:
+    normalized = str(source or "").lower()
+    if "1m" in normalized or "minute" in normalized:
+        return "1m"
+    return "unknown"
+
+
+def summarize_minute_bar_rows(rows: Any) -> tuple[dict[str, int], dict[str, str], dict[str, str]]:
+    symbol_counts: dict[str, int] = {}
+    first_timestamps: dict[str, str] = {}
+    latest_timestamps: dict[str, str] = {}
+    for row in rows:
+        symbol = str(row["symbol"])
+        timestamp = str(row["timestamp"])
+        symbol_counts[symbol] = symbol_counts.get(symbol, 0) + 1
+        if symbol not in first_timestamps or timestamp < first_timestamps[symbol]:
+            first_timestamps[symbol] = timestamp
+        if symbol not in latest_timestamps or timestamp > latest_timestamps[symbol]:
+            latest_timestamps[symbol] = timestamp
+    return dict(sorted(symbol_counts.items())), dict(sorted(first_timestamps.items())), dict(sorted(latest_timestamps.items()))
+
+
 def opportunity_alert_row(
     alert: OpportunityAlert,
     *,
@@ -472,6 +714,28 @@ def update_row(connection: sqlite3.Connection, table: str, primary_key: str, row
     connection.execute(f"UPDATE {table} SET {assignments} WHERE {primary_key} = :{primary_key}", row)
 
 
+def upsert_row_by_key(
+    connection: sqlite3.Connection,
+    table: str,
+    key_columns: tuple[str, ...],
+    row: dict[str, Any],
+    *,
+    compare_exclude: set[str] | None = None,
+) -> str:
+    compare_exclude = compare_exclude or set()
+    where_sql = " AND ".join(f"{column} = :{column}" for column in key_columns)
+    existing = connection.execute(f"SELECT * FROM {table} WHERE {where_sql}", row).fetchone()
+    if existing is None:
+        insert_row(connection, table, row)
+        return "inserted"
+    comparable_keys = [key for key in row if key not in compare_exclude]
+    if all(existing[key] == row[key] for key in comparable_keys):
+        return "skipped"
+    assignments = ", ".join(f"{column} = :{column}" for column in row if column not in key_columns)
+    connection.execute(f"UPDATE {table} SET {assignments} WHERE {where_sql}", row)
+    return "updated"
+
+
 def provider_quality_row(item: dict[str, Any], *, generated_at: str, source_path: Path, source_hash: str) -> dict[str, Any]:
     symbol = str(item.get("symbol", "")).strip().upper()
     provider = str(item.get("best_provider") or "combined").strip() or "combined"
@@ -572,6 +836,32 @@ def read_alert_outcomes(
     return [dict(row) for row in rows]
 
 
+def read_minute_bars(
+    connection: sqlite3.Connection,
+    *,
+    symbol: str | None = None,
+    source: str | None = None,
+) -> list[dict[str, Any]]:
+    conditions = []
+    params: list[str] = []
+    if symbol:
+        conditions.append("symbol = ?")
+        params.append(symbol.strip().upper())
+    if source:
+        conditions.append("source = ?")
+        params.append(source)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    rows = connection.execute(
+        f"""
+        SELECT * FROM minute_bars
+        {where}
+        ORDER BY symbol, timestamp, source
+        """,
+        params,
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def opportunity_alert_count(connection: sqlite3.Connection) -> int:
     row = connection.execute("SELECT COUNT(*) AS count FROM opportunity_alerts").fetchone()
     return int(row["count"] if row else 0)
@@ -582,9 +872,22 @@ def alert_outcome_count(connection: sqlite3.Connection) -> int:
     return int(row["count"] if row else 0)
 
 
+def minute_bar_count(connection: sqlite3.Connection) -> int:
+    row = connection.execute("SELECT COUNT(*) AS count FROM minute_bars").fetchone()
+    return int(row["count"] if row else 0)
+
+
 def count_rows_for_source(connection: sqlite3.Connection, table: str, source_path: Path) -> int:
     row = connection.execute(
         f"SELECT COUNT(*) AS count FROM {table} WHERE source_alerts_path = ?",
+        (str(source_path),),
+    ).fetchone()
+    return int(row["count"] if row else 0)
+
+
+def count_minute_bars_for_source(connection: sqlite3.Connection, source_path: Path) -> int:
+    row = connection.execute(
+        "SELECT COUNT(*) AS count FROM minute_bars WHERE source_file_path = ?",
         (str(source_path),),
     ).fetchone()
     return int(row["count"] if row else 0)
@@ -781,6 +1084,11 @@ CREATE TABLE IF NOT EXISTS minute_bars (
     close REAL,
     volume INTEGER,
     source TEXT,
+    granularity TEXT,
+    source_file_path TEXT,
+    source_file_hash TEXT,
+    imported_at TEXT,
+    updated_at TEXT,
     PRIMARY KEY(symbol, timestamp, source)
 );
 
