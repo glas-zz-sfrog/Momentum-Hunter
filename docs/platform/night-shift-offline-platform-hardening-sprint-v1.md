@@ -231,3 +231,46 @@ Safety:
 - No scoring, alert, outcome, or trade-planning changes.
 - No raw capture or user-authored file mutation.
 - No broad UI redesign.
+
+## Phase 3 Result
+
+Phase 3 is complete.
+
+Goal:
+
+- Add safe SQLite maintenance and backup tooling without making SQLite authoritative.
+
+Implemented:
+
+- Added `momentum_hunter/sqlite_maintenance.py`.
+- Added read-only SQLite integrity/schema/table checks.
+- Added timestamped SQLite backup snapshots under `MomentumHunterData/backups/sqlite/YYYYMMDD-HHMMSS/`.
+- Added backup manifests with source/backup SHA-256, size, schema version, table counts, and backup validation status.
+- Added latest JSON/Markdown reports at `MomentumHunterData/data/reports/sqlite-maintenance-latest.*`.
+- Added focused tests in `tests/test_sqlite_maintenance.py`.
+
+Validation:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_sqlite_maintenance
+.\.venv\Scripts\python.exe -B -m py_compile momentum_hunter\sqlite_maintenance.py tests\test_sqlite_maintenance.py
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_maintenance --check
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_maintenance --backup
+```
+
+Production result:
+
+```text
+SQLite maintenance status: PASS
+Integrity check: ok
+Schema version: 7
+Backup: MomentumHunterData/backups/sqlite/20260626-013518/
+Backup validation: PASS
+```
+
+Safety:
+
+- Check mode opens SQLite read-only.
+- Backup mode copies the database and validates the copy.
+- No source DB hash change was detected during tests.
+- No raw captures, user-authored files, scoring, readiness, alerts, outcomes, or trade plans were changed.
