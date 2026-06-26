@@ -560,3 +560,47 @@ Safety:
 Next phase:
 
 - Phase 10: Candidate Story chart polish, only if safe.
+
+## Phase 10 Result
+
+Phase 10 is complete.
+
+Purpose:
+
+- Improve Candidate Story chart readability without changing timeline data, scoring, outcomes, capture logic, or charting scope.
+
+Code changes:
+
+- Replaced the tiny legend glyph with readable chip-style labels.
+- Improved Price/Score/Capture marker legend contrast.
+- Kept direct marker chips for First seen, Peak score, and Latest capture above the chart.
+- Increased chart title and axis font readability.
+- Strengthened chart plot/background/grid contrast.
+- Left Intraday and 5D charting deferred.
+
+Commands run:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'
+.\.venv\Scripts\python.exe -B -m unittest tests.test_replay
+# Offscreen chart smoke probe: build Candidate Story chart, verify chart widget and legend chips construct, close QApplication cleanly.
+```
+
+Results:
+
+- Replay tests passed.
+- Candidate Story chart smoke probe passed.
+- No leftover test `python.exe` processes remained.
+
+Safety:
+
+- Presentation-only change.
+- No scoring math changed.
+- No capture logic changed.
+- No outcome logic changed.
+- No alert/readiness/trade-planning behavior changed.
+- No raw captures or user-authored stores were modified.
+
+Next phase:
+
+- Phase 11: Final validation and report.

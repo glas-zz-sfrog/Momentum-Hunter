@@ -13,6 +13,7 @@
 - Added Test Harness Reliability v1 with `tools/run_bounded_tests.py` and `docs/testing/test-harness-reliability-v1.md` to define safe backend/storage/evidence test lanes, bounded per-module subprocess execution, and the Qt do-not-run-unattended list.
 - Added App Modularization Audit v1 and extracted score explanation HTML/view-model formatting from `app.py` into `momentum_hunter/score_explanation_view_model.py`.
 - Added focused non-Qt score explanation view-model tests for human-readable score values, rule threshold formatting, compact component grouping, freshness context, and latest article display.
+- Polished Candidate Story chart readability with chip-style legends, clearer marker labels, stronger chart contrast, and more readable axis/title fonts.
 
 ### Fixed
 
@@ -27,6 +28,7 @@
 - Active Alert Reliability v1 is reporting-only. It does not generate alerts, fetch market data, change thresholds, alter readiness/scoring/outcome logic, mutate raw captures, or make SQLite authoritative.
 - Test Harness Reliability v1 changes test execution policy/tooling only. It does not change application behavior, scanner logic, scoring, readiness, alerts, outcomes, trade planning, SQLite authority, or raw captures.
 - Score explanation extraction is formatting-only. It does not recalculate score values, alter scoring weights, change readiness/alert/outcome/trade-planning logic, mutate raw captures, or make SQLite authoritative.
+- Candidate Story chart polish changes presentation only. It does not add intraday/5D charting, change stored timeline data, recalculate outcomes, change scoring, or mutate captures.
 
 ## 2026-06-25
 

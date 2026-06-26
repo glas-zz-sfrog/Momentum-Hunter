@@ -4792,14 +4792,18 @@ STORY_LATEST_COLOR = "#22d3ee"
 
 
 def story_legend_label(color: str, label: str, detail: str = "") -> QLabel:
-    detail_html = f"<span style='color:#9fb0c2;'> {escape(detail)}</span>" if detail else ""
+    detail_html = f"<span style='color:#c5d4e6;'> {escape(detail)}</span>" if detail else ""
     label_widget = QLabel(
-        "<span style='font-size:12pt; font-weight:700;'>"
-        f"<span style='color:{color};'>■</span> {escape(label)}"
-        f"{detail_html}</span>"
+        "<span style='font-size:11pt; font-weight:700; color:#f8fafc;'>"
+        f"<span style='background-color:{color}; color:{color}; border:1px solid #f8fafc;'>&nbsp;&nbsp;&nbsp;</span>"
+        f"&nbsp;{escape(label)}{detail_html}</span>"
     )
     label_widget.setTextFormat(Qt.TextFormat.RichText)
-    label_widget.setMinimumHeight(28)
+    label_widget.setWordWrap(True)
+    label_widget.setMinimumHeight(32)
+    label_widget.setStyleSheet(
+        "QLabel { background: #0b1624; border: 1px solid #2f4054; border-radius: 6px; padding: 5px 8px; }"
+    )
     return label_widget
 
 
@@ -4837,8 +4841,8 @@ def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
 
     legend_row = QWidget()
     legend_layout = QHBoxLayout(legend_row)
-    legend_layout.setContentsMargins(10, 4, 10, 0)
-    legend_layout.setSpacing(16)
+    legend_layout.setContentsMargins(10, 6, 10, 0)
+    legend_layout.setSpacing(10)
     legend_layout.addWidget(story_legend_label(STORY_PRICE_COLOR, "Price", "left axis"))
     legend_layout.addWidget(story_legend_label(STORY_SCORE_COLOR, "Score", "right axis"))
     legend_layout.addWidget(story_legend_label(STORY_CAPTURE_COLOR, "Capture point"))
@@ -4847,8 +4851,8 @@ def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
 
     marker_row = QWidget()
     marker_layout = QHBoxLayout(marker_row)
-    marker_layout.setContentsMargins(10, 0, 10, 0)
-    marker_layout.setSpacing(12)
+    marker_layout.setContentsMargins(10, 0, 10, 2)
+    marker_layout.setSpacing(10)
     for label, index in story_marker_specs(summary):
         marker_layout.addWidget(
             story_legend_label(
@@ -4863,10 +4867,14 @@ def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
     chart = QChart()
     chart.setTitle("Capture Trail")
     chart.setTitleBrush(QBrush(QColor("#dbeafe")))
-    chart.setBackgroundBrush(QBrush(QColor("#07111d")))
-    chart.setPlotAreaBackgroundBrush(QBrush(QColor("#0f1c2c")))
+    title_font = QFont()
+    title_font.setPointSize(12)
+    title_font.setBold(True)
+    chart.setTitleFont(title_font)
+    chart.setBackgroundBrush(QBrush(QColor("#08131f")))
+    chart.setPlotAreaBackgroundBrush(QBrush(QColor("#122033")))
     chart.setPlotAreaBackgroundVisible(True)
-    chart.setMargins(QMargins(10, 10, 10, 10))
+    chart.setMargins(QMargins(12, 12, 12, 12))
     chart.legend().setVisible(False)
 
     price_series = QLineSeries()
@@ -4954,11 +4962,18 @@ def build_candidate_story_chart(summary: CandidateStorySummary) -> QWidget:
 
 
 def style_story_axis(axis: QValueAxis) -> None:
-    axis.setLabelsColor(QColor("#dbeafe"))
+    label_font = QFont()
+    label_font.setPointSize(9)
+    title_font = QFont()
+    title_font.setPointSize(10)
+    title_font.setBold(True)
+    axis.setLabelsFont(label_font)
+    axis.setTitleFont(title_font)
+    axis.setLabelsColor(QColor("#f8fafc"))
     axis.setTitleBrush(QBrush(QColor("#dbeafe")))
-    axis.setLinePen(QPen(QColor("#94a3b8"), 1))
-    axis.setGridLineColor(QColor("#334155"))
-    axis.setMinorGridLineColor(QColor("#1e293b"))
+    axis.setLinePen(QPen(QColor("#cbd5e1"), 1))
+    axis.setGridLineColor(QColor("#5b6b80"))
+    axis.setMinorGridLineColor(QColor("#334155"))
 
 
 def story_marker_specs(summary: CandidateStorySummary) -> list[tuple[str, int]]:
