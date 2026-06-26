@@ -162,3 +162,54 @@ Stop and report immediately if:
 ## Phase 0 Result
 
 Phase 0 is complete. Current backend/storage baseline is green, and the sprint can proceed to the directive ledger.
+
+## Phase 1 Result
+
+Phase 1 is complete.
+
+Output:
+
+- `docs/project-management/argus-directive-order-ledger.md`
+
+Commit:
+
+- `6069844` - Add Argus directive order ledger
+
+Summary:
+
+- Reconciled the major Operator Dashboard, Phase 1B, Candidate Story, reliability, and SQLite directives.
+- Classified each directive as complete, partial, in progress, or deferred.
+- Captured known commit hashes where available.
+- Identified the next objective workflow gaps before any further UI redesign.
+
+## Phase 2 Result
+
+Phase 2 verification is complete without runtime code changes.
+
+Output:
+
+- `docs/project-management/phase-1b-workflow-verification-2026-06-26.md`
+
+Verified isolated probe markers:
+
+- `CHECKBOX_WATCHLIST_PROBE_OK`
+- `WHY_SCORE_FORMATTING_PROBE_OK`
+- `RESEARCH_LOADER_PROBE_OK`
+- `READINESS_LOADER_PROBE_OK`
+
+Finding:
+
+- The app paths passed isolated verification.
+- A combined Qt unittest group still stalled after two tests, confirming the known Qt test-harness risk.
+- The spawned `python.exe` processes were terminated and a final process check showed no leftover Python processes.
+
+Remaining deferred Phase 1B-adjacent items:
+
+- Pixel-level checkbox misclick testing requires a bounded Qt event harness.
+- Active nav styling and midnight-blue active page canvas are Phase 2 visual redesign items.
+- Candidate Story chart legend readability remains a focused polish item.
+- Watchlist Center behavior when no current candidate set is loaded remains a separate workflow-design question.
+
+Next phase:
+
+- Phase 3: Research / Readiness responsiveness audit.
