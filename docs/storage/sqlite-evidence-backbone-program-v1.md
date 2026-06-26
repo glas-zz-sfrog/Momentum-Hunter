@@ -84,7 +84,7 @@ After Phase 4:
 | 3 | System Status Events Slice | `system_status_events` | active monitor status, evidence autopilot status, provider/data-quality/status reports | Complete: `Add SQLite system status slice` |
 | 4 | Capture / Candidate Read-Only Index Slice | `captures`, `capture_candidates` | derived analysis CSV plus raw capture file hashes where safe | Complete: `Add SQLite capture index slice` |
 | 5 | Read-Only Query Helpers | query helpers over existing tables | SQLite mirrors only | Complete: `Add SQLite read-only query helpers` |
-| 6 | Unified Import CLI | all safe slices | all mirrored evidence sources | `Add SQLite all-safe import workflow` |
+| 6 | Unified Import CLI | all safe slices | all mirrored evidence sources | Complete: validated existing `--slice all` workflow |
 | 7 | Validation / Integrity Report | validation reports | source files plus SQLite mirrors | `Add SQLite validation report` |
 | 8 | Documentation and Final Report | docs only | current program evidence | final documentation update |
 
@@ -187,6 +187,29 @@ Helpers:
 - `alert_evidence_summary`: completed, pending, and unscorable alert-outcome counts
 - `candidate_history_for_ticker`: capture/candidate history for one ticker from SQLite mirrors
 - `latest_system_status`: latest status rows, optionally filtered by normalized status
+
+## Phase 6 Unified Import CLI
+
+The unified safe import path is:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice all
+```
+
+Validated latest run:
+
+- Schema version: `6`
+- Provider quality: 3 rows, no warnings
+- Opportunity alerts: 2 alerts / 2 outcomes, no warnings
+- Minute bars: 710 CRWV bars, no warnings
+- Evidence runs: 14 runs / 378 metrics, no warnings
+- System status: 16 events, no warnings
+- Capture index: 39 captures / 642 candidates, no warnings
+
+The unified report is written to:
+
+- `MomentumHunterData/data/reports/sqlite-import-latest.json`
+- `MomentumHunterData/data/reports/sqlite-import-latest.md`
 
 ## Future Cutover Rules
 

@@ -4,6 +4,7 @@
 
 ### Added
 
+- Validated `python -m momentum_hunter.sqlite_migration --slice all` as the unified safe import path across provider quality, opportunity evidence, minute bars, evidence runs, system status, and capture index mirrors.
 - Added read-only SQLite query helpers for backbone table counts, alert evidence state, candidate history by ticker, and latest system status events.
 - Added focused SQLite query helper tests proving summaries and filters are deterministic.
 - Extended SQLite schema to version 6 with read-only capture and candidate index metadata.

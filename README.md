@@ -147,6 +147,7 @@ The first low-risk vertical slice imports provider/data-quality report rows into
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice evidence-runs
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice system-status
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice capture-index
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice all
 ```
 
 Evidence import reports are written to:
