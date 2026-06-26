@@ -83,7 +83,7 @@ After Phase 4:
 | 2 | Evidence Runs / Evidence Metrics Slice | `evidence_runs`, `evidence_metrics` | evidence autopilot status, evidence health reports, alert performance summaries, outcome update status | Complete: `Add SQLite evidence runs slice` |
 | 3 | System Status Events Slice | `system_status_events` | active monitor status, evidence autopilot status, provider/data-quality/status reports | Complete: `Add SQLite system status slice` |
 | 4 | Capture / Candidate Read-Only Index Slice | `captures`, `capture_candidates` | derived analysis CSV plus raw capture file hashes where safe | Complete: `Add SQLite capture index slice` |
-| 5 | Read-Only Query Helpers | read helpers over existing tables | SQLite mirrors only | `Add SQLite read-only query helpers` |
+| 5 | Read-Only Query Helpers | query helpers over existing tables | SQLite mirrors only | Complete: `Add SQLite read-only query helpers` |
 | 6 | Unified Import CLI | all safe slices | all mirrored evidence sources | `Add SQLite all-safe import workflow` |
 | 7 | Validation / Integrity Report | validation reports | source files plus SQLite mirrors | `Add SQLite validation report` |
 | 8 | Documentation and Final Report | docs only | current program evidence | final documentation update |
@@ -176,6 +176,17 @@ Missing-data behavior:
 - Missing raw capture JSON is warned as `RAW_CAPTURE_JSON_MISSING` but does not block indexing the CSV row.
 - Missing capture-time or ticker fields are warned.
 - Duplicate candidate identities in the CSV are warned and de-duplicated for SQLite import.
+
+## Phase 5 Read-Only Query Helpers
+
+The read-only query helper slice adds `momentum_hunter.sqlite_queries` for safe analytics access over the mirrored tables. It does not add schema, write reports, mutate source files, or redirect runtime workflows.
+
+Helpers:
+
+- `sqlite_backbone_summary`: schema version and table counts
+- `alert_evidence_summary`: completed, pending, and unscorable alert-outcome counts
+- `candidate_history_for_ticker`: capture/candidate history for one ticker from SQLite mirrors
+- `latest_system_status`: latest status rows, optionally filtered by normalized status
 
 ## Future Cutover Rules
 

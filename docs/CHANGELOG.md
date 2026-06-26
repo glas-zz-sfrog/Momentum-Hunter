@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added read-only SQLite query helpers for backbone table counts, alert evidence state, candidate history by ticker, and latest system status events.
+- Added focused SQLite query helper tests proving summaries and filters are deterministic.
 - Extended SQLite schema to version 6 with read-only capture and candidate index metadata.
 - Added idempotent SQLite import/upsert support for `analysis-captures.csv` into `captures` and `capture_candidates`, including source CSV hashing and raw capture JSON hashes where active raw files exist.
 - Added `python -m momentum_hunter.sqlite_migration --slice capture-index` and generated latest capture-index import reports under `MomentumHunterData/data/reports/sqlite-capture-index-import-latest.*`.

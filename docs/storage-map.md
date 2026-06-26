@@ -183,6 +183,8 @@ MomentumHunterData/data/reports/sqlite-capture-index-import-latest.md
 
 The evidence slice preserves pending, completed, and terminal unscorable alert outcomes exactly as they appear in `opportunity-alerts.json`. The minute-bars slice preserves OHLCV rows from `opportunity-minute-bars.json` keyed by symbol, timestamp, and source. The evidence-runs slice imports structured evidence JSON only: `evidence-autopilot-status.json`, `alert-outcome-update-status.json`, `evidence-autopilot-latest.json`, `evidence-health-report-*.json`, `reliability-report-*.json`, and `alert-performance-report-*.json`. The system-status slice imports structured status JSON only: `active-monitor-status.json`, `evidence-autopilot-status.json`, `alert-outcome-update-status.json`, `system-readiness-latest.json`, `data-quality-latest.json`, and `market-tape-health-*.json`. The capture-index slice imports the derived analysis CSV and records raw capture JSON source hashes where the active raw file exists. JSON/CSV/report files remain authoritative; SQLite is a read-only analytics mirror.
 
+Read-only query helpers live in `momentum_hunter/sqlite_queries.py`. They summarize table counts, alert evidence state, candidate history by ticker, and latest system status events from SQLite without mutating source files or redirecting runtime workflows.
+
 Do not migrate raw captures, review decisions, watchlist state, or entry plans into SQLite as the only source of truth until backup, conflict handling, hash validation, and recovery behavior are designed and tested.
 
 ## Historical Cluster Display
