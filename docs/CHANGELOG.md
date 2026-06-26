@@ -1,5 +1,16 @@
 # Momentum Hunter Changelog
 
+## 2026-06-26
+
+### Added
+
+- Added System Readiness sections for `SQLite Mirror` and `User-State Safety` so the readiness report now surfaces SQLite validation, shadow-compare status, user-state diff parity, and stale mirror warnings.
+- Added focused readiness tests for SQLite mirror PASS/WARN behavior and user-state safety PASS/WARN behavior.
+
+### Safety
+
+- System Readiness remains read-only and does not make SQLite authoritative, overwrite file-based user state, mutate raw captures, or change scanner, scoring, readiness, alert, outcome, or trade-planning logic.
+
 ## 2026-06-25
 
 ### Added

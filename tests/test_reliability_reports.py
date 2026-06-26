@@ -19,6 +19,8 @@ from momentum_hunter.system_readiness import (
     market_data_section,
     outcome_tracking_section,
     overall_status,
+    sqlite_mirror_section,
+    user_state_safety_section,
 )
 
 
@@ -146,6 +148,90 @@ class ReliabilityReportTests(unittest.TestCase):
                 ]
             ),
         )
+
+    def test_sqlite_mirror_section_reports_pass_and_shadow_mismatch(self) -> None:
+        validation_path = self.root / "sqlite-validation-latest.json"
+        shadow_path = self.root / "sqlite-shadow-compare-latest.json"
+        validation_path.write_text(
+            json.dumps(
+                {
+                    "overall_status": "PASS",
+                    "sqlite_schema_version": 7,
+                    "missing_slices": [],
+                    "warnings": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        shadow_path.write_text(
+            json.dumps(
+                {
+                    "overall_status": "PASS",
+                    "mismatches": 0,
+                    "unavailable": 0,
+                    "warnings": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        ready = sqlite_mirror_section(validation_path=validation_path, shadow_compare_path=shadow_path)
+        self.assertEqual("READY", ready.status)
+
+        shadow_path.write_text(
+            json.dumps(
+                {
+                    "overall_status": "WARN",
+                    "mismatches": 1,
+                    "unavailable": 0,
+                    "warnings": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        warning = sqlite_mirror_section(validation_path=validation_path, shadow_compare_path=shadow_path)
+        self.assertEqual("WARNING", warning.status)
+        self.assertTrue(any("Shadow mismatches: 1" in fact for fact in warning.supporting_facts))
+
+    def test_user_state_safety_section_reports_diff_status(self) -> None:
+        diff_path = self.root / "sqlite-user-state-diff-latest.json"
+        diff_path.write_text(
+            json.dumps(
+                {
+                    "overall_status": "PASS",
+                    "records_in_files": 52,
+                    "records_in_sqlite": 52,
+                    "missing_in_sqlite": 0,
+                    "extra_in_sqlite": 0,
+                    "changed_values": 0,
+                    "malformed_records": 0,
+                    "warnings": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        ready = user_state_safety_section(diff_path=diff_path)
+        self.assertEqual("READY", ready.status)
+
+        diff_path.write_text(
+            json.dumps(
+                {
+                    "overall_status": "WARN",
+                    "records_in_files": 52,
+                    "records_in_sqlite": 51,
+                    "missing_in_sqlite": 1,
+                    "extra_in_sqlite": 0,
+                    "changed_values": 0,
+                    "malformed_records": 0,
+                    "warnings": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        warning = user_state_safety_section(diff_path=diff_path)
+        self.assertEqual("WARNING", warning.status)
+        self.assertTrue(any("Missing in SQLite: 1" in fact for fact in warning.supporting_facts))
 
 
 def fake_market_tape_report() -> MarketTapeHealthReport:

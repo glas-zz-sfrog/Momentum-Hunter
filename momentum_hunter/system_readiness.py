@@ -19,8 +19,11 @@ from momentum_hunter.evidence_autopilot_reliability import (
 )
 from momentum_hunter.evidence_health import EvidenceHealthReport, build_evidence_health_report
 from momentum_hunter.review import ReviewStatus, load_review_decisions
+from momentum_hunter.sqlite_reports import REPORTS_DIR as SQLITE_REPORTS_DIR
+from momentum_hunter.sqlite_validation import SQLITE_VALIDATION_LATEST_JSON
 from momentum_hunter.storage import ANALYSIS_CSV, CAPTURE_INTEGRITY_MANIFEST, CAPTURES_DIR
 from momentum_hunter.time_utils import now_central
+from momentum_hunter.user_state_diff import USER_STATE_DIFF_LATEST_JSON
 
 
 SYSTEM_READINESS_SCHEMA_VERSION = 1
@@ -70,6 +73,8 @@ def build_system_readiness_report(
         outcome_tracking_section(health),
         research_data_section(),
         storage_integrity_section(),
+        sqlite_mirror_section(),
+        user_state_safety_section(),
         schedules_section(),
     ]
     issues = [
@@ -297,6 +302,107 @@ def storage_integrity_section() -> ReadinessSection:
     )
 
 
+def sqlite_mirror_section(
+    *,
+    validation_path: Path = SQLITE_VALIDATION_LATEST_JSON,
+    shadow_compare_path: Path = SQLITE_REPORTS_DIR / "sqlite-shadow-compare-latest.json",
+) -> ReadinessSection:
+    validation = load_json(validation_path)
+    shadow = load_json(shadow_compare_path)
+    if not validation:
+        return ReadinessSection(
+            name="SQLite Mirror",
+            status="UNKNOWN",
+            explanation="No latest SQLite validation report exists.",
+            supporting_facts=[
+                f"Validation report path: {validation_path}",
+                f"Shadow compare path: {shadow_compare_path}",
+            ],
+            recommended_next_action="Run python -m momentum_hunter.sqlite_validation before trusting SQLite read models.",
+        )
+
+    validation_status = str(validation.get("overall_status", "UNKNOWN"))
+    shadow_status = str(shadow.get("overall_status", "UNKNOWN")) if shadow else "MISSING"
+    mismatches = int_value(shadow.get("mismatches")) if shadow else 0
+    unavailable = int_value(shadow.get("unavailable")) if shadow else 0
+    missing_slices = validation.get("missing_slices", [])
+    validation_warnings = validation.get("warnings", [])
+    shadow_warnings = shadow.get("warnings", []) if shadow else []
+    status = "READY"
+    if validation_status == "FAIL":
+        status = "FAILED"
+    elif validation_status != "PASS" or shadow_status != "PASS" or mismatches or unavailable or missing_slices:
+        status = "WARNING"
+    explanation = (
+        "SQLite mirrors match file-authoritative sources."
+        if status == "READY"
+        else "SQLite mirror validation or shadow comparison requires attention."
+    )
+    return ReadinessSection(
+        name="SQLite Mirror",
+        status=status,
+        explanation=explanation,
+        supporting_facts=[
+            f"Validation status: {validation_status}",
+            f"Shadow compare status: {shadow_status}",
+            f"Schema version: {validation.get('sqlite_schema_version', 'n/a')}",
+            f"Missing slices: {', '.join(str(item) for item in missing_slices) if missing_slices else 'none'}",
+            f"Shadow mismatches: {mismatches}",
+            f"Unavailable shadow fields: {unavailable}",
+            f"Validation warnings: {', '.join(str(item) for item in validation_warnings) if validation_warnings else 'none'}",
+            f"Shadow warnings: {', '.join(str(item) for item in shadow_warnings) if shadow_warnings else 'none'}",
+        ],
+        recommended_next_action=(
+            "Keep file fallback active and rerun SQLite imports/validation before using SQLite read models."
+            if status != "READY"
+            else "SQLite mirror is safe for diagnostic read-only reports; file sources remain authoritative."
+        ),
+    )
+
+
+def user_state_safety_section(*, diff_path: Path = USER_STATE_DIFF_LATEST_JSON) -> ReadinessSection:
+    diff = load_json(diff_path)
+    if not diff:
+        return ReadinessSection(
+            name="User-State Safety",
+            status="UNKNOWN",
+            explanation="No latest SQLite user-state diff report exists.",
+            supporting_facts=[f"Diff report path: {diff_path}"],
+            recommended_next_action="Run python -m momentum_hunter.sqlite_validation --slice user-state.",
+        )
+    diff_status = str(diff.get("overall_status", "UNKNOWN"))
+    missing = int_value(diff.get("missing_in_sqlite"))
+    extra = int_value(diff.get("extra_in_sqlite"))
+    changed = int_value(diff.get("changed_values"))
+    malformed = int_value(diff.get("malformed_records"))
+    warnings = diff.get("warnings", [])
+    status = "READY" if diff_status == "PASS" and not missing and not extra and not changed and not warnings else "WARNING"
+    return ReadinessSection(
+        name="User-State Safety",
+        status=status,
+        explanation=(
+            "File-authoritative user state matches the SQLite mirror."
+            if status == "READY"
+            else "File-authoritative user state and SQLite mirror need review."
+        ),
+        supporting_facts=[
+            f"Diff status: {diff_status}",
+            f"Records in files: {diff.get('records_in_files', 0)}",
+            f"Records in SQLite: {diff.get('records_in_sqlite', 0)}",
+            f"Missing in SQLite: {missing}",
+            f"Extra in SQLite: {extra}",
+            f"Changed values: {changed}",
+            f"Malformed records: {malformed}",
+            f"Warnings: {', '.join(str(item) for item in warnings) if warnings else 'none'}",
+        ],
+        recommended_next_action=(
+            "Keep files authoritative; rerun user-state import/diff and resolve reported conflicts manually."
+            if status != "READY"
+            else "User-authored files remain authoritative and match the SQLite mirror."
+        ),
+    )
+
+
 def schedules_section() -> ReadinessSection:
     snapshot = build_capture_health_snapshot()
     return ReadinessSection(
@@ -386,6 +492,13 @@ def load_json(path: Path) -> dict[str, Any]:
     except (json.JSONDecodeError, OSError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def int_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def capture_fact(info: object) -> str:
