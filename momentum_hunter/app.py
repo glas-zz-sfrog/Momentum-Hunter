@@ -330,6 +330,7 @@ class MomentumHunterWindow(QMainWindow):
         self.provider_status_text = "Provider: not checked"
         self.provider_status_ok = True
         self._report_loader_refs: list[tuple[QThread, ReportLoaderWorker, QDialog]] = []
+        self._active_report_loader_titles: set[str] = set()
         self._page_history: list[int] = []
         self.market_regime = MarketRegimeSnapshot(
             regime=MarketRegime.UNKNOWN,
@@ -3135,6 +3136,10 @@ class MomentumHunterWindow(QMainWindow):
         on_success: Callable[[object, float], None],
         error_title: str,
     ) -> None:
+        if title in self._active_report_loader_titles:
+            self._update_status(f"{title} is already loading; please wait.")
+            return
+        self._active_report_loader_titles.add(title)
         progress = self._show_loading_dialog(title, loading_message)
         thread = QThread(self)
         worker = ReportLoaderWorker(loader)
@@ -3146,6 +3151,7 @@ class MomentumHunterWindow(QMainWindow):
         def cleanup() -> None:
             if ref in self._report_loader_refs:
                 self._report_loader_refs.remove(ref)
+            self._active_report_loader_titles.discard(title)
             thread.quit()
             thread.wait(1500)
             worker.deleteLater()

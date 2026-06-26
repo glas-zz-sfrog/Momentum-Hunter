@@ -200,3 +200,34 @@ Safety:
 - No alert/outcome/trade-planning change.
 - No raw capture or user-authored file mutation.
 - `app.py` became smaller and less responsible.
+
+## Phase 2 Result
+
+Phase 2 is complete.
+
+Goal:
+
+- Make Research Lab and Readiness Gate safer to open without freezing the dashboard.
+
+Implemented:
+
+- Confirmed Research Lab and Readiness Gate already use a `QThread`-backed `ReportLoaderWorker` and non-modal loading dialog.
+- Added a duplicate-loader guard so repeated clicks do not launch multiple workers for the same report title while one is already active.
+- Preserved the existing loading dialog and failure feedback behavior.
+- Added `docs/research/research-readiness-loading-hardening-v1.md`.
+- Added focused bounded Qt tests in `tests/test_report_loader_hardening.py`.
+
+Validation:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_report_loader_hardening
+.\.venv\Scripts\python.exe -B -m py_compile momentum_hunter\app.py tests\test_report_loader_hardening.py
+```
+
+Safety:
+
+- No research calculation changes.
+- No readiness rule changes.
+- No scoring, alert, outcome, or trade-planning changes.
+- No raw capture or user-authored file mutation.
+- No broad UI redesign.

@@ -17,6 +17,8 @@
 - Added the Roadmap Reconciliation & Autonomous Closure Sprint v1 final report with commits, validation results, safety status, remaining work, and recommended next sprints.
 - Added Night Shift Offline Platform Hardening Sprint v1 kickoff documentation and extracted Candidate Story summary/header/marker view-model helpers from `app.py` into `momentum_hunter/candidate_story_view_model.py`.
 - Added focused Candidate Story view-model tests and included them in the bounded backend-safe test group.
+- Added Research / Readiness Loading Hardening v1 documentation and bounded report-loader tests.
+- Added duplicate-load protection for Research Lab and Readiness Gate report workers so repeated clicks do not spawn parallel builds for the same report.
 
 ### Fixed
 
@@ -33,6 +35,7 @@
 - Score explanation extraction is formatting-only. It does not recalculate score values, alter scoring weights, change readiness/alert/outcome/trade-planning logic, mutate raw captures, or make SQLite authoritative.
 - Candidate Story chart polish changes presentation only. It does not add intraday/5D charting, change stored timeline data, recalculate outcomes, change scoring, or mutate captures.
 - Candidate Story view-model extraction preserves existing `app.py` import compatibility and does not change capture data, replay data, scoring, outcomes, alerts, readiness, or trade-planning behavior.
+- Research / Readiness loading hardening preserves existing report builders and loading dialogs. It does not change research calculations, readiness rules, scoring, alerts, outcomes, trade planning, raw captures, or user-authored state.
 
 ## 2026-06-25
 
