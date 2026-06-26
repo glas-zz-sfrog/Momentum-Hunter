@@ -139,13 +139,14 @@ This initializes:
 MomentumHunterData\data\momentum-hunter.sqlite3
 ```
 
-The first low-risk vertical slice imports provider/data-quality report rows into `provider_quality_checks`. The second additive slice mirrors opportunity alerts and alert outcomes while keeping `opportunity-alerts.json` as the active derived source of truth. The third additive slice mirrors one-minute alert-validation bars while keeping `opportunity-minute-bars.json` as the active minute-bar cache. The fourth additive slice mirrors structured evidence/status reports into `evidence_runs` and `evidence_metrics`. The fifth additive slice mirrors structured system status and readiness events into `system_status_events`.
+The first low-risk vertical slice imports provider/data-quality report rows into `provider_quality_checks`. The second additive slice mirrors opportunity alerts and alert outcomes while keeping `opportunity-alerts.json` as the active derived source of truth. The third additive slice mirrors one-minute alert-validation bars while keeping `opportunity-minute-bars.json` as the active minute-bar cache. The fourth additive slice mirrors structured evidence/status reports into `evidence_runs` and `evidence_metrics`. The fifth additive slice mirrors structured system status and readiness events into `system_status_events`. The sixth additive slice mirrors `analysis-captures.csv` into read-only `captures` and `capture_candidates` indexes.
 
 ```powershell
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice evidence
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice minute-bars
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice evidence-runs
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice system-status
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice capture-index
 ```
 
 Evidence import reports are written to:
@@ -159,6 +160,8 @@ MomentumHunterData\data\reports\sqlite-evidence-runs-import-latest.json
 MomentumHunterData\data\reports\sqlite-evidence-runs-import-latest.md
 MomentumHunterData\data\reports\sqlite-system-status-import-latest.json
 MomentumHunterData\data\reports\sqlite-system-status-import-latest.md
+MomentumHunterData\data\reports\sqlite-capture-index-import-latest.json
+MomentumHunterData\data\reports\sqlite-capture-index-import-latest.md
 ```
 
 SQLite imports are mirrors only. Existing report files remain the current operator-facing artifacts.

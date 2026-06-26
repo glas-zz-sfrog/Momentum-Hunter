@@ -19,6 +19,7 @@ Momentum Hunter is still file-first. SQLite is an additive evidence mirror that 
 | SQLite Evidence Slice v1 | `b93f815` | `opportunity_alerts`, `alert_outcomes` | `MomentumHunterData/data/opportunity-alerts.json` | JSON alert store remains authoritative |
 | Minute Bars Slice | `e2e11a1` | `minute_bars` | `MomentumHunterData/data/opportunity-minute-bars.json` | JSON minute-bar cache remains authoritative |
 | Evidence Runs / Evidence Metrics Slice | `0a69c8f` | `evidence_runs`, `evidence_metrics` | structured evidence/status JSON reports | JSON evidence reports remain authoritative |
+| System Status Events Slice | `4264a28` | `system_status_events` | structured status/readiness JSON reports | JSON status reports remain authoritative |
 
 ## Current Preflight
 
@@ -65,6 +66,15 @@ After Phase 3:
   - `market_tape_health`: 1
   - `system_readiness:*`: 11
 
+After Phase 4:
+
+- Schema version: `6`
+- `captures`: 39
+- `capture_candidates`: 642
+- Source: `MomentumHunterData/data/analysis-captures.csv`
+- Source hash: `967af838ffabedb7846135ac724c8f0f6135123aa1b03c5cd58290b760a25afc`
+- Warnings: none
+
 ## Planned Slices
 
 | Phase | Slice | Tables | Source files | Commit target |
@@ -72,7 +82,7 @@ After Phase 3:
 | 1 | Minute Bars Slice | `minute_bars` | `opportunity-minute-bars.json` | Complete: `Add SQLite minute bars slice` |
 | 2 | Evidence Runs / Evidence Metrics Slice | `evidence_runs`, `evidence_metrics` | evidence autopilot status, evidence health reports, alert performance summaries, outcome update status | Complete: `Add SQLite evidence runs slice` |
 | 3 | System Status Events Slice | `system_status_events` | active monitor status, evidence autopilot status, provider/data-quality/status reports | Complete: `Add SQLite system status slice` |
-| 4 | Capture / Candidate Read-Only Index Slice | `captures`, `capture_candidates` | capture manifest, derived analysis CSVs, raw capture metadata where safe | `Add SQLite capture index slice` |
+| 4 | Capture / Candidate Read-Only Index Slice | `captures`, `capture_candidates` | derived analysis CSV plus raw capture file hashes where safe | Complete: `Add SQLite capture index slice` |
 | 5 | Read-Only Query Helpers | read helpers over existing tables | SQLite mirrors only | `Add SQLite read-only query helpers` |
 | 6 | Unified Import CLI | all safe slices | all mirrored evidence sources | `Add SQLite all-safe import workflow` |
 | 7 | Validation / Integrity Report | validation reports | source files plus SQLite mirrors | `Add SQLite validation report` |
@@ -89,8 +99,8 @@ After Phase 3:
 | `evidence_runs` | `momentum_hunter.sqlite_store` | Complete additive mirror | structured evidence/status JSON files |
 | `evidence_metrics` | `momentum_hunter.sqlite_store` | Complete additive mirror | structured evidence/status JSON files |
 | `system_status_events` | `momentum_hunter.sqlite_store` | Phase 3 additive mirror | status/report files |
-| `captures` | `momentum_hunter.sqlite_store` | Planned Phase 4 | raw captures and manifest |
-| `capture_candidates` | `momentum_hunter.sqlite_store` | Planned Phase 4 | raw captures and derived candidate rows |
+| `captures` | `momentum_hunter.sqlite_store` | Phase 4 additive mirror | `analysis-captures.csv` plus raw capture source hashes |
+| `capture_candidates` | `momentum_hunter.sqlite_store` | Phase 4 additive mirror | `analysis-captures.csv` |
 
 ## What Remains File-Based
 
@@ -145,6 +155,27 @@ Missing-data behavior:
 - Missing explicit status becomes `UNKNOWN`.
 - Sources with warnings become `WARNING` unless an explicit failure/error is present.
 - Missing source files passed explicitly are reported as warnings and create no event rows.
+
+## Phase 4 Capture / Candidate Index Source Audit
+
+The Capture Index slice imports `analysis-captures.csv` only. It does not parse, edit, or rewrite raw capture JSON files. When the active raw JSON exists at `MomentumHunterData/data/captures/YYYY-MM-DD/{session}.json`, the importer records the raw source path and SHA-256 hash for traceability. The analysis CSV remains authoritative for the indexed candidate fields.
+
+Imported source:
+
+- `MomentumHunterData/data/analysis-captures.csv`
+
+Identity rules:
+
+- `capture_id = sha256("capture", capture_date, capture_time, session, provider, scanner)`
+- `candidate_id = sha256("capture_candidate", capture_id, ticker, rank)`
+- Candidate uniqueness is `(capture_id, ticker, rank)`.
+- Capture source rows update safely if the derived CSV changes while the capture identity stays the same.
+
+Missing-data behavior:
+
+- Missing raw capture JSON is warned as `RAW_CAPTURE_JSON_MISSING` but does not block indexing the CSV row.
+- Missing capture-time or ticker fields are warned.
+- Duplicate candidate identities in the CSV are warned and de-duplicated for SQLite import.
 
 ## Future Cutover Rules
 

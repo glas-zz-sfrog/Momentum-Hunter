@@ -4,6 +4,10 @@
 
 ### Added
 
+- Extended SQLite schema to version 6 with read-only capture and candidate index metadata.
+- Added idempotent SQLite import/upsert support for `analysis-captures.csv` into `captures` and `capture_candidates`, including source CSV hashing and raw capture JSON hashes where active raw files exist.
+- Added `python -m momentum_hunter.sqlite_migration --slice capture-index` and generated latest capture-index import reports under `MomentumHunterData/data/reports/sqlite-capture-index-import-latest.*`.
+- Added focused SQLite capture-index tests for round trip import, idempotency, matured row updates, missing raw-capture warnings, report generation, and source-file immutability.
 - Extended SQLite schema to version 5 with queryable system status event metadata.
 - Added idempotent SQLite import/upsert support for active monitor status, Evidence Autopilot status, alert outcome updater status, system readiness, data-quality latest, and market-tape health JSON reports into `system_status_events`.
 - Added `python -m momentum_hunter.sqlite_migration --slice system-status` and generated latest system-status import reports under `MomentumHunterData/data/reports/sqlite-system-status-import-latest.*`.

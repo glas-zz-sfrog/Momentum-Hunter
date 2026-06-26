@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import csv
 import json
 import sqlite3
 from dataclasses import dataclass
@@ -25,12 +26,12 @@ from momentum_hunter.opportunity_alerts import (
     load_alerts,
     parse_datetime,
 )
-from momentum_hunter.storage import file_sha256
+from momentum_hunter.storage import ANALYSIS_CSV, CAPTURES_DIR, file_sha256
 from momentum_hunter.time_utils import now_central
 
 
 SQLITE_DB_PATH = DATA_DIR / "momentum-hunter.sqlite3"
-SQLITE_SCHEMA_VERSION = 5
+SQLITE_SCHEMA_VERSION = 6
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,28 @@ class SystemStatusImportResult:
     table_row_count: int
     status_counts: dict[str, int]
     event_type_counts: dict[str, int]
+    warnings: list[str]
+    database_path: str
+
+
+@dataclass(frozen=True)
+class CaptureIndexImportResult:
+    source_path: str
+    source_hash: str
+    imported_at: str
+    analysis_rows_seen: int
+    captures_seen: int
+    captures_inserted: int
+    captures_updated: int
+    captures_skipped: int
+    candidates_seen: int
+    candidates_inserted: int
+    candidates_updated: int
+    candidates_skipped: int
+    capture_table_row_count: int
+    candidate_table_row_count: int
+    source_capture_rows_in_sqlite: int
+    source_candidate_rows_in_sqlite: int
     warnings: list[str]
     database_path: str
 
@@ -234,6 +257,34 @@ def apply_schema_migrations(connection: sqlite3.Connection, *, applied_at: str |
         VALUES (?, ?, ?)
         """,
         (5, "sqlite_system_status_slice_v1", applied_at),
+    )
+    ensure_column(connection, "captures", "capture_session", "TEXT")
+    ensure_column(connection, "captures", "capture_calendar_status", "TEXT")
+    ensure_column(connection, "captures", "is_market_open_day", "INTEGER")
+    ensure_column(connection, "captures", "is_study_eligible", "INTEGER")
+    ensure_column(connection, "captures", "next_market_session_date", "TEXT")
+    ensure_column(connection, "captures", "scheduling_policy_version", "TEXT")
+    ensure_column(connection, "captures", "mode", "TEXT")
+    ensure_column(connection, "captures", "market_regime", "TEXT")
+    ensure_column(connection, "captures", "source_csv_path", "TEXT")
+    ensure_column(connection, "captures", "source_csv_hash", "TEXT")
+    ensure_column(connection, "captures", "imported_at", "TEXT")
+    ensure_column(connection, "captures", "updated_at", "TEXT")
+
+    ensure_column(connection, "capture_candidates", "company", "TEXT")
+    ensure_column(connection, "capture_candidates", "freshness", "TEXT")
+    ensure_column(connection, "capture_candidates", "freshness_score", "INTEGER")
+    ensure_column(connection, "capture_candidates", "article_count", "INTEGER")
+    ensure_column(connection, "capture_candidates", "source_csv_path", "TEXT")
+    ensure_column(connection, "capture_candidates", "source_csv_hash", "TEXT")
+    ensure_column(connection, "capture_candidates", "imported_at", "TEXT")
+    ensure_column(connection, "capture_candidates", "updated_at", "TEXT")
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO schema_migrations(version, name, applied_at)
+        VALUES (?, ?, ?)
+        """,
+        (6, "sqlite_capture_candidate_index_v1", applied_at),
     )
 
 
@@ -1110,6 +1161,243 @@ def normalize_event_token(value: str) -> str:
     return normalized or "unknown"
 
 
+def import_capture_candidate_index(
+    analysis_path: Path = ANALYSIS_CSV,
+    *,
+    db_path: Path | None = None,
+    captures_dir: Path = CAPTURES_DIR,
+) -> CaptureIndexImportResult:
+    imported_at = now_central().isoformat()
+    source = analysis_path
+    warnings: list[str] = []
+    if not source.exists():
+        return CaptureIndexImportResult(
+            source_path=str(source),
+            source_hash="",
+            imported_at=imported_at,
+            analysis_rows_seen=0,
+            captures_seen=0,
+            captures_inserted=0,
+            captures_updated=0,
+            captures_skipped=0,
+            candidates_seen=0,
+            candidates_inserted=0,
+            candidates_updated=0,
+            candidates_skipped=0,
+            capture_table_row_count=0,
+            candidate_table_row_count=0,
+            source_capture_rows_in_sqlite=0,
+            source_candidate_rows_in_sqlite=0,
+            warnings=[f"ANALYSIS_CAPTURE_SOURCE_MISSING:{source}"],
+            database_path=str(db_path or SQLITE_DB_PATH),
+        )
+    source_hash = file_sha256(source)
+    rows, read_warnings = read_analysis_capture_rows(source)
+    warnings.extend(read_warnings)
+    capture_rows_by_id: dict[str, dict[str, Any]] = {}
+    candidate_rows_by_id: dict[str, dict[str, Any]] = {}
+    for index, row in enumerate(rows, start=1):
+        capture_row = capture_index_row(
+            row,
+            source_path=source,
+            source_hash=source_hash,
+            captures_dir=captures_dir,
+            imported_at=imported_at,
+        )
+        capture_id = str(capture_row["capture_id"])
+        if capture_id not in capture_rows_by_id:
+            capture_rows_by_id[capture_id] = capture_row
+        candidate_row = capture_candidate_index_row(
+            row,
+            capture_id=capture_id,
+            source_path=source,
+            source_hash=source_hash,
+            imported_at=imported_at,
+            fallback_rank=index,
+        )
+        candidate_id = str(candidate_row["candidate_id"])
+        if candidate_id in candidate_rows_by_id:
+            warnings.append(f"DUPLICATE_CAPTURE_CANDIDATE_ROW:{candidate_id}")
+        candidate_rows_by_id[candidate_id] = candidate_row
+
+    for capture in capture_rows_by_id.values():
+        if capture.get("source_hash") in {None, ""}:
+            warnings.append(f"RAW_CAPTURE_JSON_MISSING:{capture.get('source_path', '')}")
+
+    captures_inserted = 0
+    captures_updated = 0
+    captures_skipped = 0
+    candidates_inserted = 0
+    candidates_updated = 0
+    candidates_skipped = 0
+    with connect_database(db_path) as connection:
+        initialize_schema(connection)
+        for capture in capture_rows_by_id.values():
+            action = upsert_row(
+                connection,
+                "captures",
+                "capture_id",
+                capture,
+                compare_exclude={"imported_at", "updated_at"},
+            )
+            if action == "inserted":
+                captures_inserted += 1
+            elif action == "updated":
+                captures_updated += 1
+            else:
+                captures_skipped += 1
+        for candidate in candidate_rows_by_id.values():
+            action = upsert_row(
+                connection,
+                "capture_candidates",
+                "candidate_id",
+                candidate,
+                compare_exclude={"imported_at", "updated_at"},
+            )
+            if action == "inserted":
+                candidates_inserted += 1
+            elif action == "updated":
+                candidates_updated += 1
+            else:
+                candidates_skipped += 1
+        connection.commit()
+        capture_count = capture_index_count(connection)
+        candidate_count = capture_candidate_index_count(connection)
+        source_capture_count = count_capture_index_for_source(connection, source)
+        source_candidate_count = count_capture_candidate_index_for_source(connection, source)
+
+    if source_capture_count != len(capture_rows_by_id):
+        warnings.append(f"SQLITE_CAPTURE_SOURCE_COUNT_MISMATCH:{source_capture_count}!={len(capture_rows_by_id)}")
+    if source_candidate_count != len(candidate_rows_by_id):
+        warnings.append(f"SQLITE_CAPTURE_CANDIDATE_SOURCE_COUNT_MISMATCH:{source_candidate_count}!={len(candidate_rows_by_id)}")
+    return CaptureIndexImportResult(
+        source_path=str(source),
+        source_hash=source_hash,
+        imported_at=imported_at,
+        analysis_rows_seen=len(rows),
+        captures_seen=len(capture_rows_by_id),
+        captures_inserted=captures_inserted,
+        captures_updated=captures_updated,
+        captures_skipped=captures_skipped,
+        candidates_seen=len(candidate_rows_by_id),
+        candidates_inserted=candidates_inserted,
+        candidates_updated=candidates_updated,
+        candidates_skipped=candidates_skipped,
+        capture_table_row_count=capture_count,
+        candidate_table_row_count=candidate_count,
+        source_capture_rows_in_sqlite=source_capture_count,
+        source_candidate_rows_in_sqlite=source_candidate_count,
+        warnings=dedupe(warnings),
+        database_path=str(db_path or SQLITE_DB_PATH),
+    )
+
+
+def read_analysis_capture_rows(path: Path) -> tuple[list[dict[str, str]], list[str]]:
+    warnings: list[str] = []
+    try:
+        with path.open("r", newline="", encoding="utf-8") as file:
+            rows = [dict(row) for row in csv.DictReader(file)]
+    except OSError as exc:
+        return [], [f"ANALYSIS_CAPTURE_SOURCE_READ_FAILED:{type(exc).__name__}"]
+    for index, row in enumerate(rows, start=1):
+        if not row.get("capture_time"):
+            warnings.append(f"ANALYSIS_CAPTURE_ROW_MISSING_CAPTURE_TIME:{index}")
+        if not row.get("ticker"):
+            warnings.append(f"ANALYSIS_CAPTURE_ROW_MISSING_TICKER:{index}")
+    return rows, warnings
+
+
+def capture_index_row(
+    row: dict[str, str],
+    *,
+    source_path: Path,
+    source_hash: str,
+    captures_dir: Path,
+    imported_at: str,
+) -> dict[str, Any]:
+    capture_date = str(row.get("capture_date") or "")
+    session = str(row.get("session") or "")
+    provider = str(row.get("provider") or "")
+    scanner = str(row.get("scanner") or "")
+    capture_time = str(row.get("capture_time") or "")
+    capture_id = deterministic_id("capture", capture_date, capture_time, session, provider, scanner)
+    raw_path = captures_dir / capture_date / f"{session}.json" if capture_date and session else source_path
+    raw_exists = raw_path.exists()
+    raw_hash = file_sha256(raw_path) if raw_exists else ""
+    return {
+        "capture_id": capture_id,
+        "capture_date": capture_date,
+        "capture_time": capture_time,
+        "session": session,
+        "provider": provider,
+        "scanner": scanner,
+        "source_path": str(raw_path if raw_exists else source_path.with_name(f"{source_path.name}#{capture_id}")),
+        "source_hash": raw_hash,
+        "capture_version": "",
+        "is_quarantined": 0,
+        "capture_session": str(row.get("capture_session") or session),
+        "capture_calendar_status": str(row.get("capture_calendar_status") or ""),
+        "is_market_open_day": optional_bool(text_to_bool(row.get("is_market_open_day"))),
+        "is_study_eligible": optional_bool(text_to_bool(row.get("is_study_eligible"))),
+        "next_market_session_date": str(row.get("next_market_session_date") or ""),
+        "scheduling_policy_version": str(row.get("scheduling_policy_version") or ""),
+        "mode": str(row.get("mode") or ""),
+        "market_regime": str(row.get("market_regime") or ""),
+        "source_csv_path": str(source_path),
+        "source_csv_hash": source_hash,
+        "imported_at": imported_at,
+        "updated_at": imported_at,
+    }
+
+
+def capture_candidate_index_row(
+    row: dict[str, str],
+    *,
+    capture_id: str,
+    source_path: Path,
+    source_hash: str,
+    imported_at: str,
+    fallback_rank: int,
+) -> dict[str, Any]:
+    ticker = str(row.get("ticker") or "").strip().upper()
+    rank = optional_int(row.get("rank")) or fallback_rank
+    candidate_id = deterministic_id("capture_candidate", capture_id, ticker, rank)
+    return {
+        "candidate_id": candidate_id,
+        "capture_id": capture_id,
+        "ticker": ticker,
+        "rank": rank,
+        "score": optional_int(row.get("score")),
+        "price": optional_float(row.get("price")),
+        "percent_change": optional_float(row.get("percent_change")),
+        "volume": optional_int(row.get("volume")),
+        "relative_volume": optional_float(row.get("relative_volume")),
+        "market_cap": optional_int(row.get("market_cap")),
+        "sector": str(row.get("sector") or ""),
+        "industry": str(row.get("industry") or ""),
+        "raw_json": json.dumps(row, sort_keys=True),
+        "company": str(row.get("company") or ""),
+        "freshness": str(row.get("freshness") or ""),
+        "freshness_score": optional_int(row.get("freshness_score")),
+        "article_count": optional_int(row.get("article_count")),
+        "source_csv_path": str(source_path),
+        "source_csv_hash": source_hash,
+        "imported_at": imported_at,
+        "updated_at": imported_at,
+    }
+
+
+def text_to_bool(value: object) -> bool | None:
+    if value is None or value == "":
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"true", "1", "yes", "y"}:
+        return True
+    if normalized in {"false", "0", "no", "n"}:
+        return False
+    return None
+
+
 def discover_evidence_run_sources(reports_dir: Path | None = None) -> list[Path]:
     reports_dir = reports_dir or DATA_DIR / "reports"
     sources = [
@@ -1715,6 +2003,58 @@ def read_system_status_events(
     return [dict(row) for row in rows]
 
 
+def read_captures(
+    connection: sqlite3.Connection,
+    *,
+    capture_id: str | None = None,
+    session: str | None = None,
+) -> list[dict[str, Any]]:
+    conditions = []
+    params: list[str] = []
+    if capture_id:
+        conditions.append("capture_id = ?")
+        params.append(capture_id)
+    if session:
+        conditions.append("session = ?")
+        params.append(session)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    rows = connection.execute(
+        f"""
+        SELECT * FROM captures
+        {where}
+        ORDER BY capture_time, session, provider, scanner
+        """,
+        params,
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def read_capture_candidates(
+    connection: sqlite3.Connection,
+    *,
+    ticker: str | None = None,
+    capture_id: str | None = None,
+) -> list[dict[str, Any]]:
+    conditions = []
+    params: list[str] = []
+    if ticker:
+        conditions.append("ticker = ?")
+        params.append(ticker.strip().upper())
+    if capture_id:
+        conditions.append("capture_id = ?")
+        params.append(capture_id)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    rows = connection.execute(
+        f"""
+        SELECT * FROM capture_candidates
+        {where}
+        ORDER BY capture_id, rank, ticker
+        """,
+        params,
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def opportunity_alert_count(connection: sqlite3.Connection) -> int:
     row = connection.execute("SELECT COUNT(*) AS count FROM opportunity_alerts").fetchone()
     return int(row["count"] if row else 0)
@@ -1745,6 +2085,16 @@ def system_status_event_count(connection: sqlite3.Connection) -> int:
     return int(row["count"] if row else 0)
 
 
+def capture_index_count(connection: sqlite3.Connection) -> int:
+    row = connection.execute("SELECT COUNT(*) AS count FROM captures").fetchone()
+    return int(row["count"] if row else 0)
+
+
+def capture_candidate_index_count(connection: sqlite3.Connection) -> int:
+    row = connection.execute("SELECT COUNT(*) AS count FROM capture_candidates").fetchone()
+    return int(row["count"] if row else 0)
+
+
 def count_rows_for_source(connection: sqlite3.Connection, table: str, source_path: Path) -> int:
     row = connection.execute(
         f"SELECT COUNT(*) AS count FROM {table} WHERE source_alerts_path = ?",
@@ -1756,6 +2106,22 @@ def count_rows_for_source(connection: sqlite3.Connection, table: str, source_pat
 def count_minute_bars_for_source(connection: sqlite3.Connection, source_path: Path) -> int:
     row = connection.execute(
         "SELECT COUNT(*) AS count FROM minute_bars WHERE source_file_path = ?",
+        (str(source_path),),
+    ).fetchone()
+    return int(row["count"] if row else 0)
+
+
+def count_capture_index_for_source(connection: sqlite3.Connection, source_path: Path) -> int:
+    row = connection.execute(
+        "SELECT COUNT(*) AS count FROM captures WHERE source_csv_path = ?",
+        (str(source_path),),
+    ).fetchone()
+    return int(row["count"] if row else 0)
+
+
+def count_capture_candidate_index_for_source(connection: sqlite3.Connection, source_path: Path) -> int:
+    row = connection.execute(
+        "SELECT COUNT(*) AS count FROM capture_candidates WHERE source_csv_path = ?",
         (str(source_path),),
     ).fetchone()
     return int(row["count"] if row else 0)
@@ -1841,7 +2207,19 @@ CREATE TABLE IF NOT EXISTS captures (
     source_path TEXT NOT NULL UNIQUE,
     source_hash TEXT,
     capture_version TEXT,
-    is_quarantined INTEGER NOT NULL DEFAULT 0
+    is_quarantined INTEGER NOT NULL DEFAULT 0,
+    capture_session TEXT,
+    capture_calendar_status TEXT,
+    is_market_open_day INTEGER,
+    is_study_eligible INTEGER,
+    next_market_session_date TEXT,
+    scheduling_policy_version TEXT,
+    mode TEXT,
+    market_regime TEXT,
+    source_csv_path TEXT,
+    source_csv_hash TEXT,
+    imported_at TEXT,
+    updated_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_captures_date_session ON captures(capture_date, session);
@@ -1860,6 +2238,14 @@ CREATE TABLE IF NOT EXISTS capture_candidates (
     sector TEXT,
     industry TEXT,
     raw_json TEXT,
+    company TEXT,
+    freshness TEXT,
+    freshness_score INTEGER,
+    article_count INTEGER,
+    source_csv_path TEXT,
+    source_csv_hash TEXT,
+    imported_at TEXT,
+    updated_at TEXT,
     UNIQUE(capture_id, ticker, rank)
 );
 
