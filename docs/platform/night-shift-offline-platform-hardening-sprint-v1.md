@@ -450,3 +450,48 @@ Safety:
 - No alert, outcome, or trade-planning changes.
 - No raw capture or user-authored state mutation.
 - SQLite remains additive/read-only for this purpose.
+
+## Phase 7 Result
+
+Phase 7 is complete.
+
+Goal:
+
+- Make autonomous testing easier and less likely to hang.
+
+Implemented:
+
+- Added `docs/testing/autonomous-test-suites.md`.
+- Added `momentum_hunter/test_plan.py`.
+- The helper lists safe suites without running them:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m momentum_hunter.test_plan --list
+.\.venv\Scripts\python.exe -B -m momentum_hunter.test_plan --json
+```
+
+- Defined suite lanes:
+  - `storage-safe`
+  - `sqlite-safe`
+  - `evidence-safe`
+  - `provider-safe`
+  - `replay-safe`
+  - `ui-bounded-safe`
+  - `do-not-run-unattended`
+- Reused the existing `tools/run_bounded_tests.py` runner for actual bounded execution.
+- Added focused tests in `tests/test_test_plan.py`.
+
+Validation:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m py_compile momentum_hunter\test_plan.py tests\test_test_plan.py
+.\.venv\Scripts\python.exe -B -m unittest tests.test_test_plan
+.\.venv\Scripts\python.exe -B -m momentum_hunter.test_plan --list
+```
+
+Safety:
+
+- Test-policy/tooling only.
+- No full test framework rewrite.
+- No application behavior changes.
+- No scanner, scoring, readiness, alert, outcome, trade-planning, broker, SQLite-authority, raw-capture, or user-authored state changes.

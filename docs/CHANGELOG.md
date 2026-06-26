@@ -27,6 +27,8 @@
 - Added focused provider field quality tests for missing price, zero relative volume, impossible market cap, stale timestamps, report generation, and score-file non-mutation.
 - Enhanced System Readiness reports with an executive summary, status reason, highest-priority issue, recommended next action, section status counts, changes since previous report, stale active-monitor detection, stale SQLite mirror detection, Provider Field Quality status, and Active Alert Reliability status.
 - Added focused readiness tests for executive summary helpers, stale active-monitor status, stale SQLite mirror detection, provider-field-quality section behavior, and active-alert reliability section behavior.
+- Added Autonomous Test Suites documentation plus `python -m momentum_hunter.test_plan --list/--json` so safe storage, SQLite, evidence, provider, replay, bounded-UI, and do-not-run-unattended lanes are easy to inspect without running risky Qt modules.
+- Added focused tests for the autonomous test-plan listing helper.
 
 ### Fixed
 
@@ -48,6 +50,7 @@
 - Offline Evidence Pipeline Drill v1 uses synthetic fixture data in a temporary workspace and existing outcome/import/validation paths. It does not fetch market data, write production alerts, change alert logic, change outcome classification, or mutate raw captures/user-authored state.
 - Provider Field Quality Audit v1 is diagnostic-only. It reads stored analysis rows and writes derived reports; it does not change provider behavior, scanner thresholds, score math, readiness, alerts, outcomes, trade planning, raw captures, or user-authored state. Field-level rows are not written to SQLite because the current `provider_quality_checks` schema is symbol-level market-tape quality, not field-level scanner quality.
 - System Readiness enhancement is reporting-only. It reads existing latest reports and status files, then writes derived readiness reports; it does not alter readiness thresholds, scoring, scanner behavior, alerts, outcomes, trade plans, raw captures, user-authored files, or SQLite authority.
+- Autonomous Test Suites is test-policy/tooling only. It does not change application behavior, scanner logic, scoring, readiness, alerts, outcomes, trade planning, broker behavior, SQLite authority, raw captures, or user-authored files.
 
 ## 2026-06-25
 
