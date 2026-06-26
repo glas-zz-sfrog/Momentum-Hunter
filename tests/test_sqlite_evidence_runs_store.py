@@ -88,6 +88,30 @@ class SQLiteEvidenceRunsStoreTests(unittest.TestCase):
         self.assertEqual(0, runs[0]["pending_count"])
         self.assertEqual(0, runs[0]["warning_count"])
 
+    def test_evidence_run_import_removes_stale_rows_for_mutable_latest_source(self) -> None:
+        write_autopilot_status(self.status_path)
+        first = import_evidence_runs(db_path=self.db_path, source_paths=[self.status_path])
+        write_autopilot_status(
+            self.status_path,
+            timestamp="2026-06-22T11:08:02-05:00",
+            end_timestamp="2026-06-22T11:08:04-05:00",
+        )
+
+        second = import_evidence_runs(db_path=self.db_path, source_paths=[self.status_path])
+
+        with connect_database(self.db_path) as connection:
+            runs = read_evidence_runs(connection)
+            metrics = read_evidence_metrics(connection)
+
+        self.assertEqual(1, first.runs_inserted)
+        self.assertEqual(1, second.runs_inserted)
+        self.assertEqual(1, second.runs_removed_stale)
+        self.assertGreater(second.metrics_removed_stale, 0)
+        self.assertEqual(1, len(runs))
+        self.assertEqual("2026-06-22T11:08:02-05:00", runs[0]["started_at"])
+        self.assertTrue(metrics)
+        self.assertEqual({runs[0]["run_id"]}, {metric["run_id"] for metric in metrics})
+
     def test_evidence_health_report_import_handles_nested_gate_and_lists(self) -> None:
         write_evidence_health_report(self.health_path)
 
@@ -122,15 +146,22 @@ class SQLiteEvidenceRunsStoreTests(unittest.TestCase):
         self.assertEqual(2, len(result.warnings))
 
 
-def write_autopilot_status(path: Path, *, pending: int = 0, warning_count: int = 1) -> None:
+def write_autopilot_status(
+    path: Path,
+    *,
+    pending: int = 0,
+    warning_count: int = 1,
+    timestamp: str = "2026-06-22T10:58:02-05:00",
+    end_timestamp: str = "2026-06-22T10:58:04-05:00",
+) -> None:
     payload = {
         "schema_version": 1,
         "engine_version": "evidence_autopilot_v1",
         "status": {
             "state": "COMPLETED",
-            "started_at": "2026-06-22T10:58:02-05:00",
-            "updated_at": "2026-06-22T10:58:04-05:00",
-            "completed_at": "2026-06-22T10:58:04-05:00",
+            "started_at": timestamp,
+            "updated_at": end_timestamp,
+            "completed_at": end_timestamp,
             "monitor_cycle_completed": True,
             "outcome_update_completed": True,
             "evidence_report_generated": True,

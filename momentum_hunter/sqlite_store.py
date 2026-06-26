@@ -102,10 +102,12 @@ class EvidenceRunsImportResult:
     runs_inserted: int
     runs_updated: int
     runs_skipped: int
+    runs_removed_stale: int
     metrics_seen: int
     metrics_inserted: int
     metrics_updated: int
     metrics_skipped: int
+    metrics_removed_stale: int
     evidence_run_table_row_count: int
     evidence_metric_table_row_count: int
     run_types: dict[str, int]
@@ -712,6 +714,7 @@ def import_evidence_runs(
     warnings: list[str] = []
     parsed_runs: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
     seen_run_ids: set[str] = set()
+    current_run_ids_by_source: dict[str, set[str]] = {}
     for source in sources:
         parsed = parse_evidence_run_source(source, imported_at=imported_at)
         if parsed is None:
@@ -720,20 +723,43 @@ def import_evidence_runs(
         run_row, metrics, source_warnings = parsed
         warnings.extend(source_warnings)
         run_id = str(run_row["run_id"])
+        source_key = str(source)
+        current_run_ids_by_source.setdefault(source_key, set())
         if run_id in seen_run_ids:
             warnings.append(f"DUPLICATE_EVIDENCE_RUN_ID_IN_SOURCE_SET:{run_id}")
             continue
         seen_run_ids.add(run_id)
+        current_run_ids_by_source[source_key].add(run_id)
         parsed_runs.append((run_row, metrics))
 
     runs_inserted = 0
     runs_updated = 0
     runs_skipped = 0
+    runs_removed_stale = 0
     metrics_inserted = 0
     metrics_updated = 0
     metrics_skipped = 0
+    metrics_removed_stale = 0
     with connect_database(db_path) as connection:
         initialize_schema(connection)
+        for source_key, current_run_ids in current_run_ids_by_source.items():
+            existing_rows = connection.execute(
+                "SELECT run_id FROM evidence_runs WHERE source_path = ?",
+                (source_key,),
+            ).fetchall()
+            stale_ids = [str(row["run_id"]) for row in existing_rows if str(row["run_id"]) not in current_run_ids]
+            if stale_ids:
+                placeholders = ",".join("?" for _item in stale_ids)
+                deleted_metrics = connection.execute(
+                    f"DELETE FROM evidence_metrics WHERE run_id IN ({placeholders})",
+                    stale_ids,
+                ).rowcount
+                connection.execute(
+                    f"DELETE FROM evidence_runs WHERE run_id IN ({placeholders})",
+                    stale_ids,
+                )
+                runs_removed_stale += len(stale_ids)
+                metrics_removed_stale += max(0, int(deleted_metrics or 0))
         for run_row, metrics in parsed_runs:
             action = upsert_row(
                 connection,
@@ -777,10 +803,12 @@ def import_evidence_runs(
         runs_inserted=runs_inserted,
         runs_updated=runs_updated,
         runs_skipped=runs_skipped,
+        runs_removed_stale=runs_removed_stale,
         metrics_seen=sum(len(metrics) for _run, metrics in parsed_runs),
         metrics_inserted=metrics_inserted,
         metrics_updated=metrics_updated,
         metrics_skipped=metrics_skipped,
+        metrics_removed_stale=metrics_removed_stale,
         evidence_run_table_row_count=run_count,
         evidence_metric_table_row_count=metric_count,
         run_types=dict(sorted(run_types.items())),

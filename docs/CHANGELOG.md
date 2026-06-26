@@ -38,12 +38,14 @@
 
 - Fixed the SQLite system-status mirror import so mutable latest-status sources replace stale rows from prior generated reports instead of accumulating duplicate historical rows.
 - Added `events_removed_stale` to the system-status import report so mirror cleanup is visible during validation.
+- Fixed the SQLite evidence-run mirror import so mutable latest evidence/status sources remove stale `evidence_runs` and `evidence_metrics` rows for the same source path during import.
 
 ### Safety
 
 - System Readiness remains read-only and does not make SQLite authoritative, overwrite file-based user state, mutate raw captures, or change scanner, scoring, readiness, alert, outcome, or trade-planning logic.
 - Evidence Autopilot stale-run detection is reporting-only and does not change alert generation, scoring, readiness, outcome classification, or trade planning.
 - SQLite system-status stale-row cleanup touches only the additive SQLite mirror; it does not mutate raw captures, JSON status files, user-authored files, scanner output, scoring, readiness, alerts, outcomes, or trade plans.
+- SQLite evidence-run stale-row cleanup touches only the additive SQLite mirror; it does not mutate source evidence reports/status files, raw captures, user-authored files, scanner output, scoring, readiness, alerts, outcomes, or trade plans.
 - Active Alert Reliability v1 is reporting-only. It does not generate alerts, fetch market data, change thresholds, alter readiness/scoring/outcome logic, mutate raw captures, or make SQLite authoritative.
 - Test Harness Reliability v1 changes test execution policy/tooling only. It does not change application behavior, scanner logic, scoring, readiness, alerts, outcomes, trade planning, SQLite authority, or raw captures.
 - Score explanation extraction is formatting-only. It does not recalculate score values, alter scoring weights, change readiness/alert/outcome/trade-planning logic, mutate raw captures, or make SQLite authoritative.

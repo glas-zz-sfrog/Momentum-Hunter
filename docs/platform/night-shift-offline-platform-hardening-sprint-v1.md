@@ -637,3 +637,78 @@ Safety:
 - Does not mutate source files, raw captures, user-authored state, or SQLite source tables.
 - Does not change scanner, scoring, readiness, alert, outcome, or trade-planning behavior.
 - Writes only derived query-pack report artifacts.
+
+## Phase 10 Result
+
+Phase 10 is complete.
+
+Goal:
+
+- Run bounded final validation, capture current readiness, and close the offline platform hardening sprint without starting UI redesign or trading-logic work.
+
+Implemented during final validation:
+
+- Fixed SQLite evidence-run mirror cleanup for mutable latest evidence/status sources.
+- `import_evidence_runs()` now removes stale `evidence_runs` rows and their `evidence_metrics` rows for the same source path when a latest-style source regenerates with a new run identity.
+- Evidence-run import reports now show:
+  - stale runs removed
+  - stale metrics removed
+- Added a regression test proving stale evidence-run/metric rows are removed while the current source row remains.
+- Created the final sprint report:
+  - `docs/platform/night-shift-offline-platform-hardening-final-report.md`
+
+Final validation commands:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_provider_field_quality tests.test_reliability_reports tests.test_test_plan tests.test_report_index tests.test_sqlite_analytics tests.test_sqlite_maintenance tests.test_offline_evidence_drill tests.test_report_loader_hardening
+.\.venv\Scripts\python.exe -B tools\run_bounded_tests.py --group storage --timeout 30
+.\.venv\Scripts\python.exe -B tools\run_bounded_tests.py --group evidence --timeout 30
+.\.venv\Scripts\python.exe -B tools\run_bounded_tests.py --group backend --timeout 30
+.\.venv\Scripts\python.exe -B -m unittest tests.test_sqlite_evidence_runs_store
+.\.venv\Scripts\python.exe -B -m momentum_hunter.offline_evidence_drill
+.\.venv\Scripts\python.exe -B -m momentum_hunter.provider_field_quality
+.\.venv\Scripts\python.exe -B -m momentum_hunter.system_readiness
+.\.venv\Scripts\python.exe -B -m momentum_hunter.report_index
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_analytics
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_migration --slice all-safe
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_validation
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_reports --all
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_maintenance --check
+```
+
+Final validation result:
+
+```text
+Focused sprint unit batch: 30 tests passed
+Storage-safe bounded group: 13/13 passed
+Evidence-safe bounded group: 11/11 passed
+Backend-safe bounded group: 26/26 passed
+SQLite evidence-run store: 6 tests passed
+Offline evidence drill: PASS
+SQLite validation: PASS
+SQLite read models / shadow compare: OK/PASS
+SQLite maintenance: PASS
+System Readiness: WARNING
+Provider Field Quality: WARN
+Report Artifact Index: WARN
+SQLite Analytics Query Pack: WARN
+```
+
+Current warnings:
+
+- System Readiness still reports a historical capture failure record and stale active-monitor/evidence-autopilot runs.
+- Provider Field Quality still reports stale historical capture rows and many zero relative-volume values.
+- Report Artifact Index still reports a missing Capture Health latest artifact and stale Market Tape Health / Daily Evidence Brief artifacts.
+- SQLite Analytics still reports stale system-status evidence events.
+
+Safety:
+
+- Final validation fixed only additive SQLite mirror cleanup.
+- No scoring math changed.
+- No readiness thresholds changed.
+- No alert thresholds changed.
+- No outcome classification logic changed.
+- No trade-planning rules changed.
+- No raw captures or user-authored state were mutated.
+- SQLite remains additive and non-authoritative.
+- Existing JSON/CSV/Markdown outputs remain in place.
