@@ -397,3 +397,56 @@ Safety:
 - No scoring changes.
 - No readiness, alert, outcome, or trade-planning changes.
 - No raw capture or user-authored state mutation.
+
+## Phase 6 Result
+
+Phase 6 is complete.
+
+Goal:
+
+- Make System Readiness more useful as a future dashboard foundation by providing a clear top-level answer and priority issue.
+
+Implemented:
+
+- Enhanced `momentum_hunter/system_readiness.py`.
+- Added top-level report fields:
+  - `status_reason`
+  - `highest_priority_issue`
+  - `recommended_next_action`
+  - `section_status_counts`
+  - `changes_since_previous`
+- Added stale active-monitor detection with `STALE_ACTIVE_MONITOR_CYCLE` when the latest monitor cycle is older than the readiness freshness threshold.
+- Added stale Evidence Autopilot visibility through the existing autopilot reliability report.
+- Added stale SQLite mirror detection with `STALE_SQLITE_MIRROR` when latest SQLite import metadata is too old.
+- Added `Active Alert Reliability` as a readiness section.
+- Added `Provider Field Quality` as a readiness section.
+- Updated Markdown output so the executive summary appears before section details.
+- Added focused tests in `tests/test_reliability_reports.py`.
+
+Validation:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m py_compile momentum_hunter\system_readiness.py tests\test_reliability_reports.py
+.\.venv\Scripts\python.exe -B -m unittest tests.test_reliability_reports
+.\.venv\Scripts\python.exe -B -m momentum_hunter.system_readiness
+```
+
+Production readiness result:
+
+```text
+System Readiness status: WARNING
+Highest priority issue: Captures: A capture failure record exists.
+Recommended next action: Open Capture Health for failure details.
+Status counts: READY 8, WARNING 6, FAILED 0, UNKNOWN 0
+New sections surfaced: Active Alert Reliability, Provider Field Quality
+```
+
+Safety:
+
+- Reporting-only change.
+- No readiness threshold changes.
+- No scoring changes.
+- No scanner/provider behavior changes.
+- No alert, outcome, or trade-planning changes.
+- No raw capture or user-authored state mutation.
+- SQLite remains additive/read-only for this purpose.

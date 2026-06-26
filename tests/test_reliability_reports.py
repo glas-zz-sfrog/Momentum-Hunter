@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from momentum_hunter.data_quality import build_data_quality_report, export_data_quality_report
+from momentum_hunter.active_monitor import ActiveMonitorStatus, save_active_monitor_status
 from momentum_hunter.evidence_autopilot import EvidenceAutopilotStatus, save_evidence_autopilot_status
 from momentum_hunter.evidence_autopilot_reliability import build_evidence_autopilot_reliability_report
 from momentum_hunter.evidence_health import EvidenceGate, EvidenceHealthReport
@@ -15,12 +16,20 @@ from momentum_hunter.market_tape_health import MarketTapeHealthAttempt, MarketTa
 from momentum_hunter.storage import file_sha256
 from momentum_hunter.system_readiness import (
     ReadinessSection,
+    active_alert_reliability_section,
+    active_monitor_section,
+    changes_since_previous,
     evidence_autopilot_section,
     market_data_section,
     outcome_tracking_section,
     overall_status,
+    provider_field_quality_section,
+    recommended_next_action_for_issue,
+    section_status_counts,
     sqlite_mirror_section,
+    status_reason,
     user_state_safety_section,
+    highest_priority_issue,
 )
 
 
@@ -180,6 +189,97 @@ class ReliabilityReportTests(unittest.TestCase):
             ),
         )
 
+    def test_system_readiness_executive_summary_selects_highest_priority_issue(self) -> None:
+        sections = [
+            ReadinessSection("Market Data", "READY", "usable", recommended_next_action="Continue."),
+            ReadinessSection("Active Monitor", "WARNING", "stale cycle", recommended_next_action="Run monitor."),
+            ReadinessSection("SQLite Mirror", "FAILED", "validation failed", recommended_next_action="Run validation."),
+        ]
+
+        status = overall_status(sections)
+        issue = highest_priority_issue(sections)
+
+        self.assertEqual("FAILED", status)
+        self.assertEqual("SQLite Mirror: validation failed", issue)
+        self.assertIn("At least one readiness section failed", status_reason(status, issue))
+        self.assertEqual("Run validation.", recommended_next_action_for_issue(sections, issue))
+        self.assertEqual({"READY": 1, "WARNING": 1, "FAILED": 1, "UNKNOWN": 0}, section_status_counts(sections))
+        self.assertEqual(
+            ["No previous report available for comparison."],
+            changes_since_previous(sections, status, {}),
+        )
+
+    def test_active_monitor_section_warns_on_stale_status(self) -> None:
+        status_path = self.root / "active-monitor-status.json"
+        save_active_monitor_status(
+            ActiveMonitorStatus(
+                state="IDLE",
+                started_at="2026-06-18T07:00:00-05:00",
+                updated_at="2026-06-18T07:05:00-05:00",
+                cycles_requested=1,
+                cycles_completed=1,
+                interval_seconds=300,
+                fetch_missing_market_data=False,
+                last_cycle_at="2026-06-18T07:05:00-05:00",
+            ),
+            status_path,
+        )
+
+        section = active_monitor_section(
+            generated_at=datetime.fromisoformat("2026-06-20T08:05:00-05:00"),
+            status_path=status_path,
+        )
+
+        self.assertEqual("WARNING", section.status)
+        self.assertTrue(any("STALE_ACTIVE_MONITOR_CYCLE" in fact for fact in section.supporting_facts))
+
+    def test_provider_field_and_active_alert_sections_handle_missing_and_warning_reports(self) -> None:
+        missing_provider = provider_field_quality_section(path=self.root / "missing-provider.json")
+        missing_alert = active_alert_reliability_section(path=self.root / "missing-alert.json")
+        self.assertEqual("UNKNOWN", missing_provider.status)
+        self.assertEqual("UNKNOWN", missing_alert.status)
+
+        provider_path = self.root / "provider-field-quality-latest.json"
+        provider_path.write_text(
+            json.dumps(
+                {
+                    "overall_status": "WARN",
+                    "source_rows": 3,
+                    "audit_row_count": 36,
+                    "sqlite_write_status": {"status": "SKIPPED_UNSUPPORTED_SCHEMA"},
+                    "top_warnings": [{"warning": "ZERO_RELATIVE_VOLUME", "count": 2}],
+                    "warnings": ["PROVIDER_FIELD_WARNINGS_PRESENT"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        alert_path = self.root / "active-alert-reliability-latest.json"
+        alert_path.write_text(
+            json.dumps(
+                {
+                    "report": {
+                        "overall_status": "WARNING",
+                        "active_monitor_state": "IDLE",
+                        "active_monitor_cycle_age_minutes": 1500,
+                        "alert_count": 2,
+                        "completed_alert_count": 1,
+                        "pending_alert_count": 0,
+                        "unscorable_alert_count": 1,
+                        "warnings": ["STALE_ACTIVE_MONITOR_CYCLE"],
+                        "next_recommended_action": "Run a fresh active monitor cycle.",
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        provider = provider_field_quality_section(path=provider_path)
+        alert = active_alert_reliability_section(path=alert_path)
+        self.assertEqual("WARNING", provider.status)
+        self.assertEqual("WARNING", alert.status)
+        self.assertTrue(any("ZERO_RELATIVE_VOLUME" in fact for fact in provider.supporting_facts))
+        self.assertTrue(any("STALE_ACTIVE_MONITOR_CYCLE" in fact for fact in alert.supporting_facts))
+
     def test_sqlite_mirror_section_reports_pass_and_shadow_mismatch(self) -> None:
         validation_path = self.root / "sqlite-validation-latest.json"
         shadow_path = self.root / "sqlite-shadow-compare-latest.json"
@@ -223,6 +323,32 @@ class ReliabilityReportTests(unittest.TestCase):
         warning = sqlite_mirror_section(validation_path=validation_path, shadow_compare_path=shadow_path)
         self.assertEqual("WARNING", warning.status)
         self.assertTrue(any("Shadow mismatches: 1" in fact for fact in warning.supporting_facts))
+
+        validation_path.write_text(
+            json.dumps(
+                {
+                    "overall_status": "PASS",
+                    "sqlite_schema_version": 7,
+                    "missing_slices": [],
+                    "warnings": [],
+                    "import_timestamps": {
+                        "captures": {"latest_imported_at": "2026-06-18T08:00:00-05:00"}
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        shadow_path.write_text(
+            json.dumps({"overall_status": "PASS", "mismatches": 0, "unavailable": 0, "warnings": []}),
+            encoding="utf-8",
+        )
+        stale = sqlite_mirror_section(
+            validation_path=validation_path,
+            shadow_compare_path=shadow_path,
+            generated_at=datetime.fromisoformat("2026-06-20T08:00:00-05:00"),
+        )
+        self.assertEqual("WARNING", stale.status)
+        self.assertTrue(any("STALE_SQLITE_MIRROR" in fact for fact in stale.supporting_facts))
 
     def test_user_state_safety_section_reports_diff_status(self) -> None:
         diff_path = self.root / "sqlite-user-state-diff-latest.json"
