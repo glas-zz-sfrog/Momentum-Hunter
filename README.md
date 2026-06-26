@@ -191,6 +191,7 @@ Generate read-only SQLite report surfaces with:
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_reports --report watchlist
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_reports --report system-readiness
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_reports --report comparison
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_reports --shadow-compare
 ```
 
 These reports are SQLite-powered read models only:
@@ -206,9 +207,13 @@ MomentumHunterData\data\reports\sqlite-system-readiness-read-model-latest.json
 MomentumHunterData\data\reports\sqlite-system-readiness-read-model-latest.md
 MomentumHunterData\data\reports\sqlite-read-model-comparison-latest.json
 MomentumHunterData\data\reports\sqlite-read-model-comparison-latest.md
+MomentumHunterData\data\reports\sqlite-shadow-compare-latest.json
+MomentumHunterData\data\reports\sqlite-shadow-compare-latest.md
 ```
 
 The comparison report checks practical file-vs-SQLite counts for alerts, outcomes, minute bars, captures, capture candidates, review statuses, watchlists, and entry plans. It is diagnostic only and does not repair, delete, rewrite, or promote data.
+
+The shadow-compare report uses the read-only facade in `momentum_hunter.read_models` to compare file-based summaries against SQLite summaries without changing what the app uses. The supported source modes are `file`, `sqlite`, and `shadow`; the default remains `file`. You can set `MOMENTUM_HUNTER_READ_MODEL_SOURCE=file|sqlite|shadow` for report-only experiments, but live UI workflows still use their existing file-backed paths unless explicitly changed in a future milestone.
 
 Validate the SQLite mirror against current source files with:
 

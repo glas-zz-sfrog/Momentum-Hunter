@@ -56,9 +56,13 @@ REPORT_PATHS = {
         "sqlite-read-model-comparison-latest.json",
         "sqlite-read-model-comparison-latest.md",
     ),
+    "shadow-compare": (
+        "sqlite-shadow-compare-latest.json",
+        "sqlite-shadow-compare-latest.md",
+    ),
 }
 
-REPORT_ORDER = ["candidate-story", "evidence", "watchlist", "system-readiness", "comparison"]
+REPORT_ORDER = ["candidate-story", "evidence", "watchlist", "system-readiness", "comparison", "shadow-compare"]
 
 
 def build_candidate_story_read_model(*, db_path: Path | None = None) -> dict[str, Any]:
@@ -461,6 +465,10 @@ def build_report(report_name: str, *, db_path: Path | None = None) -> dict[str, 
         return build_system_readiness_read_model(db_path=db_path)
     if report_name == "comparison":
         return build_sqlite_read_model_comparison(db_path=db_path)
+    if report_name == "shadow-compare":
+        from momentum_hunter.read_models import build_shadow_compare_read_model
+
+        return build_shadow_compare_read_model(db_path=db_path)
     raise ValueError(f"Unknown report: {report_name}")
 
 
@@ -500,6 +508,8 @@ def format_report_markdown(report_name: str, payload: dict[str, Any]) -> str:
         return system_readiness_markdown(payload)
     if report_name == "comparison":
         return comparison_markdown(payload)
+    if report_name == "shadow-compare":
+        return shadow_compare_markdown(payload)
     return generic_markdown(report_name, payload)
 
 
@@ -624,6 +634,39 @@ def comparison_markdown(payload: dict[str, Any]) -> str:
                 f"{display_count(item.get('file_count'))} | {display_count(item.get('sqlite_count'))} | "
                 f"{item.get('message', '')} |"
             )
+    append_warnings(lines, payload)
+    return "\n".join(lines) + "\n"
+
+
+def shadow_compare_markdown(payload: dict[str, Any]) -> str:
+    lines = header("SQLite Shadow Compare", payload)
+    lines.extend(
+        [
+            f"- Overall status: {payload.get('overall_status', 'UNKNOWN')}",
+            f"- Validation status: {payload.get('validation_status', 'UNKNOWN')}",
+            f"- Matching fields: {payload.get('matching_fields', 0)}",
+            f"- Mismatches: {payload.get('mismatches', 0)}",
+            f"- Unavailable fields: {payload.get('unavailable', 0)}",
+            f"- Stale SQLite data: {payload.get('stale_sqlite_data', False)}",
+            f"- Fallback reason: {payload.get('fallback_reason', '')}",
+            f"- Recommended action: {payload.get('recommended_action', '')}",
+            "",
+            "| Surface | Field | Status | File Value | SQLite Value | Message |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for item in payload.get("comparisons", []):
+        if isinstance(item, dict):
+            lines.append(
+                f"| {item.get('surface', '')} | {item.get('field', '')} | {item.get('status', '')} | "
+                f"{item.get('file_value', '')} | {item.get('sqlite_value', '')} | {item.get('message', '')} |"
+            )
+    missing = payload.get("missing_data", []) or []
+    lines.extend(["", "## Missing Data", ""])
+    if missing:
+        lines.extend(f"- {item}" for item in missing)
+    else:
+        lines.append("- None.")
     append_warnings(lines, payload)
     return "\n".join(lines) + "\n"
 
@@ -868,6 +911,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=REPORTS_DIR)
     parser.add_argument("--all", action="store_true", help="Generate every SQLite read model report.")
     parser.add_argument(
+        "--shadow-compare",
+        action="store_true",
+        help="Generate only the read-only file-vs-SQLite shadow comparison report.",
+    )
+    parser.add_argument(
         "--report",
         choices=REPORT_ORDER,
         action="append",
@@ -878,7 +926,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    report_names = REPORT_ORDER if args.all or not args.report else args.report
+    if args.shadow_compare and not args.all and not args.report:
+        report_names = ["shadow-compare"]
+    else:
+        report_names = REPORT_ORDER if args.all or not args.report else args.report
+        if args.shadow_compare and "shadow-compare" not in report_names:
+            report_names = [*report_names, "shadow-compare"]
     payload = generate_reports(report_names, db_path=args.db, output_dir=args.output_dir)
     print(json.dumps(payload, indent=2))
     return 0
@@ -886,4 +939,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

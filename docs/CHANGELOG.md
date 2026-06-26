@@ -4,6 +4,10 @@
 
 ### Added
 
+- Added SQLite Read-Only Adoption Audit & Shadow Mode v1, documenting safe and deferred SQLite read-only adoption surfaces.
+- Added `momentum_hunter.read_models` as a read-only facade for `file`, `sqlite`, and `shadow` report-summary modes; default remains file-based.
+- Added `python -m momentum_hunter.sqlite_reports --shadow-compare` with latest `sqlite-shadow-compare-latest.{json,md}` outputs.
+- Added focused tests proving file mode defaults, SQLite mode reads summaries, missing SQLite warns cleanly, shadow comparison detects matches/mismatches, source files are not mutated, and shadow CLI reports generate.
 - Added SQLite Read Model & Cutover Design v1 with a design-only user-state cutover plan in `docs/storage/sqlite-user-state-cutover-plan-v1.md`.
 - Added read-only SQLite report generation through `python -m momentum_hunter.sqlite_reports --all` and individual `--report` options for Candidate Story, Evidence, Watchlist/Plans, System Readiness, and file-vs-SQLite comparison.
 - Added latest SQLite read-model report outputs under `MomentumHunterData/data/reports/sqlite-*-read-model-latest.*` plus `sqlite-read-model-comparison-latest.*`.
@@ -57,6 +61,7 @@
 
 ### Safety
 
+- Read-only adoption shadow mode does not change default UI behavior or runtime source-of-truth behavior. File mode remains the default, and SQLite stays diagnostic/report-only.
 - SQLite read-model reports are diagnostic only. They do not make SQLite authoritative, mutate raw captures, overwrite user-authored files, change UI workflows, or alter scoring, readiness, alert, outcome, or trade-planning logic.
 - The user-state cutover plan is documentation only; runtime review, watchlist, and entry-plan workflows remain file-authoritative.
 - User-authored review, watchlist, and entry-plan files remain authoritative. SQLite user-state rows are mirrors only and must not overwrite JSON/Markdown stores.
@@ -66,6 +71,7 @@
 
 ### Tests
 
+- Added focused non-Qt tests for read-model source resolution, SQLite read summaries, shadow compare PASS/WARN behavior, stale SQLite mismatch reporting, CLI report output, and source-file non-mutation.
 - Added focused tests for SQLite Candidate Story, Evidence, Watchlist/Plans, System Readiness, CLI report generation, JSON/Markdown output, comparison matching/mismatch behavior, missing database handling, and source-file non-mutation.
 - Added focused tests for user-state backup/restore validation, idempotent user-state imports, duplicate/malformed user-state handling, dry-run diff detection, read-only user-state query helpers, source-file non-mutation, and schema version 7 SQLite initialization.
 
