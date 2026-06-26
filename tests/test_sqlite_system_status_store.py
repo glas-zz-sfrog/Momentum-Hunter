@@ -96,6 +96,46 @@ class SQLiteSystemStatusStoreTests(unittest.TestCase):
         self.assertEqual(1, len(rows))
         self.assertEqual("INFO", rows[0]["status"])
 
+    def test_mutable_latest_status_source_replaces_stale_rows(self) -> None:
+        source = self.root / "system-readiness-latest.json"
+        write_json(
+            source,
+            {
+                "engine_version": "system_readiness_v1",
+                "report": {
+                    "generated_at": "2026-06-25T12:01:00-05:00",
+                    "overall_status": "READY",
+                    "sections": [],
+                    "issues_requiring_attention": [],
+                },
+            },
+        )
+
+        first = import_system_status_events(db_path=self.db_path, source_paths=[source])
+        write_json(
+            source,
+            {
+                "engine_version": "system_readiness_v1",
+                "report": {
+                    "generated_at": "2026-06-25T12:02:00-05:00",
+                    "overall_status": "WARNING",
+                    "sections": [],
+                    "issues_requiring_attention": ["new warning"],
+                },
+            },
+        )
+        second = import_system_status_events(db_path=self.db_path, source_paths=[source])
+
+        with connect_database(self.db_path) as connection:
+            rows = read_system_status_events(connection)
+
+        self.assertEqual(1, first.events_inserted)
+        self.assertEqual(1, second.events_inserted)
+        self.assertEqual(1, second.events_removed_stale)
+        self.assertEqual(1, len(rows))
+        self.assertEqual("WARNING", rows[0]["status"])
+        self.assertIn("new warning", rows[0]["details_json"])
+
     def test_data_quality_status_marks_missing_tape_as_warning(self) -> None:
         source = self.root / "data-quality-latest.json"
         write_json(

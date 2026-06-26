@@ -121,6 +121,7 @@ class SystemStatusImportResult:
     events_inserted: int
     events_updated: int
     events_skipped: int
+    events_removed_stale: int
     table_row_count: int
     status_counts: dict[str, int]
     event_type_counts: dict[str, int]
@@ -799,22 +800,40 @@ def import_system_status_events(
     warnings: list[str] = []
     parsed_events: list[dict[str, Any]] = []
     seen_event_ids: set[str] = set()
+    current_event_ids_by_source: dict[str, set[str]] = {}
     for source in sources:
         events, source_warnings = parse_system_status_source(source, imported_at=imported_at)
         warnings.extend(source_warnings)
+        source_key = str(source)
+        current_event_ids_by_source.setdefault(source_key, set())
         for event in events:
             event_id = str(event["event_id"])
             if event_id in seen_event_ids:
                 warnings.append(f"DUPLICATE_SYSTEM_STATUS_EVENT_ID_IN_SOURCE_SET:{event_id}")
                 continue
             seen_event_ids.add(event_id)
+            current_event_ids_by_source[source_key].add(event_id)
             parsed_events.append(event)
 
     inserted = 0
     updated = 0
     skipped = 0
+    removed_stale = 0
     with connect_database(db_path) as connection:
         initialize_schema(connection)
+        for source_key, current_event_ids in current_event_ids_by_source.items():
+            existing_rows = connection.execute(
+                "SELECT event_id FROM system_status_events WHERE source_path = ?",
+                (source_key,),
+            ).fetchall()
+            stale_ids = [str(row["event_id"]) for row in existing_rows if str(row["event_id"]) not in current_event_ids]
+            if stale_ids:
+                placeholders = ",".join("?" for _item in stale_ids)
+                connection.execute(
+                    f"DELETE FROM system_status_events WHERE event_id IN ({placeholders})",
+                    stale_ids,
+                )
+                removed_stale += len(stale_ids)
         for event in parsed_events:
             action = upsert_row(
                 connection,
@@ -846,6 +865,7 @@ def import_system_status_events(
         events_inserted=inserted,
         events_updated=updated,
         events_skipped=skipped,
+        events_removed_stale=removed_stale,
         table_row_count=table_count,
         status_counts=dict(sorted(status_counts.items())),
         event_type_counts=dict(sorted(event_type_counts.items())),

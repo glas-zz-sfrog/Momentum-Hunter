@@ -21,7 +21,7 @@ Current SQLite row counts:
 | `minute_bars` | 710 |
 | `evidence_runs` | 14 |
 | `evidence_metrics` | 378 |
-| `system_status_events` | 16 |
+| `system_status_events` | 18 |
 | `captures` | 39 |
 | `capture_candidates` | 642 |
 
@@ -34,6 +34,8 @@ Current live read-model results:
 | Watchlist/Plans | 17 mirrored watchlist review decisions, 8 watchlist artifacts, 0 complete plans, 26 incomplete plans |
 | System Readiness | validation status `PASS`, no missing slices |
 | Shadow Compare | `PASS`, no mismatches |
+
+2026-06-26 follow-up validation found stale rows in the additive `system_status_events` mirror after mutable latest-status source files were regenerated. The system-status importer now removes stale rows for the same source path when the current source file parses to different event IDs. After repair, SQLite validation and shadow compare returned `PASS` with 18 current system-status events.
 
 ## Source Modes
 

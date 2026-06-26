@@ -419,6 +419,7 @@ def system_status_import_markdown_lines(result: dict[str, object]) -> list[str]:
         f"- Events inserted: {result.get('events_inserted', 0)}",
         f"- Events updated: {result.get('events_updated', 0)}",
         f"- Events skipped unchanged: {result.get('events_skipped', 0)}",
+        f"- Stale rows removed: {result.get('events_removed_stale', 0)}",
         f"- System status table rows: {result.get('table_row_count', 0)}",
         "",
         "## Status Counts",

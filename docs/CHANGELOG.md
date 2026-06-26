@@ -9,10 +9,16 @@
 - Added Evidence Autopilot stale-run detection with latest-run age, stale flag, and `STALE_EVIDENCE_AUTOPILOT_RUN` warning when the latest completed run is older than 24 hours.
 - Added focused reliability tests proving fresh autopilot runs stay clean and stale runs are warned.
 
+### Fixed
+
+- Fixed the SQLite system-status mirror import so mutable latest-status sources replace stale rows from prior generated reports instead of accumulating duplicate historical rows.
+- Added `events_removed_stale` to the system-status import report so mirror cleanup is visible during validation.
+
 ### Safety
 
 - System Readiness remains read-only and does not make SQLite authoritative, overwrite file-based user state, mutate raw captures, or change scanner, scoring, readiness, alert, outcome, or trade-planning logic.
 - Evidence Autopilot stale-run detection is reporting-only and does not change alert generation, scoring, readiness, outcome classification, or trade planning.
+- SQLite system-status stale-row cleanup touches only the additive SQLite mirror; it does not mutate raw captures, JSON status files, user-authored files, scanner output, scoring, readiness, alerts, outcomes, or trade plans.
 
 ## 2026-06-25
 

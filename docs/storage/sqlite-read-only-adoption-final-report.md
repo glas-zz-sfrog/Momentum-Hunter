@@ -82,9 +82,11 @@ SQLite table counts at preflight:
 | `minute_bars` | 710 |
 | `evidence_runs` | 14 |
 | `evidence_metrics` | 378 |
-| `system_status_events` | 16 |
+| `system_status_events` | 18 |
 | `captures` | 39 |
 | `capture_candidates` | 642 |
+
+2026-06-26 follow-up: a rerun found that mutable latest-status source files could leave stale `system_status_events` rows in the SQLite mirror. The importer now removes stale rows for the same source path before validating current parsed events. The refreshed mirror removed 11 stale rows and validation returned `PASS`.
 
 ## Feature Flags
 
@@ -117,6 +119,7 @@ Results:
 - Live SQLite validation: PASS
 - Live SQLite reports: PASS
 - Live shadow compare: PASS
+- System-status stale-row cleanup: PASS, 11 stale rows removed during local mirror repair
 
 ## Recommended Next Step
 
