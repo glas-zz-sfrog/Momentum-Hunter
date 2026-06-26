@@ -182,6 +182,34 @@ SQLite imports are mirrors only. Existing report files remain the current operat
 
 Read-only helper functions in `momentum_hunter.sqlite_queries` provide lightweight summaries for table counts, alert evidence state, candidate history by ticker, latest system status events, mirrored review decisions, mirrored watchlist items, mirrored entry plans, user-state import summaries, and user-state diff conflicts. These helpers query SQLite only and do not replace file-based runtime workflows.
 
+Generate read-only SQLite report surfaces with:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_reports --all
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_reports --report candidate-story
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_reports --report evidence
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_reports --report watchlist
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_reports --report system-readiness
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_reports --report comparison
+```
+
+These reports are SQLite-powered read models only:
+
+```text
+MomentumHunterData\data\reports\sqlite-candidate-story-read-model-latest.json
+MomentumHunterData\data\reports\sqlite-candidate-story-read-model-latest.md
+MomentumHunterData\data\reports\sqlite-evidence-read-model-latest.json
+MomentumHunterData\data\reports\sqlite-evidence-read-model-latest.md
+MomentumHunterData\data\reports\sqlite-watchlist-read-model-latest.json
+MomentumHunterData\data\reports\sqlite-watchlist-read-model-latest.md
+MomentumHunterData\data\reports\sqlite-system-readiness-read-model-latest.json
+MomentumHunterData\data\reports\sqlite-system-readiness-read-model-latest.md
+MomentumHunterData\data\reports\sqlite-read-model-comparison-latest.json
+MomentumHunterData\data\reports\sqlite-read-model-comparison-latest.md
+```
+
+The comparison report checks practical file-vs-SQLite counts for alerts, outcomes, minute bars, captures, capture candidates, review statuses, watchlists, and entry plans. It is diagnostic only and does not repair, delete, rewrite, or promote data.
+
 Validate the SQLite mirror against current source files with:
 
 ```powershell
@@ -202,6 +230,8 @@ Before any future user-state cutover, create and validate a backup:
 .\.venv\Scripts\python.exe -m momentum_hunter.user_state_safety backup
 .\.venv\Scripts\python.exe -m momentum_hunter.user_state_safety validate-restore MomentumHunterData\backups\user-state\YYYYMMDDHHMMSS
 ```
+
+The design-only cutover plan for eventually moving selected user-authored state to SQLite lives at `docs\storage\sqlite-user-state-cutover-plan-v1.md`. SQLite is not safe to make authoritative until backup, restore, conflict handling, stale-mirror detection, user confirmation, rollback, and one-way export/import recovery are fully implemented and tested.
 
 ## Watchlist Discipline
 

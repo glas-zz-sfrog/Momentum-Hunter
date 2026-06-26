@@ -4,6 +4,10 @@
 
 ### Added
 
+- Added SQLite Read Model & Cutover Design v1 with a design-only user-state cutover plan in `docs/storage/sqlite-user-state-cutover-plan-v1.md`.
+- Added read-only SQLite report generation through `python -m momentum_hunter.sqlite_reports --all` and individual `--report` options for Candidate Story, Evidence, Watchlist/Plans, System Readiness, and file-vs-SQLite comparison.
+- Added latest SQLite read-model report outputs under `MomentumHunterData/data/reports/sqlite-*-read-model-latest.*` plus `sqlite-read-model-comparison-latest.*`.
+- Added focused SQLite report tests for read-model generation, CLI output, source-file non-mutation, matching comparison counts, mismatch reporting, and missing-database handling.
 - Added SQLite User State Safety Cage v1 with additive schema version 7 mirrors for `candidate_reviews`, `watchlist_items`, and `entry_plans`.
 - Added user-state backup and restore-validation tooling with SHA-256 manifests and latest reports under `MomentumHunterData/data/reports/user-state-*.{json,md}`.
 - Added `python -m momentum_hunter.sqlite_migration --slice user-state` for idempotent review/watchlist/entry-plan mirror imports.
@@ -53,6 +57,8 @@
 
 ### Safety
 
+- SQLite read-model reports are diagnostic only. They do not make SQLite authoritative, mutate raw captures, overwrite user-authored files, change UI workflows, or alter scoring, readiness, alert, outcome, or trade-planning logic.
+- The user-state cutover plan is documentation only; runtime review, watchlist, and entry-plan workflows remain file-authoritative.
 - User-authored review, watchlist, and entry-plan files remain authoritative. SQLite user-state rows are mirrors only and must not overwrite JSON/Markdown stores.
 - User-state import is intentionally separate from `--slice all-safe`; it should be run after a verified backup and dry-run diff.
 - Reliability reports are read-only diagnostics. They do not change scanner logic, scoring math, readiness thresholds, alert generation, ranking, trade-planning rules, raw captures, broker behavior, or automated trading behavior.
@@ -60,6 +66,7 @@
 
 ### Tests
 
+- Added focused tests for SQLite Candidate Story, Evidence, Watchlist/Plans, System Readiness, CLI report generation, JSON/Markdown output, comparison matching/mismatch behavior, missing database handling, and source-file non-mutation.
 - Added focused tests for user-state backup/restore validation, idempotent user-state imports, duplicate/malformed user-state handling, dry-run diff detection, read-only user-state query helpers, source-file non-mutation, and schema version 7 SQLite initialization.
 
 ## 2026-06-24

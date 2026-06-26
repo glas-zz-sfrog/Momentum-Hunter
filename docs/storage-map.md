@@ -185,6 +185,16 @@ MomentumHunterData/data/reports/sqlite-user-state-import-latest.json
 MomentumHunterData/data/reports/sqlite-user-state-import-latest.md
 MomentumHunterData/data/reports/sqlite-user-state-diff-latest.json
 MomentumHunterData/data/reports/sqlite-user-state-diff-latest.md
+MomentumHunterData/data/reports/sqlite-candidate-story-read-model-latest.json
+MomentumHunterData/data/reports/sqlite-candidate-story-read-model-latest.md
+MomentumHunterData/data/reports/sqlite-evidence-read-model-latest.json
+MomentumHunterData/data/reports/sqlite-evidence-read-model-latest.md
+MomentumHunterData/data/reports/sqlite-watchlist-read-model-latest.json
+MomentumHunterData/data/reports/sqlite-watchlist-read-model-latest.md
+MomentumHunterData/data/reports/sqlite-system-readiness-read-model-latest.json
+MomentumHunterData/data/reports/sqlite-system-readiness-read-model-latest.md
+MomentumHunterData/data/reports/sqlite-read-model-comparison-latest.json
+MomentumHunterData/data/reports/sqlite-read-model-comparison-latest.md
 MomentumHunterData/data/reports/sqlite-validation-latest.json
 MomentumHunterData/data/reports/sqlite-validation-latest.md
 ```
@@ -211,9 +221,11 @@ The diff compares file-authoritative review, watchlist, and entry-plan records a
 
 Read-only query helpers live in `momentum_hunter/sqlite_queries.py`. They summarize table counts, alert evidence state, alerts by symbol, outcomes by alert ID, minute bars by symbol/time range, evidence runs by date range, latest provider quality checks, latest system status events, candidate capture trails, first/latest captures, peak-score captures, mirrored review decisions, mirrored watchlist items, mirrored entry plans, latest user-state import summaries, and user-state diff conflicts from SQLite without mutating source files or redirecting runtime workflows.
 
+Read-only report helpers live in `momentum_hunter/sqlite_reports.py`. They generate SQLite-powered latest JSON/Markdown reports for Candidate Story, Evidence, Watchlist/Plans, System Readiness, and file-vs-SQLite comparison. These reports validate SQLite when practical, label missing or unavailable comparisons honestly, and never mutate source JSON/CSV/Markdown files, raw captures, or user-authored state.
+
 SQLite validation lives in `momentum_hunter/sqlite_validation.py`. It compares mirrored row counts against the current authoritative source files and writes `sqlite-validation-latest.json` / `.md` reports. Validation includes per-symbol counts, earliest/latest timestamps, alert/outcome completed-pending-unscorable counts, minute-bar counts, capture counts, source file paths and hashes, import timestamps, schema version, missing slices, and warnings. Validation is read-only and does not modify source files or SQLite rows.
 
-Do not make raw captures, review decisions, watchlist state, or entry plans SQLite-authoritative until backup, conflict handling, hash validation, recovery behavior, UI confirmation, rollback, and cutover strategy are designed and tested.
+Do not make raw captures, review decisions, watchlist state, or entry plans SQLite-authoritative until backup, conflict handling, hash validation, recovery behavior, UI confirmation, rollback, and cutover strategy are implemented and tested. The design-only user-state cutover plan is documented in `docs/storage/sqlite-user-state-cutover-plan-v1.md`; it does not activate cutover behavior.
 
 ## Historical Cluster Display
 
