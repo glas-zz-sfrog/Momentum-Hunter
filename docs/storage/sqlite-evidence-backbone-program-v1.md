@@ -84,7 +84,7 @@ After Phase 4:
 | 3 | System Status Events Slice | `system_status_events` | active monitor status, evidence autopilot status, provider/data-quality/status reports | Complete: `Add SQLite system status slice` |
 | 4 | Capture / Candidate Read-Only Index Slice | `captures`, `capture_candidates` | derived analysis CSV plus raw capture file hashes where safe | Complete: `Add SQLite capture index slice` |
 | 5 | Read-Only Query Helpers | query helpers over existing tables | SQLite mirrors only | Complete: `Add SQLite read-only query helpers` |
-| 6 | Unified Import CLI | all safe slices | all mirrored evidence sources | Complete: validated existing `--slice all` workflow |
+| 6 | Unified Import CLI | all safe slices | all mirrored evidence sources | Complete: explicit `--slice all-safe` workflow; `--slice all` remains compatible |
 | 7 | Validation / Integrity Report | validation reports | source files plus SQLite mirrors | Complete: `Add SQLite validation report` |
 | 8 | Documentation and Final Report | docs only | current program evidence | Complete: `docs/storage/sqlite-evidence-backbone-final-report.md` |
 
@@ -112,8 +112,8 @@ After Phase 4:
 - Score breakdowns
 - Analysis CSVs
 - Opportunity alert JSON store
-- Minute-bar JSON cache until Phase 1 completes
-- Evidence and system status reports until later slices complete
+- Minute-bar JSON cache as the authoritative source; SQLite mirrors it for analytics
+- Evidence and system status reports as authoritative source files; SQLite mirrors structured rows for analytics
 
 ## Phase 2 Evidence Runs Source Audit
 
@@ -186,15 +186,25 @@ Helpers:
 - `sqlite_backbone_summary`: schema version and table counts
 - `alert_evidence_summary`: completed, pending, and unscorable alert-outcome counts
 - `candidate_history_for_ticker`: capture/candidate history for one ticker from SQLite mirrors
+- `get_alerts_by_symbol`: opportunity alerts for one symbol
+- `get_outcomes_by_alert_id`: embedded alert outcome rows by alert ID
+- `get_minute_bars_by_symbol`: minute bars by symbol, optional time range, and optional source
+- `get_evidence_runs_by_date_range`: evidence runs by date range and optional run type
+- `get_latest_provider_quality_checks`: latest provider quality rows, optionally filtered by symbol
 - `latest_system_status`: latest status rows, optionally filtered by normalized status
+- `get_candidate_capture_trail`: alias for ticker capture history
+- `get_first_latest_capture_for_symbol`: first and latest captures for one symbol
+- `get_peak_score_capture_for_symbol`: highest-score capture for one symbol
 
 ## Phase 6 Unified Import CLI
 
 The unified safe import path is:
 
 ```powershell
-.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice all
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice all-safe
 ```
+
+`--slice all` is retained as a compatibility alias for the same additive imports, but `all-safe` writes the explicit all-safe latest report files.
 
 Validated latest run:
 
@@ -208,8 +218,8 @@ Validated latest run:
 
 The unified report is written to:
 
-- `MomentumHunterData/data/reports/sqlite-import-latest.json`
-- `MomentumHunterData/data/reports/sqlite-import-latest.md`
+- `MomentumHunterData/data/reports/sqlite-import-all-safe-latest.json`
+- `MomentumHunterData/data/reports/sqlite-import-all-safe-latest.md`
 
 ## Phase 7 SQLite Validation Report
 
@@ -226,12 +236,17 @@ Validated latest report:
 - Provider quality: source 3 / SQLite 3
 - Opportunity alerts: source 2 / SQLite 2
 - Alert outcomes: source 2 / SQLite 2
+- Completed alert outcomes: source 1 / SQLite 1
+- Pending alert outcomes: source 0 / SQLite 0
+- Unscorable alert outcomes: source 1 / SQLite 1
 - Minute bars: source 710 / SQLite 710
 - Evidence runs: source 14 / SQLite 14
 - System status events: source 16 / SQLite 16
 - Captures: source 39 / SQLite 39
 - Capture candidates: source 642 / SQLite 642
 - Warnings: none
+
+The JSON validation report also records source file paths and SHA-256 hashes, import timestamps, missing slices, per-symbol minute-bar counts, capture session counts, and per-symbol capture candidate counts. The Markdown report summarizes the same categories with bounded human-readable symbol sections.
 
 Reports:
 

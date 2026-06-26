@@ -8,6 +8,14 @@ from pathlib import Path
 from momentum_hunter.sqlite_queries import (
     alert_evidence_summary,
     candidate_history_for_ticker,
+    get_alerts_by_symbol,
+    get_candidate_capture_trail,
+    get_evidence_runs_by_date_range,
+    get_first_latest_capture_for_symbol,
+    get_latest_provider_quality_checks,
+    get_minute_bars_by_symbol,
+    get_outcomes_by_alert_id,
+    get_peak_score_capture_for_symbol,
     latest_system_status,
     sqlite_backbone_summary,
 )
@@ -31,8 +39,8 @@ class SQLiteQueryHelperTests(unittest.TestCase):
         summary = sqlite_backbone_summary(db_path=self.db_path)
 
         self.assertEqual(6, summary["schema_version"])
-        self.assertEqual(1, summary["table_counts"]["captures"])
-        self.assertEqual(2, summary["table_counts"]["capture_candidates"])
+        self.assertEqual(2, summary["table_counts"]["captures"])
+        self.assertEqual(3, summary["table_counts"]["capture_candidates"])
         self.assertEqual(3, summary["table_counts"]["alert_outcomes"])
 
     def test_alert_evidence_summary_separates_completed_pending_unscorable(self) -> None:
@@ -45,10 +53,44 @@ class SQLiteQueryHelperTests(unittest.TestCase):
     def test_candidate_history_for_ticker_orders_by_capture_time(self) -> None:
         rows = candidate_history_for_ticker("aaa", db_path=self.db_path)
 
-        self.assertEqual(1, len(rows))
+        self.assertEqual(2, len(rows))
         self.assertEqual("AAA", rows[0]["ticker"])
         self.assertEqual(91, rows[0]["score"])
         self.assertEqual("morning", rows[0]["session"])
+        self.assertEqual(97, rows[-1]["score"])
+
+    def test_query_helpers_cover_alerts_outcomes_bars_evidence_and_provider_quality(self) -> None:
+        alerts = get_alerts_by_symbol("aaa", db_path=self.db_path)
+        outcomes = get_outcomes_by_alert_id("alert-1", db_path=self.db_path)
+        bars = get_minute_bars_by_symbol(
+            "aaa",
+            db_path=self.db_path,
+            start="2026-06-25T09:00:00-05:00",
+            end="2026-06-25T09:02:00-05:00",
+        )
+        evidence_runs = get_evidence_runs_by_date_range(
+            db_path=self.db_path,
+            start="2026-06-25T08:00:00-05:00",
+            end="2026-06-25T10:00:00-05:00",
+        )
+        provider_quality = get_latest_provider_quality_checks(db_path=self.db_path, symbol="aaa")
+
+        self.assertEqual(["alert-1"], [row["alert_id"] for row in alerts])
+        self.assertEqual("SUCCESSFUL", outcomes[0]["classification"])
+        self.assertEqual(2, len(bars))
+        self.assertEqual(10.2, bars[-1]["close"])
+        self.assertEqual(["run-1"], [row["run_id"] for row in evidence_runs])
+        self.assertEqual("AAA", provider_quality[0]["symbol"])
+
+    def test_capture_trail_first_latest_and_peak_score_helpers(self) -> None:
+        trail = get_candidate_capture_trail("AAA", db_path=self.db_path)
+        first_latest = get_first_latest_capture_for_symbol("AAA", db_path=self.db_path)
+        peak = get_peak_score_capture_for_symbol("AAA", db_path=self.db_path)
+
+        self.assertEqual(2, len(trail))
+        self.assertEqual("2026-06-25T07:00:00-05:00", first_latest["first"]["capture_time"])
+        self.assertEqual("2026-06-25T09:30:00-05:00", first_latest["latest"]["capture_time"])
+        self.assertEqual(97, peak["score"])
 
     def test_latest_system_status_can_filter_warnings(self) -> None:
         rows = latest_system_status(db_path=self.db_path, status="warning")
@@ -59,24 +101,31 @@ class SQLiteQueryHelperTests(unittest.TestCase):
 
 
 def seed_query_database(connection) -> None:
-    connection.execute(
-        """
-        INSERT INTO captures (
-            capture_id, capture_date, capture_time, session, provider, scanner,
-            source_path, source_hash, capture_version, is_quarantined,
-            capture_session, capture_calendar_status, is_market_open_day,
-            is_study_eligible, next_market_session_date, scheduling_policy_version,
-            mode, market_regime, source_csv_path, source_csv_hash, imported_at, updated_at
+    for capture_id, capture_time, session in [
+        ("cap-1", "2026-06-25T07:00:00-05:00", "morning"),
+        ("cap-2", "2026-06-25T09:30:00-05:00", "manual"),
+    ]:
+        connection.execute(
+            """
+            INSERT INTO captures (
+                capture_id, capture_date, capture_time, session, provider, scanner,
+                source_path, source_hash, capture_version, is_quarantined,
+                capture_session, capture_calendar_status, is_market_open_day,
+                is_study_eligible, next_market_session_date, scheduling_policy_version,
+                mode, market_regime, source_csv_path, source_csv_hash, imported_at, updated_at
+            )
+            VALUES (?, '2026-06-25', ?, ?, 'finviz', 'Base Momentum',
+                ?, 'hash', '', 0,
+                ?, 'MARKET_OPEN_DAY', 1, 1, '2026-06-25', 'market-calendar-v1',
+                'PAPER', 'bull', 'analysis-captures.csv', 'csvhash', '2026-06-25T08:00:00-05:00', '2026-06-25T08:00:00-05:00')
+            """,
+            (capture_id, capture_time, session, f"captures/2026-06-25/{session}.json", session),
         )
-        VALUES (
-            'cap-1', '2026-06-25', '2026-06-25T07:00:00-05:00', 'morning', 'finviz', 'Base Momentum',
-            'captures/2026-06-25/morning.json', 'hash', '', 0,
-            'morning', 'MARKET_OPEN_DAY', 1, 1, '2026-06-25', 'market-calendar-v1',
-            'PAPER', 'bull', 'analysis-captures.csv', 'csvhash', '2026-06-25T08:00:00-05:00', '2026-06-25T08:00:00-05:00'
-        )
-        """
-    )
-    for candidate_id, ticker, rank, score in [("cand-1", "AAA", 1, 91), ("cand-2", "BBB", 2, 84)]:
+    for candidate_id, capture_id, ticker, rank, score in [
+        ("cand-1", "cap-1", "AAA", 1, 91),
+        ("cand-2", "cap-1", "BBB", 2, 84),
+        ("cand-3", "cap-2", "AAA", 1, 97),
+    ]:
         connection.execute(
             """
             INSERT INTO capture_candidates (
@@ -84,12 +133,55 @@ def seed_query_database(connection) -> None:
                 relative_volume, market_cap, sector, industry, raw_json, company, freshness,
                 freshness_score, article_count, source_csv_path, source_csv_hash, imported_at, updated_at
             )
-            VALUES (?, 'cap-1', ?, ?, ?, 10.0, 5.0, 1000000, 1.5, 5000000000,
+            VALUES (?, ?, ?, ?, ?, 10.0, 5.0, 1000000, 1.5, 5000000000,
                 'Technology', 'Software', '{}', ?, 'HOT', 99, 3,
                 'analysis-captures.csv', 'csvhash', '2026-06-25T08:00:00-05:00', '2026-06-25T08:00:00-05:00')
             """,
-            (candidate_id, ticker, rank, score, f"{ticker} Corp"),
+            (candidate_id, capture_id, ticker, rank, score, f"{ticker} Corp"),
         )
+    connection.execute(
+        """
+        INSERT INTO opportunity_alerts (
+            alert_id, symbol, alert_type, timestamp, current_state, entry_price,
+            source_alerts_path, source_alerts_hash, imported_at, updated_at
+        )
+        VALUES ('alert-1', 'AAA', 'TEST_ALERT', '2026-06-25T09:00:00-05:00', 'PLANNING_SCAFFOLD', 10.0,
+            'opportunity-alerts.json', 'alerthash', '2026-06-25T09:00:00-05:00', '2026-06-25T09:00:00-05:00')
+        """
+    )
+    for timestamp, close in [("2026-06-25T09:00:00-05:00", 10.1), ("2026-06-25T09:01:00-05:00", 10.2)]:
+        connection.execute(
+            """
+            INSERT INTO minute_bars (
+                symbol, timestamp, open, high, low, close, volume, source,
+                granularity, source_file_path, source_file_hash, imported_at, updated_at
+            )
+            VALUES ('AAA', ?, 10.0, 10.5, 9.9, ?, 1000, 'test_1m',
+                '1m', 'opportunity-minute-bars.json', 'barhash', '2026-06-25T09:02:00-05:00', '2026-06-25T09:02:00-05:00')
+            """,
+            (timestamp, close),
+        )
+    connection.execute(
+        """
+        INSERT INTO evidence_runs (
+            run_id, run_type, generated_at, source_path, source_hash, summary_json,
+            status, imported_at, updated_at
+        )
+        VALUES ('run-1', 'evidence_health', '2026-06-25T09:05:00-05:00',
+            'evidence-health.json', 'evidencehash', '{}', 'READY',
+            '2026-06-25T09:05:00-05:00', '2026-06-25T09:05:00-05:00')
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO provider_quality_checks (
+            check_id, generated_at, symbol, provider, usable_market_tape,
+            source_report_path, source_report_hash
+        )
+        VALUES ('quality-1', '2026-06-25T09:06:00-05:00', 'AAA', 'combined', 1,
+            'data-quality-latest.json', 'qualityhash')
+        """
+    )
     for alert_id, status, classification in [
         ("alert-1", "COMPLETED", "SUCCESSFUL"),
         ("alert-2", "PENDING_OUTCOME", "PENDING"),

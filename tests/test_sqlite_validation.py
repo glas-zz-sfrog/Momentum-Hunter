@@ -48,6 +48,19 @@ class SQLiteValidationTests(unittest.TestCase):
 
         self.assertEqual("PASS", payload["overall_status"])
         self.assertTrue(all(check["status"] == "PASS" for check in payload["checks"]))
+        self.assertEqual(1, payload["alert_state_counts"]["source"]["completed"])
+        self.assertEqual(1, payload["alert_state_counts"]["sqlite"]["completed"])
+        self.assertEqual(1, payload["alert_state_counts"]["source"]["pending"])
+        self.assertEqual(1, payload["alert_state_counts"]["sqlite"]["pending"])
+        self.assertEqual(1, payload["alert_state_counts"]["source"]["unscorable"])
+        self.assertEqual(1, payload["alert_state_counts"]["sqlite"]["unscorable"])
+        self.assertEqual(1, payload["minute_bar_symbol_counts"]["source"]["AAA"]["count"])
+        self.assertEqual("2026-06-25T09:01:00-05:00", payload["minute_bar_symbol_counts"]["sqlite"]["AAA"]["first_timestamp"])
+        self.assertEqual(1, payload["capture_session_counts"]["source"]["morning"])
+        self.assertEqual(1, payload["capture_session_counts"]["sqlite"]["morning"])
+        self.assertEqual(1, payload["capture_candidate_symbol_counts"]["source"]["AAA"]["count"])
+        self.assertIn("opportunity_alerts", payload["import_timestamps"])
+        self.assertEqual([], payload["missing_slices"])
         self.assertTrue((self.root / "sqlite-validation-latest.json").exists())
         self.assertTrue((self.root / "sqlite-validation-latest.md").exists())
 
@@ -103,6 +116,28 @@ def write_validation_sources(root: Path) -> dict[str, Path]:
                     "current_state": "PLANNING_SCAFFOLD",
                     "price": 10.0,
                     "outcome": {"status": "COMPLETED", "classification": "SUCCESSFUL"},
+                },
+                {
+                    "alert_id": "alert-2",
+                    "symbol": "BBB",
+                    "timestamp": "2026-06-25T09:02:00-05:00",
+                    "alert_type": "TEST_PENDING",
+                    "current_state": "PLANNING_SCAFFOLD",
+                    "price": 11.0,
+                    "outcome": {"status": "PENDING_OUTCOME", "classification": "PENDING"},
+                },
+                {
+                    "alert_id": "alert-3",
+                    "symbol": "CCC",
+                    "timestamp": "2026-06-25T09:03:00-05:00",
+                    "alert_type": "TEST_UNSCORABLE",
+                    "current_state": "PLANNING_SCAFFOLD",
+                    "price": None,
+                    "outcome": {
+                        "status": "UNSCORABLE_OUTCOME",
+                        "classification": "UNSCORABLE_MISSING_ENTRY_PRICE",
+                        "evaluation_notes": ["Missing alert price."],
+                    },
                 }
             ],
         },

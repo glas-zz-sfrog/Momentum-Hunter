@@ -147,12 +147,16 @@ The first low-risk vertical slice imports provider/data-quality report rows into
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice evidence-runs
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice system-status
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice capture-index
-.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice all
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice all-safe
 ```
+
+`--slice all` remains a compatibility alias for the same safe additive imports, while `--slice all-safe` writes the explicit all-safe latest reports.
 
 Evidence import reports are written to:
 
 ```text
+MomentumHunterData\data\reports\sqlite-import-all-safe-latest.json
+MomentumHunterData\data\reports\sqlite-import-all-safe-latest.md
 MomentumHunterData\data\reports\sqlite-evidence-import-latest.json
 MomentumHunterData\data\reports\sqlite-evidence-import-latest.md
 MomentumHunterData\data\reports\sqlite-minute-bars-import-latest.json
@@ -163,7 +167,11 @@ MomentumHunterData\data\reports\sqlite-system-status-import-latest.json
 MomentumHunterData\data\reports\sqlite-system-status-import-latest.md
 MomentumHunterData\data\reports\sqlite-capture-index-import-latest.json
 MomentumHunterData\data\reports\sqlite-capture-index-import-latest.md
+MomentumHunterData\data\reports\sqlite-validation-latest.json
+MomentumHunterData\data\reports\sqlite-validation-latest.md
 ```
+
+The validation report compares source files to SQLite mirrors, including row counts, per-symbol counts, earliest/latest timestamps, alert state counts, minute-bar counts, capture counts, source file paths, import timestamps, schema version, missing slices, and warnings.
 
 SQLite imports are mirrors only. Existing report files remain the current operator-facing artifacts.
 

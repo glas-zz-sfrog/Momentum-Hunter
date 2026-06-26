@@ -4,10 +4,13 @@
 
 ### Added
 
+- Added explicit `python -m momentum_hunter.sqlite_migration --slice all-safe` support and latest all-safe import reports under `MomentumHunterData/data/reports/sqlite-import-all-safe-latest.*`.
+- Expanded SQLite validation reports with source file hashes, import timestamps, missing-slice detection, completed/pending/unscorable alert counts, per-symbol minute-bar counts, capture session counts, and per-symbol capture-candidate counts.
+- Expanded read-only SQLite query helper coverage for alerts by symbol, outcomes by alert ID, minute bars by symbol/time range, evidence runs by date range, provider-quality rows, candidate capture trails, first/latest captures, and peak-score captures.
 - Added SQLite Evidence Backbone Program v1 final report under `docs/storage/sqlite-evidence-backbone-final-report.md`.
 - Added `python -m momentum_hunter.sqlite_validation` to compare SQLite mirror counts against current authoritative source files and generate `sqlite-validation-latest.*` reports.
 - Added focused SQLite validation tests for matching-source PASS reports, missing-mirror FAIL reports, and validation report generation.
-- Validated `python -m momentum_hunter.sqlite_migration --slice all` as the unified safe import path across provider quality, opportunity evidence, minute bars, evidence runs, system status, and capture index mirrors.
+- Validated `python -m momentum_hunter.sqlite_migration --slice all-safe` as the unified safe import path across provider quality, opportunity evidence, minute bars, evidence runs, system status, and capture index mirrors; `--slice all` remains compatible.
 - Added read-only SQLite query helpers for backbone table counts, alert evidence state, candidate history by ticker, and latest system status events.
 - Added focused SQLite query helper tests proving summaries and filters are deterministic.
 - Extended SQLite schema to version 6 with read-only capture and candidate index metadata.

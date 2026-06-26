@@ -169,6 +169,8 @@ SQLite is not the runtime source of truth yet. Existing raw captures, CSVs, JSON
 Evidence slice reports are written to:
 
 ```text
+MomentumHunterData/data/reports/sqlite-import-all-safe-latest.json
+MomentumHunterData/data/reports/sqlite-import-all-safe-latest.md
 MomentumHunterData/data/reports/sqlite-evidence-import-latest.json
 MomentumHunterData/data/reports/sqlite-evidence-import-latest.md
 MomentumHunterData/data/reports/sqlite-minute-bars-import-latest.json
@@ -179,13 +181,15 @@ MomentumHunterData/data/reports/sqlite-system-status-import-latest.json
 MomentumHunterData/data/reports/sqlite-system-status-import-latest.md
 MomentumHunterData/data/reports/sqlite-capture-index-import-latest.json
 MomentumHunterData/data/reports/sqlite-capture-index-import-latest.md
+MomentumHunterData/data/reports/sqlite-validation-latest.json
+MomentumHunterData/data/reports/sqlite-validation-latest.md
 ```
 
 The evidence slice preserves pending, completed, and terminal unscorable alert outcomes exactly as they appear in `opportunity-alerts.json`. The minute-bars slice preserves OHLCV rows from `opportunity-minute-bars.json` keyed by symbol, timestamp, and source. The evidence-runs slice imports structured evidence JSON only: `evidence-autopilot-status.json`, `alert-outcome-update-status.json`, `evidence-autopilot-latest.json`, `evidence-health-report-*.json`, `reliability-report-*.json`, and `alert-performance-report-*.json`. The system-status slice imports structured status JSON only: `active-monitor-status.json`, `evidence-autopilot-status.json`, `alert-outcome-update-status.json`, `system-readiness-latest.json`, `data-quality-latest.json`, and `market-tape-health-*.json`. The capture-index slice imports the derived analysis CSV and records raw capture JSON source hashes where the active raw file exists. JSON/CSV/report files remain authoritative; SQLite is a read-only analytics mirror.
 
-Read-only query helpers live in `momentum_hunter/sqlite_queries.py`. They summarize table counts, alert evidence state, candidate history by ticker, and latest system status events from SQLite without mutating source files or redirecting runtime workflows.
+Read-only query helpers live in `momentum_hunter/sqlite_queries.py`. They summarize table counts, alert evidence state, alerts by symbol, outcomes by alert ID, minute bars by symbol/time range, evidence runs by date range, latest provider quality checks, latest system status events, candidate capture trails, first/latest captures, and peak-score captures from SQLite without mutating source files or redirecting runtime workflows.
 
-SQLite validation lives in `momentum_hunter/sqlite_validation.py`. It compares mirrored row counts against the current authoritative source files and writes `sqlite-validation-latest.json` / `.md` reports. Validation is read-only and does not modify source files or SQLite rows.
+SQLite validation lives in `momentum_hunter/sqlite_validation.py`. It compares mirrored row counts against the current authoritative source files and writes `sqlite-validation-latest.json` / `.md` reports. Validation includes per-symbol counts, earliest/latest timestamps, alert/outcome completed-pending-unscorable counts, minute-bar counts, capture counts, source file paths and hashes, import timestamps, schema version, missing slices, and warnings. Validation is read-only and does not modify source files or SQLite rows.
 
 Do not migrate raw captures, review decisions, watchlist state, or entry plans into SQLite as the only source of truth until backup, conflict handling, hash validation, and recovery behavior are designed and tested.
 

@@ -32,6 +32,8 @@ from momentum_hunter.sqlite_store import (
 
 SQLITE_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-import-latest.json"
 SQLITE_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-import-latest.md"
+SQLITE_IMPORT_ALL_SAFE_LATEST_JSON = DATA_DIR / "reports" / "sqlite-import-all-safe-latest.json"
+SQLITE_IMPORT_ALL_SAFE_LATEST_MD = DATA_DIR / "reports" / "sqlite-import-all-safe-latest.md"
 SQLITE_EVIDENCE_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-evidence-import-latest.json"
 SQLITE_EVIDENCE_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-evidence-import-latest.md"
 SQLITE_MINUTE_BARS_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-minute-bars-import-latest.json"
@@ -497,13 +499,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--analysis-captures-path", type=Path, default=ANALYSIS_CSV)
     parser.add_argument(
         "--slice",
-        choices=["provider-quality", "evidence", "minute-bars", "evidence-runs", "system-status", "capture-index", "all", "init"],
+        choices=["provider-quality", "evidence", "minute-bars", "evidence-runs", "system-status", "capture-index", "all", "all-safe", "init"],
         default="provider-quality",
         help="SQLite import slice to run. Default preserves the original provider-quality-only behavior.",
     )
     parser.add_argument("--init-only", action="store_true", help="Initialize schema without importing provider/data-quality rows.")
     parser.add_argument("--report-json", type=Path, default=SQLITE_IMPORT_LATEST_JSON)
     parser.add_argument("--report-md", type=Path, default=SQLITE_IMPORT_LATEST_MD)
+    parser.add_argument("--all-safe-report-json", type=Path, default=SQLITE_IMPORT_ALL_SAFE_LATEST_JSON)
+    parser.add_argument("--all-safe-report-md", type=Path, default=SQLITE_IMPORT_ALL_SAFE_LATEST_MD)
     parser.add_argument("--evidence-report-json", type=Path, default=SQLITE_EVIDENCE_IMPORT_LATEST_JSON)
     parser.add_argument("--evidence-report-md", type=Path, default=SQLITE_EVIDENCE_IMPORT_LATEST_MD)
     parser.add_argument("--minute-bars-report-json", type=Path, default=SQLITE_MINUTE_BARS_IMPORT_LATEST_JSON)
@@ -520,20 +524,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     slice_name = "init" if args.init_only else args.slice
+    run_all = slice_name in {"all", "all-safe"}
+    report_json = args.all_safe_report_json if slice_name == "all-safe" else args.report_json
+    report_md = args.all_safe_report_md if slice_name == "all-safe" else args.report_md
     payload = run_sqlite_migration(
         db_path=args.db,
         data_quality_report=args.data_quality_report,
         alerts_path=args.alerts_path,
         minute_bars_path=args.minute_bars_path,
         analysis_captures_path=args.analysis_captures_path,
-        import_provider_quality=slice_name in {"provider-quality", "all"},
-        import_evidence=slice_name in {"evidence", "all"},
-        import_minute_bar_slice=slice_name in {"minute-bars", "all"},
-        import_evidence_run_slice=slice_name in {"evidence-runs", "all"},
-        import_system_status_slice=slice_name in {"system-status", "all"},
-        import_capture_index_slice=slice_name in {"capture-index", "all"},
-        report_json=args.report_json,
-        report_md=args.report_md,
+        import_provider_quality=slice_name == "provider-quality" or run_all,
+        import_evidence=slice_name == "evidence" or run_all,
+        import_minute_bar_slice=slice_name == "minute-bars" or run_all,
+        import_evidence_run_slice=slice_name == "evidence-runs" or run_all,
+        import_system_status_slice=slice_name == "system-status" or run_all,
+        import_capture_index_slice=slice_name == "capture-index" or run_all,
+        report_json=report_json,
+        report_md=report_md,
         evidence_report_json=args.evidence_report_json,
         evidence_report_md=args.evidence_report_md,
         minute_bars_report_json=args.minute_bars_report_json,
