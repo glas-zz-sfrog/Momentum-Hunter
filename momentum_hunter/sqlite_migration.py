@@ -12,10 +12,12 @@ from momentum_hunter.opportunity_alerts import OPPORTUNITY_ALERTS_PATH
 from momentum_hunter.sqlite_store import (
     SQLITE_DB_PATH,
     EvidenceImportResult,
+    EvidenceRunsImportResult,
     MinuteBarsImportResult,
     ProviderQualityImportResult,
     connect_database,
     current_schema_version,
+    import_evidence_runs,
     import_minute_bars,
     import_opportunity_alerts,
     import_provider_quality_report,
@@ -29,6 +31,8 @@ SQLITE_EVIDENCE_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-evidence-imp
 SQLITE_EVIDENCE_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-evidence-import-latest.md"
 SQLITE_MINUTE_BARS_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-minute-bars-import-latest.json"
 SQLITE_MINUTE_BARS_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-minute-bars-import-latest.md"
+SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-evidence-runs-import-latest.json"
+SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-evidence-runs-import-latest.md"
 
 
 def initialize_database(db_path: Path | None = None) -> int:
@@ -46,30 +50,37 @@ def run_sqlite_migration(
     import_provider_quality: bool = True,
     import_evidence: bool = False,
     import_minute_bar_slice: bool = False,
+    import_evidence_run_slice: bool = False,
     report_json: Path = SQLITE_IMPORT_LATEST_JSON,
     report_md: Path = SQLITE_IMPORT_LATEST_MD,
     evidence_report_json: Path = SQLITE_EVIDENCE_IMPORT_LATEST_JSON,
     evidence_report_md: Path = SQLITE_EVIDENCE_IMPORT_LATEST_MD,
     minute_bars_report_json: Path = SQLITE_MINUTE_BARS_IMPORT_LATEST_JSON,
     minute_bars_report_md: Path = SQLITE_MINUTE_BARS_IMPORT_LATEST_MD,
+    evidence_runs_report_json: Path = SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_JSON,
+    evidence_runs_report_md: Path = SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_MD,
 ) -> dict[str, object]:
     ensure_app_dirs()
     schema_version = initialize_database(db_path)
     provider_quality_result: ProviderQualityImportResult | None = None
     evidence_result: EvidenceImportResult | None = None
     minute_bars_result: MinuteBarsImportResult | None = None
+    evidence_runs_result: EvidenceRunsImportResult | None = None
     if import_provider_quality:
         provider_quality_result = import_provider_quality_report(data_quality_report, db_path=db_path)
     if import_evidence:
         evidence_result = import_opportunity_alerts(alerts_path, db_path=db_path)
     if import_minute_bar_slice:
         minute_bars_result = import_minute_bars(minute_bars_path, db_path=db_path)
+    if import_evidence_run_slice:
+        evidence_runs_result = import_evidence_runs(db_path=db_path)
     payload: dict[str, object] = {
         "schema_version": schema_version,
         "database_path": str(db_path or SQLITE_DB_PATH),
         "provider_quality_import": asdict(provider_quality_result) if provider_quality_result else None,
         "evidence_import": asdict(evidence_result) if evidence_result else None,
         "minute_bars_import": asdict(minute_bars_result) if minute_bars_result else None,
+        "evidence_runs_import": asdict(evidence_runs_result) if evidence_runs_result else None,
     }
     write_import_report(payload, json_path=report_json, markdown_path=report_md)
     if evidence_result:
@@ -83,6 +94,12 @@ def run_sqlite_migration(
             asdict(minute_bars_result),
             json_path=minute_bars_report_json,
             markdown_path=minute_bars_report_md,
+        )
+    if evidence_runs_result:
+        write_evidence_runs_import_report(
+            asdict(evidence_runs_result),
+            json_path=evidence_runs_report_json,
+            markdown_path=evidence_runs_report_md,
         )
     return payload
 
@@ -99,6 +116,7 @@ def format_markdown(payload: dict[str, object]) -> str:
     result = payload.get("provider_quality_import")
     evidence = payload.get("evidence_import")
     minute_bars = payload.get("minute_bars_import")
+    evidence_runs = payload.get("evidence_runs_import")
     lines = [
         "# Momentum Hunter SQLite Import",
         "",
@@ -134,6 +152,11 @@ def format_markdown(payload: dict[str, object]) -> str:
         lines.append("- Not run.")
     else:
         lines.extend(minute_bars_import_markdown_lines(minute_bars))
+    lines.extend(["", "## Evidence Runs Import", ""])
+    if not isinstance(evidence_runs, dict):
+        lines.append("- Not run.")
+    else:
+        lines.extend(evidence_runs_import_markdown_lines(evidence_runs))
     return "\n".join(lines)
 
 
@@ -163,6 +186,21 @@ def write_minute_bars_import_report(payload: dict[str, object], *, json_path: Pa
         "",
     ]
     lines.extend(minute_bars_import_markdown_lines(payload))
+    markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"json": json_path, "report": markdown_path}
+
+
+def write_evidence_runs_import_report(payload: dict[str, object], *, json_path: Path, markdown_path: Path) -> dict[str, Path]:
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    lines = [
+        "# Momentum Hunter SQLite Evidence Runs Import",
+        "",
+        "Additive import report. Structured evidence JSON files remain the active source files.",
+        "",
+    ]
+    lines.extend(evidence_runs_import_markdown_lines(payload))
     markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {"json": json_path, "report": markdown_path}
 
@@ -200,6 +238,44 @@ def evidence_import_markdown_lines(result: dict[str, object]) -> list[str]:
         "## Warnings",
         "",
     ]
+    lines.extend([f"- {warning}" for warning in warnings] if warnings else ["- None."])
+    return lines
+
+
+def evidence_runs_import_markdown_lines(result: dict[str, object]) -> list[str]:
+    warnings = result.get("warnings", [])
+    if not isinstance(warnings, list):
+        warnings = []
+    run_types = result.get("run_types", {})
+    if not isinstance(run_types, dict):
+        run_types = {}
+    source_paths = result.get("source_paths", [])
+    if not isinstance(source_paths, list):
+        source_paths = []
+    lines = [
+        f"- Imported at: {result.get('imported_at', '')}",
+        f"- Source files considered: {len(source_paths)}",
+        f"- Runs seen: {result.get('runs_seen', 0)}",
+        f"- Runs inserted: {result.get('runs_inserted', 0)}",
+        f"- Runs updated: {result.get('runs_updated', 0)}",
+        f"- Runs skipped unchanged: {result.get('runs_skipped', 0)}",
+        f"- Metrics seen: {result.get('metrics_seen', 0)}",
+        f"- Metrics inserted: {result.get('metrics_inserted', 0)}",
+        f"- Metrics updated: {result.get('metrics_updated', 0)}",
+        f"- Metrics skipped unchanged: {result.get('metrics_skipped', 0)}",
+        f"- Evidence run table rows: {result.get('evidence_run_table_row_count', 0)}",
+        f"- Evidence metric table rows: {result.get('evidence_metric_table_row_count', 0)}",
+        "",
+        "## Run Types",
+        "",
+    ]
+    if run_types:
+        lines.extend([f"- {run_type}: {count}" for run_type, count in sorted(run_types.items())])
+    else:
+        lines.append("- None.")
+    lines.extend(["", "## Source Files", ""])
+    lines.extend([f"- `{path}`" for path in source_paths] if source_paths else ["- None."])
+    lines.extend(["", "## Warnings", ""])
     lines.extend([f"- {warning}" for warning in warnings] if warnings else ["- None."])
     return lines
 
@@ -273,7 +349,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--minute-bars-path", type=Path, default=OPPORTUNITY_MINUTE_BARS_PATH)
     parser.add_argument(
         "--slice",
-        choices=["provider-quality", "evidence", "minute-bars", "all", "init"],
+        choices=["provider-quality", "evidence", "minute-bars", "evidence-runs", "all", "init"],
         default="provider-quality",
         help="SQLite import slice to run. Default preserves the original provider-quality-only behavior.",
     )
@@ -284,6 +360,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--evidence-report-md", type=Path, default=SQLITE_EVIDENCE_IMPORT_LATEST_MD)
     parser.add_argument("--minute-bars-report-json", type=Path, default=SQLITE_MINUTE_BARS_IMPORT_LATEST_JSON)
     parser.add_argument("--minute-bars-report-md", type=Path, default=SQLITE_MINUTE_BARS_IMPORT_LATEST_MD)
+    parser.add_argument("--evidence-runs-report-json", type=Path, default=SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_JSON)
+    parser.add_argument("--evidence-runs-report-md", type=Path, default=SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_MD)
     return parser.parse_args(argv)
 
 
@@ -298,12 +376,15 @@ def main(argv: list[str] | None = None) -> int:
         import_provider_quality=slice_name in {"provider-quality", "all"},
         import_evidence=slice_name in {"evidence", "all"},
         import_minute_bar_slice=slice_name in {"minute-bars", "all"},
+        import_evidence_run_slice=slice_name in {"evidence-runs", "all"},
         report_json=args.report_json,
         report_md=args.report_md,
         evidence_report_json=args.evidence_report_json,
         evidence_report_md=args.evidence_report_md,
         minute_bars_report_json=args.minute_bars_report_json,
         minute_bars_report_md=args.minute_bars_report_md,
+        evidence_runs_report_json=args.evidence_runs_report_json,
+        evidence_runs_report_md=args.evidence_runs_report_md,
     )
     print(json.dumps(payload, indent=2))
     return 0

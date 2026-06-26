@@ -4,6 +4,10 @@
 
 ### Added
 
+- Extended SQLite schema to version 4 with queryable evidence-run fields and evidence metrics.
+- Added idempotent SQLite import/upsert support for structured evidence reports and status files into `evidence_runs` and `evidence_metrics`.
+- Added `python -m momentum_hunter.sqlite_migration --slice evidence-runs` and generated latest evidence-run import reports under `MomentumHunterData/data/reports/sqlite-evidence-runs-import-latest.*`.
+- Added focused SQLite evidence-run tests for run/metric round trips, idempotent imports, updated latest-run files, nested evidence gates, list-count metrics, missing/invalid source handling, and source-file immutability.
 - Added SQLite Evidence Backbone Program v1 roadmap documentation with completed slices, planned slices, table ownership, cutover rules, risks, and current preflight counts.
 - Extended SQLite schema to version 3 with minute-bar source metadata for `minute_bars`.
 - Added idempotent SQLite import/upsert support for `opportunity-minute-bars.json`, including per-symbol counts, first/latest timestamps, duplicate detection, invalid-row warnings, source hashing, and source-file immutability.

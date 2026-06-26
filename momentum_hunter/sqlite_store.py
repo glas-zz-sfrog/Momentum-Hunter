@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from momentum_hunter.alert_outcome_updater import (
+    ALERT_OUTCOME_UPDATE_STATUS_PATH,
     OPPORTUNITY_MINUTE_BARS_PATH,
     MinutePriceBar,
     minute_bar_from_dict,
@@ -29,7 +30,7 @@ from momentum_hunter.time_utils import now_central
 
 
 SQLITE_DB_PATH = DATA_DIR / "momentum-hunter.sqlite3"
-SQLITE_SCHEMA_VERSION = 3
+SQLITE_SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,25 @@ class MinuteBarsImportResult:
     symbol_counts: dict[str, int]
     first_timestamps: dict[str, str]
     latest_timestamps: dict[str, str]
+    warnings: list[str]
+    database_path: str
+
+
+@dataclass(frozen=True)
+class EvidenceRunsImportResult:
+    source_paths: list[str]
+    imported_at: str
+    runs_seen: int
+    runs_inserted: int
+    runs_updated: int
+    runs_skipped: int
+    metrics_seen: int
+    metrics_inserted: int
+    metrics_updated: int
+    metrics_skipped: int
+    evidence_run_table_row_count: int
+    evidence_metric_table_row_count: int
+    run_types: dict[str, int]
     warnings: list[str]
     database_path: str
 
@@ -166,6 +186,26 @@ def apply_schema_migrations(connection: sqlite3.Connection, *, applied_at: str |
         VALUES (?, ?, ?)
         """,
         (3, "sqlite_minute_bars_slice_v1", applied_at),
+    )
+
+    ensure_column(connection, "evidence_runs", "status", "TEXT")
+    ensure_column(connection, "evidence_runs", "started_at", "TEXT")
+    ensure_column(connection, "evidence_runs", "ended_at", "TEXT")
+    ensure_column(connection, "evidence_runs", "target_count", "INTEGER")
+    ensure_column(connection, "evidence_runs", "alert_count", "INTEGER")
+    ensure_column(connection, "evidence_runs", "completed_count", "INTEGER")
+    ensure_column(connection, "evidence_runs", "pending_count", "INTEGER")
+    ensure_column(connection, "evidence_runs", "unscorable_count", "INTEGER")
+    ensure_column(connection, "evidence_runs", "warning_count", "INTEGER")
+    ensure_column(connection, "evidence_runs", "report_paths_json", "TEXT")
+    ensure_column(connection, "evidence_runs", "imported_at", "TEXT")
+    ensure_column(connection, "evidence_runs", "updated_at", "TEXT")
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO schema_migrations(version, name, applied_at)
+        VALUES (?, ?, ?)
+        """,
+        (4, "sqlite_evidence_runs_slice_v1", applied_at),
     )
 
 
@@ -499,6 +539,264 @@ def import_minute_bars(
         warnings=dedupe(warnings),
         database_path=str(db_path or SQLITE_DB_PATH),
     )
+
+
+def import_evidence_runs(
+    *,
+    db_path: Path | None = None,
+    source_paths: list[Path] | None = None,
+    reports_dir: Path | None = None,
+) -> EvidenceRunsImportResult:
+    imported_at = now_central().isoformat()
+    sources = source_paths if source_paths is not None else discover_evidence_run_sources(reports_dir)
+    warnings: list[str] = []
+    parsed_runs: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+    seen_run_ids: set[str] = set()
+    for source in sources:
+        parsed = parse_evidence_run_source(source, imported_at=imported_at)
+        if parsed is None:
+            warnings.append(f"EVIDENCE_SOURCE_MISSING_OR_INVALID:{source}")
+            continue
+        run_row, metrics, source_warnings = parsed
+        warnings.extend(source_warnings)
+        run_id = str(run_row["run_id"])
+        if run_id in seen_run_ids:
+            warnings.append(f"DUPLICATE_EVIDENCE_RUN_ID_IN_SOURCE_SET:{run_id}")
+            continue
+        seen_run_ids.add(run_id)
+        parsed_runs.append((run_row, metrics))
+
+    runs_inserted = 0
+    runs_updated = 0
+    runs_skipped = 0
+    metrics_inserted = 0
+    metrics_updated = 0
+    metrics_skipped = 0
+    with connect_database(db_path) as connection:
+        initialize_schema(connection)
+        for run_row, metrics in parsed_runs:
+            action = upsert_row(
+                connection,
+                "evidence_runs",
+                "run_id",
+                run_row,
+                compare_exclude={"imported_at", "updated_at"},
+            )
+            if action == "inserted":
+                runs_inserted += 1
+            elif action == "updated":
+                runs_updated += 1
+            else:
+                runs_skipped += 1
+            for metric in metrics:
+                metric_action = upsert_row(
+                    connection,
+                    "evidence_metrics",
+                    "metric_id",
+                    metric,
+                    compare_exclude=set(),
+                )
+                if metric_action == "inserted":
+                    metrics_inserted += 1
+                elif metric_action == "updated":
+                    metrics_updated += 1
+                else:
+                    metrics_skipped += 1
+        connection.commit()
+        run_count = evidence_run_count(connection)
+        metric_count = evidence_metric_count(connection)
+
+    run_types: dict[str, int] = {}
+    for run_row, _metrics in parsed_runs:
+        run_type = str(run_row.get("run_type") or "unknown")
+        run_types[run_type] = run_types.get(run_type, 0) + 1
+    return EvidenceRunsImportResult(
+        source_paths=[str(path) for path in sources],
+        imported_at=imported_at,
+        runs_seen=len(parsed_runs),
+        runs_inserted=runs_inserted,
+        runs_updated=runs_updated,
+        runs_skipped=runs_skipped,
+        metrics_seen=sum(len(metrics) for _run, metrics in parsed_runs),
+        metrics_inserted=metrics_inserted,
+        metrics_updated=metrics_updated,
+        metrics_skipped=metrics_skipped,
+        evidence_run_table_row_count=run_count,
+        evidence_metric_table_row_count=metric_count,
+        run_types=dict(sorted(run_types.items())),
+        warnings=dedupe(warnings),
+        database_path=str(db_path or SQLITE_DB_PATH),
+    )
+
+
+def discover_evidence_run_sources(reports_dir: Path | None = None) -> list[Path]:
+    reports_dir = reports_dir or DATA_DIR / "reports"
+    sources = [
+        DATA_DIR / "evidence-autopilot-status.json",
+        ALERT_OUTCOME_UPDATE_STATUS_PATH,
+        reports_dir / "evidence-autopilot-latest.json",
+    ]
+    for pattern in [
+        "evidence-health-report-*.json",
+        "reliability-report-*.json",
+        "alert-performance-report-*.json",
+    ]:
+        sources.extend(sorted(reports_dir.glob(pattern)))
+    return dedupe_paths([path for path in sources if path.exists()])
+
+
+def parse_evidence_run_source(
+    source: Path,
+    *,
+    imported_at: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]] | None:
+    if not source.exists():
+        return None
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    source_hash = file_sha256(source)
+    run_type = evidence_run_type_for_source(source, payload)
+    body = evidence_payload_body(payload)
+    generated_at = evidence_generated_at(body, payload)
+    if not generated_at:
+        generated_at = imported_at
+    status = evidence_status(run_type, body)
+    warnings = evidence_warning_list(body)
+    report_paths = evidence_report_paths(body)
+    run_id = deterministic_id("evidence_run", run_type, generated_at, source)
+    row = {
+        "run_id": run_id,
+        "run_type": run_type,
+        "generated_at": generated_at,
+        "source_path": str(source),
+        "source_hash": source_hash,
+        "summary_json": json.dumps(payload, sort_keys=True),
+        "status": status,
+        "started_at": first_text(body, "started_at", "latest_run_started_at"),
+        "ended_at": first_text(body, "completed_at", "latest_run_completed_at", "updated_at"),
+        "target_count": optional_int(first_present(body, "target_count", "targets_checked")),
+        "alert_count": optional_int(first_present(body, "total_alerts", "alert_count", "tracked_alert_count", "alerts_generated")),
+        "completed_count": optional_int(first_present(body, "completed_alerts", "completed_alert_count", "completed_outcomes", "completed_outcome_count", "alerts_completed")),
+        "pending_count": optional_int(first_present(body, "pending_alerts", "pending_alert_count")),
+        "unscorable_count": optional_int(first_present(body, "unscorable_alerts", "unscorable_alert_count")),
+        "warning_count": optional_int(first_present(body, "warning_count")) if first_present(body, "warning_count") is not None else len(warnings),
+        "report_paths_json": json.dumps(report_paths, sort_keys=True),
+        "imported_at": imported_at,
+        "updated_at": imported_at,
+    }
+    metrics = evidence_metrics_for_run(run_id, body)
+    return row, metrics, []
+
+
+def evidence_run_type_for_source(source: Path, payload: dict[str, Any]) -> str:
+    name = source.name.lower()
+    engine = str(payload.get("engine_version", "")).lower()
+    if name == "evidence-autopilot-status.json":
+        return "evidence_autopilot_status"
+    if name == "alert-outcome-update-status.json":
+        return "alert_outcome_update_status"
+    if name == "evidence-autopilot-latest.json" or "evidence_autopilot_reliability" in engine:
+        return "evidence_autopilot_reliability"
+    if name.startswith("evidence-health-report-"):
+        return "evidence_health"
+    if name.startswith("reliability-report-"):
+        return "evidence_reliability"
+    if name.startswith("alert-performance-report-"):
+        return "alert_performance"
+    return "evidence_report"
+
+
+def evidence_payload_body(payload: dict[str, Any]) -> dict[str, Any]:
+    for key in ("report", "status"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    return payload
+
+
+def evidence_generated_at(body: dict[str, Any], payload: dict[str, Any]) -> str:
+    return str(
+        first_present(body, "generated_at", "completed_at", "updated_at", "started_at")
+        or first_present(payload, "generated_at", "updated_at")
+        or ""
+    )
+
+
+def evidence_status(run_type: str, body: dict[str, Any]) -> str:
+    if body.get("state"):
+        return str(body.get("state"))
+    if body.get("latest_run_state"):
+        return str(body.get("latest_run_state"))
+    gate = body.get("evidence_gate")
+    if isinstance(gate, dict) and gate.get("evidence_status"):
+        return str(gate.get("evidence_status"))
+    if body.get("measurable_edge_status"):
+        return str(body.get("measurable_edge_status"))
+    warnings = evidence_warning_list(body)
+    if run_type.endswith("status") and not body:
+        return "UNKNOWN"
+    return "WARNING" if warnings else "READY"
+
+
+def evidence_warning_list(body: dict[str, Any]) -> list[str]:
+    warnings = body.get("warnings", [])
+    if isinstance(warnings, list):
+        return [str(item) for item in warnings if str(item)]
+    return []
+
+
+def evidence_report_paths(body: dict[str, Any]) -> dict[str, str]:
+    result = {}
+    for key, value in body.items():
+        if key.endswith("_path") and value:
+            result[key] = str(value)
+    return result
+
+
+def evidence_metrics_for_run(run_id: str, body: dict[str, Any]) -> list[dict[str, Any]]:
+    metrics = []
+    for name, value in flatten_metric_values(body):
+        metric_value: float | None = None
+        metric_text: str | None = None
+        if isinstance(value, bool):
+            metric_value = 1.0 if value else 0.0
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            metric_value = float(value)
+        elif isinstance(value, str):
+            metric_text = value
+        elif isinstance(value, list):
+            metric_value = float(len(value))
+        else:
+            continue
+        metrics.append(
+            {
+                "metric_id": deterministic_id("evidence_metric", run_id, name),
+                "run_id": run_id,
+                "metric_name": name,
+                "metric_value": metric_value,
+                "metric_text": metric_text,
+            }
+        )
+    return metrics
+
+
+def flatten_metric_values(value: Any, prefix: str = "") -> list[tuple[str, Any]]:
+    if isinstance(value, dict):
+        items: list[tuple[str, Any]] = []
+        for key, child in sorted(value.items()):
+            child_name = f"{prefix}.{key}" if prefix else str(key)
+            if isinstance(child, dict):
+                items.extend(flatten_metric_values(child, child_name))
+            elif isinstance(child, list):
+                items.append((child_name, child))
+            elif child is not None:
+                items.append((child_name, child))
+        return items
+    return [(prefix or "value", value)]
 
 
 def parse_minute_bar_source(path: Path) -> dict[str, object]:
@@ -862,6 +1160,54 @@ def read_minute_bars(
     return [dict(row) for row in rows]
 
 
+def read_evidence_runs(
+    connection: sqlite3.Connection,
+    *,
+    run_type: str | None = None,
+) -> list[dict[str, Any]]:
+    if run_type:
+        rows = connection.execute(
+            """
+            SELECT * FROM evidence_runs
+            WHERE run_type = ?
+            ORDER BY generated_at, source_path
+            """,
+            (run_type,),
+        ).fetchall()
+    else:
+        rows = connection.execute(
+            """
+            SELECT * FROM evidence_runs
+            ORDER BY generated_at, run_type, source_path
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def read_evidence_metrics(
+    connection: sqlite3.Connection,
+    *,
+    run_id: str | None = None,
+) -> list[dict[str, Any]]:
+    if run_id:
+        rows = connection.execute(
+            """
+            SELECT * FROM evidence_metrics
+            WHERE run_id = ?
+            ORDER BY metric_name
+            """,
+            (run_id,),
+        ).fetchall()
+    else:
+        rows = connection.execute(
+            """
+            SELECT * FROM evidence_metrics
+            ORDER BY run_id, metric_name
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def opportunity_alert_count(connection: sqlite3.Connection) -> int:
     row = connection.execute("SELECT COUNT(*) AS count FROM opportunity_alerts").fetchone()
     return int(row["count"] if row else 0)
@@ -874,6 +1220,16 @@ def alert_outcome_count(connection: sqlite3.Connection) -> int:
 
 def minute_bar_count(connection: sqlite3.Connection) -> int:
     row = connection.execute("SELECT COUNT(*) AS count FROM minute_bars").fetchone()
+    return int(row["count"] if row else 0)
+
+
+def evidence_run_count(connection: sqlite3.Connection) -> int:
+    row = connection.execute("SELECT COUNT(*) AS count FROM evidence_runs").fetchone()
+    return int(row["count"] if row else 0)
+
+
+def evidence_metric_count(connection: sqlite3.Connection) -> int:
+    row = connection.execute("SELECT COUNT(*) AS count FROM evidence_metrics").fetchone()
     return int(row["count"] if row else 0)
 
 
@@ -922,6 +1278,18 @@ def optional_bool(value: object) -> int | None:
     return int(bool(value))
 
 
+def first_present(payload: dict[str, Any], *keys: str) -> object:
+    for key in keys:
+        if key in payload and payload.get(key) not in (None, ""):
+            return payload.get(key)
+    return None
+
+
+def first_text(payload: dict[str, Any], *keys: str) -> str:
+    value = first_present(payload, *keys)
+    return str(value) if value is not None else ""
+
+
 def dedupe(values: list[str]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -930,6 +1298,17 @@ def dedupe(values: list[str]) -> list[str]:
         if clean and clean not in seen:
             seen.add(clean)
             result.append(clean)
+    return result
+
+
+def dedupe_paths(paths: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    result: list[Path] = []
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
+            result.append(path)
     return result
 
 
@@ -1098,6 +1477,18 @@ CREATE TABLE IF NOT EXISTS evidence_runs (
     generated_at TEXT NOT NULL,
     source_path TEXT,
     source_hash TEXT,
+    status TEXT,
+    started_at TEXT,
+    ended_at TEXT,
+    target_count INTEGER,
+    alert_count INTEGER,
+    completed_count INTEGER,
+    pending_count INTEGER,
+    unscorable_count INTEGER,
+    warning_count INTEGER,
+    report_paths_json TEXT,
+    imported_at TEXT,
+    updated_at TEXT,
     summary_json TEXT,
     UNIQUE(run_type, generated_at, source_hash)
 );
