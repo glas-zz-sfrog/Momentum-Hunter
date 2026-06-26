@@ -4,6 +4,10 @@
 
 ### Added
 
+- Extended SQLite schema to version 5 with queryable system status event metadata.
+- Added idempotent SQLite import/upsert support for active monitor status, Evidence Autopilot status, alert outcome updater status, system readiness, data-quality latest, and market-tape health JSON reports into `system_status_events`.
+- Added `python -m momentum_hunter.sqlite_migration --slice system-status` and generated latest system-status import reports under `MomentumHunterData/data/reports/sqlite-system-status-import-latest.*`.
+- Added focused SQLite system-status tests for readiness sections, market-tape/data-quality status mapping, idempotent imports, missing-source warnings, report generation, and source-file immutability.
 - Extended SQLite schema to version 4 with queryable evidence-run fields and evidence metrics.
 - Added idempotent SQLite import/upsert support for structured evidence reports and status files into `evidence_runs` and `evidence_metrics`.
 - Added `python -m momentum_hunter.sqlite_migration --slice evidence-runs` and generated latest evidence-run import reports under `MomentumHunterData/data/reports/sqlite-evidence-runs-import-latest.*`.

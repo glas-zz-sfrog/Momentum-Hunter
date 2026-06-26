@@ -15,12 +15,14 @@ from momentum_hunter.sqlite_store import (
     EvidenceRunsImportResult,
     MinuteBarsImportResult,
     ProviderQualityImportResult,
+    SystemStatusImportResult,
     connect_database,
     current_schema_version,
     import_evidence_runs,
     import_minute_bars,
     import_opportunity_alerts,
     import_provider_quality_report,
+    import_system_status_events,
     initialize_schema,
 )
 
@@ -33,6 +35,8 @@ SQLITE_MINUTE_BARS_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-minute-ba
 SQLITE_MINUTE_BARS_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-minute-bars-import-latest.md"
 SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-evidence-runs-import-latest.json"
 SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-evidence-runs-import-latest.md"
+SQLITE_SYSTEM_STATUS_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-system-status-import-latest.json"
+SQLITE_SYSTEM_STATUS_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-system-status-import-latest.md"
 
 
 def initialize_database(db_path: Path | None = None) -> int:
@@ -47,10 +51,12 @@ def run_sqlite_migration(
     data_quality_report: Path = DATA_QUALITY_LATEST_JSON,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
     minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    system_status_source_paths: list[Path] | None = None,
     import_provider_quality: bool = True,
     import_evidence: bool = False,
     import_minute_bar_slice: bool = False,
     import_evidence_run_slice: bool = False,
+    import_system_status_slice: bool = False,
     report_json: Path = SQLITE_IMPORT_LATEST_JSON,
     report_md: Path = SQLITE_IMPORT_LATEST_MD,
     evidence_report_json: Path = SQLITE_EVIDENCE_IMPORT_LATEST_JSON,
@@ -59,6 +65,8 @@ def run_sqlite_migration(
     minute_bars_report_md: Path = SQLITE_MINUTE_BARS_IMPORT_LATEST_MD,
     evidence_runs_report_json: Path = SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_JSON,
     evidence_runs_report_md: Path = SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_MD,
+    system_status_report_json: Path = SQLITE_SYSTEM_STATUS_IMPORT_LATEST_JSON,
+    system_status_report_md: Path = SQLITE_SYSTEM_STATUS_IMPORT_LATEST_MD,
 ) -> dict[str, object]:
     ensure_app_dirs()
     schema_version = initialize_database(db_path)
@@ -66,6 +74,7 @@ def run_sqlite_migration(
     evidence_result: EvidenceImportResult | None = None
     minute_bars_result: MinuteBarsImportResult | None = None
     evidence_runs_result: EvidenceRunsImportResult | None = None
+    system_status_result: SystemStatusImportResult | None = None
     if import_provider_quality:
         provider_quality_result = import_provider_quality_report(data_quality_report, db_path=db_path)
     if import_evidence:
@@ -74,6 +83,8 @@ def run_sqlite_migration(
         minute_bars_result = import_minute_bars(minute_bars_path, db_path=db_path)
     if import_evidence_run_slice:
         evidence_runs_result = import_evidence_runs(db_path=db_path)
+    if import_system_status_slice:
+        system_status_result = import_system_status_events(db_path=db_path, source_paths=system_status_source_paths)
     payload: dict[str, object] = {
         "schema_version": schema_version,
         "database_path": str(db_path or SQLITE_DB_PATH),
@@ -81,6 +92,7 @@ def run_sqlite_migration(
         "evidence_import": asdict(evidence_result) if evidence_result else None,
         "minute_bars_import": asdict(minute_bars_result) if minute_bars_result else None,
         "evidence_runs_import": asdict(evidence_runs_result) if evidence_runs_result else None,
+        "system_status_import": asdict(system_status_result) if system_status_result else None,
     }
     write_import_report(payload, json_path=report_json, markdown_path=report_md)
     if evidence_result:
@@ -101,6 +113,12 @@ def run_sqlite_migration(
             json_path=evidence_runs_report_json,
             markdown_path=evidence_runs_report_md,
         )
+    if system_status_result:
+        write_system_status_import_report(
+            asdict(system_status_result),
+            json_path=system_status_report_json,
+            markdown_path=system_status_report_md,
+        )
     return payload
 
 
@@ -117,6 +135,7 @@ def format_markdown(payload: dict[str, object]) -> str:
     evidence = payload.get("evidence_import")
     minute_bars = payload.get("minute_bars_import")
     evidence_runs = payload.get("evidence_runs_import")
+    system_status = payload.get("system_status_import")
     lines = [
         "# Momentum Hunter SQLite Import",
         "",
@@ -157,6 +176,11 @@ def format_markdown(payload: dict[str, object]) -> str:
         lines.append("- Not run.")
     else:
         lines.extend(evidence_runs_import_markdown_lines(evidence_runs))
+    lines.extend(["", "## System Status Import", ""])
+    if not isinstance(system_status, dict):
+        lines.append("- Not run.")
+    else:
+        lines.extend(system_status_import_markdown_lines(system_status))
     return "\n".join(lines)
 
 
@@ -201,6 +225,21 @@ def write_evidence_runs_import_report(payload: dict[str, object], *, json_path: 
         "",
     ]
     lines.extend(evidence_runs_import_markdown_lines(payload))
+    markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"json": json_path, "report": markdown_path}
+
+
+def write_system_status_import_report(payload: dict[str, object], *, json_path: Path, markdown_path: Path) -> dict[str, Path]:
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    lines = [
+        "# Momentum Hunter SQLite System Status Import",
+        "",
+        "Additive import report. Structured status/report JSON files remain the active source files.",
+        "",
+    ]
+    lines.extend(system_status_import_markdown_lines(payload))
     markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {"json": json_path, "report": markdown_path}
 
@@ -280,6 +319,41 @@ def evidence_runs_import_markdown_lines(result: dict[str, object]) -> list[str]:
     return lines
 
 
+def system_status_import_markdown_lines(result: dict[str, object]) -> list[str]:
+    warnings = result.get("warnings", [])
+    if not isinstance(warnings, list):
+        warnings = []
+    status_counts = result.get("status_counts", {})
+    if not isinstance(status_counts, dict):
+        status_counts = {}
+    event_type_counts = result.get("event_type_counts", {})
+    if not isinstance(event_type_counts, dict):
+        event_type_counts = {}
+    source_paths = result.get("source_paths", [])
+    if not isinstance(source_paths, list):
+        source_paths = []
+    lines = [
+        f"- Imported at: {result.get('imported_at', '')}",
+        f"- Source files considered: {len(source_paths)}",
+        f"- Events seen: {result.get('events_seen', 0)}",
+        f"- Events inserted: {result.get('events_inserted', 0)}",
+        f"- Events updated: {result.get('events_updated', 0)}",
+        f"- Events skipped unchanged: {result.get('events_skipped', 0)}",
+        f"- System status table rows: {result.get('table_row_count', 0)}",
+        "",
+        "## Status Counts",
+        "",
+    ]
+    lines.extend([f"- {status}: {count}" for status, count in sorted(status_counts.items())] if status_counts else ["- None."])
+    lines.extend(["", "## Event Types", ""])
+    lines.extend([f"- {event_type}: {count}" for event_type, count in sorted(event_type_counts.items())] if event_type_counts else ["- None."])
+    lines.extend(["", "## Source Files", ""])
+    lines.extend([f"- `{path}`" for path in source_paths] if source_paths else ["- None."])
+    lines.extend(["", "## Warnings", ""])
+    lines.extend([f"- {warning}" for warning in warnings] if warnings else ["- None."])
+    return lines
+
+
 def minute_bars_import_markdown_lines(result: dict[str, object]) -> list[str]:
     warnings = result.get("warnings", [])
     if not isinstance(warnings, list):
@@ -349,7 +423,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--minute-bars-path", type=Path, default=OPPORTUNITY_MINUTE_BARS_PATH)
     parser.add_argument(
         "--slice",
-        choices=["provider-quality", "evidence", "minute-bars", "evidence-runs", "all", "init"],
+        choices=["provider-quality", "evidence", "minute-bars", "evidence-runs", "system-status", "all", "init"],
         default="provider-quality",
         help="SQLite import slice to run. Default preserves the original provider-quality-only behavior.",
     )
@@ -362,6 +436,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--minute-bars-report-md", type=Path, default=SQLITE_MINUTE_BARS_IMPORT_LATEST_MD)
     parser.add_argument("--evidence-runs-report-json", type=Path, default=SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_JSON)
     parser.add_argument("--evidence-runs-report-md", type=Path, default=SQLITE_EVIDENCE_RUNS_IMPORT_LATEST_MD)
+    parser.add_argument("--system-status-report-json", type=Path, default=SQLITE_SYSTEM_STATUS_IMPORT_LATEST_JSON)
+    parser.add_argument("--system-status-report-md", type=Path, default=SQLITE_SYSTEM_STATUS_IMPORT_LATEST_MD)
     return parser.parse_args(argv)
 
 
@@ -377,6 +453,7 @@ def main(argv: list[str] | None = None) -> int:
         import_evidence=slice_name in {"evidence", "all"},
         import_minute_bar_slice=slice_name in {"minute-bars", "all"},
         import_evidence_run_slice=slice_name in {"evidence-runs", "all"},
+        import_system_status_slice=slice_name in {"system-status", "all"},
         report_json=args.report_json,
         report_md=args.report_md,
         evidence_report_json=args.evidence_report_json,
@@ -385,6 +462,8 @@ def main(argv: list[str] | None = None) -> int:
         minute_bars_report_md=args.minute_bars_report_md,
         evidence_runs_report_json=args.evidence_runs_report_json,
         evidence_runs_report_md=args.evidence_runs_report_md,
+        system_status_report_json=args.system_status_report_json,
+        system_status_report_md=args.system_status_report_md,
     )
     print(json.dumps(payload, indent=2))
     return 0

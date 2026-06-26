@@ -18,6 +18,7 @@ Momentum Hunter is still file-first. SQLite is an additive evidence mirror that 
 | SQLite Migration Foundation v1 | `938f820` | Schema foundation plus `provider_quality_checks` | `MomentumHunterData/data/reports/data-quality-latest.json` | File reports remain authoritative |
 | SQLite Evidence Slice v1 | `b93f815` | `opportunity_alerts`, `alert_outcomes` | `MomentumHunterData/data/opportunity-alerts.json` | JSON alert store remains authoritative |
 | Minute Bars Slice | `e2e11a1` | `minute_bars` | `MomentumHunterData/data/opportunity-minute-bars.json` | JSON minute-bar cache remains authoritative |
+| Evidence Runs / Evidence Metrics Slice | `0a69c8f` | `evidence_runs`, `evidence_metrics` | structured evidence/status JSON reports | JSON evidence reports remain authoritative |
 
 ## Current Preflight
 
@@ -49,13 +50,28 @@ After Phase 2:
   - `evidence_health`: 7
   - `evidence_reliability`: 2
 
+After Phase 3:
+
+- Schema version: `5`
+- `system_status_events`: 16
+- Status counts:
+  - `READY`: 8
+  - `WARNING`: 8
+- Event types mirrored:
+  - `active_monitor_status`: 1
+  - `alert_outcome_update`: 1
+  - `data_quality:market_tape`: 1
+  - `evidence_autopilot_status`: 1
+  - `market_tape_health`: 1
+  - `system_readiness:*`: 11
+
 ## Planned Slices
 
 | Phase | Slice | Tables | Source files | Commit target |
 | --- | --- | --- | --- | --- |
 | 1 | Minute Bars Slice | `minute_bars` | `opportunity-minute-bars.json` | Complete: `Add SQLite minute bars slice` |
-| 2 | Evidence Runs / Evidence Metrics Slice | `evidence_runs`, `evidence_metrics` | evidence autopilot status, evidence health reports, alert performance summaries, outcome update status | In progress: `Add SQLite evidence runs slice` |
-| 3 | System Status Events Slice | `system_status_events` | active monitor status, evidence autopilot status, provider/data-quality/status reports | `Add SQLite system status slice` |
+| 2 | Evidence Runs / Evidence Metrics Slice | `evidence_runs`, `evidence_metrics` | evidence autopilot status, evidence health reports, alert performance summaries, outcome update status | Complete: `Add SQLite evidence runs slice` |
+| 3 | System Status Events Slice | `system_status_events` | active monitor status, evidence autopilot status, provider/data-quality/status reports | Complete: `Add SQLite system status slice` |
 | 4 | Capture / Candidate Read-Only Index Slice | `captures`, `capture_candidates` | capture manifest, derived analysis CSVs, raw capture metadata where safe | `Add SQLite capture index slice` |
 | 5 | Read-Only Query Helpers | read helpers over existing tables | SQLite mirrors only | `Add SQLite read-only query helpers` |
 | 6 | Unified Import CLI | all safe slices | all mirrored evidence sources | `Add SQLite all-safe import workflow` |
@@ -70,9 +86,9 @@ After Phase 2:
 | `opportunity_alerts` | `momentum_hunter.sqlite_store` | Complete additive mirror | `opportunity-alerts.json` |
 | `alert_outcomes` | `momentum_hunter.sqlite_store` | Complete additive mirror | embedded outcomes in `opportunity-alerts.json` |
 | `minute_bars` | `momentum_hunter.sqlite_store` | Complete additive mirror | `opportunity-minute-bars.json` |
-| `evidence_runs` | `momentum_hunter.sqlite_store` | Phase 2 additive mirror | structured evidence/status JSON files |
-| `evidence_metrics` | `momentum_hunter.sqlite_store` | Phase 2 additive mirror | structured evidence/status JSON files |
-| `system_status_events` | `momentum_hunter.sqlite_store` | Planned Phase 3 | status/report files |
+| `evidence_runs` | `momentum_hunter.sqlite_store` | Complete additive mirror | structured evidence/status JSON files |
+| `evidence_metrics` | `momentum_hunter.sqlite_store` | Complete additive mirror | structured evidence/status JSON files |
+| `system_status_events` | `momentum_hunter.sqlite_store` | Phase 3 additive mirror | status/report files |
 | `captures` | `momentum_hunter.sqlite_store` | Planned Phase 4 | raw captures and manifest |
 | `capture_candidates` | `momentum_hunter.sqlite_store` | Planned Phase 4 | raw captures and derived candidate rows |
 
@@ -103,6 +119,32 @@ Imported source patterns:
 - `MomentumHunterData/data/reports/alert-performance-report-*.json`
 
 Each source file becomes one `evidence_runs` row. Scalar fields and list counts become `evidence_metrics` rows. Full source JSON is preserved in `summary_json`, and report paths remain in `report_paths_json`.
+
+## Phase 3 System Status Source Audit
+
+The System Status slice imports structured JSON only. It normalizes monitor, readiness, provider, and outcome-update status into queryable event rows while preserving the full source JSON in `details_json`.
+
+Imported source patterns:
+
+- `MomentumHunterData/data/active-monitor-status.json`
+- `MomentumHunterData/data/evidence-autopilot-status.json`
+- `MomentumHunterData/data/alert-outcome-update-status.json`
+- `MomentumHunterData/data/reports/system-readiness-latest.json`
+- `MomentumHunterData/data/reports/data-quality-latest.json`
+- `MomentumHunterData/data/reports/market-tape-health-*.json`
+
+Identity rules:
+
+- `event_id = sha256("system_status_event", event_type, occurred_at, source_path)`
+- `system-readiness-latest.json` creates one overall row and one row per readiness section.
+- Latest/overwritten source files update the same event row when `event_type`, `occurred_at`, and source path remain stable.
+- Status values are normalized for analytics as `READY`, `WARNING`, `FAILED`, `INFO`, or `UNKNOWN` where possible.
+
+Missing-data behavior:
+
+- Missing explicit status becomes `UNKNOWN`.
+- Sources with warnings become `WARNING` unless an explicit failure/error is present.
+- Missing source files passed explicitly are reported as warnings and create no event rows.
 
 ## Future Cutover Rules
 

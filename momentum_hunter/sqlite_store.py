@@ -30,7 +30,7 @@ from momentum_hunter.time_utils import now_central
 
 
 SQLITE_DB_PATH = DATA_DIR / "momentum-hunter.sqlite3"
-SQLITE_SCHEMA_VERSION = 4
+SQLITE_SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True)
@@ -106,6 +106,21 @@ class EvidenceRunsImportResult:
     evidence_run_table_row_count: int
     evidence_metric_table_row_count: int
     run_types: dict[str, int]
+    warnings: list[str]
+    database_path: str
+
+
+@dataclass(frozen=True)
+class SystemStatusImportResult:
+    source_paths: list[str]
+    imported_at: str
+    events_seen: int
+    events_inserted: int
+    events_updated: int
+    events_skipped: int
+    table_row_count: int
+    status_counts: dict[str, int]
+    event_type_counts: dict[str, int]
     warnings: list[str]
     database_path: str
 
@@ -206,6 +221,19 @@ def apply_schema_migrations(connection: sqlite3.Connection, *, applied_at: str |
         VALUES (?, ?, ?)
         """,
         (4, "sqlite_evidence_runs_slice_v1", applied_at),
+    )
+    ensure_column(connection, "system_status_events", "source_module", "TEXT")
+    ensure_column(connection, "system_status_events", "source_hash", "TEXT")
+    ensure_column(connection, "system_status_events", "summary", "TEXT")
+    ensure_column(connection, "system_status_events", "recommended_action", "TEXT")
+    ensure_column(connection, "system_status_events", "imported_at", "TEXT")
+    ensure_column(connection, "system_status_events", "updated_at", "TEXT")
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO schema_migrations(version, name, applied_at)
+        VALUES (?, ?, ?)
+        """,
+        (5, "sqlite_system_status_slice_v1", applied_at),
     )
 
 
@@ -627,6 +655,459 @@ def import_evidence_runs(
         warnings=dedupe(warnings),
         database_path=str(db_path or SQLITE_DB_PATH),
     )
+
+
+def import_system_status_events(
+    *,
+    db_path: Path | None = None,
+    source_paths: list[Path] | None = None,
+    reports_dir: Path | None = None,
+) -> SystemStatusImportResult:
+    imported_at = now_central().isoformat()
+    sources = source_paths if source_paths is not None else discover_system_status_sources(reports_dir)
+    warnings: list[str] = []
+    parsed_events: list[dict[str, Any]] = []
+    seen_event_ids: set[str] = set()
+    for source in sources:
+        events, source_warnings = parse_system_status_source(source, imported_at=imported_at)
+        warnings.extend(source_warnings)
+        for event in events:
+            event_id = str(event["event_id"])
+            if event_id in seen_event_ids:
+                warnings.append(f"DUPLICATE_SYSTEM_STATUS_EVENT_ID_IN_SOURCE_SET:{event_id}")
+                continue
+            seen_event_ids.add(event_id)
+            parsed_events.append(event)
+
+    inserted = 0
+    updated = 0
+    skipped = 0
+    with connect_database(db_path) as connection:
+        initialize_schema(connection)
+        for event in parsed_events:
+            action = upsert_row(
+                connection,
+                "system_status_events",
+                "event_id",
+                event,
+                compare_exclude={"imported_at", "updated_at"},
+            )
+            if action == "inserted":
+                inserted += 1
+            elif action == "updated":
+                updated += 1
+            else:
+                skipped += 1
+        connection.commit()
+        table_count = system_status_event_count(connection)
+
+    status_counts: dict[str, int] = {}
+    event_type_counts: dict[str, int] = {}
+    for event in parsed_events:
+        status = str(event.get("status") or "UNKNOWN")
+        event_type = str(event.get("event_type") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+        event_type_counts[event_type] = event_type_counts.get(event_type, 0) + 1
+    return SystemStatusImportResult(
+        source_paths=[str(path) for path in sources],
+        imported_at=imported_at,
+        events_seen=len(parsed_events),
+        events_inserted=inserted,
+        events_updated=updated,
+        events_skipped=skipped,
+        table_row_count=table_count,
+        status_counts=dict(sorted(status_counts.items())),
+        event_type_counts=dict(sorted(event_type_counts.items())),
+        warnings=dedupe(warnings),
+        database_path=str(db_path or SQLITE_DB_PATH),
+    )
+
+
+def discover_system_status_sources(reports_dir: Path | None = None) -> list[Path]:
+    reports_dir = reports_dir or DATA_DIR / "reports"
+    sources = [
+        DATA_DIR / "active-monitor-status.json",
+        DATA_DIR / "evidence-autopilot-status.json",
+        ALERT_OUTCOME_UPDATE_STATUS_PATH,
+        reports_dir / "system-readiness-latest.json",
+        reports_dir / "data-quality-latest.json",
+    ]
+    sources.extend(sorted(reports_dir.glob("market-tape-health-*.json")))
+    return dedupe_paths([path for path in sources if path.exists()])
+
+
+def parse_system_status_source(source: Path, *, imported_at: str) -> tuple[list[dict[str, Any]], list[str]]:
+    if not source.exists():
+        return [], [f"SYSTEM_STATUS_SOURCE_MISSING:{source}"]
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return [], [f"SYSTEM_STATUS_SOURCE_READ_FAILED:{source}:{type(exc).__name__}"]
+    if not isinstance(payload, dict):
+        return [], [f"SYSTEM_STATUS_SOURCE_NOT_OBJECT:{source}"]
+
+    source_hash = file_sha256(source)
+    source_module = str(payload.get("engine_version") or system_source_module_from_name(source.name))
+    body = evidence_payload_body(payload)
+    generated_at = evidence_generated_at(body, payload) or imported_at
+    name = source.name.lower()
+    warnings: list[str] = []
+
+    if name == "system-readiness-latest.json":
+        events = system_readiness_events(
+            body,
+            source=source,
+            source_hash=source_hash,
+            source_module=source_module,
+            occurred_at=generated_at,
+            imported_at=imported_at,
+            original_payload=payload,
+        )
+    elif name == "data-quality-latest.json":
+        events = [
+            data_quality_status_event(
+                body,
+                source=source,
+                source_hash=source_hash,
+                source_module=source_module,
+                occurred_at=generated_at,
+                imported_at=imported_at,
+                original_payload=payload,
+            )
+        ]
+    elif name.startswith("market-tape-health-"):
+        events = [
+            market_tape_status_event(
+                body,
+                source=source,
+                source_hash=source_hash,
+                source_module=source_module,
+                occurred_at=generated_at,
+                imported_at=imported_at,
+                original_payload=payload,
+            )
+        ]
+    elif name == "alert-outcome-update-status.json":
+        events = [
+            outcome_update_status_event(
+                body,
+                source=source,
+                source_hash=source_hash,
+                source_module=source_module,
+                occurred_at=generated_at,
+                imported_at=imported_at,
+                original_payload=payload,
+            )
+        ]
+    else:
+        events = [
+            generic_status_event(
+                body,
+                source=source,
+                source_hash=source_hash,
+                source_module=source_module,
+                occurred_at=generated_at,
+                imported_at=imported_at,
+                original_payload=payload,
+            )
+        ]
+    if not events:
+        warnings.append(f"SYSTEM_STATUS_SOURCE_PRODUCED_NO_EVENTS:{source}")
+    return events, warnings
+
+
+def system_readiness_events(
+    body: dict[str, Any],
+    *,
+    source: Path,
+    source_hash: str,
+    source_module: str,
+    occurred_at: str,
+    imported_at: str,
+    original_payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    overall_status = str(first_present(body, "overall_status", "status", "state") or "UNKNOWN")
+    issues = body.get("issues_requiring_attention", [])
+    if not isinstance(issues, list):
+        issues = []
+    warnings = evidence_warning_list(body)
+    events = [
+        make_system_status_event(
+            event_type="system_readiness:overall",
+            status=overall_status,
+            occurred_at=occurred_at,
+            source=source,
+            source_hash=source_hash,
+            source_module=source_module,
+            summary=f"Overall system readiness: {overall_status}",
+            recommended_action="Review issues requiring attention." if issues else "No readiness action required.",
+            detail={"report": body, "source_payload": original_payload, "warnings": warnings},
+            imported_at=imported_at,
+        )
+    ]
+    sections = body.get("sections", [])
+    if isinstance(sections, list):
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            section_name = str(section.get("name") or "unknown")
+            section_status = str(section.get("status") or "UNKNOWN")
+            events.append(
+                make_system_status_event(
+                    event_type=f"system_readiness:{normalize_event_token(section_name)}",
+                    status=section_status,
+                    occurred_at=occurred_at,
+                    source=source,
+                    source_hash=source_hash,
+                    source_module=source_module,
+                    summary=str(section.get("explanation") or f"{section_name}: {section_status}"),
+                    recommended_action=str(section.get("recommended_next_action") or ""),
+                    detail={"section": section, "source_payload": original_payload},
+                    imported_at=imported_at,
+                )
+            )
+    return events
+
+
+def data_quality_status_event(
+    body: dict[str, Any],
+    *,
+    source: Path,
+    source_hash: str,
+    source_module: str,
+    occurred_at: str,
+    imported_at: str,
+    original_payload: dict[str, Any],
+) -> dict[str, Any]:
+    symbols = body.get("symbols", [])
+    total = len(symbols) if isinstance(symbols, list) else optional_int(body.get("symbol_count")) or 0
+    usable = optional_int(first_present(body, "usable_market_tape_count", "usable_symbol_count")) or 0
+    missing = optional_int(first_present(body, "missing_market_tape_count", "missing_symbol_count")) or max(total - usable, 0)
+    warnings = evidence_warning_list(body)
+    if total and usable == 0:
+        status = "FAILED"
+    elif missing or warnings:
+        status = "WARNING"
+    else:
+        status = "READY"
+    return make_system_status_event(
+        event_type="data_quality:market_tape",
+        status=status,
+        occurred_at=occurred_at,
+        source=source,
+        source_hash=source_hash,
+        source_module=source_module,
+        summary=f"Market tape quality: {usable} usable, {missing} missing, {total} total.",
+        recommended_action="Repair missing market tape before relying on alerts." if missing else "No market tape action required.",
+        detail={"report": body, "source_payload": original_payload},
+        imported_at=imported_at,
+    )
+
+
+def market_tape_status_event(
+    body: dict[str, Any],
+    *,
+    source: Path,
+    source_hash: str,
+    source_module: str,
+    occurred_at: str,
+    imported_at: str,
+    original_payload: dict[str, Any],
+) -> dict[str, Any]:
+    symbols = body.get("symbols", [])
+    total = len(symbols) if isinstance(symbols, list) else optional_int(body.get("symbol_count")) or 0
+    usable = optional_int(first_present(body, "usable_symbol_count", "usable_market_tape_count")) or 0
+    missing = optional_int(first_present(body, "missing_symbol_count", "missing_market_tape_count")) or max(total - usable, 0)
+    warnings = evidence_warning_list(body)
+    if total and usable == 0:
+        status = "FAILED"
+    elif missing or warnings:
+        status = "WARNING"
+    else:
+        status = "READY"
+    return make_system_status_event(
+        event_type="market_tape_health",
+        status=status,
+        occurred_at=occurred_at,
+        source=source,
+        source_hash=source_hash,
+        source_module=source_module,
+        summary=f"Market tape health: {usable} usable, {missing} missing, {total} total.",
+        recommended_action="Investigate providers with missing tape." if missing else "Market tape health passed for checked symbols.",
+        detail={"report": body, "source_payload": original_payload},
+        imported_at=imported_at,
+    )
+
+
+def outcome_update_status_event(
+    body: dict[str, Any],
+    *,
+    source: Path,
+    source_hash: str,
+    source_module: str,
+    occurred_at: str,
+    imported_at: str,
+    original_payload: dict[str, Any],
+) -> dict[str, Any]:
+    warnings = evidence_warning_list(body)
+    updated = optional_int(first_present(body, "alerts_updated", "outcomes_updated", "completed_outcomes")) or 0
+    pending = optional_int(first_present(body, "pending_alerts", "pending_outcomes")) or 0
+    status = "WARNING" if warnings else "READY"
+    return make_system_status_event(
+        event_type="alert_outcome_update",
+        status=status,
+        occurred_at=occurred_at,
+        source=source,
+        source_hash=source_hash,
+        source_module=source_module,
+        summary=f"Alert outcome update: {updated} updated, {pending} pending.",
+        recommended_action="Review outcome update warnings." if warnings else "No outcome update action required.",
+        detail={"status": body, "source_payload": original_payload},
+        imported_at=imported_at,
+    )
+
+
+def generic_status_event(
+    body: dict[str, Any],
+    *,
+    source: Path,
+    source_hash: str,
+    source_module: str,
+    occurred_at: str,
+    imported_at: str,
+    original_payload: dict[str, Any],
+) -> dict[str, Any]:
+    status = status_from_state_and_warnings(
+        str(first_present(body, "state", "status", "latest_run_state") or ""),
+        evidence_warning_list(body),
+        first_present(body, "last_error", "error", "error_message"),
+    )
+    event_type = normalize_event_token(source.stem)
+    return make_system_status_event(
+        event_type=event_type,
+        status=status,
+        occurred_at=occurred_at,
+        source=source,
+        source_hash=source_hash,
+        source_module=source_module,
+        summary=generic_status_summary(body, source),
+        recommended_action=generic_recommended_action(status, body),
+        detail={"status": body, "source_payload": original_payload},
+        imported_at=imported_at,
+    )
+
+
+def make_system_status_event(
+    *,
+    event_type: str,
+    status: str,
+    occurred_at: str,
+    source: Path,
+    source_hash: str,
+    source_module: str,
+    summary: str,
+    recommended_action: str,
+    detail: dict[str, Any],
+    imported_at: str,
+) -> dict[str, Any]:
+    clean_type = normalize_event_token(event_type)
+    clean_status = normalize_status(status)
+    event_id = deterministic_id("system_status_event", clean_type, occurred_at, source)
+    return {
+        "event_id": event_id,
+        "event_type": clean_type,
+        "status": clean_status,
+        "occurred_at": occurred_at,
+        "source_path": str(source),
+        "source_module": source_module,
+        "source_hash": source_hash,
+        "summary": summary,
+        "recommended_action": recommended_action,
+        "details_json": json.dumps(detail, sort_keys=True),
+        "imported_at": imported_at,
+        "updated_at": imported_at,
+    }
+
+
+def status_from_state_and_warnings(state: str, warnings: list[str], error: object) -> str:
+    if error:
+        return "FAILED"
+    normalized = normalize_status(state)
+    if warnings and normalized in {"READY", "INFO", "UNKNOWN"}:
+        return "WARNING"
+    return normalized
+
+
+def normalize_status(status: str) -> str:
+    value = str(status or "").strip().upper().replace("-", "_").replace(" ", "_")
+    if value in {"READY", "WARNING", "FAILED", "UNKNOWN", "INFO"}:
+        return value
+    if value in {"OK", "SUCCESS", "SUCCESSFUL", "COMPLETE", "COMPLETED", "IDLE", "PASSED", "PASS"}:
+        return "READY"
+    if value in {"WARN", "DEGRADED", "COLLECTING", "DIAGNOSTIC"}:
+        return "WARNING"
+    if value in {"FAIL", "ERROR", "ERRORED", "FAILED_RUN", "BLOCKED"}:
+        return "FAILED"
+    if value in {"RUNNING", "ACTIVE", "STARTED", "IN_PROGRESS"}:
+        return "INFO"
+    return "UNKNOWN" if not value else value
+
+
+def generic_status_summary(body: dict[str, Any], source: Path) -> str:
+    for key in ("summary", "message", "latest_run_state", "state", "status"):
+        value = body.get(key)
+        if value:
+            return f"{source.name}: {value}"
+    return f"{source.name}: status captured"
+
+
+def generic_recommended_action(status: str, body: dict[str, Any]) -> str:
+    for key in ("recommended_action", "next_action", "recommended_next_action"):
+        value = body.get(key)
+        if value:
+            return str(value)
+    if status == "FAILED":
+        return "Review the source status file for the recorded error."
+    if status == "WARNING":
+        return "Review warnings before relying on this subsystem."
+    return "No action required."
+
+
+def system_source_module_from_name(name: str) -> str:
+    normalized = name.lower()
+    if normalized == "active-monitor-status.json":
+        return "active_monitor_status"
+    if normalized == "evidence-autopilot-status.json":
+        return "evidence_autopilot_status"
+    if normalized == "alert-outcome-update-status.json":
+        return "alert_outcome_update_status"
+    if normalized == "system-readiness-latest.json":
+        return "system_readiness_v1"
+    if normalized == "data-quality-latest.json":
+        return "data_quality_audit_v1"
+    if normalized.startswith("market-tape-health-"):
+        return "market_tape_health_v1"
+    return normalize_event_token(Path(name).stem)
+
+
+def normalize_event_token(value: str) -> str:
+    token = str(value or "").strip().lower()
+    result = []
+    previous_was_separator = False
+    for character in token:
+        if character.isalnum():
+            result.append(character)
+            previous_was_separator = False
+        elif character in {":", "_"}:
+            if not previous_was_separator:
+                result.append(character)
+                previous_was_separator = True
+        else:
+            if not previous_was_separator:
+                result.append("_")
+                previous_was_separator = True
+    normalized = "".join(result).strip("_:")
+    return normalized or "unknown"
 
 
 def discover_evidence_run_sources(reports_dir: Path | None = None) -> list[Path]:
@@ -1208,6 +1689,32 @@ def read_evidence_metrics(
     return [dict(row) for row in rows]
 
 
+def read_system_status_events(
+    connection: sqlite3.Connection,
+    *,
+    event_type: str | None = None,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    conditions = []
+    params: list[str] = []
+    if event_type:
+        conditions.append("event_type = ?")
+        params.append(normalize_event_token(event_type))
+    if status:
+        conditions.append("status = ?")
+        params.append(normalize_status(status))
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    rows = connection.execute(
+        f"""
+        SELECT * FROM system_status_events
+        {where}
+        ORDER BY occurred_at, event_type, source_path
+        """,
+        params,
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def opportunity_alert_count(connection: sqlite3.Connection) -> int:
     row = connection.execute("SELECT COUNT(*) AS count FROM opportunity_alerts").fetchone()
     return int(row["count"] if row else 0)
@@ -1230,6 +1737,11 @@ def evidence_run_count(connection: sqlite3.Connection) -> int:
 
 def evidence_metric_count(connection: sqlite3.Connection) -> int:
     row = connection.execute("SELECT COUNT(*) AS count FROM evidence_metrics").fetchone()
+    return int(row["count"] if row else 0)
+
+
+def system_status_event_count(connection: sqlite3.Connection) -> int:
+    row = connection.execute("SELECT COUNT(*) AS count FROM system_status_events").fetchone()
     return int(row["count"] if row else 0)
 
 
@@ -1508,7 +2020,13 @@ CREATE TABLE IF NOT EXISTS system_status_events (
     status TEXT NOT NULL,
     occurred_at TEXT NOT NULL,
     source_path TEXT,
-    details_json TEXT
+    source_module TEXT,
+    source_hash TEXT,
+    summary TEXT,
+    recommended_action TEXT,
+    details_json TEXT,
+    imported_at TEXT,
+    updated_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_system_status_events_type_time ON system_status_events(event_type, occurred_at);
