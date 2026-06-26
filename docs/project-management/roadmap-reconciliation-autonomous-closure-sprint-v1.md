@@ -391,3 +391,63 @@ Safety:
 Next phase:
 
 - Phase 7: Active Alert evidence hardening.
+
+## Phase 7 Result
+
+Phase 7 is complete.
+
+Purpose:
+
+- Harden active-alert evidence collection with read-only reliability reporting instead of changing signal logic.
+
+Code changes:
+
+- Added `momentum_hunter/active_alert_reliability.py`.
+- Added `python -m momentum_hunter.active_alert_reliability`.
+- Added latest report outputs:
+  - `MomentumHunterData/data/reports/active-alert-reliability-latest.json`
+  - `MomentumHunterData/data/reports/active-alert-reliability-latest.md`
+- Added documentation:
+  - `docs/alerts/active-alert-reliability-v1.md`
+
+Report checks:
+
+- active monitor status freshness
+- latest monitor cycle readability and warnings
+- alert counts by completed / pending / unscorable
+- duplicate alert IDs
+- duplicate symbol/timestamp/type semantic keys
+- alert ID stability against the existing stable ID strategy
+- missing alert price
+- invalid alert timestamps
+- missing source report references
+- alert outcome updater handoff status
+- SQLite `opportunity_alerts` and `alert_outcomes` mirror parity
+
+Commands run:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'
+.\.venv\Scripts\python.exe -B -m unittest tests.test_active_alert_reliability
+.\.venv\Scripts\python.exe -B -m momentum_hunter.active_alert_reliability
+```
+
+Focused test result:
+
+- Active-alert reliability tests: `4` tests, `OK`
+
+Safety:
+
+- Reporting-only change.
+- No alert thresholds changed.
+- No scoring changes.
+- No readiness rule changes.
+- No outcome classification changes.
+- No trade-planning changes.
+- No market data fetching added.
+- No raw capture mutation.
+- SQLite remains diagnostic/additive.
+
+Next phase:
+
+- Phase 8: Test harness reliability.

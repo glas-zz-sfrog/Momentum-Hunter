@@ -8,6 +8,8 @@
 - Added focused readiness tests for SQLite mirror PASS/WARN behavior and user-state safety PASS/WARN behavior.
 - Added Evidence Autopilot stale-run detection with latest-run age, stale flag, and `STALE_EVIDENCE_AUTOPILOT_RUN` warning when the latest completed run is older than 24 hours.
 - Added focused reliability tests proving fresh autopilot runs stay clean and stale runs are warned.
+- Added Active Alert Reliability v1 with `python -m momentum_hunter.active_alert_reliability` and latest JSON/Markdown reports for active monitor freshness, alert identity integrity, missing alert evidence, outcome handoff status, and SQLite alert mirror parity.
+- Added focused active-alert reliability tests for stale monitor cycles, duplicate/unstable alert IDs, SQLite mirror mismatch warnings, report export, and source-file non-mutation.
 
 ### Fixed
 
@@ -19,6 +21,7 @@
 - System Readiness remains read-only and does not make SQLite authoritative, overwrite file-based user state, mutate raw captures, or change scanner, scoring, readiness, alert, outcome, or trade-planning logic.
 - Evidence Autopilot stale-run detection is reporting-only and does not change alert generation, scoring, readiness, outcome classification, or trade planning.
 - SQLite system-status stale-row cleanup touches only the additive SQLite mirror; it does not mutate raw captures, JSON status files, user-authored files, scanner output, scoring, readiness, alerts, outcomes, or trade plans.
+- Active Alert Reliability v1 is reporting-only. It does not generate alerts, fetch market data, change thresholds, alter readiness/scoring/outcome logic, mutate raw captures, or make SQLite authoritative.
 
 ## 2026-06-25
 

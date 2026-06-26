@@ -108,6 +108,7 @@ Momentum Hunter includes read-only reliability reports for checking whether the 
 
 ```powershell
 .\.venv\Scripts\python.exe -m momentum_hunter.data_quality
+.\.venv\Scripts\python.exe -m momentum_hunter.active_alert_reliability
 .\.venv\Scripts\python.exe -m momentum_hunter.evidence_autopilot_reliability
 .\.venv\Scripts\python.exe -m momentum_hunter.system_readiness
 ```
@@ -117,6 +118,8 @@ These write:
 ```text
 MomentumHunterData\data\reports\data-quality-latest.json
 MomentumHunterData\data\reports\data-quality-latest.md
+MomentumHunterData\data\reports\active-alert-reliability-latest.json
+MomentumHunterData\data\reports\active-alert-reliability-latest.md
 MomentumHunterData\data\reports\evidence-autopilot-latest.json
 MomentumHunterData\data\reports\evidence-autopilot-latest.md
 MomentumHunterData\data\reports\system-readiness-latest.json
