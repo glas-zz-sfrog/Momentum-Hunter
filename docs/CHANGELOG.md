@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added SQLite Evidence Backbone Program v1 final report under `docs/storage/sqlite-evidence-backbone-final-report.md`.
 - Added `python -m momentum_hunter.sqlite_validation` to compare SQLite mirror counts against current authoritative source files and generate `sqlite-validation-latest.*` reports.
 - Added focused SQLite validation tests for matching-source PASS reports, missing-mirror FAIL reports, and validation report generation.
 - Validated `python -m momentum_hunter.sqlite_migration --slice all` as the unified safe import path across provider quality, opportunity evidence, minute bars, evidence runs, system status, and capture index mirrors.

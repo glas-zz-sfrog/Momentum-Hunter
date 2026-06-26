@@ -86,7 +86,7 @@ After Phase 4:
 | 5 | Read-Only Query Helpers | query helpers over existing tables | SQLite mirrors only | Complete: `Add SQLite read-only query helpers` |
 | 6 | Unified Import CLI | all safe slices | all mirrored evidence sources | Complete: validated existing `--slice all` workflow |
 | 7 | Validation / Integrity Report | validation reports | source files plus SQLite mirrors | Complete: `Add SQLite validation report` |
-| 8 | Documentation and Final Report | docs only | current program evidence | final documentation update |
+| 8 | Documentation and Final Report | docs only | current program evidence | Complete: `docs/storage/sqlite-evidence-backbone-final-report.md` |
 
 ## Table Ownership
 
