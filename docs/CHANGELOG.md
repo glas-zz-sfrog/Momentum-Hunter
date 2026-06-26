@@ -21,6 +21,8 @@
 - Added duplicate-load protection for Research Lab and Readiness Gate report workers so repeated clicks do not spawn parallel builds for the same report.
 - Added SQLite Maintenance v1 with read-only integrity/schema/table checks, timestamped SQLite backup snapshots, backup manifests, and latest JSON/Markdown maintenance reports.
 - Added focused SQLite maintenance tests for check-only hash preservation, backup validation, missing database handling, report generation, and CLI output.
+- Added Offline Evidence Pipeline Drill v1 with fixture alerts, fixture minute bars, existing outcome-updater execution, fixture SQLite imports, validation, and latest JSON/Markdown drill reports.
+- Added focused offline evidence drill tests proving completed fixture outcomes, missing-bars warnings, fixture cleanup, and production alert-store non-mutation.
 
 ### Fixed
 
@@ -39,6 +41,7 @@
 - Candidate Story view-model extraction preserves existing `app.py` import compatibility and does not change capture data, replay data, scoring, outcomes, alerts, readiness, or trade-planning behavior.
 - Research / Readiness loading hardening preserves existing report builders and loading dialogs. It does not change research calculations, readiness rules, scoring, alerts, outcomes, trade planning, raw captures, or user-authored state.
 - SQLite Maintenance v1 is safety tooling only. It reads the live SQLite mirror, writes derived maintenance reports, and copies validated backups; it does not make SQLite authoritative or mutate raw captures, JSON/CSV/Markdown stores, user-authored state, scoring, readiness, alerts, outcomes, or trade plans.
+- Offline Evidence Pipeline Drill v1 uses synthetic fixture data in a temporary workspace and existing outcome/import/validation paths. It does not fetch market data, write production alerts, change alert logic, change outcome classification, or mutate raw captures/user-authored state.
 
 ## 2026-06-25
 
