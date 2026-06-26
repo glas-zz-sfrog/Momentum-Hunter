@@ -31,6 +31,8 @@
 - Added focused tests for the autonomous test-plan listing helper.
 - Added Report Artifact Index v1 with `python -m momentum_hunter.report_index` and latest JSON/Markdown reports that locate key SQLite, readiness, evidence, provider, market-tape, watchlist, daily brief, user-state, and capture-health artifacts with status and freshness.
 - Added focused report-index tests for latest report discovery, missing report handling, stale report classification, and JSON/Markdown generation.
+- Added SQLite Analytics Query Pack v1 with `python -m momentum_hunter.sqlite_analytics` and latest JSON/Markdown reports for candidate evidence summaries, alert sample summaries, watchlist preparedness, and stale evidence status using the additive SQLite mirror.
+- Added focused SQLite analytics tests for query outputs, missing database handling, missing table handling, stale evidence warnings, and JSON/Markdown generation.
 
 ### Fixed
 
@@ -54,6 +56,7 @@
 - System Readiness enhancement is reporting-only. It reads existing latest reports and status files, then writes derived readiness reports; it does not alter readiness thresholds, scoring, scanner behavior, alerts, outcomes, trade plans, raw captures, user-authored files, or SQLite authority.
 - Autonomous Test Suites is test-policy/tooling only. It does not change application behavior, scanner logic, scoring, readiness, alerts, outcomes, trade planning, broker behavior, SQLite authority, raw captures, or user-authored files.
 - Report Artifact Index v1 is read-only discovery/reporting. It reads report metadata and writes derived index files; it does not mutate source artifacts, raw captures, user-authored state, SQLite data, scoring, readiness, alerts, outcomes, or trade plans.
+- SQLite Analytics Query Pack v1 is read-only analytics over the additive SQLite mirror. It does not make SQLite authoritative, mutate source files, change scanner/scoring/readiness/alert/outcome/trade-planning behavior, or write anything except derived query-pack reports.
 
 ## 2026-06-25
 

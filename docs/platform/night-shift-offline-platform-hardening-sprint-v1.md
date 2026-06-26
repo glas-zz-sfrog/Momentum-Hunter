@@ -562,3 +562,78 @@ Safety:
 - Read-only discovery/reporting.
 - Writes only derived `report-index-latest.*` files.
 - Does not mutate source reports, raw captures, user-authored state, SQLite data, scoring, readiness, alerts, outcomes, or trade plans.
+
+## Phase 9 Result
+
+Phase 9 is complete.
+
+Goal:
+
+- Add a read-only SQLite analytics query pack that helps Argus summarize evidence without making SQLite authoritative.
+
+Implemented:
+
+- Added `momentum_hunter/sqlite_analytics.py`.
+- Added CLI:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_analytics
+```
+
+- Added latest JSON/Markdown outputs:
+  - `MomentumHunterData/data/reports/sqlite-analytics-query-pack-latest.json`
+  - `MomentumHunterData/data/reports/sqlite-analytics-query-pack-latest.md`
+- Added Candidate Evidence Summary:
+  - capture count
+  - first/latest seen timestamps
+  - score peak
+  - first/latest price
+  - price move percentage
+  - alert and outcome counts
+  - latest review status
+  - entry-plan status
+- Added Alert Performance Sample Summary:
+  - total alerts
+  - completed alerts
+  - pending alerts
+  - unscorable alerts
+  - classifications by outcome, alert type, and symbol
+- Added Watchlist Preparedness Summary:
+  - watchlist review count
+  - watchlist artifact count
+  - complete/incomplete entry plans
+  - missing entry and stop counts
+  - unavailable target field note for the current entry-plan schema
+- Added Stale Evidence Summary:
+  - stale `system_status_events`
+  - latest provider check age
+  - latest SQLite import age based on mirrored table import metadata
+- Added focused tests in `tests/test_sqlite_analytics.py`.
+
+Validation:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m py_compile momentum_hunter\sqlite_analytics.py tests\test_sqlite_analytics.py
+.\.venv\Scripts\python.exe -B -m unittest tests.test_sqlite_analytics
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_analytics
+```
+
+Production analytics result:
+
+```text
+SQLite analytics query pack status: WARN
+Candidate rows: 50
+Total alerts: 2
+Completed alerts: 1
+Pending alerts: 0
+Unscorable alerts: 1
+Warnings: STALE_SYSTEM_STATUS_EVENTS:4
+```
+
+Safety:
+
+- Read-only analytics over the additive SQLite mirror.
+- Does not make SQLite authoritative.
+- Does not mutate source files, raw captures, user-authored state, or SQLite source tables.
+- Does not change scanner, scoring, readiness, alert, outcome, or trade-planning behavior.
+- Writes only derived query-pack report artifacts.
