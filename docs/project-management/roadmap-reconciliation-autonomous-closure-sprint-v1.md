@@ -451,3 +451,60 @@ Safety:
 Next phase:
 
 - Phase 8: Test harness reliability.
+
+## Phase 8 Result
+
+Phase 8 is complete.
+
+Purpose:
+
+- Stop autonomous validation from drifting into broad Qt unittest modules that can hang and leave test `python.exe` processes alive.
+
+Code changes:
+
+- Added `tools/run_bounded_tests.py`.
+- Added `docs/testing/test-harness-reliability-v1.md`.
+
+Safe test lanes:
+
+- `backend`
+- `storage`
+- `evidence`
+
+The bounded runner:
+
+- disables bytecode writes
+- runs each module in its own subprocess
+- applies a per-module timeout
+- reports `PASS`, `FAIL`, or `TIMEOUT`
+- excludes known risky broad Qt modules from the safe groups
+
+Do-not-run-unattended modules:
+
+- `tests.test_gui_states`
+- `tests.test_daily_workflow`
+- `tests.test_morning_review_workspace`
+- `tests.test_review_workflow`
+
+Commands run:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'
+.\.venv\Scripts\python.exe -B tools\run_bounded_tests.py --list
+.\.venv\Scripts\python.exe -B tools\run_bounded_tests.py --group evidence --only tests.test_active_alert_reliability --timeout 30
+```
+
+Results:
+
+- Safe group listing completed.
+- Bounded evidence single-module validation completed: `tests.test_active_alert_reliability` passed.
+
+Safety:
+
+- Test tooling/documentation only.
+- No application runtime behavior changed.
+- No scanner, scoring, readiness, alert, outcome, trade-planning, SQLite authority, or raw capture behavior changed.
+
+Next phase:
+
+- Phase 9: Documentation and roadmap synthesis.

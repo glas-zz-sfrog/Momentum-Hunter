@@ -10,6 +10,7 @@
 - Added focused reliability tests proving fresh autopilot runs stay clean and stale runs are warned.
 - Added Active Alert Reliability v1 with `python -m momentum_hunter.active_alert_reliability` and latest JSON/Markdown reports for active monitor freshness, alert identity integrity, missing alert evidence, outcome handoff status, and SQLite alert mirror parity.
 - Added focused active-alert reliability tests for stale monitor cycles, duplicate/unstable alert IDs, SQLite mirror mismatch warnings, report export, and source-file non-mutation.
+- Added Test Harness Reliability v1 with `tools/run_bounded_tests.py` and `docs/testing/test-harness-reliability-v1.md` to define safe backend/storage/evidence test lanes, bounded per-module subprocess execution, and the Qt do-not-run-unattended list.
 
 ### Fixed
 
@@ -22,6 +23,7 @@
 - Evidence Autopilot stale-run detection is reporting-only and does not change alert generation, scoring, readiness, outcome classification, or trade planning.
 - SQLite system-status stale-row cleanup touches only the additive SQLite mirror; it does not mutate raw captures, JSON status files, user-authored files, scanner output, scoring, readiness, alerts, outcomes, or trade plans.
 - Active Alert Reliability v1 is reporting-only. It does not generate alerts, fetch market data, change thresholds, alter readiness/scoring/outcome logic, mutate raw captures, or make SQLite authoritative.
+- Test Harness Reliability v1 changes test execution policy/tooling only. It does not change application behavior, scanner logic, scoring, readiness, alerts, outcomes, trade planning, SQLite authority, or raw captures.
 
 ## 2026-06-25
 
