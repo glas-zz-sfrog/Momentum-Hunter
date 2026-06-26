@@ -316,3 +316,84 @@ Safety:
 - Production `opportunity-alerts.json` hash was unchanged.
 - No live provider calls were made.
 - No scoring, readiness, alert threshold, outcome classification, trade-planning, raw capture, or user-authored state changes.
+
+## Phase 5 Result
+
+Phase 5 is complete.
+
+Goal:
+
+- Build a diagnostic foundation for scanner/provider field reliability, especially fields such as relative volume, market cap, volume, price, and timestamps.
+
+Implemented:
+
+- Added `momentum_hunter/provider_field_quality.py`.
+- Added a CLI:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m momentum_hunter.provider_field_quality
+```
+
+- The audit reads stored `analysis-captures.csv` rows and checks:
+  - provider
+  - scanner
+  - symbol
+  - field name
+  - present/missing state
+  - zero values
+  - impossible values
+  - stale capture timestamps
+  - source endpoint/path
+  - confidence
+  - usability
+  - fallback source placeholder
+- Fields audited:
+  - price
+  - percent change
+  - volume
+  - relative volume
+  - average volume
+  - market cap
+  - bid
+  - ask
+  - spread
+  - premarket price
+  - premarket volume
+  - headline timestamp
+- Added latest JSON/Markdown outputs:
+  - `MomentumHunterData/data/reports/provider-field-quality-latest.json`
+  - `MomentumHunterData/data/reports/provider-field-quality-latest.md`
+- Added focused tests in `tests/test_provider_field_quality.py`.
+
+SQLite handling:
+
+- The audit does not write field-level rows to SQLite because the current `provider_quality_checks` table stores symbol-level market-tape checks, not field-level scanner audit rows.
+- The report records this explicitly as `SKIPPED_UNSUPPORTED_SCHEMA`.
+
+Validation:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_provider_field_quality
+.\.venv\Scripts\python.exe -B -m py_compile momentum_hunter\provider_field_quality.py tests\test_provider_field_quality.py
+.\.venv\Scripts\python.exe -B -m momentum_hunter.provider_field_quality
+```
+
+Production audit result:
+
+```text
+Provider field quality status: WARN
+Source rows: 642
+Audit rows: 7704
+SQLite write status: SKIPPED_UNSUPPORTED_SCHEMA
+Top warnings: STALE_CAPTURE_TIMESTAMP, ZERO_RELATIVE_VOLUME
+Report warnings: STALE_CAPTURE_ROWS, PROVIDER_FIELD_WARNINGS_PRESENT, SKIPPED_UNSUPPORTED_SCHEMA
+```
+
+Safety:
+
+- Diagnostic reporting only.
+- No provider behavior changes.
+- No scanner threshold changes.
+- No scoring changes.
+- No readiness, alert, outcome, or trade-planning changes.
+- No raw capture or user-authored state mutation.

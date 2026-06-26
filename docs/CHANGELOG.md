@@ -23,6 +23,8 @@
 - Added focused SQLite maintenance tests for check-only hash preservation, backup validation, missing database handling, report generation, and CLI output.
 - Added Offline Evidence Pipeline Drill v1 with fixture alerts, fixture minute bars, existing outcome-updater execution, fixture SQLite imports, validation, and latest JSON/Markdown drill reports.
 - Added focused offline evidence drill tests proving completed fixture outcomes, missing-bars warnings, fixture cleanup, and production alert-store non-mutation.
+- Added Provider Field Quality Audit v1 with `python -m momentum_hunter.provider_field_quality` and latest JSON/Markdown reports for scanner/provider field presence, zero values, impossible values, stale capture timestamps, confidence, and usability.
+- Added focused provider field quality tests for missing price, zero relative volume, impossible market cap, stale timestamps, report generation, and score-file non-mutation.
 
 ### Fixed
 
@@ -42,6 +44,7 @@
 - Research / Readiness loading hardening preserves existing report builders and loading dialogs. It does not change research calculations, readiness rules, scoring, alerts, outcomes, trade planning, raw captures, or user-authored state.
 - SQLite Maintenance v1 is safety tooling only. It reads the live SQLite mirror, writes derived maintenance reports, and copies validated backups; it does not make SQLite authoritative or mutate raw captures, JSON/CSV/Markdown stores, user-authored state, scoring, readiness, alerts, outcomes, or trade plans.
 - Offline Evidence Pipeline Drill v1 uses synthetic fixture data in a temporary workspace and existing outcome/import/validation paths. It does not fetch market data, write production alerts, change alert logic, change outcome classification, or mutate raw captures/user-authored state.
+- Provider Field Quality Audit v1 is diagnostic-only. It reads stored analysis rows and writes derived reports; it does not change provider behavior, scanner thresholds, score math, readiness, alerts, outcomes, trade planning, raw captures, or user-authored state. Field-level rows are not written to SQLite because the current `provider_quality_checks` schema is symbol-level market-tape quality, not field-level scanner quality.
 
 ## 2026-06-25
 
