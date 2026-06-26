@@ -169,6 +169,14 @@ SQLite imports are mirrors only. Existing report files remain the current operat
 
 Read-only helper functions in `momentum_hunter.sqlite_queries` provide lightweight summaries for table counts, alert evidence state, candidate history by ticker, and latest system status events. These helpers query SQLite only and do not replace file-based runtime workflows.
 
+Validate the SQLite mirror against current source files with:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_validation
+```
+
+Validation reports are written to `MomentumHunterData\data\reports\sqlite-validation-latest.json` and `.md`.
+
 ## Watchlist Discipline
 
 When a current/live candidate is moved to Watchlist, Momentum Hunter can store an entry plan with trigger, stop, thesis, invalidation, max loss, position size idea, planned hold time, and notes. Incomplete plans show warnings for missing trigger, stop, invalidation, and max loss.

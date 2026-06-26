@@ -85,7 +85,7 @@ After Phase 4:
 | 4 | Capture / Candidate Read-Only Index Slice | `captures`, `capture_candidates` | derived analysis CSV plus raw capture file hashes where safe | Complete: `Add SQLite capture index slice` |
 | 5 | Read-Only Query Helpers | query helpers over existing tables | SQLite mirrors only | Complete: `Add SQLite read-only query helpers` |
 | 6 | Unified Import CLI | all safe slices | all mirrored evidence sources | Complete: validated existing `--slice all` workflow |
-| 7 | Validation / Integrity Report | validation reports | source files plus SQLite mirrors | `Add SQLite validation report` |
+| 7 | Validation / Integrity Report | validation reports | source files plus SQLite mirrors | Complete: `Add SQLite validation report` |
 | 8 | Documentation and Final Report | docs only | current program evidence | final documentation update |
 
 ## Table Ownership
@@ -210,6 +210,33 @@ The unified report is written to:
 
 - `MomentumHunterData/data/reports/sqlite-import-latest.json`
 - `MomentumHunterData/data/reports/sqlite-import-latest.md`
+
+## Phase 7 SQLite Validation Report
+
+The SQLite validation report is read-only:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_validation
+```
+
+Validated latest report:
+
+- Overall status: `PASS`
+- SQLite schema version: `6`
+- Provider quality: source 3 / SQLite 3
+- Opportunity alerts: source 2 / SQLite 2
+- Alert outcomes: source 2 / SQLite 2
+- Minute bars: source 710 / SQLite 710
+- Evidence runs: source 14 / SQLite 14
+- System status events: source 16 / SQLite 16
+- Captures: source 39 / SQLite 39
+- Capture candidates: source 642 / SQLite 642
+- Warnings: none
+
+Reports:
+
+- `MomentumHunterData/data/reports/sqlite-validation-latest.json`
+- `MomentumHunterData/data/reports/sqlite-validation-latest.md`
 
 ## Future Cutover Rules
 

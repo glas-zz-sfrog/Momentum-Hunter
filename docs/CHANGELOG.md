@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added `python -m momentum_hunter.sqlite_validation` to compare SQLite mirror counts against current authoritative source files and generate `sqlite-validation-latest.*` reports.
+- Added focused SQLite validation tests for matching-source PASS reports, missing-mirror FAIL reports, and validation report generation.
 - Validated `python -m momentum_hunter.sqlite_migration --slice all` as the unified safe import path across provider quality, opportunity evidence, minute bars, evidence runs, system status, and capture index mirrors.
 - Added read-only SQLite query helpers for backbone table counts, alert evidence state, candidate history by ticker, and latest system status events.
 - Added focused SQLite query helper tests proving summaries and filters are deterministic.

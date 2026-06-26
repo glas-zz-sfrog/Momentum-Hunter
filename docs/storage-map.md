@@ -185,6 +185,8 @@ The evidence slice preserves pending, completed, and terminal unscorable alert o
 
 Read-only query helpers live in `momentum_hunter/sqlite_queries.py`. They summarize table counts, alert evidence state, candidate history by ticker, and latest system status events from SQLite without mutating source files or redirecting runtime workflows.
 
+SQLite validation lives in `momentum_hunter/sqlite_validation.py`. It compares mirrored row counts against the current authoritative source files and writes `sqlite-validation-latest.json` / `.md` reports. Validation is read-only and does not modify source files or SQLite rows.
+
 Do not migrate raw captures, review decisions, watchlist state, or entry plans into SQLite as the only source of truth until backup, conflict handling, hash validation, and recovery behavior are designed and tested.
 
 ## Historical Cluster Display
