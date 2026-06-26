@@ -495,3 +495,70 @@ Safety:
 - No full test framework rewrite.
 - No application behavior changes.
 - No scanner, scoring, readiness, alert, outcome, trade-planning, broker, SQLite-authority, raw-capture, or user-authored state changes.
+
+## Phase 8 Result
+
+Phase 8 is complete.
+
+Goal:
+
+- Create an index of important reports/artifacts so Steven and Argus can quickly find what matters.
+
+Implemented:
+
+- Added `momentum_hunter/report_index.py`.
+- Added CLI:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m momentum_hunter.report_index
+```
+
+- Added latest JSON/Markdown outputs:
+  - `MomentumHunterData/data/reports/report-index-latest.json`
+  - `MomentumHunterData/data/reports/report-index-latest.md`
+- Indexed artifacts:
+  - SQLite validation
+  - SQLite all-safe import
+  - SQLite shadow compare
+  - System Readiness
+  - Evidence Autopilot reliability
+  - Active Alert reliability
+  - Provider field quality
+  - Market tape health
+  - Candidate Story read model
+  - Watchlist read model
+  - Evidence read model
+  - Daily evidence brief
+  - User-state diff
+  - User-state backup
+  - Capture health
+- Added focused tests in `tests/test_report_index.py`.
+
+Validation:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m py_compile momentum_hunter\report_index.py tests\test_report_index.py
+.\.venv\Scripts\python.exe -B -m unittest tests.test_report_index
+.\.venv\Scripts\python.exe -B -m momentum_hunter.report_index
+```
+
+Production index result:
+
+```text
+Report index status: WARN
+Reports indexed: 15
+Missing reports: 1
+Stale reports: 2
+Warnings: MISSING_REPORTS:1, STALE_REPORTS:2
+```
+
+Current warnings:
+
+- `Capture Health` latest report artifact is missing from the report directory.
+- `Market Tape Health` and `Daily Evidence Brief` are stale by the 24-hour report-index threshold.
+
+Safety:
+
+- Read-only discovery/reporting.
+- Writes only derived `report-index-latest.*` files.
+- Does not mutate source reports, raw captures, user-authored state, SQLite data, scoring, readiness, alerts, outcomes, or trade plans.
