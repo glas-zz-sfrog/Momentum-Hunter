@@ -19,6 +19,7 @@ EVIDENCE_AUTOPILOT_RELIABILITY_SCHEMA_VERSION = 1
 EVIDENCE_AUTOPILOT_RELIABILITY_VERSION = "evidence_autopilot_reliability_v1"
 EVIDENCE_AUTOPILOT_LATEST_JSON = DATA_DIR / "reports" / "evidence-autopilot-latest.json"
 EVIDENCE_AUTOPILOT_LATEST_MD = DATA_DIR / "reports" / "evidence-autopilot-latest.md"
+STALE_AUTOPILOT_RUN_MINUTES = 24 * 60
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,8 @@ class EvidenceAutopilotReliabilityReport:
     latest_run_started_at: str
     latest_run_completed_at: str
     latest_run_duration_seconds: float | None
+    latest_run_age_minutes: float | None
+    latest_run_stale: bool
     execution_mode: str
     background_status: str
     app_closed_behavior: str
@@ -80,6 +83,10 @@ def build_evidence_autopilot_reliability_report(
         warnings.extend(status.warnings)
         if status.last_error:
             warnings.append("EVIDENCE_AUTOPILOT_LAST_RUN_FAILED")
+    age_minutes = latest_run_age_minutes(status, generated_at)
+    run_stale = bool(age_minutes is not None and age_minutes > STALE_AUTOPILOT_RUN_MINUTES)
+    if run_stale:
+        warnings.append("STALE_EVIDENCE_AUTOPILOT_RUN")
     if active_status and active_status.last_error:
         warnings.append("ACTIVE_MONITOR_LAST_ERROR")
     warnings.extend(health.warnings)
@@ -95,6 +102,8 @@ def build_evidence_autopilot_reliability_report(
         latest_run_started_at=status.started_at if status else "",
         latest_run_completed_at=status.completed_at if status else "",
         latest_run_duration_seconds=run_duration_seconds(status.started_at, status.completed_at) if status else None,
+        latest_run_age_minutes=age_minutes,
+        latest_run_stale=run_stale,
         execution_mode=execution_mode,
         background_status=background_status(status, active_status),
         app_closed_behavior=app_closed_behavior(status, active_status),
@@ -218,6 +227,8 @@ def load_latest_evidence_autopilot_reliability_report(
         latest_run_started_at=str(raw.get("latest_run_started_at", "")),
         latest_run_completed_at=str(raw.get("latest_run_completed_at", "")),
         latest_run_duration_seconds=parse_optional_float(raw.get("latest_run_duration_seconds")),
+        latest_run_age_minutes=parse_optional_float(raw.get("latest_run_age_minutes")),
+        latest_run_stale=bool(raw.get("latest_run_stale", False)),
         execution_mode=str(raw.get("execution_mode", "")),
         background_status=str(raw.get("background_status", "")),
         app_closed_behavior=str(raw.get("app_closed_behavior", "")),
@@ -261,6 +272,8 @@ def format_evidence_autopilot_markdown(report: EvidenceAutopilotReliabilityRepor
         f"- Started: {report.latest_run_started_at or 'n/a'}",
         f"- Completed: {report.latest_run_completed_at or 'n/a'}",
         f"- Duration seconds: {fmt(report.latest_run_duration_seconds)}",
+        f"- Latest run age minutes: {fmt(report.latest_run_age_minutes)}",
+        f"- Latest run stale: {yes_no(report.latest_run_stale)}",
         "",
         "## Pipeline",
         "",
@@ -304,6 +317,16 @@ def run_duration_seconds(started_at: str, completed_at: str) -> float | None:
     if not start or not end:
         return None
     return round((end - start).total_seconds(), 3)
+
+
+def latest_run_age_minutes(status: object, generated_at: datetime) -> float | None:
+    if status is None:
+        return None
+    completed_at = getattr(status, "completed_at", "") or getattr(status, "updated_at", "")
+    completed = parse_datetime(completed_at)
+    if not completed:
+        return None
+    return round((generated_at - completed).total_seconds() / 60.0, 3)
 
 
 def parse_datetime(value: str) -> datetime | None:

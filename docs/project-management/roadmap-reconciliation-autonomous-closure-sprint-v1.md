@@ -346,3 +346,48 @@ Safety:
 Next phase:
 
 - Phase 6: Evidence Autopilot reliability reconciliation.
+
+## Phase 6 Result
+
+Phase 6 is complete.
+
+Purpose:
+
+- Ensure Evidence Autopilot reliability reporting distinguishes a completed historical run from a current/active evidence loop.
+
+Code changes:
+
+- Added `latest_run_age_minutes`.
+- Added `latest_run_stale`.
+- Added `STALE_EVIDENCE_AUTOPILOT_RUN` warning when the latest completed run is older than 24 hours.
+
+Commands run:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'
+.\.venv\Scripts\python.exe -B -m unittest tests.test_reliability_reports tests.test_evidence_autopilot
+.\.venv\Scripts\python.exe -B -m momentum_hunter.evidence_autopilot_reliability
+```
+
+Results:
+
+- Reliability/autopilot tests: `9` tests, `OK`
+- Latest reliability report generated:
+  - `MomentumHunterData/data/reports/evidence-autopilot-latest.json`
+  - `MomentumHunterData/data/reports/evidence-autopilot-latest.md`
+- Latest run age: `5131.779` minutes
+- Latest run stale: `yes`
+- New warning present: `STALE_EVIDENCE_AUTOPILOT_RUN`
+
+Safety:
+
+- Reporting-only change.
+- No alert generation changes.
+- No scoring changes.
+- No readiness rule changes.
+- No outcome classification changes.
+- No trade-planning changes.
+
+Next phase:
+
+- Phase 7: Active Alert evidence hardening.

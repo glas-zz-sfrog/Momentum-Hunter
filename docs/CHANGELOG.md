@@ -6,10 +6,13 @@
 
 - Added System Readiness sections for `SQLite Mirror` and `User-State Safety` so the readiness report now surfaces SQLite validation, shadow-compare status, user-state diff parity, and stale mirror warnings.
 - Added focused readiness tests for SQLite mirror PASS/WARN behavior and user-state safety PASS/WARN behavior.
+- Added Evidence Autopilot stale-run detection with latest-run age, stale flag, and `STALE_EVIDENCE_AUTOPILOT_RUN` warning when the latest completed run is older than 24 hours.
+- Added focused reliability tests proving fresh autopilot runs stay clean and stale runs are warned.
 
 ### Safety
 
 - System Readiness remains read-only and does not make SQLite authoritative, overwrite file-based user state, mutate raw captures, or change scanner, scoring, readiness, alert, outcome, or trade-planning logic.
+- Evidence Autopilot stale-run detection is reporting-only and does not change alert generation, scoring, readiness, outcome classification, or trade planning.
 
 ## 2026-06-25
 

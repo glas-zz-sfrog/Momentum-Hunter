@@ -111,9 +111,40 @@ class ReliabilityReportTests(unittest.TestCase):
         self.assertEqual(1, report.completed_alerts)
         self.assertEqual(0, report.pending_alerts)
         self.assertEqual(1, report.unscorable_alerts)
+        self.assertFalse(report.latest_run_stale)
+        self.assertAlmostEqual(4.95, report.latest_run_age_minutes or 0.0, places=2)
         self.assertEqual("NO_BACKGROUND_AUTOPILOT_CONFIRMED", report.background_status)
         self.assertIn("no continuous autopilot work is proven", report.app_closed_behavior)
         self.assertIn("NO_ALERT_OUTCOME_UPDATE_STATUS", report.warnings)
+
+    def test_evidence_autopilot_reliability_warns_on_stale_latest_run(self) -> None:
+        status_path = self.root / "evidence-autopilot-status.json"
+        save_evidence_autopilot_status(
+            EvidenceAutopilotStatus(
+                state="COMPLETED",
+                started_at="2026-06-18T08:00:00-05:00",
+                updated_at="2026-06-18T08:00:03-05:00",
+                completed_at="2026-06-18T08:00:03-05:00",
+                monitor_cycle_completed=True,
+                outcome_update_completed=True,
+                evidence_report_generated=True,
+                daily_brief_generated=True,
+            ),
+            status_path,
+        )
+
+        report = build_evidence_autopilot_reliability_report(
+            status_path=status_path,
+            active_monitor_status_path=self.root / "missing-active-status.json",
+            outcome_status_path=self.root / "missing-outcome-status.json",
+            reports_dir=self.root / "reports",
+            evidence_health_report=fake_evidence_health_report(completed=1, pending=0, unscorable=0),
+            generated_at=datetime.fromisoformat("2026-06-20T08:05:00-05:00"),
+        )
+
+        self.assertTrue(report.latest_run_stale)
+        self.assertGreater(report.latest_run_age_minutes or 0.0, 24 * 60)
+        self.assertIn("STALE_EVIDENCE_AUTOPILOT_RUN", report.warnings)
 
     def test_system_readiness_sections_surface_warnings_without_strategy_changes(self) -> None:
         data_quality = build_data_quality_report(
