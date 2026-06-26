@@ -213,3 +213,31 @@ Remaining deferred Phase 1B-adjacent items:
 Next phase:
 
 - Phase 3: Research / Readiness responsiveness audit.
+
+## Phase 3 Result
+
+Phase 3 is complete without runtime code changes.
+
+Output:
+
+- `docs/project-management/research-readiness-responsiveness-audit-2026-06-26.md`
+
+Measured backend report-builder times:
+
+- `build_capture_study`: `0.014s`
+- `build_outcome_maturity_report`: `0.047s`
+
+Measured GUI entry-point return times:
+
+- `open_study_engine`: `0.002s`
+- `open_readiness_gate`: `0.001s`
+
+Result:
+
+- Research Lab and Readiness Gate are responsive on current data.
+- The combined Qt unittest stall remains a test-harness problem, not a current app-path failure.
+- No leftover Python processes were present after the probes.
+
+Next phase:
+
+- Phase 4: reconcile SQLite read-only adoption/shadow mode in the sprint scoreboard.
