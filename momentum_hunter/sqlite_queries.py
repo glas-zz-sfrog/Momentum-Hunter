@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 from momentum_hunter.sqlite_store import SQLITE_DB_PATH, connect_database, current_schema_version, normalize_status
+from momentum_hunter.sqlite_migration import SQLITE_USER_STATE_IMPORT_LATEST_JSON
+from momentum_hunter.user_state_diff import USER_STATE_DIFF_LATEST_JSON
 
 
 def sqlite_backbone_summary(*, db_path: Path | None = None) -> dict[str, Any]:
@@ -17,6 +20,9 @@ def sqlite_backbone_summary(*, db_path: Path | None = None) -> dict[str, Any]:
         "system_status_events",
         "captures",
         "capture_candidates",
+        "candidate_reviews",
+        "watchlist_items",
+        "entry_plans",
     ]
     with connect_database(db_path) as connection:
         counts = {
@@ -273,3 +279,125 @@ def latest_system_status(
             params,
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def get_candidate_reviews_by_symbol(symbol: str, *, db_path: Path | None = None) -> list[dict[str, Any]]:
+    ticker = symbol.strip().upper()
+    with connect_database(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM candidate_reviews
+            WHERE ticker = ?
+            ORDER BY decision_timestamp, capture_date, session, provider, scanner
+            """,
+            (ticker,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_all_interested_candidates(*, db_path: Path | None = None) -> list[dict[str, Any]]:
+    return get_reviews_by_status("interested", db_path=db_path)
+
+
+def get_all_rejected_candidates(*, db_path: Path | None = None) -> list[dict[str, Any]]:
+    return get_reviews_by_status("rejected", db_path=db_path)
+
+
+def get_reviews_by_status(status: str, *, db_path: Path | None = None) -> list[dict[str, Any]]:
+    with connect_database(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM candidate_reviews
+            WHERE review_status = ?
+            ORDER BY decision_timestamp, ticker
+            """,
+            (status,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_watchlist_items(*, db_path: Path | None = None, watchlist_date: str | None = None) -> list[dict[str, Any]]:
+    params: list[object] = []
+    where = ""
+    if watchlist_date:
+        where = "WHERE watchlist_date = ?"
+        params.append(watchlist_date)
+    with connect_database(db_path) as connection:
+        rows = connection.execute(
+            f"""
+            SELECT *
+            FROM watchlist_items
+            {where}
+            ORDER BY watchlist_date, ticker
+            """,
+            params,
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_complete_entry_plans(*, db_path: Path | None = None) -> list[dict[str, Any]]:
+    return get_entry_plans_by_completion(True, db_path=db_path)
+
+
+def get_incomplete_entry_plans(*, db_path: Path | None = None) -> list[dict[str, Any]]:
+    return get_entry_plans_by_completion(False, db_path=db_path)
+
+
+def get_entry_plans_by_completion(complete: bool, *, db_path: Path | None = None) -> list[dict[str, Any]]:
+    with connect_database(db_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM entry_plans
+            WHERE plan_complete = ?
+            ORDER BY updated_at, ticker
+            """,
+            (1 if complete else 0,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_latest_user_state_import_summary(
+    *, report_path: Path = SQLITE_USER_STATE_IMPORT_LATEST_JSON
+) -> dict[str, Any]:
+    if not report_path.exists():
+        return {"exists": False, "path": str(report_path)}
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    if isinstance(payload, dict):
+        payload["exists"] = True
+        return payload
+    return {"exists": True, "path": str(report_path), "payload_type": type(payload).__name__}
+
+
+def get_user_state_conflicts(*, report_path: Path = USER_STATE_DIFF_LATEST_JSON) -> dict[str, Any]:
+    if not report_path.exists():
+        return {"exists": False, "path": str(report_path), "conflicts": 0, "warnings": ["USER_STATE_DIFF_REPORT_MISSING"]}
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return {"exists": True, "path": str(report_path), "conflicts": 0, "warnings": ["USER_STATE_DIFF_REPORT_MALFORMED"]}
+    tables = payload.get("tables", {})
+    changed: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    extra: list[dict[str, Any]] = []
+    if isinstance(tables, dict):
+        for table, report in tables.items():
+            if not isinstance(report, dict):
+                continue
+            for item in report.get("changed_values", []) or []:
+                changed.append({"table": table, **item})
+            for key in report.get("missing_in_sqlite", []) or []:
+                missing.append({"table": table, "key": key})
+            for key in report.get("extra_in_sqlite", []) or []:
+                extra.append({"table": table, "key": key})
+    return {
+        "exists": True,
+        "path": str(report_path),
+        "overall_status": payload.get("overall_status", ""),
+        "conflicts": int(payload.get("conflicts", 0) or 0),
+        "changed_values": changed,
+        "missing_in_sqlite": missing,
+        "extra_in_sqlite": extra,
+        "warnings": payload.get("warnings", []),
+    }

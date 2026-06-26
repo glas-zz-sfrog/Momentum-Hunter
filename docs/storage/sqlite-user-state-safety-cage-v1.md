@@ -1,6 +1,6 @@
 # SQLite User State Safety Cage v1
 
-Status: implementation in progress
+Status: implemented as additive safety cage
 
 Momentum Hunter remains file-first. This safety cage prepares for a future migration of user-authored state by adding audit, backup, restore validation, conflict detection, dry-run import, mirror validation, and rollback planning before any source-of-truth cutover.
 
@@ -27,6 +27,20 @@ This program must not:
 - alter existing review/watchlist/entry-plan behavior
 
 SQLite user-state tables are additive mirrors only.
+
+## Implementation Results
+
+- SQLite schema before: `6`
+- SQLite schema after: `7`
+- Backup package created: `MomentumHunterData/backups/user-state/20260625213601`
+- Restore validation result: `PASS`
+- User-state import result: 17 review records, 8 watchlist items, 26 entry plans
+- Dry-run diff result: `PASS`
+- Current conflict count: `0`
+- Current malformed record count: `0`
+- Current stale import count: `0`
+
+The latest dry-run diff reported 51 records in files and 51 records in SQLite.
 
 ## Authoritative User-State Files
 
@@ -138,6 +152,13 @@ The manifest records:
 
 Backup must never mutate source files.
 
+Latest live reports:
+
+- `MomentumHunterData/data/reports/user-state-backup-latest.json`
+- `MomentumHunterData/data/reports/user-state-backup-latest.md`
+- `MomentumHunterData/data/reports/user-state-restore-validation-latest.json`
+- `MomentumHunterData/data/reports/user-state-restore-validation-latest.md`
+
 ## Restore Validation Model
 
 Restore validation command:
@@ -180,6 +201,62 @@ Rules:
 - Incomplete entry plans: preserve as incomplete; do not fill missing fields.
 - Deleted/removed watchlist items: report as `EXTRA_IN_SQLITE` until an explicit cleanup/cutover policy exists.
 - Status precedence: no precedence is applied in v1; file status wins for a specific identity.
+
+Dry-run diff command:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_validation --slice user-state
+```
+
+Dry-run diff reports:
+
+- `MomentumHunterData/data/reports/sqlite-user-state-diff-latest.json`
+- `MomentumHunterData/data/reports/sqlite-user-state-diff-latest.md`
+
+The diff is report-only. It does not repair SQLite and does not modify file-authoritative user-state stores.
+
+## SQLite Mirror Import
+
+Import command:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice user-state
+```
+
+Import reports:
+
+- `MomentumHunterData/data/reports/sqlite-user-state-import-latest.json`
+- `MomentumHunterData/data/reports/sqlite-user-state-import-latest.md`
+
+Mirrored tables:
+
+- `candidate_reviews`
+- `watchlist_items`
+- `entry_plans`
+
+The import is idempotent. Repeated imports update safely when file-authoritative values mature and skip unchanged rows. The import records source paths, source hashes, source JSON, and import timestamps where useful.
+
+Current live idempotency result:
+
+- review records skipped: 17
+- watchlist records skipped: 8
+- entry-plan records skipped: 26
+- warnings: none
+
+## Read-Only Query Helpers
+
+Read-only helpers live in `momentum_hunter/sqlite_queries.py`:
+
+- `get_candidate_reviews_by_symbol`
+- `get_all_interested_candidates`
+- `get_all_rejected_candidates`
+- `get_watchlist_items`
+- `get_complete_entry_plans`
+- `get_incomplete_entry_plans`
+- `get_user_state_conflicts`
+- `get_latest_user_state_import_summary`
+
+These helpers query SQLite only. They are not wired into runtime review, watchlist, entry-plan, or UI write paths.
 
 ## Migration Risks
 

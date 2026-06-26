@@ -8,14 +8,22 @@ from pathlib import Path
 from momentum_hunter.sqlite_queries import (
     alert_evidence_summary,
     candidate_history_for_ticker,
+    get_all_interested_candidates,
+    get_all_rejected_candidates,
     get_alerts_by_symbol,
     get_candidate_capture_trail,
+    get_candidate_reviews_by_symbol,
+    get_complete_entry_plans,
     get_evidence_runs_by_date_range,
     get_first_latest_capture_for_symbol,
+    get_incomplete_entry_plans,
     get_latest_provider_quality_checks,
+    get_latest_user_state_import_summary,
     get_minute_bars_by_symbol,
     get_outcomes_by_alert_id,
     get_peak_score_capture_for_symbol,
+    get_user_state_conflicts,
+    get_watchlist_items,
     latest_system_status,
     sqlite_backbone_summary,
 )
@@ -38,10 +46,13 @@ class SQLiteQueryHelperTests(unittest.TestCase):
     def test_sqlite_backbone_summary_returns_table_counts(self) -> None:
         summary = sqlite_backbone_summary(db_path=self.db_path)
 
-        self.assertEqual(6, summary["schema_version"])
+        self.assertEqual(7, summary["schema_version"])
         self.assertEqual(2, summary["table_counts"]["captures"])
         self.assertEqual(3, summary["table_counts"]["capture_candidates"])
         self.assertEqual(3, summary["table_counts"]["alert_outcomes"])
+        self.assertEqual(2, summary["table_counts"]["candidate_reviews"])
+        self.assertEqual(1, summary["table_counts"]["watchlist_items"])
+        self.assertEqual(2, summary["table_counts"]["entry_plans"])
 
     def test_alert_evidence_summary_separates_completed_pending_unscorable(self) -> None:
         summary = alert_evidence_summary(db_path=self.db_path)
@@ -98,6 +109,26 @@ class SQLiteQueryHelperTests(unittest.TestCase):
         self.assertEqual(1, len(rows))
         self.assertEqual("WARNING", rows[0]["status"])
         self.assertEqual("market_tape_health", rows[0]["event_type"])
+
+    def test_user_state_query_helpers_are_read_only(self) -> None:
+        reviews = get_candidate_reviews_by_symbol("aaa", db_path=self.db_path)
+        interested = get_all_interested_candidates(db_path=self.db_path)
+        rejected = get_all_rejected_candidates(db_path=self.db_path)
+        watchlist = get_watchlist_items(db_path=self.db_path, watchlist_date="2026-06-25")
+        complete_plans = get_complete_entry_plans(db_path=self.db_path)
+        incomplete_plans = get_incomplete_entry_plans(db_path=self.db_path)
+        missing_import_summary = get_latest_user_state_import_summary(report_path=self.root / "missing-import.json")
+        missing_conflicts = get_user_state_conflicts(report_path=self.root / "missing-diff.json")
+
+        self.assertEqual(1, len(reviews))
+        self.assertEqual("AAA", reviews[0]["ticker"])
+        self.assertEqual(["AAA"], [row["ticker"] for row in interested])
+        self.assertEqual(["BBB"], [row["ticker"] for row in rejected])
+        self.assertEqual(["AAA"], [row["ticker"] for row in watchlist])
+        self.assertEqual(["AAA"], [row["ticker"] for row in complete_plans])
+        self.assertEqual(["BBB"], [row["ticker"] for row in incomplete_plans])
+        self.assertFalse(missing_import_summary["exists"])
+        self.assertEqual(0, missing_conflicts["conflicts"])
 
 
 def seed_query_database(connection) -> None:
@@ -208,6 +239,62 @@ def seed_query_database(connection) -> None:
         )
         """
     )
+    for ticker, status, timestamp in [
+        ("AAA", "interested", "2026-06-25T09:10:00-05:00"),
+        ("BBB", "rejected", "2026-06-25T09:12:00-05:00"),
+    ]:
+        connection.execute(
+            """
+            INSERT INTO candidate_reviews (
+                review_id, capture_id, ticker, review_status, decision_timestamp,
+                decision_note, review_context_state, delayed_review, identity_key,
+                capture_date, session, provider, scanner, source_path, source_hash,
+                source_json, imported_at, updated_at
+            )
+            VALUES (?, 'cap-1', ?, ?, ?, '', '', 0, ?, '2026-06-25',
+                'morning', 'finviz', 'Base Momentum', 'review-decisions.json',
+                'reviewhash', '{}', '2026-06-25T09:15:00-05:00',
+                '2026-06-25T09:15:00-05:00')
+            """,
+            (f"review-{ticker}", ticker, status, timestamp, f"cap-1|2026-06-25|morning|finviz|Base Momentum|{ticker}"),
+        )
+    connection.execute(
+        """
+        INSERT INTO watchlist_items (
+            watchlist_item_id, capture_id, ticker, watchlist_date, created_at,
+            source_review_id, company, score, price, source_path, source_hash,
+            source_json, imported_at, updated_at
+        )
+        VALUES ('watchlist-AAA', 'cap-1', 'AAA', '2026-06-25',
+            '2026-06-25T09:20:00-05:00', '', 'AAA Corp', 91, 10.0,
+            'watchlist-2026-06-25.json', 'watchlisthash', '{}',
+            '2026-06-25T09:20:00-05:00', '2026-06-25T09:20:00-05:00')
+        """
+    )
+    for ticker, complete in [("AAA", 1), ("BBB", 0)]:
+        connection.execute(
+            """
+            INSERT INTO entry_plans (
+                entry_plan_id, capture_id, ticker, trigger_condition, stop_price,
+                thesis, invalidation, max_loss, position_size_idea, planned_hold_time,
+                notes, plan_complete, updated_at, identity_key, capture_date, session,
+                provider, scanner, stop_text, warnings_json, source_path, source_hash,
+                source_json, imported_at
+            )
+            VALUES (?, 'cap-1', ?, 'above 10', 9.5, 'continuation',
+                'loses support', '$20', '$100', '1 day', '', ?,
+                '2026-06-25T09:30:00-05:00', ?, '2026-06-25', 'morning',
+                'finviz', 'Base Momentum', '9.50', ?, 'entry-plans.json',
+                'entryhash', '{}', '2026-06-25T09:30:00-05:00')
+            """,
+            (
+                f"entry-{ticker}",
+                ticker,
+                complete,
+                f"cap-1|2026-06-25|morning|finviz|Base Momentum|{ticker}",
+                "[]" if complete else '["missing trigger"]',
+            ),
+        )
 
 
 if __name__ == "__main__":

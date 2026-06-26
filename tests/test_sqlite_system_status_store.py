@@ -172,7 +172,7 @@ class SQLiteSystemStatusStoreTests(unittest.TestCase):
             system_status_report_md=self.root / "sqlite-system-status-import-latest.md",
         )
 
-        self.assertEqual(6, payload["schema_version"])
+        self.assertEqual(7, payload["schema_version"])
         self.assertIsNotNone(payload["system_status_import"])
         self.assertTrue((self.root / "sqlite-system-status-import-latest.json").exists())
         self.assertTrue((self.root / "sqlite-system-status-import-latest.md").exists())

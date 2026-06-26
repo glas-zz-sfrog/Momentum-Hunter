@@ -18,6 +18,7 @@ from momentum_hunter.sqlite_store import (
     MinuteBarsImportResult,
     ProviderQualityImportResult,
     SystemStatusImportResult,
+    UserStateImportResult,
     connect_database,
     current_schema_version,
     import_capture_candidate_index,
@@ -26,6 +27,7 @@ from momentum_hunter.sqlite_store import (
     import_opportunity_alerts,
     import_provider_quality_report,
     import_system_status_events,
+    import_user_state,
     initialize_schema,
 )
 
@@ -44,6 +46,8 @@ SQLITE_SYSTEM_STATUS_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-system-
 SQLITE_SYSTEM_STATUS_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-system-status-import-latest.md"
 SQLITE_CAPTURE_INDEX_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-capture-index-import-latest.json"
 SQLITE_CAPTURE_INDEX_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-capture-index-import-latest.md"
+SQLITE_USER_STATE_IMPORT_LATEST_JSON = DATA_DIR / "reports" / "sqlite-user-state-import-latest.json"
+SQLITE_USER_STATE_IMPORT_LATEST_MD = DATA_DIR / "reports" / "sqlite-user-state-import-latest.md"
 
 
 def initialize_database(db_path: Path | None = None) -> int:
@@ -66,6 +70,7 @@ def run_sqlite_migration(
     import_evidence_run_slice: bool = False,
     import_system_status_slice: bool = False,
     import_capture_index_slice: bool = False,
+    import_user_state_slice: bool = False,
     report_json: Path = SQLITE_IMPORT_LATEST_JSON,
     report_md: Path = SQLITE_IMPORT_LATEST_MD,
     evidence_report_json: Path = SQLITE_EVIDENCE_IMPORT_LATEST_JSON,
@@ -78,6 +83,8 @@ def run_sqlite_migration(
     system_status_report_md: Path = SQLITE_SYSTEM_STATUS_IMPORT_LATEST_MD,
     capture_index_report_json: Path = SQLITE_CAPTURE_INDEX_IMPORT_LATEST_JSON,
     capture_index_report_md: Path = SQLITE_CAPTURE_INDEX_IMPORT_LATEST_MD,
+    user_state_report_json: Path = SQLITE_USER_STATE_IMPORT_LATEST_JSON,
+    user_state_report_md: Path = SQLITE_USER_STATE_IMPORT_LATEST_MD,
 ) -> dict[str, object]:
     ensure_app_dirs()
     schema_version = initialize_database(db_path)
@@ -87,6 +94,7 @@ def run_sqlite_migration(
     evidence_runs_result: EvidenceRunsImportResult | None = None
     system_status_result: SystemStatusImportResult | None = None
     capture_index_result: CaptureIndexImportResult | None = None
+    user_state_result: UserStateImportResult | None = None
     if import_provider_quality:
         provider_quality_result = import_provider_quality_report(data_quality_report, db_path=db_path)
     if import_evidence:
@@ -99,6 +107,8 @@ def run_sqlite_migration(
         system_status_result = import_system_status_events(db_path=db_path, source_paths=system_status_source_paths)
     if import_capture_index_slice:
         capture_index_result = import_capture_candidate_index(analysis_captures_path, db_path=db_path)
+    if import_user_state_slice:
+        user_state_result = import_user_state(db_path=db_path)
     payload: dict[str, object] = {
         "schema_version": schema_version,
         "database_path": str(db_path or SQLITE_DB_PATH),
@@ -108,6 +118,7 @@ def run_sqlite_migration(
         "evidence_runs_import": asdict(evidence_runs_result) if evidence_runs_result else None,
         "system_status_import": asdict(system_status_result) if system_status_result else None,
         "capture_index_import": asdict(capture_index_result) if capture_index_result else None,
+        "user_state_import": asdict(user_state_result) if user_state_result else None,
     }
     write_import_report(payload, json_path=report_json, markdown_path=report_md)
     if evidence_result:
@@ -140,6 +151,12 @@ def run_sqlite_migration(
             json_path=capture_index_report_json,
             markdown_path=capture_index_report_md,
         )
+    if user_state_result:
+        write_user_state_import_report(
+            asdict(user_state_result),
+            json_path=user_state_report_json,
+            markdown_path=user_state_report_md,
+        )
     return payload
 
 
@@ -158,6 +175,7 @@ def format_markdown(payload: dict[str, object]) -> str:
     evidence_runs = payload.get("evidence_runs_import")
     system_status = payload.get("system_status_import")
     capture_index = payload.get("capture_index_import")
+    user_state = payload.get("user_state_import")
     lines = [
         "# Momentum Hunter SQLite Import",
         "",
@@ -208,6 +226,11 @@ def format_markdown(payload: dict[str, object]) -> str:
         lines.append("- Not run.")
     else:
         lines.extend(capture_index_import_markdown_lines(capture_index))
+    lines.extend(["", "## User State Import", ""])
+    if not isinstance(user_state, dict):
+        lines.append("- Not run.")
+    else:
+        lines.extend(user_state_import_markdown_lines(user_state))
     return "\n".join(lines)
 
 
@@ -282,6 +305,21 @@ def write_capture_index_import_report(payload: dict[str, object], *, json_path: 
         "",
     ]
     lines.extend(capture_index_import_markdown_lines(payload))
+    markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"json": json_path, "report": markdown_path}
+
+
+def write_user_state_import_report(payload: dict[str, object], *, json_path: Path, markdown_path: Path) -> dict[str, Path]:
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    lines = [
+        "# Momentum Hunter SQLite User State Import",
+        "",
+        "Additive mirror import report. File-based review, watchlist, and entry-plan stores remain authoritative.",
+        "",
+    ]
+    lines.extend(user_state_import_markdown_lines(payload))
     markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {"json": json_path, "report": markdown_path}
 
@@ -479,6 +517,45 @@ def minute_bars_import_markdown_lines(result: dict[str, object]) -> list[str]:
     return lines
 
 
+def user_state_import_markdown_lines(result: dict[str, object]) -> list[str]:
+    warnings = result.get("warnings", [])
+    if not isinstance(warnings, list):
+        warnings = []
+    source_paths = result.get("source_paths", [])
+    if not isinstance(source_paths, list):
+        source_paths = []
+    lines = [
+        f"- Imported at: {result.get('imported_at', '')}",
+        f"- Source files: {len(source_paths)}",
+        f"- Review records seen: {result.get('review_records_seen', 0)}",
+        f"- Review records inserted: {result.get('review_records_inserted', 0)}",
+        f"- Review records updated: {result.get('review_records_updated', 0)}",
+        f"- Review records skipped unchanged: {result.get('review_records_skipped', 0)}",
+        f"- Watchlist files seen: {result.get('watchlist_files_seen', 0)}",
+        f"- Watchlist records seen: {result.get('watchlist_records_seen', 0)}",
+        f"- Watchlist records inserted: {result.get('watchlist_records_inserted', 0)}",
+        f"- Watchlist records updated: {result.get('watchlist_records_updated', 0)}",
+        f"- Watchlist records skipped unchanged: {result.get('watchlist_records_skipped', 0)}",
+        f"- Entry plan records seen: {result.get('entry_plan_records_seen', 0)}",
+        f"- Entry plan records inserted: {result.get('entry_plan_records_inserted', 0)}",
+        f"- Entry plan records updated: {result.get('entry_plan_records_updated', 0)}",
+        f"- Entry plan records skipped unchanged: {result.get('entry_plan_records_skipped', 0)}",
+        f"- Complete entry plans: {result.get('complete_entry_plans', 0)}",
+        f"- Incomplete entry plans: {result.get('incomplete_entry_plans', 0)}",
+        f"- Candidate review table rows: {result.get('candidate_review_table_row_count', 0)}",
+        f"- Watchlist item table rows: {result.get('watchlist_item_table_row_count', 0)}",
+        f"- Entry plan table rows: {result.get('entry_plan_table_row_count', 0)}",
+        "",
+        "## Source Files",
+        "",
+    ]
+    lines.extend([f"- `{path}`" for path in source_paths] if source_paths else ["- None."])
+    lines.extend(["", "## Safety", "", "- SQLite remains an additive mirror only.", "- File-based user state remains authoritative."])
+    lines.extend(["", "## Warnings", ""])
+    lines.extend([f"- {warning}" for warning in warnings] if warnings else ["- None."])
+    return lines
+
+
 def yes_no(value: bool) -> str:
     return "yes" if value else "no"
 
@@ -499,7 +576,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--analysis-captures-path", type=Path, default=ANALYSIS_CSV)
     parser.add_argument(
         "--slice",
-        choices=["provider-quality", "evidence", "minute-bars", "evidence-runs", "system-status", "capture-index", "all", "all-safe", "init"],
+        choices=[
+            "provider-quality",
+            "evidence",
+            "minute-bars",
+            "evidence-runs",
+            "system-status",
+            "capture-index",
+            "user-state",
+            "all",
+            "all-safe",
+            "init",
+        ],
         default="provider-quality",
         help="SQLite import slice to run. Default preserves the original provider-quality-only behavior.",
     )
@@ -518,6 +606,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--system-status-report-md", type=Path, default=SQLITE_SYSTEM_STATUS_IMPORT_LATEST_MD)
     parser.add_argument("--capture-index-report-json", type=Path, default=SQLITE_CAPTURE_INDEX_IMPORT_LATEST_JSON)
     parser.add_argument("--capture-index-report-md", type=Path, default=SQLITE_CAPTURE_INDEX_IMPORT_LATEST_MD)
+    parser.add_argument("--user-state-report-json", type=Path, default=SQLITE_USER_STATE_IMPORT_LATEST_JSON)
+    parser.add_argument("--user-state-report-md", type=Path, default=SQLITE_USER_STATE_IMPORT_LATEST_MD)
     return parser.parse_args(argv)
 
 
@@ -539,6 +629,7 @@ def main(argv: list[str] | None = None) -> int:
         import_evidence_run_slice=slice_name == "evidence-runs" or run_all,
         import_system_status_slice=slice_name == "system-status" or run_all,
         import_capture_index_slice=slice_name == "capture-index" or run_all,
+        import_user_state_slice=slice_name == "user-state",
         report_json=report_json,
         report_md=report_md,
         evidence_report_json=args.evidence_report_json,
@@ -551,6 +642,8 @@ def main(argv: list[str] | None = None) -> int:
         system_status_report_md=args.system_status_report_md,
         capture_index_report_json=args.capture_index_report_json,
         capture_index_report_md=args.capture_index_report_md,
+        user_state_report_json=args.user_state_report_json,
+        user_state_report_md=args.user_state_report_md,
     )
     print(json.dumps(payload, indent=2))
     return 0

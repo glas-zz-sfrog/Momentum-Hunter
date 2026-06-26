@@ -35,14 +35,14 @@ class SQLiteStoreTests(unittest.TestCase):
             initialize_schema(connection)
             initialize_schema(connection)
 
-            self.assertEqual(6, current_schema_version(connection))
+            self.assertEqual(7, current_schema_version(connection))
             migration_count = connection.execute("SELECT COUNT(*) AS count FROM schema_migrations").fetchone()["count"]
             table_count = connection.execute(
                 "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'provider_quality_checks'"
             ).fetchone()["count"]
 
         self.assertTrue(self.db_path.exists())
-        self.assertEqual(6, migration_count)
+        self.assertEqual(7, migration_count)
         self.assertEqual(1, table_count)
 
     def test_provider_quality_import_round_trips_without_mutating_source(self) -> None:
@@ -87,7 +87,7 @@ class SQLiteStoreTests(unittest.TestCase):
         )
         imported = payload["provider_quality_import"]
 
-        self.assertEqual(6, payload["schema_version"])
+        self.assertEqual(7, payload["schema_version"])
         self.assertEqual(2, imported["rows_seen"])
         self.assertEqual(2, imported["rows_inserted"])
         self.assertTrue(report_json.exists())
@@ -102,7 +102,7 @@ class SQLiteStoreTests(unittest.TestCase):
             report_md=self.root / "init-only.md",
         )
 
-        self.assertEqual(6, payload["schema_version"])
+        self.assertEqual(7, payload["schema_version"])
         self.assertIsNone(payload["provider_quality_import"])
         with connect_database(self.db_path) as connection:
             self.assertEqual(0, provider_quality_count(connection))

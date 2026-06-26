@@ -4,6 +4,11 @@
 
 ### Added
 
+- Added SQLite User State Safety Cage v1 with additive schema version 7 mirrors for `candidate_reviews`, `watchlist_items`, and `entry_plans`.
+- Added user-state backup and restore-validation tooling with SHA-256 manifests and latest reports under `MomentumHunterData/data/reports/user-state-*.{json,md}`.
+- Added `python -m momentum_hunter.sqlite_migration --slice user-state` for idempotent review/watchlist/entry-plan mirror imports.
+- Added `python -m momentum_hunter.sqlite_validation --slice user-state` for dry-run user-state diff reports comparing file-authoritative state against SQLite.
+- Added read-only SQLite query helpers for mirrored review decisions, interested/rejected candidates, watchlist items, complete/incomplete entry plans, user-state conflicts, and latest user-state import summaries.
 - Added explicit `python -m momentum_hunter.sqlite_migration --slice all-safe` support and latest all-safe import reports under `MomentumHunterData/data/reports/sqlite-import-all-safe-latest.*`.
 - Expanded SQLite validation reports with source file hashes, import timestamps, missing-slice detection, completed/pending/unscorable alert counts, per-symbol minute-bar counts, capture session counts, and per-symbol capture-candidate counts.
 - Expanded read-only SQLite query helper coverage for alerts by symbol, outcomes by alert ID, minute bars by symbol/time range, evidence runs by date range, provider-quality rows, candidate capture trails, first/latest captures, and peak-score captures.
@@ -48,8 +53,14 @@
 
 ### Safety
 
+- User-authored review, watchlist, and entry-plan files remain authoritative. SQLite user-state rows are mirrors only and must not overwrite JSON/Markdown stores.
+- User-state import is intentionally separate from `--slice all-safe`; it should be run after a verified backup and dry-run diff.
 - Reliability reports are read-only diagnostics. They do not change scanner logic, scoring math, readiness thresholds, alert generation, ranking, trade-planning rules, raw captures, broker behavior, or automated trading behavior.
 - SQLite is additive only. Existing JSON/CSV/Markdown outputs remain active, and raw captures plus user-authored review/watchlist/entry-plan state remain file-based.
+
+### Tests
+
+- Added focused tests for user-state backup/restore validation, idempotent user-state imports, duplicate/malformed user-state handling, dry-run diff detection, read-only user-state query helpers, source-file non-mutation, and schema version 7 SQLite initialization.
 
 ## 2026-06-24
 

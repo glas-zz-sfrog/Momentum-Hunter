@@ -127,7 +127,7 @@ class SQLiteCaptureIndexStoreTests(unittest.TestCase):
             capture_index_report_md=self.root / "sqlite-capture-index-import-latest.md",
         )
 
-        self.assertEqual(6, payload["schema_version"])
+        self.assertEqual(7, payload["schema_version"])
         self.assertIsNotNone(payload["capture_index_import"])
         self.assertTrue((self.root / "sqlite-capture-index-import-latest.json").exists())
         self.assertTrue((self.root / "sqlite-capture-index-import-latest.md").exists())

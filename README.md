@@ -139,7 +139,7 @@ This initializes:
 MomentumHunterData\data\momentum-hunter.sqlite3
 ```
 
-The first low-risk vertical slice imports provider/data-quality report rows into `provider_quality_checks`. The second additive slice mirrors opportunity alerts and alert outcomes while keeping `opportunity-alerts.json` as the active derived source of truth. The third additive slice mirrors one-minute alert-validation bars while keeping `opportunity-minute-bars.json` as the active minute-bar cache. The fourth additive slice mirrors structured evidence/status reports into `evidence_runs` and `evidence_metrics`. The fifth additive slice mirrors structured system status and readiness events into `system_status_events`. The sixth additive slice mirrors `analysis-captures.csv` into read-only `captures` and `capture_candidates` indexes.
+The first low-risk vertical slice imports provider/data-quality report rows into `provider_quality_checks`. The second additive slice mirrors opportunity alerts and alert outcomes while keeping `opportunity-alerts.json` as the active derived source of truth. The third additive slice mirrors one-minute alert-validation bars while keeping `opportunity-minute-bars.json` as the active minute-bar cache. The fourth additive slice mirrors structured evidence/status reports into `evidence_runs` and `evidence_metrics`. The fifth additive slice mirrors structured system status and readiness events into `system_status_events`. The sixth additive slice mirrors `analysis-captures.csv` into read-only `captures` and `capture_candidates` indexes. The seventh additive slice mirrors user-authored review, watchlist, and entry-plan state behind a backup/restore/diff safety cage while keeping JSON/Markdown files authoritative.
 
 ```powershell
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice evidence
@@ -147,10 +147,11 @@ The first low-risk vertical slice imports provider/data-quality report rows into
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice evidence-runs
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice system-status
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice capture-index
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice user-state
 .\.venv\Scripts\python.exe -m momentum_hunter.sqlite_migration --slice all-safe
 ```
 
-`--slice all` remains a compatibility alias for the same safe additive imports, while `--slice all-safe` writes the explicit all-safe latest reports.
+`--slice all` remains a compatibility alias for the same safe additive imports, while `--slice all-safe` writes the explicit all-safe latest reports. User-state import is intentionally separate from `all-safe` because it mirrors user-authored state and should be run only after a verified backup exists.
 
 Evidence import reports are written to:
 
@@ -167,6 +168,10 @@ MomentumHunterData\data\reports\sqlite-system-status-import-latest.json
 MomentumHunterData\data\reports\sqlite-system-status-import-latest.md
 MomentumHunterData\data\reports\sqlite-capture-index-import-latest.json
 MomentumHunterData\data\reports\sqlite-capture-index-import-latest.md
+MomentumHunterData\data\reports\sqlite-user-state-import-latest.json
+MomentumHunterData\data\reports\sqlite-user-state-import-latest.md
+MomentumHunterData\data\reports\sqlite-user-state-diff-latest.json
+MomentumHunterData\data\reports\sqlite-user-state-diff-latest.md
 MomentumHunterData\data\reports\sqlite-validation-latest.json
 MomentumHunterData\data\reports\sqlite-validation-latest.md
 ```
@@ -175,7 +180,7 @@ The validation report compares source files to SQLite mirrors, including row cou
 
 SQLite imports are mirrors only. Existing report files remain the current operator-facing artifacts.
 
-Read-only helper functions in `momentum_hunter.sqlite_queries` provide lightweight summaries for table counts, alert evidence state, candidate history by ticker, and latest system status events. These helpers query SQLite only and do not replace file-based runtime workflows.
+Read-only helper functions in `momentum_hunter.sqlite_queries` provide lightweight summaries for table counts, alert evidence state, candidate history by ticker, latest system status events, mirrored review decisions, mirrored watchlist items, mirrored entry plans, user-state import summaries, and user-state diff conflicts. These helpers query SQLite only and do not replace file-based runtime workflows.
 
 Validate the SQLite mirror against current source files with:
 
@@ -184,6 +189,19 @@ Validate the SQLite mirror against current source files with:
 ```
 
 Validation reports are written to `MomentumHunterData\data\reports\sqlite-validation-latest.json` and `.md`.
+
+Validate the user-state mirror against file-authoritative review/watchlist/entry-plan stores with:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.sqlite_validation --slice user-state
+```
+
+Before any future user-state cutover, create and validate a backup:
+
+```powershell
+.\.venv\Scripts\python.exe -m momentum_hunter.user_state_safety backup
+.\.venv\Scripts\python.exe -m momentum_hunter.user_state_safety validate-restore MomentumHunterData\backups\user-state\YYYYMMDDHHMMSS
+```
 
 ## Watchlist Discipline
 

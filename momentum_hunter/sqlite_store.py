@@ -26,12 +26,14 @@ from momentum_hunter.opportunity_alerts import (
     load_alerts,
     parse_datetime,
 )
+from momentum_hunter.entry_plans import ENTRY_PLANS_PATH, entry_plan_from_dict, entry_plan_warnings
+from momentum_hunter.review import REVIEW_DECISIONS_PATH, review_decision_from_dict
 from momentum_hunter.storage import ANALYSIS_CSV, CAPTURES_DIR, file_sha256
 from momentum_hunter.time_utils import now_central
 
 
 SQLITE_DB_PATH = DATA_DIR / "momentum-hunter.sqlite3"
-SQLITE_SCHEMA_VERSION = 6
+SQLITE_SCHEMA_VERSION = 7
 
 
 @dataclass(frozen=True)
@@ -144,6 +146,32 @@ class CaptureIndexImportResult:
     candidate_table_row_count: int
     source_capture_rows_in_sqlite: int
     source_candidate_rows_in_sqlite: int
+    warnings: list[str]
+    database_path: str
+
+
+@dataclass(frozen=True)
+class UserStateImportResult:
+    source_paths: list[str]
+    imported_at: str
+    review_records_seen: int
+    review_records_inserted: int
+    review_records_updated: int
+    review_records_skipped: int
+    watchlist_files_seen: int
+    watchlist_records_seen: int
+    watchlist_records_inserted: int
+    watchlist_records_updated: int
+    watchlist_records_skipped: int
+    entry_plan_records_seen: int
+    entry_plan_records_inserted: int
+    entry_plan_records_updated: int
+    entry_plan_records_skipped: int
+    complete_entry_plans: int
+    incomplete_entry_plans: int
+    candidate_review_table_row_count: int
+    watchlist_item_table_row_count: int
+    entry_plan_table_row_count: int
     warnings: list[str]
     database_path: str
 
@@ -285,6 +313,58 @@ def apply_schema_migrations(connection: sqlite3.Connection, *, applied_at: str |
         VALUES (?, ?, ?)
         """,
         (6, "sqlite_capture_candidate_index_v1", applied_at),
+    )
+
+    for column, column_type in {
+        "identity_key": "TEXT",
+        "capture_date": "TEXT",
+        "session": "TEXT",
+        "provider": "TEXT",
+        "scanner": "TEXT",
+        "review_delay_minutes": "INTEGER",
+        "capture_status": "TEXT",
+        "capture_quarantined_at": "TEXT",
+        "capture_quarantine_reason": "TEXT",
+        "source_path": "TEXT",
+        "source_hash": "TEXT",
+        "source_json": "TEXT",
+        "imported_at": "TEXT",
+        "updated_at": "TEXT",
+    }.items():
+        ensure_column(connection, "candidate_reviews", column, column_type)
+
+    for column, column_type in {
+        "company": "TEXT",
+        "score": "INTEGER",
+        "price": "REAL",
+        "source_path": "TEXT",
+        "source_hash": "TEXT",
+        "source_json": "TEXT",
+        "imported_at": "TEXT",
+        "updated_at": "TEXT",
+    }.items():
+        ensure_column(connection, "watchlist_items", column, column_type)
+
+    for column, column_type in {
+        "identity_key": "TEXT",
+        "capture_date": "TEXT",
+        "session": "TEXT",
+        "provider": "TEXT",
+        "scanner": "TEXT",
+        "stop_text": "TEXT",
+        "warnings_json": "TEXT",
+        "source_path": "TEXT",
+        "source_hash": "TEXT",
+        "source_json": "TEXT",
+        "imported_at": "TEXT",
+    }.items():
+        ensure_column(connection, "entry_plans", column, column_type)
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO schema_migrations(version, name, applied_at)
+        VALUES (?, ?, ?)
+        """,
+        (7, "sqlite_user_state_safety_cage_v1", applied_at),
     )
 
 
@@ -1290,6 +1370,293 @@ def import_capture_candidate_index(
         warnings=dedupe(warnings),
         database_path=str(db_path or SQLITE_DB_PATH),
     )
+
+
+def import_user_state(
+    *,
+    review_decisions_path: Path = REVIEW_DECISIONS_PATH,
+    entry_plans_path: Path = ENTRY_PLANS_PATH,
+    data_dir: Path = DATA_DIR,
+    db_path: Path | None = None,
+) -> UserStateImportResult:
+    imported_at = now_central().isoformat()
+    warnings: list[str] = []
+    source_paths: list[str] = []
+    review_inserted = review_updated = review_skipped = 0
+    watchlist_inserted = watchlist_updated = watchlist_skipped = 0
+    entry_inserted = entry_updated = entry_skipped = 0
+
+    review_records, review_warnings = load_review_source_records(review_decisions_path)
+    warnings.extend(review_warnings)
+    if review_decisions_path.exists():
+        source_paths.append(str(review_decisions_path))
+
+    entry_records, entry_warnings = load_entry_plan_source_records(entry_plans_path)
+    warnings.extend(entry_warnings)
+    if entry_plans_path.exists():
+        source_paths.append(str(entry_plans_path))
+
+    watchlist_records: list[dict[str, Any]] = []
+    watchlist_files = sorted(data_dir.glob("watchlist-*.json"))
+    for path in watchlist_files:
+        source_paths.append(str(path))
+        records, file_warnings = load_watchlist_source_records(path)
+        watchlist_records.extend(records)
+        warnings.extend(file_warnings)
+
+    with connect_database(db_path) as connection:
+        initialize_schema(connection)
+        for record in review_records:
+            action = upsert_row_by_key(
+                connection,
+                "candidate_reviews",
+                ("capture_id", "ticker"),
+                candidate_review_row(record, imported_at=imported_at),
+                compare_exclude={"imported_at", "updated_at"},
+            )
+            review_inserted += 1 if action == "inserted" else 0
+            review_updated += 1 if action == "updated" else 0
+            review_skipped += 1 if action == "skipped" else 0
+        for record in watchlist_records:
+            action = upsert_row_by_key(
+                connection,
+                "watchlist_items",
+                ("capture_id", "ticker", "watchlist_date"),
+                watchlist_item_row(record, imported_at=imported_at),
+                compare_exclude={"imported_at", "updated_at"},
+            )
+            watchlist_inserted += 1 if action == "inserted" else 0
+            watchlist_updated += 1 if action == "updated" else 0
+            watchlist_skipped += 1 if action == "skipped" else 0
+        for record in entry_records:
+            action = upsert_row_by_key(
+                connection,
+                "entry_plans",
+                ("capture_id", "ticker"),
+                entry_plan_row(record, imported_at=imported_at),
+                compare_exclude={"imported_at", "updated_at"},
+            )
+            entry_inserted += 1 if action == "inserted" else 0
+            entry_updated += 1 if action == "updated" else 0
+            entry_skipped += 1 if action == "skipped" else 0
+        connection.commit()
+        review_count = table_count(connection, "candidate_reviews")
+        watchlist_count = table_count(connection, "watchlist_items")
+        entry_count = table_count(connection, "entry_plans")
+
+    complete_plans = sum(1 for record in entry_records if record["plan"].plan_complete)
+    incomplete_plans = len(entry_records) - complete_plans
+    return UserStateImportResult(
+        source_paths=source_paths,
+        imported_at=imported_at,
+        review_records_seen=len(review_records),
+        review_records_inserted=review_inserted,
+        review_records_updated=review_updated,
+        review_records_skipped=review_skipped,
+        watchlist_files_seen=len(watchlist_files),
+        watchlist_records_seen=len(watchlist_records),
+        watchlist_records_inserted=watchlist_inserted,
+        watchlist_records_updated=watchlist_updated,
+        watchlist_records_skipped=watchlist_skipped,
+        entry_plan_records_seen=len(entry_records),
+        entry_plan_records_inserted=entry_inserted,
+        entry_plan_records_updated=entry_updated,
+        entry_plan_records_skipped=entry_skipped,
+        complete_entry_plans=complete_plans,
+        incomplete_entry_plans=incomplete_plans,
+        candidate_review_table_row_count=review_count,
+        watchlist_item_table_row_count=watchlist_count,
+        entry_plan_table_row_count=entry_count,
+        warnings=dedupe(warnings),
+        database_path=str(db_path or SQLITE_DB_PATH),
+    )
+
+
+def load_review_source_records(source: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    warnings: list[str] = []
+    if not source.exists():
+        return [], [f"REVIEW_DECISIONS_SOURCE_MISSING:{source}"]
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [f"REVIEW_DECISIONS_SOURCE_UNREADABLE:{type(exc).__name__}:{source}"]
+    raw_decisions = payload.get("decisions", payload if isinstance(payload, dict) else {})
+    if not isinstance(raw_decisions, dict):
+        return [], [f"REVIEW_DECISIONS_SOURCE_MALFORMED:{source}"]
+    source_hash = file_sha256(source)
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for key, item in raw_decisions.items():
+        if not isinstance(item, dict) or not item.get("identity"):
+            warnings.append(f"MALFORMED_REVIEW_RECORD:{key}")
+            continue
+        try:
+            decision = review_decision_from_dict(item)
+        except (KeyError, TypeError, ValueError) as exc:
+            warnings.append(f"MALFORMED_REVIEW_RECORD:{key}:{type(exc).__name__}")
+            continue
+        if decision.identity.key in seen:
+            warnings.append(f"DUPLICATE_REVIEW_IDENTITY:{decision.identity.key}")
+            continue
+        seen.add(decision.identity.key)
+        records.append({"key": str(key), "decision": decision, "raw": item, "source_path": source, "source_hash": source_hash})
+    return records, warnings
+
+
+def load_entry_plan_source_records(source: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    warnings: list[str] = []
+    if not source.exists():
+        return [], [f"ENTRY_PLANS_SOURCE_MISSING:{source}"]
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [f"ENTRY_PLANS_SOURCE_UNREADABLE:{type(exc).__name__}:{source}"]
+    raw_plans = payload.get("plans", payload if isinstance(payload, dict) else {})
+    if not isinstance(raw_plans, dict):
+        return [], [f"ENTRY_PLANS_SOURCE_MALFORMED:{source}"]
+    source_hash = file_sha256(source)
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for key, item in raw_plans.items():
+        if not isinstance(item, dict) or not item.get("identity"):
+            warnings.append(f"MALFORMED_ENTRY_PLAN_RECORD:{key}")
+            continue
+        try:
+            plan = entry_plan_from_dict(item)
+        except (KeyError, TypeError, ValueError) as exc:
+            warnings.append(f"MALFORMED_ENTRY_PLAN_RECORD:{key}:{type(exc).__name__}")
+            continue
+        if plan.identity.key in seen:
+            warnings.append(f"DUPLICATE_ENTRY_PLAN_IDENTITY:{plan.identity.key}")
+            continue
+        seen.add(plan.identity.key)
+        records.append({"key": str(key), "plan": plan, "raw": item, "source_path": source, "source_hash": source_hash})
+    return records, warnings
+
+
+def load_watchlist_source_records(source: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    warnings: list[str] = []
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [f"WATCHLIST_SOURCE_UNREADABLE:{type(exc).__name__}:{source}"]
+    if not isinstance(payload, list):
+        return [], [f"WATCHLIST_SOURCE_MALFORMED:{source}"]
+    watchlist_date = watchlist_date_from_path(source)
+    source_hash = file_sha256(source)
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, item in enumerate(payload):
+        if not isinstance(item, dict):
+            warnings.append(f"MALFORMED_WATCHLIST_RECORD:{source.name}:{index}")
+            continue
+        ticker = str(item.get("ticker", "")).strip().upper()
+        if not ticker:
+            warnings.append(f"WATCHLIST_RECORD_MISSING_TICKER:{source.name}:{index}")
+            continue
+        key = f"{watchlist_date}|{ticker}"
+        if key in seen:
+            warnings.append(f"DUPLICATE_WATCHLIST_ITEM:{key}")
+            continue
+        seen.add(key)
+        records.append({"watchlist_date": watchlist_date, "ticker": ticker, "raw": item, "source_path": source, "source_hash": source_hash})
+    return records, warnings
+
+
+def candidate_review_row(record: dict[str, Any], *, imported_at: str) -> dict[str, Any]:
+    decision = record["decision"]
+    identity = decision.identity
+    raw = record["raw"]
+    return {
+        "review_id": deterministic_id("candidate_review", identity.key),
+        "capture_id": identity.capture_id,
+        "ticker": identity.ticker.upper(),
+        "review_status": decision.review_status.value,
+        "decision_timestamp": decision.decision_timestamp.isoformat() if decision.decision_timestamp else "",
+        "decision_note": decision.decision_note,
+        "review_context_state": decision.review_context_state,
+        "delayed_review": optional_bool(decision.delayed_review) or 0,
+        "identity_key": identity.key,
+        "capture_date": identity.capture_date,
+        "session": identity.session,
+        "provider": identity.provider,
+        "scanner": identity.scanner,
+        "review_delay_minutes": optional_int(decision.review_delay_minutes),
+        "capture_status": decision.capture_status,
+        "capture_quarantined_at": decision.capture_quarantined_at,
+        "capture_quarantine_reason": decision.capture_quarantine_reason,
+        "source_path": str(record["source_path"]),
+        "source_hash": record["source_hash"],
+        "source_json": json.dumps(raw, sort_keys=True),
+        "imported_at": imported_at,
+        "updated_at": imported_at,
+    }
+
+
+def entry_plan_row(record: dict[str, Any], *, imported_at: str) -> dict[str, Any]:
+    plan = record["plan"]
+    identity = plan.identity
+    warnings = entry_plan_warnings(plan)
+    return {
+        "entry_plan_id": deterministic_id("entry_plan", identity.key),
+        "capture_id": identity.capture_id,
+        "ticker": identity.ticker.upper(),
+        "trigger_condition": plan.trigger,
+        "stop_price": optional_float(plan.stop),
+        "thesis": plan.thesis,
+        "invalidation": plan.invalidation,
+        "max_loss": plan.max_loss,
+        "position_size_idea": plan.position_size,
+        "planned_hold_time": plan.planned_hold_time,
+        "notes": plan.notes,
+        "plan_complete": optional_bool(plan.plan_complete) or 0,
+        "updated_at": plan.updated_at.isoformat() if plan.updated_at else imported_at,
+        "identity_key": identity.key,
+        "capture_date": identity.capture_date,
+        "session": identity.session,
+        "provider": identity.provider,
+        "scanner": identity.scanner,
+        "stop_text": plan.stop,
+        "warnings_json": json.dumps(warnings, sort_keys=True),
+        "source_path": str(record["source_path"]),
+        "source_hash": record["source_hash"],
+        "source_json": json.dumps(record["raw"], sort_keys=True),
+        "imported_at": imported_at,
+    }
+
+
+def watchlist_item_row(record: dict[str, Any], *, imported_at: str) -> dict[str, Any]:
+    raw = record["raw"]
+    watchlist_date = record["watchlist_date"]
+    ticker = record["ticker"]
+    capture_id = str(raw.get("capture_id") or f"watchlist:{watchlist_date}")
+    return {
+        "watchlist_item_id": deterministic_id("watchlist_item", watchlist_date, ticker, str(record["source_path"])),
+        "capture_id": capture_id,
+        "ticker": ticker,
+        "watchlist_date": watchlist_date,
+        "created_at": str(raw.get("saved_at") or ""),
+        "source_review_id": str(raw.get("source_review_id", "")),
+        "company": str(raw.get("company", "")),
+        "score": optional_int(raw.get("score")),
+        "price": optional_float(raw.get("price")),
+        "source_path": str(record["source_path"]),
+        "source_hash": record["source_hash"],
+        "source_json": json.dumps(raw, sort_keys=True),
+        "imported_at": imported_at,
+        "updated_at": imported_at,
+    }
+
+
+def watchlist_date_from_path(path: Path) -> str:
+    name = path.stem
+    prefix = "watchlist-"
+    return name[len(prefix) :] if name.startswith(prefix) else ""
+
+
+def table_count(connection: sqlite3.Connection, table: str) -> int:
+    row = connection.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()
+    return int(row["count"] if row else 0)
 
 
 def read_analysis_capture_rows(path: Path) -> tuple[list[dict[str, str]], list[str]]:

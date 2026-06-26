@@ -32,6 +32,12 @@ from momentum_hunter.sqlite_store import (
 )
 from momentum_hunter.storage import ANALYSIS_CSV, file_sha256
 from momentum_hunter.time_utils import now_central
+from momentum_hunter.user_state_diff import (
+    USER_STATE_DIFF_LATEST_JSON,
+    USER_STATE_DIFF_LATEST_MD,
+    build_user_state_diff_report,
+    write_user_state_diff_report,
+)
 
 
 SQLITE_VALIDATION_LATEST_JSON = DATA_DIR / "reports" / "sqlite-validation-latest.json"
@@ -608,6 +614,7 @@ def append_symbol_count_section(lines: list[str], section: object, *, limit: int
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate Momentum Hunter SQLite mirrors against current source files.")
+    parser.add_argument("--slice", choices=["evidence", "user-state"], default="evidence")
     parser.add_argument("--db", type=Path, default=SQLITE_DB_PATH)
     parser.add_argument("--json", type=Path, default=SQLITE_VALIDATION_LATEST_JSON)
     parser.add_argument("--markdown", type=Path, default=SQLITE_VALIDATION_LATEST_MD)
@@ -616,6 +623,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.slice == "user-state":
+        json_path = args.json if args.json != SQLITE_VALIDATION_LATEST_JSON else USER_STATE_DIFF_LATEST_JSON
+        markdown_path = args.markdown if args.markdown != SQLITE_VALIDATION_LATEST_MD else USER_STATE_DIFF_LATEST_MD
+        payload = build_user_state_diff_report(db_path=args.db)
+        write_user_state_diff_report(payload, json_path=json_path, markdown_path=markdown_path)
+        print(json.dumps(payload, indent=2))
+        return 0 if payload.get("overall_status") in {"PASS", "WARN"} else 1
     payload = build_sqlite_validation_report(db_path=args.db)
     write_sqlite_validation_report(payload, json_path=args.json, markdown_path=args.markdown)
     print(json.dumps(payload, indent=2))
