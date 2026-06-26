@@ -46,6 +46,7 @@ TEST_GROUPS: dict[str, list[str]] = {
         "tests.test_scheduling_policy",
         "tests.test_scoring",
         "tests.test_score_breakdowns",
+        "tests.test_score_explanation_view_model",
         "tests.test_news_age",
         "tests.test_news_freshness_audit",
         "tests.test_catalyst_age",

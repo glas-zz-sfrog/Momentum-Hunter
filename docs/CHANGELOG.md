@@ -11,6 +11,8 @@
 - Added Active Alert Reliability v1 with `python -m momentum_hunter.active_alert_reliability` and latest JSON/Markdown reports for active monitor freshness, alert identity integrity, missing alert evidence, outcome handoff status, and SQLite alert mirror parity.
 - Added focused active-alert reliability tests for stale monitor cycles, duplicate/unstable alert IDs, SQLite mirror mismatch warnings, report export, and source-file non-mutation.
 - Added Test Harness Reliability v1 with `tools/run_bounded_tests.py` and `docs/testing/test-harness-reliability-v1.md` to define safe backend/storage/evidence test lanes, bounded per-module subprocess execution, and the Qt do-not-run-unattended list.
+- Added App Modularization Audit v1 and extracted score explanation HTML/view-model formatting from `app.py` into `momentum_hunter/score_explanation_view_model.py`.
+- Added focused non-Qt score explanation view-model tests for human-readable score values, rule threshold formatting, compact component grouping, freshness context, and latest article display.
 
 ### Fixed
 
@@ -24,6 +26,7 @@
 - SQLite system-status stale-row cleanup touches only the additive SQLite mirror; it does not mutate raw captures, JSON status files, user-authored files, scanner output, scoring, readiness, alerts, outcomes, or trade plans.
 - Active Alert Reliability v1 is reporting-only. It does not generate alerts, fetch market data, change thresholds, alter readiness/scoring/outcome logic, mutate raw captures, or make SQLite authoritative.
 - Test Harness Reliability v1 changes test execution policy/tooling only. It does not change application behavior, scanner logic, scoring, readiness, alerts, outcomes, trade planning, SQLite authority, or raw captures.
+- Score explanation extraction is formatting-only. It does not recalculate score values, alter scoring weights, change readiness/alert/outcome/trade-planning logic, mutate raw captures, or make SQLite authoritative.
 
 ## 2026-06-25
 

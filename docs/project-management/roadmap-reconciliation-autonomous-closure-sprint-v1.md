@@ -508,3 +508,55 @@ Safety:
 Next phase:
 
 - Phase 9: Documentation and roadmap synthesis.
+
+## Phase 9 Result
+
+Phase 9 is complete.
+
+Purpose:
+
+- Reduce `app.py` risk through a low-risk pure helper extraction instead of broad UI redesign.
+
+Audit:
+
+- Added `docs/architecture/app-modularization-audit-v1.md`.
+- Identified low/medium/high-risk extraction candidates.
+- Deferred broad UI layout, Research Lab widget builders, Evidence Console layout, and chart rendering work.
+
+Code changes:
+
+- Added `momentum_hunter/score_explanation_view_model.py`.
+- Moved score explanation HTML/view-model formatting out of `app.py`.
+- Preserved the existing `momentum_hunter.app.format_score_breakdown_html` import path by importing the helper back into `app.py`.
+- Reduced `app.py` from roughly `7,714` lines to roughly `7,434` lines.
+
+Tests added:
+
+- `tests/test_score_explanation_view_model.py`
+
+Commands run:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'
+.\.venv\Scripts\python.exe -B -m unittest tests.test_score_explanation_view_model tests.test_score_breakdowns
+.\.venv\Scripts\python.exe -B tools\run_bounded_tests.py --group backend --only tests.test_score_explanation_view_model --timeout 30
+```
+
+Results:
+
+- Score explanation / score breakdown tests passed.
+- Bounded safe runner validated the new score explanation module.
+
+Safety:
+
+- Formatting/view-model extraction only.
+- No scoring math changed.
+- No readiness rules changed.
+- No alert thresholds changed.
+- No outcome classification changed.
+- No trade-planning behavior changed.
+- No raw captures or user-authored files were modified.
+
+Next phase:
+
+- Phase 10: Candidate Story chart polish, only if safe.
