@@ -152,6 +152,12 @@ REPORT_DEFINITIONS: list[dict[str, str]] = [
         "description": "Dry-run-first proof harness for market-hours provider, monitor, evidence, SQLite, and readiness validation.",
         "recommended_use": "Use to plan or execute a bounded market-hours proof cycle without changing trading logic.",
     },
+    {
+        "name": "SQLite Runtime Adoption Dry-Run",
+        "pattern": "sqlite-runtime-adoption-dry-run-v1.json",
+        "description": "Read-only cutover readiness report for optional SQLite runtime adoption experiments.",
+        "recommended_use": "Use before any CLI/report surface tests SQLite read mode instead of file mode.",
+    },
 ]
 
 
