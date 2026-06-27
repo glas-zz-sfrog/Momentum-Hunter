@@ -221,7 +221,7 @@ Warnings: MISSING_REPORTS:1, STALE_REPORTS:2
 | 0 | Preflight validation and sprint kickoff documentation | Complete |
 | 1 | Mutable source hygiene and mirror freshness program | Complete |
 | 2 | User-state disaster recovery and cutover simulation | Complete |
-| 3 | SQLite analytics, performance, and evidence census | Pending |
+| 3 | SQLite analytics, performance, and evidence census | Complete |
 | 4 | Final validation and sprint closeout report | Pending |
 
 ## Milestone 0 Result
@@ -377,3 +377,81 @@ Safety notes:
 - Production evidence stores were not populated with synthetic data.
 - SQLite remains an additive mirror.
 - User-state cutover remains blocked until backup, restore validation, diff, simulation, rollback, and explicit approval all pass.
+
+## Milestone 3 Result
+
+Milestone 3 is complete.
+
+Added:
+
+- `momentum_hunter/sqlite_benchmarks.py`
+- `momentum_hunter/evidence_census.py`
+- `tests/test_sqlite_benchmarks.py`
+- `tests/test_evidence_census.py`
+- `docs/analytics/sqlite-evidence-census-v1.md`
+
+Updated:
+
+- `momentum_hunter/report_index.py`
+
+Reports:
+
+```text
+MomentumHunterData/data/reports/sqlite-query-benchmark-latest.json
+MomentumHunterData/data/reports/sqlite-query-benchmark-latest.md
+MomentumHunterData/data/reports/evidence-census-latest.json
+MomentumHunterData/data/reports/evidence-census-latest.md
+MomentumHunterData/data/reports/candidate-data-completeness-latest.json
+MomentumHunterData/data/reports/candidate-data-completeness-latest.md
+```
+
+Commands:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_benchmarks
+.\.venv\Scripts\python.exe -B -m momentum_hunter.evidence_census
+```
+
+Results:
+
+```text
+SQLite Query Benchmark: PASS
+Benchmark queries: 9
+Max query time: 4.433 ms
+
+Evidence Census: WARN
+Warning: LOW_COMPLETED_ALERT_SAMPLE
+Total alerts: 2
+Completed alerts: 1
+Pending alerts: 0
+Unscorable alerts: 1
+Captures: 41
+Capture candidates: 675
+Study eligible captures: 36
+Minute bars: 710
+Minute bar symbols: 1
+
+Candidate Data Completeness: PASS
+Candidate rows: 675
+```
+
+Focused tests:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_sqlite_benchmarks tests.test_evidence_census tests.test_sqlite_analytics tests.test_report_index
+```
+
+Result:
+
+```text
+Ran 13 tests
+OK
+```
+
+Safety notes:
+
+- Reports are read-only against SQLite.
+- No raw captures were mutated.
+- No user-authored state was mutated.
+- No trading logic, scoring, readiness, alerts, outcomes, or trade plans were changed.
+- The evidence census warning is expected: completed alert sample size remains too low for optimization.

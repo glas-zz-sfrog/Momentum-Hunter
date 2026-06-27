@@ -45,6 +45,24 @@ REPORT_DEFINITIONS: list[dict[str, str]] = [
         "recommended_use": "Run after all-safe imports and before trusting SQLite mirrors for offline analysis.",
     },
     {
+        "name": "SQLite Query Benchmark",
+        "pattern": "sqlite-query-benchmark-latest.json",
+        "description": "Read-only query timing benchmark for SQLite evidence and operator analytics.",
+        "recommended_use": "Use to detect slow read-model queries before heavier analysis or UI adoption.",
+    },
+    {
+        "name": "Evidence Census",
+        "pattern": "evidence-census-latest.json",
+        "description": "Read-only census of alerts, captures, minute bars, evidence runs, and user-state mirror rows.",
+        "recommended_use": "Use to understand current evidence sample size and coverage.",
+    },
+    {
+        "name": "Candidate Data Completeness",
+        "pattern": "candidate-data-completeness-latest.json",
+        "description": "Field-completeness report for mirrored capture candidate rows.",
+        "recommended_use": "Use before trusting analytics that depend on fields such as relative volume, market cap, or freshness.",
+    },
+    {
         "name": "System Readiness",
         "pattern": "system-readiness-latest.json",
         "description": "Top-level operator trust and readiness report.",
