@@ -111,6 +111,12 @@ REPORT_DEFINITIONS: list[dict[str, str]] = [
         "recommended_use": "Check before user-state maintenance or restore work.",
     },
     {
+        "name": "User-State Cutover Simulation",
+        "pattern": "user-state-cutover-simulation-latest.json",
+        "description": "Synthetic disaster-recovery and cutover simulation for review decisions, watchlists, and entry plans.",
+        "recommended_use": "Run before any SQLite user-state authority or cutover work.",
+    },
+    {
         "name": "Capture Health",
         "pattern": "capture-health-latest.json",
         "description": "Capture health and scheduled-capture status report.",

@@ -220,7 +220,7 @@ Warnings: MISSING_REPORTS:1, STALE_REPORTS:2
 | --- | --- | --- |
 | 0 | Preflight validation and sprint kickoff documentation | Complete |
 | 1 | Mutable source hygiene and mirror freshness program | Complete |
-| 2 | User-state disaster recovery and cutover simulation | Pending |
+| 2 | User-state disaster recovery and cutover simulation | Complete |
 | 3 | SQLite analytics, performance, and evidence census | Pending |
 | 4 | Final validation and sprint closeout report | Pending |
 
@@ -303,3 +303,77 @@ Safety notes:
 - No user-authored state was imported or changed.
 - SQLite remains an additive mirror.
 - `review-decisions.json`, `entry-plans.json`, and `watchlist-*.json` remain outside `all-safe` and require explicit user-state cutover workflow.
+
+## Milestone 2 Result
+
+Milestone 2 is complete.
+
+Added:
+
+- `momentum_hunter/user_state_cutover_simulation.py`
+- `tests/test_user_state_cutover_simulation.py`
+- `docs/storage/user-state-disaster-recovery-and-cutover-simulation-v1.md`
+
+Updated:
+
+- `momentum_hunter/report_index.py`
+
+The user-state cutover simulation uses synthetic fixtures and a temporary workspace under `MomentumHunterData/data/_tmp/`, then deletes that workspace by default. It does not touch production `review-decisions.json`, `entry-plans.json`, or `watchlist-*.json`.
+
+Command:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m momentum_hunter.user_state_cutover_simulation
+```
+
+Report paths:
+
+```text
+MomentumHunterData/data/reports/user-state-cutover-simulation-latest.json
+MomentumHunterData/data/reports/user-state-cutover-simulation-latest.md
+```
+
+Result:
+
+```text
+Overall status: PASS
+Scenarios: 10
+Passed scenarios: 10
+Failed scenarios: 0
+```
+
+Scenario coverage:
+
+| Scenario | Detection Result | Observed Status |
+| --- | --- | --- |
+| clean_import | PASS | PASS |
+| missing_watchlist_row | PASS | WARN |
+| stale_entry_plan | PASS | WARN |
+| duplicate_review | PASS | WARN |
+| conflicting_review_status | PASS | WARN |
+| malformed_entry_plan | PASS | WARN |
+| incomplete_entry_plan | PASS | WARN |
+| backup_restore_validation_failure | PASS | FAIL |
+| rollback_simulation | PASS | PASS |
+| source_files_unchanged | PASS | PASS |
+
+Focused tests:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_user_state_cutover_simulation tests.test_user_state_safety tests.test_user_state_diff tests.test_sqlite_user_state_store tests.test_report_index
+```
+
+Result:
+
+```text
+Ran 15 tests
+OK
+```
+
+Safety notes:
+
+- Synthetic fixtures were used.
+- Production user-state files were not mutated.
+- Production evidence stores were not populated with synthetic data.
+- SQLite remains an additive mirror.
+- User-state cutover remains blocked until backup, restore validation, diff, simulation, rollback, and explicit approval all pass.
