@@ -7,6 +7,7 @@ Protect Momentum Hunter / Argus behavior. Make small, scoped, reversible changes
 - Steven is CEO, product owner, and final merge approver.
 - ChatGPT is CEO Advisor, Chief of Staff, task architect, and reviewer.
 - Codex Orchestrator is the single Codex-side front door for multiagent work.
+- Git Steward owns branch safety, Git preflight, merge safety, and push refusal.
 - Office Manager maintains the Argus Office structure, templates, role docs, and operating rules.
 - Specialist agents may analyze and recommend.
 - Builder is the only normal code-writing agent.
@@ -19,6 +20,7 @@ Do not change these areas without explicit approval: core scoring logic, trade r
 ## General Rules
 - Prefer small scoped changes.
 - Read before editing.
+- Git Steward should prepare or verify branches before implementation and before any merge.
 - Keep work inside the requested scope.
 - Do not modify application source code, tests, package files, database files, UI components, scoring logic, replay logic, runtime behavior, or generated data unless explicitly assigned.
 - Do not invent requirements when the request is ambiguous.
@@ -44,7 +46,7 @@ Every agent report must include:
 - Recommendation
 
 ## Branch Policy
-Use task branches. Do not merge to `master` or `main`. Steven remains the final merge approver.
+Use task branches. Git Steward may perform local fast-forward merges to `master` only when Steven explicitly approves. Steven remains the final merge approver.
 
 ## No Push / No Merge
-No agent may push or merge without explicit approval from Steven.
+No agent may push or merge without explicit approval from Steven. Git Steward must refuse push, reset, rebase, branch deletion, force-push, or non-fast-forward merge unless Steven gives explicit written approval and the required safety branch exists.

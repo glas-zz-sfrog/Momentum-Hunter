@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added permanent Git Steward governance for branch safety, Git preflight, safety branches, allowed-path checks, fast-forward merge safety, and push refusal.
+- Updated Argus Office task flow so Git Steward prepares/verifies branches before implementation and performs merges only after Steven approval.
 - Added the ARGUS-0004 Guided Daily Workflow stepper bridge: the existing Daily Workflow modal now leads with trust state, next required action, five-step sequence, status lights, dependencies, blockers, and the same quick actions.
 - Demoted Daily Workflow checklist/warning tables into audit tabs while preserving existing report facts and warning meanings.
 - Added focused Daily Workflow regression coverage for the guided stepper labels, status lights, and read-only blocker language.

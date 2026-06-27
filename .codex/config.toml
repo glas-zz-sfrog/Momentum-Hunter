@@ -6,7 +6,7 @@ ceo = "Steven"
 ceo_advisor = "ChatGPT"
 commit_policy = "one approved scoped commit per task when acceptance criteria pass"
 push_policy = "no push without explicit approval"
-merge_policy = "no merge to master or main; Steven is final merge approver"
+merge_policy = "Git Steward may fast-forward merge to master only after explicit Steven approval; Steven is final merge approver"
 
 allowed_scaffold_paths = [
   "AGENTS.md",
@@ -29,6 +29,7 @@ protected_areas = [
 
 [argus_office.operating_model]
 orchestrator = "single Codex-side front door for multiagent work"
+git_steward = "owns branch safety, Git preflight, merge safety, and push refusal"
 office_manager = "maintains office structure and operating rules"
 builder = "only normal code-writing agent"
 qa_regression = "may write tests only when explicitly assigned"

@@ -15,6 +15,13 @@
 
 ## Assigned Agents
 
+## Git Steward Preflight
+- [ ] Current branch confirmed.
+- [ ] Branch base confirmed.
+- [ ] Worktree clean/dirty state confirmed.
+- [ ] Ahead/behind versus `origin/master` reported.
+- [ ] Allowed changed paths identified.
+
 ## Checks Required
 
 ## Protected Areas
@@ -24,6 +31,7 @@ Do not change these areas without explicit approval: core scoring logic, trade r
 - Branch
 - Files changed
 - Tests or checks run
+- Git Steward branch/status report
 - Risks
 - Manual QA
 - Open questions
