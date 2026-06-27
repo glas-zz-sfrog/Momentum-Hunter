@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added the ARGUS-0004 Guided Daily Workflow stepper bridge: the existing Daily Workflow modal now leads with trust state, next required action, five-step sequence, status lights, dependencies, blockers, and the same quick actions.
+- Demoted Daily Workflow checklist/warning tables into audit tabs while preserving existing report facts and warning meanings.
+- Added focused Daily Workflow regression coverage for the guided stepper labels, status lights, and read-only blocker language.
 - Restored a visible Dashboard path to the existing Daily Checklist workflow for ARGUS-0002.
 - Guarded Daily Checklist quick actions so target dialogs and unavailable-action messages are visible instead of appearing to do nothing.
 - Added focused Daily Workflow GUI regression coverage that opens the checklist through the restored button.

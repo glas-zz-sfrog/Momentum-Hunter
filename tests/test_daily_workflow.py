@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtWidgets import QApplication, QDialog, QPushButton
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
 
 from momentum_hunter.app import MomentumHunterWindow
 from momentum_hunter.capture_health import CaptureFailureInfo, CaptureHealthSnapshot, CaptureSuccessInfo, CsvStatus
@@ -149,6 +149,18 @@ class DailyWorkflowTests(unittest.TestCase):
         self.assertTrue(self.button(dialog, "Open Capture Health").isEnabled())
         self.assertTrue(self.button(dialog, "Open Readiness Gate").isEnabled())
 
+    def test_dialog_guided_stepper_shows_next_action_and_step_lights(self) -> None:
+        self.window.daily_checklist_button.click()
+        dialog = self.dialogs[-1]
+
+        self.assertEqual("Guided Daily Workflow", dialog.windowTitle())
+        self.assertIn("Trust clear:", self.label_text(dialog, "dailyWorkflowTrustLabel"))
+        self.assertIn("Next Required Action: review candidates", self.label_text(dialog, "dailyWorkflowNextActionLabel"))
+        self.assertIn("Light: green | Complete", self.label_text(dialog, "dailyWorkflowStep_capture_status"))
+        self.assertIn("Light: blue | Needs review", self.label_text(dialog, "dailyWorkflowStep_review_status"))
+        self.assertIn("Light: gray | Waiting", self.label_text(dialog, "dailyWorkflowStep_plans_status"))
+        self.assertIn("Light: gray | Locked check", self.label_text(dialog, "dailyWorkflowStep_readiness_status"))
+
     def test_dialog_quick_actions_close_checklist_before_running_targets(self) -> None:
         targets = [
             ("Open Morning Review", "open_morning_review_workspace"),
@@ -208,6 +220,8 @@ class DailyWorkflowTests(unittest.TestCase):
         historical_dialog = self.dialogs[-1]
         self.assertFalse(self.button(historical_dialog, "Open Morning Review").isEnabled())
         self.assertFalse(self.button(historical_dialog, "Generate Watchlist Report").isEnabled())
+        self.assertIn("Trust blocker:", self.label_text(historical_dialog, "dailyWorkflowTrustLabel"))
+        self.assertIn("restore a reviewable current workflow", self.label_text(historical_dialog, "dailyWorkflowNextActionLabel"))
 
         self.window.data_view_state = DataViewState.STUDY
         self.window._apply_data_view_state()
@@ -246,6 +260,12 @@ class DailyWorkflowTests(unittest.TestCase):
             if button.text() == text:
                 return button
         self.fail(f"Button not found: {text}")
+
+    def label_text(self, dialog: QDialog, object_name: str) -> str:
+        label = dialog.findChild(QLabel, object_name)
+        if label is None:
+            self.fail(f"Label not found: {object_name}")
+        return label.text()
 
     def capture_health(self, *, failed: bool = False) -> CaptureHealthSnapshot:
         current = self.current_time if hasattr(self, "current_time") else now_central()

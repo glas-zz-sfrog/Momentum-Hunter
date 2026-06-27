@@ -2502,12 +2502,12 @@ class MomentumHunterWindow(QMainWindow):
         context = self.current_operator_context or self._operator_review_context()
         read_only = not context.can_review
         dialog = QDialog(self)
-        dialog.setWindowTitle("Daily Workflow Checklist")
-        dialog.resize(1060, 760)
+        dialog.setWindowTitle("Guided Daily Workflow")
+        dialog.resize(1160, 820)
         layout = QVBoxLayout(dialog)
 
         banner = QLabel(
-            "DAILY WORKFLOW CHECKLIST / REVIEW REPORT\n"
+            "GUIDED DAILY WORKFLOW\n"
             f"{style.banner_text}\n"
             "Workflow discipline only. This does not evaluate trade quality, change scores, place orders, or optimize weights."
         )
@@ -2515,28 +2515,14 @@ class MomentumHunterWindow(QMainWindow):
         banner.setWordWrap(True)
         layout.addWidget(banner)
 
-        score_label = QLabel(f"Today's Workflow Score: {report.workflow_score}%")
+        score_label = QLabel(
+            f"Today's Workflow Score: {report.workflow_score}% | Workflow lights guide operator flow, not trade readiness."
+        )
         score_label.setObjectName("tickerLabel")
         score_label.setWordWrap(True)
         self.daily_workflow_score_label = score_label
         layout.addWidget(score_label)
 
-        if report.warnings:
-            warning_label = QLabel("Warnings: " + " | ".join(report.warnings))
-            warning_label.setWordWrap(True)
-            warning_label.setStyleSheet("color: #fcd34d; font-weight: 700;")
-            layout.addWidget(warning_label)
-
-        tabs = QTabWidget()
-        summary_table = build_daily_workflow_summary_table(report, style)
-        self.daily_workflow_summary_table = summary_table
-        tabs.addTab(summary_table, "Checklist")
-        tabs.addTab(build_daily_workflow_warning_table(report, style), "Warnings")
-        layout.addWidget(tabs, 1)
-
-        action_row = QWidget()
-        action_layout = QHBoxLayout(action_row)
-        action_layout.setContentsMargins(0, 0, 0, 0)
         morning_button = QPushButton("Open Morning Review")
         watchlist_button = QPushButton("Generate Watchlist Report")
         capture_button = QPushButton("Open Capture Health")
@@ -2547,12 +2533,30 @@ class MomentumHunterWindow(QMainWindow):
         watchlist_button.clicked.connect(lambda: self._run_daily_workflow_quick_action(dialog, self.save_tomorrow_watchlist))
         capture_button.clicked.connect(lambda: self._run_daily_workflow_quick_action(dialog, self.open_capture_health_report))
         readiness_button.clicked.connect(lambda: self._run_daily_workflow_quick_action(dialog, self.open_readiness_gate))
-        action_layout.addWidget(morning_button)
-        action_layout.addWidget(watchlist_button)
-        action_layout.addWidget(capture_button)
-        action_layout.addWidget(readiness_button)
-        action_layout.addStretch(1)
-        layout.addWidget(action_row)
+
+        action_buttons = {
+            "capture": capture_button,
+            "review": morning_button,
+            "report": watchlist_button,
+            "readiness": readiness_button,
+        }
+        guided_panel, trust_label, next_action_label, step_status_labels = build_daily_workflow_guided_panel(
+            report,
+            style,
+            context,
+            action_buttons,
+        )
+        self.daily_workflow_trust_label = trust_label
+        self.daily_workflow_next_action_label = next_action_label
+        self.daily_workflow_step_status_labels = step_status_labels
+        layout.addWidget(guided_panel)
+
+        tabs = QTabWidget()
+        summary_table = build_daily_workflow_summary_table(report, style)
+        self.daily_workflow_summary_table = summary_table
+        tabs.addTab(summary_table, "Audit Details")
+        tabs.addTab(build_daily_workflow_warning_table(report, style), "Warning Detail")
+        layout.addWidget(tabs, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
@@ -4273,6 +4277,520 @@ def build_daily_workflow_summary_table(report: DailyWorkflowReport, style: DataV
             item.setBackground(QBrush(QColor("#735f24")))
         table.setItem(row, 2, item)
     return table
+
+
+def build_daily_workflow_guided_panel(
+    report: DailyWorkflowReport,
+    style: DataViewStyle,
+    context: OperatorReviewContext,
+    action_buttons: dict[str, QPushButton],
+) -> tuple[QWidget, QLabel, QLabel, dict[str, QLabel]]:
+    panel = QWidget()
+    layout = QVBoxLayout(panel)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(8)
+
+    trust = daily_workflow_trust_state(report, style, context)
+    trust_label = QLabel(f"{trust['title']}\n{trust['detail']}")
+    trust_label.setObjectName("dailyWorkflowTrustLabel")
+    trust_label.setWordWrap(True)
+    trust_label.setStyleSheet(daily_workflow_panel_stylesheet(trust["level"]))
+    layout.addWidget(trust_label)
+
+    next_action = daily_workflow_next_action(report, context)
+    next_action_label = QLabel(f"{next_action['title']}\n{next_action['detail']}")
+    next_action_label.setObjectName("dailyWorkflowNextActionLabel")
+    next_action_label.setWordWrap(True)
+    next_action_label.setStyleSheet(daily_workflow_panel_stylesheet(next_action["level"]))
+    layout.addWidget(next_action_label)
+
+    sequence_label = QLabel(
+        "Sequence: Capture Health -> Morning Review -> Watchlist Plans -> Watchlist Report -> Readiness Gate"
+    )
+    sequence_label.setObjectName("criteriaLabel")
+    sequence_label.setWordWrap(True)
+    layout.addWidget(sequence_label)
+
+    for key, button in action_buttons.items():
+        button.setProperty("dailyWorkflowAction", key)
+        if key == next_action["action_key"]:
+            button.setStyleSheet("background: #1f6f4a; border: 1px solid #9ae6b4; font-weight: 700;")
+            button.setToolTip("Next required Daily Workflow action.")
+        else:
+            button.setToolTip("Daily Workflow quick action.")
+
+    step_row = QWidget()
+    step_layout = QHBoxLayout(step_row)
+    step_layout.setContentsMargins(0, 0, 0, 0)
+    step_layout.setSpacing(8)
+    step_status_labels: dict[str, QLabel] = {}
+    for index, step in enumerate(daily_workflow_steps(report, context, next_action), start=1):
+        card = QGroupBox(f"{index}. {step['name']}")
+        card.setObjectName(f"dailyWorkflowStep_{step['id']}")
+        card.setStyleSheet(daily_workflow_card_stylesheet(step["level"]))
+        card_layout = QVBoxLayout(card)
+        card_layout.setSpacing(6)
+
+        status_label = QLabel(f"Light: {step['light']} | {step['status']}")
+        status_label.setObjectName(f"dailyWorkflowStep_{step['id']}_status")
+        status_label.setWordWrap(True)
+        status_label.setStyleSheet(daily_workflow_light_stylesheet(step["level"]))
+        step_status_labels[step["id"]] = status_label
+        card_layout.addWidget(status_label)
+
+        dependency_label = QLabel(f"Depends on: {step['dependency']}")
+        dependency_label.setWordWrap(True)
+        card_layout.addWidget(dependency_label)
+
+        blocker_label = QLabel(f"Blocker: {step['blocker']}")
+        blocker_label.setWordWrap(True)
+        card_layout.addWidget(blocker_label)
+
+        detail_label = QLabel(step["detail"])
+        detail_label.setWordWrap(True)
+        card_layout.addWidget(detail_label)
+
+        action_key = step.get("action_key", "")
+        if action_key and action_key in action_buttons:
+            card_layout.addWidget(action_buttons[action_key])
+        else:
+            card_layout.addStretch(1)
+        step_layout.addWidget(card)
+    layout.addWidget(step_row)
+    return panel, trust_label, next_action_label, step_status_labels
+
+
+def daily_workflow_trust_state(
+    report: DailyWorkflowReport,
+    style: DataViewStyle,
+    context: OperatorReviewContext,
+) -> dict[str, str]:
+    if not context.can_review:
+        return {
+            "title": f"Trust blocker: {context.label}",
+            "detail": context.block_reason or context.guidance or "This view is not available for daily review.",
+            "level": "blocked",
+        }
+    if report.capture_health_status.startswith("warning"):
+        return {
+            "title": "Trust blocker: capture failure detected",
+            "detail": "Open Capture Health before trusting today's workflow.",
+            "level": "blocked",
+        }
+    if report.capture_health_status == "incomplete":
+        return {
+            "title": "Trust attention: capture health incomplete",
+            "detail": "Capture status is incomplete. Review Capture Health before assuming the day is clear.",
+            "level": "attention",
+        }
+    if style.is_warning:
+        return {
+            "title": f"Trust attention: {context.label}",
+            "detail": context.guidance or style.decision_status,
+            "level": "attention",
+        }
+    return {
+        "title": f"Trust clear: {context.label}",
+        "detail": "Current workflow facts are loaded. Continue with the highlighted next required action.",
+        "level": "complete",
+    }
+
+
+def daily_workflow_next_action(report: DailyWorkflowReport, context: OperatorReviewContext) -> dict[str, str]:
+    if not context.can_review:
+        return {
+            "title": "Next Required Action: restore a reviewable current workflow",
+            "detail": context.block_reason or context.guidance or "Return to a current reviewable capture before daily review.",
+            "action_key": "capture",
+            "active_step": "capture",
+            "level": "blocked",
+        }
+    if report.capture_health_status.startswith("warning") or report.capture_health_status == "incomplete":
+        return {
+            "title": "Next Required Action: inspect Capture Health",
+            "detail": "Capture health needs attention before the workflow lights can be trusted.",
+            "action_key": "capture",
+            "active_step": "capture",
+            "level": "blocked" if report.capture_health_status.startswith("warning") else "attention",
+        }
+    if report.review.total_candidates == 0:
+        return {
+            "title": "Next Required Action: load review candidates",
+            "detail": "No candidates are available in the current workflow. Run or load a current capture before review.",
+            "action_key": "capture",
+            "active_step": "capture",
+            "level": "attention",
+        }
+    if report.review.unreviewed_candidates:
+        return {
+            "title": "Next Required Action: review candidates",
+            "detail": f"{report.review.unreviewed_candidates} candidate(s) still need Interested, Rejected, or Watchlist decisions.",
+            "action_key": "review",
+            "active_step": "review",
+            "level": "active",
+        }
+    if report.entry_plans.watchlist_candidates == 0:
+        return {
+            "title": "Daily workflow complete",
+            "detail": "All candidates are reviewed and no Watchlist candidates are selected for a report.",
+            "action_key": "",
+            "active_step": "",
+            "level": "complete",
+        }
+    if report.entry_plans.incomplete_plans:
+        return {
+            "title": "Next Required Action: complete watchlist plans",
+            "detail": (
+                f"{report.entry_plans.incomplete_plans} Watchlist plan(s) need trigger, stop, invalidation, "
+                "or max-loss discipline."
+            ),
+            "action_key": "review",
+            "active_step": "plans",
+            "level": "active",
+        }
+    return {
+        "title": "Next Required Action: generate the Watchlist Report",
+        "detail": "Watchlist candidates have complete plan discipline. Generate the report, then use Readiness Gate as a check.",
+        "action_key": "report",
+        "active_step": "report",
+        "level": "active",
+    }
+
+
+def daily_workflow_steps(
+    report: DailyWorkflowReport,
+    context: OperatorReviewContext,
+    next_action: dict[str, str],
+) -> list[dict[str, str]]:
+    active_step = next_action["active_step"]
+    readiness_locked = any(status == "LOCKED" for status in report.readiness_statuses.values())
+    steps = [
+        daily_workflow_capture_step(report, context),
+        daily_workflow_review_step(report, context),
+        daily_workflow_plan_step(report, context),
+        daily_workflow_report_step(report, context),
+        daily_workflow_readiness_step(readiness_locked),
+    ]
+    for step in steps:
+        if step["id"] == active_step and step["level"] not in {"blocked", "locked"}:
+            step["level"] = "active"
+            step["light"] = "blue"
+    return steps
+
+
+def daily_workflow_capture_step(report: DailyWorkflowReport, context: OperatorReviewContext) -> dict[str, str]:
+    if not context.can_review:
+        return daily_workflow_step(
+            "capture",
+            "Capture Health",
+            "blocked",
+            "Blocked",
+            "red",
+            "A current reviewable capture.",
+            context.block_reason or context.guidance or "This view is not available for daily review.",
+            "Open Capture Health for diagnostics; return to a current capture before continuing.",
+            "capture",
+        )
+    if report.capture_health_status.startswith("warning"):
+        return daily_workflow_step(
+            "capture",
+            "Capture Health",
+            "blocked",
+            "Blocked",
+            "red",
+            "Successful scheduled or current capture health.",
+            "A scheduled capture failure is recorded.",
+            "Open Capture Health before trusting today's workflow.",
+            "capture",
+        )
+    if report.capture_health_status == "healthy":
+        return daily_workflow_step(
+            "capture",
+            "Capture Health",
+            "complete",
+            "Complete",
+            "green",
+            "Capture status from existing Capture Health.",
+            "None.",
+            "Capture Health reports healthy for the current workflow.",
+            "capture",
+        )
+    return daily_workflow_step(
+        "capture",
+        "Capture Health",
+        "attention",
+        "Needs capture",
+        "yellow",
+        "Morning plus evening or preopen capture health.",
+        "Capture Health is incomplete.",
+        "Open Capture Health or load a current reviewable capture.",
+        "capture",
+    )
+
+
+def daily_workflow_review_step(report: DailyWorkflowReport, context: OperatorReviewContext) -> dict[str, str]:
+    if not context.can_review:
+        return daily_workflow_waiting_step(
+            "review",
+            "Morning Review",
+            "A current reviewable capture.",
+            context.block_reason or context.guidance or "This view is read-only.",
+            "review",
+        )
+    if report.review.total_candidates == 0:
+        return daily_workflow_waiting_step(
+            "review",
+            "Morning Review",
+            "One or more loaded candidates.",
+            "No review candidates are available in the current workflow.",
+            "review",
+        )
+    if report.review.unreviewed_candidates:
+        return daily_workflow_step(
+            "review",
+            "Morning Review",
+            "attention",
+            "Needs review",
+            "yellow",
+            "Loaded candidates and a reviewable context.",
+            f"{report.review.unreviewed_candidates} candidate(s) still need a review decision.",
+            "Mark each candidate Interested, Rejected, or Watchlist.",
+            "review",
+        )
+    return daily_workflow_step(
+        "review",
+        "Morning Review",
+        "complete",
+        "Complete",
+        "green",
+        "All loaded candidates reviewed.",
+        "None.",
+        f"{report.review.reviewed_candidates} of {report.review.total_candidates} candidate(s) are reviewed.",
+        "review",
+    )
+
+
+def daily_workflow_plan_step(report: DailyWorkflowReport, context: OperatorReviewContext) -> dict[str, str]:
+    if not context.can_review:
+        return daily_workflow_waiting_step(
+            "plans",
+            "Watchlist Plans",
+            "A reviewable workflow.",
+            context.block_reason or context.guidance or "This view is read-only.",
+        )
+    if report.review.unreviewed_candidates:
+        return daily_workflow_waiting_step(
+            "plans",
+            "Watchlist Plans",
+            "Morning Review complete.",
+            "Review decisions are still incomplete.",
+        )
+    if report.entry_plans.watchlist_candidates == 0:
+        return daily_workflow_step(
+            "plans",
+            "Watchlist Plans",
+            "waiting",
+            "No watchlist",
+            "gray",
+            "At least one candidate marked Watchlist.",
+            "No Watchlist candidates are selected.",
+            "No entry plan is needed unless a candidate is moved to Watchlist.",
+            "",
+        )
+    if report.entry_plans.incomplete_plans:
+        return daily_workflow_step(
+            "plans",
+            "Watchlist Plans",
+            "attention",
+            "Needs plan",
+            "yellow",
+            "Watchlist candidates with complete entry-plan fields.",
+            f"{report.entry_plans.incomplete_plans} plan(s) are incomplete.",
+            "Use Morning Review to add trigger, stop, invalidation, and max loss.",
+            "",
+        )
+    return daily_workflow_step(
+        "plans",
+        "Watchlist Plans",
+        "complete",
+        "Complete",
+        "green",
+        "All Watchlist candidates have complete plan discipline.",
+        "None.",
+        f"{report.entry_plans.complete_plans} Watchlist plan(s) are complete.",
+        "",
+    )
+
+
+def daily_workflow_report_step(report: DailyWorkflowReport, context: OperatorReviewContext) -> dict[str, str]:
+    if not context.can_review:
+        return daily_workflow_waiting_step(
+            "report",
+            "Watchlist Report",
+            "A reviewable workflow and Watchlist candidates.",
+            context.block_reason or context.guidance or "This view is read-only.",
+            "report",
+        )
+    if report.review.unreviewed_candidates:
+        return daily_workflow_waiting_step(
+            "report",
+            "Watchlist Report",
+            "Morning Review complete.",
+            "Review decisions are still incomplete.",
+            "report",
+        )
+    if report.entry_plans.watchlist_candidates == 0:
+        return daily_workflow_step(
+            "report",
+            "Watchlist Report",
+            "waiting",
+            "Unavailable",
+            "gray",
+            "At least one candidate marked Watchlist.",
+            "No Watchlist candidates are selected.",
+            "The existing report action will explain this if clicked.",
+            "report",
+        )
+    if report.entry_plans.incomplete_plans:
+        return daily_workflow_waiting_step(
+            "report",
+            "Watchlist Report",
+            "Complete Watchlist Plans.",
+            "Entry-plan discipline is incomplete.",
+            "report",
+        )
+    return daily_workflow_step(
+        "report",
+        "Watchlist Report",
+        "attention",
+        "Available",
+        "yellow",
+        "Reviewed candidates and complete Watchlist plans.",
+        "None.",
+        "Generate the Watchlist Report using the existing safe action.",
+        "report",
+    )
+
+
+def daily_workflow_readiness_step(readiness_locked: bool) -> dict[str, str]:
+    if readiness_locked:
+        return daily_workflow_step(
+            "readiness",
+            "Readiness Gate",
+            "locked",
+            "Locked check",
+            "gray",
+            "Existing outcome-maturity/readiness report.",
+            "One or more research/readiness gates are locked.",
+            "This is a check/gate only; it does not approve trades or change readiness logic.",
+            "readiness",
+        )
+    return daily_workflow_step(
+        "readiness",
+        "Readiness Gate",
+        "complete",
+        "Available check",
+        "green",
+        "Existing outcome-maturity/readiness report.",
+        "None.",
+        "Open Readiness Gate as a read-only check; trading decisions still require operator review.",
+        "readiness",
+    )
+
+
+def daily_workflow_waiting_step(
+    step_id: str,
+    name: str,
+    dependency: str,
+    blocker: str,
+    action_key: str = "",
+) -> dict[str, str]:
+    return daily_workflow_step(
+        step_id,
+        name,
+        "waiting",
+        "Waiting",
+        "gray",
+        dependency,
+        blocker,
+        "Complete the upstream light before this step becomes available.",
+        action_key,
+    )
+
+
+def daily_workflow_step(
+    step_id: str,
+    name: str,
+    level: str,
+    status: str,
+    light: str,
+    dependency: str,
+    blocker: str,
+    detail: str,
+    action_key: str,
+) -> dict[str, str]:
+    return {
+        "id": step_id,
+        "name": name,
+        "level": level,
+        "status": status,
+        "light": light,
+        "dependency": dependency,
+        "blocker": blocker,
+        "detail": detail,
+        "action_key": action_key,
+    }
+
+
+def daily_workflow_panel_stylesheet(level: str) -> str:
+    colors = {
+        "complete": ("#123222", "#1f6f4a", "#d8ffe8"),
+        "active": ("#172746", "#3c5d9d", "#eaf1ff"),
+        "attention": ("#3a3117", "#a4812a", "#fff0bd"),
+        "blocked": ("#3a1717", "#a14646", "#ffe1e1"),
+        "locked": ("#2b1f36", "#6d5780", "#f4ecff"),
+        "waiting": ("#1b2a3a", "#34475b", "#cbd8e6"),
+    }
+    background, border, color = colors.get(level, colors["waiting"])
+    return (
+        f"background: {background}; border: 1px solid {border}; border-radius: 6px; "
+        f"color: {color}; font-weight: 700; padding: 8px;"
+    )
+
+
+def daily_workflow_card_stylesheet(level: str) -> str:
+    colors = {
+        "complete": ("#14251d", "#1f6f4a"),
+        "active": ("#172746", "#3c5d9d"),
+        "attention": ("#2d2818", "#a4812a"),
+        "blocked": ("#2f1919", "#a14646"),
+        "locked": ("#241f2d", "#6d5780"),
+        "waiting": ("#162230", "#34475b"),
+    }
+    background, border = colors.get(level, colors["waiting"])
+    return (
+        "QGroupBox { "
+        f"background: {background}; border: 1px solid {border}; border-radius: 6px; "
+        "margin-top: 8px; padding: 8px; "
+        "} "
+        "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; color: #e7edf4; }"
+    )
+
+
+def daily_workflow_light_stylesheet(level: str) -> str:
+    colors = {
+        "complete": ("#1f6f4a", "#d8ffe8"),
+        "active": ("#2563eb", "#eaf1ff"),
+        "attention": ("#a4812a", "#fff0bd"),
+        "blocked": ("#a14646", "#ffe1e1"),
+        "locked": ("#6d5780", "#f4ecff"),
+        "waiting": ("#34475b", "#cbd8e6"),
+    }
+    background, color = colors.get(level, colors["waiting"])
+    return (
+        f"background: {background}; color: {color}; border-radius: 4px; "
+        "font-weight: 700; padding: 5px;"
+    )
 
 
 def build_daily_workflow_warning_table(report: DailyWorkflowReport, style: DataViewStyle) -> QTableWidget:
