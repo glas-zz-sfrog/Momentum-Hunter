@@ -1,0 +1,36 @@
+[argus_office]
+version = "0.1"
+name = "Argus Office"
+front_door_agent = "argus_orchestrator"
+ceo = "Steven"
+ceo_advisor = "ChatGPT"
+commit_policy = "one approved scoped commit per task when acceptance criteria pass"
+push_policy = "no push without explicit approval"
+merge_policy = "no merge to master or main; Steven is final merge approver"
+
+allowed_scaffold_paths = [
+  "AGENTS.md",
+  ".codex/**",
+  "docs/argus-office/**",
+]
+
+protected_areas = [
+  "core scoring logic",
+  "trade readiness logic",
+  "replay identity rules",
+  "historical capture selection",
+  "database schema/migrations",
+  "broker/order execution behavior",
+  "alert threshold semantics",
+  "secrets/API keys/env config",
+  "production configs",
+  "runtime behavior",
+]
+
+[argus_office.operating_model]
+orchestrator = "single Codex-side front door for multiagent work"
+office_manager = "maintains office structure and operating rules"
+builder = "only normal code-writing agent"
+qa_regression = "may write tests only when explicitly assigned"
+release_scribe = "updates docs, reports, logs, and checklists; does not approve merges"
+specialists = "read-only by default; analyze and recommend"
