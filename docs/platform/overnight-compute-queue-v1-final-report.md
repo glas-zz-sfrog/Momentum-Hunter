@@ -1,6 +1,6 @@
 # Overnight Compute Queue v1 Final Report
 
-Generated: 2026-06-27 01:36 CT
+Generated: 2026-06-27 01:39 CT
 
 ## Summary
 
@@ -108,11 +108,35 @@ Bounded backend validation only:
 Result:
 
 ```text
-Ran 32 tests in 5.360s
+Ran 32 tests in 5.037s
 OK
 ```
 
 No broad Qt test modules were run.
+
+## Final Validation Commands
+
+Safe backend/storage/evidence CLIs were run after implementation:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_validation
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_reports --shadow-compare
+.\.venv\Scripts\python.exe -B -m momentum_hunter.system_readiness
+.\.venv\Scripts\python.exe -B -m momentum_hunter.evidence_census
+.\.venv\Scripts\python.exe -B -m momentum_hunter.provider_field_quality
+.\.venv\Scripts\python.exe -B -m momentum_hunter.report_index
+```
+
+Observed statuses:
+
+| Validation | Result |
+| --- | --- |
+| SQLite validation | `PASS` |
+| SQLite shadow compare | `PASS` |
+| System readiness | Report generated; status remains warning due to known operational warnings |
+| Evidence census | `WARN` due to low completed alert sample |
+| Provider field quality | `WARN` due to stale capture rows and zero relative-volume rows |
+| Report index | `WARN` due to one missing report and three stale reports |
 
 ## Steven Visual Inspection Needs
 
