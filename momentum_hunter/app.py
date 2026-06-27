@@ -2543,10 +2543,10 @@ class MomentumHunterWindow(QMainWindow):
         readiness_button = QPushButton("Open Readiness Gate")
         morning_button.setEnabled(not read_only and bool(self.candidates))
         watchlist_button.setEnabled(context.can_generate_watchlist)
-        morning_button.clicked.connect(self.open_morning_review_workspace)
-        watchlist_button.clicked.connect(self.save_tomorrow_watchlist)
-        capture_button.clicked.connect(self.open_capture_health_report)
-        readiness_button.clicked.connect(self.open_readiness_gate)
+        morning_button.clicked.connect(lambda: self._run_daily_workflow_quick_action(dialog, self.open_morning_review_workspace))
+        watchlist_button.clicked.connect(lambda: self._run_daily_workflow_quick_action(dialog, self.save_tomorrow_watchlist))
+        capture_button.clicked.connect(lambda: self._run_daily_workflow_quick_action(dialog, self.open_capture_health_report))
+        readiness_button.clicked.connect(lambda: self._run_daily_workflow_quick_action(dialog, self.open_readiness_gate))
         action_layout.addWidget(morning_button)
         action_layout.addWidget(watchlist_button)
         action_layout.addWidget(capture_button)
@@ -2560,6 +2560,10 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(buttons)
         dialog.setStyleSheet(STYLESHEET)
         dialog.exec()
+
+    def _run_daily_workflow_quick_action(self, dialog: QDialog, action: Callable[[], None]) -> None:
+        dialog.accept()
+        action()
 
     def open_capture_health_report(self) -> None:
         health = build_capture_health_snapshot()

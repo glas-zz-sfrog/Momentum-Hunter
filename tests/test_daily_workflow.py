@@ -149,6 +149,35 @@ class DailyWorkflowTests(unittest.TestCase):
         self.assertTrue(self.button(dialog, "Open Capture Health").isEnabled())
         self.assertTrue(self.button(dialog, "Open Readiness Gate").isEnabled())
 
+    def test_dialog_quick_actions_close_checklist_before_running_targets(self) -> None:
+        targets = [
+            ("Open Morning Review", "open_morning_review_workspace"),
+            ("Generate Watchlist Report", "save_tomorrow_watchlist"),
+            ("Open Capture Health", "open_capture_health_report"),
+            ("Open Readiness Gate", "open_readiness_gate"),
+        ]
+        for button_text, method_name in targets:
+            with self.subTest(button=button_text):
+                with patch.object(self.window, method_name) as action:
+                    self.window.open_daily_workflow_checklist()
+                    dialog = self.dialogs[-1]
+
+                    self.button(dialog, button_text).click()
+
+                self.assertEqual(QDialog.DialogCode.Accepted, QDialog.DialogCode(dialog.result()))
+                action.assert_called_once_with()
+
+    def test_watchlist_quick_action_shows_guard_when_no_watchlist_candidates(self) -> None:
+        messages: list[str] = []
+        self.window.open_daily_workflow_checklist()
+        dialog = self.dialogs[-1]
+
+        with patch.object(self.window, "_show_action_blocked", lambda message, title="Action Not Available": messages.append(message)):
+            self.button(dialog, "Generate Watchlist Report").click()
+
+        self.assertEqual(QDialog.DialogCode.Accepted, QDialog.DialogCode(dialog.result()))
+        self.assertEqual(["No watchlist candidates found. Mark candidates as Watchlist first."], messages)
+
     def test_operator_navigation_labels_are_clear(self) -> None:
         self.assertFalse(hasattr(self.window, "save_button"))
         self.assertEqual("Daily Checklist", self.window.daily_checklist_button.text())

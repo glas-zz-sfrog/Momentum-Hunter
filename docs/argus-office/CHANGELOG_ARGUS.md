@@ -2,6 +2,7 @@
 
 ## Unreleased
 - Restored a visible Dashboard path to the existing Daily Checklist workflow for ARGUS-0002.
+- Guarded Daily Checklist quick actions so target dialogs and unavailable-action messages are visible instead of appearing to do nothing.
 - Added focused Daily Workflow GUI regression coverage that opens the checklist through the restored button.
 - Added Argus Office v0.1 scaffold for governance, agent roles, commandbus workflow, templates, branch policy, and release documentation.
 - Established Steven as final merge approver, ChatGPT as CEO Advisor, and Codex Orchestrator as the single Codex-side front door.
