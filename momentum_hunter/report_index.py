@@ -140,6 +140,12 @@ REPORT_DEFINITIONS: list[dict[str, str]] = [
         "description": "Capture health and scheduled-capture status report.",
         "recommended_use": "Use when captures are missing, failed, or stale.",
     },
+    {
+        "name": "Operational Reliability",
+        "pattern": "operational-reliability-sprint-v1-final-report.json",
+        "description": "Classifies provider, evidence, monitor, readiness, capture, and report-index warnings into actionable categories.",
+        "recommended_use": "Use as the top-level backend reliability triage before overnight or market-hours proof runs.",
+    },
 ]
 
 
