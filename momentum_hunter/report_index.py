@@ -158,6 +158,12 @@ REPORT_DEFINITIONS: list[dict[str, str]] = [
         "description": "Read-only cutover readiness report for optional SQLite runtime adoption experiments.",
         "recommended_use": "Use before any CLI/report surface tests SQLite read mode instead of file mode.",
     },
+    {
+        "name": "Evidence Analytics Maturity",
+        "pattern": "evidence-analytics-maturity-latest.json",
+        "description": "Research-only sample-size, evidence-gate, and alert-group maturity report.",
+        "recommended_use": "Use before asking whether alert evidence is mature enough for pattern or strategy review.",
+    },
 ]
 
 
