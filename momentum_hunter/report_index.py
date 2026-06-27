@@ -146,6 +146,12 @@ REPORT_DEFINITIONS: list[dict[str, str]] = [
         "description": "Classifies provider, evidence, monitor, readiness, capture, and report-index warnings into actionable categories.",
         "recommended_use": "Use as the top-level backend reliability triage before overnight or market-hours proof runs.",
     },
+    {
+        "name": "Market-Hours Proof Harness",
+        "pattern": "market-hours-proof-harness-latest.json",
+        "description": "Dry-run-first proof harness for market-hours provider, monitor, evidence, SQLite, and readiness validation.",
+        "recommended_use": "Use to plan or execute a bounded market-hours proof cycle without changing trading logic.",
+    },
 ]
 
 
