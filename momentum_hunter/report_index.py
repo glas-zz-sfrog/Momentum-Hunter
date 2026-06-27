@@ -39,6 +39,12 @@ REPORT_DEFINITIONS: list[dict[str, str]] = [
         "recommended_use": "Use as guardrail before optional SQLite read-mode experiments.",
     },
     {
+        "name": "SQLite Mirror Freshness",
+        "pattern": "sqlite-mirror-freshness-latest.json",
+        "description": "Validates whether SQLite mirrors are current against file-authoritative source hashes and counts.",
+        "recommended_use": "Run after all-safe imports and before trusting SQLite mirrors for offline analysis.",
+    },
+    {
         "name": "System Readiness",
         "pattern": "system-readiness-latest.json",
         "description": "Top-level operator trust and readiness report.",

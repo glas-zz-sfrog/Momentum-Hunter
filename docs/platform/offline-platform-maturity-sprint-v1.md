@@ -219,7 +219,7 @@ Warnings: MISSING_REPORTS:1, STALE_REPORTS:2
 | Milestone | Name | Status |
 | --- | --- | --- |
 | 0 | Preflight validation and sprint kickoff documentation | Complete |
-| 1 | Mutable source hygiene and mirror freshness program | Pending |
+| 1 | Mutable source hygiene and mirror freshness program | Complete |
 | 2 | User-state disaster recovery and cutover simulation | Pending |
 | 3 | SQLite analytics, performance, and evidence census | Pending |
 | 4 | Final validation and sprint closeout report | Pending |
@@ -231,3 +231,75 @@ Milestone 0 is complete.
 SQLite validation and shadow compare pass after the additive all-safe mirror refresh. System Readiness and Report Index both report warnings that should remain visible during the sprint, but neither warning requires changing trading logic or mutating raw captures.
 
 SQLite remains an additive mirror. File-based JSON/CSV/Markdown outputs remain preserved and authoritative where they are currently the source of truth.
+
+## Milestone 1 Result
+
+Milestone 1 is complete.
+
+Added:
+
+- `momentum_hunter/source_registry.py`
+- `momentum_hunter/sqlite_mirror_freshness.py`
+- `docs/storage/source-classification-and-mirror-freshness-v1.md`
+- `tests/test_source_registry.py`
+- `tests/test_sqlite_mirror_freshness.py`
+
+Updated:
+
+- `momentum_hunter/report_index.py`
+
+The new source registry classifies raw captures, derived evidence files, user state, user artifacts, integrity metadata, and SQLite mirrors. The new mirror freshness report validates SQLite mirror tables against current source hashes/counts and distinguishes `all-safe` mirrors from explicit user-state import/cutover mirrors.
+
+Command:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_mirror_freshness
+```
+
+Report paths:
+
+```text
+MomentumHunterData/data/reports/sqlite-mirror-freshness-latest.json
+MomentumHunterData/data/reports/sqlite-mirror-freshness-latest.md
+```
+
+During validation, the freshness report first detected stale `system_status_events` rows after new preflight reports were generated:
+
+```text
+Overall status: FAIL
+Failure: system_status_events source 20 / current SQLite 5
+```
+
+After the additive all-safe refresh:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_migration --slice all-safe
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_mirror_freshness
+```
+
+Result:
+
+```text
+Overall status: PASS
+Warnings: 0
+```
+
+Focused tests:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_source_registry tests.test_sqlite_mirror_freshness tests.test_sqlite_validation tests.test_report_index
+```
+
+Result:
+
+```text
+Ran 9 tests
+OK
+```
+
+Safety notes:
+
+- No raw captures were mutated.
+- No user-authored state was imported or changed.
+- SQLite remains an additive mirror.
+- `review-decisions.json`, `entry-plans.json`, and `watchlist-*.json` remain outside `all-safe` and require explicit user-state cutover workflow.
