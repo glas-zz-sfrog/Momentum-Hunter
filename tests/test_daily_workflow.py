@@ -140,7 +140,7 @@ class DailyWorkflowTests(unittest.TestCase):
         self.assertLess(report.workflow_score, 100)
 
     def test_dialog_current_view_allows_workflow_quick_actions(self) -> None:
-        self.window.open_daily_workflow_checklist()
+        self.window.daily_checklist_button.click()
         dialog = self.dialogs[-1]
 
         self.assertIn("Today's Workflow Score:", self.window.daily_workflow_score_label.text())
@@ -152,6 +152,7 @@ class DailyWorkflowTests(unittest.TestCase):
     def test_operator_navigation_labels_are_clear(self) -> None:
         self.assertFalse(hasattr(self.window, "save_button"))
         self.assertEqual("Daily Checklist", self.window.daily_checklist_button.text())
+        self.assertIsNotNone(self.window.daily_checklist_button.parentWidget())
         self.assertEqual("Morning Review", self.window.morning_review_button.text())
         self.assertEqual("Capture Health", self.window.capture_health_button.text())
         self.assertEqual("Generate Watchlist Report", self.window.watchlist_button.text())

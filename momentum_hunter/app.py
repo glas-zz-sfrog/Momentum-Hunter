@@ -78,6 +78,7 @@ from momentum_hunter.evidence_console_view_model import (
     evidence_autopilot_summary_text,
     evidence_health_summary_text,
     evidence_next_action_text,
+    latest_active_monitor_cycle_json_path,
     load_active_alert_rows,
     load_active_monitor_dashboard_rows,
     load_alert_outcome_rows,
@@ -1488,6 +1489,7 @@ class MomentumHunterWindow(QMainWindow):
         layout.addWidget(QLabel("Market"), 2, 0)
         layout.addWidget(self.regime_combo, 2, 1)
         layout.addWidget(self.regime_button, 2, 2)
+        layout.addWidget(self.daily_checklist_button, 2, 3)
         layout.addWidget(self.brand_logo, 0, 9, 3, 1)
         layout.addWidget(self.criteria_label, 3, 0, 1, 10)
         layout.addWidget(QLabel("What should I do next?"), 4, 0, 1, 2)
