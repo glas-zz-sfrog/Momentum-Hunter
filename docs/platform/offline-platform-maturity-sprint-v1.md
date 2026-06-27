@@ -222,7 +222,7 @@ Warnings: MISSING_REPORTS:1, STALE_REPORTS:2
 | 1 | Mutable source hygiene and mirror freshness program | Complete |
 | 2 | User-state disaster recovery and cutover simulation | Complete |
 | 3 | SQLite analytics, performance, and evidence census | Complete |
-| 4 | Final validation and sprint closeout report | Pending |
+| 4 | Final validation and sprint closeout report | Complete |
 
 ## Milestone 0 Result
 
@@ -455,3 +455,68 @@ Safety notes:
 - No user-authored state was mutated.
 - No trading logic, scoring, readiness, alerts, outcomes, or trade plans were changed.
 - The evidence census warning is expected: completed alert sample size remains too low for optimization.
+
+## Milestone 4 Result
+
+Milestone 4 is complete.
+
+Final bounded validation confirmed the offline platform work is coherent, SQLite mirrors are current, and user-state cutover remains safely simulated rather than activated.
+
+Final commands:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest tests.test_source_registry tests.test_sqlite_mirror_freshness tests.test_user_state_cutover_simulation tests.test_sqlite_benchmarks tests.test_evidence_census tests.test_sqlite_validation tests.test_report_index tests.test_user_state_safety tests.test_user_state_diff tests.test_sqlite_user_state_store tests.test_sqlite_analytics
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_migration --slice all-safe
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_validation
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_reports --shadow-compare
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_mirror_freshness
+.\.venv\Scripts\python.exe -B -m momentum_hunter.sqlite_benchmarks
+.\.venv\Scripts\python.exe -B -m momentum_hunter.evidence_census
+.\.venv\Scripts\python.exe -B -m momentum_hunter.user_state_cutover_simulation
+.\.venv\Scripts\python.exe -B -m momentum_hunter.report_index
+```
+
+Final validation summary:
+
+| Check | Result |
+| --- | --- |
+| Focused non-Qt tests | 31 tests OK |
+| SQLite all-safe import | PASS |
+| SQLite validation | PASS |
+| SQLite shadow compare | PASS |
+| SQLite mirror freshness | PASS |
+| SQLite query benchmark | PASS |
+| Evidence census | WARN: `LOW_COMPLETED_ALERT_SAMPLE` |
+| Candidate data completeness | PASS |
+| User-state cutover simulation | PASS |
+| System readiness | WARNING: capture failure record plus stale monitor/autopilot signals |
+| Report index | WARN: missing/stale report artifacts still need routine maintenance |
+
+Final SQLite counts:
+
+| Table | Rows |
+| --- | ---: |
+| provider_quality_checks | 3 |
+| opportunity_alerts | 2 |
+| alert_outcomes | 2 |
+| minute_bars | 710 |
+| evidence_runs | 14 |
+| evidence_metrics | 380 |
+| system_status_events | 20 |
+| captures | 41 |
+| capture_candidates | 675 |
+
+Final report:
+
+```text
+docs/platform/offline-platform-maturity-sprint-v1-final-report.md
+```
+
+Safety notes:
+
+- SQLite remains additive, not authoritative.
+- File-based JSON/CSV/Markdown behavior remains preserved.
+- Raw captures were not mutated.
+- Production user-authored state was not changed.
+- Synthetic user-state fixtures were temporary and cleaned up.
+- No scoring, readiness, alert, outcome, scanner, or trade-planning logic was changed.
