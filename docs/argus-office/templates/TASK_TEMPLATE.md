@@ -15,6 +15,13 @@
 
 ## Assigned Agents
 
+## Goal Charter
+- [ ] Goal Steward reviewed or created a Goal Charter before Builder work.
+- [ ] Goal statement is explicit.
+- [ ] User pain or operator outcome is explicit.
+- [ ] In scope and out of scope are explicit.
+- [ ] Acceptance criteria and evidence required are explicit.
+
 ## Git Steward Preflight
 - [ ] Current branch confirmed.
 - [ ] Branch base confirmed.

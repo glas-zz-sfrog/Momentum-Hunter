@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added permanent Goal Steward governance for Goal Charters, acceptance alignment, non-goals, and completion evidence before Builder work.
+- Added `GOALS.md` with the active Daily Workflow "make the next light click" goal and a governance goal requiring Goal Charters before Builder tasks.
+- Added a Goal Charter template and updated task/merge templates to require explicit goal framing.
 - Added permanent Git Steward governance for branch safety, Git preflight, safety branches, allowed-path checks, fast-forward merge safety, and push refusal.
 - Updated Argus Office task flow so Git Steward prepares/verifies branches before implementation and performs merges only after Steven approval.
 - Added the ARGUS-0004 Guided Daily Workflow stepper bridge: the existing Daily Workflow modal now leads with trust state, next required action, five-step sequence, status lights, dependencies, blockers, and the same quick actions.

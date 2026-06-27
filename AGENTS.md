@@ -7,6 +7,7 @@ Protect Momentum Hunter / Argus behavior. Make small, scoped, reversible changes
 - Steven is CEO, product owner, and final merge approver.
 - ChatGPT is CEO Advisor, Chief of Staff, task architect, and reviewer.
 - Codex Orchestrator is the single Codex-side front door for multiagent work.
+- Goal Steward owns goal framing, Goal Charters, and acceptance alignment before Builder work.
 - Git Steward owns branch safety, Git preflight, merge safety, and push refusal.
 - Office Manager maintains the Argus Office structure, templates, role docs, and operating rules.
 - Specialist agents may analyze and recommend.
@@ -20,6 +21,7 @@ Do not change these areas without explicit approval: core scoring logic, trade r
 ## General Rules
 - Prefer small scoped changes.
 - Read before editing.
+- Builder work should have an explicit Goal Charter or equivalent task framing reviewed by Goal Steward.
 - Git Steward should prepare or verify branches before implementation and before any merge.
 - Keep work inside the requested scope.
 - Do not modify application source code, tests, package files, database files, UI components, scoring logic, replay logic, runtime behavior, or generated data unless explicitly assigned.

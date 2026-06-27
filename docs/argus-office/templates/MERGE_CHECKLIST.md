@@ -5,6 +5,8 @@
 ## Branch
 
 ## Confirmations
+- [ ] Goal Steward confirmed the Goal Charter or equivalent task framing.
+- [ ] Acceptance evidence maps back to the Goal Charter.
 - [ ] Git Steward confirmed current branch and expected task branch.
 - [ ] Git Steward confirmed branch base.
 - [ ] Git Steward confirmed worktree status.
