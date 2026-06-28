@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added startup gateway with Steven Desk and Argus Machine choices.
+- Added safe Argus Machine Console shell with Machine Status Bar, Top 5 Trade Plan Candidates, Selected Candidate Workbench, Trade Plan Ladder, Risk Governor, locked Order Console, and Machine Log.
+- Added focused UI tests for gateway routing, Top 5 candidate selection, Trade Plan Ladder population, and disabled order controls.
 - Added ARGUS-A000 autonomous platform foundation docs for Steven Desk, Argus Machine, autonomy modes, Machine Console, Trade Plan Ladder, Top 5 Trade Plan Candidates, Risk Governor, Broker Adapter, and Execution Ledger.
 - Added autonomous-side agent roles for execution architecture, risk governance, broker integration, paper trading, chart analysis, equity research, and execution auditability.
 - Added the first 20 autonomous roadmap tasks and fully specified ARGUS-A001 through ARGUS-A005.
