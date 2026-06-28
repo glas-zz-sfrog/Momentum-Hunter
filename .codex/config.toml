@@ -29,9 +29,11 @@ protected_areas = [
 
 [argus_office.operating_model]
 orchestrator = "single Codex-side front door for multiagent work"
+goal_steward = "owns goal framing, Goal Charters, and acceptance alignment"
 git_steward = "owns branch safety, Git preflight, merge safety, and push refusal"
 office_manager = "maintains office structure and operating rules"
 builder = "only normal code-writing agent"
 qa_regression = "may write tests only when explicitly assigned"
 release_scribe = "updates docs, reports, logs, and checklists; does not approve merges"
 specialists = "read-only by default; analyze and recommend"
+autonomous_agents = "read-only/spec-only by default; define autonomous planning, risk, broker, paper, research, chart, and audit boundaries"

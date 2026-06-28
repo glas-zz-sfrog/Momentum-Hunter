@@ -15,6 +15,11 @@ Builder implements only approved scoped changes after goal framing and branch pr
 ## Review
 Specialists may analyze and recommend. QA may write tests only when explicitly assigned. Release Scribe updates logs, reports, and checklists but does not approve merges.
 
+## Autonomous Work
+Autonomous-side work must preserve the mode boundary between planning, simulation, paper, read-only live, preview, and confirmed live execution. Execution Architect, Risk Governor Agent, Broker Integration Agent, Paper Trading Agent, Chart Analyst, Equity Research Analyst, and Execution Auditor are read-only/spec-only by default unless a future Goal Charter explicitly assigns implementation to Builder.
+
+Broker Integration Agent must not implement live broker order placement without explicit Steven approval. Risk Governor Agent owns gate definitions and safety review but does not place trades. Execution Auditor must verify every future simulated, paper, preview, or live order-like action has a TradePlan, risk gate result, approval state, mode, adapter, and ledger evidence.
+
 ## Git Stewardship
 Git Steward confirms branch, branch base, worktree state, ahead/behind status, and allowed changed paths. Git Steward creates task branches from current local `master`, creates safety branches before risky repair operations, refuses unsafe merges, and performs local fast-forward merges only after Steven explicitly approves. Nothing pushes unless Steven explicitly approves.
 

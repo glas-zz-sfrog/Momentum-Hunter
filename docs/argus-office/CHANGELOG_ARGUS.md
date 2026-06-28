@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added ARGUS-A000 autonomous platform foundation docs for Steven Desk, Argus Machine, autonomy modes, Machine Console, Trade Plan Ladder, Top 5 Trade Plan Candidates, Risk Governor, Broker Adapter, and Execution Ledger.
+- Added autonomous-side agent roles for execution architecture, risk governance, broker integration, paper trading, chart analysis, equity research, and execution auditability.
+- Added the first 20 autonomous roadmap tasks and fully specified ARGUS-A001 through ARGUS-A005.
 - Added permanent Goal Steward governance for Goal Charters, acceptance alignment, non-goals, and completion evidence before Builder work.
 - Added `GOALS.md` with the active Daily Workflow "make the next light click" goal and a governance goal requiring Goal Charters before Builder tasks.
 - Added a Goal Charter template and updated task/merge templates to require explicit goal framing.

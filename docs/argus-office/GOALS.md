@@ -31,3 +31,17 @@ Acceptance Direction:
 - Task prompts or office docs identify goal, operator pain, scope, non-goals, protected areas, acceptance criteria, and evidence required.
 - Goal Steward verifies the charter before Builder implementation begins.
 - Completion reports map verification back to the charter instead of redefining success around what was easiest to implement.
+
+## Autonomy: Build The Machine Room Safely
+
+Status: Active
+
+Goal: Momentum Hunter should grow a second major experience, Argus Machine, for autonomous planning, simulation, paper trading, broker awareness, and future execution supervision under strict gates.
+
+Operator Pain: Steven needs to see how the autonomous side will evolve before broker integration begins, without mixing planning language with approved live-trade language.
+
+Acceptance Direction:
+- A two-door gateway separates Steven Desk from Argus Machine.
+- Argus Machine shows Machine Status, Top 5 Trade Plan Candidates, Selected Candidate Workbench, Trade Plan Ladder, Risk Governor, Order Console, Machine Log, and Execution Ledger concepts.
+- TradePlan, Risk Governor, Broker Adapter, and Execution Ledger boundaries exist before any broker work.
+- Live execution remains locked until Steven explicitly approves a future live-execution Goal Charter.

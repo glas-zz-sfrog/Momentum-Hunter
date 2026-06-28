@@ -18,6 +18,13 @@ Steven is CEO, product owner, and final merge approver. ChatGPT is CEO Advisor, 
 | data_integrity_reviewer | Read-only | Reviews replay identity, capture IDs, linkage, stale data, and fallback risks. | No code edits |
 | quant_researcher | Read-only | Reviews scoring, math, signals, and trade assumptions. | Must not change scoring logic |
 | catalyst_researcher | Read-only | Reviews catalyst, news, evidence, and research representation. | No code edits |
+| execution_architect | Spec-only | Designs TradePlan-to-execution architecture, mode boundaries, and adapter contracts. | No app code by default |
+| risk_governor_agent | Spec-only | Owns autonomy risk gate definitions and safety-state review. | Does not place trades |
+| broker_integration_agent | Spec-only | Plans broker adapter phases, paper/live separation, and credential safety. | No live broker order placement without explicit Steven approval |
+| paper_trading_agent | Spec-only | Reviews paper-trading workflow and paper-only safety boundaries. | No live broker behavior |
+| chart_analyst | Read-only | Reviews chart setups and technical context for candidate TradePlans. | No code edits |
+| equity_research_analyst | Read-only | Reviews equity, catalyst, sector, and market context. | No code edits |
+| execution_auditor | Read-only | Reviews Execution Ledger completeness and order-like action auditability. | Does not approve or place trades |
 | release_scribe | Documentation | Updates changelog, task log, decisions, reports, and checklists. | No app code; does not approve merges |
 
 ## Standard Task Flow
@@ -31,6 +38,9 @@ Steven is CEO, product owner, and final merge approver. ChatGPT is CEO Advisor, 
 8. Release Scribe documents.
 9. Git Steward performs merge only after Steven approval.
 10. Nothing pushes unless Steven explicitly approves.
+
+## Autonomous Agent Rule
+Autonomous-side agents are read-only/spec-only by default. Broker/order execution, live trading, secrets, schemas, and runtime behavior require separate explicit Steven approval and a Goal Charter.
 
 ## Protected Areas
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
