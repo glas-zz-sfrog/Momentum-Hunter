@@ -12,6 +12,23 @@ Goal Steward confirms the user-visible goal, operator pain, scope, non-goals, pr
 ## Implementation
 Builder implements only approved scoped changes after goal framing and branch preflight are clear. Builder must report files changed, tests run, risks, manual QA, and evidence mapped to the Goal Charter.
 
+## Hard Chew Protocol
+For any implementation task, done means proven, not merely changed. The agent must not stop after shallow checklist completion, created files, labels, or tests that only prove text exists. The agent may finish quickly only when the proof gates below are actually satisfied; no fixed time duration is required.
+
+Implementation tasks must complete:
+1. Build/implementation pass.
+2. Full compile check where applicable.
+3. Focused tests for the changed behavior.
+4. Broader bounded test discovery with timeout handling.
+5. UI proof for UI changes, including screenshot sanity checks when possible.
+6. Protected-path diff review.
+7. Second-pass self-review of diff, tests, docs, and user-facing behavior.
+8. Narrow fix pass for issues found during self-review.
+9. Final verification pass.
+10. Commit only after acceptance criteria pass.
+
+Required evidence includes commands run, test results, files changed, screenshots or proof artifacts when UI changed, protected areas reviewed, branch status, push/merge status, and remaining risks.
+
 ## Review
 Specialists may analyze and recommend. QA may write tests only when explicitly assigned. Release Scribe updates logs, reports, and checklists but does not approve merges.
 

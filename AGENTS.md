@@ -2,6 +2,7 @@
 
 ## Prime Directive
 Protect Momentum Hunter / Argus behavior. Make small, scoped, reversible changes only when the task is clear and approved.
+Rule: done means proven, not merely changed.
 
 ## Authority Model
 - Steven is CEO, product owner, and final merge approver.
@@ -22,11 +23,13 @@ Do not change these areas without explicit approval: core scoring logic, trade r
 - Prefer small scoped changes.
 - Read before editing.
 - Builder work should have an explicit Goal Charter or equivalent task framing reviewed by Goal Steward.
+- Implementation tasks must follow the Hard Chew Protocol: build, compile/check, test, broaden bounded verification, prove UI changes when applicable, review protected paths, self-review, fix narrowly, verify again, and commit only after acceptance criteria pass.
 - Git Steward should prepare or verify branches before implementation and before any merge.
 - Keep work inside the requested scope.
 - Do not modify application source code, tests, package files, database files, UI components, scoring logic, replay logic, runtime behavior, or generated data unless explicitly assigned.
 - Do not invent requirements when the request is ambiguous.
 - Compare final changes against the current local branch state.
+- Do not mark a task complete merely because files were created, labels exist, or narrow tests pass without evidence that the requested behavior works.
 
 ## Stop Conditions
 Stop and report when:
@@ -42,6 +45,9 @@ Every agent report must include:
 - Scope
 - Files changed
 - Tests or checks run
+- Evidence for changed behavior
+- Protected areas reviewed
+- Push/merge status
 - Risks
 - Manual QA, if applicable
 - Open questions
