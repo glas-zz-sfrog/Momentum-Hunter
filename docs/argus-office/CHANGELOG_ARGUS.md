@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Added ARGUS-R001 app.py responsibility map, extraction target ranking, extraction risk matrix, and R002-R006 task contracts.
 - Added ARGUS-R000 architecture decision docs recommending staged PySide6 modernization, app.py extraction, and a backend/frontend boundary instead of a full rewrite now.
 - Added startup gateway with Steven Desk and Argus Machine choices.
 - Added safe Argus Machine Console shell with Machine Status Bar, Top 5 Trade Plan Candidates, Selected Candidate Workbench, Trade Plan Ladder, Risk Governor, locked Order Console, and Machine Log.
