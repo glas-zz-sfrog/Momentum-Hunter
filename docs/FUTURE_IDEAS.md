@@ -205,3 +205,154 @@ Before automated trading is enabled, require broker-grade quote confirmation for
   - Prefer isolated offscreen probes with hard timeouts, bytecode disabled, and explicit Python process checks.
   - Add a small test-runner helper that executes one risky Qt probe at a time and kills only the spawned test process on timeout.
   - Record the exact command that hangs before attempting any retry.
+
+## Future Ideas Parking Lot - Momentum Hunter / Argus
+
+### Frontend Modernization Spike
+Investigate whether Momentum Hunter should remain PySide6 with a modern design system or eventually migrate the frontend to C# WinUI 3, Avalonia, or a Tauri/web-style shell.
+
+Key questions:
+- Can PySide6 be made modern enough with a real design system?
+- Would C# WinUI 3 give the best native Windows experience?
+- Would Avalonia help if cross-platform matters?
+- Would Tauri/web offer the most polished dashboard experience?
+- How can we separate the Python engine from the UI so the frontend can be replaced later?
+
+### Momentum Hunter Design System
+Create a reusable visual system:
+- dark premium trading theme
+- gold/red accent language
+- modern cards
+- status pills
+- mode banners
+- warning states
+- locked/live/paper visual language
+- Trade Plan Ladder visual components
+- consistent spacing and typography
+
+This should improve the dated "Netscape browser from 1998" feel without requiring an immediate rewrite.
+
+### Steven Desk vs Argus Machine Gateway
+Preserve the two-door product split:
+- Steven Desk: human-guided momentum operations
+- Argus Machine: autonomous planning, simulation, paper trading, and future execution control
+
+The gateway should feel intentional and high-stakes, not like a basic menu. It creates a safety boundary between human review and machine supervision.
+
+### Trade Plan Ladder Visual System
+Continue developing Trade Plan Ladder as a major autonomous-side component.
+
+It should show:
+- Top 5 Trade Plan Candidates
+- clickable ticker rows
+- selected ticker details
+- entry trigger
+- entry/limit price
+- invalidation / hard stop
+- Target 1 / Target 2 / Target 3
+- trailing stop rule
+- position size
+- max dollar risk
+- risk/reward
+- manual override state
+- Risk Governor status
+
+The generated "Trade Plan Ladder" button/asset is good enough as an early visual direction and can be refined later.
+
+### Top 5 Trade Plan Candidates
+Argus Machine should show the top five candidate trade plans as clickable ticker rows. Clicking a ticker should populate the Trade Plan Ladder.
+
+Avoid implying these are approved live trades. Prefer labels like:
+- Top 5 Setups
+- Top 5 Trade Plan Candidates
+- Top 5 Machine Plans
+
+Avoid "Strongest Trades" until Risk Governor and paper outcomes justify that language.
+
+### Chart Analyst Agent
+Add a dedicated Chart Analyst lane for read-only technical analysis:
+- trend/posture
+- support/resistance
+- gap behavior
+- volume confirmation
+- relative volume
+- moving average posture if available
+- invalidation level
+- chase risk
+- final label: ignore / monitor / watchlist / deeper review
+
+Chart analysis should support candidate review, not directly change scoring or execution.
+
+### Public Equity Investing Research Desk
+Use public-equity-investing as a read-only research layer around Momentum Hunter candidates.
+
+It should help with:
+- company snapshot
+- catalyst context
+- earnings risk
+- valuation context
+- bull/bear thesis
+- thesis invalidation
+- portfolio/risk flags
+
+Default policy: read-only decision support only. It may not change scoring, readiness, alerts, broker behavior, or execution without a Goal Charter and Steven approval.
+
+### Execution Console and Machine Log
+Argus Machine needs an always-visible Machine Log and Execution Console so Steven can see:
+- what Argus is doing
+- why it is doing it
+- what data it used
+- what is blocked
+- what needs approval
+- what mode it is in
+- whether live trading is locked
+
+Every future simulated, paper, or live action should be audit-logged.
+
+### Paper / Live Safety Language
+Keep strong mode separation:
+- Simulation Lab
+- Paper Trading
+- Live Trading Locked
+- Live Preview only
+- Confirmed Live Execution later
+- Supervised Automation much later
+
+Live trading should never be a casual toggle.
+
+### Screenshot Validation Repair
+Future UI proof should validate that screenshots are real:
+- file exists
+- nonzero dimensions
+- nontrivial file size
+- not blank
+- expected labels/panels visible or verified by UI inspection
+
+This prevents false confidence from broken screenshot capture.
+
+### TradePlan / Risk Governor Follow-Ups
+Track follow-up questions from ARGUS-A004/A005:
+- Should future UI require all three targets, or is at least one target enough?
+- Should TradePlan fields be renamed before UI wiring?
+- Should live-preview remain fully locked until a separate approval model exists?
+- How should manual override re-checks appear in the UI?
+- What is the exact mapping from Top 5 candidates into real TradePlan objects?
+
+### Argus Office as a Reusable Company-in-a-Box
+If the Argus Office model works, adapt it later for Honda work:
+- NARS automation
+- TagTracker
+- QMF/SAP BI workflow support
+- dashboard/report generation
+- work-process automation
+
+Reusable pattern:
+- CEO / final approver
+- ChatGPT advisor
+- Goal Steward
+- Git Steward
+- Builder
+- QA
+- domain specialists
+- Release Scribe
+- Hard Chew Protocol
