@@ -22,5 +22,12 @@
 - Define autonomy modes, Machine Console panels, Trade Plan Ladder, Top 5 Trade Plan Candidates, Risk Governor, Broker Adapter roadmap, and Execution Ledger.
 - Keep autonomous agents read-only/spec-only by default until future Goal Charters explicitly approve implementation.
 
+## Phase 5 - Staged Architecture Modernization
+- Do not rewrite Momentum Hunter now.
+- Keep Python as the core engine for scanning, scoring, evidence, replay, storage, readiness, trade planning, and risk governance.
+- Modernize PySide6 first with a real design system and extracted UI modules.
+- Shrink `momentum_hunter/app.py` through small, test-protected extractions.
+- Define a backend/frontend boundary before considering C# WinUI, Avalonia, or Tauri as replacement frontends.
+
 ## Protected Areas
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.

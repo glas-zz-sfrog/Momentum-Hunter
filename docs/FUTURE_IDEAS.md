@@ -205,3 +205,12 @@ Before automated trading is enabled, require broker-grade quote confirmation for
   - Prefer isolated offscreen probes with hard timeouts, bytecode disabled, and explicit Python process checks.
   - Add a small test-runner helper that executes one risky Qt probe at a time and kills only the spawned test process on timeout.
   - Record the exact command that hangs before attempting any retry.
+
+## Architecture Modernization / Rewrite Decision
+
+- Do not rewrite Momentum Hunter now.
+- Modernize PySide6 first with a real design system and extracted UI modules.
+- Treat `momentum_hunter/app.py` as the first major refactor target because it mixes shell navigation, UI construction, workflow mapping, scanner orchestration, report rendering, formatting, and styling.
+- Keep scanning, scoring, evidence, replay, SQLite/storage, Daily Workflow facts, TradePlan, and future Risk Governor behavior in Python.
+- Define backend/frontend DTO and command boundaries before choosing C# WinUI, Avalonia, or Tauri.
+- Revisit a frontend rewrite only after the R001-R005 architecture tasks prove the boundary and improve the visible UI.

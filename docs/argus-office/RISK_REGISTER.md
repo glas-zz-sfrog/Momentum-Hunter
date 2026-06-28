@@ -12,6 +12,9 @@
 | R-008 | Paper and live broker states are blurred. | Broker safety | High | Separate fake, paper, read-only live, preview, and confirmed live adapter modes with visible console labels. | Open |
 | R-009 | Manual TradePlan edits bypass risk re-check. | Risk controls | High | Mark edits as manual overrides and require Risk Governor re-check before advancing state. | Open |
 | R-010 | Autonomous roadmap expands into protected runtime behavior too early. | Scope control | Medium | Keep ARGUS-A000 docs/config only and require future Goal Charters for implementation. | Open |
+| R-011 | A full rewrite regresses proven trading behavior before the backend boundary is ready. | Architecture | High | Use staged PySide6 modernization, app.py extraction, and DTO/service boundaries before any frontend replacement. | Open |
+| R-012 | `app.py` continues growing and blocks safe UI modernization. | Maintainability | High | Execute R001-R005 to map, extract, theme, and boundary the app shell without changing protected behavior. | Open |
+| R-013 | Frontend modernization improves appearance but weakens safety language. | Product trust | High | Preserve locked/live/paper/simulation labels and screenshot-proof warning states in every UI modernization task. | Open |
 
 ## Protected Areas
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.

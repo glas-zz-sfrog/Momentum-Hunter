@@ -45,3 +45,22 @@ Acceptance Direction:
 - Argus Machine shows Machine Status, Top 5 Trade Plan Candidates, Selected Candidate Workbench, Trade Plan Ladder, Risk Governor, Order Console, Machine Log, and Execution Ledger concepts.
 - TradePlan, Risk Governor, Broker Adapter, and Execution Ledger boundaries exist before any broker work.
 - Live execution remains locked until Steven explicitly approves a future live-execution Goal Charter.
+
+## Architecture: Modernize Without A Premature Rewrite
+
+Status: Active
+
+Goal: Momentum Hunter should become easier to modernize and eventually frontend-replaceable without rewriting proven Python engine behavior.
+
+Operator Pain: Steven sees a dated UI and a large `app.py`, but a full rewrite would risk scoring, readiness, replay, storage, and broker safety before the frontend/backend boundary is ready.
+
+Current Evidence:
+- ARGUS-R000 found `momentum_hunter/app.py` is 7,188 lines and mixes shell navigation, UI construction, workflow mapping, scanner orchestration, report rendering, formatting, and styling.
+- Backend modules already exist for daily workflow, scoring, storage, replay, SQLite, trade planning, evidence, and UI view-state decisions.
+
+Acceptance Direction:
+- No full rewrite until the Python engine boundary is explicit.
+- PySide6 modernization comes first.
+- `app.py` shrinks through small, test-protected extractions.
+- Future WinUI, Avalonia, or Tauri work stays optional until R001-R005 prove the boundary.
+- Protected trading, replay, storage, scoring, readiness, and broker/order behavior remain untouched unless Steven approves a separate Goal Charter.
