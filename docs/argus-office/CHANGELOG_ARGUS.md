@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added `TradePlan` model primitives for Argus Machine planning, including ladder-compatible field output and conservative validation.
+- Added first-pass Risk Governor gates with `PASS`, `WARN`, `BLOCK`, `NEEDS_STEVEN`, and `LOCKED` statuses.
+- Added focused TradePlan and Risk Governor unit tests; live and live-preview modes remain locked by default.
 - Added startup gateway with Steven Desk and Argus Machine choices.
 - Added safe Argus Machine Console shell with Machine Status Bar, Top 5 Trade Plan Candidates, Selected Candidate Workbench, Trade Plan Ladder, Risk Governor, locked Order Console, and Machine Log.
 - Added focused UI tests for gateway routing, Top 5 candidate selection, Trade Plan Ladder population, and disabled order controls.
