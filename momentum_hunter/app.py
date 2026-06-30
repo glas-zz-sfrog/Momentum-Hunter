@@ -212,7 +212,7 @@ from momentum_hunter.study import (
     build_capture_study,
 )
 from momentum_hunter.time_utils import format_central, next_market_session, now_central
-from momentum_hunter.ui.autonomy_gateway import build_argus_machine_console_page, build_gateway_page
+from momentum_hunter.ui.autonomy_gateway import build_argus_machine_console_page, build_gateway_page, refresh_argus_machine_console
 from momentum_hunter.ui.data_view_state import (
     DataViewState,
     DataViewStyle,
@@ -409,8 +409,9 @@ class MomentumHunterWindow(QMainWindow):
     def open_argus_machine_console(self) -> None:
         if not hasattr(self, "app_stack"):
             return
+        refresh_argus_machine_console(self)
         self.app_stack.setCurrentWidget(self.argus_machine_page)
-        self._update_status("Argus Machine open in Simulation Lab. No broker connected. Live trading locked.")
+        self._update_status("Argus Machine open in Simulation Lab. FakeBroker only. Live trading locked.")
 
     def _build_navigation_rail(self) -> QWidget:
         rail = QGroupBox("Momentum")
