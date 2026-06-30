@@ -19,109 +19,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-
-ARGUS_MACHINE_PLACEHOLDER_CANDIDATES: list[dict[str, str]] = [
-    {
-        "ticker": "NVDA",
-        "setup": "Opening drive continuation",
-        "status": "Draft plan",
-        "gate": "Preview only / live locked",
-        "summary": "Placeholder setup for a high-liquidity momentum continuation candidate.",
-        "catalyst": "Demo catalyst: earnings strength placeholder, not live research.",
-        "chart": "Demo chart: trend continuation placeholder.",
-        "plan_status": "Machine draft incomplete; Risk Governor preview only.",
-        "entry_trigger": "Break and hold above demo opening range",
-        "entry_limit": "Demo limit: prior high + 0.5%",
-        "stop": "Demo invalidation: loses VWAP and opening range low",
-        "target_1": "Demo target 1: +1R",
-        "target_2": "Demo target 2: +2R",
-        "target_3": "Demo target 3: trend extension",
-        "trailing_rule": "Demo trail: below rising 9 EMA after Target 1",
-        "position_size": "Not sized",
-        "max_risk": "Not approved",
-        "risk_reward": "Preview only",
-    },
-    {
-        "ticker": "AMD",
-        "setup": "Relative strength pullback",
-        "status": "Needs risk check",
-        "gate": "Stop required",
-        "summary": "Placeholder setup for a pullback that still needs complete risk fields.",
-        "catalyst": "Demo catalyst: sector strength placeholder.",
-        "chart": "Demo chart: higher-low pullback placeholder.",
-        "plan_status": "Waiting on stop and max-risk discipline.",
-        "entry_trigger": "Reclaim demo pivot with volume confirmation",
-        "entry_limit": "Demo limit: pivot reclaim",
-        "stop": "Demo invalidation: lower-low under pullback base",
-        "target_1": "Demo target 1: prior intraday high",
-        "target_2": "Demo target 2: measured move",
-        "target_3": "Demo target 3: stretch target",
-        "trailing_rule": "Demo trail: move stop after Target 1",
-        "position_size": "Not sized",
-        "max_risk": "Missing",
-        "risk_reward": "Needs check",
-    },
-    {
-        "ticker": "PLTR",
-        "setup": "Catalyst gap watch",
-        "status": "Simulation candidate",
-        "gate": "Broker mode locked",
-        "summary": "Placeholder setup for a catalyst gap candidate in simulation-only mode.",
-        "catalyst": "Demo catalyst: headline momentum placeholder.",
-        "chart": "Demo chart: gap-and-hold placeholder.",
-        "plan_status": "Simulation-ready only; broker mode is locked.",
-        "entry_trigger": "Hold above demo gap support",
-        "entry_limit": "Demo limit: first pullback",
-        "stop": "Demo invalidation: gap support failure",
-        "target_1": "Demo target 1: opening high retest",
-        "target_2": "Demo target 2: gap extension",
-        "target_3": "Demo target 3: runner only",
-        "trailing_rule": "Demo trail: prior candle low after Target 2",
-        "position_size": "Simulation only",
-        "max_risk": "Demo $ risk only",
-        "risk_reward": "Preview estimate",
-    },
-    {
-        "ticker": "TSLA",
-        "setup": "Volatility compression break",
-        "status": "Blocked",
-        "gate": "Steven approval required",
-        "summary": "Placeholder setup intentionally blocked until explicit approval state exists.",
-        "catalyst": "Demo catalyst: volatility event placeholder.",
-        "chart": "Demo chart: compression range placeholder.",
-        "plan_status": "Blocked: approval gate is not satisfied.",
-        "entry_trigger": "Demo range break with confirmation",
-        "entry_limit": "Demo limit: breakout retest",
-        "stop": "Demo invalidation: range reclaim failure",
-        "target_1": "Demo target 1: range height",
-        "target_2": "Demo target 2: prior resistance",
-        "target_3": "Demo target 3: no live target",
-        "trailing_rule": "Demo trail: disabled while blocked",
-        "position_size": "Blocked",
-        "max_risk": "Blocked",
-        "risk_reward": "Blocked",
-    },
-    {
-        "ticker": "SMCI",
-        "setup": "Late-day reclaim",
-        "status": "Watch only",
-        "gate": "Data freshness check",
-        "summary": "Placeholder setup for a reclaim candidate that needs freshness review.",
-        "catalyst": "Demo catalyst: watchlist-only placeholder.",
-        "chart": "Demo chart: reclaim placeholder.",
-        "plan_status": "Watch-only until data freshness is checked.",
-        "entry_trigger": "Demo reclaim above afternoon pivot",
-        "entry_limit": "Demo limit: pivot plus spread buffer",
-        "stop": "Demo invalidation: pivot failure",
-        "target_1": "Demo target 1: liquidity shelf",
-        "target_2": "Demo target 2: session high",
-        "target_3": "Demo target 3: locked",
-        "trailing_rule": "Demo trail: not active",
-        "position_size": "Not sized",
-        "max_risk": "Needs freshness check",
-        "risk_reward": "Not trusted yet",
-    },
-]
+from momentum_hunter.autonomy.broker import FakeBrokerAdapter
+from momentum_hunter.autonomy.ledger import ExecutionLedger, render_machine_log
+from momentum_hunter.autonomy.risk_governor import RiskGovernorResult, SIMULATION_MODE
+from momentum_hunter.autonomy.simulation import SimulationLabEngine
+from momentum_hunter.autonomy.view_models import Top5CandidatePlan, build_top5_candidate_plans
+from momentum_hunter.monitor_targets import latest_trade_report_path
+from momentum_hunter.ui.trade_plan_ladder import TradePlanLadderWidget
 
 
 def build_gateway_page(window: Any) -> QWidget:
@@ -142,7 +46,7 @@ def build_gateway_page(window: Any) -> QWidget:
 
     subtitle = QLabel(
         "Steven Desk preserves the human-guided dashboard. Argus Machine opens the safe autonomous console shell. "
-        "Simulation only. No broker connected. Live trading locked."
+        "Simulation only. FakeBroker only. Live trading locked."
     )
     subtitle.setObjectName("gatewaySubtitle")
     subtitle.setWordWrap(True)
@@ -165,15 +69,15 @@ def build_gateway_page(window: Any) -> QWidget:
         build_gateway_choice(
             "Argus Machine",
             "Autonomous planning, simulation, and execution control",
-            "Machine status, Top 5 plan candidates, Trade Plan Ladder, Risk Governor, locked Order Console, and Machine Log.",
-            "Simulation Lab. No broker connected. Live trading locked.",
+            "Machine status, Top 5 plan candidates, Trade Plan Ladder, Risk Governor, simulation-only controls, and Machine Log.",
+            "Simulation Lab. FakeBroker only. Paper and live trading locked.",
             window.open_argus_machine_console,
         )
     )
     layout.addWidget(choice_row)
     layout.addStretch(1)
 
-    footer = QLabel("Gateway state: safe startup shell. Orders cannot be previewed, simulated, submitted, or routed from here.")
+    footer = QLabel("Gateway state: safe startup shell. Orders cannot be paper-traded, live-traded, or routed from here.")
     footer.setObjectName("gatewaySafetyFooter")
     footer.setWordWrap(True)
     layout.addWidget(footer)
@@ -219,6 +123,7 @@ def build_gateway_choice(
 
 
 def build_argus_machine_console_page(window: Any) -> QWidget:
+    ensure_argus_machine_runtime(window)
     page = QWidget()
     page.setObjectName("argusMachineConsolePage")
     layout = QVBoxLayout(page)
@@ -231,7 +136,7 @@ def build_argus_machine_console_page(window: Any) -> QWidget:
     header_layout.setSpacing(10)
     title = QLabel(
         "ARGUS MACHINE\n"
-        "Autonomous planning console shell. Placeholder/demo state only. No broker connected. Live trading locked."
+        "Structured planning and simulation console. FakeBroker only. Paper and live trading locked."
     )
     title.setObjectName("argusMachineTitle")
     title.setWordWrap(True)
@@ -255,8 +160,8 @@ def build_argus_machine_console_page(window: Any) -> QWidget:
     left_layout = QVBoxLayout(left)
     left_layout.setContentsMargins(0, 0, 0, 0)
     left_layout.setSpacing(10)
-    left_layout.addWidget(build_argus_top5_panel(window))
-    left_layout.addWidget(build_argus_workbench_panel(window))
+    left_layout.addWidget(build_argus_top5_panel(window), 4)
+    left_layout.addWidget(build_argus_workbench_panel(window), 2)
     body.addWidget(left)
 
     right = QWidget()
@@ -272,8 +177,21 @@ def build_argus_machine_console_page(window: Any) -> QWidget:
     layout.addWidget(body, 1)
 
     layout.addWidget(build_argus_machine_log_panel(window))
-    clear_argus_trade_plan_ladder(window)
+    refresh_argus_machine_console(window)
     return page
+
+
+def ensure_argus_machine_runtime(window: Any) -> None:
+    if not hasattr(window, "argus_execution_ledger"):
+        window.argus_execution_ledger = ExecutionLedger()
+    if not hasattr(window, "argus_fake_broker"):
+        window.argus_fake_broker = FakeBrokerAdapter()
+    window.argus_simulation_engine = SimulationLabEngine(
+        adapter=window.argus_fake_broker,
+        ledger=window.argus_execution_ledger,
+    )
+    if not hasattr(window, "argus_selected_candidate_plan"):
+        window.argus_selected_candidate_plan = None
 
 
 def build_argus_machine_status_bar(window: Any) -> QWidget:
@@ -282,10 +200,11 @@ def build_argus_machine_status_bar(window: Any) -> QWidget:
     layout = QGridLayout(box)
     layout.setSpacing(8)
     statuses = [
-        ("Mode", "Simulation Lab"),
-        ("Broker", "None connected"),
+        ("Mode", SIMULATION_MODE),
+        ("Broker", "FakeBroker only"),
+        ("Order Ability", "Simulated only"),
+        ("Risk Governor", "Select candidate"),
         ("Live Trading", "Locked"),
-        ("Risk Governor", "Preview only"),
         ("Kill Switch", "Available"),
     ]
     window.argus_machine_status_labels = {}
@@ -299,29 +218,36 @@ def build_argus_machine_status_bar(window: Any) -> QWidget:
 
 
 def build_argus_top5_panel(window: Any) -> QWidget:
-    box = QGroupBox("Top 5 Trade Plan Candidates - Placeholder")
+    box = QGroupBox("Top 5 Trade Plan Candidates")
     box.setObjectName("argusTop5Panel")
     layout = QVBoxLayout(box)
     layout.setSpacing(8)
-    note = QLabel(
-        "Demo candidates only. These are machine-plan candidates, not approved live trades. "
-        "Click a ticker row to populate the Trade Plan Ladder."
+    window.argus_top5_note_label = QLabel(
+        "Machine-plan candidates only; not approved trades. Click a ticker to populate the ladder."
     )
-    note.setObjectName("criteriaLabel")
-    note.setWordWrap(True)
-    layout.addWidget(note)
+    window.argus_top5_note_label.setObjectName("criteriaLabel")
+    window.argus_top5_note_label.setWordWrap(True)
+    window.argus_top5_note_label.setMaximumHeight(48)
+    layout.addWidget(window.argus_top5_note_label)
 
+    window.argus_top5_empty_label = QLabel("")
+    window.argus_top5_empty_label.setObjectName("argusTop5EmptyState")
+    window.argus_top5_empty_label.setWordWrap(True)
+    window.argus_top5_empty_label.hide()
+    layout.addWidget(window.argus_top5_empty_label)
+
+    window.argus_top5_table = QTableWidget(0, 4)
+    window.argus_top5_table.setObjectName("argusTop5Table")
+    window.argus_top5_table.setHorizontalHeaderLabels(["Ticker", "Setup", "Plan", "Gate"])
+    window.argus_top5_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    window.argus_top5_table.verticalHeader().setVisible(False)
+    window.argus_top5_table.verticalHeader().setDefaultSectionSize(28)
+    window.argus_top5_table.setWordWrap(False)
+    window.argus_top5_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    window.argus_top5_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+    layout.addWidget(window.argus_top5_table, 1)
     window.argus_candidate_buttons = []
-    for candidate in ARGUS_MACHINE_PLACEHOLDER_CANDIDATES:
-        button = QPushButton(
-            f"{candidate['ticker']} | {candidate['setup']} | {candidate['status']} | Gate: {candidate['gate']}"
-        )
-        button.setObjectName(f"argusCandidateButton_{candidate['ticker']}")
-        button.setProperty("argusTicker", candidate["ticker"])
-        button.setToolTip("Placeholder Top 5 candidate. Click to populate the Trade Plan Ladder.")
-        button.clicked.connect(lambda _checked=False, item=candidate: select_argus_machine_candidate(window, item))
-        layout.addWidget(button)
-        window.argus_candidate_buttons.append(button)
+    window.argus_candidate_plans = []
     return box
 
 
@@ -334,13 +260,13 @@ def build_argus_workbench_panel(window: Any) -> QWidget:
     window.argus_workbench_ticker_label = QLabel("Selected ticker: none")
     window.argus_workbench_ticker_label.setObjectName("argusWorkbenchTicker")
     window.argus_workbench_ticker_label.setWordWrap(True)
-    window.argus_workbench_summary_label = QLabel("Setup summary: select a Top 5 placeholder candidate.")
+    window.argus_workbench_summary_label = QLabel("Setup summary: select a Top 5 Trade Plan Candidate.")
     window.argus_workbench_summary_label.setWordWrap(True)
-    window.argus_workbench_catalyst_label = QLabel("Catalyst placeholder: waiting for candidate selection.")
+    window.argus_workbench_catalyst_label = QLabel("Catalyst: waiting for candidate selection.")
     window.argus_workbench_catalyst_label.setWordWrap(True)
-    window.argus_workbench_chart_label = QLabel("Chart placeholder: waiting for candidate selection.")
+    window.argus_workbench_chart_label = QLabel("Chart context: waiting for candidate selection.")
     window.argus_workbench_chart_label.setWordWrap(True)
-    window.argus_workbench_plan_status_label = QLabel("Plan status: no Trade Plan selected.")
+    window.argus_workbench_plan_status_label = QLabel("Plan status: no TradePlan selected.")
     window.argus_workbench_plan_status_label.setWordWrap(True)
 
     labels = [
@@ -357,89 +283,73 @@ def build_argus_workbench_panel(window: Any) -> QWidget:
 
 
 def build_argus_trade_plan_ladder_panel(window: Any) -> QWidget:
-    box = QGroupBox("Trade Plan Ladder")
-    box.setObjectName("argusTradePlanLadderPanel")
-    layout = QVBoxLayout(box)
-    layout.setSpacing(8)
-
-    window.argus_ladder_empty_label = QLabel("Select a candidate to populate the Trade Plan Ladder")
-    window.argus_ladder_empty_label.setObjectName("argusTradePlanEmptyState")
-    window.argus_ladder_empty_label.setWordWrap(True)
-    layout.addWidget(window.argus_ladder_empty_label)
-
-    window.argus_ladder_table = QTableWidget(0, 2)
-    window.argus_ladder_table.setObjectName("argusTradePlanLadderTable")
-    window.argus_ladder_table.setHorizontalHeaderLabels(["Field", "Placeholder Value"])
-    window.argus_ladder_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-    window.argus_ladder_table.verticalHeader().setVisible(False)
-    window.argus_ladder_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-    window.argus_ladder_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-    layout.addWidget(window.argus_ladder_table, 1)
-    return box
+    widget = TradePlanLadderWidget()
+    window.argus_ladder_widget = widget
+    window.argus_ladder_empty_label = widget.empty_label
+    window.argus_ladder_table = widget.table
+    return widget
 
 
 def build_argus_risk_governor_panel(window: Any) -> QWidget:
-    box = QGroupBox("Risk Governor - Display Only")
+    box = QGroupBox("Risk Governor - Simulation Gate")
     box.setObjectName("argusRiskGovernorPanel")
     layout = QVBoxLayout(box)
-    warning = QLabel(
-        "Preview only. This panel is not live trading permission and cannot approve broker execution."
+    window.argus_risk_warning_label = QLabel(
+        "Select a TradePlan candidate to see current simulation gate status. This is not paper or live permission."
     )
-    warning.setObjectName("argusRiskWarningLabel")
-    warning.setWordWrap(True)
-    layout.addWidget(warning)
+    window.argus_risk_warning_label.setObjectName("argusRiskWarningLabel")
+    window.argus_risk_warning_label.setWordWrap(True)
+    layout.addWidget(window.argus_risk_warning_label)
 
-    window.argus_risk_gate_table = QTableWidget(6, 3)
+    window.argus_risk_gate_table = QTableWidget(0, 3)
     window.argus_risk_gate_table.setObjectName("argusRiskGateTable")
     window.argus_risk_gate_table.setHorizontalHeaderLabels(["Gate", "State", "Reason"])
     window.argus_risk_gate_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     window.argus_risk_gate_table.verticalHeader().setVisible(False)
     window.argus_risk_gate_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-    gates = [
-        ("Data freshness", "Demo check", "Placeholder data requires operator review."),
-        ("Stop defined", "Preview", "Demo stop only; not approved for orders."),
-        ("Max risk", "Missing/preview", "No account risk model is connected."),
-        ("Duplicate order", "Locked", "No broker or order ledger connected."),
-        ("Broker mode", "None connected", "Broker adapter is not active."),
-        ("Steven approval", "Required", "Live execution needs separate explicit approval."),
-    ]
-    for row, values in enumerate(gates):
-        for column, value in enumerate(values):
-            window.argus_risk_gate_table.setItem(row, column, QTableWidgetItem(value))
     layout.addWidget(window.argus_risk_gate_table)
     return box
 
 
 def build_argus_order_console_panel(window: Any) -> QWidget:
-    box = QGroupBox("Order Console - Locked")
+    box = QGroupBox("Simulation Order Console - Locked From Paper/Live")
     box.setObjectName("argusOrderConsolePanel")
     layout = QVBoxLayout(box)
-    note = QLabel(
-        "Display-only shell. No preview, paper order, live order, broker connection, or execution route exists."
+    window.argus_order_console_note = QLabel(
+        "Simulation only. FakeBroker can preview and submit fake orders into the ledger. Paper and live controls are locked."
     )
-    note.setObjectName("argusOrderConsoleWarning")
-    note.setWordWrap(True)
-    layout.addWidget(note)
+    window.argus_order_console_note.setObjectName("argusOrderConsoleWarning")
+    window.argus_order_console_note.setWordWrap(True)
+    layout.addWidget(window.argus_order_console_note)
 
     button_row = QWidget()
     button_layout = QHBoxLayout(button_row)
     button_layout.setContentsMargins(0, 0, 0, 0)
-    window.argus_preview_order_button = QPushButton("Preview Order")
-    window.argus_submit_paper_button = QPushButton("Submit Paper Order")
-    window.argus_submit_live_button = QPushButton("Submit Live Order")
-    locked_buttons = [
-        window.argus_preview_order_button,
-        window.argus_submit_paper_button,
-        window.argus_submit_live_button,
-    ]
+    window.argus_run_simulation_button = QPushButton("Run Simulation Only")
+    window.argus_run_simulation_button.setEnabled(False)
+    window.argus_run_simulation_button.setToolTip("Select a candidate with no blocked Risk Governor gates.")
+    window.argus_run_simulation_button.clicked.connect(lambda: run_argus_simulation(window))
+    window.argus_submit_paper_button = QPushButton("Paper Order Locked")
+    window.argus_submit_live_button = QPushButton("Live Order Locked")
+    locked_buttons = [window.argus_submit_paper_button, window.argus_submit_live_button]
+    button_layout.addWidget(window.argus_run_simulation_button)
     for button in locked_buttons:
         button.setEnabled(False)
         button.setProperty("lockedOrderControl", True)
-        button.setToolTip("Locked: display-only shell. No broker or execution behavior is connected.")
+        button.setToolTip("Locked: no paper or live broker path is connected.")
         button_layout.addWidget(button)
+    window.argus_preview_order_button = window.argus_run_simulation_button
     window.argus_submit_live_button.setObjectName("argusSubmitLiveOrderButton")
     window.argus_submit_live_button.setToolTip("Locked: live trading requires separate Steven approval and broker safety gates.")
     layout.addWidget(button_row)
+
+    window.argus_simulation_table = QTableWidget(0, 5)
+    window.argus_simulation_table.setObjectName("argusSimulationOrderTable")
+    window.argus_simulation_table.setHorizontalHeaderLabels(["Order", "Ticker", "Status", "Qty", "Reason"])
+    window.argus_simulation_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    window.argus_simulation_table.verticalHeader().setVisible(False)
+    window.argus_simulation_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    layout.addWidget(window.argus_simulation_table)
     return box
 
 
@@ -450,50 +360,165 @@ def build_argus_machine_log_panel(window: Any) -> QWidget:
     window.argus_machine_log = QPlainTextEdit()
     window.argus_machine_log.setObjectName("argusMachineLog")
     window.argus_machine_log.setReadOnly(True)
-    window.argus_machine_log.setMaximumHeight(96)
-    window.argus_machine_log.setPlainText(
-        "Argus Machine loaded in Simulation Lab. No broker connected. Live trading locked.\n"
-        "Top 5 placeholder candidates ready. Selecting a ticker populates the Trade Plan Ladder.\n"
-        "Order Console disabled. This shell cannot place, preview, simulate, or submit trades."
-    )
+    window.argus_machine_log.setMaximumHeight(120)
+    if not window.argus_execution_ledger.events:
+        window.argus_execution_ledger.record(
+            event_type="machine_loaded",
+            mode=SIMULATION_MODE,
+            requested_action="machine_loaded",
+            result="ready",
+            broker_adapter="FakeBrokerAdapter",
+            reason="Argus Machine loaded. FakeBroker simulation only. Live trading locked.",
+        )
+    render_argus_machine_log(window)
     layout.addWidget(window.argus_machine_log)
     return box
 
 
+def refresh_argus_machine_console(window: Any) -> None:
+    ensure_argus_machine_runtime(window)
+    report_path = latest_trade_report_path()
+    plans = build_top5_candidate_plans(
+        report_path=report_path,
+        candidates=getattr(window, "candidates", []),
+        limit=5,
+    )
+    window.argus_candidate_plans = plans
+    window.argus_candidate_buttons = []
+    if plans:
+        source = plans[0].source_name
+        window.argus_top5_note_label.setText(
+            f"Top 5 from {source}; machine-plan candidates, not approved trades."
+        )
+        window.argus_top5_empty_label.hide()
+        window.argus_top5_table.show()
+        window.argus_top5_table.setRowCount(len(plans))
+        for row, candidate in enumerate(plans):
+            button = QPushButton(f"{candidate.rank}. {candidate.ticker}")
+            button.setObjectName(f"argusCandidateButton_{candidate.ticker}")
+            button.setProperty("argusTicker", candidate.ticker)
+            button.setToolTip(candidate.button_text)
+            button.setMinimumHeight(24)
+            button.setMaximumHeight(26)
+            button.clicked.connect(lambda _checked=False, item=candidate: select_argus_machine_candidate(window, item))
+            window.argus_top5_table.setCellWidget(row, 0, button)
+            values = [candidate.setup_label, candidate.plan_status, candidate.gate_state]
+            for column, value in enumerate(values, 1):
+                window.argus_top5_table.setItem(row, column, QTableWidgetItem(value))
+            window.argus_candidate_buttons.append(button)
+    else:
+        window.argus_top5_table.setRowCount(0)
+        window.argus_top5_table.hide()
+        window.argus_top5_empty_label.setText(
+            "No Trade Plan Candidates available. Generate a trade-planning report or load scanner candidates first."
+        )
+        window.argus_top5_empty_label.show()
+        clear_argus_trade_plan_ladder(window)
+        render_argus_risk_result(window, None)
+        window.argus_run_simulation_button.setEnabled(False)
+    render_simulation_orders(window)
+    render_argus_machine_log(window)
+
+
+def clear_layout(layout: QVBoxLayout) -> None:
+    while layout.count():
+        item = layout.takeAt(0)
+        widget = item.widget()
+        if widget is not None:
+            widget.deleteLater()
+
+
 def clear_argus_trade_plan_ladder(window: Any) -> None:
-    window.argus_ladder_empty_label.setText("Select a candidate to populate the Trade Plan Ladder")
-    window.argus_ladder_table.setRowCount(0)
+    window.argus_ladder_widget.clear()
 
 
-def select_argus_machine_candidate(window: Any, candidate: dict[str, str]) -> None:
-    window.argus_workbench_ticker_label.setText(f"Selected ticker: {candidate['ticker']}")
-    window.argus_workbench_summary_label.setText(f"Setup summary: {candidate['summary']}")
-    window.argus_workbench_catalyst_label.setText(f"Catalyst placeholder: {candidate['catalyst']}")
-    window.argus_workbench_chart_label.setText(f"Chart placeholder: {candidate['chart']}")
-    window.argus_workbench_plan_status_label.setText(f"Plan status: {candidate['plan_status']}")
-    window.argus_ladder_empty_label.setText(
-        f"Trade Plan Ladder populated for {candidate['ticker']} - placeholder/demo state only."
+def select_argus_machine_candidate(window: Any, candidate: Top5CandidatePlan) -> None:
+    window.argus_selected_candidate_plan = candidate
+    window.argus_workbench_ticker_label.setText(f"Selected ticker: {candidate.ticker}")
+    window.argus_workbench_summary_label.setText(f"Setup summary: {candidate.source_summary}")
+    window.argus_workbench_catalyst_label.setText(f"Catalyst: {candidate.catalyst_summary}")
+    window.argus_workbench_chart_label.setText(f"Chart context: {candidate.chart_summary}")
+    window.argus_workbench_plan_status_label.setText(
+        f"Plan status: {candidate.plan_status}; Risk Governor: {candidate.risk_result.status}"
     )
-    rows = [
-        ("Ticker", candidate["ticker"]),
-        ("Setup type", candidate["setup"]),
-        ("Entry trigger", candidate["entry_trigger"]),
-        ("Entry/limit", candidate["entry_limit"]),
-        ("Stop/invalidation", candidate["stop"]),
-        ("Target 1", candidate["target_1"]),
-        ("Target 2", candidate["target_2"]),
-        ("Target 3", candidate["target_3"]),
-        ("Trailing rule", candidate["trailing_rule"]),
-        ("Position size", candidate["position_size"]),
-        ("Max dollar risk", candidate["max_risk"]),
-        ("Risk/reward", candidate["risk_reward"]),
-        ("Manual override state", "None. Any future Steven edit requires Risk Governor re-check."),
-        ("Risk Governor status", candidate["gate"]),
-    ]
-    window.argus_ladder_table.setRowCount(len(rows))
-    for row, (field, value) in enumerate(rows):
-        window.argus_ladder_table.setItem(row, 0, QTableWidgetItem(field))
-        window.argus_ladder_table.setItem(row, 1, QTableWidgetItem(value))
-    window.argus_machine_log.appendPlainText(
-        f"{candidate['ticker']} selected. Ladder populated with placeholder plan fields. Live trading remains locked."
+    window.argus_ladder_widget.render_candidate(candidate)
+    render_argus_risk_result(window, candidate.risk_result)
+    window.argus_execution_ledger.record(
+        event_type="candidate_selected",
+        mode=SIMULATION_MODE,
+        ticker=candidate.ticker,
+        trade_plan_id=candidate.trade_plan_id,
+        risk_result_id=candidate.risk_result.result_id,
+        broker_adapter="FakeBrokerAdapter",
+        requested_action="candidate_selected",
+        result=candidate.plan_status,
+        reason=f"Risk Governor status: {candidate.risk_result.status}",
+        payload={"source": candidate.source_name, "composite_score": candidate.composite_score},
     )
+    window.argus_execution_ledger.record(
+        event_type="risk_gate_evaluated",
+        mode=SIMULATION_MODE,
+        ticker=candidate.ticker,
+        trade_plan_id=candidate.trade_plan_id,
+        risk_result_id=candidate.risk_result.result_id,
+        broker_adapter="FakeBrokerAdapter",
+        requested_action="risk_gate_evaluated",
+        result=candidate.risk_result.status,
+        reason=" | ".join(candidate.risk_result.reasons),
+    )
+    can_simulate = candidate.risk_result.allows_simulation
+    window.argus_run_simulation_button.setEnabled(can_simulate)
+    window.argus_run_simulation_button.setToolTip(
+        "Run this TradePlan through FakeBroker simulation."
+        if can_simulate
+        else "Simulation blocked by current Risk Governor gates."
+    )
+    update_status_card(window, "Risk Governor", candidate.risk_result.status)
+    render_argus_machine_log(window)
+
+
+def render_argus_risk_result(window: Any, result: RiskGovernorResult | None) -> None:
+    if result is None:
+        window.argus_risk_warning_label.setText(
+            "Select a TradePlan candidate to see current simulation gate status. This is not paper or live permission."
+        )
+        window.argus_risk_gate_table.setRowCount(0)
+        return
+    window.argus_risk_warning_label.setText(
+        f"{result.ticker}: {result.status}. Simulation-only gate; paper and live remain locked."
+    )
+    window.argus_risk_gate_table.setRowCount(len(result.gates))
+    for row, gate in enumerate(result.gates):
+        for column, value in enumerate([gate.name, gate.state, gate.reason]):
+            window.argus_risk_gate_table.setItem(row, column, QTableWidgetItem(value))
+
+
+def run_argus_simulation(window: Any) -> None:
+    candidate = getattr(window, "argus_selected_candidate_plan", None)
+    if candidate is None:
+        return
+    result = window.argus_simulation_engine.run_candidate(candidate)
+    render_simulation_orders(window)
+    render_argus_machine_log(window)
+    update_status_card(window, "Order Ability", f"Simulation {result.status}")
+
+
+def render_simulation_orders(window: Any) -> None:
+    orders = window.argus_fake_broker.list_orders() if hasattr(window, "argus_fake_broker") else []
+    window.argus_simulation_table.setRowCount(len(orders))
+    for row, order in enumerate(orders):
+        values = [order.order_id, order.ticker, order.status, str(order.quantity), order.reason]
+        for column, value in enumerate(values):
+            window.argus_simulation_table.setItem(row, column, QTableWidgetItem(value))
+
+
+def render_argus_machine_log(window: Any) -> None:
+    if not hasattr(window, "argus_machine_log"):
+        return
+    window.argus_machine_log.setPlainText(render_machine_log(window.argus_execution_ledger.events))
+
+
+def update_status_card(window: Any, label: str, value: str) -> None:
+    card = getattr(window, "argus_machine_status_labels", {}).get(label)
+    if card is not None:
+        card.setText(f"{label}\n{value}")

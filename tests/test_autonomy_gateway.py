@@ -6,6 +6,7 @@ from unittest.mock import patch
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 
 from momentum_hunter.app import MomentumHunterWindow
+from momentum_hunter.models import Candidate, NewsItem, NewsStack
 
 
 class ArgusGatewayTests(unittest.TestCase):
@@ -19,6 +20,7 @@ class ArgusGatewayTests(unittest.TestCase):
             patch.object(MomentumHunterWindow, "_load_capture_history", lambda window: None),
             patch.object(MomentumHunterWindow, "_start_snapshot_timer", lambda window: None),
             patch.object(MomentumHunterWindow, "refresh_market_regime", lambda window, show_status=True: None),
+            patch("momentum_hunter.ui.autonomy_gateway.latest_trade_report_path", lambda: None),
         ]
         for patcher in self.patches:
             patcher.start()
@@ -65,22 +67,25 @@ class ArgusGatewayTests(unittest.TestCase):
         self.assertIn("ARGUS MACHINE", self.label("argusMachineTitle").text())
         status_text = "\n".join(label.text() for label in self.window.argus_machine_status_labels.values())
         self.assertIn("Mode\nSimulation Lab", status_text)
-        self.assertIn("Broker\nNone connected", status_text)
+        self.assertIn("Broker\nFakeBroker only", status_text)
         self.assertIn("Live Trading\nLocked", status_text)
-        self.assertIn("Risk Governor\nPreview only", status_text)
+        self.assertIn("Risk Governor\nSelect candidate", status_text)
         self.assertIn("Kill Switch\nAvailable", status_text)
-        self.assertIn("not live trading permission", self.label("argusRiskWarningLabel").text())
+        self.assertIn("not paper or live permission", self.label("argusRiskWarningLabel").text())
 
     def test_argus_machine_shows_five_top_trade_plan_candidate_rows(self) -> None:
+        self.window.candidates = sample_candidates()
         self.window.open_argus_machine_console()
 
         self.assertEqual(5, len(self.window.argus_candidate_buttons))
         button_texts = [button.text() for button in self.window.argus_candidate_buttons]
-        self.assertTrue(all("Gate:" in text for text in button_texts))
+        gate_texts = [self.window.argus_top5_table.item(row, 3).text() for row in range(self.window.argus_top5_table.rowCount())]
+        self.assertTrue(all(text for text in gate_texts))
         self.assertTrue(all("approved live" not in text.lower() for text in button_texts))
         self.assertFalse(any("Strongest Trades" in text for text in button_texts))
 
     def test_clicking_candidate_populates_trade_plan_ladder(self) -> None:
+        self.window.candidates = sample_candidates()
         self.window.open_argus_machine_console()
 
         self.button("argusCandidateButton_AMD").click()
@@ -89,24 +94,49 @@ class ArgusGatewayTests(unittest.TestCase):
         self.assertIn("Selected ticker: AMD", self.window.argus_workbench_ticker_label.text())
         self.assertIn("Trade Plan Ladder populated for AMD", self.window.argus_ladder_empty_label.text())
         self.assertEqual("AMD", self.ladder_value("Ticker"))
-        self.assertEqual("Relative strength pullback", self.ladder_value("Setup type"))
-        self.assertEqual("Reclaim demo pivot with volume confirmation", self.ladder_value("Entry trigger"))
-        self.assertEqual("Demo invalidation: lower-low under pullback base", self.ladder_value("Stop/invalidation"))
+        self.assertNotIn("Demo", self.ladder_value("Entry trigger"))
+        self.assertNotEqual("Missing", self.ladder_value("Entry/limit"))
+        self.assertNotEqual("Missing", self.ladder_value("Stop/invalidation"))
         self.assertEqual("None. Any future Steven edit requires Risk Governor re-check.", self.ladder_value("Manual override state"))
-        self.assertEqual("Stop required", self.ladder_value("Risk Governor status"))
+        self.assertIn(self.ladder_value("Risk Governor status"), {"Needs review", "Simulation-only"})
+        self.assertGreater(self.window.argus_risk_gate_table.rowCount(), 0)
+        self.assertIn("candidate_selected", self.window.argus_machine_log.toPlainText())
 
     def test_live_order_controls_are_locked_and_disabled(self) -> None:
         self.window.open_argus_machine_console()
 
+        self.assertEqual("Run Simulation Only", self.window.argus_run_simulation_button.text())
+        self.assertFalse(self.window.argus_run_simulation_button.isEnabled())
         locked_buttons = [
-            self.window.argus_preview_order_button,
             self.window.argus_submit_paper_button,
             self.window.argus_submit_live_button,
         ]
-        self.assertEqual(["Preview Order", "Submit Paper Order", "Submit Live Order"], [button.text() for button in locked_buttons])
+        self.assertEqual(["Paper Order Locked", "Live Order Locked"], [button.text() for button in locked_buttons])
         self.assertTrue(all(not button.isEnabled() for button in locked_buttons))
         self.assertIn("live trading requires separate Steven approval", self.window.argus_submit_live_button.toolTip())
-        self.assertIn("No broker connected. Live trading locked.", self.window.argus_machine_log.toPlainText())
+        self.assertIn("Live trading locked.", self.window.argus_machine_log.toPlainText())
+
+    def test_simulation_button_runs_fake_order_and_updates_log(self) -> None:
+        self.window.candidates = sample_candidates()
+        self.window.open_argus_machine_console()
+
+        self.button("argusCandidateButton_AMD").click()
+        self.app.processEvents()
+
+        self.assertTrue(self.window.argus_run_simulation_button.isEnabled())
+        self.window.argus_run_simulation_button.click()
+        self.app.processEvents()
+
+        self.assertEqual(1, self.window.argus_simulation_table.rowCount())
+        self.assertIn("fake_order_submitted", self.window.argus_machine_log.toPlainText())
+        self.assertIn("AMD", self.window.argus_machine_log.toPlainText())
+
+    def test_empty_state_explains_missing_candidates(self) -> None:
+        self.window.open_argus_machine_console()
+
+        self.assertEqual(0, len(self.window.argus_candidate_buttons))
+        empty = self.label("argusTop5EmptyState")
+        self.assertIn("No Trade Plan Candidates available", empty.text())
 
     def button(self, object_name: str) -> QPushButton:
         button = self.window.findChild(QPushButton, object_name)
@@ -128,6 +158,34 @@ class ArgusGatewayTests(unittest.TestCase):
             if field_item and field_item.text() == field and value_item:
                 return value_item.text()
         self.fail(f"Ladder field not found: {field}")
+
+
+def sample_candidates() -> list[Candidate]:
+    return [
+        sample_candidate("NVDA", 30.0, 93, "NVDA extends AI infrastructure momentum"),
+        sample_candidate("AMD", 20.0, 91, "AMD gains on AI accelerator demand"),
+        sample_candidate("PLTR", 16.0, 88, "PLTR rallies on government contract catalyst"),
+        sample_candidate("TSLA", 25.0, 86, "TSLA breaks higher on delivery update"),
+        sample_candidate("SMCI", 22.0, 84, "SMCI rebounds on server demand"),
+    ]
+
+
+def sample_candidate(ticker: str, price: float, score: int, headline: str) -> Candidate:
+    return Candidate(
+        ticker=ticker,
+        company=f"{ticker} Corp",
+        price=price,
+        percent_change=5.0,
+        volume=10_000_000,
+        relative_volume=1.5,
+        market_cap=10_000_000_000,
+        sector="Technology",
+        industry="Software",
+        news=[NewsItem(headline=headline, source="Test")],
+        score=score,
+        freshness_score=90,
+        news_stack=NewsStack(article_count=1, freshest_headline=headline, freshness_score=90, freshness="HOT"),
+    )
 
 
 if __name__ == "__main__":
