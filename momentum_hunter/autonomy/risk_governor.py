@@ -119,4 +119,3 @@ def approval_gate(mode: str) -> RiskGate:
     if mode == SIMULATION_MODE:
         return RiskGate("Steven approval", "Live-locked", LIVE_LOCKED_REASON)
     return RiskGate("Steven approval", "Blocked", LIVE_LOCKED_REASON)
-
