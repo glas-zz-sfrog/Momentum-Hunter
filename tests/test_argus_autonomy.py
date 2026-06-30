@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from momentum_hunter.autonomy.auditor import audit_execution_ledger, audit_simulation_chain
+from momentum_hunter.autonomy.ledger import ExecutionLedgerEvent
 from momentum_hunter.autonomy.broker import BrokerOrderRequest, FakeBrokerAdapter
 from momentum_hunter.autonomy.ledger import ExecutionLedger
 from momentum_hunter.autonomy.risk_governor import evaluate_trade_plan
@@ -47,6 +48,34 @@ class ArgusAutonomyTests(unittest.TestCase):
         self.assertEqual("Blocked", result.status)
         self.assertFalse(result.allows_simulation)
         self.assertTrue(any(gate.name == "Stop defined" and gate.state == "Blocked" for gate in result.gates))
+
+    def test_risk_governor_blocks_missing_risk_only(self) -> None:
+        plan = complete_trade_plan(estimated_dollar_risk=None)
+
+        result = evaluate_trade_plan(plan, ticker="AAA", trade_plan_id="tp-AAA")
+
+        self.assertEqual("Blocked", result.status)
+        self.assertFalse(result.allows_simulation)
+        self.assertTrue(any(gate.name == "Max risk" and gate.state == "Blocked" for gate in result.gates))
+
+    def test_risk_governor_blocks_live_mode(self) -> None:
+        result = evaluate_trade_plan(complete_trade_plan(), ticker="AAA", trade_plan_id="tp-AAA", mode="Live Preview")
+
+        self.assertEqual("Blocked", result.status)
+        self.assertFalse(result.allows_simulation)
+        self.assertTrue(any(gate.name == "Broker mode" and gate.state == "Blocked" for gate in result.gates))
+
+    def test_manual_override_requires_risk_recheck(self) -> None:
+        result = evaluate_trade_plan(
+            complete_trade_plan(),
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            manual_override_pending=True,
+        )
+
+        self.assertEqual("Blocked", result.status)
+        self.assertFalse(result.allows_simulation)
+        self.assertTrue(any(gate.name == "Manual override" and gate.state == "Blocked" for gate in result.gates))
 
     def test_execution_ledger_serializes_events(self) -> None:
         ledger = ExecutionLedger()
@@ -139,6 +168,81 @@ class ArgusAutonomyTests(unittest.TestCase):
         self.assertFalse(report.passed)
         self.assertTrue(any(finding.field == "trade_plan_id" for finding in report.findings))
 
+    def test_auditor_fails_missing_risk_result_id(self) -> None:
+        ledger = ExecutionLedger()
+        ledger.record(
+            event_type="fake_order_submitted",
+            mode="Simulation Lab",
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            risk_result_id="",
+            broker_adapter="FakeBrokerAdapter",
+            requested_action="fake_order_submitted",
+            result="filled",
+        )
+
+        report = audit_execution_ledger(ledger)
+
+        self.assertFalse(report.passed)
+        self.assertTrue(any(finding.field == "risk_result_id" for finding in report.findings))
+
+    def test_auditor_fails_invalid_order_evidence(self) -> None:
+        ledger = ExecutionLedger()
+        ledger.record(
+            event_type="fake_order_submitted",
+            mode="Live Preview",
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            risk_result_id="risk-AAA",
+            broker_adapter="LiveBrokerAdapter",
+            approval_state="live-preview",
+            requested_action="fake_order_submitted",
+            result="filled",
+        )
+
+        report = audit_execution_ledger(ledger)
+
+        self.assertFalse(report.passed)
+        fields = {finding.field for finding in report.findings}
+        self.assertIn("mode", fields)
+        self.assertIn("broker_adapter", fields)
+        self.assertIn("approval_state", fields)
+
+    def test_auditor_fails_missing_risk_gate_in_simulation_chain(self) -> None:
+        ledger = ExecutionLedger()
+        ledger.record(
+            event_type="fake_order_submitted",
+            mode="Simulation Lab",
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            risk_result_id="risk-AAA",
+            broker_adapter="FakeBrokerAdapter",
+            requested_action="fake_order_submitted",
+            result="filled",
+        )
+
+        report = audit_simulation_chain(ledger, ticker="AAA", trade_plan_id="tp-AAA")
+
+        self.assertFalse(report.passed)
+        self.assertTrue(any(finding.field == "risk_result_id" for finding in report.findings))
+
+    def test_auditor_fails_duplicate_order_like_event_ids(self) -> None:
+        event = order_like_event(event_id="ledger-duplicate")
+        ledger = ExecutionLedger([event, event])
+
+        report = audit_execution_ledger(ledger)
+
+        self.assertFalse(report.passed)
+        self.assertTrue(any(finding.field == "event_id" for finding in report.findings))
+
+    def test_auditor_fails_missing_order_like_event_id(self) -> None:
+        ledger = ExecutionLedger([order_like_event(event_id="")])
+
+        report = audit_execution_ledger(ledger)
+
+        self.assertFalse(report.passed)
+        self.assertTrue(any(finding.field == "event_id" for finding in report.findings))
+
 
 def sample_candidates() -> list[Candidate]:
     return [
@@ -170,6 +274,43 @@ def sample_candidate(ticker: str, price: float, score: int) -> Candidate:
     )
 
 
+def complete_trade_plan(**overrides: object) -> TradePlan:
+    values = {
+        "bullish_entry": 10.0,
+        "bullish_stop": 9.5,
+        "bullish_target_1": 11.0,
+        "bullish_target_2": 11.5,
+        "risk_reward_ratio": 2.0,
+        "estimated_shares_for_500": 50.0,
+        "estimated_dollar_risk": 25.0,
+        "estimated_target_1_reward": 50.0,
+        "confidence": "HIGH",
+        "tradeability": "HIGH",
+        "readiness": "EXECUTION_READY_TRADE",
+        "blocking_reasons": [],
+        "warnings": [],
+    }
+    values.update(overrides)
+    return TradePlan(**values)
+
+
+def order_like_event(*, event_id: str) -> ExecutionLedgerEvent:
+    return ExecutionLedgerEvent(
+        event_id=event_id,
+        timestamp="2026-06-30T08:00:00-05:00",
+        event_type="fake_order_submitted",
+        mode="Simulation Lab",
+        ticker="AAA",
+        trade_plan_id="tp-AAA",
+        risk_result_id="risk-AAA",
+        broker_adapter="FakeBrokerAdapter",
+        approval_state="simulation-only",
+        requested_action="fake_order_submitted",
+        result="filled",
+        actor="Argus Machine",
+        source="test",
+    )
+
+
 if __name__ == "__main__":
     unittest.main()
-

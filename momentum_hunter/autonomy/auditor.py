@@ -28,9 +28,15 @@ class AuditReport:
 
 def audit_execution_ledger(ledger: ExecutionLedger) -> AuditReport:
     findings: list[AuditFinding] = []
+    seen_event_ids: set[str] = set()
     for event in ledger.events:
         if event.requested_action not in ORDER_LIKE_ACTIONS:
             continue
+        if not event.event_id.strip():
+            findings.append(AuditFinding(event.event_id, "event_id", "Missing required audit field: event_id"))
+        elif event.event_id in seen_event_ids:
+            findings.append(AuditFinding(event.event_id, "event_id", "Duplicate order-like ledger event identifier."))
+        seen_event_ids.add(event.event_id)
         findings.extend(audit_order_like_event(event))
     return AuditReport("PASS" if not findings else "FAIL", findings)
 
@@ -74,4 +80,3 @@ def audit_simulation_chain(ledger: ExecutionLedger, *, ticker: str, trade_plan_i
         findings.append(AuditFinding("chain", "result", "Missing final simulation order or blocked outcome."))
     findings.extend(audit_execution_ledger(ExecutionLedger(events)).findings)
     return AuditReport("PASS" if not findings else "FAIL", findings)
-
