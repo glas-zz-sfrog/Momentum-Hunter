@@ -42,4 +42,3 @@ class TradePlanLadderWidget(QGroupBox):
         for row_index, row in enumerate(rows):
             self.table.setItem(row_index, 0, QTableWidgetItem(row.field))
             self.table.setItem(row_index, 1, QTableWidgetItem(row.value))
-

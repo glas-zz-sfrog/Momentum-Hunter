@@ -120,4 +120,3 @@ def render_event_line(event: ExecutionLedgerEvent) -> str:
         f"{event.timestamp} | {event.mode}{ticker} | "
         f"{event.requested_action} -> {event.result}{reason}"
     )
-

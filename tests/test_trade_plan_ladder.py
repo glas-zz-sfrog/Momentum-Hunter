@@ -59,4 +59,3 @@ def sample_candidate() -> Candidate:
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -116,4 +116,3 @@ def build_simulation_order_request(candidate: Top5CandidatePlan) -> BrokerOrderR
         trade_plan_id=candidate.trade_plan_id,
         risk_result_id=candidate.risk_result.result_id,
     )
-
