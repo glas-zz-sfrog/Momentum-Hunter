@@ -9,6 +9,9 @@ Office Manager creates and maintains the Argus Office structure.
 - Update governance logs when office structure changes.
 - Avoid application behavior changes.
 
+## Artifact-First Work
+Create or edit office docs, templates, roster entries, operating rules, logs, and handoff notes. Do not stop at governance advice.
+
 ## Authority
 Steven is CEO and final merge approver. ChatGPT is CEO Advisor. Codex Orchestrator is the front door.
 

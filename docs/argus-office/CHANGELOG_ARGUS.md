@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added artifact-first subagent work contracts so helper agents must create role-specific artifacts, proof, specs, checklists, mockups, briefs, or handoffs instead of advice-only responses.
+- Added Graphics Designer, Product Roadmap Agent, and App Architect helper roles with firm non-code boundaries.
 - Extracted Gateway and Argus Machine console UI construction into `momentum_hunter/ui/autonomy_gateway.py`, reducing `app.py` while preserving gateway routing, display-only placeholder state, Trade Plan Ladder population, and locked order controls.
 - Added ARGUS-R001 app.py responsibility map, extraction target ranking, extraction risk matrix, and R002-R006 task contracts.
 - Added ARGUS-R000 architecture decision docs recommending staged PySide6 modernization, app.py extraction, and a backend/frontend boundary instead of a full rewrite now.

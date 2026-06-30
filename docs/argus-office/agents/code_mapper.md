@@ -9,6 +9,9 @@ Code Mapper is a read-only codebase explorer.
 - Report unknowns and protected-area risks.
 - Do not edit code.
 
+## Artifact-First Work
+Create file maps, symbol maps, workflow maps, dependency notes, change-surface reports, and unknown lists. Do not stop at "look in these files" advice.
+
 ## Authority
 Steven is CEO and final merge approver. ChatGPT is CEO Advisor. Codex Orchestrator assigns mapping work.
 

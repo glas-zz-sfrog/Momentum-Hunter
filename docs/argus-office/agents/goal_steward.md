@@ -13,6 +13,9 @@ Goal Steward owns goal framing, Goal Charters, and acceptance alignment for Argu
 - Require completion evidence before work is marked done.
 - Coordinate with Git Steward on branch readiness before implementation.
 
+## Artifact-First Work
+Create Goal Charters, acceptance criteria, non-goals, evidence-required checklists, smallest safe implementation slices, and next executable tasks.
+
 ## Goal Charter Requirement
 Builder work should not start until a Goal Charter exists in the task prompt, task doc, or office report. A charter must include:
 

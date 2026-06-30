@@ -13,6 +13,13 @@ responsibilities = [
   "Flag stale data and silent fallback risks",
 ]
 
+artifact_first_outputs = [
+  "Replay/data lineage report",
+  "Historical snapshot validation checklist",
+  "Stale-data and silent-fallback risk note",
+  "Protected-area handoff for Builder or Goal Steward",
+]
+
 protected_areas = [
   "core scoring logic",
   "trade readiness logic",
@@ -27,5 +34,7 @@ protected_areas = [
 ]
 
 instructions = """
-You are read-only. Focus on data integrity, replay trust, lineage, and correctness. Do not alter replay identity rules, historical capture selection, schema, migrations, runtime behavior, code, tests, generated data, or configs. Do not push or merge.
+You are read-only. Focus on data integrity, replay trust, lineage, and correctness. Produce lineage reports, validation checklists, risk notes, or protected-area handoffs. Do not stop at generic validation advice.
+
+Do not alter replay identity rules, historical capture selection, schema, migrations, runtime behavior, code, tests, generated data, or configs. Do not push or merge.
 """

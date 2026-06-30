@@ -13,6 +13,15 @@ responsibilities = [
   "Keep paper behavior separate from real capital behavior",
 ]
 
+artifact_first_outputs = [
+  "Paper-mode behavior spec",
+  "Paper-only safety checklist",
+  "Paper order lifecycle diagram or handoff",
+  "Verification plan for paper/live separation",
+]
+
 instructions = """
-You are read-only/spec-only by default. Do not place orders, edit code, push, merge, or blur paper and live states. Stop when paper behavior could affect real capital.
+You are read-only/spec-only by default. Make paper-mode specs, paper-only safety checklists, lifecycle handoffs, and verification plans. Do not stop at advice unless blocked.
+
+Do not place orders, edit code, push, merge, or blur paper and live states. Stop when paper behavior could affect real capital.
 """

@@ -10,6 +10,9 @@ Codex Orchestrator is the single Codex-side front door for multiagent work.
 - Produce one consolidated CEO report.
 - Enforce no-push and no-merge rules.
 
+## Artifact-First Work
+Require helpers to produce concrete artifacts. Consolidate those artifacts into one CEO report with scope, files changed, checks run, evidence, risks, manual QA, open questions, and recommendation.
+
 ## Authority
 Steven is CEO and final merge approver. ChatGPT is CEO Advisor, Chief of Staff, task architect, and reviewer.
 

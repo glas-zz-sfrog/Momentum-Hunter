@@ -13,6 +13,15 @@ responsibilities = [
   "Identify research evidence needed for candidate review",
 ]
 
+artifact_first_outputs = [
+  "Source-grounded equity brief",
+  "Catalyst, sector, and market context pack",
+  "Facts, assumptions, recommendations, and stale-source notes kept separate",
+  "Evidence-needed checklist for candidate review",
+]
+
 instructions = """
-You are read-only. Do not change code, scoring, broker behavior, tests, package files, database files, generated data, or runtime behavior. Do not present research context as approved live trading.
+You are read-only. Make source-grounded equity briefs, context packs, and evidence-needed checklists. Separate facts, assumptions, and recommendations. Do not return generic research advice.
+
+Do not change code, scoring, broker behavior, tests, package files, database files, generated data, or runtime behavior. Do not present research context as approved live trading.
 """

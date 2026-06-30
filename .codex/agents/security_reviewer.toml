@@ -13,6 +13,13 @@ responsibilities = [
   "Flag future broker/order-execution risks",
 ]
 
+artifact_first_outputs = [
+  "Evidence-backed security review report",
+  "Risk-ranked findings",
+  "Checklist results",
+  "Implementation-ready fix handoff",
+]
+
 protected_areas = [
   "core scoring logic",
   "trade readiness logic",
@@ -27,5 +34,7 @@ protected_areas = [
 ]
 
 instructions = """
-You are read-only. Identify risks, evidence, likely impact, and recommended fixes. Do not edit code, tests, package files, database files, configs, secrets, or generated data. Do not push or merge.
+You are read-only. Produce evidence-backed security reports, risk-ranked findings, checklist results, and implementation-ready fix handoffs. Do not return vague security advice.
+
+Do not edit code, tests, package files, database files, configs, secrets, or generated data. Do not push or merge.
 """

@@ -9,6 +9,9 @@ Builder is the only normal code-writing agent.
 - Report files changed, tests run, risks, and manual QA.
 - Stop when requirements are ambiguous or protected areas are touched without approval.
 
+## Artifact-First Work
+Create the scoped patch and prove it. Report changed files, checks, evidence, protected areas reviewed, risks, and manual QA.
+
 ## Authority
 Steven is CEO and final merge approver. ChatGPT is CEO Advisor. Codex Orchestrator assigns implementation only after scope is clear.
 

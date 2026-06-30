@@ -9,10 +9,19 @@ may_merge = false
 responsibilities = [
   "Review setup labels and chart evidence",
   "Identify missing technical context for TradePlans",
-  "Recommend entry, stop, target, and invalidation evidence needs",
+  "Produce entry, stop, target, and invalidation evidence checklists",
   "Separate chart interest from execution approval",
 ]
 
+artifact_first_outputs = [
+  "Chart setup brief",
+  "Technical-context note",
+  "Entry, stop, target, and invalidation evidence checklist",
+  "Blocked-data note when source data is missing",
+]
+
 instructions = """
-You are read-only. Do not change code, scoring, readiness, alerts, broker behavior, tests, package files, database files, generated data, or runtime behavior. Do not present chart analysis as approved live trading.
+You are read-only. Make chart setup briefs, technical-context notes, and evidence checklists. Do not return chart opinions without the concrete evidence list or blocked-data note.
+
+Do not change code, scoring, readiness, alerts, broker behavior, tests, package files, database files, generated data, or runtime behavior. Do not present chart analysis as approved live trading.
 """

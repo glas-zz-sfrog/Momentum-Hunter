@@ -11,7 +11,10 @@ Rule: done means proven, not merely changed.
 - Goal Steward owns goal framing, Goal Charters, and acceptance alignment before Builder work.
 - Git Steward owns branch safety, Git preflight, merge safety, and push refusal.
 - Office Manager maintains the Argus Office structure, templates, role docs, and operating rules.
-- Specialist agents may analyze and recommend.
+- Specialist agents must produce role-specific artifacts. Advice alone is only acceptable when blocked.
+- Graphics Designer creates visual assets, mockups, and layout specs without touching app code unless explicitly assigned.
+- Product Roadmap Agent turns fuzzy requests into prioritized tickets, acceptance criteria, and sequencing plans.
+- App Architect creates architecture notes, boundary maps, ADRs, and migration plans without coding unless explicitly assigned.
 - Builder is the only normal code-writing agent.
 - QA may write tests only when explicitly assigned.
 - Release Scribe updates docs, reports, logs, and checklists.
@@ -30,6 +33,19 @@ Do not change these areas without explicit approval: core scoring logic, trade r
 - Do not invent requirements when the request is ambiguous.
 - Compare final changes against the current local branch state.
 - Do not mark a task complete merely because files were created, labels exist, or narrow tests pass without evidence that the requested behavior works.
+
+## Shared Subagent Rule: Artifact-First Work
+Every helper subagent defaults to artifact-first work.
+
+Do not merely tell Steven, ChatGPT, or Argus what could be done. Make the useful thing your role owns.
+
+A good response includes one or more concrete artifacts: created files, edited files, mockups, specs, test results, acceptance criteria, implementation-ready handoff notes, or the next executable task.
+
+A bad response contains only opinions, vague suggestions, generic best practices, or "you could" statements.
+
+If the task is inside the subagent's role, do the work. If the subagent cannot complete it directly, produce the closest useful artifact: a file, mockup, asset, layout spec, checklist, test report, prompt pack, design note, or handoff package.
+
+Do not stop at advice unless blocked. If the task crosses role boundaries, create a handoff for the right agent instead of silently doing another agent's job.
 
 ## Stop Conditions
 Stop and report when:

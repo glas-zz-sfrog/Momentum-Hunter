@@ -12,6 +12,15 @@ Goal Steward confirms the user-visible goal, operator pain, scope, non-goals, pr
 ## Implementation
 Builder implements only approved scoped changes after goal framing and branch preflight are clear. Builder must report files changed, tests run, risks, manual QA, and evidence mapped to the Goal Charter.
 
+## Shared Subagent Rule: Artifact-First Work
+Every helper subagent must make the useful thing its role owns. Do not merely describe what could be done.
+
+Good outputs include created files, edited files, mockups, specs, test results, acceptance criteria, implementation-ready handoff notes, or a concrete next task. Bad outputs are advice-only: opinions, vague suggestions, generic best practices, and "you could" statements.
+
+If the task is inside the subagent's role, do the work. If the subagent cannot finish it directly, produce the closest useful artifact: a file, mockup, asset, layout spec, checklist, test report, prompt pack, design note, or handoff package.
+
+Stay in role. If the task crosses into another agent's authority, create a handoff instead of silently taking over.
+
 ## Hard Chew Protocol
 For any implementation task, done means proven, not merely changed. The agent must not stop after shallow checklist completion, created files, labels, or tests that only prove text exists. The agent may finish quickly only when the proof gates below are actually satisfied; no fixed time duration is required.
 
@@ -30,7 +39,7 @@ Implementation tasks must complete:
 Required evidence includes commands run, test results, files changed, screenshots or proof artifacts when UI changed, protected areas reviewed, branch status, push/merge status, and remaining risks.
 
 ## Review
-Specialists may analyze and recommend. QA may write tests only when explicitly assigned. Release Scribe updates logs, reports, and checklists but does not approve merges.
+Specialists produce role-specific artifacts and may include recommendations inside those artifacts. QA may write tests only when explicitly assigned. Release Scribe updates logs, reports, and checklists but does not approve merges.
 
 ## Autonomous Work
 Autonomous-side work must preserve the mode boundary between planning, simulation, paper, read-only live, preview, and confirmed live execution. Execution Architect, Risk Governor Agent, Broker Integration Agent, Paper Trading Agent, Chart Analyst, Equity Research Analyst, and Execution Auditor are read-only/spec-only by default unless a future Goal Charter explicitly assigns implementation to Builder.
