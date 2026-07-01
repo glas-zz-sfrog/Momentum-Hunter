@@ -18,6 +18,8 @@
 | R-014 | Stale branch reports cause Steven or ChatGPT to continue from a superseded branch. | Git / operations | High | Maintain `BRANCH_LEDGER.md`, classify superseded branches, and start new work only from local `master` unless Git Steward says otherwise. | Open |
 | R-015 | Duplicate TradePlan/RiskGovernor model paths create conflicting source authority. | Architecture | High | Treat `momentum_hunter/trade_planning.py` and `momentum_hunter/autonomy/*` as canonical; do not merge the older `momentum_hunter/execution/*` branch as-is. | Open |
 | R-016 | Review bundles omit imported dependencies or include stale manifest values. | Review quality | Medium | Future bundles must include key imported dependencies such as `trade_planning.py`, `models.py`, `time_utils.py`, and `monitor_targets.py`, while staying curated and excluding secrets/data. | Open |
+| R-017 | Simulation engine adapter injection becomes a paper/live transmit path if reused without guards. | Broker safety | High | Before A017/A018, require FakeBroker-only metadata checks and tests proving non-Fake or transmit-capable adapters are rejected before adapter calls. | Open |
+| R-018 | Execution Auditor is treated as a hard paper gate before it validates chronology, preview-before-submit, and event consistency. | Broker safety | High | Harden auditor rules and tests before any paper broker skeleton or paper pilot. | Open |
 
 ## Protected Areas
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.

@@ -42,6 +42,8 @@
 - Next planned Builder-adjacent work is A016 broker research matrix, docs-only.
 - Do not implement paper broker code, live broker code, credentials, API keys, or order routing in A016.
 - Future paper broker work must start from a new Goal Charter and must preserve FakeBroker / paper / read-only live / preview / confirmed live separation.
+- ARGUS-QUALITY-001 classifies the simulation foundation as `READY_FOR_A016_WITH_CAUTIONS`.
+- Harden before A017/A018: add simulation adapter guards, auditor chronology/preview checks, ledger validation, cockpit extraction, and stronger negative tests.
 
 ## Protected Areas
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.

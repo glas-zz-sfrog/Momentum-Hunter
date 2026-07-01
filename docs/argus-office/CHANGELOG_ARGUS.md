@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added ARGUS-QUALITY-001 simulation foundation quality review, A016 readiness decision, hardening plan, and test quality review.
+- Classified the simulation foundation as ready for A016 broker research with cautions, while requiring hardening before A017/A018 paper broker work.
 - Added branch truth ledger and canonical code path docs so future work starts from real local `master` state instead of stale feature branch reports.
 - Reconciled local `master` after the clean-room Argus Machine simulation foundation merge; `master` remains unpushed and ahead of `origin/master`.
 - Hardened Argus Machine simulation cockpit with FakeBroker-only simulated orders, simulated positions, and ledger-backed fills/events panels.
