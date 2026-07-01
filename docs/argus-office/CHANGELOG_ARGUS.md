@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added branch truth ledger and canonical code path docs so future work starts from real local `master` state instead of stale feature branch reports.
+- Reconciled local `master` after the clean-room Argus Machine simulation foundation merge; `master` remains unpushed and ahead of `origin/master`.
 - Hardened Argus Machine simulation cockpit with FakeBroker-only simulated orders, simulated positions, and ledger-backed fills/events panels.
 - Added a visible Execution Auditor paper advancement gate that reports `PASS`, `WARN`, or `BLOCK` from TradePlan, RiskResult, Ledger, and FakeBroker evidence while keeping paper/live controls locked.
 - Added artifact-first subagent work contracts so helper agents must create role-specific artifacts, proof, specs, checklists, mockups, briefs, or handoffs instead of advice-only responses.

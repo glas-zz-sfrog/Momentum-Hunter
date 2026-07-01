@@ -1,19 +1,52 @@
 # Current State
 
 ## Phase
-ARGUS-A014/A015C Simulation Cockpit and Auditor Gate Hardening.
+ARGUS-STATE-001 branch reconciliation after local merge of the Argus Machine simulation foundation.
 
 ## Branch
-`codex/ARGUS-A006-A015-argus-machine-simulation`
+Current canonical local branch: `master`
+
+Local `master` HEAD: `664381d Add clean-room simulation proof`
+
+Local `master` status vs `origin/master`: ahead 75, not pushed.
 
 ## State Summary
-Argus Machine now has a simulation-only cockpit that separates FakeBroker orders, simulated positions, and ledger-backed fills/events. The console displays an Execution Auditor paper advancement gate with `PASS`, `WARN`, or `BLOCK` status tied to selected TradePlan, RiskResult, Ledger, and FakeBroker evidence. Paper and live controls remain locked; no paper broker, live broker, credentials, API keys, schema changes, or runtime market-data changes were added.
+Local `master` now contains the Argus Machine simulation foundation. The simulation foundation was finalized through `codex/ARGUS-A006-A015-clean-room-verification` and fast-forward merged into local `master`.
+
+Canonical Argus Machine implementation paths are:
+
+- Gateway / Argus Machine UI: `momentum_hunter/ui/autonomy_gateway.py`
+- Trade Plan Ladder UI: `momentum_hunter/ui/trade_plan_ladder.py`
+- TradePlan source model: `momentum_hunter/trade_planning.py`
+- Autonomy primitives: `momentum_hunter/autonomy/*`
+
+Paper and live trading remain locked. No paper broker, live broker, broker credentials, API keys, or real order path exists on local `master`.
 
 ## Active Rule
-Steven remains final merge approver. Master must not be pushed. This branch remains simulation-only. Scoring, readiness, replay identity, storage/schema, alert thresholds, package/dependency files, generated data, market-data/report outputs, paper broker code, live broker code, credentials, and real broker/order behavior remain protected.
+Steven remains final merge and push approver. Do not push `master` until Steven explicitly approves. Future implementation should start from a fresh task branch off local `master`.
+
+## Branch Truth
+The original `codex/ARGUS-A006-A015-argus-machine-simulation` branch is superseded by the clean-room cherry-picked history on `master`. It should not be used for future work.
+
+The older `codex/ARGUS-A004-A005-tradeplan-risk-governor` branch is also superseded. It contains an unmerged `momentum_hunter/execution/*` model path that is not canonical.
+
+See:
+
+- `docs/argus-office/BRANCH_LEDGER.md`
+- `docs/argus-office/CANONICAL_CODE_PATHS.md`
+
+## Active Artifact Note
+`argus_review_bundle_current.zip` may exist as an untracked review artifact in the repo root. It is not source code and should not be committed unless a future task explicitly requests artifact tracking.
+
+## Review Bundle Quality Note
+Future review bundles should:
+
+- fix manifest variable substitution before delivery,
+- include imported dependencies such as `momentum_hunter/trade_planning.py`, `momentum_hunter/models.py`, `momentum_hunter/time_utils.py`, and `momentum_hunter/monitor_targets.py`,
+- remain curated and exclude secrets, credentials, `.env` files, virtualenvs, generated market data, and raw data folders.
 
 ## Protected Areas
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
 
 ## Next State Target
-Steven should manually QA the Argus Machine simulation cockpit and auditor gate. If accepted, Git Steward can prepare a local merge path for the simulation foundation; paper broker work should remain deferred until a separate approved paper-track task.
+Complete this branch reconciliation, then start A016 as a docs-only broker research matrix unless reconciliation reveals a blocker. Paper/live remain locked until a separate Steven-approved task explicitly changes that scope.
