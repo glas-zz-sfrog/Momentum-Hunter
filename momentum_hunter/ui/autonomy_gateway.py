@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from momentum_hunter.autonomy.auditor import AuditReport, audit_paper_advancement_gate
 from momentum_hunter.autonomy.broker import FakeBrokerAdapter
 from momentum_hunter.autonomy.ledger import ExecutionLedger, render_machine_log
 from momentum_hunter.autonomy.risk_governor import RiskGovernorResult, SIMULATION_MODE
@@ -170,6 +171,7 @@ def build_argus_machine_console_page(window: Any) -> QWidget:
     right_layout.setSpacing(10)
     right_layout.addWidget(build_argus_trade_plan_ladder_panel(window), 2)
     right_layout.addWidget(build_argus_risk_governor_panel(window))
+    right_layout.addWidget(build_argus_auditor_gate_panel(window))
     right_layout.addWidget(build_argus_order_console_panel(window))
     body.addWidget(right)
     body.setStretchFactor(0, 2)
@@ -204,6 +206,7 @@ def build_argus_machine_status_bar(window: Any) -> QWidget:
         ("Broker", "FakeBroker only"),
         ("Order Ability", "Simulated only"),
         ("Risk Governor", "Select candidate"),
+        ("Auditor", "WARN"),
         ("Live Trading", "Locked"),
         ("Kill Switch", "Available"),
     ]
@@ -287,6 +290,7 @@ def build_argus_trade_plan_ladder_panel(window: Any) -> QWidget:
     window.argus_ladder_widget = widget
     window.argus_ladder_empty_label = widget.empty_label
     window.argus_ladder_table = widget.table
+    window.argus_ladder_table.setMaximumHeight(150)
     return widget
 
 
@@ -306,17 +310,51 @@ def build_argus_risk_governor_panel(window: Any) -> QWidget:
     window.argus_risk_gate_table.setHorizontalHeaderLabels(["Gate", "State", "Reason"])
     window.argus_risk_gate_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     window.argus_risk_gate_table.verticalHeader().setVisible(False)
+    window.argus_risk_gate_table.setMaximumHeight(140)
     window.argus_risk_gate_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
     layout.addWidget(window.argus_risk_gate_table)
     return box
 
 
-def build_argus_order_console_panel(window: Any) -> QWidget:
-    box = QGroupBox("Simulation Order Console - Locked From Paper/Live")
-    box.setObjectName("argusOrderConsolePanel")
+def build_argus_auditor_gate_panel(window: Any) -> QWidget:
+    box = QGroupBox("Execution Auditor - Paper Advancement Gate")
+    box.setObjectName("argusAuditorGatePanel")
     layout = QVBoxLayout(box)
+    layout.setSpacing(6)
+
+    window.argus_auditor_status_label = QLabel("Auditor: WARN - waiting for TradePlan selection")
+    window.argus_auditor_status_label.setObjectName("argusAuditorStatusLabel")
+    window.argus_auditor_status_label.setWordWrap(True)
+    layout.addWidget(window.argus_auditor_status_label)
+
+    window.argus_auditor_detail_label = QLabel(
+        "Paper/live remain locked. Future paper advancement requires a passing simulation audit."
+    )
+    window.argus_auditor_detail_label.setObjectName("argusAuditorDetailLabel")
+    window.argus_auditor_detail_label.setWordWrap(True)
+    layout.addWidget(window.argus_auditor_detail_label)
+
+    window.argus_auditor_evidence_table = QTableWidget(0, 2)
+    window.argus_auditor_evidence_table.setObjectName("argusAuditorEvidenceTable")
+    window.argus_auditor_evidence_table.setHorizontalHeaderLabels(["Evidence", "Status"])
+    window.argus_auditor_evidence_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    window.argus_auditor_evidence_table.verticalHeader().setVisible(False)
+    window.argus_auditor_evidence_table.verticalHeader().setDefaultSectionSize(24)
+    window.argus_auditor_evidence_table.setMaximumHeight(120)
+    window.argus_auditor_evidence_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    layout.addWidget(window.argus_auditor_evidence_table)
+    return box
+
+
+def build_argus_order_console_panel(window: Any) -> QWidget:
+    box = QGroupBox("Simulation Cockpit - No Paper/Live Broker")
+    box.setObjectName("argusOrderConsolePanel")
+    box.setMinimumHeight(330)
+    layout = QVBoxLayout(box)
+    layout.setSpacing(6)
     window.argus_order_console_note = QLabel(
-        "Simulation only. FakeBroker can preview and submit fake orders into the ledger. Paper and live controls are locked."
+        "Simulation only. FakeBroker records preview, submit, fill, reject, and cancel evidence locally. "
+        "No paper broker, no live broker, no real order."
     )
     window.argus_order_console_note.setObjectName("argusOrderConsoleWarning")
     window.argus_order_console_note.setWordWrap(True)
@@ -343,13 +381,46 @@ def build_argus_order_console_panel(window: Any) -> QWidget:
     window.argus_submit_live_button.setToolTip("Locked: live trading requires separate Steven approval and broker safety gates.")
     layout.addWidget(button_row)
 
-    window.argus_simulation_table = QTableWidget(0, 5)
+    orders_label = QLabel("Simulated Orders")
+    orders_label.setObjectName("argusSimulationOrdersLabel")
+    layout.addWidget(orders_label)
+    window.argus_simulation_table = QTableWidget(0, 8)
     window.argus_simulation_table.setObjectName("argusSimulationOrderTable")
-    window.argus_simulation_table.setHorizontalHeaderLabels(["Order", "Ticker", "Status", "Qty", "Reason"])
+    window.argus_simulation_table.setHorizontalHeaderLabels(
+        ["Order ID", "Ticker", "Side", "Qty", "Status", "Mode", "TradePlan", "RiskResult"]
+    )
     window.argus_simulation_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     window.argus_simulation_table.verticalHeader().setVisible(False)
+    window.argus_simulation_table.verticalHeader().setDefaultSectionSize(24)
+    window.argus_simulation_table.setMinimumHeight(78)
     window.argus_simulation_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
     layout.addWidget(window.argus_simulation_table)
+
+    positions_label = QLabel("Simulated Positions - FakeBroker Only")
+    positions_label.setObjectName("argusSimulationPositionsLabel")
+    layout.addWidget(positions_label)
+    window.argus_simulation_positions_table = QTableWidget(0, 4)
+    window.argus_simulation_positions_table.setObjectName("argusSimulationPositionsTable")
+    window.argus_simulation_positions_table.setHorizontalHeaderLabels(["Ticker", "Qty", "Avg Fake Fill", "Source"])
+    window.argus_simulation_positions_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    window.argus_simulation_positions_table.verticalHeader().setVisible(False)
+    window.argus_simulation_positions_table.verticalHeader().setDefaultSectionSize(24)
+    window.argus_simulation_positions_table.setMinimumHeight(72)
+    window.argus_simulation_positions_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    layout.addWidget(window.argus_simulation_positions_table)
+
+    events_label = QLabel("Simulated Fills / Events - Ledger Backed")
+    events_label.setObjectName("argusSimulationEventsLabel")
+    layout.addWidget(events_label)
+    window.argus_simulation_events_table = QTableWidget(0, 5)
+    window.argus_simulation_events_table.setObjectName("argusSimulationEventsTable")
+    window.argus_simulation_events_table.setHorizontalHeaderLabels(["Event", "Ticker", "Result", "Order / Qty", "Reason"])
+    window.argus_simulation_events_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    window.argus_simulation_events_table.verticalHeader().setVisible(False)
+    window.argus_simulation_events_table.verticalHeader().setDefaultSectionSize(24)
+    window.argus_simulation_events_table.setMinimumHeight(78)
+    window.argus_simulation_events_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    layout.addWidget(window.argus_simulation_events_table)
     return box
 
 
@@ -416,7 +487,8 @@ def refresh_argus_machine_console(window: Any) -> None:
         clear_argus_trade_plan_ladder(window)
         render_argus_risk_result(window, None)
         window.argus_run_simulation_button.setEnabled(False)
-    render_simulation_orders(window)
+    render_simulation_cockpit(window)
+    render_argus_auditor_gate(window)
     render_argus_machine_log(window)
 
 
@@ -474,6 +546,8 @@ def select_argus_machine_candidate(window: Any, candidate: Top5CandidatePlan) ->
         else "Simulation blocked by current Risk Governor gates."
     )
     update_status_card(window, "Risk Governor", candidate.risk_result.status)
+    render_simulation_cockpit(window)
+    render_argus_auditor_gate(window)
     render_argus_machine_log(window)
 
 
@@ -498,18 +572,174 @@ def run_argus_simulation(window: Any) -> None:
     if candidate is None:
         return
     result = window.argus_simulation_engine.run_candidate(candidate)
-    render_simulation_orders(window)
+    record_argus_auditor_result(window, candidate)
+    render_simulation_cockpit(window)
+    render_argus_auditor_gate(window)
     render_argus_machine_log(window)
     update_status_card(window, "Order Ability", f"Simulation {result.status}")
+
+
+def record_argus_auditor_result(window: Any, candidate: Top5CandidatePlan) -> None:
+    report = audit_paper_advancement_gate(
+        window.argus_execution_ledger,
+        ticker=candidate.ticker,
+        trade_plan_id=candidate.trade_plan_id,
+    )
+    window.argus_last_auditor_report = report
+    window.argus_execution_ledger.record(
+        event_type="execution_audited",
+        mode=SIMULATION_MODE,
+        ticker=candidate.ticker,
+        trade_plan_id=candidate.trade_plan_id,
+        risk_result_id=candidate.risk_result.result_id,
+        broker_adapter="FakeBrokerAdapter",
+        requested_action="execution_audited",
+        result=report.status,
+        reason=summarize_auditor_findings(report),
+        payload={"finding_count": len(report.findings)},
+    )
+
+
+def render_simulation_cockpit(window: Any) -> None:
+    render_simulation_orders(window)
+    render_simulation_positions(window)
+    render_simulation_events(window)
 
 
 def render_simulation_orders(window: Any) -> None:
     orders = window.argus_fake_broker.list_orders() if hasattr(window, "argus_fake_broker") else []
     window.argus_simulation_table.setRowCount(len(orders))
     for row, order in enumerate(orders):
-        values = [order.order_id, order.ticker, order.status, str(order.quantity), order.reason]
+        values = [
+            order.order_id,
+            order.ticker,
+            order.side,
+            str(order.quantity),
+            order.status,
+            SIMULATION_MODE,
+            order.trade_plan_id,
+            order.risk_result_id,
+        ]
         for column, value in enumerate(values):
             window.argus_simulation_table.setItem(row, column, QTableWidgetItem(value))
+
+
+def render_simulation_positions(window: Any) -> None:
+    if not hasattr(window, "argus_simulation_positions_table"):
+        return
+    positions = window.argus_fake_broker.get_positions() if hasattr(window, "argus_fake_broker") else []
+    window.argus_simulation_positions_table.setRowCount(len(positions))
+    for row, position in enumerate(positions):
+        values = [
+            position.ticker,
+            str(position.quantity),
+            format_fake_price(position.average_price),
+            "FakeBroker only - simulation-only",
+        ]
+        for column, value in enumerate(values):
+            window.argus_simulation_positions_table.setItem(row, column, QTableWidgetItem(value))
+
+
+def render_simulation_events(window: Any) -> None:
+    if not hasattr(window, "argus_simulation_events_table"):
+        return
+    event_actions = {"simulated_order_previewed", "fake_order_submitted", "simulation_blocked"}
+    events = [
+        event
+        for event in window.argus_execution_ledger.events
+        if event.requested_action in event_actions
+    ]
+    window.argus_simulation_events_table.setRowCount(len(events))
+    for row, event in enumerate(events):
+        payload = event.payload
+        order_or_qty = str(payload.get("order_id") or payload.get("quantity") or "")
+        if payload.get("order_id") and payload.get("quantity"):
+            order_or_qty = f"{payload['order_id']} / {payload['quantity']}"
+        values = [event.requested_action, event.ticker, event.result, order_or_qty, event.reason]
+        for column, value in enumerate(values):
+            window.argus_simulation_events_table.setItem(row, column, QTableWidgetItem(str(value)))
+
+
+def render_argus_auditor_gate(window: Any) -> None:
+    if not hasattr(window, "argus_auditor_status_label"):
+        return
+    candidate = getattr(window, "argus_selected_candidate_plan", None)
+    if candidate is None:
+        window.argus_auditor_status_label.setText("Auditor: WARN - waiting for TradePlan selection")
+        window.argus_auditor_detail_label.setText(
+            "Missing selected TradePlan, RiskResult, and ledger evidence. Paper/live remain locked."
+        )
+        set_auditor_rows(
+            window,
+            [
+                ("Selected TradePlan", "Missing"),
+                ("RiskResult", "Missing"),
+                ("Ledger risk gate", "Missing"),
+                ("Ledger order/block", "Missing"),
+                ("BrokerAdapter", "FakeBroker only; no real broker connected"),
+                ("Paper advancement gate", "WARN - cannot advance"),
+            ],
+        )
+        update_status_card(window, "Auditor", "WARN")
+        return
+
+    report = audit_paper_advancement_gate(
+        window.argus_execution_ledger,
+        ticker=candidate.ticker,
+        trade_plan_id=candidate.trade_plan_id,
+    )
+    actions = {
+        event.requested_action
+        for event in window.argus_execution_ledger.events
+        if event.ticker == candidate.ticker and event.trade_plan_id == candidate.trade_plan_id
+    }
+    has_risk = "risk_gate_evaluated" in actions
+    has_final = bool({"fake_order_submitted", "simulation_blocked"} & actions)
+    if report.passed:
+        auditor_status = "PASS"
+        detail = "Complete simulation evidence chain present. Paper/live remain locked until a future approved task."
+    elif not has_final:
+        auditor_status = "WARN"
+        detail = "Waiting for final simulated order or blocked outcome before paper advancement can be considered."
+    else:
+        auditor_status = "BLOCK"
+        detail = f"Paper advancement blocked: {summarize_auditor_findings(report)}"
+    window.argus_last_auditor_report = AuditReport(auditor_status, report.findings)
+    window.argus_auditor_status_label.setText(f"Auditor: {auditor_status} - simulation evidence gate")
+    window.argus_auditor_detail_label.setText(detail)
+    set_auditor_rows(
+        window,
+        [
+            ("Selected TradePlan", candidate.trade_plan_id or "Missing"),
+            ("RiskResult", candidate.risk_result.result_id or "Missing"),
+            ("Ledger risk gate", "Found" if has_risk else "Missing"),
+            ("Ledger order/block", "Found" if has_final else "Missing"),
+            ("BrokerAdapter", window.argus_fake_broker.metadata.adapter_name),
+            ("Paper advancement gate", auditor_status),
+        ],
+    )
+    update_status_card(window, "Auditor", auditor_status)
+
+
+def set_auditor_rows(window: Any, rows: list[tuple[str, str]]) -> None:
+    window.argus_auditor_evidence_table.setRowCount(len(rows))
+    for row, (field, value) in enumerate(rows):
+        window.argus_auditor_evidence_table.setItem(row, 0, QTableWidgetItem(field))
+        window.argus_auditor_evidence_table.setItem(row, 1, QTableWidgetItem(value))
+
+
+def summarize_auditor_findings(report: AuditReport) -> str:
+    if report.passed:
+        return "Execution Auditor PASS: complete simulation evidence chain."
+    if not report.findings:
+        return f"Execution Auditor {report.status}: missing simulation evidence."
+    return "; ".join(f"{finding.field}: {finding.message}" for finding in report.findings[:3])
+
+
+def format_fake_price(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    return f"${value:,.2f}"
 
 
 def render_argus_machine_log(window: Any) -> None:

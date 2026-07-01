@@ -70,8 +70,10 @@ class ArgusGatewayTests(unittest.TestCase):
         self.assertIn("Broker\nFakeBroker only", status_text)
         self.assertIn("Live Trading\nLocked", status_text)
         self.assertIn("Risk Governor\nSelect candidate", status_text)
+        self.assertIn("Auditor\nWARN", status_text)
         self.assertIn("Kill Switch\nAvailable", status_text)
         self.assertIn("not paper or live permission", self.label("argusRiskWarningLabel").text())
+        self.assertIn("No paper broker, no live broker, no real order", self.label("argusOrderConsoleWarning").text())
 
     def test_argus_machine_shows_five_top_trade_plan_candidate_rows(self) -> None:
         self.window.candidates = sample_candidates()
@@ -128,8 +130,39 @@ class ArgusGatewayTests(unittest.TestCase):
         self.app.processEvents()
 
         self.assertEqual(1, self.window.argus_simulation_table.rowCount())
+        self.assertTrue(self.table_value(self.window.argus_simulation_table, 0, 0).startswith("fake-"))
+        self.assertEqual("AMD", self.table_value(self.window.argus_simulation_table, 0, 1))
+        self.assertEqual("buy", self.table_value(self.window.argus_simulation_table, 0, 2))
+        self.assertEqual("filled", self.table_value(self.window.argus_simulation_table, 0, 4))
+        self.assertEqual("Simulation Lab", self.table_value(self.window.argus_simulation_table, 0, 5))
+        self.assertTrue(self.table_value(self.window.argus_simulation_table, 0, 6))
+        self.assertTrue(self.table_value(self.window.argus_simulation_table, 0, 7))
+        self.assertEqual(1, self.window.argus_simulation_positions_table.rowCount())
+        self.assertEqual("AMD", self.table_value(self.window.argus_simulation_positions_table, 0, 0))
+        self.assertIn("FakeBroker only", self.table_value(self.window.argus_simulation_positions_table, 0, 3))
+        event_names = {
+            self.table_value(self.window.argus_simulation_events_table, row, 0)
+            for row in range(self.window.argus_simulation_events_table.rowCount())
+        }
+        self.assertIn("simulated_order_previewed", event_names)
+        self.assertIn("fake_order_submitted", event_names)
+        self.assertIn("Auditor: PASS", self.label("argusAuditorStatusLabel").text())
+        self.assertEqual("PASS", self.audit_value("Paper advancement gate"))
         self.assertIn("fake_order_submitted", self.window.argus_machine_log.toPlainText())
+        self.assertIn("execution_audited", self.window.argus_machine_log.toPlainText())
         self.assertIn("AMD", self.window.argus_machine_log.toPlainText())
+
+    def test_auditor_warns_before_final_simulation_outcome(self) -> None:
+        self.window.candidates = sample_candidates()
+        self.window.open_argus_machine_console()
+
+        self.button("argusCandidateButton_AMD").click()
+        self.app.processEvents()
+
+        self.assertIn("Auditor: WARN", self.label("argusAuditorStatusLabel").text())
+        self.assertEqual("Found", self.audit_value("Ledger risk gate"))
+        self.assertEqual("Missing", self.audit_value("Ledger order/block"))
+        self.assertIn("Waiting for final simulated order", self.label("argusAuditorDetailLabel").text())
 
     def test_empty_state_explains_missing_candidates(self) -> None:
         self.window.open_argus_machine_console()
@@ -158,6 +191,21 @@ class ArgusGatewayTests(unittest.TestCase):
             if field_item and field_item.text() == field and value_item:
                 return value_item.text()
         self.fail(f"Ladder field not found: {field}")
+
+    def audit_value(self, field: str) -> str:
+        table = self.window.argus_auditor_evidence_table
+        for row in range(table.rowCount()):
+            field_item = table.item(row, 0)
+            value_item = table.item(row, 1)
+            if field_item and field_item.text() == field and value_item:
+                return value_item.text()
+        self.fail(f"Auditor field not found: {field}")
+
+    def table_value(self, table, row: int, column: int) -> str:
+        item = table.item(row, column)
+        if item is None:
+            self.fail(f"Table cell missing: {row}, {column}")
+        return item.text()
 
 
 def sample_candidates() -> list[Candidate]:

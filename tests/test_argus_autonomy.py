@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import inspect
 import unittest
 
-from momentum_hunter.autonomy.auditor import audit_execution_ledger, audit_simulation_chain
+from momentum_hunter.autonomy.auditor import audit_execution_ledger, audit_paper_advancement_gate, audit_simulation_chain
 from momentum_hunter.autonomy.ledger import ExecutionLedgerEvent
 from momentum_hunter.autonomy.broker import BrokerOrderRequest, FakeBrokerAdapter
 from momentum_hunter.autonomy.ledger import ExecutionLedger
@@ -135,10 +136,16 @@ class ArgusAutonomyTests(unittest.TestCase):
 
         result = engine.run_candidate(candidate)
         audit = audit_simulation_chain(ledger, ticker=candidate.ticker, trade_plan_id=candidate.trade_plan_id)
+        order_events = [
+            event for event in ledger.events if event.requested_action in {"simulated_order_previewed", "fake_order_submitted"}
+        ]
 
         self.assertEqual("filled", result.status)
         self.assertTrue(audit.passed)
         self.assertIn("fake_order_submitted", {event.requested_action for event in ledger.events})
+        self.assertTrue(order_events)
+        self.assertTrue(all(event.trade_plan_id == candidate.trade_plan_id for event in order_events))
+        self.assertTrue(all(event.risk_result_id == candidate.risk_result.result_id for event in order_events))
 
     def test_simulation_engine_records_fake_rejection(self) -> None:
         candidate = build_candidate_plans_from_candidates(sample_candidates())[0]
@@ -149,6 +156,75 @@ class ArgusAutonomyTests(unittest.TestCase):
 
         self.assertEqual("rejected", result.status)
         self.assertIn("FakeBroker configured rejection", result.submitted_order.reason)
+
+    def test_paper_advancement_gate_passes_complete_simulation_chain(self) -> None:
+        candidate = build_candidate_plans_from_candidates(sample_candidates())[0]
+        ledger = ExecutionLedger()
+        SimulationLabEngine(adapter=FakeBrokerAdapter(), ledger=ledger).run_candidate(candidate)
+
+        report = audit_paper_advancement_gate(ledger, ticker=candidate.ticker, trade_plan_id=candidate.trade_plan_id)
+
+        self.assertTrue(report.passed)
+        self.assertEqual("PASS", report.status)
+
+    def test_paper_advancement_gate_blocks_missing_tradeplan_evidence(self) -> None:
+        ledger = ExecutionLedger()
+        ledger.record(
+            event_type="risk_gate_evaluated",
+            mode="Simulation Lab",
+            ticker="AAA",
+            trade_plan_id="",
+            risk_result_id="risk-AAA",
+            broker_adapter="FakeBrokerAdapter",
+            requested_action="risk_gate_evaluated",
+            result="Simulation-only",
+        )
+        ledger.record(
+            event_type="fake_order_submitted",
+            mode="Simulation Lab",
+            ticker="AAA",
+            trade_plan_id="",
+            risk_result_id="risk-AAA",
+            broker_adapter="FakeBrokerAdapter",
+            requested_action="fake_order_submitted",
+            result="filled",
+        )
+
+        report = audit_paper_advancement_gate(ledger, ticker="AAA", trade_plan_id="")
+
+        self.assertFalse(report.passed)
+        self.assertEqual("BLOCK", report.status)
+        self.assertTrue(any(finding.field == "trade_plan_id" for finding in report.findings))
+
+    def test_paper_advancement_gate_blocks_missing_order_evidence(self) -> None:
+        ledger = ExecutionLedger()
+        ledger.record(
+            event_type="risk_gate_evaluated",
+            mode="Simulation Lab",
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            risk_result_id="risk-AAA",
+            broker_adapter="FakeBrokerAdapter",
+            requested_action="risk_gate_evaluated",
+            result="Simulation-only",
+        )
+
+        report = audit_paper_advancement_gate(ledger, ticker="AAA", trade_plan_id="tp-AAA")
+
+        self.assertFalse(report.passed)
+        self.assertEqual("BLOCK", report.status)
+        self.assertTrue(any(finding.field == "result" for finding in report.findings))
+
+    def test_fake_broker_has_no_real_broker_network_path(self) -> None:
+        source = inspect.getsource(FakeBrokerAdapter)
+        metadata = FakeBrokerAdapter().metadata
+
+        self.assertNotIn("requests", source)
+        self.assertNotIn("urllib", source)
+        self.assertNotIn("http", source.lower())
+        self.assertEqual("FakeBrokerAdapter", metadata.adapter_name)
+        self.assertEqual("not required", metadata.credential_status)
+        self.assertFalse(metadata.order_transmit_allowed)
 
     def test_auditor_fails_missing_required_order_fields(self) -> None:
         ledger = ExecutionLedger()
