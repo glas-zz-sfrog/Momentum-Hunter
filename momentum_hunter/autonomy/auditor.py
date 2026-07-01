@@ -74,9 +74,21 @@ def audit_simulation_chain(ledger: ExecutionLedger, *, ticker: str, trade_plan_i
     ]
     actions = {event.requested_action for event in events}
     findings: list[AuditFinding] = []
+    if not ticker.strip():
+        findings.append(AuditFinding("chain", "ticker", "Missing ticker for simulation audit."))
+    if not trade_plan_id.strip():
+        findings.append(AuditFinding("chain", "trade_plan_id", "Missing TradePlan identifier for simulation audit."))
     if "risk_gate_evaluated" not in actions:
         findings.append(AuditFinding("chain", "risk_result_id", "Missing Risk Governor event before simulation."))
     if not ({"fake_order_submitted", "simulation_blocked"} & actions):
         findings.append(AuditFinding("chain", "result", "Missing final simulation order or blocked outcome."))
     findings.extend(audit_execution_ledger(ExecutionLedger(events)).findings)
     return AuditReport("PASS" if not findings else "FAIL", findings)
+
+
+def audit_paper_advancement_gate(ledger: ExecutionLedger, *, ticker: str, trade_plan_id: str) -> AuditReport:
+    """Display-only gate: future paper work must start from a complete simulation audit."""
+    report = audit_simulation_chain(ledger, ticker=ticker, trade_plan_id=trade_plan_id)
+    if report.passed:
+        return report
+    return AuditReport("BLOCK", report.findings)

@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Hardened Argus Machine simulation cockpit with FakeBroker-only simulated orders, simulated positions, and ledger-backed fills/events panels.
+- Added a visible Execution Auditor paper advancement gate that reports `PASS`, `WARN`, or `BLOCK` from TradePlan, RiskResult, Ledger, and FakeBroker evidence while keeping paper/live controls locked.
 - Added artifact-first subagent work contracts so helper agents must create role-specific artifacts, proof, specs, checklists, mockups, briefs, or handoffs instead of advice-only responses.
 - Added Graphics Designer, Product Roadmap Agent, and App Architect helper roles with firm non-code boundaries.
 - Extracted Gateway and Argus Machine console UI construction into `momentum_hunter/ui/autonomy_gateway.py`, reducing `app.py` while preserving gateway routing, display-only placeholder state, Trade Plan Ladder population, and locked order controls.
