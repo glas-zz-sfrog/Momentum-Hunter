@@ -82,8 +82,35 @@ def audit_simulation_chain(ledger: ExecutionLedger, *, ticker: str, trade_plan_i
         findings.append(AuditFinding("chain", "risk_result_id", "Missing Risk Governor event before simulation."))
     if not ({"fake_order_submitted", "simulation_blocked"} & actions):
         findings.append(AuditFinding("chain", "result", "Missing final simulation order or blocked outcome."))
+    findings.extend(audit_simulation_chronology(events))
     findings.extend(audit_execution_ledger(ExecutionLedger(events)).findings)
     return AuditReport("PASS" if not findings else "FAIL", findings)
+
+
+def audit_simulation_chronology(events: list[ExecutionLedgerEvent]) -> list[AuditFinding]:
+    findings: list[AuditFinding] = []
+    indexed_actions: dict[str, list[int]] = {}
+    for index, event in enumerate(events):
+        indexed_actions.setdefault(event.requested_action, []).append(index)
+    risk_indexes = indexed_actions.get("risk_gate_evaluated", [])
+    preview_indexes = indexed_actions.get("simulated_order_previewed", [])
+    submit_indexes = indexed_actions.get("fake_order_submitted", [])
+    blocked_indexes = indexed_actions.get("simulation_blocked", [])
+    if not risk_indexes:
+        return findings
+    first_risk = risk_indexes[0]
+    order_like_indexes = preview_indexes + submit_indexes + blocked_indexes
+    if any(index < first_risk for index in order_like_indexes):
+        findings.append(
+            AuditFinding("chain", "chronology", "Risk Governor evidence must precede preview, submit, or block evidence.")
+        )
+    if submit_indexes and not preview_indexes:
+        findings.append(AuditFinding("chain", "preview_order", "Missing simulated preview before fake submit evidence."))
+    elif submit_indexes and preview_indexes and min(submit_indexes) < min(preview_indexes):
+        findings.append(
+            AuditFinding("chain", "chronology", "Simulated preview evidence must precede fake submit evidence.")
+        )
+    return findings
 
 
 def audit_paper_advancement_gate(ledger: ExecutionLedger, *, ticker: str, trade_plan_id: str) -> AuditReport:

@@ -1,19 +1,21 @@
 # Current State
 
 ## Phase
-ARGUS-QUALITY-001 simulation foundation quality review after local merge of the Argus Machine simulation foundation.
+ARGUS-QUALITY-002 simulation foundation hardening tests after ARGUS-QUALITY-001 quality review.
 
 ## Branch
 Current canonical local branch: `master`
 
-Local `master` HEAD: `6893dba Reconcile Argus branch ledger and canonical paths`
+Local `master` baseline before ARGUS-QUALITY-002: `7f088c0 Add simulation foundation quality review`
 
-Local `master` status vs `origin/master`: ahead 76, not pushed.
+Local `master` status vs `origin/master` before ARGUS-QUALITY-002: ahead 77, not pushed.
 
 ## State Summary
 Local `master` now contains the Argus Machine simulation foundation. The simulation foundation was finalized through `codex/ARGUS-A006-A015-clean-room-verification` and fast-forward merged into local `master`.
 
 ARGUS-QUALITY-001 reviewed the current simulation foundation and classified it as ready for A016 broker research with cautions, but not ready for A017/A018 paper broker dependency without hardening.
+
+ARGUS-QUALITY-002 adds hardening tests and narrow safety fixes for non-Fake adapter rejection, transmit-capable adapter rejection, auditor chronology, preview-before-submit ordering, and locked UI no-op behavior.
 
 Canonical Argus Machine implementation paths are:
 
@@ -31,6 +33,7 @@ Quality review artifacts:
 - `docs/argus-office/quality/SIMULATION_FOUNDATION_HARDENING_PLAN.md`
 - `docs/argus-office/quality/TEST_QUALITY_REVIEW.md`
 - `docs/argus-office/quality/A016_READINESS_DECISION.md`
+- `docs/argus-office/reports/releases/ARGUS-QUALITY-002-simulation-hardening-tests.md`
 
 ## Active Rule
 Steven remains final merge and push approver. Do not push `master` until Steven explicitly approves. Future implementation should start from a fresh task branch off local `master`.
@@ -59,4 +62,4 @@ Future review bundles should:
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
 
 ## Next State Target
-Next work should either harden the simulation foundation through `ARGUS-QUALITY-002` / `ARGUS-A013B` / `ARGUS-A015B`, or proceed with `ARGUS-A016` as docs-only broker research with no code, credentials, API keys, dependencies, or paper/live wiring. Paper/live remain locked until a separate Steven-approved task explicitly changes that scope.
+After ARGUS-QUALITY-002, the next work can proceed to `ARGUS-A016` docs-only broker research, or continue with additional auditor/ledger/UI hardening if Steven wants more safety proof before research. Paper/live remain locked until a separate Steven-approved task explicitly changes that scope.

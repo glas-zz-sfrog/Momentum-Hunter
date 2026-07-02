@@ -5,7 +5,15 @@ import unittest
 
 from momentum_hunter.autonomy.auditor import audit_execution_ledger, audit_paper_advancement_gate, audit_simulation_chain
 from momentum_hunter.autonomy.ledger import ExecutionLedgerEvent
-from momentum_hunter.autonomy.broker import BrokerOrderRequest, FakeBrokerAdapter
+from momentum_hunter.autonomy.broker import (
+    BrokerAccount,
+    BrokerAdapter,
+    BrokerAdapterMetadata,
+    BrokerOrder,
+    BrokerOrderRequest,
+    BrokerPosition,
+    FakeBrokerAdapter,
+)
 from momentum_hunter.autonomy.ledger import ExecutionLedger
 from momentum_hunter.autonomy.risk_governor import evaluate_trade_plan
 from momentum_hunter.autonomy.simulation import SimulationLabEngine
@@ -157,6 +165,54 @@ class ArgusAutonomyTests(unittest.TestCase):
         self.assertEqual("rejected", result.status)
         self.assertIn("FakeBroker configured rejection", result.submitted_order.reason)
 
+    def test_simulation_engine_rejects_non_fake_adapter_before_broker_calls(self) -> None:
+        candidate = build_candidate_plans_from_candidates(sample_candidates())[0]
+        ledger = ExecutionLedger()
+        adapter = RecordingBrokerAdapter(
+            BrokerAdapterMetadata(
+                adapter_name="ResearchOnlyAdapter",
+                mode="Simulation Lab",
+                capabilities=["preview_order", "submit_order"],
+                order_transmit_allowed=False,
+                credential_status="not required",
+                last_health_check="2026-07-01T08:00:00-05:00",
+            )
+        )
+        engine = SimulationLabEngine(adapter=adapter, ledger=ledger)
+
+        result = engine.run_candidate(candidate)
+
+        self.assertEqual("blocked", result.status)
+        self.assertEqual([], adapter.calls)
+        self.assertIn("FakeBrokerAdapter", result.message)
+        self.assertIn("simulation_blocked", {event.requested_action for event in ledger.events})
+        self.assertNotIn("simulated_order_previewed", {event.requested_action for event in ledger.events})
+        self.assertNotIn("fake_order_submitted", {event.requested_action for event in ledger.events})
+
+    def test_simulation_engine_rejects_transmit_capable_adapter_before_broker_calls(self) -> None:
+        candidate = build_candidate_plans_from_candidates(sample_candidates())[0]
+        ledger = ExecutionLedger()
+        adapter = RecordingBrokerAdapter(
+            BrokerAdapterMetadata(
+                adapter_name="FakeBrokerAdapter",
+                mode="Simulation Lab",
+                capabilities=["preview_order", "submit_order", "transmit_order"],
+                order_transmit_allowed=True,
+                credential_status="configured",
+                last_health_check="2026-07-01T08:00:00-05:00",
+            )
+        )
+        engine = SimulationLabEngine(adapter=adapter, ledger=ledger)
+
+        result = engine.run_candidate(candidate)
+
+        self.assertEqual("blocked", result.status)
+        self.assertEqual([], adapter.calls)
+        self.assertIn("transmit", result.message.lower())
+        self.assertIn("simulation_blocked", {event.requested_action for event in ledger.events})
+        self.assertNotIn("simulated_order_previewed", {event.requested_action for event in ledger.events})
+        self.assertNotIn("fake_order_submitted", {event.requested_action for event in ledger.events})
+
     def test_paper_advancement_gate_passes_complete_simulation_chain(self) -> None:
         candidate = build_candidate_plans_from_candidates(sample_candidates())[0]
         ledger = ExecutionLedger()
@@ -261,6 +317,72 @@ class ArgusAutonomyTests(unittest.TestCase):
 
         self.assertFalse(report.passed)
         self.assertTrue(any(finding.field == "risk_result_id" for finding in report.findings))
+
+    def test_auditor_fails_submit_without_preview_evidence(self) -> None:
+        ledger = ExecutionLedger()
+        ledger.record(
+            event_type="risk_gate_evaluated",
+            mode="Simulation Lab",
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            risk_result_id="risk-AAA",
+            broker_adapter="FakeBrokerAdapter",
+            requested_action="risk_gate_evaluated",
+            result="Simulation-only",
+        )
+        ledger.record(
+            event_type="fake_order_submitted",
+            mode="Simulation Lab",
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            risk_result_id="risk-AAA",
+            broker_adapter="FakeBrokerAdapter",
+            requested_action="fake_order_submitted",
+            result="filled",
+        )
+
+        report = audit_simulation_chain(ledger, ticker="AAA", trade_plan_id="tp-AAA")
+
+        self.assertFalse(report.passed)
+        self.assertTrue(any(finding.field == "preview_order" for finding in report.findings))
+
+    def test_auditor_fails_order_event_before_risk_gate(self) -> None:
+        ledger = ExecutionLedger()
+        ledger.record(
+            event_type="fake_order_submitted",
+            mode="Simulation Lab",
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            risk_result_id="risk-AAA",
+            broker_adapter="FakeBrokerAdapter",
+            requested_action="fake_order_submitted",
+            result="filled",
+        )
+        ledger.record(
+            event_type="risk_gate_evaluated",
+            mode="Simulation Lab",
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            risk_result_id="risk-AAA",
+            broker_adapter="FakeBrokerAdapter",
+            requested_action="risk_gate_evaluated",
+            result="Simulation-only",
+        )
+        ledger.record(
+            event_type="simulated_order_created",
+            mode="Simulation Lab",
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            risk_result_id="risk-AAA",
+            broker_adapter="FakeBrokerAdapter",
+            requested_action="simulated_order_previewed",
+            result="previewed",
+        )
+
+        report = audit_simulation_chain(ledger, ticker="AAA", trade_plan_id="tp-AAA")
+
+        self.assertFalse(report.passed)
+        self.assertTrue(any(finding.field == "chronology" for finding in report.findings))
 
     def test_auditor_fails_invalid_order_evidence(self) -> None:
         ledger = ExecutionLedger()
@@ -386,6 +508,64 @@ def order_like_event(*, event_id: str) -> ExecutionLedgerEvent:
         actor="Argus Machine",
         source="test",
     )
+
+
+class RecordingBrokerAdapter(BrokerAdapter):
+    def __init__(self, metadata: BrokerAdapterMetadata) -> None:
+        self._metadata = metadata
+        self.calls: list[str] = []
+
+    @property
+    def metadata(self) -> BrokerAdapterMetadata:
+        return self._metadata
+
+    def get_account(self) -> BrokerAccount:
+        self.calls.append("get_account")
+        return BrokerAccount(account_id="recording", buying_power=0.0, mode=self.metadata.mode)
+
+    def get_positions(self) -> list[BrokerPosition]:
+        self.calls.append("get_positions")
+        return []
+
+    def preview_order(self, request: BrokerOrderRequest) -> BrokerOrder:
+        self.calls.append("preview_order")
+        return BrokerOrder(
+            order_id="recording-preview",
+            ticker=request.ticker,
+            side=request.side,
+            quantity=request.quantity,
+            order_type=request.order_type,
+            limit_price=request.limit_price,
+            status="previewed",
+            trade_plan_id=request.trade_plan_id,
+            risk_result_id=request.risk_result_id,
+        )
+
+    def submit_order(self, request: BrokerOrderRequest) -> BrokerOrder:
+        self.calls.append("submit_order")
+        return BrokerOrder(
+            order_id="recording-submit",
+            ticker=request.ticker,
+            side=request.side,
+            quantity=request.quantity,
+            order_type=request.order_type,
+            limit_price=request.limit_price,
+            status="filled",
+            trade_plan_id=request.trade_plan_id,
+            risk_result_id=request.risk_result_id,
+        )
+
+    def cancel_order(self, order_id: str) -> BrokerOrder:
+        self.calls.append("cancel_order")
+        raise KeyError(order_id)
+
+    def get_order_status(self, order_id: str) -> BrokerOrder:
+        self.calls.append("get_order_status")
+        raise KeyError(order_id)
+
+    def list_orders(self) -> list[BrokerOrder]:
+        self.calls.append("list_orders")
+        return []
 
 
 if __name__ == "__main__":

@@ -34,6 +34,20 @@ class SimulationLabEngine:
             result=risk.status,
             reason=" | ".join(risk.reasons),
         )
+        adapter_block_reason = simulation_adapter_block_reason(self.adapter)
+        if adapter_block_reason:
+            self.ledger.record(
+                event_type="execution_blocked",
+                mode=SIMULATION_MODE,
+                ticker=candidate.ticker,
+                trade_plan_id=candidate.trade_plan_id,
+                risk_result_id=risk.result_id,
+                broker_adapter=self.adapter.metadata.adapter_name,
+                requested_action="simulation_blocked",
+                result="blocked",
+                reason=adapter_block_reason,
+            )
+            return SimulationResult("blocked", f"{candidate.ticker} blocked: {adapter_block_reason}")
         if not risk.allows_simulation:
             self.ledger.record(
                 event_type="execution_blocked",
@@ -98,6 +112,27 @@ class SimulationLabEngine:
             preview_order=preview,
             submitted_order=submitted,
         )
+
+
+def simulation_adapter_block_reason(adapter: BrokerAdapter) -> str:
+    metadata = adapter.metadata
+    problems: list[str] = []
+    if not isinstance(adapter, FakeBrokerAdapter) or metadata.adapter_name != "FakeBrokerAdapter":
+        problems.append("Simulation Lab requires the local FakeBrokerAdapter.")
+    if metadata.mode != SIMULATION_MODE:
+        problems.append(f"Adapter mode must be {SIMULATION_MODE}.")
+    if metadata.order_transmit_allowed:
+        problems.append("Adapter metadata allows transmit; Simulation Lab requires transmit disabled.")
+    if metadata.credential_status != "not required":
+        problems.append("Simulation Lab cannot use broker credentials.")
+    risky_capabilities = [
+        capability
+        for capability in metadata.capabilities
+        if any(marker in capability.lower() for marker in ("transmit", "paper", "live"))
+    ]
+    if risky_capabilities:
+        problems.append(f"Adapter capabilities are not simulation-only: {', '.join(risky_capabilities)}.")
+    return " ".join(problems)
 
 
 def build_simulation_order_request(candidate: Top5CandidatePlan) -> BrokerOrderRequest | None:

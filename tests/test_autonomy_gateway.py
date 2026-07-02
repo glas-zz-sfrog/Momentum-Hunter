@@ -118,6 +118,27 @@ class ArgusGatewayTests(unittest.TestCase):
         self.assertIn("live trading requires separate Steven approval", self.window.argus_submit_live_button.toolTip())
         self.assertIn("Live trading locked.", self.window.argus_machine_log.toPlainText())
 
+    def test_locked_paper_and_live_controls_are_no_op_when_clicked(self) -> None:
+        self.window.candidates = sample_candidates()
+        self.window.open_argus_machine_console()
+        self.button("argusCandidateButton_AMD").click()
+        self.app.processEvents()
+        before_events = len(self.window.argus_execution_ledger.events)
+        before_orders = len(self.window.argus_fake_broker.list_orders())
+
+        self.window.argus_submit_paper_button.click()
+        self.window.argus_submit_live_button.click()
+        self.app.processEvents()
+
+        after_actions = [event.requested_action for event in self.window.argus_execution_ledger.events]
+        self.assertFalse(self.window.argus_submit_paper_button.isEnabled())
+        self.assertFalse(self.window.argus_submit_live_button.isEnabled())
+        self.assertEqual(before_events, len(self.window.argus_execution_ledger.events))
+        self.assertEqual(before_orders, len(self.window.argus_fake_broker.list_orders()))
+        self.assertNotIn("submit_paper", after_actions)
+        self.assertNotIn("submit_live", after_actions)
+        self.assertNotIn("fake_order_submitted", after_actions)
+
     def test_simulation_button_runs_fake_order_and_updates_log(self) -> None:
         self.window.candidates = sample_candidates()
         self.window.open_argus_machine_console()

@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added ARGUS-QUALITY-002 simulation hardening tests and narrow safety fixes for adapter rejection, auditor chronology, preview-before-submit evidence, and locked UI no-op behavior.
+- Blocked Simulation Lab from using non-Fake, transmit-capable, credential-backed, wrong-mode, or paper/live/transmit-capability adapters before preview/submit calls.
+- Hardened Execution Auditor simulation-chain checks so submit evidence requires prior preview evidence and Risk Governor evidence must come before preview/submit/block evidence.
 - Added ARGUS-QUALITY-001 simulation foundation quality review, A016 readiness decision, hardening plan, and test quality review.
 - Classified the simulation foundation as ready for A016 broker research with cautions, while requiring hardening before A017/A018 paper broker work.
 - Added branch truth ledger and canonical code path docs so future work starts from real local `master` state instead of stale feature branch reports.
