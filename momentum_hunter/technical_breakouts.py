@@ -11,6 +11,15 @@ from statistics import mean, pstdev
 from typing import Any
 
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
+from momentum_hunter.daily_ohlc import (
+    DAILY_OHLC_COVERAGE_LATEST_JSON,
+    DAILY_OHLC_COVERAGE_LATEST_MD,
+    DAILY_OHLC_SOURCE_PATH,
+    DailyOhlcRecord,
+    build_daily_ohlc_coverage_report,
+    load_daily_ohlc_records,
+    write_daily_ohlc_coverage_report,
+)
 from momentum_hunter.time_utils import now_central
 
 
@@ -116,6 +125,7 @@ def build_technical_breakout_reports(
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
     minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
     daily_bars_path: Path | None = None,
+    daily_ohlc_path: Path | None = DAILY_OHLC_SOURCE_PATH,
     output_dir: Path | None = None,
     generated_at: str | None = None,
     options: BreakoutResearchOptions | None = None,
@@ -129,7 +139,17 @@ def build_technical_breakout_reports(
     outcomes = load_csv_rows(outcomes_path)
     alerts = load_json_records(alerts_path, "alerts")
     minute_bars_by_symbol = load_bar_source(minute_bars_path, default_source="opportunity-minute-bars")
-    daily_bars_by_symbol = load_bar_source(daily_bars_path, default_source="daily-bars") if daily_bars_path else {}
+    requested_symbols = tracked_symbols(captures, alerts, minute_bars_by_symbol)
+    if "QQQ" not in requested_symbols:
+        requested_symbols.append("QQQ")
+    daily_ohlc_result = None
+    if daily_bars_path:
+        daily_bars_by_symbol = load_bar_source(daily_bars_path, default_source="daily-bars")
+    elif daily_ohlc_path:
+        daily_ohlc_result = load_daily_ohlc_records(daily_ohlc_path, requested_symbols=requested_symbols, generated_at=generated_at)
+        daily_bars_by_symbol = daily_ohlc_records_to_technical_bars(daily_ohlc_result.valid_records)
+    else:
+        daily_bars_by_symbol = {}
 
     events = detect_breakout_events(
         daily_bars_by_symbol=daily_bars_by_symbol,
@@ -151,6 +171,7 @@ def build_technical_breakout_reports(
         "alerts_path": str(alerts_path),
         "minute_bars_path": str(minute_bars_path),
         "daily_bars_path": str(daily_bars_path) if daily_bars_path else None,
+        "daily_ohlc_path": str(daily_ohlc_path) if daily_ohlc_path else None,
     }
     event_payload = build_event_report_payload(
         generated_at=generated_at,
@@ -160,6 +181,8 @@ def build_technical_breakout_reports(
         outcomes_seen=len(outcomes),
         alerts_seen=len(alerts),
         daily_symbols=len(daily_bars_by_symbol),
+        daily_ohlc_valid_records=len(daily_ohlc_result.valid_records) if daily_ohlc_result else None,
+        daily_ohlc_invalid_records=len(daily_ohlc_result.invalid_records) if daily_ohlc_result else None,
         minute_symbols=len(minute_bars_by_symbol),
     )
     study_payload = build_study_report_payload(
@@ -177,12 +200,22 @@ def build_technical_breakout_reports(
     write_markdown_event_report(event_payload, event_md)
     write_json(study_payload, study_json)
     write_markdown_study_report(study_payload, study_md)
-    return {
+    paths = {
         "events_json": event_json,
         "events_markdown": event_md,
         "study_json": study_json,
         "study_markdown": study_md,
     }
+    if daily_ohlc_result is not None:
+        coverage_report = build_daily_ohlc_coverage_report(daily_ohlc_result, requested_symbols=requested_symbols)
+        coverage_paths = write_daily_ohlc_coverage_report(
+            coverage_report,
+            json_path=output_dir / DAILY_OHLC_COVERAGE_LATEST_JSON.name,
+            markdown_path=output_dir / DAILY_OHLC_COVERAGE_LATEST_MD.name,
+        )
+        paths["daily_ohlc_coverage_json"] = coverage_paths["json"]
+        paths["daily_ohlc_coverage_markdown"] = coverage_paths["markdown"]
+    return paths
 
 
 def detect_breakout_events(
@@ -914,6 +947,8 @@ def build_event_report_payload(
     alerts_seen: int,
     daily_symbols: int,
     minute_symbols: int,
+    daily_ohlc_valid_records: int | None = None,
+    daily_ohlc_invalid_records: int | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -926,6 +961,8 @@ def build_event_report_payload(
             "outcomes_seen": outcomes_seen,
             "alerts_seen": alerts_seen,
             "daily_symbols": daily_symbols,
+            "daily_ohlc_valid_records": daily_ohlc_valid_records,
+            "daily_ohlc_invalid_records": daily_ohlc_invalid_records,
             "minute_symbols": minute_symbols,
         },
         "summary": event_summary(events),
@@ -1134,6 +1171,26 @@ def load_bar_source(path: Path | None, *, default_source: str) -> dict[str, list
             bar = bar_from_dict(record, default_source=default_source)
             if bar:
                 grouped.setdefault(bar.symbol, []).append(bar)
+    return {symbol: sorted_bars(bars) for symbol, bars in grouped.items()}
+
+
+def daily_ohlc_records_to_technical_bars(records: list[DailyOhlcRecord]) -> dict[str, list[TechnicalPriceBar]]:
+    grouped: dict[str, list[TechnicalPriceBar]] = {}
+    for record in records:
+        if None in (record.open, record.high, record.low, record.close):
+            continue
+        grouped.setdefault(record.symbol, []).append(
+            TechnicalPriceBar(
+                symbol=record.symbol,
+                timestamp=record.date,
+                open=record.open or 0.0,
+                high=record.high or 0.0,
+                low=record.low or 0.0,
+                close=record.close or 0.0,
+                volume=record.volume,
+                source=record.source,
+            )
+        )
     return {symbol: sorted_bars(bars) for symbol, bars in grouped.items()}
 
 
@@ -1426,6 +1483,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--alerts", type=Path, default=OPPORTUNITY_ALERTS_PATH)
     parser.add_argument("--minute-bars", type=Path, default=OPPORTUNITY_MINUTE_BARS_PATH)
     parser.add_argument("--daily-bars", type=Path, default=None)
+    parser.add_argument("--daily-ohlc", type=Path, default=DAILY_OHLC_SOURCE_PATH)
     parser.add_argument("--output-dir", type=Path, default=DATA_DIR / "reports")
     args = parser.parse_args(argv)
     ensure_app_dirs()
@@ -1435,6 +1493,7 @@ def main(argv: list[str] | None = None) -> int:
         alerts_path=args.alerts,
         minute_bars_path=args.minute_bars,
         daily_bars_path=args.daily_bars,
+        daily_ohlc_path=args.daily_ohlc,
         output_dir=args.output_dir,
     )
     for label, path in paths.items():

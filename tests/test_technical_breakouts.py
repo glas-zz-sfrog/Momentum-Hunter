@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from momentum_hunter import technical_breakouts
+from momentum_hunter.daily_ohlc import QUALITY_VALID, DailyOhlcRecord
 from momentum_hunter.technical_breakouts import (
     BREAKOUT_FAILED,
     BREAKOUT_PRESENT,
@@ -179,6 +180,17 @@ class TechnicalBreakoutTests(unittest.TestCase):
         self.assertTrue(studies[0].failed_back_below_breakout_level)
         self.assertEqual(BREAKOUT_FAILED, studies[0].status)
 
+    def test_daily_event_study_calculates_forward_returns(self) -> None:
+        event = daily_present_event("AAA", "2026-01-21", trigger_price=10.0)
+        bars = daily_bars("AAA", [10.0] * 21 + [10.5, 11.0, 10.8, 11.2, 12.0])
+
+        studies = study_breakout_events([event], daily_bars_by_symbol={"AAA": bars})
+
+        self.assertEqual(1, len(studies))
+        self.assertEqual(5.0, studies[0].forward_returns_pct["1d"])
+        self.assertEqual(20.0, studies[0].forward_returns_pct["5d"])
+        self.assertEqual(20.0, studies[0].max_favorable_excursion_pct)
+
     def test_no_daily_source_marks_daily_signals_insufficient(self) -> None:
         events = detect_breakout_events(
             minute_bars_by_symbol={"AAA": minute_bars("AAA", [10.0, 10.1])},
@@ -232,6 +244,31 @@ class TechnicalBreakoutTests(unittest.TestCase):
         self.assertTrue(paths["events_markdown"].exists())
         self.assertTrue(paths["study_json"].exists())
         self.assertTrue(paths["study_markdown"].exists())
+
+    def test_report_builder_consumes_normalized_daily_ohlc(self) -> None:
+        daily_path = self.root / "daily-ohlc-bars.json"
+        records = [
+            daily_ohlc_record("AAA", offset, close=9.5, high=10.0)
+            for offset in range(21)
+        ]
+        records.append(daily_ohlc_record("AAA", 21, close=11.0, high=11.0, volume=300))
+        daily_path.write_text(json.dumps({"records": [record.__dict__ for record in records]}, indent=2), encoding="utf-8")
+
+        paths = build_technical_breakout_reports(
+            captures_path=self.root / "missing-captures.csv",
+            outcomes_path=self.root / "missing-outcomes.csv",
+            alerts_path=self.root / "missing-alerts.json",
+            minute_bars_path=self.root / "missing-minute-bars.json",
+            daily_ohlc_path=daily_path,
+            output_dir=self.root / "reports",
+            generated_at="2026-01-23T12:00:00-05:00",
+        )
+        payload = json.loads(paths["events_json"].read_text(encoding="utf-8"))
+        event_types = {event["event_type"] for event in payload["events"]}
+
+        self.assertIn("donchian_20_day_breakout", event_types)
+        self.assertTrue(paths["daily_ohlc_coverage_json"].exists())
+        self.assertEqual(22, payload["source_counts"]["daily_ohlc_valid_records"])
 
     def test_module_stays_research_only_by_import_boundary(self) -> None:
         source = inspect.getsource(technical_breakouts)
@@ -345,6 +382,55 @@ def present_event(symbol: str, timestamp: str, *, trigger_price: float) -> Break
         quality_flag="HIGH",
         status=BREAKOUT_PRESENT,
         volume_confirmed=True,
+    )
+
+
+def daily_present_event(symbol: str, timestamp: str, *, trigger_price: float) -> BreakoutEvent:
+    return BreakoutEvent(
+        event_id="daily-event-1",
+        symbol=symbol,
+        event_timestamp=timestamp,
+        event_type="donchian_20_day_breakout",
+        timeframe="daily",
+        trigger_price=trigger_price,
+        reference_label="prior_20_day_high",
+        prior_high_band_or_moving_average_value=trigger_price,
+        distance_above_trigger_pct=0.0,
+        volume=100,
+        relative_volume=2.0,
+        market_regime="bull",
+        source_data="test",
+        data_sufficiency="Sufficient",
+        quality_flag="HIGH",
+        status=BREAKOUT_PRESENT,
+        volume_confirmed=True,
+    )
+
+
+def daily_ohlc_record(
+    symbol: str,
+    offset: int,
+    *,
+    close: float,
+    high: float,
+    low: float | None = None,
+    volume: int = 100,
+) -> DailyOhlcRecord:
+    day = datetime(2026, 1, 1) + timedelta(days=offset)
+    low = close if low is None else low
+    return DailyOhlcRecord(
+        symbol=symbol,
+        date=day.date().isoformat(),
+        open=close,
+        high=high,
+        low=low,
+        close=close,
+        volume=volume,
+        source="test_daily_ohlc",
+        adjusted=True,
+        imported_at="2026-01-23T12:00:00-05:00",
+        quality_status=QUALITY_VALID,
+        warnings=[],
     )
 
 
