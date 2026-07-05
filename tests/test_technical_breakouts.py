@@ -235,6 +235,7 @@ class TechnicalBreakoutTests(unittest.TestCase):
             outcomes_path=self.root / "missing-outcomes.csv",
             alerts_path=self.root / "missing-alerts.json",
             minute_bars_path=minute_path,
+            daily_ohlc_path=None,
             output_dir=self.root / "reports",
             generated_at="2026-01-02T12:00:00-05:00",
         )
