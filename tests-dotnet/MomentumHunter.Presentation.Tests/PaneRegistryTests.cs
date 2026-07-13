@@ -158,6 +158,7 @@ public sealed class PaneRegistryTests
         var registry = new PaneRegistry();
         var softClosed = registry.Create(PaneKind.Chart, "Chart B", LinkGroup.B, symbol: "MSTR", interval: "Daily");
         softClosed.IsPinned = true;
+        softClosed.SoftClosedDockLayoutXml = "<LayoutRoot><LayoutDocument ContentId=\"chart-b\" /></LayoutRoot>";
         Assert.True(registry.SoftClose(softClosed.InstanceId));
 
         var restored = new PaneRegistry();
@@ -168,6 +169,7 @@ public sealed class PaneRegistryTests
         Assert.Equal("Daily", retained.Interval);
         Assert.True(retained.IsPinned);
         Assert.False(retained.IsVisible);
+        Assert.Equal(softClosed.SoftClosedDockLayoutXml, retained.SoftClosedDockLayoutXml);
 
         Assert.True(registry.Remove(softClosed.InstanceId));
         Assert.Empty(registry.ToLayouts());

@@ -199,7 +199,8 @@ public sealed record PaneLayout(
     DockRegion DockRegion,
     int SortOrder,
     string? DisplayKey,
-    RectGeometry? FloatingBounds);
+    RectGeometry? FloatingBounds,
+    string? SoftClosedDockLayoutXml = null);
 
 public sealed record WorkspaceLayoutSnapshot(
     int SchemaVersion,

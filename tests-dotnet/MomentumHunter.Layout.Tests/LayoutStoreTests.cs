@@ -30,6 +30,7 @@ public sealed class LayoutStoreTests : IDisposable
         Assert.Equal(snapshot.WindowBounds, roundTripped.WindowBounds);
         Assert.True(roundTripped.ActivityExpanded);
         Assert.Equal(WindowDisplayState.Maximized, roundTripped.WindowState);
+        Assert.Equal("<LayoutRoot />", roundTripped.Panes[0].SoftClosedDockLayoutXml);
         Assert.DoesNotContain("authorization", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("credential", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("token", json, StringComparison.OrdinalIgnoreCase);
@@ -116,7 +117,7 @@ public sealed class LayoutStoreTests : IDisposable
     {
         var panes = new[]
         {
-            new PaneLayout(Guid.NewGuid(), PaneKind.Chart, "Chart", LinkGroup.A, symbol, "5m", false, true, DockRegion.Center, 0, null, null),
+            new PaneLayout(Guid.NewGuid(), PaneKind.Chart, "Chart", LinkGroup.A, symbol, "5m", false, true, DockRegion.Center, 0, null, null, "<LayoutRoot />"),
         };
         return new WorkspaceLayoutSnapshot(1, WorkspaceKind.Live, Guid.NewGuid(), createdAt, false, null, symbol, "5m", panes, string.Empty);
     }

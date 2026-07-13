@@ -59,6 +59,9 @@ public sealed partial class PaneState : ObservableObject
     [ObservableProperty]
     private RectGeometry? _floatingBounds;
 
+    [ObservableProperty]
+    private string? _softClosedDockLayoutXml;
+
     public PaneLayout ToLayout() => new(
         InstanceId,
         Kind,
@@ -71,7 +74,8 @@ public sealed partial class PaneState : ObservableObject
         DockRegion,
         SortOrder,
         DisplayKey,
-        FloatingBounds);
+        FloatingBounds,
+        SoftClosedDockLayoutXml);
 
     public static PaneState FromLayout(PaneLayout layout) => new(
         layout.Kind,
@@ -87,5 +91,6 @@ public sealed partial class PaneState : ObservableObject
         IsVisible = layout.IsVisible,
         DisplayKey = layout.DisplayKey,
         FloatingBounds = layout.FloatingBounds,
+        SoftClosedDockLayoutXml = layout.SoftClosedDockLayoutXml,
     };
 }

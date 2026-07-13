@@ -180,7 +180,18 @@ public partial class MainWindow : Window
             var pane = _viewModel.Registry.Find(instanceId)!;
             if (pane.Kind == PaneKind.Chart && pane != _viewModel.PrimaryChartPane)
             {
-                CreateAdditionalChartDocument(pane, activate: true);
+                if (!string.IsNullOrWhiteSpace(pane.SoftClosedDockLayoutXml))
+                {
+                    CreateAdditionalChartDocument(pane, activate: false);
+                    RestoreDockLayout(pane.SoftClosedDockLayoutXml);
+                    pane.SoftClosedDockLayoutXml = null;
+                }
+                else
+                {
+                    CreateAdditionalChartDocument(pane, activate: true);
+                }
+
+                SetContentVisibility(ContentIdForPane(pane), true);
             }
             else
             {
@@ -265,14 +276,14 @@ public partial class MainWindow : Window
         _contentById[ReviewOutcomesContentId] = ReviewOutcomesAnchor.Content;
     }
 
-    private void RestoreDockLayout()
+    private void RestoreDockLayout(string? explicitLayoutXml = null)
     {
         _isRestoringDockLayout = true;
         try
         {
             DockLayoutPersistence.TryRestore(
                 DockManager,
-                HasCompleteStaticDockLayout() ? _viewModel.RestoredDockLayoutXml : _builtInDockLayoutXml,
+                explicitLayoutXml ?? (HasCompleteStaticDockLayout() ? _viewModel.RestoredDockLayoutXml : _builtInDockLayoutXml),
                 ResolveDockContent);
         }
         finally
@@ -499,6 +510,7 @@ public partial class MainWindow : Window
 
         if (content is LayoutDocument)
         {
+            pane.SoftClosedDockLayoutXml = DockLayoutPersistence.Serialize(DockManager);
             if (_viewModel.SoftClosePane(pane.InstanceId))
             {
                 _contentById.Remove(contentId);
