@@ -19,10 +19,9 @@ public sealed class LinkGroupCoordinator
         }
 
         foreach (var pane in _registry.Panes.Where(pane =>
-                     pane.IsVisible &&
                      !pane.IsPinned &&
                      pane.LinkGroup == linkGroup &&
-                     pane.Kind is PaneKind.Hunter or PaneKind.Chart or PaneKind.TradePlan))
+                     pane.Kind is PaneKind.Hunter or PaneKind.Chart or PaneKind.TradePlan or PaneKind.Research))
         {
             pane.Symbol = symbol;
             pane.Interval = interval;

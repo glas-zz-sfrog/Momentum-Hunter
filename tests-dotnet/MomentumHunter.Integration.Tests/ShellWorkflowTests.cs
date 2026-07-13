@@ -35,6 +35,81 @@ public sealed class ShellWorkflowTests
     }
 
     [Fact]
+    public async Task AdditionalChartKeepsItsOwnCandleContextWhenLinkASelectionChanges()
+    {
+        var viewModel = new ShellViewModel(new MockEngineClient());
+        await viewModel.InitializeAsync();
+        var chartB = viewModel.AddLinkedChart();
+        var chartBContext = Assert.Single(viewModel.SecondaryCharts);
+        var originalCandles = chartBContext.Candles.ToArray();
+
+        await viewModel.SelectCandidateAsync(viewModel.Candidates.Single(candidate => candidate.Symbol == "PLTR"));
+
+        Assert.Equal(LinkGroup.B, chartB.LinkGroup);
+        Assert.Equal("NVDA", chartB.Symbol);
+        Assert.Equal(originalCandles, chartBContext.Candles);
+        Assert.Equal("PLTR", viewModel.PrimaryChart!.Pane.Symbol);
+    }
+
+    [Fact]
+    public async Task PinnedPrimaryChartRetainsItsSymbolAndCandlesWhenSelectionChanges()
+    {
+        var viewModel = new ShellViewModel(new MockEngineClient());
+        await viewModel.InitializeAsync();
+        var originalCandles = viewModel.PrimaryChart!.Candles.ToArray();
+
+        await viewModel.TogglePrimaryChartPinCommand.ExecuteAsync(null);
+        await viewModel.SelectCandidateAsync(viewModel.Candidates.Single(candidate => candidate.Symbol == "PLTR"));
+
+        Assert.True(viewModel.PrimaryChart.Pane.IsPinned);
+        Assert.Equal("NVDA", viewModel.PrimaryChart.Pane.Symbol);
+        Assert.Equal(originalCandles, viewModel.PrimaryChart.Candles);
+        Assert.Equal("PLTR", viewModel.SelectedSymbol);
+    }
+
+    [Fact]
+    public async Task PinnedTradePlanRetainsItsPlanWhenSelectionChanges()
+    {
+        var viewModel = new ShellViewModel(new MockEngineClient());
+        await viewModel.InitializeAsync();
+
+        await viewModel.TogglePrimaryTradePlanPinCommand.ExecuteAsync(null);
+        await viewModel.SelectCandidateAsync(viewModel.Candidates.Single(candidate => candidate.Symbol == "MSTR"));
+
+        Assert.True(viewModel.PrimaryTradePlanPane!.IsPinned);
+        Assert.Equal("NVDA", viewModel.TradePlan!.Symbol);
+        Assert.Equal("MSTR", viewModel.SelectedSymbol);
+    }
+
+    [Fact]
+    public async Task SwitchingWorkspaceDoesNotCarryDynamicChartInstancesForward()
+    {
+        var viewModel = new ShellViewModel(new MockEngineClient());
+        await viewModel.InitializeAsync();
+        var chartB = viewModel.AddLinkedChart();
+
+        viewModel.ChangeWorkspace(WorkspaceKind.Review);
+
+        Assert.Null(viewModel.Registry.Find(chartB.InstanceId));
+        Assert.Empty(viewModel.SecondaryCharts);
+        Assert.Single(viewModel.Registry.Panes.Where(pane => pane.Kind == PaneKind.Chart));
+    }
+
+    [Theory]
+    [InlineData(WorkspaceKind.Live, "SIMULATION \u2022 FakeBroker")]
+    [InlineData(WorkspaceKind.Replay, "REPLAY \u2022 Read Only")]
+    [InlineData(WorkspaceKind.Review, "REVIEW \u2022 Read Only")]
+    public async Task EnvironmentIdentityReflectsTheActiveWorkspace(WorkspaceKind workspace, string expectedLabel)
+    {
+        var viewModel = new ShellViewModel(new MockEngineClient());
+        await viewModel.InitializeAsync();
+
+        viewModel.ChangeWorkspace(workspace);
+
+        Assert.Equal(expectedLabel, viewModel.EnvironmentLabel);
+    }
+
+    [Fact]
     public async Task DailyIntervalIsAvailableAndUsesTheSameReadOnlyEngineBoundary()
     {
         var viewModel = new ShellViewModel(new MockEngineClient());
@@ -58,6 +133,16 @@ public sealed class ShellWorkflowTests
         Assert.Equal(EnvironmentMode.Replay, viewModel.Environment);
         Assert.Equal("Replay Timeline", viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.Hunter).Title);
         Assert.Contains("historical", viewModel.WorkspaceNarrative, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ActivityHandleShowsTheCurrentUnreadCountWithoutExpandingThePane()
+    {
+        var viewModel = new ShellViewModel(new MockEngineClient());
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("Activity 3", viewModel.ActivityLabel);
+        Assert.False(viewModel.IsActivityOpen);
     }
 
     [Fact]
@@ -104,5 +189,21 @@ public sealed class ShellWorkflowTests
         Assert.Null(viewModel.LastSimulationResult);
         Assert.False(viewModel.TradePlan!.RiskDecision!.Allowed);
         Assert.Contains("does not mutate evidence", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SoftClosedLinkedPaneReceivesTheLatestContextBeforeItIsReopened()
+    {
+        var registry = new PaneRegistry();
+        var hunter = registry.Create(PaneKind.Hunter, "Hunter", LinkGroup.A, symbol: "NVDA");
+        var chart = registry.Create(PaneKind.Chart, "Chart", LinkGroup.A, symbol: "NVDA");
+        Assert.True(registry.SoftClose(chart.InstanceId));
+        var coordinator = new LinkGroupCoordinator(registry);
+
+        coordinator.PublishSymbol(hunter.LinkGroup, "AMD", "Daily");
+
+        Assert.False(chart.IsVisible);
+        Assert.Equal("AMD", chart.Symbol);
+        Assert.Equal("Daily", chart.Interval);
     }
 }

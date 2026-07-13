@@ -19,6 +19,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private LinkGroupCoordinator _linkGroups = null!;
     private string? _dockLayoutXml;
     private RectGeometry? _windowBounds;
+    private WindowDisplayState _windowState;
 
     public ShellViewModel(IEngineClient engineClient)
         : this(engineClient, layoutStore: null, isInternalConstruction: true)
@@ -55,6 +56,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public ObservableCollection<CandleSnapshot> Candles { get; }
 
+    public ObservableCollection<ChartPaneViewModel> SecondaryCharts { get; } = [];
+
     public IReadOnlyList<WorkspaceKind> WorkspaceOptions { get; }
 
     public IReadOnlyList<string> IntervalOptions { get; }
@@ -75,6 +78,9 @@ public sealed partial class ShellViewModel : ObservableObject
     private TradePlanSnapshot? _tradePlan;
 
     [ObservableProperty]
+    private int _tradePlanTabIndex;
+
+    [ObservableProperty]
     private SystemHealthSnapshot? _health;
 
     [ObservableProperty]
@@ -82,6 +88,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty]
     private SimulationResult? _lastSimulationResult;
+
+    [ObservableProperty]
+    private ChartPaneViewModel? _primaryChart;
 
     [ObservableProperty]
     private bool _isHealthOpen;
@@ -121,13 +130,32 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public PaneState? PrimaryChartPane => Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Chart);
 
+    public PaneState? PrimaryTradePlanPane => Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.TradePlan);
+
     public string PrimaryChartLinkLabel => PrimaryChartPane?.IsPinned == true
         ? "Pinned"
         : $"Link {PrimaryChartPane?.LinkGroup ?? LinkGroup.Unlinked}";
 
+    public string PrimaryTradePlanLinkLabel => PrimaryTradePlanPane?.IsPinned == true
+        ? "Pinned"
+        : $"Link {PrimaryTradePlanPane?.LinkGroup ?? LinkGroup.Unlinked}";
+
+    public string EnvironmentLabel => Environment switch
+    {
+        EnvironmentMode.Simulation => "SIMULATION \u2022 FakeBroker",
+        EnvironmentMode.Replay => "REPLAY \u2022 Read Only",
+        _ => "REVIEW \u2022 Read Only",
+    };
+
+    public string ActivityLabel => Activity.Count == 0 ? "Activity" : $"Activity {Activity.Count}";
+
     public bool CanRunSimulation => TradePlan?.RiskDecision?.Allowed == true && Environment == EnvironmentMode.Simulation;
 
     public RectGeometry? RestoredWindowBounds => _windowBounds;
+
+    public string? RestoredDockLayoutXml => _dockLayoutXml;
+
+    public WindowDisplayState RestoredWindowState => _windowState;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -142,15 +170,22 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         await RefreshWorkspaceDataAsync(cancellationToken);
+        await RefreshChartPaneDataAsync(cancellationToken);
     }
 
     public async Task SelectCandidateAsync(CandidateSnapshot candidate, CancellationToken cancellationToken = default)
     {
         SelectedCandidate = candidate;
         SelectedSymbol = candidate.Symbol;
-        TradePlan = await _engineClient.GetTradePlanAsync(candidate.Symbol, cancellationToken);
+        var plan = await _engineClient.GetTradePlanAsync(candidate.Symbol, cancellationToken);
         await RefreshCandlesAsync(cancellationToken);
         _linkGroups.PublishSymbol(LinkGroup.A, candidate.Symbol, SelectedInterval);
+        if (PrimaryTradePlanPane?.IsPinned != true)
+        {
+            TradePlan = plan;
+        }
+
+        await RefreshChartPaneDataAsync(cancellationToken);
         RaisePresentationProperties();
         RequestLayoutSave();
     }
@@ -171,6 +206,7 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         ChangeInterval(interval);
         await RefreshCandlesAsync(cancellationToken);
+        await RefreshChartPaneDataAsync(cancellationToken);
     }
 
     public void ChangeWorkspace(WorkspaceKind workspace)
@@ -182,6 +218,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
         Workspace = workspace;
         SetRegistry(WorkspaceFactory.Create(workspace, SelectedSymbol, SelectedInterval));
+        _dockLayoutXml = null;
+        _windowBounds = null;
+        _windowState = WindowDisplayState.Normal;
         IsActivityOpen = Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Activity)?.IsVisible == true;
         RaisePresentationProperties();
         RequestLayoutSave();
@@ -207,6 +246,7 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         await RefreshWorkspaceDataAsync(cancellationToken);
+        await RefreshChartPaneDataAsync(cancellationToken);
     }
 
     public async Task RestoreNamedLayoutAsync(string name, CancellationToken cancellationToken = default)
@@ -227,14 +267,39 @@ public sealed partial class ShellViewModel : ObservableObject
         ApplyLayoutSnapshot(snapshot);
         StatusMessage = $"Restored layout '{name}'.";
         await RefreshWorkspaceDataAsync(cancellationToken);
+        await RefreshChartPaneDataAsync(cancellationToken);
     }
 
-    public void CaptureWindowState(RectGeometry bounds, string? dockLayoutXml, bool activityExpanded)
+    public void CaptureWindowState(
+        RectGeometry bounds,
+        string? dockLayoutXml,
+        bool activityExpanded,
+        WindowDisplayState windowState = WindowDisplayState.Normal)
     {
         _windowBounds = bounds;
         _dockLayoutXml = dockLayoutXml;
         IsActivityOpen = activityExpanded;
+        _windowState = windowState;
         RequestLayoutSave();
+    }
+
+    public bool SoftClosePane(Guid instanceId) => Registry.SoftClose(instanceId);
+
+    public bool ReopenPane(Guid instanceId) => Registry.Reopen(instanceId);
+
+    public bool RemovePane(Guid instanceId)
+    {
+        var removed = Registry.Remove(instanceId);
+        if (removed)
+        {
+            var chart = SecondaryCharts.FirstOrDefault(item => item.Pane.InstanceId == instanceId);
+            if (chart is not null)
+            {
+                SecondaryCharts.Remove(chart);
+            }
+        }
+
+        return removed;
     }
 
     [RelayCommand]
@@ -252,17 +317,35 @@ public sealed partial class ShellViewModel : ObservableObject
     private void ToggleHealth() => IsHealthOpen = !IsHealthOpen;
 
     [RelayCommand]
-    private void ToggleDiagnostics() => IsDiagnosticsOpen = !IsDiagnosticsOpen;
+    private void ToggleDiagnostics()
+    {
+        var diagnosticsPane = Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Diagnostics);
+        if (diagnosticsPane is null)
+        {
+            StatusMessage = "Diagnostics was removed from this workspace.";
+            return;
+        }
+
+        IsDiagnosticsOpen = !IsDiagnosticsOpen;
+        diagnosticsPane.IsVisible = IsDiagnosticsOpen;
+    }
 
     [RelayCommand]
     private void ToggleCommandPalette() => IsCommandPaletteOpen = !IsCommandPaletteOpen;
 
     [RelayCommand]
-    private void TogglePrimaryChartPin()
+    private async Task TogglePrimaryChartPinAsync()
     {
         if (PrimaryChartPane is not null)
         {
             PrimaryChartPane.IsPinned = !PrimaryChartPane.IsPinned;
+            if (!PrimaryChartPane.IsPinned)
+            {
+                PrimaryChartPane.Symbol = SelectedSymbol;
+                PrimaryChartPane.Interval = SelectedInterval;
+                await RefreshChartPaneDataAsync();
+            }
+
             OnPropertyChanged(nameof(PrimaryChartLinkLabel));
         }
     }
@@ -285,9 +368,30 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(PrimaryChartLinkLabel));
     }
 
+    [RelayCommand]
+    private async Task TogglePrimaryTradePlanPinAsync()
+    {
+        if (PrimaryTradePlanPane is null)
+        {
+            return;
+        }
+
+        PrimaryTradePlanPane.IsPinned = !PrimaryTradePlanPane.IsPinned;
+        if (!PrimaryTradePlanPane.IsPinned)
+        {
+            PrimaryTradePlanPane.Symbol = SelectedSymbol;
+            PrimaryTradePlanPane.Interval = SelectedInterval;
+            TradePlan = await _engineClient.GetTradePlanAsync(SelectedSymbol);
+        }
+
+        OnPropertyChanged(nameof(PrimaryTradePlanLinkLabel));
+        OnPropertyChanged(nameof(CanRunSimulation));
+    }
+
     public PaneState AddLinkedChart()
     {
         var pane = Registry.Create(PaneKind.Chart, "Chart", LinkGroup.B, DockRegion.Center, SelectedSymbol, SelectedInterval);
+        SecondaryCharts.Add(new ChartPaneViewModel(pane, Candles));
         OnPropertyChanged(nameof(PrimaryChartLinkLabel));
         return pane;
     }
@@ -340,12 +444,16 @@ public sealed partial class ShellViewModel : ObservableObject
         Registry = registry;
         Registry.Changed += OnRegistryChanged;
         _linkGroups = new LinkGroupCoordinator(Registry);
+        SecondaryCharts.Clear();
+        PrimaryChart = null;
     }
 
     private void OnRegistryChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(PrimaryChartPane));
         OnPropertyChanged(nameof(PrimaryChartLinkLabel));
+        OnPropertyChanged(nameof(PrimaryTradePlanPane));
+        OnPropertyChanged(nameof(PrimaryTradePlanLinkLabel));
         RequestLayoutSave();
     }
 
@@ -354,7 +462,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private WorkspaceLayoutSnapshot CreateAutomaticLayoutSnapshot() => CreateLayoutSnapshot(isNamedLayout: false, name: null);
 
     private WorkspaceLayoutSnapshot CreateLayoutSnapshot(bool isNamedLayout, string? name) => new(
-        SchemaVersion: 2,
+        SchemaVersion: 3,
         Workspace,
         Guid.NewGuid(),
         DateTimeOffset.UtcNow,
@@ -366,7 +474,8 @@ public sealed partial class ShellViewModel : ObservableObject
         string.Empty,
         _dockLayoutXml,
         _windowBounds,
-        IsActivityOpen);
+        IsActivityOpen,
+        _windowState);
 
     private void ApplyLayoutSnapshot(WorkspaceLayoutSnapshot snapshot)
     {
@@ -377,7 +486,10 @@ public sealed partial class ShellViewModel : ObservableObject
         Registry.Restore(snapshot.Panes);
         _dockLayoutXml = snapshot.DockLayoutXml;
         _windowBounds = snapshot.WindowBounds;
+        _windowState = snapshot.WindowState;
         IsActivityOpen = snapshot.ActivityExpanded;
+        IsDiagnosticsOpen = Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Diagnostics)?.IsVisible == true;
+        PrimaryChart = null;
         RaisePresentationProperties();
     }
 
@@ -394,6 +506,8 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             Activity.Add(activity);
         }
+
+        OnPropertyChanged(nameof(ActivityLabel));
 
         Health = await _engineClient.GetSystemHealthAsync(cancellationToken);
         ReplaySession = await _engineClient.GetReplaySessionAsync(cancellationToken);
@@ -413,14 +527,62 @@ public sealed partial class ShellViewModel : ObservableObject
         }
     }
 
+    private async Task RefreshChartPaneDataAsync(CancellationToken cancellationToken = default)
+    {
+        var primaryPane = PrimaryChartPane;
+        if (primaryPane is null)
+        {
+            PrimaryChart = null;
+            SecondaryCharts.Clear();
+            return;
+        }
+
+        var primaryCandles = await _engineClient.GetCandlesAsync(primaryPane.Symbol, primaryPane.Interval, cancellationToken);
+        if (PrimaryChart is null || PrimaryChart.Pane.InstanceId != primaryPane.InstanceId)
+        {
+            PrimaryChart = new ChartPaneViewModel(primaryPane, primaryCandles);
+        }
+        else
+        {
+            PrimaryChart.ReplaceCandles(primaryCandles);
+        }
+
+        var secondaryPanes = Registry.Panes
+            .Where(pane => pane.Kind == PaneKind.Chart && pane.InstanceId != primaryPane.InstanceId)
+            .ToArray();
+        var obsoleteCharts = SecondaryCharts.Where(chart => secondaryPanes.All(pane => pane.InstanceId != chart.Pane.InstanceId)).ToArray();
+        foreach (var chart in obsoleteCharts)
+        {
+            SecondaryCharts.Remove(chart);
+        }
+
+        foreach (var pane in secondaryPanes)
+        {
+            var candles = await _engineClient.GetCandlesAsync(pane.Symbol, pane.Interval, cancellationToken);
+            var chart = SecondaryCharts.FirstOrDefault(item => item.Pane.InstanceId == pane.InstanceId);
+            if (chart is null)
+            {
+                SecondaryCharts.Add(new ChartPaneViewModel(pane, candles));
+            }
+            else
+            {
+                chart.ReplaceCandles(candles);
+            }
+        }
+    }
+
     private void RaisePresentationProperties()
     {
         OnPropertyChanged(nameof(Registry));
         OnPropertyChanged(nameof(Environment));
+        OnPropertyChanged(nameof(EnvironmentLabel));
+        OnPropertyChanged(nameof(ActivityLabel));
         OnPropertyChanged(nameof(WorkspaceTitle));
         OnPropertyChanged(nameof(WorkspaceNarrative));
         OnPropertyChanged(nameof(PrimaryChartPane));
         OnPropertyChanged(nameof(PrimaryChartLinkLabel));
+        OnPropertyChanged(nameof(PrimaryTradePlanPane));
+        OnPropertyChanged(nameof(PrimaryTradePlanLinkLabel));
         OnPropertyChanged(nameof(CanRunSimulation));
     }
 }

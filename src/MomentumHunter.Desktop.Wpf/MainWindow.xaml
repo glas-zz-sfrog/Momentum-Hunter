@@ -6,8 +6,8 @@
         xmlns:themes="clr-namespace:AvalonDock.Themes;assembly=AvalonDock.Themes.VS2013"
         xmlns:controls="clr-namespace:MomentumHunter.Desktop.Wpf.Controls"
         Title="Momentum Hunter Workstation"
-        Height="900"
-        Width="1500"
+        Height="920"
+        Width="1440"
         MinHeight="650"
         MinWidth="1050"
         Background="{StaticResource AppBackground}"
@@ -15,7 +15,7 @@
         KeyDown="Window_KeyDown">
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="54" />
+            <RowDefinition Height="48" />
             <RowDefinition Height="1*" />
             <RowDefinition Height="28" />
         </Grid.RowDefinitions>
@@ -33,7 +33,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="MOMENTUM HUNTER" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <TextBlock Text="MOMENTUM HUNTER" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
                     <TextBlock Text="  WORKSTATION" Foreground="{StaticResource TextMuted}" FontSize="12" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -59,11 +59,12 @@
                 <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Click="SaveLayoutButton_Click"><TextBlock Text="Save Layout" Foreground="{StaticResource TextPrimary}" /></Button>
                     <Button Click="RestoreLayoutButton_Click"><TextBlock Text="Restore" Foreground="{StaticResource TextPrimary}" /></Button>
+                <Button x:Name="PanesButton" Content="Panes" Click="PanesButton_Click" />
                 </StackPanel>
                 <Border Grid.Column="5" Padding="10,5" Margin="5,0" Background="#203A38" CornerRadius="3">
-                    <TextBlock Text="SIMULATION ONLY" Foreground="{StaticResource Teal}" FontWeight="SemiBold" FontSize="11" />
+                    <TextBlock Text="{Binding EnvironmentLabel}" Foreground="{StaticResource Teal}" FontWeight="SemiBold" FontSize="11" />
                 </Border>
-                <Button Grid.Column="6" Content="Activity" Click="ActivityButton_Click" VerticalAlignment="Center" />
+                <Button Grid.Column="6" Content="{Binding ActivityLabel}" Click="ActivityButton_Click" VerticalAlignment="Center" />
                 <Button x:Name="HealthButton" Grid.Column="7" Content="Health" Command="{Binding ToggleHealthCommand}" VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -76,7 +77,7 @@
                 <avalon:LayoutPanel Orientation="Vertical">
                     <avalon:LayoutPanel Orientation="Horizontal">
                         <avalon:LayoutAnchorablePane DockWidth="310">
-                            <avalon:LayoutAnchorable Title="Hunter" CanClose="False" CanFloat="True">
+                            <avalon:LayoutAnchorable x:Name="HunterAnchor" ContentId="pane-hunter" Title="Hunter" CanClose="True" CanFloat="True">
                                 <Border Background="{StaticResource PanelBackground}" Padding="10">
                                     <Grid>
                                         <Grid.RowDefinitions>
@@ -86,35 +87,56 @@
                                         </Grid.RowDefinitions>
                                         <TextBlock Text="{Binding WorkspaceTitle}" FontWeight="SemiBold" FontSize="15" />
                                         <TextBlock Grid.Row="1" Text="{Binding WorkspaceNarrative}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,10" />
-                                        <DataGrid x:Name="CandidateGrid"
-                                                  Grid.Row="2"
-                                                  ItemsSource="{Binding Candidates}"
-                                                  SelectedItem="{Binding SelectedCandidate, Mode=OneWay}"
-                                                  SelectionChanged="CandidateGrid_SelectionChanged"
-                                                  AutoGenerateColumns="False"
-                                                  CanUserAddRows="False"
-                                                  CanUserDeleteRows="False"
-                                                  CanUserResizeRows="False"
-                                                  HeadersVisibility="Column"
-                                                  GridLinesVisibility="Horizontal"
-                                                  Background="#17212B"
-                                                  Foreground="{StaticResource TextPrimary}"
-                                                  BorderBrush="{StaticResource PanelBorder}">
-                                            <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="42" />
-                                                <DataGridTextColumn Header="Symbol" Binding="{Binding Symbol}" Width="58" />
-                                                <DataGridTextColumn Header="Last" Binding="{Binding LastPrice, StringFormat={}{0:C2}}" Width="70" />
-                                                <DataGridTextColumn Header="RVOL" Binding="{Binding RelativeVolume, StringFormat={}{0:N1}x}" Width="48" />
-                                                <DataGridTextColumn Header="Gate" Binding="{Binding OperatorState}" Width="*" />
-                                            </DataGrid.Columns>
-                                        </DataGrid>
+                                        <ListBox x:Name="CandidateGrid"
+                                                 Grid.Row="2"
+                                                 ItemsSource="{Binding Candidates}"
+                                                 SelectedItem="{Binding SelectedCandidate, Mode=OneWay}"
+                                                 SelectionChanged="CandidateGrid_SelectionChanged"
+                                                 Background="#17212B"
+                                                 Foreground="{StaticResource TextPrimary}"
+                                                 BorderBrush="{StaticResource PanelBorder}"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                 ScrollViewer.CanContentScroll="True"
+                                                 VirtualizingPanel.IsVirtualizing="True"
+                                                 VirtualizingPanel.VirtualizationMode="Recycling">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="5,5,5,4">
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="40" />
+                                                            <ColumnDefinition Width="58" />
+                                                            <ColumnDefinition Width="78" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Button Grid.Row="0" Grid.Column="0" Content="{Binding Score}" Tag="{Binding}" Click="CandidateScoreButton_Click" Padding="2" />
+                                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Symbol}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding LastPrice, StringFormat={}{0:C2}}" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Row="0" Grid.Column="3" Text="{Binding ChangePercent, StringFormat={}{0:+0.0;-0.0;0.0}%}" Foreground="{StaticResource Teal}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Margin="2,4,4,0" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis">
+                                                            <Run Text="{Binding RelativeVolume, StringFormat=RVOL {0:N1}x}" />
+                                                            <Run Text=" | " />
+                                                            <Run Text="{Binding FloatOrLiquidity}" />
+                                                            <Run Text=" | " />
+                                                            <Run Text="{Binding Catalyst}" />
+                                                        </TextBlock>
+                                                        <Border Grid.Row="1" Grid.Column="3" Background="#263846" CornerRadius="3" Padding="5,2" Margin="4,4,0,0" HorizontalAlignment="Right">
+                                                            <TextBlock Text="{Binding OperatorState}" Foreground="{StaticResource Teal}" FontSize="10" />
+                                                        </Border>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
                                     </Grid>
                                 </Border>
                             </avalon:LayoutAnchorable>
                         </avalon:LayoutAnchorablePane>
 
                         <avalon:LayoutDocumentPane x:Name="ChartDocumentPane">
-                            <avalon:LayoutDocument Title="Chart" CanClose="False">
+                            <avalon:LayoutDocument x:Name="PrimaryChartDocument" ContentId="pane-primary-chart" Title="Chart" CanClose="False" CanFloat="True">
                                 <Border Background="{StaticResource PanelBackground}" Padding="12">
                                     <Grid>
                                         <Grid.RowDefinitions>
@@ -124,8 +146,8 @@
                                         </Grid.RowDefinitions>
                                         <DockPanel>
                                             <StackPanel DockPanel.Dock="Left">
-                                                <TextBlock Text="{Binding SelectedSymbol}" FontSize="20" FontWeight="SemiBold" />
-                                                <TextBlock Text="Deterministic mock candle data" Foreground="{StaticResource TextMuted}" FontSize="11" />
+                                                <TextBlock Text="{Binding PrimaryChart.Pane.Symbol}" FontSize="20" FontWeight="SemiBold" />
+                                                <TextBlock Text="Local simulation candle data" Foreground="{StaticResource TextMuted}" FontSize="11" />
                                             </StackPanel>
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
                                                 <Border Padding="7,3" Margin="4,0" Background="#263846" CornerRadius="3">
@@ -136,7 +158,7 @@
                                                 <Button Content="New Chart" Click="NewChartButton_Click" />
                                             </StackPanel>
                                         </DockPanel>
-                                        <controls:CandleChart Grid.Row="1" Candles="{Binding Candles}" Margin="0,12,0,8" />
+                                        <controls:CandleChart Grid.Row="1" Candles="{Binding PrimaryChart.Candles}" Margin="0,12,0,8" />
                                         <StackPanel Grid.Row="2" Orientation="Horizontal">
                                             <TextBlock Text="Research display only" Foreground="{StaticResource TextMuted}" FontSize="11" />
                                             <TextBlock Text="  |  Linked panes update only within their selected link group" Foreground="{StaticResource TextMuted}" FontSize="11" />
@@ -147,7 +169,7 @@
                         </avalon:LayoutDocumentPane>
 
                         <avalon:LayoutAnchorablePane DockWidth="340">
-                            <avalon:LayoutAnchorable Title="Trade Plan" CanClose="False" CanFloat="True">
+                            <avalon:LayoutAnchorable x:Name="TradePlanAnchor" ContentId="pane-trade-plan" Title="Trade Plan" CanClose="True" CanFloat="True">
                                 <Border Background="{StaticResource PanelBackground}" Padding="12">
                                     <Grid>
                                         <Grid.RowDefinitions>
@@ -157,13 +179,19 @@
                                         <DockPanel>
                                             <StackPanel DockPanel.Dock="Left">
                                                 <TextBlock Text="Trade Plan" FontSize="16" FontWeight="SemiBold" />
-                                                <TextBlock Text="{Binding TradePlan.DataLineage.Summary}" Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" MaxWidth="270" />
+                                                <TextBlock Text="{Binding TradePlan.Symbol}" Foreground="{StaticResource TextMuted}" FontSize="10" />
                                             </StackPanel>
-                                            <Border DockPanel.Dock="Right" Padding="7,3" Background="#3A3524" CornerRadius="3">
-                                                <TextBlock Text="{Binding TradePlan.RiskDecision.State}" Foreground="{StaticResource Amber}" FontSize="10" />
-                                            </Border>
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                <Border Padding="7,3" Margin="0,0,4,0" Background="#263846" CornerRadius="3">
+                                                    <TextBlock Text="{Binding PrimaryTradePlanLinkLabel}" Foreground="{StaticResource Teal}" FontSize="10" />
+                                                </Border>
+                                                <Border Padding="7,3" Margin="0,0,4,0" Background="#3A3524" CornerRadius="3">
+                                                    <TextBlock Text="{Binding TradePlan.RiskDecision.State}" Foreground="{StaticResource Amber}" FontSize="10" />
+                                                </Border>
+                                                <Button Content="Pin" Command="{Binding TogglePrimaryTradePlanPinCommand}" />
+                                            </StackPanel>
                                         </DockPanel>
-                                        <TabControl Grid.Row="1" Margin="0,12,0,0" Background="#17212B" Foreground="{StaticResource TextPrimary}">
+                                        <TabControl Grid.Row="1" Margin="0,12,0,0" Background="#17212B" Foreground="{StaticResource TextPrimary}" SelectedIndex="{Binding TradePlanTabIndex}">
                                             <TabItem Header="Plan">
                                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                                     <StackPanel Margin="8">
@@ -202,7 +230,7 @@
                     </avalon:LayoutPanel>
 
                     <avalon:LayoutAnchorablePane DockHeight="180" DockMinHeight="90">
-                        <avalon:LayoutAnchorable x:Name="ActivityAnchor" Title="Activity" CanClose="True" CanFloat="True">
+                        <avalon:LayoutAnchorable x:Name="ActivityAnchor" ContentId="pane-activity" Title="Activity" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="10">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="1*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
@@ -225,7 +253,7 @@
                                 </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
-                        <avalon:LayoutAnchorable x:Name="DiagnosticsAnchor" Title="Diagnostics" CanClose="True" CanFloat="True">
+                        <avalon:LayoutAnchorable x:Name="DiagnosticsAnchor" ContentId="pane-diagnostics" Title="Diagnostics" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="12">
                                 <StackPanel>
                                     <TextBlock Text="Diagnostics" FontSize="16" FontWeight="SemiBold" />
@@ -237,6 +265,42 @@
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </avalon:LayoutAnchorable>
+                        <avalon:LayoutAnchorable x:Name="ResearchAnchor" ContentId="pane-research" Title="Research" CanClose="True" CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="Research" FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock Text="Evidence context for the linked symbol stays available without becoming a permanent route." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                    <TextBlock Text="Catalyst and lineage are shown in the Trade Plan tabs. Detailed provider mechanics remain in Diagnostics." TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </avalon:LayoutAnchorable>
+                        <avalon:LayoutAnchorable x:Name="WatchlistAnchor" ContentId="pane-watchlist" Title="Watchlist" CanClose="True" CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="Watchlist" FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock Text="Saved symbol collections are an optional workspace pane in this shell spike." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                    <TextBlock Text="Use the Hunter pane for the active ranked candidate list." TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </avalon:LayoutAnchorable>
+                        <avalon:LayoutAnchorable x:Name="ReplayEventsAnchor" ContentId="pane-replay-events" Title="Replay Events" CanClose="True" CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="Replay Events" FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock Text="Historical decisions are read-only and cannot alter current research." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                    <TextBlock Text="Replay timeline context is supplied by the deterministic engine boundary." TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </avalon:LayoutAnchorable>
+                        <avalon:LayoutAnchorable x:Name="ReviewOutcomesAnchor" ContentId="pane-review-outcomes" Title="Outcomes" CanClose="True" CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="Outcomes" FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock Text="Insufficient local sample: outcome analytics are intentionally withheld rather than implied." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                    <TextBlock Text="Use this pane for future outcome and discipline review once a suitable evidence sample exists." TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
                         </avalon:LayoutAnchorable>
@@ -270,6 +334,31 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <Button Content="Open Diagnostics" Click="DiagnosticsButton_Click" Margin="0,10,0,0" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <Popup x:Name="PanesPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=PanesButton}" StaysOpen="False" AllowsTransparency="True" DataContext="{Binding DataContext, ElementName=Root}">
+            <Border Width="360" Padding="12" Background="#1B2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="4">
+                <StackPanel>
+                    <TextBlock Text="Workspace Panes" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="Close hides a pane. Remove permanently deletes that pane instance from this workspace." Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,8" />
+                    <ItemsControl ItemsSource="{Binding Registry.Panes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,3">
+                                    <StackPanel DockPanel.Dock="Left">
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Symbol}" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                    </StackPanel>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button Content="Open" Tag="{Binding InstanceId}" Click="ReopenPaneButton_Click" />
+                                        <Button Content="Remove" Tag="{Binding InstanceId}" Click="RemovePaneButton_Click" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </Border>
         </Popup>

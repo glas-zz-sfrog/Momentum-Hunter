@@ -46,6 +46,12 @@ public enum EnvironmentMode
     Review,
 }
 
+public enum WindowDisplayState
+{
+    Normal,
+    Maximized,
+}
+
 public enum ReadinessState
 {
     ReadyForSimulation,
@@ -106,6 +112,11 @@ public sealed record CandleSnapshot(
     long Volume);
 
 public sealed record ReadinessCheck(string Name, bool Passed, string Detail);
+
+public sealed record ReadinessSnapshot(
+    ReadinessState State,
+    IReadOnlyList<ReadinessCheck> Checks,
+    string Summary);
 
 public sealed record TradeLevel(string Name, decimal Price, string Detail);
 
@@ -203,4 +214,5 @@ public sealed record WorkspaceLayoutSnapshot(
     string Checksum,
     string? DockLayoutXml = null,
     RectGeometry? WindowBounds = null,
-    bool ActivityExpanded = false);
+    bool ActivityExpanded = false,
+    WindowDisplayState WindowState = WindowDisplayState.Normal);

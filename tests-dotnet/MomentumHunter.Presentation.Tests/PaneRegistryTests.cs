@@ -74,9 +74,20 @@ public sealed class PaneRegistryTests
     {
         var registry = WorkspaceFactory.Create(workspace);
 
-        Assert.Equal(4, registry.Panes.Count);
+        var expectedPaneCount = workspace == WorkspaceKind.Live ? 7 : 5;
+        Assert.Equal(expectedPaneCount, registry.Panes.Count);
         Assert.Equal(hunterTitle, registry.Panes.Single(pane => pane.Kind == PaneKind.Hunter).Title);
         Assert.Equal(lowerPaneVisible, registry.Panes.Single(pane => pane.Kind == lowerPaneKind).IsVisible);
+        Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Diagnostics).IsVisible);
+    }
+
+    [Fact]
+    public void LiveWorkspaceKeepsResearchAndWatchlistAvailableAsHiddenPanes()
+    {
+        var registry = WorkspaceFactory.Create(WorkspaceKind.Live);
+
+        Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Research).IsVisible);
+        Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Watchlist).IsVisible);
     }
 
     [Fact]
@@ -139,6 +150,39 @@ public sealed class PaneRegistryTests
         registry.Remove(pane.InstanceId);
 
         Assert.True(notifications >= 3);
+    }
+
+    [Fact]
+    public void SoftClosePersistsPaneIdentityWhilePermanentRemoveDoesNot()
+    {
+        var registry = new PaneRegistry();
+        var softClosed = registry.Create(PaneKind.Chart, "Chart B", LinkGroup.B, symbol: "MSTR", interval: "Daily");
+        softClosed.IsPinned = true;
+        Assert.True(registry.SoftClose(softClosed.InstanceId));
+
+        var restored = new PaneRegistry();
+        restored.Restore(registry.ToLayouts());
+        var retained = Assert.Single(restored.Panes);
+        Assert.Equal(softClosed.InstanceId, retained.InstanceId);
+        Assert.Equal("MSTR", retained.Symbol);
+        Assert.Equal("Daily", retained.Interval);
+        Assert.True(retained.IsPinned);
+        Assert.False(retained.IsVisible);
+
+        Assert.True(registry.Remove(softClosed.InstanceId));
+        Assert.Empty(registry.ToLayouts());
+    }
+
+    [Fact]
+    public async Task DiagnosticsPaneStartsHiddenAndCanBeToggledWithoutASeparateRoute()
+    {
+        var viewModel = new ShellViewModel(new MockEngineClient());
+        await viewModel.InitializeAsync();
+
+        viewModel.ToggleDiagnosticsCommand.Execute(null);
+
+        Assert.True(viewModel.IsDiagnosticsOpen);
+        Assert.True(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.Diagnostics).IsVisible);
     }
 
     private static WorkspaceLayoutSnapshot CreateSnapshot(string symbol) => new(

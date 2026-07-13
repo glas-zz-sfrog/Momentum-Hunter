@@ -45,7 +45,7 @@ public sealed class MockEngineClient : IEngineClient
         score,
         liquidity,
         new CatalystSummary(catalyst, "Deterministic local fixture", SnapshotTime),
-        new DataLineage("Mock engine fixture", SnapshotTime, "Deterministic local fixture; research display only."));
+        new DataLineage("Local simulation snapshot", SnapshotTime, "Current research snapshot is available for planning."));
 
     public Task<IReadOnlyList<CandidateSnapshot>> GetCandidatesAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(Candidates);
@@ -101,7 +101,7 @@ public sealed class MockEngineClient : IEngineClient
             candidate.Readiness,
             checks,
             blocked ? "Refresh evidence before simulation" : "Review plan in simulation",
-            candidate.DataLineage ?? new DataLineage("Mock engine fixture", SnapshotTime, "Deterministic local fixture; research display only."),
+            candidate.DataLineage ?? new DataLineage("Local simulation snapshot", SnapshotTime, "Current research snapshot is available for planning."),
             [
                 new TradeLevel("Entry", entry, "Research display level"),
                 new TradeLevel("Stop", stop, "Defined invalidation level"),

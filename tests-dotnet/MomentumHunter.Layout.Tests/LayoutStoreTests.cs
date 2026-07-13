@@ -11,7 +11,13 @@ public sealed class LayoutStoreTests : IDisposable
     [Fact]
     public void LayoutSerializationRoundTripsAndExcludesAuthorizationMaterial()
     {
-        var snapshot = CreateSnapshot("NVDA", DateTimeOffset.Parse("2026-07-13T14:30:00Z"));
+        var snapshot = CreateSnapshot("NVDA", DateTimeOffset.Parse("2026-07-13T14:30:00Z")) with
+        {
+            DockLayoutXml = "<LayoutRoot><LayoutPanel Orientation=\"Horizontal\" /></LayoutRoot>",
+            WindowBounds = new RectGeometry(120, 80, 1440, 920),
+            ActivityExpanded = true,
+            WindowState = WindowDisplayState.Maximized,
+        };
         var sealedSnapshot = LayoutIntegrity.Seal(snapshot);
 
         var json = LayoutIntegrity.Serialize(sealedSnapshot);
@@ -20,6 +26,10 @@ public sealed class LayoutStoreTests : IDisposable
         Assert.NotNull(roundTripped);
         Assert.True(LayoutIntegrity.IsValid(roundTripped!));
         Assert.Equal("NVDA", roundTripped.SelectedSymbol);
+        Assert.Equal(snapshot.DockLayoutXml, roundTripped.DockLayoutXml);
+        Assert.Equal(snapshot.WindowBounds, roundTripped.WindowBounds);
+        Assert.True(roundTripped.ActivityExpanded);
+        Assert.Equal(WindowDisplayState.Maximized, roundTripped.WindowState);
         Assert.DoesNotContain("authorization", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("credential", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("token", json, StringComparison.OrdinalIgnoreCase);
