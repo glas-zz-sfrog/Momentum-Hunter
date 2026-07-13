@@ -1,0 +1,99 @@
+<Application x:Class="MomentumHunter.Desktop.Wpf.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Startup="OnStartup">
+    <Application.Resources>
+        <SolidColorBrush x:Key="AppBackground" Color="#10161D" />
+        <SolidColorBrush x:Key="PanelBackground" Color="#17212B" />
+        <SolidColorBrush x:Key="PanelBorder" Color="#31404E" />
+        <SolidColorBrush x:Key="TextPrimary" Color="#E7EDF2" />
+        <SolidColorBrush x:Key="TextMuted" Color="#99A9B7" />
+        <SolidColorBrush x:Key="Teal" Color="#4AC7B6" />
+        <SolidColorBrush x:Key="Amber" Color="#D9A441" />
+        <Style TargetType="{x:Type TextBlock}">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+        </Style>
+        <Style TargetType="{x:Type Button}">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            <Setter Property="Background" Value="#253440" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Margin" Value="3,0" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="#64727F" />
+                    <Setter Property="Background" Value="#1A2731" />
+                    <Setter Property="BorderBrush" Value="#253440" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="{x:Type ComboBox}">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            <Setter Property="Background" Value="#1A2731" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+            <Setter Property="Padding" Value="6,3" />
+        </Style>
+        <Style TargetType="{x:Type ComboBoxItem}">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            <Setter Property="Background" Value="#1A2731" />
+        </Style>
+        <Style TargetType="{x:Type DataGrid}">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="RowBackground" Value="#17212B" />
+            <Setter Property="AlternatingRowBackground" Value="#1B2832" />
+            <Setter Property="HorizontalGridLinesBrush" Value="#31404E" />
+            <Setter Property="VerticalGridLinesBrush" Value="#31404E" />
+        </Style>
+        <Style TargetType="{x:Type DataGridCell}">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="#31404E" />
+            <Setter Property="Padding" Value="4,5" />
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#284B52" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="{x:Type DataGridColumnHeader}">
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+            <Setter Property="Background" Value="#121C24" />
+            <Setter Property="BorderBrush" Value="#31404E" />
+            <Setter Property="Padding" Value="4,5" />
+        </Style>
+        <Style TargetType="{x:Type TabItem}">
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+            <Setter Property="Background" Value="#121C24" />
+            <Setter Property="BorderBrush" Value="#31404E" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabItem}">
+                        <Border x:Name="HeaderBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1,1,1,0"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="#253440" />
+                                <Setter TargetName="HeaderBorder" Property="BorderBrush" Value="#4AC7B6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+                    <Setter Property="Background" Value="#253440" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Application.Resources>
+</Application>

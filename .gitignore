@@ -3,3 +3,6 @@
 MomentumHunterData/
 __pycache__/
 *.py[cod]
+bin/
+obj/
+TestResults/
