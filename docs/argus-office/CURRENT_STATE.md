@@ -1,65 +1,55 @@
 # Current State
 
-## Phase
-ARGUS-QUALITY-002 simulation foundation hardening tests after ARGUS-QUALITY-001 quality review.
+Date reconciled: 2026-07-13
 
-## Branch
-Current canonical local branch: `master`
+## Canonical Baseline
 
-Local `master` baseline before ARGUS-QUALITY-002: `7f088c0 Add simulation foundation quality review`
+- Local `master` HEAD: `1180315 Add daily OHLC source for breakout research`.
+- `master` matches `origin/master` (`0 ahead / 0 behind`).
+- All named local branch tips were checked on 2026-07-13 and are reachable from an `origin/*` branch.
+- The worktree was clean before this documentation reconciliation branch was created.
 
-Local `master` status vs `origin/master` before ARGUS-QUALITY-002: ahead 77, not pushed.
+## What Is In Local Master
 
-## State Summary
-Local `master` now contains the Argus Machine simulation foundation. The simulation foundation was finalized through `codex/ARGUS-A006-A015-clean-room-verification` and fast-forward merged into local `master`.
+- Guided Daily Workflow first bridge and Argus Office governance foundation.
+- Gateway / Argus Machine Python UI extraction.
+- Argus Machine simulation foundation: TradePlan, Risk Governor, ledger, FakeBroker, Simulation Lab, Machine Log, Execution Auditor, and hardening tests.
+- Technical Breakout Research Engine v1 and its research-only daily OHLC source.
 
-ARGUS-QUALITY-001 reviewed the current simulation foundation and classified it as ready for A016 broker research with cautions, but not ready for A017/A018 paper broker dependency without hardening.
+## Current Active Branches
 
-ARGUS-QUALITY-002 adds hardening tests and narrow safety fixes for non-Fake adapter rejection, transmit-capable adapter rejection, auditor chronology, preview-before-submit ordering, and locked UI no-op behavior.
+| Branch | HEAD | Status | Meaning |
+| --- | --- | --- | --- |
+| `codex/ARGUS-R004-momentum-hunter-wpf-shell-spike` | `fb024a1` | `STARTED`, pushed, clean | WPF workstation feasibility spike. It is three commits ahead of `master`, uses mock/local engine data, and can fast-forward merge after review. |
+| `codex/technical-confluence-wave-1-primitives` | `9678c5c` | `STARTED`, pushed | Research-only Wave 1 confluence primitives awaiting review and merge decision. |
+| `codex/technical-indicator-registry-confluence-roadmap-v1` | `2af99da` | `STARTED`, pushed | Indicator registry/confluence roadmap awaiting review; not canonical behavior. |
+| `codex/daily-ohlc-coverage-expansion-v1` | `2f1e03d` | `NEEDS_REVIEW`, pushed | Separate daily OHLC coverage expansion; not in `master`. |
 
-Canonical Argus Machine implementation paths are:
+## Simulation Safety Boundary
 
-- Gateway / Argus Machine UI: `momentum_hunter/ui/autonomy_gateway.py`
-- Trade Plan Ladder UI: `momentum_hunter/ui/trade_plan_ladder.py`
-- TradePlan source model: `momentum_hunter/trade_planning.py`
-- Autonomy primitives: `momentum_hunter/autonomy/*`
+- Paper and live trading remain locked.
+- No PaperBroker, LiveBroker, broker credentials, API keys, provider SDK, or real order path exists.
+- A016 broker research is permitted only as docs/research work; it does not authorize A017/A018 code.
+- Any paper or live work needs a new Goal Charter and explicit Steven approval.
 
-Paper and live trading remain locked. No paper broker, live broker, broker credentials, API keys, or real order path exists on local `master`.
+## Architecture Boundary
 
-Quality review artifacts:
+- Python remains the canonical engine for scanning, scoring, evidence, replay, storage, readiness, trade planning, and risk governance.
+- Canonical Argus Machine paths remain `momentum_hunter/autonomy/*`, `momentum_hunter/ui/autonomy_gateway.py`, and `momentum_hunter/ui/trade_plan_ladder.py`.
+- The R004 WPF shell is a feasibility spike only. It is not a production Python bridge or a frontend-replacement decision.
 
-- `docs/argus-office/reports/quality/ARGUS-QUALITY-001-simulation-foundation-review.md`
-- `docs/argus-office/quality/SIMULATION_FOUNDATION_QUALITY_REVIEW.md`
-- `docs/argus-office/quality/SIMULATION_FOUNDATION_HARDENING_PLAN.md`
-- `docs/argus-office/quality/TEST_QUALITY_REVIEW.md`
-- `docs/argus-office/quality/A016_READINESS_DECISION.md`
-- `docs/argus-office/reports/releases/ARGUS-QUALITY-002-simulation-hardening-tests.md`
+## Next Decisions
 
-## Active Rule
-Steven remains final merge and push approver. Do not push `master` until Steven explicitly approves. Future implementation should start from a fresh task branch off local `master`.
+1. Review/merge or hold the R004 WPF workstation feasibility spike.
+2. Review/merge or hold the Wave 1 confluence primitives.
+3. Select the next research lane: confluence validation or A016 broker research.
 
-## Branch Truth
-The original `codex/ARGUS-A006-A015-argus-machine-simulation` branch is superseded by the clean-room cherry-picked history on `master`. It should not be used for future work.
+## Branch History Notes
 
-The older `codex/ARGUS-A004-A005-tradeplan-risk-governor` branch is also superseded. It contains an unmerged `momentum_hunter/execution/*` model path that is not canonical.
-
-See:
-
-- `docs/argus-office/BRANCH_LEDGER.md`
-- `docs/argus-office/CANONICAL_CODE_PATHS.md`
-
-## Active Artifact Note
-`argus_review_bundle_current.zip` may exist as an untracked review artifact in the repo root. It is not source code and should not be committed unless a future task explicitly requests artifact tracking.
-
-## Review Bundle Quality Note
-Future review bundles should:
-
-- fix manifest variable substitution before delivery,
-- include imported dependencies such as `momentum_hunter/trade_planning.py`, `momentum_hunter/models.py`, `momentum_hunter/time_utils.py`, and `momentum_hunter/monitor_targets.py`,
-- remain curated and exclude secrets, credentials, `.env` files, virtualenvs, generated market data, and raw data folders.
+- `codex/ARGUS-A006-A015-argus-machine-simulation` is cloud-backed but superseded by the clean-room-derived simulation foundation in `master`.
+- `codex/ARGUS-A004-A005-tradeplan-risk-governor` is superseded and not a source for new work.
+- See `docs/argus-office/BRANCH_LEDGER.md` and `docs/argus-office/CANONICAL_CODE_PATHS.md` for canonical-path and branch detail.
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
 
-## Next State Target
-After ARGUS-QUALITY-002, the next work can proceed to `ARGUS-A016` docs-only broker research, or continue with additional auditor/ledger/UI hardening if Steven wants more safety proof before research. Paper/live remain locked until a separate Steven-approved task explicitly changes that scope.
+Do not change core scoring, trade readiness, replay identity, historical capture selection, database schema/migrations, broker/order execution, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior without explicit approval.
