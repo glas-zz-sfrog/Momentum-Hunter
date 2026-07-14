@@ -462,7 +462,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private WorkspaceLayoutSnapshot CreateAutomaticLayoutSnapshot() => CreateLayoutSnapshot(isNamedLayout: false, name: null);
 
     private WorkspaceLayoutSnapshot CreateLayoutSnapshot(bool isNamedLayout, string? name) => new(
-        SchemaVersion: 3,
+        SchemaVersion: 4,
         Workspace,
         Guid.NewGuid(),
         DateTimeOffset.UtcNow,
@@ -484,6 +484,7 @@ public sealed partial class ShellViewModel : ObservableObject
         SelectedInterval = IntervalOptions.Contains(snapshot.SelectedInterval, StringComparer.Ordinal) ? snapshot.SelectedInterval : "5m";
         SetRegistry(new PaneRegistry());
         Registry.Restore(snapshot.Panes);
+        MigrateLegacyContextualPanes(snapshot.SchemaVersion);
         _dockLayoutXml = snapshot.DockLayoutXml;
         _windowBounds = snapshot.WindowBounds;
         _windowState = snapshot.WindowState;
@@ -491,6 +492,29 @@ public sealed partial class ShellViewModel : ObservableObject
         IsDiagnosticsOpen = Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Diagnostics)?.IsVisible == true;
         PrimaryChart = null;
         RaisePresentationProperties();
+    }
+
+    private void MigrateLegacyContextualPanes(int schemaVersion)
+    {
+        if (schemaVersion >= 4 || Workspace != WorkspaceKind.Live)
+        {
+            return;
+        }
+
+        foreach (var (kind, title) in new[]
+        {
+            (PaneKind.Automation, "Automation"),
+            (PaneKind.Orders, "Orders"),
+            (PaneKind.Positions, "Positions"),
+        })
+        {
+            if (Registry.Panes.Any(pane => pane.Kind == kind))
+            {
+                continue;
+            }
+
+            Registry.Create(kind, title, LinkGroup.Unlinked, DockRegion.Bottom, SelectedSymbol, SelectedInterval).IsVisible = false;
+        }
     }
 
     private async Task RefreshWorkspaceDataAsync(CancellationToken cancellationToken)

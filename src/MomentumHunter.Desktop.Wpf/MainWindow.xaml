@@ -286,6 +286,33 @@
                                 </StackPanel>
                             </Border>
                         </avalon:LayoutAnchorable>
+                        <avalon:LayoutAnchorable x:Name="AutomationAnchor" ContentId="pane-automation" Title="Automation" CanClose="True" CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="Automation" FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock Text="Automation status and scheduled research work appear here when that capability is added." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                    <TextBlock Text="This shell exposes no automatic trading controls." TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </avalon:LayoutAnchorable>
+                        <avalon:LayoutAnchorable x:Name="OrdersAnchor" ContentId="pane-orders" Title="Orders" CanClose="True" CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="Orders" FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock Text="Order activity is unavailable in this simulation-only workstation shell." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                    <TextBlock Text="The shell does not send, cancel, or modify orders." TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </avalon:LayoutAnchorable>
+                        <avalon:LayoutAnchorable x:Name="PositionsAnchor" ContentId="pane-positions" Title="Positions" CanClose="True" CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="Positions" FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock Text="Position data is unavailable because no account data source is configured." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                    <TextBlock Text="A future read-only account source can appear here after explicit approval." TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="ReplayEventsAnchor" ContentId="pane-replay-events" Title="Replay Events" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="12">
                                 <StackPanel>

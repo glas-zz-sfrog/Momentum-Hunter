@@ -74,7 +74,7 @@ public sealed class PaneRegistryTests
     {
         var registry = WorkspaceFactory.Create(workspace);
 
-        var expectedPaneCount = workspace == WorkspaceKind.Live ? 7 : 5;
+        var expectedPaneCount = workspace == WorkspaceKind.Live ? 10 : 5;
         Assert.Equal(expectedPaneCount, registry.Panes.Count);
         Assert.Equal(hunterTitle, registry.Panes.Single(pane => pane.Kind == PaneKind.Hunter).Title);
         Assert.Equal(lowerPaneVisible, registry.Panes.Single(pane => pane.Kind == lowerPaneKind).IsVisible);
@@ -88,6 +88,20 @@ public sealed class PaneRegistryTests
 
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Research).IsVisible);
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Watchlist).IsVisible);
+    }
+
+    [Fact]
+    public void LiveWorkspaceKeepsAutomationOrdersAndPositionsAsHiddenInformationalPanes()
+    {
+        var registry = WorkspaceFactory.Create(WorkspaceKind.Live);
+
+        foreach (var kind in new[] { PaneKind.Automation, PaneKind.Orders, PaneKind.Positions })
+        {
+            var pane = registry.Panes.Single(candidate => candidate.Kind == kind);
+            Assert.False(pane.IsVisible);
+            Assert.Equal(LinkGroup.Unlinked, pane.LinkGroup);
+            Assert.Equal(DockRegion.Bottom, pane.DockRegion);
+        }
     }
 
     [Fact]
@@ -136,6 +150,33 @@ public sealed class PaneRegistryTests
 
         Assert.Equal(WorkspaceKind.Replay, viewModel.Workspace);
         Assert.Equal("PLTR", viewModel.SelectedSymbol);
+    }
+
+    [Fact]
+    public async Task ShellMigratesLegacyLiveLayoutWithNewContextualPanesOnce()
+    {
+        var legacyLiveLayout = CreateSnapshot("NVDA") with { SchemaVersion = 3 };
+        var viewModel = new ShellViewModel(new MockEngineClient(), new InMemoryLayoutStore(legacyLiveLayout));
+
+        await viewModel.InitializeAsync();
+
+        foreach (var kind in new[] { PaneKind.Automation, PaneKind.Orders, PaneKind.Positions })
+        {
+            Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == kind).IsVisible);
+        }
+    }
+
+    [Fact]
+    public async Task ShellDoesNotRecreateContextualPanesRemovedFromCurrentLayout()
+    {
+        var currentLayoutWithoutContextualPanes = CreateSnapshot("NVDA") with { SchemaVersion = 4 };
+        var viewModel = new ShellViewModel(new MockEngineClient(), new InMemoryLayoutStore(currentLayoutWithoutContextualPanes));
+
+        await viewModel.InitializeAsync();
+
+        Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Automation);
+        Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Orders);
+        Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Positions);
     }
 
     [Fact]

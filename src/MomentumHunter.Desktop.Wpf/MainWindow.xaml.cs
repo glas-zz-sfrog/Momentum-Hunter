@@ -21,6 +21,9 @@ public partial class MainWindow : Window
     private const string DiagnosticsContentId = "pane-diagnostics";
     private const string ResearchContentId = "pane-research";
     private const string WatchlistContentId = "pane-watchlist";
+    private const string AutomationContentId = "pane-automation";
+    private const string OrdersContentId = "pane-orders";
+    private const string PositionsContentId = "pane-positions";
     private const string ReplayEventsContentId = "pane-replay-events";
     private const string ReviewOutcomesContentId = "pane-review-outcomes";
 
@@ -272,6 +275,9 @@ public partial class MainWindow : Window
         _contentById[DiagnosticsContentId] = DiagnosticsAnchor.Content;
         _contentById[ResearchContentId] = ResearchAnchor.Content;
         _contentById[WatchlistContentId] = WatchlistAnchor.Content;
+        _contentById[AutomationContentId] = AutomationAnchor.Content;
+        _contentById[OrdersContentId] = OrdersAnchor.Content;
+        _contentById[PositionsContentId] = PositionsAnchor.Content;
         _contentById[ReplayEventsContentId] = ReplayEventsAnchor.Content;
         _contentById[ReviewOutcomesContentId] = ReviewOutcomesAnchor.Content;
     }
@@ -290,6 +296,8 @@ public partial class MainWindow : Window
         {
             _isRestoringDockLayout = false;
         }
+
+        EnsureContextualAnchorables();
     }
 
     private object? ResolveDockContent(string contentId) =>
@@ -328,6 +336,37 @@ public partial class MainWindow : Window
         foreach (var pane in _viewModel.Registry.Panes.Where(pane => pane.Kind == PaneKind.Chart && pane != primaryChart && pane.IsVisible))
         {
             CreateAdditionalChartDocument(pane, activate: false);
+        }
+    }
+
+    // Preserve existing saved layouts while adding optional panes introduced by a newer shell version.
+    private void EnsureContextualAnchorables()
+    {
+        var targetPane = FindLayoutContent(ActivityContentId)?.Parent as LayoutAnchorablePane
+            ?? DockManager.Layout.Descendents().OfType<LayoutAnchorablePane>().LastOrDefault();
+        if (targetPane is null)
+        {
+            return;
+        }
+
+        foreach (var (contentId, title) in new[]
+        {
+            (AutomationContentId, "Automation"),
+            (OrdersContentId, "Orders"),
+            (PositionsContentId, "Positions"),
+        })
+        {
+            if (FindLayoutContent(contentId) is null && _contentById.TryGetValue(contentId, out var content))
+            {
+                targetPane.Children.Add(new LayoutAnchorable
+                {
+                    Title = title,
+                    ContentId = contentId,
+                    Content = content,
+                    CanClose = true,
+                    CanFloat = true,
+                });
+            }
         }
     }
 
@@ -405,6 +444,9 @@ public partial class MainWindow : Window
             DiagnosticsContentId,
             ResearchContentId,
             WatchlistContentId,
+            AutomationContentId,
+            OrdersContentId,
+            PositionsContentId,
             ReplayEventsContentId,
             ReviewOutcomesContentId,
         })
@@ -467,6 +509,9 @@ public partial class MainWindow : Window
             PaneKind.Diagnostics => DiagnosticsContentId,
             PaneKind.Research => ResearchContentId,
             PaneKind.Watchlist => WatchlistContentId,
+            PaneKind.Automation => AutomationContentId,
+            PaneKind.Orders => OrdersContentId,
+            PaneKind.Positions => PositionsContentId,
             PaneKind.ReplayEvents => ReplayEventsContentId,
             PaneKind.ReviewOutcomes => ReviewOutcomesContentId,
             _ => pane.InstanceId.ToString("N"),
@@ -489,6 +534,9 @@ public partial class MainWindow : Window
             DiagnosticsContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Diagnostics),
             ResearchContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Research),
             WatchlistContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Watchlist),
+            AutomationContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Automation),
+            OrdersContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Orders),
+            PositionsContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Positions),
             ReplayEventsContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.ReplayEvents),
             ReviewOutcomesContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.ReviewOutcomes),
             _ => null,

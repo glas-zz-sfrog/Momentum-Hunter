@@ -17,6 +17,9 @@ public enum PaneKind
     MarketClock,
     Research,
     Watchlist,
+    Automation,
+    Orders,
+    Positions,
     ReplayEvents,
     ReviewOutcomes,
 }
