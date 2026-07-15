@@ -108,42 +108,60 @@ public partial class App : System.Windows.Application
 
     private void OnTrayOpenRequested(object? sender, EventArgs e)
     {
-        if (_window is not null && _lifetime is not null)
+        DispatchToWorkstation(() =>
         {
-            _lifetime.RestoreWorkstation(_window);
-        }
+            if (_window is not null && _lifetime is not null)
+            {
+                _lifetime.RestoreWorkstation(_window);
+            }
+        });
     }
 
-    private async void OnTrayPauseOrResumeRequested(object? sender, EventArgs e)
-    {
-        if (_lifetime is not null)
-        {
-            await _lifetime.PauseOrResumeAsync();
-        }
-    }
+    private async void OnTrayPauseOrResumeRequested(object? sender, EventArgs e) =>
+        await DispatchToWorkstationAsync(() => _lifetime?.PauseOrResumeAsync() ?? Task.CompletedTask);
 
-    private async void OnTrayRunScanNowRequested(object? sender, EventArgs e)
-    {
-        if (_lifetime is not null)
+    private async void OnTrayRunScanNowRequested(object? sender, EventArgs e) =>
+        await DispatchToWorkstationAsync(async () =>
         {
-            await _lifetime.RunScanNowAsync();
-        }
-    }
+            if (_lifetime is not null)
+            {
+                await _lifetime.RunScanNowAsync();
+            }
+        });
 
     private void OnTraySystemStatusRequested(object? sender, EventArgs e)
     {
-        if (_window is not null && _lifetime is not null)
+        DispatchToWorkstation(() =>
         {
-            _lifetime.OpenSystemStatus(_window);
-        }
+            if (_window is not null && _lifetime is not null)
+            {
+                _lifetime.OpenSystemStatus(_window);
+            }
+        });
     }
 
-    private async void OnTrayExitRequested(object? sender, EventArgs e)
+    private async void OnTrayExitRequested(object? sender, EventArgs e) =>
+        await DispatchToWorkstationAsync(() => _window?.RequestExplicitExitFromUiAsync() ?? Task.CompletedTask);
+
+    private void DispatchToWorkstation(Action action)
     {
-        if (_window is not null)
+        if (Dispatcher.CheckAccess())
         {
-            await _window.RequestExplicitExitFromUiAsync();
+            action();
+            return;
         }
+
+        Dispatcher.BeginInvoke(action);
+    }
+
+    private Task DispatchToWorkstationAsync(Func<Task> action)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            return action();
+        }
+
+        return Dispatcher.InvokeAsync(action).Task.Unwrap();
     }
 
     private void OnSessionEnding(object? sender, SessionEndingCancelEventArgs e)
