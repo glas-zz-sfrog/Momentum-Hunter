@@ -34,6 +34,12 @@ Do not change these areas without explicit approval: core scoring logic, trade r
 - Compare final changes against the current local branch state.
 - Do not mark a task complete merely because files were created, labels exist, or narrow tests pass without evidence that the requested behavior works.
 
+## Roadmap Authority And Reporting
+- `docs/argus-office/ROADMAP.md` is the sole authoritative current-status and next-work document. `CURRENT_STATE.md` is retired.
+- Before starting substantive work, read the Roadmap `Now` section and reconcile any mismatch with Git before relying on it.
+- Before reporting a substantive task complete, update the Roadmap from actual branch, commit, test, merge, push, and next-action evidence. Branch-only work must be `IMPLEMENTED_PENDING_MERGE`, not `COMPLETE`.
+- Give Steven detailed progress updates for substantive work: what is being checked or changed, why it matters, evidence found, verification planned, and unresolved risk.
+
 ## Shared Subagent Rule: Artifact-First Work
 Every helper subagent defaults to artifact-first work.
 

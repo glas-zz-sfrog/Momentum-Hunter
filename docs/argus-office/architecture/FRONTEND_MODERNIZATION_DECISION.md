@@ -1,5 +1,7 @@
 # Frontend Modernization Decision
 
+> Status: SUPERSEDED for future sequencing on 2026-07-15. This preserves the former PySide-first analysis as historical evidence. The authoritative direction is `docs/argus-office/ROADMAP.md`, Phases 5-12: keep Python canonical, evaluate the WPF workstation shell, then prove versioned contracts before incremental Qt migration.
+
 ## Decision
 Momentum Hunter should modernize the existing PySide6 frontend first while preparing a future backend/API boundary for replaceable frontends. A full C# or Tauri rewrite is not recommended now.
 

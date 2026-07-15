@@ -22,7 +22,7 @@ Do not stop at advice unless blocked. If the task crosses role boundaries, creat
 | office_manager | Create or update office docs, templates, operating rules, logs, and structure notes. | No application behavior, source, tests, package, database, generated data, secrets, configs, or runtime changes. |
 | code_mapper | Produce file maps, symbol maps, workflow maps, dependency notes, change-surface reports, and unknown lists. | Read-only unless explicitly reassigned. |
 | product_roadmap_agent | Produce prioritized tickets, acceptance criteria, sequencing plans, scope boundaries, and decision records. | No app code. Handoff implementation to Goal Steward, Git Steward, and Builder. |
-| app_architect | Produce architecture notes, boundary maps, ADRs, migration plans, dependency analysis, and refactor sequencing. | No app code by default. Preserve the staged PySide6 modernization strategy. |
+| app_architect | Produce architecture notes, boundary maps, ADRs, migration plans, dependency analysis, and refactor sequencing. | No app code by default. Preserve the Python-canonical, WPF-first feasibility direction in the Roadmap. |
 | graphics_designer | Create visual artifacts: SVG icons, PNG mockups when feasible, layout sketches, visual specs, asset instructions, button/icon concepts, and fallback image prompts. | No app code unless explicitly assigned. Do not change runtime behavior. |
 | builder | Produce scoped code/docs patches, focused tests, check results, self-review notes, and behavior evidence. | Only code-writing agent. Protected areas require explicit approval. |
 | qa_regression | Produce test reports with commands, results, screenshots when relevant, failed checks, and pass/fail summary. | Tests only when explicitly assigned. No production behavior changes. |
@@ -45,6 +45,6 @@ The app architecture path is fixed unless Steven changes it:
 
 - No full rewrite now.
 - Keep the Python engine authoritative.
-- Modernize PySide6 first.
-- Extract `app.py` responsibilities in small proven slices.
-- Define backend/frontend DTO boundaries before considering WinUI, Avalonia, or Tauri.
+- Evaluate the Windows-first C#/.NET WPF workstation-shell direction before more Qt modernization.
+- Define versioned backend/frontend contracts before moving product workflows into the shell.
+- Migrate or retire Qt screens only in small proven slices after those contracts work.

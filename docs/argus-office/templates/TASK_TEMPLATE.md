@@ -29,6 +29,11 @@
 - [ ] Ahead/behind versus `origin/master` reported.
 - [ ] Allowed changed paths identified.
 
+## Roadmap Ledger
+- [ ] Read `docs/argus-office/ROADMAP.md` before work and confirmed the active task and next action.
+- [ ] Final Roadmap status will distinguish branch-only implementation from merged completion.
+- [ ] Required `Now` section fields, affected phase, next action, and block/decision gates are identified.
+
 ## Hard Chew Protocol
 Required for app-code, UI-code, runtime, workflow, or behavior-changing tasks. Done means proven, not merely changed.
 - [ ] Build/implementation pass completed.
@@ -61,3 +66,4 @@ Do not change these areas without explicit approval: core scoring logic, trade r
 - Manual QA
 - Open questions
 - Recommendation
+- Roadmap transition and exact next action

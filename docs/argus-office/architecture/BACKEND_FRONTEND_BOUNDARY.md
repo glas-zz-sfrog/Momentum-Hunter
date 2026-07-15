@@ -1,5 +1,7 @@
 # Backend / Frontend Boundary
 
+> Status: PARTIALLY SUPERSEDED on 2026-07-15. Its Python-boundary analysis remains useful, but its PySide-first sequencing does not. The authoritative order is in `docs/argus-office/ROADMAP.md`: WPF feasibility first, then versioned Python contracts.
+
 ## Boundary Decision
 Momentum Hunter should evolve toward a Python engine plus replaceable frontend architecture. The frontend should ask the engine for state, commands, and DTOs; it should not own scoring, readiness, replay, storage, or broker semantics.
 
