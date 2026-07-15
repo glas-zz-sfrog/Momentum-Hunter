@@ -246,6 +246,25 @@ public sealed class BackgroundCollectionLifecycleTests
     }
 
     [Fact]
+    public void TrayMenuContainsOnlyLifecycleAndMonitoringCommands()
+    {
+        Assert.Equal(
+        [
+            "Open Workstation",
+            "Pause Monitoring",
+            "Resume Monitoring",
+            "Run Scan Now",
+            "View System Status",
+            "Exit Momentum Hunter",
+        ],
+        TrayMenuDefinition.OperatorCommands);
+        Assert.DoesNotContain(TrayMenuDefinition.OperatorCommands, command => command.Contains("paper", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(TrayMenuDefinition.OperatorCommands, command => command.Contains("live", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(TrayMenuDefinition.OperatorCommands, command => command.Contains("broker", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(TrayMenuDefinition.OperatorCommands, command => command.Contains("risk", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void TrayTooltipIsCompactAndDescribesTheCurrentHealth()
     {
         var status = new BackgroundCollectionStatus(

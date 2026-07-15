@@ -36,13 +36,13 @@ public sealed class NotifyIconTrayService : ITrayService
         }
 
         var menu = new Forms.ContextMenuStrip();
-        var heading = new Forms.ToolStripMenuItem("Momentum Hunter") { Enabled = false };
-        _statusItem = new Forms.ToolStripMenuItem("System: Starting") { Enabled = false };
-        var openItem = new Forms.ToolStripMenuItem("Open Workstation");
-        _pauseOrResumeItem = new Forms.ToolStripMenuItem("Pause Monitoring");
-        _runScanNowItem = new Forms.ToolStripMenuItem("Run Scan Now");
-        var systemStatusItem = new Forms.ToolStripMenuItem("View System Status");
-        var exitItem = new Forms.ToolStripMenuItem("Exit Momentum Hunter");
+        var heading = new Forms.ToolStripMenuItem(TrayMenuDefinition.Heading) { Enabled = false };
+        _statusItem = new Forms.ToolStripMenuItem(TrayMenuDefinition.StatusLabel(new BackgroundCollectionStatus(BackgroundCollectionState.Starting, null, 0, 0, "Waiting for monitoring to start."))) { Enabled = false };
+        var openItem = new Forms.ToolStripMenuItem(TrayMenuDefinition.OpenWorkstation);
+        _pauseOrResumeItem = new Forms.ToolStripMenuItem(TrayMenuDefinition.PauseMonitoring);
+        _runScanNowItem = new Forms.ToolStripMenuItem(TrayMenuDefinition.RunScanNow);
+        var systemStatusItem = new Forms.ToolStripMenuItem(TrayMenuDefinition.ViewSystemStatus);
+        var exitItem = new Forms.ToolStripMenuItem(TrayMenuDefinition.ExitMomentumHunter);
 
         openItem.Click += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
         _pauseOrResumeItem.Click += (_, _) => PauseOrResumeRequested?.Invoke(this, EventArgs.Empty);
@@ -84,8 +84,8 @@ public sealed class NotifyIconTrayService : ITrayService
             return;
         }
 
-        _statusItem.Text = $"System: {status.State} - {status.Detail}";
-        _pauseOrResumeItem.Text = status.State == BackgroundCollectionState.Paused ? "Resume Monitoring" : "Pause Monitoring";
+        _statusItem.Text = TrayMenuDefinition.StatusLabel(status);
+        _pauseOrResumeItem.Text = TrayMenuDefinition.PauseOrResumeLabel(status);
         _pauseOrResumeItem.Enabled = status.State is BackgroundCollectionState.Healthy or BackgroundCollectionState.Degraded or BackgroundCollectionState.Paused;
         _runScanNowItem.Enabled = status.State is not (BackgroundCollectionState.Paused or BackgroundCollectionState.Stopping);
         _notifyIcon.Text = CreateTooltip(status);

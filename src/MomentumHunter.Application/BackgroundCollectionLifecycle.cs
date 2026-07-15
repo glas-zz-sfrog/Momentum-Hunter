@@ -160,6 +160,32 @@ public static class BackgroundStatusText
     }
 }
 
+public static class TrayMenuDefinition
+{
+    public const string Heading = "Momentum Hunter";
+    public const string OpenWorkstation = "Open Workstation";
+    public const string PauseMonitoring = "Pause Monitoring";
+    public const string ResumeMonitoring = "Resume Monitoring";
+    public const string RunScanNow = "Run Scan Now";
+    public const string ViewSystemStatus = "View System Status";
+    public const string ExitMomentumHunter = "Exit Momentum Hunter";
+
+    public static IReadOnlyList<string> OperatorCommands { get; } =
+    [
+        OpenWorkstation,
+        PauseMonitoring,
+        ResumeMonitoring,
+        RunScanNow,
+        ViewSystemStatus,
+        ExitMomentumHunter,
+    ];
+
+    public static string StatusLabel(BackgroundCollectionStatus status) => $"System: {status.State} - {status.Detail}";
+
+    public static string PauseOrResumeLabel(BackgroundCollectionStatus status) =>
+        status.State == BackgroundCollectionState.Paused ? ResumeMonitoring : PauseMonitoring;
+}
+
 public sealed class DeterministicBackgroundCollectionService : IBackgroundCollectionService
 {
     private readonly object _sync = new();
