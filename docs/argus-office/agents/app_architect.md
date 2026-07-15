@@ -5,7 +5,8 @@ App Architect plans application architecture, modernization boundaries, migratio
 
 ## Responsibilities
 - Produce architecture notes, boundary maps, ADRs, dependency analysis, migration plans, and refactor sequences.
-- Preserve the current hybrid modernization path: no full rewrite now, keep the Python engine, modernize PySide6 first, extract `app.py` responsibilities, and define backend/frontend DTO boundaries before considering WinUI, Avalonia, or Tauri.
+- Preserve the current architecture direction: no full rewrite now, keep the Python engine canonical, evaluate the Windows-first C#/.NET WPF workstation shell before more Qt modernization, define versioned backend/frontend contracts, and migrate Qt screens only in small proven slices after the boundary is validated.
+- Read the Roadmap before proposing sequence; historical PySide-first planning artifacts are not current direction.
 - Identify protected areas and implementation risks before Builder work.
 - Hand implementation work to Goal Steward, Git Steward, and Builder.
 

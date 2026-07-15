@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Established `ROADMAP.md` as the sole current-status and next-work authority, retired the independent Current State document, and added a required roadmap reconciliation gate to governance templates and operating rules.
+- Replaced the obsolete PySide-first planning direction in active governance sources with the Python-canonical, Windows-first C#/.NET WPF workstation-shell feasibility path.
+- Recorded R004 as implemented and pending Steven merge; broker research and paper-execution preparation remain deferred until the WPF direction and Python engine boundary are proven.
 - Added ARGUS-QUALITY-002 simulation hardening tests and narrow safety fixes for adapter rejection, auditor chronology, preview-before-submit evidence, and locked UI no-op behavior.
 - Blocked Simulation Lab from using non-Fake, transmit-capable, credential-backed, wrong-mode, or paper/live/transmit-capability adapters before preview/submit calls.
 - Hardened Execution Auditor simulation-chain checks so submit evidence requires prior preview evidence and Risk Governor evidence must come before preview/submit/block evidence.

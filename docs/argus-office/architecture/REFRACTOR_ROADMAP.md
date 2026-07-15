@@ -1,5 +1,7 @@
 # Refractor Roadmap
 
+> Status: SUPERSEDED for future sequencing on 2026-07-15. This records the earlier PySide-first extraction sequence. Use `docs/argus-office/ROADMAP.md` for current priority, status, and the WPF-first architecture path.
+
 This file intentionally keeps the directive spelling `REFRACTOR_ROADMAP.md`. The work described is a refactor roadmap.
 
 ## Roadmap Decision

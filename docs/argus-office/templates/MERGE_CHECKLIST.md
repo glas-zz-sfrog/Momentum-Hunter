@@ -20,6 +20,8 @@
 - [ ] Steven explicitly approved merge.
 - [ ] Merge is fast-forward only, or Steven explicitly approved another strategy in writing.
 - [ ] Steven reviewed final report.
+- [ ] Roadmap `Now` section records the branch as `IMPLEMENTED_PENDING_MERGE` before merge.
+- [ ] Post-merge task updates the Roadmap baseline, status, and next action from actual Git evidence.
 
 ## Protected Areas
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.

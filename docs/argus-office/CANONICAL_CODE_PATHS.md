@@ -1,14 +1,14 @@
 # Canonical Code Paths
 
-Date reconciled: 2026-06-30
+Date reconciled: 2026-07-15
 
-This document names the current canonical implementation paths on local `master` after the Argus Machine simulation foundation was fast-forward merged through the clean-room verification branch.
+This document names the current canonical implementation paths on local `master` and identifies the unmerged WPF workstation-shell feasibility branch. The Roadmap, not this file, decides priority and next work.
 
 ## Canonical Paths
 
 | Area | Canonical path | Notes |
 | --- | --- | --- |
-| Gateway / Argus Machine UI | `momentum_hunter/ui/autonomy_gateway.py` plus routing calls in `momentum_hunter/app.py` | `app.py` remains the application shell and stack coordinator. The Gateway / Argus Machine screen construction is now in the UI module. |
+| Existing Python Automation and Simulation UI | `momentum_hunter/ui/autonomy_gateway.py` plus routing calls in `momentum_hunter/app.py` | This is the canonical merged Python UI path. Existing source names are historical implementation names, not future product terminology. |
 | Trade Plan Ladder UI | `momentum_hunter/ui/trade_plan_ladder.py` | Renders ladder rows from `momentum_hunter/autonomy/view_models.py`. |
 | Top 5 candidate view model | `momentum_hunter/autonomy/view_models.py` | Builds `Top5CandidatePlan` rows from `TradePlanningReport.rows` or current candidate state. These are candidates, not approved trades. |
 | TradePlan model | `momentum_hunter/trade_planning.py` | `TradePlan`, `TradePlanRow`, and `TradePlanningReport` are the source primitives. Do not introduce a parallel TradePlan model path. |
@@ -20,13 +20,15 @@ This document names the current canonical implementation paths on local `master`
 | Daily Workflow report model | `momentum_hunter/daily_workflow.py` | Builds `DailyWorkflowReport`. |
 | Daily Workflow operator context | `momentum_hunter/operator_review.py`, `momentum_hunter/outcome_maturity.py`, `momentum_hunter/ui/data_view_state.py` | Supplies review context, outcome maturity, and view-state language used by the operator UI. |
 | Daily Workflow UI | `momentum_hunter/app.py` | The guided Daily Workflow stepper is still implemented inside `app.py`; future extraction should be a separate scoped task. |
-| Future paper broker work | No code path yet; docs/specs under `docs/argus-office/autonomy/` | A016 should be docs-only broker research. No paper broker adapter exists on `master`. |
+| WPF workstation-shell feasibility | `src/MomentumHunter.Desktop.Wpf/` and supporting `src/MomentumHunter.*` projects on `codex/ARGUS-R004-momentum-hunter-wpf-shell-spike` | Verified, unmerged prototype path. It is not yet the canonical merged frontend or a Python-engine replacement. |
+| Future Python engine contracts | No canonical implementation yet | Phase 8 will define versioned, read-only contracts between the WPF shell and the canonical Python engine. |
+| Future paper broker work | No code path yet | Deferred until the WPF direction and Python engine boundary are proven. No paper broker adapter exists on `master`. |
 
 ## Direct Answers
 
 1. Is `momentum_hunter/autonomy/*` the canonical autonomy implementation path?
 
-Yes. `momentum_hunter/autonomy/*` is canonical for Argus Machine autonomy primitives: view models, risk gates, ledger, fake broker, simulation engine, and auditor.
+Yes. `momentum_hunter/autonomy/*` is canonical for merged Python automation and simulation primitives: view models, risk gates, ledger, fake broker, simulation engine, and auditor.
 
 2. Is any older `momentum_hunter/execution/*` path still active?
 

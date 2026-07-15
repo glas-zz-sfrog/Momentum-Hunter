@@ -38,7 +38,7 @@ Steven is CEO, product owner, and final merge approver. ChatGPT is CEO Advisor, 
 5. Orchestrator delegates to specialists.
 6. Builder implements only approved scoped app-code tasks.
 7. QA verifies.
-8. Release Scribe documents.
+8. Release Scribe reconciles the Roadmap and records historical evidence.
 9. Git Steward performs merge only after Steven approval.
 10. Nothing pushes unless Steven explicitly approves.
 

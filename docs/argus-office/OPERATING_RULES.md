@@ -41,6 +41,11 @@ Required evidence includes commands run, test results, files changed, screenshot
 ## Review
 Specialists produce role-specific artifacts and may include recommendations inside those artifacts. QA may write tests only when explicitly assigned. Release Scribe updates logs, reports, and checklists but does not approve merges.
 
+## Roadmap Reconciliation
+`ROADMAP.md` is the single current-status authority. Before starting substantive work, the Orchestrator reads its `Now` section and Git Steward reconciles any branch or commit mismatch. Before a substantive task is reported complete, implemented pending merge, merged, or blocked, Release Scribe updates the Roadmap from actual Git and verification evidence.
+
+`BRANCH_LEDGER.md` records branch evidence; `TASK_LOG.md` and `CHANGELOG_ARGUS.md` record history. They do not replace the Roadmap's current state or next-action decision.
+
 ## Autonomous Work
 Autonomous-side work must preserve the mode boundary between planning, simulation, paper, read-only live, preview, and confirmed live execution. Execution Architect, Risk Governor Agent, Broker Integration Agent, Paper Trading Agent, Chart Analyst, Equity Research Analyst, and Execution Auditor are read-only/spec-only by default unless a future Goal Charter explicitly assigns implementation to Builder.
 
@@ -60,7 +65,7 @@ Codex Orchestrator produces one consolidated CEO report. Steven decides whether 
 5. Orchestrator delegates to specialists.
 6. Builder implements only approved scoped app-code tasks.
 7. QA verifies.
-8. Release Scribe documents.
+8. Release Scribe reconciles the Roadmap and records historical evidence.
 9. Git Steward performs merge only after Steven approval.
 10. Nothing pushes unless Steven explicitly approves.
 

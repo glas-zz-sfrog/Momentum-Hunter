@@ -15,6 +15,9 @@ Argus Office v0.1 is the operating scaffold for Momentum Hunter / Argus. It defi
 ## Operating Model
 Work begins as a CEO request, moves through the commandbus, is mapped or reviewed by specialists, is implemented only by Builder when approved, and returns as a consolidated CEO report for review.
 
+## Current Work
+Open `ROADMAP.md` first. Its `Now` section is the single authoritative current-status and next-work record; the branch ledger and task log provide supporting evidence rather than competing summaries.
+
 ## Artifact-First Work
 Every helper subagent must make the useful thing its role owns: a brief, file map, wireframe, visual asset, test report, checklist, spec, ticket set, ADR, changelog entry, or implementation-ready handoff. Do not stop at "you could" advice unless the task is blocked.
 

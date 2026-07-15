@@ -32,17 +32,17 @@ Acceptance Direction:
 - Goal Steward verifies the charter before Builder implementation begins.
 - Completion reports map verification back to the charter instead of redefining success around what was easiest to implement.
 
-## Autonomy: Build The Machine Room Safely
+## Automation And Simulation: Build The Machine Room Safely
 
 Status: Active
 
-Goal: Momentum Hunter should grow a second major experience, Argus Machine, for autonomous planning, simulation, paper trading, broker awareness, and future execution supervision under strict gates.
+Goal: Momentum Hunter should grow a Machine Room experience for automation, simulation, paper-trading preparation, broker awareness, and future execution supervision under strict gates.
 
 Operator Pain: Steven needs to see how the autonomous side will evolve before broker integration begins, without mixing planning language with approved live-trade language.
 
 Acceptance Direction:
-- A two-door gateway separates Steven Desk from Argus Machine.
-- Argus Machine shows Machine Status, Top 5 Trade Plan Candidates, Selected Candidate Workbench, Trade Plan Ladder, Risk Governor, Order Console, Machine Log, and Execution Ledger concepts.
+- The operator experience uses neutral product terms: Automation, Simulation, Machine Room, Risk Governor, Execution Ledger, and Trade Plan.
+- Machine Room surfaces Machine Status, Top 5 Trade Plan Candidates, Selected Candidate Workbench, Trade Plan Ladder, Risk Governor, Order Console, Machine Log, and Execution Ledger concepts.
 - TradePlan, Risk Governor, Broker Adapter, and Execution Ledger boundaries exist before any broker work.
 - Live execution remains locked until Steven explicitly approves a future live-execution Goal Charter.
 
@@ -60,7 +60,7 @@ Current Evidence:
 
 Acceptance Direction:
 - No full rewrite until the Python engine boundary is explicit.
-- PySide6 modernization comes first.
-- `app.py` shrinks through small, test-protected extractions.
-- Future WinUI, Avalonia, or Tauri work stays optional until R001-R005 prove the boundary.
+- The Windows-first C#/.NET WPF workstation-shell feasibility path comes before more Qt modernization.
+- Versioned Python contracts prove the engine boundary before product workflows move into the WPF shell.
+- Existing Qt screens migrate or retire only in small, test-protected slices after the boundary is validated.
 - Protected trading, replay, storage, scoring, readiness, and broker/order behavior remain untouched unless Steven approves a separate Goal Charter.

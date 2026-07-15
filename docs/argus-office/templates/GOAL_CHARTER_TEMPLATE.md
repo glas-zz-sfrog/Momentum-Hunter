@@ -30,6 +30,7 @@ For implementation tasks, define what would prove the goal beyond shallow comple
 - Narrow fix pass for self-review findings.
 - Final verification pass before commit.
 - Required final evidence: commands run, test results, files changed, proof artifacts, protected areas reviewed, branch status, push/merge status, and remaining risks.
+- Required Roadmap evidence: the `Now` status before work, the status transition at closeout, the exact next action, and any unresolved gate.
 
 Do not accept completion merely because files were created, labels exist, or tests only prove the presence of text.
 

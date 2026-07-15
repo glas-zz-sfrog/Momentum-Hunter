@@ -1,5 +1,7 @@
 # Extraction Targets
 
+> Status: HISTORICAL PRIORITIZATION on 2026-07-15. The source observations remain useful, but the listed PySide-first implementation order is superseded by `docs/argus-office/ROADMAP.md`.
+
 ## Recommendation
 Start with `ARGUS-R002 - Extract Gateway / Argus Machine UI into dedicated PySide module`.
 
