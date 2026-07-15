@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 using MomentumHunter.Application;
 
@@ -6,6 +7,7 @@ namespace MomentumHunter.Desktop.Wpf;
 
 public sealed class NotifyIconTrayService : ITrayService
 {
+    private readonly Dispatcher _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
     private Forms.NotifyIcon? _notifyIcon;
     private Forms.ToolStripMenuItem? _statusItem;
     private Forms.ToolStripMenuItem? _pauseOrResumeItem;
@@ -23,6 +25,11 @@ public sealed class NotifyIconTrayService : ITrayService
 
     public void Initialize()
     {
+        if (!EnsureDispatcher(Initialize))
+        {
+            return;
+        }
+
         if (_notifyIcon is not null)
         {
             return;
@@ -67,6 +74,11 @@ public sealed class NotifyIconTrayService : ITrayService
 
     public void UpdateStatus(BackgroundCollectionStatus status)
     {
+        if (!EnsureDispatcher(() => UpdateStatus(status)))
+        {
+            return;
+        }
+
         if (_notifyIcon is null || _statusItem is null || _pauseOrResumeItem is null || _runScanNowItem is null)
         {
             return;
@@ -74,13 +86,18 @@ public sealed class NotifyIconTrayService : ITrayService
 
         _statusItem.Text = $"System: {status.State} - {status.Detail}";
         _pauseOrResumeItem.Text = status.State == BackgroundCollectionState.Paused ? "Resume Monitoring" : "Pause Monitoring";
-        _pauseOrResumeItem.Enabled = status.State != BackgroundCollectionState.Stopping;
-        _runScanNowItem.Enabled = status.State is not (BackgroundCollectionState.Paused or BackgroundCollectionState.Stopping or BackgroundCollectionState.Blocked);
+        _pauseOrResumeItem.Enabled = status.State is BackgroundCollectionState.Healthy or BackgroundCollectionState.Degraded or BackgroundCollectionState.Paused;
+        _runScanNowItem.Enabled = status.State is not (BackgroundCollectionState.Paused or BackgroundCollectionState.Stopping);
         _notifyIcon.Text = CreateTooltip(status);
     }
 
     public void ShowNotification(string title, string message)
     {
+        if (!EnsureDispatcher(() => ShowNotification(title, message)))
+        {
+            return;
+        }
+
         if (_notifyIcon is null)
         {
             return;
@@ -93,6 +110,16 @@ public sealed class NotifyIconTrayService : ITrayService
 
     public void Dispose()
     {
+        if (!_dispatcher.CheckAccess())
+        {
+            if (!_dispatcher.HasShutdownStarted)
+            {
+                _dispatcher.Invoke(Dispose);
+            }
+
+            return;
+        }
+
         if (_notifyIcon is null)
         {
             return;
@@ -104,6 +131,21 @@ public sealed class NotifyIconTrayService : ITrayService
         _statusItem = null;
         _pauseOrResumeItem = null;
         _runScanNowItem = null;
+    }
+
+    private bool EnsureDispatcher(Action action)
+    {
+        if (_dispatcher.CheckAccess())
+        {
+            return true;
+        }
+
+        if (!_dispatcher.HasShutdownStarted)
+        {
+            _dispatcher.BeginInvoke(action);
+        }
+
+        return false;
     }
 
     private static string CreateTooltip(BackgroundCollectionStatus status)

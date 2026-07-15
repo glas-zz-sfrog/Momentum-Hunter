@@ -23,10 +23,12 @@
         <Border Grid.Row="0" Background="#121C24" BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,0,1">
             <Grid Margin="16,8">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="275" />
-                    <ColumnDefinition Width="190" />
+                    <ColumnDefinition Width="260" />
                     <ColumnDefinition Width="185" />
+                    <ColumnDefinition Width="180" />
                     <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -61,11 +63,15 @@
                     <Button Click="RestoreLayoutButton_Click"><TextBlock Text="Restore" Foreground="{StaticResource TextPrimary}" /></Button>
                 <Button x:Name="PanesButton" Content="Panes" Click="PanesButton_Click" />
                 </StackPanel>
-                <Border Grid.Column="5" Padding="10,5" Margin="5,0" Background="#203A38" CornerRadius="3">
+                <Border Grid.Column="5" Padding="10,5" Margin="5,0" Background="#253440" CornerRadius="3">
+                    <TextBlock Text="{Binding BackgroundStatusLabel}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" FontSize="11" />
+                </Border>
+                <Border Grid.Column="6" Padding="10,5" Margin="5,0" Background="#203A38" CornerRadius="3">
                     <TextBlock Text="{Binding EnvironmentLabel}" Foreground="{StaticResource Teal}" FontWeight="SemiBold" FontSize="11" />
                 </Border>
-                <Button Grid.Column="6" Content="{Binding ActivityLabel}" Click="ActivityButton_Click" VerticalAlignment="Center" />
-                <Button x:Name="HealthButton" Grid.Column="7" Content="Health" Command="{Binding ToggleHealthCommand}" VerticalAlignment="Center" />
+                <Button Grid.Column="7" Content="{Binding ActivityLabel}" Click="ActivityButton_Click" VerticalAlignment="Center" />
+                <Button x:Name="HealthButton" Grid.Column="8" Content="Health" Command="{Binding ToggleHealthCommand}" VerticalAlignment="Center" />
+                <Button x:Name="ApplicationMenuButton" Grid.Column="9" Content="Menu" Click="ApplicationMenuButton_Click" VerticalAlignment="Center" />
             </Grid>
         </Border>
 
@@ -339,7 +345,7 @@
         <Border Grid.Row="2" Background="#121C24" BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,1,0,0" Padding="16,5">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Left" Text="{Binding WorkspaceNarrative}" Foreground="{StaticResource TextMuted}" FontSize="10" />
-                <TextBlock DockPanel.Dock="Right" Text="{Binding StatusMessage}" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding BackgroundStatusDetail}" Foreground="{StaticResource TextMuted}" FontSize="10" />
             </DockPanel>
         </Border>
 
@@ -386,6 +392,20 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <Popup x:Name="ApplicationMenuPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=ApplicationMenuButton}" StaysOpen="False" AllowsTransparency="True" DataContext="{Binding DataContext, ElementName=Root}">
+            <Border Width="300" Padding="12" Background="#1B2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="4">
+                <StackPanel>
+                    <TextBlock Text="Background Collection" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding BackgroundStatusDetail}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,10" />
+                    <Button Content="{Binding MonitoringToggleLabel}" Click="PauseOrResumeButton_Click" HorizontalAlignment="Stretch" />
+                    <Button Content="Run Scan Now" Click="RunScanNowButton_Click" HorizontalAlignment="Stretch" Margin="3,5,3,0" />
+                    <Button Content="View System Status" Click="ViewSystemStatusButton_Click" HorizontalAlignment="Stretch" Margin="3,5,3,0" />
+                    <Separator Margin="3,10" />
+                    <Button Content="Exit Momentum Hunter" Click="ExitApplicationButton_Click" HorizontalAlignment="Stretch" Margin="3,0" />
                 </StackPanel>
             </Border>
         </Popup>

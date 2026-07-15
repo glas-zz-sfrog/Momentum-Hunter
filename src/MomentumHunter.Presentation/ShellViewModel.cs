@@ -107,6 +107,17 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty]
     private string _statusMessage = "Mock engine | Local deterministic data | No provider calls";
 
+    [ObservableProperty]
+    private string _backgroundStatusLabel = "Monitoring: Starting";
+
+    [ObservableProperty]
+    private string _backgroundStatusDetail = "Waiting for background monitoring to start.";
+
+    [ObservableProperty]
+    private bool _isMonitoringPaused;
+
+    public string MonitoringToggleLabel => IsMonitoringPaused ? "Resume Monitoring" : "Pause Monitoring";
+
     public EnvironmentMode Environment => Workspace switch
     {
         WorkspaceKind.Live => EnvironmentMode.Simulation,
@@ -433,6 +444,28 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public Task FlushLayoutAsync(CancellationToken cancellationToken = default) =>
         _layoutAutosave?.FlushAsync(cancellationToken) ?? Task.CompletedTask;
+
+    public void UpdateBackgroundStatus(BackgroundCollectionStatus status)
+    {
+        BackgroundStatusLabel = BackgroundStatusText.Label(status);
+        BackgroundStatusDetail = BackgroundStatusText.Detail(status);
+        IsMonitoringPaused = status.State == BackgroundCollectionState.Paused;
+    }
+
+    public void RecordBackgroundActivity(BackgroundCollectionActivity activity)
+    {
+        var state = activity.State switch
+        {
+            BackgroundCollectionState.Healthy => HealthState.Healthy,
+            BackgroundCollectionState.Paused => HealthState.Healthy,
+            BackgroundCollectionState.Degraded => HealthState.Degraded,
+            _ => HealthState.Unavailable,
+        };
+        Activity.Insert(0, new ActivityEvent(activity.Timestamp, "Monitoring", activity.Message, SelectedSymbol, state));
+        OnPropertyChanged(nameof(ActivityLabel));
+    }
+
+    partial void OnIsMonitoringPausedChanged(bool value) => OnPropertyChanged(nameof(MonitoringToggleLabel));
 
     private void SetRegistry(PaneRegistry registry)
     {

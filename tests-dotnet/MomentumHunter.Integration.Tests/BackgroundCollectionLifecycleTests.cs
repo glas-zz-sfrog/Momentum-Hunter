@@ -1,5 +1,7 @@
 using MomentumHunter.Application;
+using MomentumHunter.EngineBridge;
 using MomentumHunter.Infrastructure;
+using MomentumHunter.Presentation;
 
 namespace MomentumHunter.Integration.Tests;
 
@@ -130,6 +132,28 @@ public sealed class BackgroundCollectionLifecycleTests
     }
 
     [Fact]
+    public async Task BlockedMonitoringDoesNotPauseAndCanRecoverThroughAnExplicitRetry()
+    {
+        var attempt = 0;
+        await using var harness = new LifecycleHarness(runCycle: _ =>
+        {
+            attempt++;
+            return attempt == 1
+                ? Task.FromException(new InvalidOperationException("transient test failure"))
+                : Task.CompletedTask;
+        });
+        await harness.InitializeAsync();
+
+        await harness.Coordinator.RunScanNowAsync();
+        await harness.Coordinator.PauseOrResumeAsync();
+        var recovered = await harness.Coordinator.RunScanNowAsync();
+
+        Assert.True(recovered.Completed);
+        Assert.Equal(BackgroundCollectionState.Healthy, harness.Background.Status.State);
+        Assert.Contains(harness.Tray.Notifications, notification => notification.Message.Contains("recovered", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task ReopenAndSystemStatusUseTheExistingWorkstationPresentation()
     {
         await using var harness = new LifecycleHarness();
@@ -238,6 +262,25 @@ public sealed class BackgroundCollectionLifecycleTests
         Assert.Contains("Momentum Hunter", tooltip, StringComparison.Ordinal);
         Assert.Contains("Healthy", tooltip, StringComparison.Ordinal);
         Assert.Contains("5 symbols", tooltip, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShellViewModelPresentsTheCurrentMonitoringStateWithoutChangingTheEngineContract()
+    {
+        var viewModel = new ShellViewModel(new MockEngineClient());
+        var paused = new BackgroundCollectionStatus(
+            BackgroundCollectionState.Paused,
+            null,
+            5,
+            2,
+            "Monitoring paused.");
+
+        viewModel.UpdateBackgroundStatus(paused);
+
+        Assert.Equal("Monitoring: Paused", viewModel.BackgroundStatusLabel);
+        Assert.Contains("paused", viewModel.BackgroundStatusDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.True(viewModel.IsMonitoringPaused);
+        Assert.Equal("Resume Monitoring", viewModel.MonitoringToggleLabel);
     }
 
     private sealed class LifecycleHarness : IAsyncDisposable

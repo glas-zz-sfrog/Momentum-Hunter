@@ -82,3 +82,46 @@ public sealed class WpfNotificationService : INotificationService
         }
     }
 }
+
+public sealed class ExitConfirmationWindow : Window
+{
+    private ExitConfirmationWindow()
+    {
+        Title = "Exit Momentum Hunter";
+        Width = 430;
+        Height = 190;
+        ResizeMode = ResizeMode.NoResize;
+        ShowInTaskbar = false;
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        Background = new SolidColorBrush(Color.FromRgb(27, 39, 49));
+        Foreground = new SolidColorBrush(Color.FromRgb(231, 237, 242));
+
+        var root = new StackPanel { Margin = new Thickness(18) };
+        root.Children.Add(new TextBlock
+        {
+            Text = "Exit Momentum Hunter and stop background collection?",
+            FontFamily = new FontFamily("Segoe UI"),
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        root.Children.Add(new TextBlock
+        {
+            Text = "Closing the workstation normally keeps in-process monitoring active in the system tray.",
+            FontFamily = new FontFamily("Segoe UI"),
+            Foreground = new SolidColorBrush(Color.FromRgb(153, 169, 183)),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 7, 0, 14),
+        });
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var cancel = new Button { Content = "Cancel", Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(0, 0, 8, 0) };
+        cancel.Click += (_, _) => DialogResult = false;
+        var exit = new Button { Content = "Exit and Stop Collection", Padding = new Thickness(14, 5, 14, 5) };
+        exit.Click += (_, _) => DialogResult = true;
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(exit);
+        root.Children.Add(buttons);
+        Content = root;
+    }
+
+    public static bool Confirm() => new ExitConfirmationWindow().ShowDialog() == true;
+}

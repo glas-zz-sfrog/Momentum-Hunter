@@ -234,7 +234,7 @@ public sealed class DeterministicBackgroundCollectionService : IBackgroundCollec
         BackgroundCollectionStatus? status = null;
         lock (_sync)
         {
-            if (!_started || _status.State is BackgroundCollectionState.Paused or BackgroundCollectionState.Stopping)
+            if (!_started || _status.State is not (BackgroundCollectionState.Healthy or BackgroundCollectionState.Degraded))
             {
                 return Task.CompletedTask;
             }

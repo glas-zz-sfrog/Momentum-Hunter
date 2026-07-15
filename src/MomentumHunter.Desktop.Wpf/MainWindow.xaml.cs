@@ -6,13 +6,14 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using AvalonDock.Layout;
+using MomentumHunter.Application;
 using MomentumHunter.Contracts;
 using MomentumHunter.Desktop.Wpf.Controls;
 using MomentumHunter.Presentation;
 
 namespace MomentumHunter.Desktop.Wpf;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Window, IWorkstationPresentation
 {
     private const string HunterContentId = "pane-hunter";
     private const string PrimaryChartContentId = "pane-primary-chart";
@@ -28,16 +29,19 @@ public partial class MainWindow : Window
     private const string ReviewOutcomesContentId = "pane-review-outcomes";
 
     private readonly ShellViewModel _viewModel;
+    private readonly IApplicationLifetimeCoordinator _lifetime;
     private readonly Dictionary<string, object> _contentById = new(StringComparer.Ordinal);
     private readonly HashSet<string> _permanentlyRemovingContent = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _layoutCaptureTimer;
     private string? _builtInDockLayoutXml;
     private bool _isRestoringDockLayout;
     private bool _isInitialized;
+    private bool _allowApplicationShutdown;
 
-    public MainWindow(ShellViewModel viewModel)
+    public MainWindow(ShellViewModel viewModel, IApplicationLifetimeCoordinator lifetime)
     {
         _viewModel = viewModel;
+        _lifetime = lifetime;
         DataContext = viewModel;
         InitializeComponent();
         _layoutCaptureTimer = new DispatcherTimer(DispatcherPriority.Background)
@@ -125,7 +129,7 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void Window_KeyDown(object sender, KeyEventArgs e)
+    private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.K)
         {
@@ -176,6 +180,43 @@ public partial class MainWindow : Window
 
     private void PanesButton_Click(object sender, RoutedEventArgs e) => PanesPopup.IsOpen = !PanesPopup.IsOpen;
 
+    private void ApplicationMenuButton_Click(object sender, RoutedEventArgs e) => ApplicationMenuPopup.IsOpen = !ApplicationMenuPopup.IsOpen;
+
+    private async void PauseOrResumeButton_Click(object sender, RoutedEventArgs e)
+    {
+        await _lifetime.PauseOrResumeAsync();
+        ApplicationMenuPopup.IsOpen = false;
+    }
+
+    private async void RunScanNowButton_Click(object sender, RoutedEventArgs e)
+    {
+        await _lifetime.RunScanNowAsync();
+        ApplicationMenuPopup.IsOpen = false;
+    }
+
+    private void ViewSystemStatusButton_Click(object sender, RoutedEventArgs e)
+    {
+        _lifetime.OpenSystemStatus(this);
+        ApplicationMenuPopup.IsOpen = false;
+    }
+
+    private async void ExitApplicationButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RequestExplicitExitFromUiAsync();
+    }
+
+    public async Task RequestExplicitExitFromUiAsync()
+    {
+        if (_lifetime.IsExplicitShutdown || !ExitConfirmationWindow.Confirm())
+        {
+            return;
+        }
+
+        await _lifetime.RequestExplicitExitAsync(this);
+        AllowApplicationShutdown();
+        System.Windows.Application.Current.Shutdown();
+    }
+
     private void ReopenPaneButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: Guid instanceId } && _viewModel.ReopenPane(instanceId))
@@ -219,12 +260,68 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnClosing(object? sender, CancelEventArgs e)
+    private async void OnClosing(object? sender, CancelEventArgs e)
+    {
+        if (_allowApplicationShutdown)
+        {
+            await SavePresentationStateAsync();
+            return;
+        }
+
+        e.Cancel = true;
+        var action = await _lifetime.RequestWindowCloseAsync(this);
+        if (action == WorkstationCloseAction.Shutdown)
+        {
+            AllowApplicationShutdown();
+            System.Windows.Application.Current.Shutdown();
+        }
+    }
+
+    public async Task SavePresentationStateAsync(CancellationToken cancellationToken = default)
     {
         _layoutCaptureTimer.Stop();
         CaptureShellState();
-        _viewModel.FlushLayoutAsync().GetAwaiter().GetResult();
+        await _viewModel.FlushLayoutAsync(cancellationToken);
     }
+
+    public void HideWorkstation()
+    {
+        ShowInTaskbar = false;
+        Hide();
+    }
+
+    public void RestoreWorkstation()
+    {
+        ShowInTaskbar = true;
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+        Topmost = true;
+        Topmost = false;
+        Focus();
+    }
+
+    public void OpenSystemStatus()
+    {
+        if (!_viewModel.IsHealthOpen)
+        {
+            _viewModel.ToggleHealthCommand.Execute(null);
+        }
+    }
+
+    public void UpdateBackgroundStatus(BackgroundCollectionStatus status) => _viewModel.UpdateBackgroundStatus(status);
+
+    public void RecordBackgroundActivity(BackgroundCollectionActivity activity) => _viewModel.RecordBackgroundActivity(activity);
+
+    public void AllowApplicationShutdown() => _allowApplicationShutdown = true;
 
     private void CaptureShellState()
     {
