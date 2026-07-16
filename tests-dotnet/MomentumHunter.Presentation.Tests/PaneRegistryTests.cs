@@ -136,6 +136,29 @@ public sealed class PaneRegistryTests
     }
 
     [Fact]
+    public async Task ShellRestoresPersistedSecondaryChartContext()
+    {
+        var chartBId = Guid.NewGuid();
+        var snapshot = CreateSnapshot("NVDA") with
+        {
+            Panes =
+            [
+                new PaneLayout(Guid.NewGuid(), PaneKind.Chart, "Chart", LinkGroup.A, "NVDA", "5m", false, true, DockRegion.Center, 0, null, null),
+                new PaneLayout(chartBId, PaneKind.Chart, "Chart", LinkGroup.B, "MSTR", "15m", false, true, DockRegion.Center, 1, null, null),
+            ],
+        };
+        var viewModel = new ShellViewModel(new MockEngineClient(), new InMemoryLayoutStore(snapshot));
+
+        await viewModel.InitializeAsync();
+
+        var chartB = Assert.Single(viewModel.SecondaryCharts);
+        Assert.Equal(chartBId, chartB.Pane.InstanceId);
+        Assert.Equal(LinkGroup.B, chartB.Pane.LinkGroup);
+        Assert.Equal("MSTR", chartB.Pane.Symbol);
+        Assert.Equal("15m", chartB.Pane.Interval);
+    }
+
+    [Fact]
     public async Task ShellRestoresMostRecentWorkspaceInsteadOfAlwaysStartingLive()
     {
         var live = CreateSnapshot("NVDA") with { CreatedAt = DateTimeOffset.Parse("2026-07-13T12:00:00Z") };

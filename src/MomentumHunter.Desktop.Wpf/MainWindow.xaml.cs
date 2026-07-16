@@ -265,7 +265,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
     {
         if (_allowApplicationShutdown)
         {
-            await SavePresentationStateAsync();
+            // Explicit shutdown already flushes the intact dock layout before WPF begins teardown.
             return;
         }
 
