@@ -92,7 +92,7 @@ public sealed class ExitConfirmationWindow : Window
         Height = 190;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
-        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = new SolidColorBrush(Color.FromRgb(27, 39, 49));
         Foreground = new SolidColorBrush(Color.FromRgb(231, 237, 242));
 
@@ -113,9 +113,20 @@ public sealed class ExitConfirmationWindow : Window
             Margin = new Thickness(0, 7, 0, 14),
         });
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var cancel = new Button { Content = "Cancel", Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button
+        {
+            Content = "Cancel",
+            Padding = new Thickness(14, 5, 14, 5),
+            Margin = new Thickness(0, 0, 8, 0),
+            IsCancel = true,
+        };
         cancel.Click += (_, _) => DialogResult = false;
-        var exit = new Button { Content = "Exit and Stop Collection", Padding = new Thickness(14, 5, 14, 5) };
+        var exit = new Button
+        {
+            Content = "Exit and Stop Collection",
+            Padding = new Thickness(14, 5, 14, 5),
+            IsDefault = true,
+        };
         exit.Click += (_, _) => DialogResult = true;
         buttons.Children.Add(cancel);
         buttons.Children.Add(exit);
@@ -123,5 +134,9 @@ public sealed class ExitConfirmationWindow : Window
         Content = root;
     }
 
-    public static bool Confirm() => new ExitConfirmationWindow().ShowDialog() == true;
+    public static bool Confirm(Window owner)
+    {
+        var confirmation = new ExitConfirmationWindow { Owner = owner };
+        return confirmation.ShowDialog() == true;
+    }
 }

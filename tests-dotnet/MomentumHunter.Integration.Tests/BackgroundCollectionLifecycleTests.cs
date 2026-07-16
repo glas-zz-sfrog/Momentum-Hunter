@@ -47,9 +47,12 @@ public sealed class BackgroundCollectionLifecycleTests
 
         await harness.Coordinator.RequestExplicitExitAsync(harness.Workstation);
         await harness.Coordinator.RequestExplicitExitAsync(harness.Workstation);
+        var scanAfterExit = await harness.Coordinator.RunScanNowAsync();
 
         Assert.True(harness.Coordinator.IsExplicitShutdown);
         Assert.Equal(BackgroundCollectionState.Stopping, harness.Background.Status.State);
+        Assert.False(scanAfterExit.Completed);
+        Assert.Contains("stopping", scanAfterExit.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, harness.Tray.DisposeCount);
         Assert.Single(harness.SettingsStore.SavedSettings);
         Assert.Equal(["save"], harness.Workstation.Events);

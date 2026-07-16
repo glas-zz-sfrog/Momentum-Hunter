@@ -14,6 +14,28 @@
             <Setter Property="FontFamily" Value="Segoe UI" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
         </Style>
+        <Style TargetType="{x:Type ContextMenu}">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            <Setter Property="Background" Value="#17212B" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+        </Style>
+        <Style TargetType="{x:Type MenuItem}">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            <Setter Property="Background" Value="#17212B" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+            <Setter Property="Padding" Value="10,5" />
+            <Style.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter Property="Background" Value="#253440" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="#64727F" />
+                    <Setter Property="Background" Value="#1A2731" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
         <Style TargetType="{x:Type Button}">
             <Setter Property="FontFamily" Value="Segoe UI" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />

@@ -11,8 +11,9 @@ The R005 branch was created from `d3a98d9 Integrate authoritative roadmap with R
 ## 3. Branch And Commit Information
 
 - Branch: `codex/ARGUS-R005-background-tray-lifecycle`
-- Head at report time: `89acdee Harden tray command surface`
-- R005 commits: `9276c90`, `baa67e8`, `eb46a7a`, `3d98654`, and `89acdee`
+- Pre-physical-QA tip: `fdac285 Add R005 UI proof and implementation report`
+- R005 implementation commits before the physical-QA fix: `9276c90`, `baa67e8`, `eb46a7a`, `3d98654`, `89acdee`, and `fdac285`
+- This report accompanies the focused post-QA WPF rendering/exit fix; the final branch tip is recorded by the Git evidence and final delivery.
 - Remote backup: pushed to `origin/codex/ARGUS-R005-background-tray-lifecycle`
 - Local master: unchanged. No master push, merge, rebase, or PR occurred.
 
@@ -77,19 +78,40 @@ Focused lifecycle tests cover save-before-hide, background continuity, first-clo
 - Second-pass review found and fixed mutex ownership across asynchronous shutdown, dispatcher marshaling for tray callbacks, blocked-state handling, precise exit wording, and an explicit restricted tray command definition.
 - Final CLI verification: complete after the narrow fixes.
 
-## 14. UI Proof
+## 14. Physical Windows QA
 
-This run used CLI verification by Steven's instruction. No screenshot or interactive computer-control artifact was created, and this report does not claim pixel-level inspection of the Windows notification area.
+Physical verification ran on 2026-07-15 on Steven's local Windows desktop against this Release executable:
 
-Equivalent CLI evidence proves the lifecycle contracts and menu surface: `NotifyIconTrayService` is the sole tray adapter; `TrayMenuDefinition` has only Open Workstation, Pause/Resume Monitoring, Run Scan Now, View System Status, and Exit Momentum Hunter; the test suite asserts Paper, Live, broker, and risk commands are absent. The adapter truncates tooltip text to the Windows-safe 63-character limit and uses the WPF dispatcher for all tray operations.
+```text
+C:\Users\steve\OneDrive\Documents\Investing-r005\src\MomentumHunter.Desktop.Wpf\bin\Release\net8.0-windows\MomentumHunter.Desktop.Wpf.exe
+```
 
-Visual-only checks still appropriate for Steven before integration are one physical tray-icon inspection, menu rendering, first-close notice appearance, restored floating Chart B, and font/icon appearance. They are intentionally not represented as completed here.
+The candidate opened the Live workspace with `SIMULATION - FakeBroker` visible, active monitoring, and advancing Activity/cycle entries. No Paper route, broker authorization, risk-limit controls, provider-selection controls, credentials, or execution path were exposed.
+
+- Close to tray: passed. Clicking the main-window X hid the workstation and removed its main window handle while the `MomentumHunter.Desktop.Wpf` process remained alive. A later launch of the same executable restored the existing instance rather than creating a second host.
+- Continued collection: passed. The restored workstation's Activity count advanced from 19 to 27 while the main workstation had been hidden. OS-process inspection confirmed one process after the second launch.
+- First-close notice: passed. The notice stated that Momentum Hunter was still running and collecting data, rendered normally, and dismissed with `Continue`. The implementation's same-session single-notice contract remains covered by `FirstCloseNoticeOnlyAppearsOnceAndCanPersistDismissal`.
+- Layout and floating Chart B: passed for visible restoration. The Operator Layout returned with the primary chart pinned and a separately floating `Chart B` retaining its `Link B` context. The floating chart's native AvalonDock command menu now renders readable dark text and panels.
+- Pause, Resume, and Run Scan Now: passed in the initial physical R005 run before the focused QA fix. Pause stopped automatic activity growth; Run Scan Now returned the visible paused policy without starting work; Resume returned monitoring to Healthy and activity resumed without a duplicate loop. The later code changes were confined to context-menu rendering and exit confirmation presentation; the deterministic lifecycle tests cover rapid/no-overlap behavior.
+- System Status: passed in the initial physical R005 run through the same lifecycle coordinator command surface. It focused the existing health surface without creating a conflicting workstation; the later focused fix did not modify that path.
+- Single instance: passed. Launching the exact executable after close-to-tray reactivated the hidden primary. There was one process and one monitoring host; the original layout was not reset.
+- Explicit Exit: passed after the focused QA fix. The owner-centered warning displayed correctly; Cancel left the candidate alive; `Exit and Stop Collection` terminated it. OS-process inspection reported `MomentumHunterProcessCount=0` afterward.
+- Session ending: automated evidence only. `SessionEndingBypassesCloseToTrayAndUsesExplicitShutdown` proves the coordinator saves state, stops collection, and disposes the tray without requiring the normal confirmation. A physical Windows shutdown was intentionally not attempted because the desktop contained unrelated active work.
+
+The physical QA found and corrected two narrow desktop defects before this report update:
+
+- The floating Chart B native context menu used unreadable light text on a light background. Global WPF `ContextMenu` and `MenuItem` styling now follows the existing dark workstation palette.
+- The explicit-exit confirmation was ownerless and left the application menu open behind it. The menu now closes first, the confirmation is centered on its owner, and standard default/cancel semantics are applied. The lifecycle integration test now proves that a confirmed exit rejects new manual scans while stopping.
+
+### Remaining Physical Tray Caution
+
+The Windows automation surface cannot target the Explorer notification area, so it could not directly count the tray icon, open the actual notification-area context menu, double-click the icon, or visually confirm the icon disappears after explicit exit. The in-application lifecycle menu and automated tray-adapter contract prove the same command definitions and behaviors, but they are not a substitute for that one physical Explorer check. Before local master is fast-forwarded, Steven should manually confirm exactly one tray icon, the approved menu labels, Open Workstation, and icon removal after explicit exit.
 
 ## 15. Known Limitations
 
 - Background collection exists only while the WPF application process remains alive.
 - This is deterministic in-process monitoring, not a Python engine host.
-- Closing to the tray is proven through lifecycle tests; a physical Windows notification-area screenshot is not included in this CLI-only run.
+- The Windows notification-area icon and context menu still require one manual Explorer-level check before this branch can be classified `READY_FOR_MASTER_FAST_FORWARD`.
 - No paper broker, live broker, credentials, provider calls, order routing, or execution authorization was added.
 
 ## 16. Phase 8 Handoff Requirements
@@ -111,4 +133,4 @@ Phase 8 must introduce a separately hosted Python engine with versioned local co
 
 `READY_WITH_DOCUMENTED_CAUTIONS`
 
-The implementation, tests, branch safety, and CLI verification are complete. The sole caution is intentionally deferred visual-only notification-area and pixel rendering inspection after Steven requested CLI-only verification.
+The implementation, focused physical QA, tests, and branch safety evidence are complete. The only remaining caution is a bounded but merge-blocking Explorer notification-area check: confirm one tray icon, its actual rendered menu, restore actions, and icon removal after exit. No local-master fast-forward has occurred.

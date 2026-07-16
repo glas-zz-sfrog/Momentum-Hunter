@@ -202,12 +202,13 @@ public partial class MainWindow : Window, IWorkstationPresentation
 
     private async void ExitApplicationButton_Click(object sender, RoutedEventArgs e)
     {
+        ApplicationMenuPopup.IsOpen = false;
         await RequestExplicitExitFromUiAsync();
     }
 
     public async Task RequestExplicitExitFromUiAsync()
     {
-        if (_lifetime.IsExplicitShutdown || !ExitConfirmationWindow.Confirm())
+        if (_lifetime.IsExplicitShutdown || !ExitConfirmationWindow.Confirm(this))
         {
             return;
         }
