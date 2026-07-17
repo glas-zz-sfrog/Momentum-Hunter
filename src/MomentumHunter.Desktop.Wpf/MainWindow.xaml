@@ -153,7 +153,7 @@
                                         <DockPanel>
                                             <StackPanel DockPanel.Dock="Left">
                                                 <TextBlock Text="{Binding PrimaryChart.Pane.Symbol}" FontSize="20" FontWeight="SemiBold" />
-                                                <TextBlock Text="Local simulation candle data" Foreground="{StaticResource TextMuted}" FontSize="11" />
+                                                <TextBlock Text="{Binding ChartSourceLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" />
                                             </StackPanel>
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
                                                 <Border Padding="7,3" Margin="4,0" Background="#263846" CornerRadius="3">
@@ -180,6 +180,7 @@
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                             <RowDefinition Height="1*" />
                                         </Grid.RowDefinitions>
                                         <DockPanel>
@@ -197,7 +198,8 @@
                                                 <Button Content="Pin" Command="{Binding TogglePrimaryTradePlanPinCommand}" />
                                             </StackPanel>
                                         </DockPanel>
-                                        <TabControl Grid.Row="1" Margin="0,12,0,0" Background="#17212B" Foreground="{StaticResource TextPrimary}" SelectedIndex="{Binding TradePlanTabIndex}">
+                                        <TextBlock Grid.Row="1" Text="{Binding PlanningStatus}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,10,0,2" />
+                                        <TabControl Grid.Row="2" Margin="0,12,0,0" Background="#17212B" Foreground="{StaticResource TextPrimary}" SelectedIndex="{Binding TradePlanTabIndex}">
                                             <TabItem Header="Plan">
                                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                                     <StackPanel Margin="8">
@@ -221,7 +223,7 @@
                                                             </ItemsControl.ItemTemplate>
                                                         </ItemsControl>
                                                         <TextBlock Text="{Binding TradePlan.RiskDecision.Summary}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,10,0,0" />
-                                                        <Button Content="{Binding TradePlan.PrimaryAction}" Click="TradePlanActionButton_Click" Margin="0,14,0,0" HorizontalAlignment="Stretch" />
+                                                        <Button Content="{Binding PrimaryActionLabel}" IsEnabled="{Binding CanRunPrimaryAction}" Click="TradePlanActionButton_Click" Margin="0,14,0,0" HorizontalAlignment="Stretch" />
                                                     </StackPanel>
                                                 </ScrollViewer>
                                             </TabItem>
@@ -252,7 +254,7 @@
                                         </ListBox.ItemTemplate>
                                     </ListBox>
                                     <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                                        <TextBlock Text="Activity is local to this shell." FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding ActivitySourceLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                         <TextBlock Text="Recent workspace and evidence events appear here; reopen it any time from the top bar." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,4,0,0" />
                                         <Button Content="Diagnostics" Click="DiagnosticsButton_Click" Margin="0,12,0,0" HorizontalAlignment="Left" />
                                     </StackPanel>
@@ -278,7 +280,7 @@
                             <Border Background="{StaticResource PanelBackground}" Padding="12">
                                 <StackPanel>
                                     <TextBlock Text="Research" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Evidence context for the linked symbol stays available without becoming a permanent route." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                    <TextBlock Text="{Binding ResearchSummary}" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
                                     <TextBlock Text="Catalyst and lineage are shown in the Trade Plan tabs. Detailed provider mechanics remain in Diagnostics." TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
@@ -324,7 +326,7 @@
                                 <StackPanel>
                                     <TextBlock Text="Replay Events" FontSize="16" FontWeight="SemiBold" />
                                     <TextBlock Text="Historical decisions are read-only and cannot alter current research." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
-                                    <TextBlock Text="Replay timeline context is supplied by the deterministic engine boundary." TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding ReplaySummary}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
                         </avalon:LayoutAnchorable>

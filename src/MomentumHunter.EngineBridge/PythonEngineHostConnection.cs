@@ -182,6 +182,21 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         return await SendRequestAsync(endpoint, command, commandId, cancellationToken);
     }
 
+    public async Task<JsonElement> GetReadOnlyWorkspaceSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandAsync(
+            PythonEngineHostProtocol.GetReadOnlyWorkspaceSnapshot,
+            Guid.NewGuid().ToString("N"),
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException($"The Python Engine Host did not provide a read-only workspace snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
     private async Task<PythonEngineHostSnapshot?> TryGetSnapshotAsync(CancellationToken cancellationToken)
     {
         try
@@ -271,7 +286,8 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
             response.Accepted,
             response.Result.Code,
             response.Result.Summary,
-            response.Result.Snapshot);
+            response.Result.Snapshot,
+            response.Result.Payload?.Clone());
     }
 
     private sealed record PythonEngineHostEndpoint(
@@ -300,5 +316,6 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
     private sealed record PythonEngineHostResult(
         string Code,
         string Summary,
-        PythonEngineHostSnapshot? Snapshot);
+        PythonEngineHostSnapshot? Snapshot,
+        JsonElement? Payload);
 }

@@ -37,6 +37,8 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IEngineClient, MockEngineClient>();
         services.AddSingleton<IPythonEngineHostConnection>(_ =>
             new PythonEngineHostConnection(PythonEngineHostOptions.CreateDefault()));
+        services.AddSingleton<IReadOnlyWorkspaceClient>(serviceProvider =>
+            new PythonReadOnlyWorkspaceClient(serviceProvider.GetRequiredService<IPythonEngineHostConnection>()));
         services.AddSingleton<IWorkspaceLayoutStore>(_ =>
             new SqliteWorkspaceLayoutStore(Path.Combine(settingsDirectory, "workstation-layouts.db")));
         services.AddSingleton<ITraySettingsStore>(_ =>
@@ -48,7 +50,8 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IApplicationLifetimeCoordinator, ApplicationLifetimeCoordinator>();
         services.AddSingleton<ShellViewModel>(serviceProvider => new ShellViewModel(
             serviceProvider.GetRequiredService<IEngineClient>(),
-            serviceProvider.GetRequiredService<IWorkspaceLayoutStore>()));
+            serviceProvider.GetRequiredService<IWorkspaceLayoutStore>(),
+            serviceProvider.GetRequiredService<IReadOnlyWorkspaceClient>()));
         services.AddSingleton<MainWindow>();
         _services = services.BuildServiceProvider();
 

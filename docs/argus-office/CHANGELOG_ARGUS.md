@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added Phase 9 persisted-evidence workstation snapshots over the existing loopback-only Python host: candidates, evidence activity, health, source lineage, and read-only Replay context now cross a versioned boundary without score/readiness recalculation.
+- Disabled WPF mock TradePlan, chart, risk, and simulation fallback whenever Phase 9 read-only snapshots are active; missing Python data remains unavailable rather than being replaced by deterministic candidates.
+- Added Python mapper/host, C# wire-mapper, presentation, and live C#-to-Python host coverage for the read-only boundary; no broker, Paper, Live, provider, or order capability was added.
 - Added Phase 8's versioned local Python Engine Host and WPF lifecycle bridge: discover/launch, reconnect, health/collection snapshots, pause, resume, one-cycle, and explicit graceful shutdown.
 - Added atomic duplicate-host and duplicate-cycle guards, legacy active-monitor-runner conflict blocking, loopback-only authenticated IPC, structured protocol failures, and Python/.NET process-level integration tests.
 - Kept candidate, research, Replay, TradePlan, Risk Governor, simulation, broker, Paper, and Live workflows outside the Phase 8 process boundary.

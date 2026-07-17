@@ -1,6 +1,6 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-16
+Date reconciled: 2026-07-17
 
 ## Current Truth
 
@@ -36,12 +36,14 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `d3a98d9` | Integrate authoritative roadmap with R004 workstation shell | Yes |
 | `e141054` | Preserve floating layout on explicit exit | Yes |
 | `30c0e0b` | Reconcile roadmap after R004 and R005 integration | Yes |
+| `6f853ba` | Harden Python host unavailable state | No; Phase 8 feature branch only |
 
 ## Branch Classifications
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
 | `master` | `30c0e0b` | Yes | Yes | `ACTIVE` | Canonical merged Python engine and accepted WPF operator-surface baseline. | Steven review is required before fast-forwarding Phase 8. |
+| `codex/ARGUS-R009-readonly-workstation-integration` | Phase-close tip (stacked from `6f853ba`) | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Read-only persisted Python candidates, evidence, health, source lineage, and Replay context in WPF; mock planning/chart/simulation fallback disabled. | Review the exact `master <- R008 <- R009` fast-forward stack; do not stack Phase 10 before integration. |
 | `codex/ARGUS-R008-python-engine-contract-host` | Phase-close tip (this record) | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Independent local Python Engine Host, versioned WPF lifecycle bridge, duplicate guards, and process-level proof. | Review for an explicit fast-forward merge decision; do not add Phase 9 to this branch without recording a stacked-branch decision. |
 | `codex/ARGUS-R004-momentum-hunter-wpf-shell-spike` | `5bbd0c7` | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Windows-first WPF workstation-shell feasibility spike. | Historical branch; do not continue feature work here. |
 | `codex/technical-confluence-wave-1-primitives` | `9678c5` | Yes | No | `NEEDS_REVIEW` | Research-only technical confluence primitives. | Review separately; it is not the current workstation-shell priority. |

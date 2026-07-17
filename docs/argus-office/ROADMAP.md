@@ -12,17 +12,18 @@ Supporting records have narrower roles:
 
 ## Now
 
-Last reconciled: 2026-07-16 from the Phase 8 feature-branch evidence; `master` remains unchanged.
+Last reconciled: 2026-07-17 from the completed Phase 9 stacked-branch verification; `master` remains unchanged.
 
 | Item | Current truth |
 | --- | --- |
 | Canonical product baseline | `master` and `origin/master` are synchronized at `30c0e0b Reconcile roadmap after R004 and R005 integration` (`0` behind, `0` ahead); verified tree `388b410727aefe9f65bd94bac8fa589e408ea787`. |
 | Active product decision | The Windows-first WPF workstation is the accepted operator-surface direction, while Python remains the canonical trading and evidence engine. |
 | Active implementation | Phase 8 is `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R008-python-engine-contract-host`, based on `30c0e0b`. It has independent Python-host and WPF-bridge milestones, focused process proof, and remote feature-branch backup. |
+| Active successor implementation | Phase 9 is `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R009-readonly-workstation-integration`, intentionally stacked from verified Phase 8 tip `6f853ba`. It connects only persisted Python evidence snapshots to WPF and keeps Phase 10 planning/simulation unavailable. |
 | R004 status | `COMPLETE`: workstation-shell feasibility is integrated into `origin/master`. |
 | R005 status | `COMPLETE`: close-to-tray, lifecycle controls, single-instance activation, and physical Windows tray QA are integrated into `origin/master`. |
-| Immediate next action | Steven reviews the Phase 8 feature branch for a fast-forward merge decision. Phase 9 remains the next authorized build only after that decision or an explicitly documented stacked-branch choice. |
-| Next build after Phase 8 | Phase 9: attach read-only discovery, research, health, and Replay snapshots to the proven Python-host boundary. |
+| Immediate next action | Steven reviews the Phase 8 + Phase 9 fast-forward stack for integration into `master`. Do not begin another successor phase until that stack is merged or Steven explicitly directs otherwise. |
+| Next build after the stack | Phase 10: attach TradePlan, Risk Governor, FakeBroker-only simulation, Execution Ledger, and Execution Auditor only after the read-only boundary is merged and reviewed. |
 | Broker and execution state | No paper or live broker path, credentials, API keys, or real order path exists. Paper and live remain locked. |
 
 ### Status Legend
@@ -121,11 +122,13 @@ Status: `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R008-python-engine-contract-
 
 ### Phase 9 - Read-Only Discovery, Research, Health, And Replay Integration
 
-Status: `NOT_STARTED`
+Status: `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R009-readonly-workstation-integration` (stacked from `codex/ARGUS-R008-python-engine-contract-host` at `6f853ba`)
 
 - Connect WPF panes to the Phase 8 read-only boundary for candidates, evidence, research context, health, and replay.
 - Preserve source lineage, stale-data language, and read-only replay identity.
 - Use the independent engine lifecycle rather than a workstation-owned collection loop.
+- The first slice exposes persisted report/status snapshots only and explicitly disables mock TradePlan, chart, risk, and simulation fallback until Phase 10.
+- Focused Python tests, focused C# presentation/integration tests, a C#-to-Python host proof, broader nearby Python regression, the full .NET suite, and full Python discovery passed before branch review.
 
 ### Phase 10 - Trade Planning, Risk, And Simulation Integration
 

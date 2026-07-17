@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MomentumHunter.Contracts;
 
 namespace MomentumHunter.Application;
@@ -12,4 +13,7 @@ public interface IPythonEngineHostConnection
         string command,
         string commandId,
         CancellationToken cancellationToken = default);
+
+    Task<JsonElement> GetReadOnlyWorkspaceSnapshotAsync(CancellationToken cancellationToken = default) =>
+        Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose read-only workspace snapshots."));
 }

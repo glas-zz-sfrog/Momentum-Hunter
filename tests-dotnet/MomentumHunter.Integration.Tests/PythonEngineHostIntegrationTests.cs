@@ -49,7 +49,15 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Equal(first.Identity.HostInstanceId, second.Identity.HostInstanceId);
             Assert.Equal(first.Identity.HostInstanceId, reconnected.Identity.HostInstanceId);
             Assert.Contains(PythonEngineHostProtocol.PauseCollection, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetReadOnlyWorkspaceSnapshot, first.Capabilities);
             Assert.DoesNotContain("submit_order", first.Capabilities);
+
+            var readOnlyWorkspacePayload = await firstConnection.GetReadOnlyWorkspaceSnapshotAsync();
+            Assert.Equal(1, readOnlyWorkspacePayload.GetProperty("schemaVersion").GetInt32());
+            Assert.False(readOnlyWorkspacePayload.GetProperty("planningAvailable").GetBoolean());
+            Assert.True(readOnlyWorkspacePayload.TryGetProperty("candidates", out _));
+            Assert.True(readOnlyWorkspacePayload.TryGetProperty("health", out _));
+            Assert.True(readOnlyWorkspacePayload.TryGetProperty("replay", out _));
 
             var paused = await firstConnection.SendCommandAsync(PythonEngineHostProtocol.PauseCollection, "pause-once");
             var repeatedPause = await firstConnection.SendCommandAsync(PythonEngineHostProtocol.PauseCollection, "pause-once");

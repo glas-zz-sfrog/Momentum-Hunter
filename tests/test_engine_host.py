@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 from momentum_hunter.engine_host import (
     COMMAND_PAUSE,
+    COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
     COMMAND_RESUME,
     COMMAND_RUN_CYCLE,
     COMMAND_SHUTDOWN,
@@ -140,6 +141,19 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertTrue(result.accepted)
         self.assertEqual(before, hashlib.sha256(source.read_bytes()).hexdigest())
 
+    def test_read_only_workspace_command_returns_injected_payload_without_starting_collection(self) -> None:
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(AssertionError("collection should not run")),
+            workspace_snapshot_loader=lambda: {"schemaVersion": 1, "planningAvailable": False, "candidates": []},
+        )
+
+        result = runtime.execute(COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT, "read-only-snapshot")
+
+        self.assertTrue(result.accepted)
+        self.assertEqual("READ_ONLY_WORKSPACE_SNAPSHOT", result.code)
+        self.assertEqual({"schemaVersion": 1, "planningAvailable": False, "candidates": []}, result.payload)
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+
 
 class EngineHostProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -174,6 +188,16 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertNotIn("submit_order", snapshot["capabilities"])
         self.assertNotIn("paper_order", snapshot["capabilities"])
         self.assertNotIn("live_order", snapshot["capabilities"])
+
+    def test_protocol_returns_read_only_workspace_payload(self) -> None:
+        self.runtime._workspace_snapshot_loader = lambda: {"schemaVersion": 1, "planningAvailable": False, "candidates": []}
+
+        response = self.send(command=COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT, command_id="read-only-workspace")
+
+        self.assertTrue(response["accepted"])
+        self.assertEqual("READ_ONLY_WORKSPACE_SNAPSHOT", response["result"]["code"])
+        self.assertEqual([], response["result"]["payload"]["candidates"])
+        self.assertFalse(response["result"]["payload"]["planningAvailable"])
 
     def test_shutdown_command_stops_server_after_a_response(self) -> None:
         response = self.send(command=COMMAND_SHUTDOWN, command_id="shutdown")

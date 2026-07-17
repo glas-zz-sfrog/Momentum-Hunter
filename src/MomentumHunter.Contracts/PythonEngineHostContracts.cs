@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace MomentumHunter.Contracts;
 
 public static class PythonEngineHostProtocol
@@ -8,6 +10,7 @@ public static class PythonEngineHostProtocol
     public const string ResumeCollection = "resume_collection";
     public const string RunCollectionCycle = "run_collection_cycle";
     public const string ShutdownHost = "shutdown_host";
+    public const string GetReadOnlyWorkspaceSnapshot = "get_readonly_workspace_snapshot";
 }
 
 public sealed record PythonEngineHostIdentity(
@@ -43,4 +46,5 @@ public sealed record PythonEngineHostCommandResult(
     bool Accepted,
     string Code,
     string Summary,
-    PythonEngineHostSnapshot Snapshot);
+    PythonEngineHostSnapshot Snapshot,
+    JsonElement? Payload = null);

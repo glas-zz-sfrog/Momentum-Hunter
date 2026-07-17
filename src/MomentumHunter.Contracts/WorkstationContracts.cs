@@ -84,10 +84,10 @@ public sealed record DataLineage(string SourceLabel, DateTimeOffset AsOf, string
 public sealed record CandidateSnapshot(
     string Symbol,
     string Company,
-    decimal LastPrice,
-    decimal ChangePercent,
-    long Volume,
-    decimal RelativeVolume,
+    decimal? LastPrice,
+    decimal? ChangePercent,
+    long? Volume,
+    decimal? RelativeVolume,
     string Catalyst,
     ReadinessState Readiness,
     string QualityLabel,
@@ -95,9 +95,12 @@ public sealed record CandidateSnapshot(
     int Score = 0,
     string FloatOrLiquidity = "Unavailable",
     CatalystSummary? CatalystSummary = null,
-    DataLineage? DataLineage = null)
+    DataLineage? DataLineage = null,
+    string? SourceReadinessLabel = null)
 {
-    public string OperatorState => Readiness switch
+    public string OperatorState => !string.IsNullOrWhiteSpace(SourceReadinessLabel)
+        ? SourceReadinessLabel
+        : Readiness switch
     {
         ReadinessState.ReadyForSimulation => "Ready",
         ReadinessState.NeedsEvidence => "Repair",
@@ -171,6 +174,16 @@ public sealed record HealthComponentSnapshot(
 public sealed record SystemHealthSnapshot(
     IReadOnlyList<HealthComponentSnapshot> Components,
     DateTimeOffset CheckedAt);
+
+public sealed record ReadOnlyWorkspaceSnapshot(
+    int SchemaVersion,
+    DateTimeOffset ObservedAt,
+    string Summary,
+    IReadOnlyList<CandidateSnapshot> Candidates,
+    IReadOnlyList<ActivityEvent> Activity,
+    SystemHealthSnapshot Health,
+    ReplaySnapshot Replay,
+    bool PlanningAvailable);
 
 public sealed record WorkspaceSnapshot(
     WorkspaceKind Workspace,

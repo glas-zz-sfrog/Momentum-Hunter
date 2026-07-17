@@ -79,7 +79,7 @@ public sealed class MockEngineClient : IEngineClient
     public Task<TradePlanSnapshot> GetTradePlanAsync(string symbol, CancellationToken cancellationToken = default)
     {
         var candidate = Candidates.FirstOrDefault(item => item.Symbol == symbol) ?? Candidates[0];
-        var entry = candidate.LastPrice;
+        var entry = candidate.LastPrice ?? 100m;
         var blocked = candidate.Readiness is ReadinessState.Blocked or ReadinessState.StaleData or ReadinessState.NeedsEvidence;
         var checks = new[]
         {

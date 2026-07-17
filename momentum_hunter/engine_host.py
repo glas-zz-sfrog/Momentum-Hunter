@@ -29,6 +29,7 @@ COMMAND_PAUSE = "pause_collection"
 COMMAND_RESUME = "resume_collection"
 COMMAND_RUN_CYCLE = "run_collection_cycle"
 COMMAND_SHUTDOWN = "shutdown_host"
+COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT = "get_readonly_workspace_snapshot"
 SUPPORTED_COMMANDS = frozenset(
     {
         COMMAND_SNAPSHOT,
@@ -36,6 +37,7 @@ SUPPORTED_COMMANDS = frozenset(
         COMMAND_RESUME,
         COMMAND_RUN_CYCLE,
         COMMAND_SHUTDOWN,
+        COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
     }
 )
 
@@ -172,6 +174,7 @@ class EngineHostCommandResult:
     summary: str
     snapshot: dict[str, Any]
     shutdown_requested: bool = False
+    payload: dict[str, Any] | None = None
 
     def to_wire(self, request_id: str) -> dict[str, Any]:
         return {
@@ -183,6 +186,7 @@ class EngineHostCommandResult:
                 "code": self.code,
                 "summary": self.summary,
                 "snapshot": self.snapshot,
+                "payload": self.payload,
             },
         }
 
@@ -197,12 +201,14 @@ class EngineHostRuntime:
         collection_interval_seconds: int = DEFAULT_COLLECTION_INTERVAL_SECONDS,
         cycle_runner: Callable[[], Any] | None = None,
         external_monitor_running: Callable[[], bool] | None = None,
+        workspace_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
         self.collection_interval_seconds = max(1, int(collection_interval_seconds))
         self._cycle_runner = cycle_runner or self._run_canonical_monitor_cycle
         self._external_monitor_running = external_monitor_running or self._is_legacy_monitor_runner_active
+        self._workspace_snapshot_loader = workspace_snapshot_loader or self._load_read_only_workspace_snapshot
         self._state_lock = threading.RLock()
         self._command_condition = threading.Condition(self._state_lock)
         self._cycle_lock = threading.Lock()
@@ -310,6 +316,15 @@ class EngineHostRuntime:
     def _execute_once(self, command: str) -> EngineHostCommandResult:
         if command == COMMAND_SNAPSHOT:
             return EngineHostCommandResult(True, "SNAPSHOT", "Host snapshot returned.", self.snapshot())
+        if command == COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT:
+            payload = self._workspace_snapshot_loader()
+            return EngineHostCommandResult(
+                True,
+                "READ_ONLY_WORKSPACE_SNAPSHOT",
+                "Read-only workstation snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
         if command == COMMAND_PAUSE:
             with self._state_lock:
                 if self._stopping:
@@ -409,6 +424,12 @@ class EngineHostRuntime:
         from momentum_hunter.active_monitor import run_monitor_cycle
 
         return run_monitor_cycle()
+
+    @staticmethod
+    def _load_read_only_workspace_snapshot() -> dict[str, Any]:
+        from momentum_hunter.workstation_read_models import build_read_only_workspace_snapshot
+
+        return build_read_only_workspace_snapshot()
 
     @staticmethod
     def _is_legacy_monitor_runner_active() -> bool:
