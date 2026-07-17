@@ -7,6 +7,22 @@ namespace MomentumHunter.Integration.Tests;
 public sealed class PythonEngineHostIntegrationTests
 {
     [Fact]
+    public void DefaultHostOptionsPreferTheRepositoryVirtualEnvironmentWhenAvailable()
+    {
+        var root = FindRepositoryRoot();
+        var configuredPython = Environment.GetEnvironmentVariable("MOMENTUM_HUNTER_PYTHON_EXECUTABLE");
+        var virtualEnvironmentPython = Path.Combine(root, ".venv", "Scripts", "python.exe");
+        var options = PythonEngineHostOptions.CreateDefault();
+
+        Assert.Equal(root, options.WorkingDirectory);
+        Assert.Contains("python-engine-host", options.StateDirectory, StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(configuredPython) && File.Exists(virtualEnvironmentPython))
+        {
+            Assert.Equal(virtualEnvironmentPython, options.PythonExecutable);
+        }
+    }
+
+    [Fact]
     public async Task WpfBoundaryLaunchesReconnectsAndDeliberatelyStopsOnePythonHost()
     {
         var stateDirectory = Path.Combine(Path.GetTempPath(), "MomentumHunter.R008.Tests", Guid.NewGuid().ToString("N"));

@@ -4,14 +4,14 @@ Date reconciled: 2026-07-16
 
 ## Current Truth
 
-`master` and `origin/master` are the canonical merged product baseline for Momentum Hunter. They contain the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, and the R005 tray and lifecycle work through `e141054 Preserve floating layout on explicit exit`.
+`master` and `origin/master` are the canonical merged product baseline for Momentum Hunter. They contain the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, R005 tray/lifecycle work, and the State-004 governance reconciliation through `30c0e0b Reconcile roadmap after R004 and R005 integration`.
 
 Git evidence at reconciliation time:
 
 - `git status --short --branch` on `master`: clean.
 - `git rev-list --left-right --count origin/master...master`: `0 0`.
-- `master` and `origin/master` both resolve to `e14105493061ec133ecd273aaac21d8e33ead5cf`.
-- The verified `master` and remote R005 tree is `76bc0a44ffd3013c2fe8eb49774c40577f2ca187`.
+- `master` and `origin/master` both resolve to `30c0e0b4e3c3b80ec946681015f3b6f0a7dd729b`.
+- The verified `master` and remote governance tree is `388b410727aefe9f65bd94bac8fa589e408ea787`.
 - R004 and R005 are integrated through the `d3a98d9` and `e141054` history; their historical feature branches remain preserved but are not active work bases.
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
@@ -35,12 +35,14 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `1180315` | Add daily OHLC source for breakout research | Yes |
 | `d3a98d9` | Integrate authoritative roadmap with R004 workstation shell | Yes |
 | `e141054` | Preserve floating layout on explicit exit | Yes |
+| `30c0e0b` | Reconcile roadmap after R004 and R005 integration | Yes |
 
 ## Branch Classifications
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | `e141054` | Yes | Yes | `ACTIVE` | Canonical merged Python engine and accepted WPF operator-surface baseline. | Use a new task branch; Phase 8 is next but not started. |
+| `master` | `30c0e0b` | Yes | Yes | `ACTIVE` | Canonical merged Python engine and accepted WPF operator-surface baseline. | Steven review is required before fast-forwarding Phase 8. |
+| `codex/ARGUS-R008-python-engine-contract-host` | Phase-close tip (this record) | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Independent local Python Engine Host, versioned WPF lifecycle bridge, duplicate guards, and process-level proof. | Review for an explicit fast-forward merge decision; do not add Phase 9 to this branch without recording a stacked-branch decision. |
 | `codex/ARGUS-R004-momentum-hunter-wpf-shell-spike` | `5bbd0c7` | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Windows-first WPF workstation-shell feasibility spike. | Historical branch; do not continue feature work here. |
 | `codex/technical-confluence-wave-1-primitives` | `9678c5` | Yes | No | `NEEDS_REVIEW` | Research-only technical confluence primitives. | Review separately; it is not the current workstation-shell priority. |
 | `codex/technical-indicator-registry-confluence-roadmap-v1` | `2af99da` | Yes | No | `NEEDS_REVIEW` | Indicator registry and confluence planning artifacts. | Keep as research planning; do not treat it as production behavior. |

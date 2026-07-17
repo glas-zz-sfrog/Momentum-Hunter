@@ -2,7 +2,7 @@
 
 Date reconciled: 2026-07-16
 
-This document names the current canonical implementation paths on synchronized `master` and `origin/master` at `e141054`. The Roadmap, not this file, decides priority and next work.
+This document names the current merged implementation paths on synchronized `master` and `origin/master` at `30c0e0b`, plus the verified Phase 8 feature path awaiting merge. The Roadmap, not this file, decides priority and next work.
 
 ## Canonical Paths
 
@@ -22,12 +22,13 @@ This document names the current canonical implementation paths on synchronized `
 | Daily Workflow UI | `momentum_hunter/app.py` | The guided Daily Workflow stepper is still implemented inside `app.py`; future extraction should be a separate scoped task. |
 | WPF operator shell and lifecycle | `src/MomentumHunter.Desktop.Wpf/` | Canonical WPF operator surface on `master`: workstation UI, docking, chart surface, layout persistence, notifications, tray integration, and explicit application lifecycle. It does not replace the Python engine. |
 | WPF presentation state | `src/MomentumHunter.Presentation/` | Canonical WPF shell view models, pane registry/state, linked contexts, workspace selection, and layout autosave coordination. |
-| WPF lifecycle application services | `src/MomentumHunter.Application/` | Canonical WPF application-level lifecycle, background-collection coordination, and shell-facing engine contracts. This is not an independent Python engine host. |
-| WPF contracts | `src/MomentumHunter.Contracts/` | Canonical .NET workstation contracts and shared value types. They do not yet define the Phase 8 Python boundary. |
+| Python Engine Host (Phase 8 branch) | `momentum_hunter/engine_host.py` | Local loopback-only independent process. It exposes versioned host/health/collection snapshots and only lifecycle commands; it has no candidate, broker, Paper, or Live command. |
+| WPF lifecycle application services | `src/MomentumHunter.Application/` | Canonical WPF lifecycle interfaces and background-collection coordination. `PythonEngineHostContracts.cs` defines the narrow host connection interface on the Phase 8 branch. |
+| WPF contracts | `src/MomentumHunter.Contracts/` | Canonical .NET workstation contracts and shared value types. `PythonEngineHostContracts.cs` adds the Phase 8 provider-neutral snapshot and command-result models. |
 | WPF infrastructure | `src/MomentumHunter.Infrastructure/` | Canonical WPF persistence, layout integrity, monitor recovery, and tray-setting storage. |
-| WPF engine bridge | `src/MomentumHunter.EngineBridge/` | Canonical current shell bridge seam and deterministic/mock engine client. It is not a Python-process bridge or provider integration. |
+| WPF engine bridge | `src/MomentumHunter.EngineBridge/` | `PythonEngineHostConnection` and `RemoteBackgroundCollectionService` are the Phase 8 local-process lifecycle bridge; `MockEngineClient` remains the deterministic data seam until Phase 9. No provider or broker integration exists here. |
 | WPF verification | `tests-dotnet/` | Canonical .NET presentation, lifecycle, shell-workflow, and layout test coverage for R004/R005. |
-| Future Python engine contracts | No canonical implementation yet | Phase 8 will define versioned, read-only, provider-neutral contracts and independently host the canonical Python engine. |
+| Python engine lifecycle contracts | `momentum_hunter/engine_host.py`, `src/MomentumHunter.Contracts/PythonEngineHostContracts.cs`, `src/MomentumHunter.Application/PythonEngineHostContracts.cs` | Phase 8 feature-path implementation, awaiting merge. It is intentionally limited to host identity, health, collection state, pause, resume, one cycle, and shutdown. |
 | Future paper broker work | No code path yet | Deferred until the WPF direction and Python engine boundary are proven. No paper broker adapter exists on `master`. |
 
 ## Direct Answers
@@ -52,7 +53,7 @@ Possibly as reference only. Its isolated TradePlan/RiskGovernor tests and naming
 
 - New simulation/autonomy work should branch from local `master`.
 - New WPF shell work should branch from local `master`; do not continue R004/R005 historical feature branches.
-- Phase 8 must not claim that `MomentumHunter.EngineBridge` is an independent Python host before that host and its versioned contracts exist.
+- Phase 8 host code is on `codex/ARGUS-R008-python-engine-contract-host` pending Steven's merge approval. It must not be described as merged or as a read-model integration for candidates, research, Replay, TradePlan, risk, simulation, Paper, or Live.
 - Do not build on the original `codex/ARGUS-A006-A015-argus-machine-simulation` branch.
 - Do not build on `codex/ARGUS-A004-A005-tradeplan-risk-governor`.
 - Do not add paper/live broker code until a new Goal Charter explicitly approves that scope.

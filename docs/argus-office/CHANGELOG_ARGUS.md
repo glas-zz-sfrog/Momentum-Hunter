@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added Phase 8's versioned local Python Engine Host and WPF lifecycle bridge: discover/launch, reconnect, health/collection snapshots, pause, resume, one-cycle, and explicit graceful shutdown.
+- Added atomic duplicate-host and duplicate-cycle guards, legacy active-monitor-runner conflict blocking, loopback-only authenticated IPC, structured protocol failures, and Python/.NET process-level integration tests.
+- Kept candidate, research, Replay, TradePlan, Risk Governor, simulation, broker, Paper, and Live workflows outside the Phase 8 process boundary.
 - Established `ROADMAP.md` as the sole current-status and next-work authority, retired the independent Current State document, and added a required roadmap reconciliation gate to governance templates and operating rules.
 - Replaced the obsolete PySide-first planning direction in active governance sources with the Python-canonical, Windows-first C#/.NET WPF workstation-shell feasibility path.
 - Recorded R004 as implemented and pending Steven merge; broker research and paper-execution preparation remain deferred until the WPF direction and Python engine boundary are proven.

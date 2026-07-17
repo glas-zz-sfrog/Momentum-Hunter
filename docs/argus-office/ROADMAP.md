@@ -12,17 +12,17 @@ Supporting records have narrower roles:
 
 ## Now
 
-Last reconciled: 2026-07-16 from verified `origin/master` evidence.
+Last reconciled: 2026-07-16 from the Phase 8 feature-branch evidence; `master` remains unchanged.
 
 | Item | Current truth |
 | --- | --- |
-| Canonical product baseline | `master` and `origin/master` are synchronized at `e141054 Preserve floating layout on explicit exit` (`0` behind, `0` ahead); verified tree `76bc0a44ffd3013c2fe8eb49774c40577f2ca187`. |
+| Canonical product baseline | `master` and `origin/master` are synchronized at `30c0e0b Reconcile roadmap after R004 and R005 integration` (`0` behind, `0` ahead); verified tree `388b410727aefe9f65bd94bac8fa589e408ea787`. |
 | Active product decision | The Windows-first WPF workstation is the accepted operator-surface direction, while Python remains the canonical trading and evidence engine. |
-| Active implementation | No product implementation is active. The current governance branch reconciles post-integration records only. |
+| Active implementation | Phase 8 is `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R008-python-engine-contract-host`, based on `30c0e0b`. It has independent Python-host and WPF-bridge milestones, focused process proof, and remote feature-branch backup. |
 | R004 status | `COMPLETE`: workstation-shell feasibility is integrated into `origin/master`. |
 | R005 status | `COMPLETE`: close-to-tray, lifecycle controls, single-instance activation, and physical Windows tray QA are integrated into `origin/master`. |
-| Immediate next action | Prepare a separately approved Phase 8 Goal Charter for versioned, read-only Python contracts and an independent engine host. |
-| Next build after R005 acceptance | Phase 8: host Python independently so WPF can disconnect, restart, and reconnect without stopping collection. |
+| Immediate next action | Steven reviews the Phase 8 feature branch for a fast-forward merge decision. Phase 9 remains the next authorized build only after that decision or an explicitly documented stacked-branch choice. |
+| Next build after Phase 8 | Phase 9: attach read-only discovery, research, health, and Replay snapshots to the proven Python-host boundary. |
 | Broker and execution state | No paper or live broker path, credentials, API keys, or real order path exists. Paper and live remain locked. |
 
 ### Status Legend
@@ -111,13 +111,13 @@ Status: `COMPLETE`
 
 ### Phase 8 - Headless Python Engine Through Versioned Contracts
 
-Status: `NEXT / NOT_STARTED`
+Status: `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R008-python-engine-contract-host`
 
-- Create versioned, provider-neutral, read-only contracts between WPF and the canonical Python engine.
-- Host Python independently from the visible WPF workstation. WPF must connect to an already-running host, disconnect without stopping collection, restart, and reconnect.
-- Prevent duplicate engine-host processes and duplicate monitoring loops after reconnection; expose read-only engine health and collection status.
-- Keep the boundary local, observable, credential-free, and free of broker transmit behavior. Preserve Python as the canonical engine.
-- Do not implement this phase until a separate Phase 8 Goal Charter and directive are approved.
+- The approved Goal Charter creates versioned, provider-neutral host identity, health, collection, capability, command, and structured-error contracts.
+- `momentum_hunter/engine_host.py` owns the independent loopback-only Python Engine Host. WPF discovers an existing host or launches one, reconnects by host identity, and deliberately shuts it down only on explicit Exit.
+- The host has an atomic single-host lease, per-command idempotency, non-overlapping cycle guard, and a guard against the existing active-monitor runner starting a second collection loop.
+- The exposed command surface is only snapshot, pause, resume, run one collection cycle, and graceful shutdown. Candidate, research, Replay, TradePlan, Risk Governor, simulation, broker, Paper, and Live workflows do not cross this boundary.
+- Focused Python process proof and .NET integration proof passed. The branch is pushed; no merge has occurred. See `reports/releases/ARGUS-R008-python-engine-contract-host.md`.
 
 ### Phase 9 - Read-Only Discovery, Research, Health, And Replay Integration
 
