@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Locally fast-forwarded the Steven-approved Phase 8 + Phase 9 stack into `master` through `a886c90`; no merge commit and no master push occurred. The independent host and persisted-evidence WPF boundary are now the local canonical baseline.
 - Added Phase 9 persisted-evidence workstation snapshots over the existing loopback-only Python host: candidates, evidence activity, health, source lineage, and read-only Replay context now cross a versioned boundary without score/readiness recalculation.
 - Disabled WPF mock TradePlan, chart, risk, and simulation fallback whenever Phase 9 read-only snapshots are active; missing Python data remains unavailable rather than being replaced by deterministic candidates.
 - Added Python mapper/host, C# wire-mapper, presentation, and live C#-to-Python host coverage for the read-only boundary; no broker, Paper, Live, provider, or order capability was added.

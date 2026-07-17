@@ -12,18 +12,17 @@ Supporting records have narrower roles:
 
 ## Now
 
-Last reconciled: 2026-07-17 from the completed Phase 9 stacked-branch verification; `master` remains unchanged.
+Last reconciled: 2026-07-17 after Steven-approved local fast-forward of the Phase 8 + Phase 9 stack; `master` is ahead of `origin/master` and has not been pushed.
 
 | Item | Current truth |
 | --- | --- |
-| Canonical product baseline | `master` and `origin/master` are synchronized at `30c0e0b Reconcile roadmap after R004 and R005 integration` (`0` behind, `0` ahead); verified tree `388b410727aefe9f65bd94bac8fa589e408ea787`. |
+| Canonical product baseline | Local `master` contains `a886c90 Add read-only workstation integration` and is ahead of `origin/master` at `30c0e0b`. The local merge is approved; no `master` push has occurred. |
 | Active product decision | The Windows-first WPF workstation is the accepted operator-surface direction, while Python remains the canonical trading and evidence engine. |
-| Active implementation | Phase 8 is `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R008-python-engine-contract-host`, based on `30c0e0b`. It has independent Python-host and WPF-bridge milestones, focused process proof, and remote feature-branch backup. |
-| Active successor implementation | Phase 9 is `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R009-readonly-workstation-integration`, intentionally stacked from verified Phase 8 tip `6f853ba`. It connects only persisted Python evidence snapshots to WPF and keeps Phase 10 planning/simulation unavailable. |
+| Integrated implementation | Phase 8 and Phase 9 are `COMPLETE` on local `master` through `a886c90`. The independent Python host now supplies persisted evidence snapshots to WPF; planning, risk, charts, and simulation remain deferred. |
 | R004 status | `COMPLETE`: workstation-shell feasibility is integrated into `origin/master`. |
 | R005 status | `COMPLETE`: close-to-tray, lifecycle controls, single-instance activation, and physical Windows tray QA are integrated into `origin/master`. |
-| Immediate next action | Steven reviews the Phase 8 + Phase 9 fast-forward stack for integration into `master`. Do not begin another successor phase until that stack is merged or Steven explicitly directs otherwise. |
-| Next build after the stack | Phase 10: attach TradePlan, Risk Governor, FakeBroker-only simulation, Execution Ledger, and Execution Auditor only after the read-only boundary is merged and reviewed. |
+| Immediate next action | Create the Phase 10 Goal Charter and a fresh branch from local `master` to attach the existing TradePlan, Risk Governor, FakeBroker-only simulation, Execution Ledger, and Execution Auditor through the proven host boundary. |
+| Remote backup action | Do not push local `master` without Steven's separate explicit approval. The merged feature branches remain backed up on `origin`. |
 | Broker and execution state | No paper or live broker path, credentials, API keys, or real order path exists. Paper and live remain locked. |
 
 ### Status Legend
@@ -112,23 +111,23 @@ Status: `COMPLETE`
 
 ### Phase 8 - Headless Python Engine Through Versioned Contracts
 
-Status: `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R008-python-engine-contract-host`
+Status: `COMPLETE` on local `master` through `a886c90`; not pushed to `origin/master`
 
 - The approved Goal Charter creates versioned, provider-neutral host identity, health, collection, capability, command, and structured-error contracts.
 - `momentum_hunter/engine_host.py` owns the independent loopback-only Python Engine Host. WPF discovers an existing host or launches one, reconnects by host identity, and deliberately shuts it down only on explicit Exit.
 - The host has an atomic single-host lease, per-command idempotency, non-overlapping cycle guard, and a guard against the existing active-monitor runner starting a second collection loop.
-- The exposed command surface is only snapshot, pause, resume, run one collection cycle, and graceful shutdown. Candidate, research, Replay, TradePlan, Risk Governor, simulation, broker, Paper, and Live workflows do not cross this boundary.
-- Focused Python process proof and .NET integration proof passed. The branch is pushed; no merge has occurred. See `reports/releases/ARGUS-R008-python-engine-contract-host.md`.
+- The host core owns snapshot, pause, resume, one collection cycle, and graceful shutdown. Phase 9 adds one versioned persisted-evidence snapshot capability; TradePlan, Risk Governor, chart data, simulation, broker, Paper, and Live remain outside the boundary.
+- Focused Python process proof and .NET integration proof passed. The remote feature branch remains preserved; the implementation fast-forwarded into local `master`. See `reports/releases/ARGUS-R008-python-engine-contract-host.md`.
 
 ### Phase 9 - Read-Only Discovery, Research, Health, And Replay Integration
 
-Status: `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R009-readonly-workstation-integration` (stacked from `codex/ARGUS-R008-python-engine-contract-host` at `6f853ba`)
+Status: `COMPLETE` on local `master` through `a886c90`; not pushed to `origin/master`
 
 - Connect WPF panes to the Phase 8 read-only boundary for candidates, evidence, research context, health, and replay.
 - Preserve source lineage, stale-data language, and read-only replay identity.
 - Use the independent engine lifecycle rather than a workstation-owned collection loop.
 - The first slice exposes persisted report/status snapshots only and explicitly disables mock TradePlan, chart, risk, and simulation fallback until Phase 10.
-- Focused Python tests, focused C# presentation/integration tests, a C#-to-Python host proof, broader nearby Python regression, the full .NET suite, and full Python discovery passed before branch review.
+- Focused Python tests, focused C# presentation/integration tests, a C#-to-Python host proof, broader nearby Python regression, the full .NET suite, and full Python discovery passed before the Steven-approved local fast-forward.
 
 ### Phase 10 - Trade Planning, Risk, And Simulation Integration
 
