@@ -138,12 +138,7 @@ public sealed class PythonEngineHostIntegrationTests
     private static string FindPythonExecutable()
     {
         var virtualEnvironmentPython = Path.Combine(FindRepositoryRoot(), ".venv", "Scripts", "python.exe");
-        if (!File.Exists(virtualEnvironmentPython))
-        {
-            throw new InvalidOperationException("The repository Python virtual environment is required for the host integration test.");
-        }
-
-        return virtualEnvironmentPython;
+        return File.Exists(virtualEnvironmentPython) ? virtualEnvironmentPython : "py";
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)
