@@ -26,7 +26,7 @@ The Phase 8 Goal Charter is complete: the visible WPF workstation no longer owns
 
 - Fresh `dotnet restore MomentumHunter.Workstation.sln --force` completed.
 - Release build completed with `0` warnings and `0` errors.
-- Full .NET suite passed: `59/59` (36 integration, 18 presentation, 5 layout).
+- Full .NET suite passed: `60/60` (37 integration, 18 presentation, 5 layout).
 - Python compileall passed for `momentum_hunter` and `tests`.
 - Focused Python regression set passed: `36/36` across host, active monitor, active-monitor runner, and daily workflow tests.
 - The all-Python discovery command was bounded by the available 30-second command window and was inconclusive before it emitted its summary; it is not counted as passing evidence.
@@ -36,6 +36,7 @@ The Phase 8 Goal Charter is complete: the visible WPF workstation no longer owns
 - Python tests cover bad token, protocol mismatch, unsupported capabilities, duplicate command IDs, overlapping cycles, paused collection, collection failure, legacy-runner conflict, lease cleanup, and no mutation of canonical monitor source.
 - A real Python subprocess test proves a separate client can exit while the host remains alive and accepts a reconnect using the same host ID; deliberate shutdown removes both endpoint and lease files.
 - A real .NET-to-Python integration test concurrently launches/attaches two WPF-side connections, proves one host identity, repeats an idempotent pause command, resumes, and deliberately shuts the host down with cleanup.
+- A clean-room clone from the pushed feature branch, with no copied `.venv` or runtime-state artifacts, completed fresh restore/build, `59/59` .NET tests, Python compileall, and `12/12` host tests before the final unavailable-host negative test was added.
 - No operator layout or visible control text changed in Phase 8. Existing tray and application-menu controls now call the host bridge. The available automation surface could not capture a WPF desktop screenshot, so the lifecycle UI behavior is proven by the WPF adapter integration test rather than a new image artifact.
 
 ## Protected-Path Review

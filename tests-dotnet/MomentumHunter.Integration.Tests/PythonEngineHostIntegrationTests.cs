@@ -119,6 +119,17 @@ public sealed class PythonEngineHostIntegrationTests
         Assert.Equal(BackgroundCollectionState.Stopping, service.Status.State);
     }
 
+    [Fact]
+    public async Task RemoteLifecycleAdapterReportsAnUnavailableHostWithoutCrashingTheWorkstation()
+    {
+        await using var service = new RemoteBackgroundCollectionService(new UnavailableHostConnection());
+
+        await service.StartAsync();
+
+        Assert.Equal(BackgroundCollectionState.Blocked, service.Status.State);
+        Assert.Contains("unavailable", service.Status.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string FindRepositoryRoot()
     {
         foreach (var startingPath in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
@@ -219,5 +230,20 @@ public sealed class PythonEngineHostIntegrationTests
                 PythonEngineHostProtocol.RunCollectionCycle,
                 PythonEngineHostProtocol.ShutdownHost,
             ]);
+    }
+
+    private sealed class UnavailableHostConnection : IPythonEngineHostConnection
+    {
+        public Task<PythonEngineHostSnapshot> EnsureConnectedAsync(CancellationToken cancellationToken = default) =>
+            Task.FromException<PythonEngineHostSnapshot>(new IOException("Python process unavailable."));
+
+        public Task<PythonEngineHostSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default) =>
+            Task.FromException<PythonEngineHostSnapshot>(new IOException("Python process unavailable."));
+
+        public Task<PythonEngineHostCommandResult> SendCommandAsync(
+            string command,
+            string commandId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromException<PythonEngineHostCommandResult>(new IOException("Python process unavailable."));
     }
 }
