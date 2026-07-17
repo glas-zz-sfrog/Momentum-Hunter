@@ -12,17 +12,17 @@ Supporting records have narrower roles:
 
 ## Now
 
-Last reconciled: 2026-07-15 from local Git evidence.
+Last reconciled: 2026-07-16 from verified `origin/master` evidence.
 
 | Item | Current truth |
 | --- | --- |
-| Canonical product baseline | Local `master` at `1180315 Add daily OHLC source for breakout research`; synchronized with `origin/master` (`0` behind, `0` ahead). |
-| Active product decision | The approved R004 workstation and authoritative Roadmap are preserved together on `codex/ARGUS-INTEGRATE-roadmap-r004` at `d3a98d9`; local `master` remains unchanged pending Steven's separate fast-forward approval. |
-| Active implementation | `ARGUS-R005` on `codex/ARGUS-R005-background-tray-lifecycle`, based on the verified integration commit `d3a98d9`. |
-| R004 status | `IMPLEMENTED_PENDING_MASTER_MERGE`: the WPF shell is accepted in the remote-backed integration history; it is not yet merged to local `master`. |
-| R005 status | `ACTIVE`: build the close-to-tray lifecycle and deterministic in-process background-collection controls without claiming independent engine hosting. |
-| Immediate next action | Implement and hard-chew R005: explicit hide, pause, resume, scan, status, restore, single-instance, and exit behavior for the WPF host. |
-| Next build after R005 acceptance | Phase 8: define versioned contracts and an independent Python engine host that survives WPF restart, disconnect, and failure. |
+| Canonical product baseline | `master` and `origin/master` are synchronized at `e141054 Preserve floating layout on explicit exit` (`0` behind, `0` ahead); verified tree `76bc0a44ffd3013c2fe8eb49774c40577f2ca187`. |
+| Active product decision | The Windows-first WPF workstation is the accepted operator-surface direction, while Python remains the canonical trading and evidence engine. |
+| Active implementation | No product implementation is active. The current governance branch reconciles post-integration records only. |
+| R004 status | `COMPLETE`: workstation-shell feasibility is integrated into `origin/master`. |
+| R005 status | `COMPLETE`: close-to-tray, lifecycle controls, single-instance activation, and physical Windows tray QA are integrated into `origin/master`. |
+| Immediate next action | Prepare a separately approved Phase 8 Goal Charter for versioned, read-only Python contracts and an independent engine host. |
+| Next build after R005 acceptance | Phase 8: host Python independently so WPF can disconnect, restart, and reconnect without stopping collection. |
 | Broker and execution state | No paper or live broker path, credentials, API keys, or real order path exists. Paper and live remain locked. |
 
 ### Status Legend
@@ -33,6 +33,13 @@ Last reconciled: 2026-07-15 from local Git evidence.
 - `COMPLETE`: work is merged into local `master` and verified.
 - `BLOCKED`: a stated gate or CEO decision prevents work from starting.
 - `DEFERRED`: valid future work, intentionally not the current priority.
+
+### Roadmap Governance
+
+Status: `COMPLETE`
+
+- The authoritative Roadmap is integrated into `master`; `CURRENT_STATE.md` remains deleted.
+- This file is the single live state view; branch history and canonical paths are recorded in their supporting governance files.
 
 ## Roadmap
 
@@ -66,53 +73,51 @@ Status: `COMPLETE`
 
 ### Phase 4 - Automation And Simulation Foundation
 
-Status: `COMPLETE` on local `master`
+Status: `COMPLETE` on `origin/master`
 
 - Use neutral product terminology: Automation, Simulation, Machine Room, Risk Governor, Execution Ledger, Trade Plan, and operator review.
 - Keep `Argus` as the Codex builder and office persona, not a product-screen or product-flow name.
 - Retain the existing Python simulation foundation: TradePlan, Risk Governor, FakeBroker-only simulation, Execution Ledger, and Execution Auditor.
 - Keep every paper and live execution boundary locked.
 
-### Phase 5 - C# WPF Workstation-Shell Feasibility
+### Phase 5 - C# WPF Operator-Surface Feasibility
 
-Status: `ACTIVE` through R005 lifecycle validation
+Status: `COMPLETE / DIRECTION ACCEPTED`
 
 - Preserve Python as the canonical engine for research, scoring, readiness, replay, storage, trade planning, risk, and simulation.
-- Use the Windows-first .NET WPF workstation shell as the architecture feasibility path before committing more effort to Qt modernization.
-- Do not treat the WPF shell as a Python rewrite or as broker integration.
-- Do not start a new PySide-first modernization track while the WPF direction is being evaluated.
-- Require Windows system-tray integration, close-to-tray behavior, persistent in-process monitoring while the workstation is hidden, exact layout restoration, single-instance activation, reliable tray cleanup, visible background health, and safe session-ending behavior before accepting the shell as the operator surface.
+- R004 proved the Windows-first WPF workstation shell: docked and floating panes, linked contexts, persistent layouts, recovery behavior, and simulation-only safety language.
+- R005 proved close-to-tray behavior, single-instance activation, lifecycle controls, restricted tray commands, and physical Windows tray behavior.
+- WPF is the accepted planned operator surface, subject to continued phase-gated validation; it is not a Python-engine rewrite or broker integration.
 - Keep Hide, Pause Monitoring, and Exit as separate lifecycle operations. Tray or layout state must never store execution authorization, credentials, API keys, broker permissions, or order-routing permissions.
 
 ### Phase 6 - Python Simulation Foundation And Evidence Research
 
-Status: `COMPLETE` on local `master`
+Status: `COMPLETE` on `origin/master`
 
 - `momentum_hunter/autonomy/*`, `trade_planning.py`, and the current Python UI modules remain the canonical implementation on `master`.
 - The clean-room simulation foundation and hardening tests are merged on `master`.
 - Technical Breakout Research Engine v1 and its daily OHLC source are merged on `master`; they remain research-only and do not alter production scoring or execution behavior.
 - The older standalone execution-model branch and earlier simulation branch are superseded; see `BRANCH_LEDGER.md`.
 
-### Phase 7 - Build And Hard-Chew The Workstation Shell
+### Phase 7 - WPF Workstation And Background Lifecycle
 
-Status: `ACTIVE`
+Status: `COMPLETE`
 
-- R004 provides the WPF shell spike: docked, tabbed, floating, resizable panes; linked chart contexts; saved layouts; SQLite autosave and recovery; Live, Replay, and Review workspaces; and simulation-only safety language.
-- R004 adds contextual Machine Room panes for Research, Watchlist, Automation, Diagnostics, Orders, and Positions without adding broker capability.
-- R004 is implemented in the accepted integration history, pending Steven's separate local-master fast-forward decision; it is not a production-frontend declaration.
-- R005 is active: add WPF close-to-tray behavior, deterministic in-process background collection while hidden, explicit Pause, Resume, Run Scan Now, Open, Status, and Exit controls, one-instance activation, lifecycle tests, and UI proof.
-- R005 prepares the future engine boundary but does not claim that Python collection survives WPF application exit, crash, or restart.
-- Physical multi-monitor/DPI validation and a real Python engine bridge remain future proof obligations.
+- R004 and R005 are integrated into `origin/master` at `e14105493061ec133ecd273aaac21d8e33ead5cf`.
+- R004 supplied the workstation shell: docked, tabbed, floating, resizable panes; linked chart contexts; saved layouts; SQLite recovery; and simulation-only safety language.
+- R005 supplied close-to-tray behavior, explicit exit, session-ending behavior, single-instance signaling, restricted tray commands, and the in-process background-collection lifecycle. Physical Windows QA passed.
+- Collection continues while the WPF application process is alive and the visible workstation is hidden.
+- The Python engine is not independently hosted yet. A WPF process crash or explicit process exit still stops the current R005-hosted lifecycle.
 
 ### Phase 8 - Headless Python Engine Through Versioned Contracts
 
-Status: `NOT_STARTED`
+Status: `NEXT / NOT_STARTED`
 
-- Define versioned, read-only contracts that let the WPF shell request discovery, research, health, replay, and simulation data from the canonical Python engine.
-- Keep the boundary explicit, local, observable, and free of credentials or broker transmit behavior.
-- Prove contract compatibility before moving any existing product workflow into the WPF shell.
-- Run Python as a genuinely independent engine process: WPF must connect to an already-running host, disconnect or restart without stopping it, reconnect without duplicate loops, and query health and monitoring state through versioned contracts.
-- Make Pause, Resume, and engine shutdown explicit and auditable. Prevent duplicate engine-host processes. Prove that closing or crashing WPF does not stop scheduled Python collection.
+- Create versioned, provider-neutral, read-only contracts between WPF and the canonical Python engine.
+- Host Python independently from the visible WPF workstation. WPF must connect to an already-running host, disconnect without stopping collection, restart, and reconnect.
+- Prevent duplicate engine-host processes and duplicate monitoring loops after reconnection; expose read-only engine health and collection status.
+- Keep the boundary local, observable, credential-free, and free of broker transmit behavior. Preserve Python as the canonical engine.
+- Do not implement this phase until a separate Phase 8 Goal Charter and directive are approved.
 
 ### Phase 9 - Read-Only Discovery, Research, Health, And Replay Integration
 

@@ -1,17 +1,18 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-15
+Date reconciled: 2026-07-16
 
 ## Current Truth
 
-Local `master` is the canonical merged product baseline for Momentum Hunter. It contains the Python automation and simulation foundation, Technical Breakout Research Engine v1, and daily OHLC source support through `1180315 Add daily OHLC source for breakout research`.
+`master` and `origin/master` are the canonical merged product baseline for Momentum Hunter. They contain the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, and the R005 tray and lifecycle work through `e141054 Preserve floating layout on explicit exit`.
 
 Git evidence at reconciliation time:
 
-- `git status --short --branch` on the reconciliation branch: clean.
+- `git status --short --branch` on `master`: clean.
 - `git rev-list --left-right --count origin/master...master`: `0 0`.
-- `master` and `origin/master` both resolve to `1180315`.
-- `codex/ARGUS-R004-momentum-hunter-wpf-shell-spike` is at `5bbd0c7`, is four commits ahead of `master`, is fast-forwardable, and matches its remote branch.
+- `master` and `origin/master` both resolve to `e14105493061ec133ecd273aaac21d8e33ead5cf`.
+- The verified `master` and remote R005 tree is `76bc0a44ffd3013c2fe8eb49774c40577f2ca187`.
+- R004 and R005 are integrated through the `d3a98d9` and `e141054` history; their historical feature branches remain preserved but are not active work bases.
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
@@ -32,17 +33,21 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `664381d` | Add clean-room simulation proof | Yes |
 | `4d63655` | Add technical breakout research engine | Yes |
 | `1180315` | Add daily OHLC source for breakout research | Yes |
+| `d3a98d9` | Integrate authoritative roadmap with R004 workstation shell | Yes |
+| `e141054` | Preserve floating layout on explicit exit | Yes |
 
 ## Branch Classifications
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | `1180315` | Yes | Yes | `ACTIVE` | Canonical merged Python product baseline. | Do not add WPF or broker work directly; use task branches. |
-| `codex/ARGUS-R004-momentum-hunter-wpf-shell-spike` | `5bbd0c7` | Yes | No | `ACTIVE` | Windows-first WPF workstation-shell feasibility spike. | Steven review and fast-forward merge decision; do not call it a production frontend yet. |
+| `master` | `e141054` | Yes | Yes | `ACTIVE` | Canonical merged Python engine and accepted WPF operator-surface baseline. | Use a new task branch; Phase 8 is next but not started. |
+| `codex/ARGUS-R004-momentum-hunter-wpf-shell-spike` | `5bbd0c7` | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Windows-first WPF workstation-shell feasibility spike. | Historical branch; do not continue feature work here. |
 | `codex/technical-confluence-wave-1-primitives` | `9678c5` | Yes | No | `NEEDS_REVIEW` | Research-only technical confluence primitives. | Review separately; it is not the current workstation-shell priority. |
 | `codex/technical-indicator-registry-confluence-roadmap-v1` | `2af99da` | Yes | No | `NEEDS_REVIEW` | Indicator registry and confluence planning artifacts. | Keep as research planning; do not treat it as production behavior. |
 | `codex/ARGUS-STATE-002-roadmap-reconciliation` | `ccfb7a0` | Yes | No | `SUPERSEDED` | Earlier roadmap reconciliation attempt. | Do not merge; replaced by the authoritative Roadmap reconciliation. |
-| `codex/ARGUS-STATE-003-authoritative-roadmap` | Current branch HEAD | No | No | `ACTIVE` | Consolidates current status into the Roadmap and aligns active governance. | Review and merge independently of R004. |
+| `codex/ARGUS-STATE-003-authoritative-roadmap` | `48d3ab4` | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Established the authoritative Roadmap that was integrated through R004/R005 history. | Historical governance branch. |
+| `codex/ARGUS-INTEGRATE-roadmap-r004` | `d3a98d9` | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Integrated the authoritative Roadmap with R004 workstation history. | Superseded as an active work base by `master`. |
+| `codex/ARGUS-R005-background-tray-lifecycle` | `e141054` | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Close-to-tray, lifecycle controls, single-instance signaling, and R005 physical QA fixes. | Historical branch; Phase 8 must start from a new branch. |
 | `codex/ARGUS-A006-A015-clean-room-verification` | `664381d` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Clean-room cherry-pick verification branch for simulation foundation; source of local fast-forward merge. | Keep as audit branch; do not continue feature work here. |
 | `codex/ARGUS-A006-A015-argus-machine-simulation` | `91da577` | No | No by commit identity; content superseded by clean-room cherry-picks on `master` | `SUPERSEDED` | Original simulation foundation workstream. | Do not use for future work; use `master` or a new task branch. |
 | `codex/ARGUS-A004-A005-tradeplan-risk-governor` | `8a90e18` | Yes | No | `SUPERSEDED` | Older standalone `momentum_hunter/execution/*` TradePlan/RiskGovernor experiment. | Do not merge as-is; see salvage note below. |
