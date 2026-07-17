@@ -16,25 +16,37 @@ public sealed partial class ShellViewModel : ObservableObject
 {
     private readonly IEngineClient _engineClient;
     private readonly IReadOnlyWorkspaceClient? _readOnlyWorkspaceClient;
+    private readonly ISimulationWorkspaceClient? _simulationWorkspaceClient;
     private readonly IWorkspaceLayoutStore? _layoutStore;
     private readonly LayoutAutosaveCoordinator? _layoutAutosave;
     private LinkGroupCoordinator _linkGroups = null!;
     private string? _dockLayoutXml;
     private RectGeometry? _windowBounds;
     private WindowDisplayState _windowState;
+    private SimulationWorkspaceSnapshot? _simulationWorkspaceSnapshot;
 
     public ShellViewModel(IEngineClient engineClient)
-        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
     public ShellViewModel(IEngineClient engineClient, IWorkspaceLayoutStore layoutStore)
-        : this(engineClient, layoutStore, readOnlyWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
     public ShellViewModel(IEngineClient engineClient, IReadOnlyWorkspaceClient readOnlyWorkspaceClient)
-        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient, isInternalConstruction: true)
+        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient, simulationWorkspaceClient: null, isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(IEngineClient engineClient, ISimulationWorkspaceClient simulationWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: simulationWorkspaceClient,
+            isInternalConstruction: true)
     {
     }
 
@@ -42,7 +54,20 @@ public sealed partial class ShellViewModel : ObservableObject
         IEngineClient engineClient,
         IWorkspaceLayoutStore layoutStore,
         IReadOnlyWorkspaceClient readOnlyWorkspaceClient)
-        : this(engineClient, layoutStore, readOnlyWorkspaceClient, isInternalConstruction: true)
+        : this(engineClient, layoutStore, readOnlyWorkspaceClient, simulationWorkspaceClient: null, isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: simulationWorkspaceClient,
+            isInternalConstruction: true)
     {
     }
 
@@ -50,11 +75,13 @@ public sealed partial class ShellViewModel : ObservableObject
         IEngineClient engineClient,
         IWorkspaceLayoutStore? layoutStore,
         IReadOnlyWorkspaceClient? readOnlyWorkspaceClient,
+        ISimulationWorkspaceClient? simulationWorkspaceClient,
         bool isInternalConstruction)
     {
         _engineClient = engineClient;
         _layoutStore = layoutStore;
         _readOnlyWorkspaceClient = readOnlyWorkspaceClient;
+        _simulationWorkspaceClient = simulationWorkspaceClient;
         SetRegistry(WorkspaceFactory.Create(WorkspaceKind.Live));
         if (_layoutStore is not null)
         {
@@ -139,6 +166,9 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty]
     private bool _isReadOnlySnapshotMode;
 
+    [ObservableProperty]
+    private bool _isPythonSimulationWorkspaceMode;
+
     public string MonitoringToggleLabel => IsMonitoringPaused ? "Resume Monitoring" : "Pause Monitoring";
 
     public EnvironmentMode Environment => Workspace switch
@@ -177,6 +207,7 @@ public sealed partial class ShellViewModel : ObservableObject
     public string EnvironmentLabel => Environment switch
     {
         _ when IsReadOnlySnapshotMode => "READ-ONLY SNAPSHOT \u2022 Planning Deferred",
+        _ when IsPythonSimulationWorkspaceMode => "SIMULATION \u2022 Python FakeBroker Only",
         EnvironmentMode.Simulation => "SIMULATION \u2022 FakeBroker",
         EnvironmentMode.Replay => "REPLAY \u2022 Read Only",
         _ => "REVIEW \u2022 Read Only",
@@ -190,6 +221,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public string PlanningStatus => IsReadOnlySnapshotMode
         ? "Trade planning, Risk Governor, charts, and simulation are deferred to Phase 10. This pane will not create a substitute plan."
+        : IsPythonSimulationWorkspaceMode
+            ? "TradePlan and Risk Governor evidence are supplied by the Python FakeBroker-only simulation boundary. Chart integration remains deferred."
         : TradePlan is null
             ? "No TradePlan is available for the selected candidate."
             : "TradePlan data is supplied by the current engine client.";
@@ -198,15 +231,19 @@ public sealed partial class ShellViewModel : ObservableObject
         ? "Planning Deferred"
         : TradePlan?.PrimaryAction ?? "No Plan Available";
 
-    public string ChartSourceLabel => IsReadOnlySnapshotMode
+    public string ChartSourceLabel => IsReadOnlySnapshotMode || IsPythonSimulationWorkspaceMode
         ? "Chart integration is deferred; no simulated candle fallback is shown."
         : "Local simulation candle data";
 
-    public string ActivitySourceLabel => IsReadOnlySnapshotMode
+    public string ActivitySourceLabel => IsPythonSimulationWorkspaceMode
+        ? "Activity combines persisted Python evidence with the in-memory simulation ledger."
+        : IsReadOnlySnapshotMode
         ? "Activity is read from persisted Python evidence snapshots."
         : "Activity is local to this shell.";
 
-    public string ResearchSummary => IsReadOnlySnapshotMode
+    public string ResearchSummary => IsPythonSimulationWorkspaceMode
+        ? "Candidate evidence remains persisted and read-only. TradePlan, Risk Governor, ledger, audit, and FakeBroker simulation arrive through the Python host."
+        : IsReadOnlySnapshotMode
         ? "Candidate, evidence, health, and source lineage come from the Python read-only boundary. Scores and readiness labels are not recalculated here."
         : "Evidence context for the linked symbol stays available without becoming a permanent route.";
 
@@ -217,6 +254,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public string? RestoredDockLayoutXml => _dockLayoutXml;
 
     public WindowDisplayState RestoredWindowState => _windowState;
+
+    private bool UsesPythonWorkspaceBoundary => IsReadOnlySnapshotMode || IsPythonSimulationWorkspaceMode;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -231,7 +270,7 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         await RefreshWorkspaceDataAsync(cancellationToken);
-        if (!IsReadOnlySnapshotMode)
+        if (!UsesPythonWorkspaceBoundary)
         {
             await RefreshChartPaneDataAsync(cancellationToken);
         }
@@ -249,6 +288,18 @@ public sealed partial class ShellViewModel : ObservableObject
             PrimaryChart = null;
             SecondaryCharts.Clear();
             StatusMessage = "Read-only Python candidate selected. Trade planning, charts, risk, and simulation remain deferred to Phase 10.";
+            RaisePresentationProperties();
+            RequestLayoutSave();
+            return;
+        }
+
+        if (IsPythonSimulationWorkspaceMode)
+        {
+            ApplySimulationTradePlan(candidate.Symbol);
+            Candles.Clear();
+            PrimaryChart = null;
+            SecondaryCharts.Clear();
+            StatusMessage = "Python persisted TradePlan selected. Risk Governor evidence is current; chart data remains deferred.";
             RaisePresentationProperties();
             RequestLayoutSave();
             return;
@@ -281,7 +332,7 @@ public sealed partial class ShellViewModel : ObservableObject
     public async Task ChangeIntervalAsync(string interval, CancellationToken cancellationToken = default)
     {
         ChangeInterval(interval);
-        if (IsReadOnlySnapshotMode)
+        if (UsesPythonWorkspaceBoundary)
         {
             return;
         }
@@ -326,7 +377,7 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         await RefreshWorkspaceDataAsync(cancellationToken);
-        if (!IsReadOnlySnapshotMode)
+        if (!UsesPythonWorkspaceBoundary)
         {
             await RefreshChartPaneDataAsync(cancellationToken);
         }
@@ -460,7 +511,13 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         PrimaryTradePlanPane.IsPinned = !PrimaryTradePlanPane.IsPinned;
-        if (!PrimaryTradePlanPane.IsPinned && !IsReadOnlySnapshotMode)
+        if (!PrimaryTradePlanPane.IsPinned && IsPythonSimulationWorkspaceMode)
+        {
+            PrimaryTradePlanPane.Symbol = SelectedSymbol;
+            PrimaryTradePlanPane.Interval = SelectedInterval;
+            ApplySimulationTradePlan(SelectedSymbol);
+        }
+        else if (!PrimaryTradePlanPane.IsPinned && !IsReadOnlySnapshotMode)
         {
             PrimaryTradePlanPane.Symbol = SelectedSymbol;
             PrimaryTradePlanPane.Interval = SelectedInterval;
@@ -490,6 +547,24 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (TradePlan is null)
         {
+            return;
+        }
+
+        if (IsPythonSimulationWorkspaceMode)
+        {
+            if (!CanRunSimulation)
+            {
+                StatusMessage = $"Risk Governor blocked simulation: {TradePlan.RiskDecision?.Summary ?? "risk evidence is unavailable"}. No evidence was changed.";
+                RaisePresentationProperties();
+                RequestLayoutSave();
+                return;
+            }
+
+            LastSimulationResult = await _simulationWorkspaceClient!.RunSimulationAsync(TradePlan.Symbol, cancellationToken);
+            await RefreshSimulationWorkspaceDataAsync(cancellationToken);
+            StatusMessage = LastSimulationResult.Summary;
+            RaisePresentationProperties();
+            RequestLayoutSave();
             return;
         }
 
@@ -631,6 +706,12 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private async Task RefreshWorkspaceDataAsync(CancellationToken cancellationToken)
     {
+        if (_simulationWorkspaceClient is not null)
+        {
+            await RefreshSimulationWorkspaceDataAsync(cancellationToken);
+            return;
+        }
+
         if (_readOnlyWorkspaceClient is not null)
         {
             await RefreshReadOnlyWorkspaceDataAsync(cancellationToken);
@@ -638,6 +719,7 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         IsReadOnlySnapshotMode = false;
+        IsPythonSimulationWorkspaceMode = false;
         Candidates.Clear();
         foreach (var candidate in await _engineClient.GetCandidatesAsync(cancellationToken))
         {
@@ -663,7 +745,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private async Task RefreshCandlesAsync(CancellationToken cancellationToken)
     {
-        if (IsReadOnlySnapshotMode)
+        if (UsesPythonWorkspaceBoundary)
         {
             Candles.Clear();
             return;
@@ -678,7 +760,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private async Task RefreshChartPaneDataAsync(CancellationToken cancellationToken = default)
     {
-        if (IsReadOnlySnapshotMode)
+        if (UsesPythonWorkspaceBoundary)
         {
             PrimaryChart = null;
             SecondaryCharts.Clear();
@@ -749,9 +831,85 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(ReplaySummary));
     }
 
+    private async Task RefreshSimulationWorkspaceDataAsync(CancellationToken cancellationToken)
+    {
+        IsReadOnlySnapshotMode = false;
+        IsPythonSimulationWorkspaceMode = true;
+        try
+        {
+            var snapshot = await _simulationWorkspaceClient!.GetSnapshotAsync(cancellationToken);
+            _simulationWorkspaceSnapshot = snapshot;
+            Candidates.Clear();
+            foreach (var candidate in snapshot.Workspace.Candidates)
+            {
+                Candidates.Add(candidate);
+            }
+
+            Activity.Clear();
+            foreach (var activity in snapshot.Workspace.Activity)
+            {
+                Activity.Add(activity);
+            }
+
+            Health = snapshot.Workspace.Health;
+            ReplaySession = snapshot.Workspace.Replay;
+            Candles.Clear();
+            PrimaryChart = null;
+            SecondaryCharts.Clear();
+            var candidateToSelect = Candidates.FirstOrDefault(candidate => candidate.Symbol == SelectedSymbol) ?? Candidates.FirstOrDefault();
+            if (candidateToSelect is not null)
+            {
+                SelectedCandidate = candidateToSelect;
+                SelectedSymbol = candidateToSelect.Symbol;
+                _linkGroups.PublishSymbol(LinkGroup.A, candidateToSelect.Symbol, SelectedInterval);
+                ApplySimulationTradePlan(candidateToSelect.Symbol);
+            }
+            else
+            {
+                TradePlan = null;
+            }
+
+            StatusMessage = snapshot.Summary;
+            OnPropertyChanged(nameof(ActivityLabel));
+            RaisePresentationProperties();
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        {
+            _simulationWorkspaceSnapshot = null;
+            Candidates.Clear();
+            Activity.Clear();
+            var now = DateTimeOffset.UtcNow;
+            var detail = $"Python simulation workspace unavailable: {exception.Message} Mock fallback is disabled.";
+            Activity.Add(new ActivityEvent(now, "Engine", detail, string.Empty, HealthState.Unavailable));
+            Health = new SystemHealthSnapshot(
+                [new HealthComponentSnapshot("Python simulation workspace", HealthState.Unavailable, detail, now)],
+                now);
+            ReplaySession = new ReplaySnapshot("UNAVAILABLE", now, string.Empty, "source capture", "Replay context is unavailable because the Python simulation workspace could not be loaded.");
+            TradePlan = null;
+            Candles.Clear();
+            PrimaryChart = null;
+            SecondaryCharts.Clear();
+            StatusMessage = detail;
+            OnPropertyChanged(nameof(ActivityLabel));
+            RaisePresentationProperties();
+        }
+    }
+
+    private void ApplySimulationTradePlan(string symbol)
+    {
+        if (PrimaryTradePlanPane?.IsPinned == true)
+        {
+            return;
+        }
+
+        TradePlan = _simulationWorkspaceSnapshot?.TradePlans
+            .FirstOrDefault(plan => string.Equals(plan.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
+    }
+
     private async Task RefreshReadOnlyWorkspaceDataAsync(CancellationToken cancellationToken)
     {
         IsReadOnlySnapshotMode = true;
+        IsPythonSimulationWorkspaceMode = false;
         try
         {
             var snapshot = await _readOnlyWorkspaceClient!.GetSnapshotAsync(cancellationToken);

@@ -141,7 +141,16 @@ public sealed record TradePlanSnapshot(
     string PrimaryAction,
     DataLineage DataLineage,
     IReadOnlyList<TradeLevel>? Levels = null,
-    RiskDecision? RiskDecision = null);
+    RiskDecision? RiskDecision = null)
+{
+    public string EntryDisplay => Entry > 0m ? Entry.ToString("C2") : "Unavailable";
+
+    public string StopDisplay => Stop > 0m ? Stop.ToString("C2") : "Unavailable";
+
+    public string TargetDisplay => Target > 0m ? Target.ToString("C2") : "Unavailable";
+
+    public string RewardToRiskDisplay => RewardToRisk > 0m ? RewardToRisk.ToString("N2") : "Unavailable";
+}
 
 public sealed record ActivityEvent(
     DateTimeOffset Timestamp,
@@ -183,6 +192,14 @@ public sealed record ReadOnlyWorkspaceSnapshot(
     IReadOnlyList<ActivityEvent> Activity,
     SystemHealthSnapshot Health,
     ReplaySnapshot Replay,
+    bool PlanningAvailable);
+
+public sealed record SimulationWorkspaceSnapshot(
+    int SchemaVersion,
+    DateTimeOffset ObservedAt,
+    string Summary,
+    ReadOnlyWorkspaceSnapshot Workspace,
+    IReadOnlyList<TradePlanSnapshot> TradePlans,
     bool PlanningAvailable);
 
 public sealed record WorkspaceSnapshot(

@@ -204,10 +204,10 @@
                                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                                     <StackPanel Margin="8">
                                                         <UniformGrid Columns="2" Margin="0,0,0,12">
-                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Entry" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.Entry, StringFormat={}{0:C2}}" FontSize="16" /></StackPanel>
-                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Stop" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.Stop, StringFormat={}{0:C2}}" FontSize="16" /></StackPanel>
-                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Target" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.Target, StringFormat={}{0:C2}}" FontSize="16" /></StackPanel>
-                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Reward/Risk" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.RewardToRisk, StringFormat={}{0:N2}}" FontSize="16" /></StackPanel>
+                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Entry" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.EntryDisplay}" FontSize="16" /></StackPanel>
+                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Stop" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.StopDisplay}" FontSize="16" /></StackPanel>
+                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Target" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.TargetDisplay}" FontSize="16" /></StackPanel>
+                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Reward/Risk" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.RewardToRiskDisplay}" FontSize="16" /></StackPanel>
                                                         </UniformGrid>
                                                         <TextBlock Text="Readiness Gate" FontWeight="SemiBold" Margin="0,0,0,6" />
                                                         <ItemsControl ItemsSource="{Binding TradePlan.Checks}">

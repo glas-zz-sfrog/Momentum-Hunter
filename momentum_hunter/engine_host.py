@@ -30,6 +30,8 @@ COMMAND_RESUME = "resume_collection"
 COMMAND_RUN_CYCLE = "run_collection_cycle"
 COMMAND_SHUTDOWN = "shutdown_host"
 COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT = "get_readonly_workspace_snapshot"
+COMMAND_SIMULATION_WORKSPACE_SNAPSHOT = "get_simulation_workspace_snapshot"
+COMMAND_RUN_SIMULATION = "run_simulation"
 SUPPORTED_COMMANDS = frozenset(
     {
         COMMAND_SNAPSHOT,
@@ -38,6 +40,8 @@ SUPPORTED_COMMANDS = frozenset(
         COMMAND_RUN_CYCLE,
         COMMAND_SHUTDOWN,
         COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
+        COMMAND_SIMULATION_WORKSPACE_SNAPSHOT,
+        COMMAND_RUN_SIMULATION,
     }
 )
 
@@ -202,6 +206,8 @@ class EngineHostRuntime:
         cycle_runner: Callable[[], Any] | None = None,
         external_monitor_running: Callable[[], bool] | None = None,
         workspace_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
+        simulation_workspace_loader: Callable[[], dict[str, Any]] | None = None,
+        simulation_runner: Callable[[str], dict[str, Any]] | None = None,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
@@ -209,6 +215,13 @@ class EngineHostRuntime:
         self._cycle_runner = cycle_runner or self._run_canonical_monitor_cycle
         self._external_monitor_running = external_monitor_running or self._is_legacy_monitor_runner_active
         self._workspace_snapshot_loader = workspace_snapshot_loader or self._load_read_only_workspace_snapshot
+        self._simulation_workspace_service = None
+        if simulation_workspace_loader is None or simulation_runner is None:
+            from momentum_hunter.workstation_simulation import SimulationWorkspaceService
+
+            self._simulation_workspace_service = SimulationWorkspaceService()
+        self._simulation_workspace_loader = simulation_workspace_loader or self._simulation_workspace_service.snapshot
+        self._simulation_runner = simulation_runner or self._simulation_workspace_service.run_simulation
         self._state_lock = threading.RLock()
         self._command_condition = threading.Condition(self._state_lock)
         self._cycle_lock = threading.Lock()
@@ -216,6 +229,7 @@ class EngineHostRuntime:
         self._schedule_changed = threading.Event()
         self._collection_thread: threading.Thread | None = None
         self._command_receipts: dict[str, EngineHostCommandResult] = {}
+        self._command_receipt_requests: dict[str, tuple[str, str]] = {}
         self._commands_in_progress: set[str] = set()
         self._paused = False
         self._stopping = False
@@ -282,22 +296,38 @@ class EngineHostRuntime:
                 "capabilities": sorted(SUPPORTED_COMMANDS),
             }
 
-    def execute(self, command: str, command_id: str) -> EngineHostCommandResult:
+    def execute(
+        self,
+        command: str,
+        command_id: str,
+        arguments: dict[str, Any] | None = None,
+    ) -> EngineHostCommandResult:
         if not command_id.strip():
             return EngineHostCommandResult(False, "COMMAND_ID_REQUIRED", "A stable command ID is required.", self.snapshot())
         if command not in SUPPORTED_COMMANDS:
             return EngineHostCommandResult(False, "UNSUPPORTED_COMMAND", "The requested host command is unavailable.", self.snapshot())
+        if arguments is not None and not isinstance(arguments, dict):
+            return EngineHostCommandResult(False, "INVALID_COMMAND_ARGUMENTS", "Host command arguments must be an object.", self.snapshot())
+        normalized_arguments = dict(arguments or {})
+        request_key = (command, json.dumps(normalized_arguments, sort_keys=True, separators=(",", ":")))
 
         with self._command_condition:
             while command_id in self._commands_in_progress:
                 self._command_condition.wait()
             cached = self._command_receipts.get(command_id)
             if cached is not None:
+                if self._command_receipt_requests.get(command_id) != request_key:
+                    return EngineHostCommandResult(
+                        False,
+                        "COMMAND_ID_REUSED",
+                        "A command ID cannot be reused with a different command or argument set.",
+                        self.snapshot(),
+                    )
                 return cached
             self._commands_in_progress.add(command_id)
 
         try:
-            result = self._execute_once(command)
+            result = self._execute_once(command, normalized_arguments)
         except Exception:
             result = EngineHostCommandResult(
                 False,
@@ -309,11 +339,12 @@ class EngineHostRuntime:
             with self._command_condition:
                 if "result" in locals():
                     self._command_receipts[command_id] = result
+                    self._command_receipt_requests[command_id] = request_key
                 self._commands_in_progress.discard(command_id)
                 self._command_condition.notify_all()
         return result
 
-    def _execute_once(self, command: str) -> EngineHostCommandResult:
+    def _execute_once(self, command: str, arguments: dict[str, Any]) -> EngineHostCommandResult:
         if command == COMMAND_SNAPSHOT:
             return EngineHostCommandResult(True, "SNAPSHOT", "Host snapshot returned.", self.snapshot())
         if command == COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT:
@@ -322,6 +353,32 @@ class EngineHostRuntime:
                 True,
                 "READ_ONLY_WORKSPACE_SNAPSHOT",
                 "Read-only workstation snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_SIMULATION_WORKSPACE_SNAPSHOT:
+            payload = self._simulation_workspace_loader()
+            return EngineHostCommandResult(
+                True,
+                "SIMULATION_WORKSPACE_SNAPSHOT",
+                "Simulation workspace snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_RUN_SIMULATION:
+            symbol = arguments.get("symbol")
+            if not isinstance(symbol, str) or not symbol.strip():
+                return EngineHostCommandResult(
+                    False,
+                    "SIMULATION_SYMBOL_REQUIRED",
+                    "A non-empty symbol is required for FakeBroker simulation.",
+                    self.snapshot(),
+                )
+            payload = self._simulation_runner(symbol.strip().upper())
+            return EngineHostCommandResult(
+                True,
+                "SIMULATION_COMPLETED",
+                "Simulation command completed through the FakeBroker-only boundary.",
                 self.snapshot(),
                 payload=payload,
             )
@@ -485,7 +542,22 @@ class EngineHostRequestHandler(socketserver.StreamRequestHandler):
                 failure_response(request_id, "UNAUTHENTICATED", "The local host token was not accepted.", self.server.runtime.snapshot()),
                 False,
             )
-        result = self.server.runtime.execute(str(payload.get("command", "")), str(payload.get("commandId", "")))
+        arguments = payload.get("arguments", {})
+        if not isinstance(arguments, dict):
+            return (
+                failure_response(
+                    request_id,
+                    "INVALID_COMMAND_ARGUMENTS",
+                    "Host command arguments must be an object.",
+                    self.server.runtime.snapshot(),
+                ),
+                False,
+            )
+        result = self.server.runtime.execute(
+            str(payload.get("command", "")),
+            str(payload.get("commandId", "")),
+            arguments,
+        )
         return result.to_wire(request_id), result.shutdown_requested
 
 

@@ -12,16 +12,16 @@ Supporting records have narrower roles:
 
 ## Now
 
-Last reconciled: 2026-07-17 after Steven-approved local fast-forward of the Phase 8 + Phase 9 stack; `master` is ahead of `origin/master` and has not been pushed.
+Last reconciled: 2026-07-17 after Phase 10 implementation verification on `codex/ARGUS-R010-tradeplan-risk-simulation-integration`; local `master` remains ahead of `origin/master` and has not been pushed.
 
 | Item | Current truth |
 | --- | --- |
-| Canonical product baseline | Local `master` contains `a886c90 Add read-only workstation integration` and is ahead of `origin/master` at `30c0e0b`. The local merge is approved; no `master` push has occurred. |
+| Canonical product baseline | Local `master` contains `802dea7 Record Phase 8 and 9 integration` and is ahead of `origin/master` at `30c0e0b`. The local merge is approved; no `master` push has occurred. |
 | Active product decision | The Windows-first WPF workstation is the accepted operator-surface direction, while Python remains the canonical trading and evidence engine. |
-| Integrated implementation | Phase 8 and Phase 9 are `COMPLETE` on local `master` through `a886c90`. The independent Python host now supplies persisted evidence snapshots to WPF; planning, risk, charts, and simulation remain deferred. |
+| Integrated implementation | Phase 8 and Phase 9 are `COMPLETE` on local `master` through `802dea7`. Phase 10 is `IMPLEMENTED_PENDING_MERGE` on its task branch: the Python host now supplies persisted TradePlan, Risk Governor, FakeBroker-only simulation, ledger, and audit evidence to WPF; chart data remains deferred. |
 | R004 status | `COMPLETE`: workstation-shell feasibility is integrated into `origin/master`. |
 | R005 status | `COMPLETE`: close-to-tray, lifecycle controls, single-instance activation, and physical Windows tray QA are integrated into `origin/master`. |
-| Immediate next action | Create the Phase 10 Goal Charter and a fresh branch from local `master` to attach the existing TradePlan, Risk Governor, FakeBroker-only simulation, Execution Ledger, and Execution Auditor through the proven host boundary. |
+| Immediate next action | Steven reviews Phase 10 on `codex/ARGUS-R010-tradeplan-risk-simulation-integration`; after explicit approval, Git Steward may fast-forward it into local `master`. |
 | Remote backup action | Do not push local `master` without Steven's separate explicit approval. The merged feature branches remain backed up on `origin`. |
 | Broker and execution state | No paper or live broker path, credentials, API keys, or real order path exists. Paper and live remain locked. |
 
@@ -131,11 +131,12 @@ Status: `COMPLETE` on local `master` through `a886c90`; not pushed to `origin/ma
 
 ### Phase 10 - Trade Planning, Risk, And Simulation Integration
 
-Status: `NOT_STARTED`
+Status: `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R010-tradeplan-risk-simulation-integration`
 
-- Connect TradePlan, Risk Governor, Simulation, Execution Ledger, and Execution Auditor through the versioned Python boundary.
-- Preserve FakeBroker-only simulation and require risk evidence before any simulated lifecycle action.
-- Use the same independent engine lifecycle and preserve the simulation-only execution boundary.
+- The versioned Python host exposes a persisted-plan simulation workspace snapshot and a symbol-scoped FakeBroker-only simulation command.
+- WPF consumes the canonical persisted TradePlan, Risk Governor, Execution Ledger, and Execution Auditor evidence rather than a mock fallback; charts intentionally remain deferred with no synthetic candles.
+- A Risk Governor block prevents the simulation call and states that no evidence changed. A permitted simulation records risk, preview, FakeBroker outcome, and audit evidence in the in-memory host ledger.
+- Focused Python simulation/host/autonomy tests, the full .NET workstation solution, and release compilation passed. Full Python discovery was bounded at 120 seconds and did not complete; retain that test-harness timeout as a follow-up risk.
 
 ### Phase 11 - Broker Research And Hardening Before Paper Execution
 

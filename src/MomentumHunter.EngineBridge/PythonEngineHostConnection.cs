@@ -158,7 +158,12 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
     {
         var endpoint = await LoadEndpointAsync(cancellationToken)
             ?? throw new InvalidOperationException("No Python Engine Host endpoint is currently available.");
-        var result = await SendRequestAsync(endpoint, PythonEngineHostProtocol.GetHostSnapshot, Guid.NewGuid().ToString("N"), cancellationToken);
+        var result = await SendRequestAsync(
+            endpoint,
+            PythonEngineHostProtocol.GetHostSnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(),
+            cancellationToken);
         if (!result.Accepted)
         {
             throw new InvalidOperationException($"Python Engine Host rejected its snapshot request: {result.Code}.");
@@ -179,7 +184,7 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
 
         var endpoint = await LoadEndpointAsync(cancellationToken)
             ?? throw new InvalidOperationException("No Python Engine Host endpoint is currently available.");
-        return await SendRequestAsync(endpoint, command, commandId, cancellationToken);
+        return await SendRequestAsync(endpoint, command, commandId, new Dictionary<string, string>(), cancellationToken);
     }
 
     public async Task<JsonElement> GetReadOnlyWorkspaceSnapshotAsync(CancellationToken cancellationToken = default)
@@ -195,6 +200,54 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         }
 
         return result.Payload.Value.Clone();
+    }
+
+    public async Task<JsonElement> GetSimulationWorkspaceSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetSimulationWorkspaceSnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(),
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException($"The Python Engine Host did not provide a simulation workspace snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
+    public async Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            throw new ArgumentException("A symbol is required for FakeBroker simulation.", nameof(symbol));
+        }
+
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.RunSimulation,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["symbol"] = symbol.Trim().ToUpperInvariant() },
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException($"The Python Engine Host did not complete the FakeBroker simulation: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
+    private async Task<PythonEngineHostCommandResult> SendCommandWithArgumentsAsync(
+        string command,
+        string commandId,
+        IReadOnlyDictionary<string, string> arguments,
+        CancellationToken cancellationToken)
+    {
+        var endpoint = await LoadEndpointAsync(cancellationToken)
+            ?? throw new InvalidOperationException("No Python Engine Host endpoint is currently available.");
+        return await SendRequestAsync(endpoint, command, commandId, arguments, cancellationToken);
     }
 
     private async Task<PythonEngineHostSnapshot?> TryGetSnapshotAsync(CancellationToken cancellationToken)
@@ -251,6 +304,7 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         PythonEngineHostEndpoint endpoint,
         string command,
         string commandId,
+        IReadOnlyDictionary<string, string> arguments,
         CancellationToken cancellationToken)
     {
         var requestId = Guid.NewGuid().ToString("N");
@@ -259,7 +313,8 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
             requestId,
             endpoint.AccessToken,
             command,
-            commandId);
+            commandId,
+            arguments);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_options.RequestTimeout);
         using var client = new TcpClient();
@@ -305,7 +360,8 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         string RequestId,
         string AccessToken,
         string Command,
-        string CommandId);
+        string CommandId,
+        IReadOnlyDictionary<string, string> Arguments);
 
     private sealed record PythonEngineHostResponse(
         string ProtocolVersion,

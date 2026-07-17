@@ -50,6 +50,8 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Equal(first.Identity.HostInstanceId, reconnected.Identity.HostInstanceId);
             Assert.Contains(PythonEngineHostProtocol.PauseCollection, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetReadOnlyWorkspaceSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetSimulationWorkspaceSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.RunSimulation, first.Capabilities);
             Assert.DoesNotContain("submit_order", first.Capabilities);
 
             var readOnlyWorkspacePayload = await firstConnection.GetReadOnlyWorkspaceSnapshotAsync();
@@ -58,6 +60,13 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.True(readOnlyWorkspacePayload.TryGetProperty("candidates", out _));
             Assert.True(readOnlyWorkspacePayload.TryGetProperty("health", out _));
             Assert.True(readOnlyWorkspacePayload.TryGetProperty("replay", out _));
+
+            var simulationWorkspacePayload = await firstConnection.GetSimulationWorkspaceSnapshotAsync();
+            Assert.Equal("SIMULATION_ONLY_FAKE_BROKER", simulationWorkspacePayload.GetProperty("mode").GetString());
+            Assert.True(simulationWorkspacePayload.TryGetProperty("plans", out _));
+            var unavailableSimulationPayload = await firstConnection.RunSimulationAsync("ZZZNOTAREALPERSISTEDPLAN");
+            Assert.Equal("Unavailable", unavailableSimulationPayload.GetProperty("state").GetString());
+            Assert.Equal([], unavailableSimulationPayload.GetProperty("ledgerEvents").EnumerateArray().ToArray());
 
             var paused = await firstConnection.SendCommandAsync(PythonEngineHostProtocol.PauseCollection, "pause-once");
             var repeatedPause = await firstConnection.SendCommandAsync(PythonEngineHostProtocol.PauseCollection, "pause-once");

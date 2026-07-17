@@ -16,4 +16,10 @@ public interface IPythonEngineHostConnection
 
     Task<JsonElement> GetReadOnlyWorkspaceSnapshotAsync(CancellationToken cancellationToken = default) =>
         Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose read-only workspace snapshots."));
+
+    Task<JsonElement> GetSimulationWorkspaceSnapshotAsync(CancellationToken cancellationToken = default) =>
+        Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose simulation workspace snapshots."));
+
+    Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default) =>
+        Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose FakeBroker simulation commands."));
 }
