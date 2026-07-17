@@ -35,12 +35,14 @@ public partial class App : System.Windows.Application
         var settingsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MomentumHunter");
         var services = new ServiceCollection();
         services.AddSingleton<IEngineClient, MockEngineClient>();
+        services.AddSingleton<IPythonEngineHostConnection>(_ =>
+            new PythonEngineHostConnection(PythonEngineHostOptions.CreateDefault()));
         services.AddSingleton<IWorkspaceLayoutStore>(_ =>
             new SqliteWorkspaceLayoutStore(Path.Combine(settingsDirectory, "workstation-layouts.db")));
         services.AddSingleton<ITraySettingsStore>(_ =>
             new JsonTraySettingsStore(Path.Combine(settingsDirectory, "background-collection-settings.json")));
-        services.AddSingleton<IBackgroundCollectionService>(_ =>
-            new DeterministicBackgroundCollectionService(monitoredSymbolCount: 5));
+        services.AddSingleton<IBackgroundCollectionService>(serviceProvider =>
+            new RemoteBackgroundCollectionService(serviceProvider.GetRequiredService<IPythonEngineHostConnection>()));
         services.AddSingleton<ITrayService, NotifyIconTrayService>();
         services.AddSingleton<INotificationService, WpfNotificationService>();
         services.AddSingleton<IApplicationLifetimeCoordinator, ApplicationLifetimeCoordinator>();
