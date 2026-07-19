@@ -38,6 +38,19 @@ class SimulationWorkspaceServiceTests(unittest.TestCase):
             self.assertEqual(97, assert_single(snapshot["workspace"]["candidates"])["score"])
             self.assertEqual(before, sha256(report_path))
 
+    def test_snapshot_rehydrates_each_persisted_candidate_plan_not_only_top_five(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths, report_path = setup_workspace(Path(directory), additional_candidates=[candidate_row(symbol="AMD")])
+            before = sha256(report_path)
+
+            snapshot = SimulationWorkspaceService(paths=paths).snapshot()
+
+            plans_by_symbol = {plan["symbol"]: plan for plan in snapshot["plans"]}
+            self.assertEqual({"NVDA", "AMD"}, set(plans_by_symbol))
+            self.assertEqual(176.42, plans_by_symbol["NVDA"]["entry"])
+            self.assertEqual(176.42, plans_by_symbol["AMD"]["entry"])
+            self.assertEqual(before, sha256(report_path))
+
     def test_completed_simulation_records_risk_preview_submit_and_passing_audit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             paths, _ = setup_workspace(Path(directory))
@@ -100,7 +113,12 @@ class SimulationHostCommandTests(unittest.TestCase):
         self.assertEqual("COMMAND_ID_REUSED", reused.code)
 
 
-def setup_workspace(root: Path, *, stop: float | None = 171.42) -> tuple[WorkstationReadModelPaths, Path]:
+def setup_workspace(
+    root: Path,
+    *,
+    stop: float | None = 171.42,
+    additional_candidates: list[dict] | None = None,
+) -> tuple[WorkstationReadModelPaths, Path]:
     data_dir = root / "data"
     reports_dir = data_dir / "reports"
     reports_dir.mkdir(parents=True)
@@ -111,11 +129,12 @@ def setup_workspace(root: Path, *, stop: float | None = 171.42) -> tuple[Worksta
         alerts_path=data_dir / "opportunity-alerts.json",
     )
     report_path = reports_dir / "trade-plan-briefing-2026-07-17-morning.json"
-    report_path.write_text(json.dumps(report_payload(stop=stop)), encoding="utf-8")
+    report_path.write_text(json.dumps(report_payload(stop=stop, additional_candidates=additional_candidates)), encoding="utf-8")
     return paths, report_path
 
 
-def report_payload(*, stop: float | None) -> dict:
+def report_payload(*, stop: float | None, additional_candidates: list[dict] | None = None) -> dict:
+    primary_candidate = candidate_row(stop=stop)
     return {
         "schema_version": 1,
         "metadata": {
@@ -123,14 +142,14 @@ def report_payload(*, stop: float | None) -> dict:
             "source_capture_path": "MomentumHunterData/data/captures/2026-07-17/morning.json",
             "source_capture_time": "2026-07-17T09:25:00-05:00",
         },
-        "top_5_for_capital": [candidate_row(stop=stop)],
-        "candidates": [candidate_row(stop=stop)],
+        "top_5_for_capital": [primary_candidate],
+        "candidates": [primary_candidate, *(additional_candidates or [])],
     }
 
 
-def candidate_row(*, stop: float | None) -> dict:
+def candidate_row(*, stop: float | None = 171.42, symbol: str = "NVDA") -> dict:
     return {
-        "symbol": "NVDA",
+        "symbol": symbol,
         "company": "NVIDIA Corporation",
         "market_data": {
             "last_price": 176.42,

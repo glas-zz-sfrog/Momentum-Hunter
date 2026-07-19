@@ -67,15 +67,25 @@ def build_top5_candidate_plans(
     return build_candidate_plans_from_candidates(list(candidates or []), limit=limit)
 
 
-def build_candidate_plans_from_report(path: Path, *, limit: int = 5) -> list[Top5CandidatePlan]:
+def build_candidate_plans_from_report(
+    path: Path,
+    *,
+    limit: int | None = 5,
+    include_all_candidates: bool = False,
+) -> list[Top5CandidatePlan]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return []
-    rows = payload.get("top_5_for_capital") or payload.get("candidates") or []
+    rows = (
+        payload.get("candidates") or []
+        if include_all_candidates
+        else payload.get("top_5_for_capital") or payload.get("candidates") or []
+    )
     metadata = payload.get("metadata", {}) if isinstance(payload.get("metadata"), dict) else {}
     plans: list[Top5CandidatePlan] = []
-    for index, raw in enumerate(rows[:limit], 1):
+    selected_rows = rows if limit is None else rows[:limit]
+    for index, raw in enumerate(selected_rows, 1):
         if not isinstance(raw, dict):
             continue
         plan = candidate_plan_from_report_row(

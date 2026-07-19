@@ -15,7 +15,7 @@ from momentum_hunter.autonomy.auditor import AuditReport, audit_simulation_chain
 from momentum_hunter.autonomy.ledger import ExecutionLedgerEvent
 from momentum_hunter.autonomy.risk_governor import RiskGovernorResult
 from momentum_hunter.autonomy.simulation import SimulationLabEngine, SimulationResult
-from momentum_hunter.autonomy.view_models import Top5CandidatePlan, build_top5_candidate_plans
+from momentum_hunter.autonomy.view_models import Top5CandidatePlan, build_candidate_plans_from_report
 from momentum_hunter.monitor_targets import latest_trade_report_path
 from momentum_hunter.workstation_read_models import WorkstationReadModelPaths, build_read_only_workspace_snapshot
 
@@ -96,7 +96,11 @@ class SimulationWorkspaceService:
 
     def _candidate_plans(self) -> list[Top5CandidatePlan]:
         report_path = latest_trade_report_path(self._paths.reports_dir)
-        return build_top5_candidate_plans(report_path=report_path) if report_path else []
+        return (
+            build_candidate_plans_from_report(report_path, limit=None, include_all_candidates=True)
+            if report_path
+            else []
+        )
 
 
 def candidate_plan_payload(candidate: Top5CandidatePlan) -> dict[str, Any]:
