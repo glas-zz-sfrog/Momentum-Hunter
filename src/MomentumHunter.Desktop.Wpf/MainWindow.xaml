@@ -186,14 +186,14 @@
                                         <DockPanel>
                                             <StackPanel DockPanel.Dock="Left">
                                                 <TextBlock Text="Trade Plan" FontSize="16" FontWeight="SemiBold" />
-                                                <TextBlock Text="{Binding TradePlan.Symbol}" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                <TextBlock Text="{Binding TradePlanSymbolLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" />
                                             </StackPanel>
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                                 <Border Padding="7,3" Margin="0,0,4,0" Background="#263846" CornerRadius="3">
                                                     <TextBlock Text="{Binding PrimaryTradePlanLinkLabel}" Foreground="{StaticResource Teal}" FontSize="10" />
                                                 </Border>
                                                 <Border Padding="7,3" Margin="0,0,4,0" Background="#3A3524" CornerRadius="3">
-                                                    <TextBlock Text="{Binding TradePlan.RiskDecision.State}" Foreground="{StaticResource Amber}" FontSize="10" />
+                                                    <TextBlock Text="{Binding TradePlanRiskStatusLabel}" Foreground="{StaticResource Amber}" FontSize="10" />
                                                 </Border>
                                                 <Button Content="Pin" Command="{Binding TogglePrimaryTradePlanPinCommand}" />
                                             </StackPanel>

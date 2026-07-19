@@ -219,8 +219,14 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public bool CanRunPrimaryAction => !IsReadOnlySnapshotMode && TradePlan is not null;
 
+    public string TradePlanSymbolLabel => TradePlan?.Symbol ?? SelectedSymbol;
+
+    public string TradePlanRiskStatusLabel => TradePlan?.RiskDecision?.State ?? "Plan unavailable";
+
     public string PlanningStatus => IsReadOnlySnapshotMode
         ? "Trade planning, Risk Governor, charts, and simulation are deferred to Phase 10. This pane will not create a substitute plan."
+        : IsPythonSimulationWorkspaceMode && TradePlan is null
+            ? $"No persisted TradePlan is available for {SelectedSymbol}. Simulation is unavailable; no substitute plan was created."
         : IsPythonSimulationWorkspaceMode
             ? "TradePlan and Risk Governor evidence are supplied by the Python FakeBroker-only simulation boundary. Chart integration remains deferred."
         : TradePlan is null
@@ -823,6 +829,8 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(PrimaryTradePlanLinkLabel));
         OnPropertyChanged(nameof(CanRunSimulation));
         OnPropertyChanged(nameof(CanRunPrimaryAction));
+        OnPropertyChanged(nameof(TradePlanSymbolLabel));
+        OnPropertyChanged(nameof(TradePlanRiskStatusLabel));
         OnPropertyChanged(nameof(PlanningStatus));
         OnPropertyChanged(nameof(PrimaryActionLabel));
         OnPropertyChanged(nameof(ChartSourceLabel));

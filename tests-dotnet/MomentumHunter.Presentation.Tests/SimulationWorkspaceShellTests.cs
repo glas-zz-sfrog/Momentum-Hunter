@@ -20,6 +20,8 @@ public sealed class SimulationWorkspaceShellTests
         Assert.Empty(viewModel.Candles);
         Assert.True(viewModel.CanRunSimulation);
         Assert.Contains("Python FakeBroker Only", viewModel.EnvironmentLabel, StringComparison.Ordinal);
+        Assert.Equal("NVDA", viewModel.TradePlanSymbolLabel);
+        Assert.Equal("Simulation-only", viewModel.TradePlanRiskStatusLabel);
         Assert.Contains("chart integration remains deferred", viewModel.PlanningStatus, StringComparison.OrdinalIgnoreCase);
 
         await viewModel.RunPrimaryActionAsync();
@@ -46,7 +48,26 @@ public sealed class SimulationWorkspaceShellTests
         Assert.Contains("no evidence was changed", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static SimulationWorkspaceSnapshot Snapshot(bool allowed)
+    [Fact]
+    public async Task MissingPersistedPlanUsesExplicitUnavailableLabelsAndCannotRunSimulation()
+    {
+        var client = new StaticSimulationWorkspaceClient(Snapshot(allowed: false, includePlan: false));
+        var viewModel = new ShellViewModel(new ThrowingEngineClient(), client);
+
+        await viewModel.InitializeAsync();
+        await viewModel.RunPrimaryActionAsync();
+
+        Assert.Null(viewModel.TradePlan);
+        Assert.False(viewModel.CanRunSimulation);
+        Assert.False(viewModel.CanRunPrimaryAction);
+        Assert.Equal("NVDA", viewModel.TradePlanSymbolLabel);
+        Assert.Equal("Plan unavailable", viewModel.TradePlanRiskStatusLabel);
+        Assert.Contains("No persisted TradePlan is available for NVDA", viewModel.PlanningStatus, StringComparison.Ordinal);
+        Assert.Contains("Simulation is unavailable", viewModel.PlanningStatus, StringComparison.Ordinal);
+        Assert.Empty(client.RunSymbols);
+    }
+
+    private static SimulationWorkspaceSnapshot Snapshot(bool allowed, bool includePlan = true)
     {
         var observedAt = DateTimeOffset.Parse("2026-07-17T15:00:00Z");
         var lineage = new DataLineage("Persisted trade-planning report", observedAt, "No score or readiness recalculation occurred.");
@@ -94,7 +115,13 @@ public sealed class SimulationWorkspaceShellTests
             new SystemHealthSnapshot([new HealthComponentSnapshot("Trade planning report", HealthState.Healthy, "Loaded", observedAt)], observedAt),
             new ReplaySnapshot("NOT_SELECTED", observedAt, string.Empty, "source capture", "No replay identity was synthesized."),
             true);
-        return new SimulationWorkspaceSnapshot(1, observedAt, "Python simulation workspace uses FakeBroker only.", workspace, [plan], true);
+        return new SimulationWorkspaceSnapshot(
+            1,
+            observedAt,
+            "Python simulation workspace uses FakeBroker only.",
+            workspace,
+            includePlan ? [plan] : [],
+            includePlan);
     }
 
     private sealed class StaticSimulationWorkspaceClient : ISimulationWorkspaceClient
