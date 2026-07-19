@@ -12,16 +12,16 @@ Supporting records have narrower roles:
 
 ## Now
 
-Last reconciled: 2026-07-17 after Phase 10 implementation verification on `codex/ARGUS-R010-tradeplan-risk-simulation-integration`; local `master` remains ahead of `origin/master` and has not been pushed.
+Last reconciled: 2026-07-19 after Phase 10 follow-up verification on `codex/ARGUS-R010-tradeplan-risk-simulation-integration` at `893a6da`; local `master` remains ahead of `origin/master` and has not been pushed.
 
 | Item | Current truth |
 | --- | --- |
-| Canonical product baseline | Local `master` contains `802dea7 Record Phase 8 and 9 integration` and is ahead of `origin/master` at `30c0e0b`. The local merge is approved; no `master` push has occurred. |
+| Canonical product baseline | Local `master` contains `802dea7 Record Phase 8 and 9 integration` and is seven commits ahead of `origin/master` at `30c0e0b`. The local merge is approved; no `master` push has occurred. |
 | Active product decision | The Windows-first WPF workstation is the accepted operator-surface direction, while Python remains the canonical trading and evidence engine. |
-| Integrated implementation | Phase 8 and Phase 9 are `COMPLETE` on local `master` through `802dea7`. Phase 10 is `IMPLEMENTED_PENDING_MERGE` on its task branch: the Python host now supplies persisted TradePlan, Risk Governor, FakeBroker-only simulation, ledger, and audit evidence to WPF; chart data remains deferred. |
+| Integrated implementation | Phase 8 and Phase 9 are `COMPLETE` on local `master` through `802dea7`. Phase 10 is `IMPLEMENTED_PENDING_MERGE` on its task branch through `893a6da`: the Python host supplies every valid persisted TradePlan, Risk Governor, FakeBroker-only simulation, ledger, and audit evidence to WPF; charts remain deferred. |
 | R004 status | `COMPLETE`: workstation-shell feasibility is integrated into `origin/master`. |
 | R005 status | `COMPLETE`: close-to-tray, lifecycle controls, single-instance activation, and physical Windows tray QA are integrated into `origin/master`. |
-| Immediate next action | Steven reviews Phase 10 on `codex/ARGUS-R010-tradeplan-risk-simulation-integration`; after explicit approval, Git Steward may fast-forward it into local `master`. |
+| Immediate next action | Steven restarts Momentum Hunter after gaming and manually reviews Phase 10 on `codex/ARGUS-R010-tradeplan-risk-simulation-integration`: a selected persisted candidate must show its TradePlan and Risk Governor state; a missing plan must state `Plan unavailable` and keep simulation disabled. After explicit approval, Git Steward may fast-forward the branch into local `master`. |
 | Remote backup action | Do not push local `master` without Steven's separate explicit approval. The merged feature branches remain backed up on `origin`. |
 | Broker and execution state | No paper or live broker path, credentials, API keys, or real order path exists. Paper and live remain locked. |
 
@@ -136,7 +136,8 @@ Status: `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R010-tradeplan-risk-simulati
 - The versioned Python host exposes a persisted-plan simulation workspace snapshot and a symbol-scoped FakeBroker-only simulation command.
 - WPF consumes the canonical persisted TradePlan, Risk Governor, Execution Ledger, and Execution Auditor evidence rather than a mock fallback; charts intentionally remain deferred with no synthetic candles.
 - A Risk Governor block prevents the simulation call and states that no evidence changed. A permitted simulation records risk, preview, FakeBroker outcome, and audit evidence in the in-memory host ledger.
-- Focused Python simulation/host/autonomy tests, the full .NET workstation solution, and release compilation passed. Full Python discovery was bounded at 120 seconds and did not complete; retain that test-harness timeout as a follow-up risk.
+- Follow-up commits `14fe317` and `893a6da` remove the Top-5-only plan mapping mismatch and the empty Risk Governor badge: all valid persisted candidate plans are exposed, and a missing plan explicitly shows `Plan unavailable` with simulation unavailable rather than a blank colored state.
+- Focused Python simulation/host/autonomy tests, focused WPF presentation tests, the full .NET workstation solution, and release compilation passed. Manual visual proof of the follow-up build remains pending a clean workstation restart. Full Python discovery was bounded at 120 seconds and did not complete; retain that test-harness timeout as a follow-up risk.
 
 ### Phase 11 - Broker Research And Hardening Before Paper Execution
 
