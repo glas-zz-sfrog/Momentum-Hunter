@@ -1,16 +1,16 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-17
+Date reconciled: 2026-07-22
 
 ## Current Truth
 
-Local `master` is the canonical merged product baseline for Momentum Hunter. It contains the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, R005 tray/lifecycle work, the independent Python Engine Host, and Phase 9 read-only workstation integration through `a886c90 Add read-only workstation integration`. `origin/master` remains at the prior `30c0e0b` baseline because no master push was authorized.
+Local `master` is the canonical merged product baseline for Momentum Hunter. It contains the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, R005 tray/lifecycle work, the independent Python Engine Host, Phase 9 read-only workstation integration, and Phase 10 persisted TradePlan/Risk Governor/FakeBroker simulation integration through `7efd48d Reconcile Phase 10 follow-up state`. `origin/master` remains at `30c0e0b` because no master push was authorized.
 
 Git evidence at reconciliation time:
 
 - `git status --short --branch` on `master`: clean after the fast-forward.
-- Local `master` is ahead of `origin/master` and contains `a886c900dea34e7cbd221b92075d37cabebc119f`; `origin/master` resolves to `30c0e0b4e3c3b80ec946681015f3b6f0a7dd729b`.
-- The Phase 8 + Phase 9 stack fast-forwarded locally with no merge commit and no master push.
+- Local `master` is ahead of `origin/master` and contains `7efd48dcf4863ccb0680624e30cee71dad8c2d19`; `origin/master` resolves to `30c0e0b4e3c3b80ec946681015f3b6f0a7dd729b`.
+- Steven approved Phase 10, and the task branch fast-forwarded locally with no merge commit and no master push.
 - R004 and R005 are integrated through the `d3a98d9` and `e141054` history; their historical feature branches remain preserved but are not active work bases.
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
@@ -37,12 +37,17 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `30c0e0b` | Reconcile roadmap after R004 and R005 integration | Yes |
 | `6f853ba` | Harden Python host unavailable state | Yes |
 | `a886c90` | Add read-only workstation integration | Yes |
+| `180d69f` | Integrate WPF simulation workspace | Yes |
+| `14fe317` | Fix simulation workspace plan mapping | Yes |
+| `893a6da` | Clarify unavailable TradePlan state | Yes |
+| `7efd48d` | Reconcile Phase 10 follow-up state | Yes |
 
 ## Branch Classifications
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | Contains `a886c90` | No; local master is ahead of `origin/master` | Yes | `ACTIVE` | Canonical merged Python engine, WPF operator surface, independent host, and read-only workstation integration baseline. | Start Phase 10 on a fresh task branch; do not push master without explicit approval. |
+| `master` | Contains `7efd48d` | No; local master is ahead of `origin/master` | Yes | `ACTIVE` | Canonical merged Python engine, WPF operator surface, independent host, read-only evidence, and FakeBroker-only Phase 10 simulation baseline. | Charter Phase 11/A016 broker research; do not push master without explicit approval. |
+| `codex/ARGUS-R010-tradeplan-risk-simulation-integration` | `7efd48d` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Persisted TradePlan and Risk Governor evidence, FakeBroker-only simulation, ledger/auditor results, and explicit unavailable-plan handling in WPF. | Historical integration branch; start Phase 11 from local `master`. |
 | `codex/ARGUS-R009-readonly-workstation-integration` | `a886c90` (stacked from `6f853ba`) | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Read-only persisted Python candidates, evidence, health, source lineage, and Replay context in WPF; mock planning/chart/simulation fallback disabled. | Historical integration branch; Phase 10 must branch from local master. |
 | `codex/ARGUS-R008-python-engine-contract-host` | `6f853ba` | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Independent local Python Engine Host, versioned WPF lifecycle bridge, duplicate guards, and process-level proof. | Historical integration branch; Phase 10 must branch from local master. |
 | `codex/ARGUS-R004-momentum-hunter-wpf-shell-spike` | `5bbd0c7` | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Windows-first WPF workstation-shell feasibility spike. | Historical branch; do not continue feature work here. |
