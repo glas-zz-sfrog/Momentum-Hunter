@@ -250,6 +250,32 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         return result.Payload.Value.Clone();
     }
 
+    public async Task<JsonElement> GetTechnicalResearchSnapshotAsync(
+        string symbol,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            throw new ArgumentException("A symbol is required for technical research evidence.", nameof(symbol));
+        }
+
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetTechnicalResearchSnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["symbol"] = symbol.Trim().ToUpperInvariant(),
+            },
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException($"The Python Engine Host did not provide technical research evidence: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
     public async Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(symbol))

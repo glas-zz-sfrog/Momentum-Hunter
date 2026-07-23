@@ -26,6 +26,11 @@ public interface IPythonEngineHostConnection
         CancellationToken cancellationToken = default) =>
         Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose read-only chart snapshots."));
 
+    Task<JsonElement> GetTechnicalResearchSnapshotAsync(
+        string symbol,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose read-only technical research snapshots."));
+
     Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default) =>
         Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose FakeBroker simulation commands."));
 }

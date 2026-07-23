@@ -18,6 +18,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IReadOnlyWorkspaceClient? _readOnlyWorkspaceClient;
     private readonly ISimulationWorkspaceClient? _simulationWorkspaceClient;
     private readonly IChartWorkspaceClient? _chartWorkspaceClient;
+    private readonly ITechnicalResearchWorkspaceClient? _technicalResearchWorkspaceClient;
     private readonly IWorkspaceLayoutStore? _layoutStore;
     private readonly LayoutAutosaveCoordinator? _layoutAutosave;
     private LinkGroupCoordinator _linkGroups = null!;
@@ -103,19 +104,68 @@ public sealed partial class ShellViewModel : ObservableObject
     {
     }
 
+    public ShellViewModel(
+        IEngineClient engineClient,
+        ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            isInternalConstruction: true,
+            technicalResearchWorkspaceClient: technicalResearchWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: simulationWorkspaceClient,
+            chartWorkspaceClient: chartWorkspaceClient,
+            isInternalConstruction: true,
+            technicalResearchWorkspaceClient: technicalResearchWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: simulationWorkspaceClient,
+            chartWorkspaceClient: chartWorkspaceClient,
+            isInternalConstruction: true,
+            technicalResearchWorkspaceClient: technicalResearchWorkspaceClient)
+    {
+    }
+
     private ShellViewModel(
         IEngineClient engineClient,
         IWorkspaceLayoutStore? layoutStore,
         IReadOnlyWorkspaceClient? readOnlyWorkspaceClient,
         ISimulationWorkspaceClient? simulationWorkspaceClient,
         IChartWorkspaceClient? chartWorkspaceClient,
-        bool isInternalConstruction)
+        bool isInternalConstruction,
+        ITechnicalResearchWorkspaceClient? technicalResearchWorkspaceClient = null)
     {
         _engineClient = engineClient;
         _layoutStore = layoutStore;
         _readOnlyWorkspaceClient = readOnlyWorkspaceClient;
         _simulationWorkspaceClient = simulationWorkspaceClient;
         _chartWorkspaceClient = chartWorkspaceClient;
+        _technicalResearchWorkspaceClient = technicalResearchWorkspaceClient;
         SetRegistry(WorkspaceFactory.Create(WorkspaceKind.Live));
         if (_layoutStore is not null)
         {
@@ -183,6 +233,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty]
     private AlertEvidenceSnapshot? _alertEvidence;
+
+    [ObservableProperty]
+    private TechnicalResearchSnapshot? _technicalResearch;
 
     [ObservableProperty]
     private SimulationResult? _lastSimulationResult;
@@ -378,6 +431,34 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public HealthDiagnosticsView Diagnostics => HealthDiagnosticsView.From(Health);
 
+    public TechnicalResearchOverviewView TechnicalResearchOverview =>
+        TechnicalResearchOverviewView.From(TechnicalResearch);
+
+    public IReadOnlyList<TechnicalResearchEventRowView> TechnicalResearchEventRows =>
+        TechnicalResearch?.Events.Select(TechnicalResearchEventRowView.From).ToArray() ?? [];
+
+    public IReadOnlyList<TechnicalResearchStudyRowView> TechnicalResearchStudyRows =>
+        TechnicalResearch?.Studies.Select(TechnicalResearchStudyRowView.From).ToArray() ?? [];
+
+    public bool HasTechnicalResearchEvents => TechnicalResearchEventRows.Count > 0;
+
+    public bool HasTechnicalResearchStudies => TechnicalResearchStudyRows.Count > 0;
+
+    public string TechnicalResearchEventsEmptyLabel => TechnicalResearch?.State switch
+    {
+        TechnicalResearchState.Empty => $"No stored technical research events exist for {SelectedSymbol}.",
+        TechnicalResearchState.Unavailable => "Technical research event evidence is unavailable.",
+        _ => "No technical research event rows were supplied for this symbol.",
+    };
+
+    public string TechnicalResearchStudiesEmptyLabel => TechnicalResearch?.State switch
+    {
+        TechnicalResearchState.Empty => $"No stored technical outcome studies exist for {SelectedSymbol}.",
+        TechnicalResearchState.Unavailable => "Technical research outcome evidence is unavailable.",
+        TechnicalResearchState.Partial => "The stored outcome-study report is partial or unavailable.",
+        _ => "No technical outcome-study rows were supplied for this symbol.",
+    };
+
     public string ReplaySummary => ReplaySession?.Summary ?? "Replay context is unavailable.";
 
     public ReplayContextView ReplayContext => ReplayContextView.From(ReplaySession);
@@ -437,6 +518,7 @@ public sealed partial class ShellViewModel : ObservableObject
         SelectedCandidate = candidate;
         SelectedSymbol = candidate.Symbol;
         _linkGroups.PublishSymbol(LinkGroup.A, candidate.Symbol, SelectedInterval);
+        await RefreshTechnicalResearchAsync(candidate.Symbol, cancellationToken);
         if (IsReadOnlySnapshotMode)
         {
             TradePlan = null;
@@ -1159,6 +1241,13 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(CandidateLineageSummary));
         OnPropertyChanged(nameof(CandidateOpportunityNotes));
         OnPropertyChanged(nameof(CandidateOpportunityNotesLabel));
+        OnPropertyChanged(nameof(TechnicalResearchOverview));
+        OnPropertyChanged(nameof(TechnicalResearchEventRows));
+        OnPropertyChanged(nameof(TechnicalResearchStudyRows));
+        OnPropertyChanged(nameof(HasTechnicalResearchEvents));
+        OnPropertyChanged(nameof(HasTechnicalResearchStudies));
+        OnPropertyChanged(nameof(TechnicalResearchEventsEmptyLabel));
+        OnPropertyChanged(nameof(TechnicalResearchStudiesEmptyLabel));
         OnPropertyChanged(nameof(ReplaySummary));
         OnPropertyChanged(nameof(ReplayContext));
         OnPropertyChanged(nameof(AlertEvidenceOverview));
@@ -1211,10 +1300,14 @@ public sealed partial class ShellViewModel : ObservableObject
                 SelectedSymbol = candidateToSelect.Symbol;
                 _linkGroups.PublishSymbol(LinkGroup.A, candidateToSelect.Symbol, SelectedInterval);
                 ApplySimulationTradePlan(candidateToSelect.Symbol);
+                await RefreshTechnicalResearchAsync(candidateToSelect.Symbol, cancellationToken);
             }
             else
             {
                 TradePlan = null;
+                TechnicalResearch = UnavailableTechnicalResearch(
+                    SelectedSymbol,
+                    "No selected candidate is available for technical research evidence.");
             }
 
             StatusMessage = snapshot.Summary;
@@ -1234,6 +1327,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 now);
             AlertEvidence = UnavailableAlertEvidence(now, detail);
             ReplaySession = new ReplaySnapshot("UNAVAILABLE", now, string.Empty, "source capture", "Replay context is unavailable because the Python simulation workspace could not be loaded.");
+            TechnicalResearch = UnavailableTechnicalResearch(SelectedSymbol, detail);
             TradePlan = null;
             Candles.Clear();
             PrimaryChart = null;
@@ -1305,6 +1399,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 now);
             AlertEvidence = UnavailableAlertEvidence(now, detail);
             ReplaySession = new ReplaySnapshot("UNAVAILABLE", now, string.Empty, "source capture", "Replay context is unavailable because the Python snapshot could not be loaded.");
+            TechnicalResearch = UnavailableTechnicalResearch(SelectedSymbol, detail);
             TradePlan = null;
             Candles.Clear();
             PrimaryChart = null;
@@ -1334,6 +1429,71 @@ public sealed partial class ShellViewModel : ObservableObject
         0,
         0,
         0,
+        [],
+        []);
+
+    partial void OnTechnicalResearchChanged(TechnicalResearchSnapshot? value)
+    {
+        OnPropertyChanged(nameof(TechnicalResearchOverview));
+        OnPropertyChanged(nameof(TechnicalResearchEventRows));
+        OnPropertyChanged(nameof(TechnicalResearchStudyRows));
+        OnPropertyChanged(nameof(HasTechnicalResearchEvents));
+        OnPropertyChanged(nameof(HasTechnicalResearchStudies));
+        OnPropertyChanged(nameof(TechnicalResearchEventsEmptyLabel));
+        OnPropertyChanged(nameof(TechnicalResearchStudiesEmptyLabel));
+    }
+
+    private async Task RefreshTechnicalResearchAsync(
+        string symbol,
+        CancellationToken cancellationToken)
+    {
+        var requestedSymbol = symbol.Trim().ToUpperInvariant();
+        if (_technicalResearchWorkspaceClient is null)
+        {
+            TechnicalResearch = UnavailableTechnicalResearch(
+                requestedSymbol,
+                "The technical research boundary is not configured in this workspace.");
+            return;
+        }
+
+        try
+        {
+            var snapshot = await _technicalResearchWorkspaceClient.GetSnapshotAsync(
+                requestedSymbol,
+                cancellationToken);
+            if (string.Equals(SelectedSymbol, requestedSymbol, StringComparison.OrdinalIgnoreCase))
+            {
+                TechnicalResearch = snapshot;
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        {
+            if (string.Equals(SelectedSymbol, requestedSymbol, StringComparison.OrdinalIgnoreCase))
+            {
+                TechnicalResearch = UnavailableTechnicalResearch(
+                    requestedSymbol,
+                    $"Stored technical research evidence could not be loaded: {exception.Message}");
+            }
+        }
+    }
+
+    private static TechnicalResearchSnapshot UnavailableTechnicalResearch(string symbol, string summary) => new(
+        1,
+        string.IsNullOrWhiteSpace(symbol) ? "UNAVAILABLE" : symbol.Trim().ToUpperInvariant(),
+        TechnicalResearchState.Unavailable,
+        DateTimeOffset.UtcNow,
+        null,
+        summary,
+        "Technical research source unavailable",
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        [],
         [],
         []);
 }

@@ -20,6 +20,7 @@ from momentum_hunter.engine_host import (
     COMMAND_RUN_CYCLE,
     COMMAND_SHUTDOWN,
     COMMAND_SNAPSHOT,
+    COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
     ENDPOINT_FILENAME,
     HOST_LOCK_FILENAME,
     PROTOCOL_VERSION,
@@ -196,6 +197,33 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertFalse(invalid.accepted)
         self.assertEqual("INVALID_CHART_REQUEST", invalid.code)
 
+    def test_technical_research_command_is_read_only_idempotent_and_requires_symbol(self) -> None:
+        calls: list[str] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(AssertionError("collection should not run")),
+            technical_research_snapshot_loader=lambda symbol: calls.append(symbol)
+            or {"schemaVersion": 1, "symbol": symbol, "state": "AVAILABLE", "events": [], "studies": []},
+        )
+
+        missing = runtime.execute(COMMAND_TECHNICAL_RESEARCH_SNAPSHOT, "missing", {})
+        result = runtime.execute(
+            COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
+            "research",
+            {"symbol": "nvda"},
+        )
+        repeated = runtime.execute(
+            COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
+            "research",
+            {"symbol": "nvda"},
+        )
+
+        self.assertFalse(missing.accepted)
+        self.assertEqual("TECHNICAL_RESEARCH_SYMBOL_REQUIRED", missing.code)
+        self.assertTrue(result.accepted)
+        self.assertEqual(result, repeated)
+        self.assertEqual(["NVDA"], calls)
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+
 
 class EngineHostProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -228,6 +256,7 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertEqual("loopback-tcp", snapshot["identity"]["transport"])
         self.assertIn(COMMAND_RUN_CYCLE, snapshot["capabilities"])
         self.assertIn(COMMAND_CHART_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(COMMAND_TECHNICAL_RESEARCH_SNAPSHOT, snapshot["capabilities"])
         self.assertNotIn("submit_order", snapshot["capabilities"])
         self.assertNotIn("paper_order", snapshot["capabilities"])
         self.assertNotIn("live_order", snapshot["capabilities"])
@@ -261,6 +290,25 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertEqual("CHART_SNAPSHOT", response["result"]["code"])
         self.assertEqual("AAA", response["result"]["payload"]["symbol"])
         self.assertEqual("Daily", response["result"]["payload"]["interval"])
+
+    def test_protocol_returns_technical_research_payload_with_symbol(self) -> None:
+        self.runtime._technical_research_snapshot_loader = lambda symbol: {
+            "schemaVersion": 1,
+            "symbol": symbol,
+            "state": "AVAILABLE",
+            "events": [],
+            "studies": [],
+        }
+
+        response = self.send(
+            command=COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
+            command_id="technical-research",
+            arguments={"symbol": "nvda"},
+        )
+
+        self.assertTrue(response["accepted"])
+        self.assertEqual("TECHNICAL_RESEARCH_SNAPSHOT", response["result"]["code"])
+        self.assertEqual("NVDA", response["result"]["payload"]["symbol"])
 
     def test_shutdown_command_stops_server_after_a_response(self) -> None:
         response = self.send(command=COMMAND_SHUTDOWN, command_id="shutdown")

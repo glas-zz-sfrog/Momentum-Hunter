@@ -385,6 +385,10 @@ public partial class MainWindow : Window, IWorkstationPresentation
             {
                 EnsureAnchorablePaneHeight(ReviewOutcomesContentId, 340);
             }
+            else if (pane.Kind == PaneKind.Research)
+            {
+                EnsureAnchorablePaneHeight(ResearchContentId, 390);
+            }
 
             PanesPopup.IsOpen = false;
         }

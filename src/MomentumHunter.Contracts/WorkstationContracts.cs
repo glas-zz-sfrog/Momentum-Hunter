@@ -92,6 +92,15 @@ public enum AlertEvidenceState
     Unavailable,
 }
 
+public enum TechnicalResearchState
+{
+    Available,
+    Stale,
+    Partial,
+    Empty,
+    Unavailable,
+}
+
 public sealed record CatalystSummary(string Headline, string SourceLabel, DateTimeOffset ObservedAt);
 
 public sealed record DataLineage(string SourceLabel, DateTimeOffset AsOf, string Summary);
@@ -143,6 +152,61 @@ public sealed record ChartSnapshot(
     string Summary,
     DataLineage DataLineage,
     IReadOnlyList<CandleSnapshot> Candles);
+
+public sealed record TechnicalResearchEventSnapshot(
+    string EventId,
+    DateTimeOffset? EventTimestamp,
+    string EventType,
+    string Timeframe,
+    string Status,
+    string QualityFlag,
+    string DataSufficiency,
+    decimal? TriggerPrice,
+    decimal? DistanceAboveTriggerPercent,
+    decimal? RelativeVolume,
+    bool? VolumeConfirmed,
+    bool? RelativeStrengthConfirmed,
+    string Notes);
+
+public sealed record TechnicalResearchStudySnapshot(
+    string EventId,
+    DateTimeOffset? EventTimestamp,
+    string EventType,
+    string Timeframe,
+    string Status,
+    string DataSufficiency,
+    decimal? Return5MinutePercent,
+    decimal? Return15MinutePercent,
+    decimal? Return60MinutePercent,
+    decimal? Return1DayPercent,
+    decimal? Return5DayPercent,
+    decimal? Return10DayPercent,
+    decimal? MaxFavorableExcursionPercent,
+    decimal? MaxAdverseExcursionPercent,
+    bool? HeldAboveBreakoutLevel,
+    bool? FailedBackBelowBreakoutLevel,
+    bool? BecameExtended,
+    bool? VolumeConfirmed,
+    string Notes);
+
+public sealed record TechnicalResearchSnapshot(
+    int SchemaVersion,
+    string Symbol,
+    TechnicalResearchState State,
+    DateTimeOffset ObservedAt,
+    DateTimeOffset? AsOf,
+    string Summary,
+    string SourceLabel,
+    int GlobalEventCount,
+    int GlobalStudyCount,
+    int SymbolEventCount,
+    int SymbolStudyCount,
+    int PresentEventCount,
+    int FailedStudyCount,
+    int InsufficientDataCount,
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<TechnicalResearchEventSnapshot> Events,
+    IReadOnlyList<TechnicalResearchStudySnapshot> Studies);
 
 public sealed record ReadinessCheck(string Name, bool Passed, string Detail);
 

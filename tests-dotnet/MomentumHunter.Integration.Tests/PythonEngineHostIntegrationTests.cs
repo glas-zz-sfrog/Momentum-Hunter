@@ -52,6 +52,7 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Contains(PythonEngineHostProtocol.GetReadOnlyWorkspaceSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetSimulationWorkspaceSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetChartSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetTechnicalResearchSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.RunSimulation, first.Capabilities);
             Assert.DoesNotContain("submit_order", first.Capabilities);
 
@@ -68,6 +69,13 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Equal("Daily", chartPayload.GetProperty("interval").GetString());
             Assert.Equal("UNAVAILABLE", chartPayload.GetProperty("state").GetString());
             Assert.Empty(chartPayload.GetProperty("candles").EnumerateArray());
+
+            var researchPayload = await firstConnection.GetTechnicalResearchSnapshotAsync("ZZZNOTREAL");
+            Assert.Equal(1, researchPayload.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal("ZZZNOTREAL", researchPayload.GetProperty("symbol").GetString());
+            Assert.Equal("UNAVAILABLE", researchPayload.GetProperty("state").GetString());
+            Assert.Empty(researchPayload.GetProperty("events").EnumerateArray());
+            Assert.Empty(researchPayload.GetProperty("studies").EnumerateArray());
 
             var simulationWorkspacePayload = await firstConnection.GetSimulationWorkspaceSnapshotAsync();
             Assert.Equal("SIMULATION_ONLY_FAKE_BROKER", simulationWorkspacePayload.GetProperty("mode").GetString());

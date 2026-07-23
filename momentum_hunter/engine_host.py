@@ -32,6 +32,7 @@ COMMAND_SHUTDOWN = "shutdown_host"
 COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT = "get_readonly_workspace_snapshot"
 COMMAND_SIMULATION_WORKSPACE_SNAPSHOT = "get_simulation_workspace_snapshot"
 COMMAND_CHART_SNAPSHOT = "get_chart_snapshot"
+COMMAND_TECHNICAL_RESEARCH_SNAPSHOT = "get_technical_research_snapshot"
 COMMAND_RUN_SIMULATION = "run_simulation"
 SUPPORTED_COMMANDS = frozenset(
     {
@@ -43,6 +44,7 @@ SUPPORTED_COMMANDS = frozenset(
         COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
         COMMAND_SIMULATION_WORKSPACE_SNAPSHOT,
         COMMAND_CHART_SNAPSHOT,
+        COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
         COMMAND_RUN_SIMULATION,
     }
 )
@@ -211,6 +213,7 @@ class EngineHostRuntime:
         simulation_workspace_loader: Callable[[], dict[str, Any]] | None = None,
         simulation_runner: Callable[[str], dict[str, Any]] | None = None,
         chart_snapshot_loader: Callable[[str, str], dict[str, Any]] | None = None,
+        technical_research_snapshot_loader: Callable[[str], dict[str, Any]] | None = None,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
@@ -232,6 +235,15 @@ class EngineHostRuntime:
         else:
             self._chart_service = None
         self._chart_snapshot_loader = chart_snapshot_loader or self._chart_service.snapshot
+        if technical_research_snapshot_loader is None:
+            from momentum_hunter.workstation_technical_research import WorkstationTechnicalResearchService
+
+            self._technical_research_service = WorkstationTechnicalResearchService()
+        else:
+            self._technical_research_service = None
+        self._technical_research_snapshot_loader = (
+            technical_research_snapshot_loader or self._technical_research_service.snapshot
+        )
         self._state_lock = threading.RLock()
         self._command_condition = threading.Condition(self._state_lock)
         self._cycle_lock = threading.Lock()
@@ -405,6 +417,31 @@ class EngineHostRuntime:
                 True,
                 "CHART_SNAPSHOT",
                 "Read-only chart snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_TECHNICAL_RESEARCH_SNAPSHOT:
+            symbol = arguments.get("symbol")
+            if not isinstance(symbol, str) or not symbol.strip():
+                return EngineHostCommandResult(
+                    False,
+                    "TECHNICAL_RESEARCH_SYMBOL_REQUIRED",
+                    "A non-empty symbol is required for technical research evidence.",
+                    self.snapshot(),
+                )
+            try:
+                payload = self._technical_research_snapshot_loader(symbol.strip().upper())
+            except ValueError as exc:
+                return EngineHostCommandResult(
+                    False,
+                    "INVALID_TECHNICAL_RESEARCH_REQUEST",
+                    str(exc),
+                    self.snapshot(),
+                )
+            return EngineHostCommandResult(
+                True,
+                "TECHNICAL_RESEARCH_SNAPSHOT",
+                "Read-only technical research snapshot returned.",
                 self.snapshot(),
                 payload=payload,
             )
