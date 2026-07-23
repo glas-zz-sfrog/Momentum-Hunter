@@ -105,8 +105,8 @@ class GuiStateTests(unittest.TestCase):
             patch.object(self.window, "_show_action_blocked", blocked),
         ):
             self.window.open_readiness_gate()
+            self.assertTrue(self.wait_until(lambda: bool(messages)))
 
-        self.assertTrue(self.wait_until(lambda: bool(messages)))
         self.assertEqual("Readiness Gate Error", messages[0][0])
         self.assertIn("RuntimeError", messages[0][1])
         self.assertIn("boom", messages[0][1])
@@ -122,8 +122,8 @@ class GuiStateTests(unittest.TestCase):
             patch.object(self.window, "_show_action_blocked", blocked),
         ):
             self.window.open_study_engine()
+            self.assertTrue(self.wait_until(lambda: bool(messages)))
 
-        self.assertTrue(self.wait_until(lambda: bool(messages)))
         self.assertEqual("Research Lab Error", messages[0][0])
         self.assertIn("RuntimeError", messages[0][1])
         self.assertIn("boom", messages[0][1])
@@ -142,9 +142,9 @@ class GuiStateTests(unittest.TestCase):
             started = time.perf_counter()
             self.window.open_study_engine()
             elapsed = time.perf_counter() - started
+            self.assertTrue(self.wait_until(lambda: bool(opened), timeout=3.0))
 
         self.assertLess(elapsed, 0.15)
-        self.assertTrue(self.wait_until(lambda: bool(opened), timeout=3.0))
 
     def test_score_breakdown_html_uses_readable_units_and_freshness_note(self) -> None:
         capture_time = now_central()
@@ -354,6 +354,14 @@ class GuiStateTests(unittest.TestCase):
             patch("momentum_hunter.app.build_weight_recommendations"),
         ):
             self.window._show_study_dialog(study_summary())
+            self.assertTrue(
+                self.wait_until(
+                    lambda: any(
+                        table.columnCount() == 6 and table.rowCount() == 4
+                        for table in dialogs[0].findChildren(QTableWidget)
+                    )
+                )
+            )
 
         labels = [label.text() for label in dialogs[0].findChildren(QLabel)]
         tables = dialogs[0].findChildren(QTableWidget)

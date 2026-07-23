@@ -226,21 +226,25 @@ class EntryPlanGuiTests(unittest.TestCase):
             }
         )
 
-        self.window.entry_trigger.setText("should not save")
-        self.window._entry_plan_changed()
+        with patch("momentum_hunter.app.QMessageBox.information"):
+            self.window.entry_trigger.setText("should not save")
+            self.window._entry_plan_changed()
 
         self.assertFalse(load_entry_plans(self.entry_path))
-        self.assertIn("read-only", self.window.status_label.text())
+        status = self.window.status_label.text().lower()
+        self.assertIn("historical", status)
+        self.assertIn("cannot be used", status)
 
     def test_study_view_cannot_edit_entry_plan(self) -> None:
         self.window.data_view_state = DataViewState.STUDY
         self.window._apply_data_view_state()
 
-        self.window.entry_trigger.setText("should not save")
-        self.window._entry_plan_changed()
+        with patch("momentum_hunter.app.QMessageBox.information"):
+            self.window.entry_trigger.setText("should not save")
+            self.window._entry_plan_changed()
 
         self.assertFalse(load_entry_plans(self.entry_path))
-        self.assertIn("read-only", self.window.status_label.text())
+        self.assertIn("research-only", self.window.status_label.text().lower())
 
 
 if __name__ == "__main__":
