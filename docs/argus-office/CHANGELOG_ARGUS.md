@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Added deterministic WPF chart price/time axes and latest stored-bar OHLCV details, with focused scale/view-model coverage and offscreen full-workstation proof.
 - Fast-forwarded Steven-approved R011 into local `master` at `268f3f8`, reconciled the authoritative roadmap and branch ledger, and backed the integrated baseline up to `origin/master` under explicit push approval.
 - Added R011's versioned read-only local chart snapshot boundary and WPF candle/wick/volume rendering for stored `1m`, aggregated `5m`/`15m`, and `Daily` evidence.
 - Added explicit chart `AVAILABLE`, `STALE`, `INSUFFICIENT_DATA`, and `UNAVAILABLE` states, source/as-of lineage, request identity validation, and no mock or cross-timeframe fallback.

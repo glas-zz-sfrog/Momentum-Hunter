@@ -149,6 +149,7 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="1*" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <DockPanel>
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
@@ -171,8 +172,27 @@
                                         <controls:CandleChart Grid.Row="1"
                                                               Candles="{Binding PrimaryChart.Candles}"
                                                               EmptyStateText="{Binding PrimaryChart.EmptyStateText}"
+                                                              Interval="{Binding PrimaryChart.Pane.Interval}"
                                                               Margin="0,12,0,8" />
-                                        <StackPanel Grid.Row="2" Orientation="Horizontal">
+                                        <Border Grid.Row="2"
+                                                BorderBrush="{StaticResource PanelBorder}"
+                                                BorderThickness="0,1,0,0"
+                                                Padding="0,7,0,6">
+                                            <DockPanel LastChildFill="True">
+                                                <TextBlock DockPanel.Dock="Left"
+                                                           Text="LATEST BAR"
+                                                           Foreground="{StaticResource Teal}"
+                                                           FontSize="10"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,12,0" />
+                                                <TextBlock Text="{Binding PrimaryChart.LatestBarSummary}"
+                                                           Foreground="{StaticResource TextPrimary}"
+                                                           FontSize="11"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding PrimaryChart.LatestBarSummary}" />
+                                            </DockPanel>
+                                        </Border>
+                                        <StackPanel Grid.Row="3" Orientation="Horizontal">
                                             <TextBlock Text="Research display only" Foreground="{StaticResource TextMuted}" FontSize="11" />
                                             <TextBlock Text="  |  Linked panes update only within their selected link group" Foreground="{StaticResource TextMuted}" FontSize="11" />
                                         </StackPanel>

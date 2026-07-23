@@ -13,6 +13,7 @@ Git evidence at reconciliation time:
 - Steven approved R011, and the task branch fast-forwarded locally with no merge commit before the approved master push.
 - `codex/ARGUS-A016S-schwab-paper-api-verification` is branch-only through `c979866`; its official support request is sent, but no A017 implementation gate has opened.
 - `codex/ARGUS-R011-wpf-chart-candle-integration` starts from `a17eff8`; its implementation and proof are merged into `master`, and commit `268f3f8` is remotely backed up through `origin/master`.
+- `codex/ARGUS-R012-wpf-chart-readability` starts from synchronized `master` at `82f10e3`; deterministic chart axes, latest-bar details, tests, and offscreen WPF proof are implemented locally and await Steven's merge decision.
 - R004 and R005 are integrated through the `d3a98d9` and `e141054` history; their historical feature branches remain preserved but are not active work bases.
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
@@ -50,7 +51,8 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | `268f3f8` plus this reconciliation commit | Yes; synchronized with `origin/master` after Steven's explicit approval | Yes | `ACTIVE` | Canonical merged Python engine, WPF operator surface, independent host, read-only evidence, FakeBroker-only Phase 10 simulation, and R011 chart-candle baseline. | Start R012 from clean synchronized `master`; keep broker work blocked at A017 pending Schwab evidence. |
+| `master` | `82f10e3` | Yes; synchronized with `origin/master` after Steven's explicit approval | Yes | `ACTIVE` | Canonical merged Python engine, WPF operator surface, independent host, read-only evidence, FakeBroker-only Phase 10 simulation, and R011 chart-candle baseline. | Review branch-only R012; keep broker work blocked at A017 pending Schwab evidence. |
+| `codex/ARGUS-R012-wpf-chart-readability` | R012 task commit, parent `82f10e3` | No | No | `NEEDS_REVIEW` | Deterministic WPF chart price/time axes and latest stored-bar OHLCV details with no engine or provider change. | Steven reviews proof; Git Steward may fast-forward only after explicit approval. |
 | `codex/ARGUS-R011-wpf-chart-candle-integration` | `268f3f8` | No branch ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Versioned read-only local chart snapshots and WPF candle/wick/volume rendering with explicit stale/unavailable behavior. | Historical integration branch; begin R012 from `master`. |
 | `codex/ARGUS-A016S-schwab-paper-api-verification` | `c979866` | No | No | `ACTIVE` | Schwab paper API evidence gate and verified support request. | Await and preserve official response; do not begin A017. |
 | `codex/ARGUS-A016-broker-research-matrix` | `90259e4` | No | No | `NEEDS_REVIEW` | Broker matrix plus Steven's Schwab/thinkorswim continuity decision. | Preserve under A016S; review before any local merge. |

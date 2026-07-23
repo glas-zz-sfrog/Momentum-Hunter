@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MomentumHunter.Contracts;
 
@@ -60,6 +61,15 @@ public sealed class ChartPaneViewModel : ObservableObject
 
     public string DetailLabel => $"{ContextLabel} | {SourceSummary}";
 
+    public CandleSnapshot? LatestBar { get; private set; }
+
+    public string LatestBarSummary => LatestBar is null
+        ? "Latest bar unavailable"
+        : $"{FormatTimestamp(LatestBar.Timestamp)}  |  " +
+          $"O {FormatPrice(LatestBar.Open)}  H {FormatPrice(LatestBar.High)}  " +
+          $"L {FormatPrice(LatestBar.Low)}  C {FormatPrice(LatestBar.Close)}  |  " +
+          $"V {LatestBar.Volume.ToString("N0", CultureInfo.InvariantCulture)}";
+
     public void ReplaceCandles(IEnumerable<CandleSnapshot> candles)
     {
         Candles.Clear();
@@ -67,6 +77,12 @@ public sealed class ChartPaneViewModel : ObservableObject
         {
             Candles.Add(candle);
         }
+
+        LatestBar = Candles
+            .OrderBy(candle => candle.Timestamp)
+            .LastOrDefault();
+        OnPropertyChanged(nameof(LatestBar));
+        OnPropertyChanged(nameof(LatestBarSummary));
     }
 
     public void ApplySnapshot(ChartSnapshot snapshot)
@@ -89,10 +105,29 @@ public sealed class ChartPaneViewModel : ObservableObject
             OnPropertyChanged(nameof(Title));
         }
 
+        if (eventArgs.PropertyName is nameof(PaneState.Interval))
+        {
+            OnPropertyChanged(nameof(LatestBarSummary));
+        }
+
         if (eventArgs.PropertyName is nameof(PaneState.IsPinned) or nameof(PaneState.LinkGroup))
         {
             OnPropertyChanged(nameof(ContextLabel));
             OnPropertyChanged(nameof(DetailLabel));
         }
+    }
+
+    private string FormatTimestamp(DateTimeOffset timestamp)
+    {
+        var format = string.Equals(Pane.Interval, "Daily", StringComparison.OrdinalIgnoreCase)
+            ? "yyyy-MM-dd 'UTC'"
+            : "yyyy-MM-dd HH:mm 'UTC'";
+        return timestamp.UtcDateTime.ToString(format, CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatPrice(decimal value)
+    {
+        var format = Math.Abs(value) >= 1m ? "N2" : "N4";
+        return value.ToString(format, CultureInfo.InvariantCulture);
     }
 }

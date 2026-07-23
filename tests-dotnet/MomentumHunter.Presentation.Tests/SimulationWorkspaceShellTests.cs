@@ -21,6 +21,9 @@ public sealed class SimulationWorkspaceShellTests
         Assert.NotNull(viewModel.PrimaryChart);
         Assert.Equal(2, viewModel.PrimaryChart!.Candles.Count);
         Assert.Equal(ChartDataState.Stale, viewModel.PrimaryChart.DataState);
+        Assert.Equal(DateTimeOffset.Parse("2026-06-18T20:00:00Z"), viewModel.PrimaryChart.LatestBar!.Timestamp);
+        Assert.Contains("O 119.10", viewModel.PrimaryChart.LatestBarSummary, StringComparison.Ordinal);
+        Assert.Contains("V 1,500", viewModel.PrimaryChart.LatestBarSummary, StringComparison.Ordinal);
         Assert.True(viewModel.CanRunSimulation);
         Assert.Contains("Python FakeBroker Only", viewModel.EnvironmentLabel, StringComparison.Ordinal);
         Assert.Equal("NVDA", viewModel.TradePlanSymbolLabel);
@@ -95,6 +98,7 @@ public sealed class SimulationWorkspaceShellTests
         Assert.NotNull(viewModel.PrimaryChart);
         Assert.Empty(viewModel.PrimaryChart!.Candles);
         Assert.Equal("No stored candles available", viewModel.PrimaryChart.EmptyStateText);
+        Assert.Equal("Latest bar unavailable", viewModel.PrimaryChart.LatestBarSummary);
         Assert.Contains("UNAVAILABLE", viewModel.ChartSourceLabel, StringComparison.Ordinal);
         Assert.Contains("No simulated fallback", viewModel.ChartSourceLabel, StringComparison.Ordinal);
     }
