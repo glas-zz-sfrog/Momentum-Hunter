@@ -56,6 +56,7 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Contains(PythonEngineHostProtocol.GetSavedWatchlistSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetDailyWorkflowSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetCandidateStorySnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetResearchMaturitySnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.RunSimulation, first.Capabilities);
             Assert.DoesNotContain("submit_order", first.Capabilities);
 
@@ -99,6 +100,25 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Equal("EMPTY", candidateStoryPayload.GetProperty("state").GetString());
             Assert.True(candidateStoryPayload.GetProperty("readOnly").GetBoolean());
             Assert.Empty(candidateStoryPayload.GetProperty("points").EnumerateArray());
+
+            var researchMaturityPayload =
+                await firstConnection.GetResearchMaturitySnapshotAsync();
+            Assert.Equal(
+                1,
+                researchMaturityPayload.GetProperty("schemaVersion").GetInt32());
+            Assert.True(
+                researchMaturityPayload.GetProperty("researchOnly").GetBoolean());
+            Assert.True(
+                researchMaturityPayload.GetProperty("readOnly").GetBoolean());
+            Assert.False(
+                researchMaturityPayload
+                    .GetProperty("strategyChangeRecommendationsAllowed")
+                    .GetBoolean());
+            Assert.Equal(
+                "LOCKED",
+                researchMaturityPayload
+                    .GetProperty("strategyOptimizationStatus")
+                    .GetString());
 
             var simulationWorkspacePayload = await firstConnection.GetSimulationWorkspaceSnapshotAsync();
             Assert.Equal("SIMULATION_ONLY_FAKE_BROKER", simulationWorkspacePayload.GetProperty("mode").GetString());

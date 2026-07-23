@@ -51,6 +51,9 @@ public partial class App : System.Windows.Application
             new PythonDailyWorkflowWorkspaceClient(serviceProvider.GetRequiredService<IPythonEngineHostConnection>()));
         services.AddSingleton<ICandidateStoryWorkspaceClient>(serviceProvider =>
             new PythonCandidateStoryWorkspaceClient(serviceProvider.GetRequiredService<IPythonEngineHostConnection>()));
+        services.AddSingleton<IResearchMaturityWorkspaceClient>(serviceProvider =>
+            new PythonResearchMaturityWorkspaceClient(
+                serviceProvider.GetRequiredService<IPythonEngineHostConnection>()));
         services.AddSingleton<IWorkspaceLayoutStore>(_ =>
             new SqliteWorkspaceLayoutStore(Path.Combine(settingsDirectory, "workstation-layouts.db")));
         services.AddSingleton<ITraySettingsStore>(_ =>
@@ -68,7 +71,8 @@ public partial class App : System.Windows.Application
             serviceProvider.GetRequiredService<ITechnicalResearchWorkspaceClient>(),
             serviceProvider.GetRequiredService<ISavedWatchlistWorkspaceClient>(),
             serviceProvider.GetRequiredService<IDailyWorkflowWorkspaceClient>(),
-            serviceProvider.GetRequiredService<ICandidateStoryWorkspaceClient>()));
+            serviceProvider.GetRequiredService<ICandidateStoryWorkspaceClient>(),
+            serviceProvider.GetRequiredService<IResearchMaturityWorkspaceClient>()));
         services.AddSingleton<MainWindow>();
         _services = services.BuildServiceProvider();
 

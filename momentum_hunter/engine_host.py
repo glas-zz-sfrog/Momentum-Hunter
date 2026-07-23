@@ -36,6 +36,7 @@ COMMAND_TECHNICAL_RESEARCH_SNAPSHOT = "get_technical_research_snapshot"
 COMMAND_SAVED_WATCHLIST_SNAPSHOT = "get_saved_watchlist_snapshot"
 COMMAND_DAILY_WORKFLOW_SNAPSHOT = "get_daily_workflow_snapshot"
 COMMAND_CANDIDATE_STORY_SNAPSHOT = "get_candidate_story_snapshot"
+COMMAND_RESEARCH_MATURITY_SNAPSHOT = "get_research_maturity_snapshot"
 COMMAND_RUN_SIMULATION = "run_simulation"
 SUPPORTED_COMMANDS = frozenset(
     {
@@ -51,6 +52,7 @@ SUPPORTED_COMMANDS = frozenset(
         COMMAND_SAVED_WATCHLIST_SNAPSHOT,
         COMMAND_DAILY_WORKFLOW_SNAPSHOT,
         COMMAND_CANDIDATE_STORY_SNAPSHOT,
+        COMMAND_RESEARCH_MATURITY_SNAPSHOT,
         COMMAND_RUN_SIMULATION,
     }
 )
@@ -223,6 +225,7 @@ class EngineHostRuntime:
         saved_watchlist_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
         daily_workflow_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
         candidate_story_loader: Callable[[str], dict[str, Any]] | None = None,
+        research_maturity_loader: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
@@ -272,6 +275,17 @@ class EngineHostRuntime:
         else:
             self._candidate_story_service = None
         self._candidate_story_loader = candidate_story_loader or self._candidate_story_service.snapshot
+        if research_maturity_loader is None:
+            from momentum_hunter.workstation_research_maturity import (
+                WorkstationResearchMaturityService,
+            )
+
+            self._research_maturity_service = WorkstationResearchMaturityService()
+        else:
+            self._research_maturity_service = None
+        self._research_maturity_loader = (
+            research_maturity_loader or self._research_maturity_service.snapshot
+        )
         self._state_lock = threading.RLock()
         self._command_condition = threading.Condition(self._state_lock)
         self._cycle_lock = threading.Lock()
@@ -520,6 +534,22 @@ class EngineHostRuntime:
                 True,
                 "CANDIDATE_STORY_SNAPSHOT",
                 "Read-only Candidate Story snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_RESEARCH_MATURITY_SNAPSHOT:
+            if arguments:
+                return EngineHostCommandResult(
+                    False,
+                    "INVALID_RESEARCH_MATURITY_REQUEST",
+                    "The read-only research-maturity snapshot does not accept arguments.",
+                    self.snapshot(),
+                )
+            payload = self._research_maturity_loader()
+            return EngineHostCommandResult(
+                True,
+                "RESEARCH_MATURITY_SNAPSHOT",
+                "Read-only persisted research-maturity snapshot returned.",
                 self.snapshot(),
                 payload=payload,
             )

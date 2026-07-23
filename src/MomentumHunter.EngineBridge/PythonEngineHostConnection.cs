@@ -328,6 +328,24 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         return result.Payload.Value.Clone();
     }
 
+    public async Task<JsonElement> GetResearchMaturitySnapshotAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetResearchMaturitySnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(),
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException(
+                $"The Python Engine Host did not provide a research-maturity snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
     public async Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(symbol))

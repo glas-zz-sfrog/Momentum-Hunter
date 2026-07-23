@@ -77,7 +77,7 @@ public sealed class PaneRegistryTests
     {
         var registry = WorkspaceFactory.Create(workspace);
 
-        var expectedPaneCount = workspace == WorkspaceKind.Live ? 12 : 5;
+        var expectedPaneCount = workspace == WorkspaceKind.Live ? 13 : 5;
         Assert.Equal(expectedPaneCount, registry.Panes.Count);
         Assert.Equal(hunterTitle, registry.Panes.Single(pane => pane.Kind == PaneKind.Hunter).Title);
         Assert.Equal(lowerPaneVisible, registry.Panes.Single(pane => pane.Kind == lowerPaneKind).IsVisible);
@@ -93,6 +93,18 @@ public sealed class PaneRegistryTests
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Watchlist).IsVisible);
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.CandidateStory).IsVisible);
+    }
+
+    [Fact]
+    public void LiveWorkspaceKeepsResearchMaturityHiddenAndUnlinked()
+    {
+        var pane = WorkspaceFactory.Create(WorkspaceKind.Live)
+            .Panes
+            .Single(candidate => candidate.Kind == PaneKind.ResearchMaturity);
+
+        Assert.False(pane.IsVisible);
+        Assert.Equal(LinkGroup.Unlinked, pane.LinkGroup);
+        Assert.Equal(DockRegion.Bottom, pane.DockRegion);
     }
 
     [Fact]
@@ -195,6 +207,7 @@ public sealed class PaneRegistryTests
         }
         Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
         Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.CandidateStory).IsVisible);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.ResearchMaturity).IsVisible);
     }
 
     [Fact]
@@ -210,6 +223,25 @@ public sealed class PaneRegistryTests
         Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Positions);
         Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
         Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.CandidateStory).IsVisible);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.ResearchMaturity).IsVisible);
+    }
+
+    [Fact]
+    public async Task ShellDoesNotRecreateResearchMaturityRemovedFromSchemaSevenLayout()
+    {
+        var currentLayoutWithoutResearchMaturity = CreateSnapshot("NVDA") with
+        {
+            SchemaVersion = 7,
+        };
+        var viewModel = new ShellViewModel(
+            new MockEngineClient(),
+            new InMemoryLayoutStore(currentLayoutWithoutResearchMaturity));
+
+        await viewModel.InitializeAsync();
+
+        Assert.DoesNotContain(
+            viewModel.Registry.Panes,
+            pane => pane.Kind == PaneKind.ResearchMaturity);
     }
 
     [Fact]

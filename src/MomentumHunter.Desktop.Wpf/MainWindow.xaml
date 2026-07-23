@@ -467,8 +467,273 @@
                                         <ScrollViewer Grid.Column="1" MaxHeight="54" VerticalScrollBarVisibility="Auto" Margin="12,0,0,0">
                                             <TextBlock Text="{Binding CandidateStoryOverview.Warnings}" Foreground="{StaticResource Amber}" FontSize="10" TextWrapping="Wrap" />
                                         </ScrollViewer>
-                                    </Grid>
+                                     </Grid>
                                 </Grid>
+                            </Border>
+                        </avalon:LayoutAnchorable>
+                    </avalon:LayoutAnchorablePane>
+
+                    <avalon:LayoutAnchorablePane DockHeight="560" DockMinHeight="320">
+                        <avalon:LayoutAnchorable x:Name="ResearchMaturityAnchor"
+                                                  ContentId="pane-research-maturity"
+                                                  Title="Research Maturity"
+                                                  CanClose="True"
+                                                  CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="14">
+                                <Border.Resources>
+                                    <Style x:Key="ResearchMaturityColumnHeaderStyle"
+                                           TargetType="{x:Type DataGridColumnHeader}">
+                                        <Setter Property="Foreground" Value="#99A9B7" />
+                                        <Setter Property="Background" Value="#121C24" />
+                                        <Setter Property="BorderBrush" Value="#31404E" />
+                                        <Setter Property="BorderThickness" Value="0,0,1,1" />
+                                        <Setter Property="Padding" Value="4,5" />
+                                    </Style>
+                                </Border.Resources>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Margin="0,0,24,0">
+                                                <TextBlock Text="Research Maturity"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding ResearchMaturity.Summary}"
+                                                           Foreground="{StaticResource TextMuted}"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,5,0,0" />
+                                                <TextBlock Text="{Binding ResearchMaturityProgressLabel}"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,7,0,0" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding ResearchMaturityStateLabel}"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Right">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding ResearchMaturity.State}"
+                                                                             Value="{x:Static contracts:ResearchMaturityEvidenceState.Available}">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding ResearchMaturity.State}"
+                                                                             Value="{x:Static contracts:ResearchMaturityEvidenceState.Stale}">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding ResearchMaturity.State}"
+                                                                             Value="{x:Static contracts:ResearchMaturityEvidenceState.Partial}">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding ResearchMaturity.State}"
+                                                                             Value="{x:Static contracts:ResearchMaturityEvidenceState.Unavailable}">
+                                                                    <Setter Property="Foreground" Value="#FF7B86" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding ResearchMaturityAsOfLabel}"
+                                                           Foreground="{StaticResource TextMuted}"
+                                                           FontSize="10"
+                                                           Margin="0,3,0,0"
+                                                           HorizontalAlignment="Right" />
+                                                <TextBlock Text="{Binding ResearchMaturity.SourceLabel}"
+                                                           Foreground="{StaticResource TextMuted}"
+                                                           FontSize="10"
+                                                           Margin="0,2,0,0"
+                                                           HorizontalAlignment="Right" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <Border Background="#302B1D"
+                                                BorderBrush="{StaticResource Amber}"
+                                                BorderThickness="1"
+                                                CornerRadius="3"
+                                                Padding="10"
+                                                Margin="0,12,0,10">
+                                            <DockPanel>
+                                                <TextBlock Text="STRATEGY OPTIMIZATION LOCKED"
+                                                           Foreground="{StaticResource Amber}"
+                                                           FontWeight="SemiBold"
+                                                           DockPanel.Dock="Left" />
+                                                <TextBlock Text="{Binding ResearchMaturity.EvidenceGate.AllowedAction, StringFormat=Allowed now: {0}}"
+                                                           Foreground="{StaticResource TextPrimary}"
+                                                           HorizontalAlignment="Right" />
+                                            </DockPanel>
+                                        </Border>
+
+                                        <UniformGrid Columns="4" Margin="0,0,0,10">
+                                            <Border Background="#17212B" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,8,8">
+                                                <StackPanel>
+                                                    <TextBlock Text="Maturity Outcome Coverage" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                    <TextBlock Text="{Binding ResearchMaturityRateLabel}" FontWeight="SemiBold" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                                    <TextBlock Text="Scorable denominator only" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Background="#17212B" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,8,8">
+                                                <StackPanel>
+                                                    <TextBlock Text="Census Outcome Coverage" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                    <TextBlock Text="{Binding ResearchCensusRateLabel}" FontWeight="SemiBold" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                                    <TextBlock Text="All-alert denominator" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Background="#17212B" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,8,8">
+                                                <StackPanel>
+                                                    <TextBlock Text="Sample Confidence" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                    <TextBlock Text="{Binding ResearchMaturity.SampleConfidence}" FontWeight="SemiBold" Margin="0,4,0,0" />
+                                                    <TextBlock Text="{Binding ResearchMaturity.MeasurableEdgeStatus}" Foreground="{StaticResource Amber}" FontSize="10" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Background="#17212B" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8">
+                                                <StackPanel>
+                                                    <TextBlock Text="Evidence Needed" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                    <TextBlock Text="{Binding ResearchMaturity.EvidenceNeededToNextGate, StringFormat={}{0:N0}}"
+                                                               FontSize="18"
+                                                               FontWeight="SemiBold"
+                                                               Margin="0,2,0,0" />
+                                                    <TextBlock Text="completed alerts to next gate" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                </StackPanel>
+                                            </Border>
+                                        </UniformGrid>
+
+                                        <TabControl Background="#17212B"
+                                                    Foreground="{StaticResource TextPrimary}"
+                                                    MinHeight="260">
+                                            <TabItem Header="Evidence Gates">
+                                                <DataGrid ItemsSource="{Binding ResearchMaturity.Gates}"
+                                                          AutoGenerateColumns="False"
+                                                          IsReadOnly="True"
+                                                          CanUserAddRows="False"
+                                                          HeadersVisibility="Column"
+                                                          GridLinesVisibility="Horizontal"
+                                                          Background="#17212B"
+                                                          Foreground="{StaticResource TextPrimary}"
+                                                          BorderBrush="{StaticResource PanelBorder}"
+                                                          ColumnHeaderStyle="{StaticResource ResearchMaturityColumnHeaderStyle}"
+                                                          RowHeaderWidth="0">
+                                                    <DataGrid.Columns>
+                                                        <DataGridTextColumn Header="Gate" Binding="{Binding Name}" Width="260" />
+                                                        <DataGridTextColumn Header="State" Binding="{Binding Status}" Width="110" />
+                                                        <DataGridTextColumn Header="Current" Binding="{Binding CurrentCompletedAlerts}" Width="80" />
+                                                        <DataGridTextColumn Header="Required" Binding="{Binding RequiredCompletedAlerts}" Width="80" />
+                                                        <DataGridTextColumn Header="Needed" Binding="{Binding CompletedNeeded}" Width="80" />
+                                                        <DataGridTextColumn Header="Allowed Research Action" Binding="{Binding AllowedAction}" Width="*" MinWidth="260" />
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                            </TabItem>
+                                            <TabItem Header="Census Counts">
+                                                <Grid Margin="10">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="1*" />
+                                                        <ColumnDefinition Width="1*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <UniformGrid Columns="2" Margin="0,0,12,0">
+                                                        <StackPanel Margin="0,0,8,8">
+                                                            <TextBlock Text="Captures" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                            <TextBlock Text="{Binding ResearchMaturity.Census.Captures, StringFormat={}{0:N0}}" FontSize="17" />
+                                                        </StackPanel>
+                                                        <StackPanel Margin="0,0,8,8">
+                                                            <TextBlock Text="Candidate Rows" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                            <TextBlock Text="{Binding ResearchMaturity.Census.CandidateRows, StringFormat={}{0:N0}}" FontSize="17" />
+                                                        </StackPanel>
+                                                        <StackPanel Margin="0,0,8,8">
+                                                            <TextBlock Text="Minute Bars" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                            <TextBlock Text="{Binding ResearchMaturity.Census.MinuteBars, StringFormat={}{0:N0}}" FontSize="17" />
+                                                        </StackPanel>
+                                                        <StackPanel Margin="0,0,8,8">
+                                                            <TextBlock Text="Minute Symbols" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                            <TextBlock Text="{Binding ResearchMaturity.Census.MinuteBarSymbols, StringFormat={}{0:N0}}" FontSize="17" />
+                                                        </StackPanel>
+                                                        <StackPanel Margin="0,0,8,8">
+                                                            <TextBlock Text="Evidence Runs" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                            <TextBlock Text="{Binding ResearchMaturity.Census.EvidenceRuns, StringFormat={}{0:N0}}" FontSize="17" />
+                                                        </StackPanel>
+                                                        <StackPanel Margin="0,0,8,8">
+                                                            <TextBlock Text="Evidence Metrics" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                            <TextBlock Text="{Binding ResearchMaturity.Census.EvidenceMetrics, StringFormat={}{0:N0}}" FontSize="17" />
+                                                        </StackPanel>
+                                                        <StackPanel Margin="0,0,8,8">
+                                                            <TextBlock Text="Entry Plans" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                            <TextBlock Text="{Binding ResearchMaturity.Census.EntryPlans, StringFormat={}{0:N0}}" FontSize="17" />
+                                                        </StackPanel>
+                                                        <StackPanel Margin="0,0,8,8">
+                                                            <TextBlock Text="Complete Plans" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                            <TextBlock Text="{Binding ResearchMaturity.Census.CompleteEntryPlans, StringFormat={}{0:N0}}" FontSize="17" />
+                                                        </StackPanel>
+                                                    </UniformGrid>
+                                                    <DataGrid Grid.Column="1"
+                                                              ItemsSource="{Binding ResearchMaturity.Census.TableCounts}"
+                                                              AutoGenerateColumns="False"
+                                                              IsReadOnly="True"
+                                                              CanUserAddRows="False"
+                                                              HeadersVisibility="Column"
+                                                              GridLinesVisibility="Horizontal"
+                                                              Background="#17212B"
+                                                              Foreground="{StaticResource TextPrimary}"
+                                                              BorderBrush="{StaticResource PanelBorder}"
+                                                              ColumnHeaderStyle="{StaticResource ResearchMaturityColumnHeaderStyle}"
+                                                              RowHeaderWidth="0">
+                                                        <DataGrid.Columns>
+                                                            <DataGridTextColumn Header="Persisted Evidence Table" Binding="{Binding Name}" Width="*" />
+                                                            <DataGridTextColumn Header="Rows" Binding="{Binding Count, StringFormat={}{0:N0}}" Width="90" />
+                                                        </DataGrid.Columns>
+                                                    </DataGrid>
+                                                </Grid>
+                                            </TabItem>
+                                            <TabItem Header="Research Questions">
+                                                <DataGrid ItemsSource="{Binding ResearchMaturity.Questions}"
+                                                          AutoGenerateColumns="False"
+                                                          IsReadOnly="True"
+                                                          CanUserAddRows="False"
+                                                          HeadersVisibility="Column"
+                                                          GridLinesVisibility="Horizontal"
+                                                          Background="#17212B"
+                                                          Foreground="{StaticResource TextPrimary}"
+                                                          BorderBrush="{StaticResource PanelBorder}"
+                                                          ColumnHeaderStyle="{StaticResource ResearchMaturityColumnHeaderStyle}"
+                                                          RowHeaderWidth="0">
+                                                    <DataGrid.Columns>
+                                                        <DataGridTextColumn Header="Question" Binding="{Binding Question}" Width="1.2*" />
+                                                        <DataGridTextColumn Header="Evidence Answer" Binding="{Binding Answer}" Width="2*" />
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                            </TabItem>
+                                        </TabControl>
+
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1*" />
+                                                <ColumnDefinition Width="1*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Expander Header="Warnings" Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding ResearchMaturityWarningsLabel}"
+                                                           Foreground="{StaticResource Amber}"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,6,0,0" />
+                                            </Expander>
+                                            <Expander Grid.Column="1" Header="Safety Notes">
+                                                <TextBlock Text="{Binding ResearchMaturitySafetyLabel}"
+                                                           Foreground="{StaticResource TextMuted}"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,6,0,0" />
+                                            </Expander>
+                                        </Grid>
+                                        <TextBlock Text="Persisted evidence display only. No report is rebuilt here; no score, readiness state, alert threshold, TradePlan, broker, or execution behavior is changed."
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   FontSize="10"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,10,0,0" />
+                                    </StackPanel>
+                                </ScrollViewer>
                             </Border>
                         </avalon:LayoutAnchorable>
                     </avalon:LayoutAnchorablePane>

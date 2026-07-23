@@ -19,6 +19,7 @@ public enum PaneKind
     Watchlist,
     DailyWorkflow,
     CandidateStory,
+    ResearchMaturity,
     Automation,
     Orders,
     Positions,
@@ -95,6 +96,15 @@ public enum AlertEvidenceState
 }
 
 public enum TechnicalResearchState
+{
+    Available,
+    Stale,
+    Partial,
+    Empty,
+    Unavailable,
+}
+
+public enum ResearchMaturityEvidenceState
 {
     Available,
     Stale,
@@ -501,6 +511,80 @@ public sealed record DailyWorkflowSnapshot(
     DailyWorkflowNextAction NextAction,
     IReadOnlyList<DailyWorkflowStepSnapshot> Steps,
     IReadOnlyList<string> Warnings,
+    bool ReadOnly);
+
+public sealed record ResearchMaturityAlertCounts(
+    int Total,
+    int Completed,
+    int Pending,
+    int Unscorable,
+    decimal? CompletionRatePercent);
+
+public sealed record ResearchMaturityEvidenceGate(
+    int CompletedAlerts,
+    int RequiredAlerts,
+    string EvidenceStatus,
+    string AllowedAction,
+    string StrategyOptimizationStatus,
+    string Reason);
+
+public sealed record ResearchMaturityGate(
+    string Name,
+    string Status,
+    int CurrentCompletedAlerts,
+    int RequiredCompletedAlerts,
+    int CompletedNeeded,
+    string AllowedAction,
+    bool StrategyChangeAllowed);
+
+public sealed record ResearchMaturityQuestion(string Question, string Answer);
+
+public sealed record ResearchMaturityTableCount(string Name, int Count);
+
+public sealed record ResearchEvidenceCensus(
+    ResearchMaturityAlertCounts Alerts,
+    int Captures,
+    int CandidateRows,
+    int StudyEligibleCaptures,
+    int QuarantinedCaptures,
+    int MinuteBars,
+    int MinuteBarSymbols,
+    int EvidenceRuns,
+    int EvidenceMetrics,
+    int CandidateReviews,
+    int WatchlistItems,
+    int EntryPlans,
+    int CompleteEntryPlans,
+    int IncompleteEntryPlans,
+    IReadOnlyList<ResearchMaturityTableCount> TableCounts,
+    int TableCount);
+
+public sealed record ResearchMaturitySnapshot(
+    int SchemaVersion,
+    ResearchMaturityEvidenceState State,
+    DateTimeOffset ObservedAt,
+    DateTimeOffset? SourceAsOf,
+    DateTimeOffset? MaturityGeneratedAt,
+    DateTimeOffset? CensusGeneratedAt,
+    string SourceLabel,
+    string Summary,
+    string MaturityOverallStatus,
+    string CensusOverallStatus,
+    string SampleConfidence,
+    string MeasurableEdgeStatus,
+    string StrategyOptimizationStatus,
+    bool StrategyChangeRecommendationsAllowed,
+    ResearchMaturityAlertCounts MaturityAlerts,
+    int EvidenceNeededToNextGate,
+    ResearchMaturityEvidenceGate EvidenceGate,
+    IReadOnlyList<ResearchMaturityGate> Gates,
+    int GateCount,
+    IReadOnlyList<ResearchMaturityQuestion> Questions,
+    int QuestionCount,
+    ResearchEvidenceCensus Census,
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<string> SafetyNotes,
+    bool ResearchOnly,
     bool ReadOnly);
 
 public sealed record SimulationWorkspaceSnapshot(

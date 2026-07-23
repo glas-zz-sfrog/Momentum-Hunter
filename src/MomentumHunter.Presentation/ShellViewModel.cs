@@ -22,6 +22,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly ISavedWatchlistWorkspaceClient? _savedWatchlistWorkspaceClient;
     private readonly IDailyWorkflowWorkspaceClient? _dailyWorkflowWorkspaceClient;
     private readonly ICandidateStoryWorkspaceClient? _candidateStoryWorkspaceClient;
+    private readonly IResearchMaturityWorkspaceClient? _researchMaturityWorkspaceClient;
     private readonly IWorkspaceLayoutStore? _layoutStore;
     private readonly LayoutAutosaveCoordinator? _layoutAutosave;
     private LinkGroupCoordinator _linkGroups = null!;
@@ -109,6 +110,39 @@ public sealed partial class ShellViewModel : ObservableObject
             chartWorkspaceClient: chartWorkspaceClient,
             savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IResearchMaturityWorkspaceClient researchMaturityWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
+            researchMaturityWorkspaceClient: researchMaturityWorkspaceClient,
+            isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        IResearchMaturityWorkspaceClient researchMaturityWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: simulationWorkspaceClient,
+            chartWorkspaceClient: chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            researchMaturityWorkspaceClient: researchMaturityWorkspaceClient)
     {
     }
 
@@ -281,7 +315,8 @@ public sealed partial class ShellViewModel : ObservableObject
         ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient,
         ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient,
         IDailyWorkflowWorkspaceClient dailyWorkflowWorkspaceClient,
-        ICandidateStoryWorkspaceClient candidateStoryWorkspaceClient)
+        ICandidateStoryWorkspaceClient candidateStoryWorkspaceClient,
+        IResearchMaturityWorkspaceClient researchMaturityWorkspaceClient)
         : this(
             engineClient,
             layoutStore,
@@ -292,7 +327,8 @@ public sealed partial class ShellViewModel : ObservableObject
             isInternalConstruction: true,
             technicalResearchWorkspaceClient,
             dailyWorkflowWorkspaceClient,
-            candidateStoryWorkspaceClient)
+            candidateStoryWorkspaceClient,
+            researchMaturityWorkspaceClient)
     {
     }
 
@@ -306,7 +342,8 @@ public sealed partial class ShellViewModel : ObservableObject
         bool isInternalConstruction,
         ITechnicalResearchWorkspaceClient? technicalResearchWorkspaceClient = null,
         IDailyWorkflowWorkspaceClient? dailyWorkflowWorkspaceClient = null,
-        ICandidateStoryWorkspaceClient? candidateStoryWorkspaceClient = null)
+        ICandidateStoryWorkspaceClient? candidateStoryWorkspaceClient = null,
+        IResearchMaturityWorkspaceClient? researchMaturityWorkspaceClient = null)
     {
         _engineClient = engineClient;
         _layoutStore = layoutStore;
@@ -317,6 +354,7 @@ public sealed partial class ShellViewModel : ObservableObject
         _savedWatchlistWorkspaceClient = savedWatchlistWorkspaceClient;
         _dailyWorkflowWorkspaceClient = dailyWorkflowWorkspaceClient;
         _candidateStoryWorkspaceClient = candidateStoryWorkspaceClient;
+        _researchMaturityWorkspaceClient = researchMaturityWorkspaceClient;
         SetRegistry(WorkspaceFactory.Create(WorkspaceKind.Live));
         if (_layoutStore is not null)
         {
@@ -402,6 +440,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty]
     private ChartPaneViewModel? _primaryChart;
+
+    [ObservableProperty]
+    private ResearchMaturitySnapshot? _researchMaturity;
 
     [ObservableProperty]
     private bool _isHealthOpen;
@@ -622,6 +663,34 @@ public sealed partial class ShellViewModel : ObservableObject
         _ => "No technical outcome-study rows were supplied for this symbol.",
     };
 
+    public string ResearchMaturityStateLabel =>
+        ResearchMaturity?.State.ToString().ToUpperInvariant() ?? "UNAVAILABLE";
+
+    public string ResearchMaturityAsOfLabel => ResearchMaturity?.SourceAsOf is { } asOf
+        ? $"Source as of {asOf:yyyy-MM-dd HH:mm} UTC"
+        : "Source timestamp unavailable";
+
+    public string ResearchMaturityProgressLabel => ResearchMaturity is { } snapshot
+        ? $"Maturity sample: {snapshot.MaturityAlerts.Completed:N0} completed / "
+          + $"{snapshot.EvidenceGate.RequiredAlerts:N0} required for current gate"
+        : "Maturity sample unavailable";
+
+    public string ResearchMaturityRateLabel => ResearchMaturity?.MaturityAlerts.CompletionRatePercent is { } rate
+        ? $"Maturity completion: {rate:N1}% of scorable alerts"
+        : "Maturity completion unavailable";
+
+    public string ResearchCensusRateLabel => ResearchMaturity?.Census.Alerts.CompletionRatePercent is { } rate
+        ? $"Census completion: {rate:N1}% of all alerts"
+        : "Census completion unavailable";
+
+    public string ResearchMaturityWarningsLabel => ResearchMaturity is { Warnings.Count: > 0 } snapshot
+        ? string.Join(System.Environment.NewLine, snapshot.Warnings)
+        : "No persisted warnings.";
+
+    public string ResearchMaturitySafetyLabel => ResearchMaturity is { SafetyNotes.Count: > 0 } snapshot
+        ? string.Join(System.Environment.NewLine, snapshot.SafetyNotes)
+        : "Research only. Strategy changes remain locked.";
+
     public string ReplaySummary => ReplaySession?.Summary ?? "Replay context is unavailable.";
 
     public ReplayContextView ReplayContext => ReplayContextView.From(ReplaySession);
@@ -756,6 +825,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         await RefreshDailyWorkflowDataAsync(cancellationToken);
         await RefreshWorkspaceDataAsync(cancellationToken);
+        await RefreshResearchMaturityAsync(cancellationToken);
         await RefreshChartPaneDataAsync(cancellationToken);
     }
 
@@ -1271,7 +1341,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private WorkspaceLayoutSnapshot CreateAutomaticLayoutSnapshot() => CreateLayoutSnapshot(isNamedLayout: false, name: null);
 
     private WorkspaceLayoutSnapshot CreateLayoutSnapshot(bool isNamedLayout, string? name) => new(
-        SchemaVersion: 6,
+        SchemaVersion: 7,
         Workspace,
         Guid.NewGuid(),
         DateTimeOffset.UtcNow,
@@ -1305,7 +1375,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void MigrateLegacyContextualPanes(int schemaVersion)
     {
-        if (schemaVersion >= 6 || Workspace != WorkspaceKind.Live)
+        if (schemaVersion >= 7 || Workspace != WorkspaceKind.Live)
         {
             return;
         }
@@ -1315,6 +1385,10 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             missingPanes.Add((PaneKind.DailyWorkflow, "Daily Workflow"));
             missingPanes.Add((PaneKind.CandidateStory, "Candidate Story"));
+        }
+        if (schemaVersion < 7)
+        {
+            missingPanes.Add((PaneKind.ResearchMaturity, "Research Maturity"));
         }
         if (schemaVersion < 4)
         {
@@ -1336,6 +1410,93 @@ public sealed partial class ShellViewModel : ObservableObject
             var linkGroup = kind == PaneKind.CandidateStory ? LinkGroup.A : LinkGroup.Unlinked;
             Registry.Create(kind, title, linkGroup, DockRegion.Bottom, SelectedSymbol, SelectedInterval).IsVisible = false;
         }
+    }
+
+    private async Task RefreshResearchMaturityAsync(CancellationToken cancellationToken)
+    {
+        if (_researchMaturityWorkspaceClient is null)
+        {
+            ResearchMaturity = null;
+            RaiseResearchMaturityProperties();
+            return;
+        }
+
+        try
+        {
+            ResearchMaturity = await _researchMaturityWorkspaceClient.GetSnapshotAsync(
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or InvalidDataException
+                or InvalidOperationException
+                or JsonException)
+        {
+            var now = DateTimeOffset.UtcNow;
+            ResearchMaturity = new ResearchMaturitySnapshot(
+                1,
+                ResearchMaturityEvidenceState.Unavailable,
+                now,
+                null,
+                null,
+                null,
+                "Unavailable persisted research evidence",
+                $"UNAVAILABLE | Research maturity could not be loaded: {exception.Message} "
+                    + "No evidence or strategy conclusion was inferred.",
+                "UNAVAILABLE",
+                "UNAVAILABLE",
+                "UNAVAILABLE",
+                "UNAVAILABLE",
+                "LOCKED",
+                false,
+                new ResearchMaturityAlertCounts(0, 0, 0, 0, null),
+                0,
+                new ResearchMaturityEvidenceGate(
+                    0,
+                    0,
+                    "UNAVAILABLE",
+                    "No action available",
+                    "LOCKED",
+                    "The persisted research-maturity boundary did not return usable evidence."),
+                [],
+                0,
+                [],
+                0,
+                new ResearchEvidenceCensus(
+                    new ResearchMaturityAlertCounts(0, 0, 0, 0, null),
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    [],
+                    0),
+                [exception.Message],
+                ["Research evidence only; strategy changes remain prohibited."],
+                true,
+                true);
+        }
+
+        RaiseResearchMaturityProperties();
+    }
+
+    private void RaiseResearchMaturityProperties()
+    {
+        OnPropertyChanged(nameof(ResearchMaturityStateLabel));
+        OnPropertyChanged(nameof(ResearchMaturityAsOfLabel));
+        OnPropertyChanged(nameof(ResearchMaturityProgressLabel));
+        OnPropertyChanged(nameof(ResearchMaturityRateLabel));
+        OnPropertyChanged(nameof(ResearchCensusRateLabel));
+        OnPropertyChanged(nameof(ResearchMaturityWarningsLabel));
+        OnPropertyChanged(nameof(ResearchMaturitySafetyLabel));
     }
 
     private async Task RefreshWorkspaceDataAsync(CancellationToken cancellationToken)

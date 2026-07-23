@@ -18,6 +18,7 @@ from momentum_hunter.engine_host import (
     COMMAND_DAILY_WORKFLOW_SNAPSHOT,
     COMMAND_PAUSE,
     COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
+    COMMAND_RESEARCH_MATURITY_SNAPSHOT,
     COMMAND_RESUME,
     COMMAND_RUN_CYCLE,
     COMMAND_SAVED_WATCHLIST_SNAPSHOT,
@@ -250,6 +251,45 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertEqual(["read"], calls)
         self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
 
+    def test_research_maturity_command_returns_injected_read_only_payload_without_collection(self) -> None:
+        payload = {
+            "schemaVersion": 1,
+            "state": "STALE",
+            "researchOnly": True,
+            "readOnly": True,
+            "strategyChangeRecommendationsAllowed": False,
+        }
+        calls: list[str] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(
+                AssertionError("collection should not run")
+            ),
+            research_maturity_loader=lambda: calls.append("read") or payload,
+        )
+
+        result = runtime.execute(
+            COMMAND_RESEARCH_MATURITY_SNAPSHOT,
+            "research-maturity",
+        )
+        repeated = runtime.execute(
+            COMMAND_RESEARCH_MATURITY_SNAPSHOT,
+            "research-maturity",
+        )
+        invalid = runtime.execute(
+            COMMAND_RESEARCH_MATURITY_SNAPSHOT,
+            "research-maturity-invalid",
+            {"refresh": "true"},
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual("RESEARCH_MATURITY_SNAPSHOT", result.code)
+        self.assertEqual(payload, result.payload)
+        self.assertEqual(result, repeated)
+        self.assertEqual(["read"], calls)
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+        self.assertFalse(invalid.accepted)
+        self.assertEqual("INVALID_RESEARCH_MATURITY_REQUEST", invalid.code)
+
     def test_daily_workflow_snapshot_is_read_only_argument_free_and_idempotent(self) -> None:
         cycle_runs: list[str] = []
         loads: list[str] = []
@@ -321,7 +361,6 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertFalse(invalid.accepted)
         self.assertEqual("INVALID_CANDIDATE_STORY_REQUEST", invalid.code)
 
-
 class EngineHostProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
         self.runtime = EngineHostRuntime(cycle_runner=lambda: SimpleNamespace(target_count=4))
@@ -357,6 +396,7 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertIn(COMMAND_SAVED_WATCHLIST_SNAPSHOT, snapshot["capabilities"])
         self.assertIn(COMMAND_DAILY_WORKFLOW_SNAPSHOT, snapshot["capabilities"])
         self.assertIn(COMMAND_CANDIDATE_STORY_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(COMMAND_RESEARCH_MATURITY_SNAPSHOT, snapshot["capabilities"])
         self.assertNotIn("submit_order", snapshot["capabilities"])
         self.assertNotIn("paper_order", snapshot["capabilities"])
         self.assertNotIn("live_order", snapshot["capabilities"])

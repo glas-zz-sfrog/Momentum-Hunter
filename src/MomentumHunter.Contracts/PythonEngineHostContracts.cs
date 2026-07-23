@@ -17,6 +17,7 @@ public static class PythonEngineHostProtocol
     public const string GetSavedWatchlistSnapshot = "get_saved_watchlist_snapshot";
     public const string GetDailyWorkflowSnapshot = "get_daily_workflow_snapshot";
     public const string GetCandidateStorySnapshot = "get_candidate_story_snapshot";
+    public const string GetResearchMaturitySnapshot = "get_research_maturity_snapshot";
     public const string RunSimulation = "run_simulation";
 }
 
