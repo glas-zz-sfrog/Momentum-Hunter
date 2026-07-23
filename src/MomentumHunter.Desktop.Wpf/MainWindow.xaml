@@ -506,11 +506,73 @@
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="ReplayEventsAnchor" ContentId="pane-replay-events" Title="Replay Events" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="12">
-                                <StackPanel>
-                                    <TextBlock Text="Replay Events" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Historical decisions are read-only and cannot alter current research." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
-                                    <TextBlock Text="{Binding ReplaySummary}" TextWrapping="Wrap" />
-                                </StackPanel>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <DockPanel LastChildFill="False">
+                                        <TextBlock DockPanel.Dock="Left" Text="Replay Context" FontSize="16" FontWeight="SemiBold" />
+                                        <Border DockPanel.Dock="Right" Padding="7,3" CornerRadius="3">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#263846" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ReplayContext.StatusLabel}" Value="AVAILABLE">
+                                                            <Setter Property="Background" Value="#173C37" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding ReplayContext.StatusLabel}" Value="NOT SELECTED">
+                                                            <Setter Property="Background" Value="#3A3524" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding ReplayContext.StatusLabel}" FontSize="10" FontWeight="SemiBold">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding ReplayContext.StatusLabel}" Value="AVAILABLE">
+                                                                <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding ReplayContext.StatusLabel}" Value="NOT SELECTED">
+                                                                <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </DockPanel>
+                                    <TextBlock Grid.Row="1" Text="{Binding ReplayContext.Summary}" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
+                                    <Grid Grid.Row="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="1*" />
+                                            <ColumnDefinition Width="1*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock Text="Replay ID" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <TextBlock Text="{Binding ReplayContext.ReplayIdLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="0,0,16,0">
+                                            <TextBlock Text="As of (UTC)" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <TextBlock Text="{Binding ReplayContext.AsOfLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Margin="0,0,16,0">
+                                            <TextBlock Text="Symbol" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <TextBlock Text="{Binding ReplayContext.SymbolLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="3">
+                                            <TextBlock Text="Interval" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <TextBlock Text="{Binding ReplayContext.IntervalLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Grid.Row="3" Text="Read-only replay identity. This pane cannot select captures, alter replay identity, or change current research." Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" Margin="0,12,0,0" />
+                                </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="ReviewOutcomesAnchor" ContentId="pane-review-outcomes" Title="Outcomes" CanClose="True" CanFloat="True">

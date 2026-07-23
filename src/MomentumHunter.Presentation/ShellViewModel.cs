@@ -356,6 +356,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public string ReplaySummary => ReplaySession?.Summary ?? "Replay context is unavailable.";
 
+    public ReplayContextView ReplayContext => ReplayContextView.From(ReplaySession);
+
     public RectGeometry? RestoredWindowBounds => _windowBounds;
 
     public string? RestoredDockLayoutXml => _dockLayoutXml;
@@ -819,6 +821,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     partial void OnHealthChanged(SystemHealthSnapshot? value) => OnPropertyChanged(nameof(Diagnostics));
 
+    partial void OnReplaySessionChanged(ReplaySnapshot? value) => OnPropertyChanged(nameof(ReplayContext));
+
     private void SetRegistry(PaneRegistry registry)
     {
         if (Registry is not null)
@@ -1101,6 +1105,8 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(CandidateOpportunityNotes));
         OnPropertyChanged(nameof(CandidateOpportunityNotesLabel));
         OnPropertyChanged(nameof(ReplaySummary));
+
+        OnPropertyChanged(nameof(ReplayContext));
     }
 
     private static string TextOrUnavailable(string? value, string unavailable) =>
