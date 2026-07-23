@@ -49,19 +49,49 @@
                     <Button Content="15m" Tag="15m" Click="IntervalButton_Click" />
                     <Button Content="Daily" Tag="Daily" Click="IntervalButton_Click" />
                 </StackPanel>
-                <TextBox Grid.Column="3"
-                         Width="300"
-                         HorizontalAlignment="Left"
-                         VerticalAlignment="Center"
-                         Background="#1A2731"
-                         BorderBrush="{StaticResource PanelBorder}"
-                         Foreground="{StaticResource TextPrimary}"
-                         Padding="9,5"
-                         Text="Search symbol or command (Ctrl+K)" />
+                <Grid Grid.Column="3"
+                      MinWidth="120"
+                      MaxWidth="360"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Center">
+                    <TextBox x:Name="GlobalSearchBox"
+                             Background="#1A2731"
+                             BorderBrush="{StaticResource PanelBorder}"
+                             Foreground="{StaticResource TextPrimary}"
+                             Padding="9,5"
+                             Text="{Binding CommandQuery, UpdateSourceTrigger=PropertyChanged}"
+                             PreviewKeyDown="GlobalSearchBox_PreviewKeyDown" />
+                    <TextBlock Text="Search (Ctrl+K)"
+                               Foreground="{StaticResource TextMuted}"
+                               Margin="10,0,0,0"
+                               VerticalAlignment="Center"
+                               IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="{x:Type TextBlock}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=GlobalSearchBox}" Value="">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
                 <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Click="SaveLayoutButton_Click"><TextBlock Text="Save Layout" Foreground="{StaticResource TextPrimary}" /></Button>
-                    <Button Click="RestoreLayoutButton_Click"><TextBlock Text="Restore" Foreground="{StaticResource TextPrimary}" /></Button>
-                <Button x:Name="PanesButton" Content="Panes" Click="PanesButton_Click" />
+                    <Button Width="32"
+                            ToolTip="Save layout"
+                            AutomationProperties.Name="Save layout"
+                            Click="SaveLayoutButton_Click">
+                        <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource TextPrimary}" />
+                    </Button>
+                    <Button Width="32"
+                            ToolTip="Restore layout"
+                            AutomationProperties.Name="Restore layout"
+                            Click="RestoreLayoutButton_Click">
+                        <TextBlock Text="&#xE777;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource TextPrimary}" />
+                    </Button>
+                    <Button x:Name="PanesButton" Content="Panes" Click="PanesButton_Click" />
                 </StackPanel>
                 <Border Grid.Column="5" Padding="10,5" Margin="5,0" Background="#253440" CornerRadius="3">
                     <TextBlock Text="{Binding BackgroundStatusLabel}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" FontSize="11" />
@@ -440,12 +470,85 @@
             </Border>
         </Popup>
 
-        <Popup IsOpen="{Binding IsCommandPaletteOpen}" Placement="Center" StaysOpen="False" AllowsTransparency="True" DataContext="{Binding DataContext, ElementName=Root}">
-            <Border Width="480" Padding="16" Background="#1B2731" BorderBrush="{StaticResource Teal}" BorderThickness="1" CornerRadius="4">
+        <Popup x:Name="CommandPalettePopup"
+               IsOpen="{Binding IsCommandPaletteOpen, Mode=TwoWay}"
+               Placement="Center"
+               PlacementTarget="{Binding ElementName=Root}"
+               StaysOpen="False"
+               AllowsTransparency="True"
+               Opened="CommandPalettePopup_Opened"
+               Closed="CommandPalettePopup_Closed"
+               DataContext="{Binding DataContext, ElementName=Root}">
+            <Border Width="520" Padding="16" Background="#1B2731" BorderBrush="{StaticResource Teal}" BorderThickness="1" CornerRadius="4">
                 <StackPanel>
                     <TextBlock Text="Command Palette" FontSize="16" FontWeight="SemiBold" />
-                    <TextBox Margin="0,10,0,8" Background="#10161D" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource PanelBorder}" Padding="8" Text="Type a symbol or command" />
-                    <TextBlock Text="Open candidate   |   Add chart   |   Toggle activity   |   View diagnostics" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" />
+                    <Grid Margin="0,10,0,8">
+                        <TextBox x:Name="CommandPaletteSearchBox"
+                                 Background="#10161D"
+                                 Foreground="{StaticResource TextPrimary}"
+                                 BorderBrush="{StaticResource PanelBorder}"
+                                 Padding="8"
+                                 Text="{Binding CommandQuery, UpdateSourceTrigger=PropertyChanged}"
+                                 PreviewKeyDown="CommandPaletteSearchBox_PreviewKeyDown" />
+                        <TextBlock Text="Type a symbol or command"
+                                   Foreground="{StaticResource TextMuted}"
+                                   Margin="9,0,0,0"
+                                   VerticalAlignment="Center"
+                                   IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="{x:Type TextBlock}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=CommandPaletteSearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                    <ListBox x:Name="CommandPaletteResultsList"
+                             ItemsSource="{Binding CommandPaletteResults}"
+                             SelectedItem="{Binding SelectedCommandPaletteItem, Mode=TwoWay}"
+                             Background="#17212B"
+                             BorderBrush="{StaticResource PanelBorder}"
+                             Foreground="{StaticResource TextPrimary}"
+                             MaxHeight="340"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             PreviewKeyDown="CommandPaletteResultsList_PreviewKeyDown"
+                             MouseDoubleClick="CommandPaletteResultsList_MouseDoubleClick">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="6,5">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Row="1"
+                                               Text="{Binding Detail}"
+                                               Foreground="{StaticResource TextMuted}"
+                                               FontSize="11"
+                                               Margin="0,2,0,0"
+                                               TextTrimming="CharacterEllipsis" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Text="{Binding CommandPaletteEmptyText}"
+                               Foreground="{StaticResource Amber}"
+                               Margin="0,8,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="{x:Type TextBlock}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasCommandPaletteResults}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </StackPanel>
             </Border>
         </Popup>

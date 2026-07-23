@@ -125,8 +125,11 @@ public sealed partial class ShellViewModel : ObservableObject
         Candidates = [];
         Activity = [];
         Candles = [];
+        CommandPaletteResults = [];
         WorkspaceOptions = Enum.GetValues<WorkspaceKind>();
         IntervalOptions = ["1m", "5m", "15m", "Daily"];
+        Candidates.CollectionChanged += (_, _) => RefreshCommandPaletteResults();
+        RefreshCommandPaletteResults();
     }
 
     public PaneRegistry Registry { get; private set; } = null!;
@@ -138,6 +141,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public ObservableCollection<CandleSnapshot> Candles { get; }
 
     public ObservableCollection<ChartPaneViewModel> SecondaryCharts { get; } = [];
+
+    public ObservableCollection<CommandPaletteItem> CommandPaletteResults { get; }
 
     public IReadOnlyList<WorkspaceKind> WorkspaceOptions { get; }
 
@@ -184,6 +189,12 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isCommandPaletteOpen;
+
+    [ObservableProperty]
+    private string _commandQuery = string.Empty;
+
+    [ObservableProperty]
+    private CommandPaletteItem? _selectedCommandPaletteItem;
 
     [ObservableProperty]
     private string _statusMessage = "Mock engine | Local deterministic data | No provider calls";
@@ -248,6 +259,12 @@ public sealed partial class ShellViewModel : ObservableObject
     };
 
     public string ActivityLabel => Activity.Count == 0 ? "Activity" : $"Activity {Activity.Count}";
+
+    public bool HasCommandPaletteResults => CommandPaletteResults.Count > 0;
+
+    public string CommandPaletteEmptyText => string.IsNullOrWhiteSpace(CommandQuery)
+        ? "No commands or candidates are available."
+        : $"No candidate or command matches '{CommandQuery.Trim()}'.";
 
     public bool CanRunSimulation => !IsReadOnlySnapshotMode && TradePlan?.RiskDecision?.Allowed == true && Environment == EnvironmentMode.Simulation;
 
@@ -495,7 +512,95 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ToggleCommandPalette() => IsCommandPaletteOpen = !IsCommandPaletteOpen;
+    private void ToggleCommandPalette()
+    {
+        if (IsCommandPaletteOpen)
+        {
+            CloseCommandPalette();
+        }
+        else
+        {
+            OpenCommandPalette();
+        }
+    }
+
+    public void OpenCommandPalette(string? query = null)
+    {
+        CommandQuery = query?.Trim() ?? string.Empty;
+        RefreshCommandPaletteResults();
+        IsCommandPaletteOpen = true;
+    }
+
+    public void CloseCommandPalette()
+    {
+        IsCommandPaletteOpen = false;
+        CommandQuery = string.Empty;
+    }
+
+    public CommandPaletteItem? FindExactCommandPaletteItem(string? query) =>
+        CommandPaletteCatalog.FindExact(Candidates, query);
+
+    public async Task<CommandPaletteExecution> ExecuteCommandPaletteItemAsync(
+        CommandPaletteItem? item = null,
+        CancellationToken cancellationToken = default)
+    {
+        var selected = item ?? SelectedCommandPaletteItem;
+        if (selected is null)
+        {
+            StatusMessage = string.IsNullOrWhiteSpace(CommandQuery)
+                ? "Choose a candidate or command."
+                : $"No candidate or command matches '{CommandQuery.Trim()}'.";
+            return new CommandPaletteExecution(false);
+        }
+
+        PaneState? addedPane = null;
+        switch (selected.Action)
+        {
+            case CommandPaletteAction.OpenCandidate:
+            {
+                var candidate = Candidates.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Symbol, selected.Symbol, StringComparison.OrdinalIgnoreCase));
+                if (candidate is null)
+                {
+                    StatusMessage = $"Candidate {selected.Symbol ?? "unknown"} is no longer available in the current evidence snapshot.";
+                    RefreshCommandPaletteResults();
+                    return new CommandPaletteExecution(false);
+                }
+
+                await SelectCandidateAsync(candidate, cancellationToken);
+                StatusMessage = $"Opened candidate {candidate.Symbol} from the command palette.";
+                break;
+            }
+            case CommandPaletteAction.AddChart:
+                addedPane = await AddLinkedChartAsync(cancellationToken);
+                StatusMessage = $"Added linked chart for {addedPane.Symbol}.";
+                break;
+            case CommandPaletteAction.ToggleActivity:
+                ToggleActivity();
+                StatusMessage = IsActivityOpen ? "Opened workstation activity." : "Hid workstation activity.";
+                break;
+            case CommandPaletteAction.ViewDiagnostics:
+            {
+                var diagnostics = Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Diagnostics);
+                if (diagnostics is null)
+                {
+                    StatusMessage = "Diagnostics was removed from this workspace.";
+                    return new CommandPaletteExecution(false);
+                }
+
+                IsDiagnosticsOpen = true;
+                diagnostics.IsVisible = true;
+                StatusMessage = "Opened workstation diagnostics.";
+                break;
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(selected), selected.Action, "Unsupported command palette action.");
+        }
+
+        var action = selected.Action;
+        CloseCommandPalette();
+        return new CommandPaletteExecution(true, action, addedPane);
+    }
 
     [RelayCommand]
     private async Task TogglePrimaryChartPinAsync()
@@ -661,6 +766,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     partial void OnIsMonitoringPausedChanged(bool value) => OnPropertyChanged(nameof(MonitoringToggleLabel));
 
+    partial void OnCommandQueryChanged(string value) => RefreshCommandPaletteResults();
+
     private void SetRegistry(PaneRegistry registry)
     {
         if (Registry is not null)
@@ -685,6 +792,21 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     private void RequestLayoutSave() => _layoutAutosave?.RequestSave();
+
+    private void RefreshCommandPaletteResults()
+    {
+        var results = CommandPaletteCatalog.Filter(Candidates, CommandQuery);
+        SelectedCommandPaletteItem = null;
+        CommandPaletteResults.Clear();
+        foreach (var result in results)
+        {
+            CommandPaletteResults.Add(result);
+        }
+
+        SelectedCommandPaletteItem = CommandPaletteResults.FirstOrDefault();
+        OnPropertyChanged(nameof(HasCommandPaletteResults));
+        OnPropertyChanged(nameof(CommandPaletteEmptyText));
+    }
 
     private WorkspaceLayoutSnapshot CreateAutomaticLayoutSnapshot() => CreateLayoutSnapshot(isNamedLayout: false, name: null);
 

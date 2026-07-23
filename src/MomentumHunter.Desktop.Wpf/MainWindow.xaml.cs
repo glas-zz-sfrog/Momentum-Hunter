@@ -131,10 +131,102 @@ public partial class MainWindow : Window, IWorkstationPresentation
 
     private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && _viewModel.IsCommandPaletteOpen)
+        {
+            _viewModel.CloseCommandPalette();
+            e.Handled = true;
+            return;
+        }
+
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.K)
         {
-            _viewModel.ToggleCommandPaletteCommand.Execute(null);
+            if (_viewModel.IsCommandPaletteOpen)
+            {
+                _viewModel.CloseCommandPalette();
+            }
+            else
+            {
+                OpenCommandPalette();
+            }
+
             e.Handled = true;
+        }
+    }
+
+    private async void GlobalSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        var exact = _viewModel.FindExactCommandPaletteItem(GlobalSearchBox.Text);
+        if (exact is null)
+        {
+            OpenCommandPalette(GlobalSearchBox.Text);
+        }
+        else
+        {
+            await ExecuteCommandPaletteItemAsync(exact);
+        }
+
+        e.Handled = true;
+    }
+
+    private async void CommandPaletteSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Down:
+                MoveCommandPaletteSelection(1);
+                e.Handled = true;
+                break;
+            case Key.Up:
+                MoveCommandPaletteSelection(-1);
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                await ExecuteCommandPaletteItemAsync();
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                _viewModel.CloseCommandPalette();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private async void CommandPaletteResultsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        await ExecuteCommandPaletteItemAsync();
+        e.Handled = true;
+    }
+
+    private async void CommandPaletteResultsList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            await ExecuteCommandPaletteItemAsync();
+            e.Handled = true;
+        }
+    }
+
+    private void CommandPalettePopup_Opened(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            () =>
+            {
+                CommandPaletteSearchBox.Focus();
+                CommandPaletteSearchBox.SelectAll();
+            });
+    }
+
+    private void CommandPalettePopup_Closed(object? sender, EventArgs e)
+    {
+        if (_viewModel.IsCommandPaletteOpen)
+        {
+            _viewModel.CloseCommandPalette();
         }
     }
 
@@ -154,6 +246,48 @@ public partial class MainWindow : Window, IWorkstationPresentation
     {
         var pane = await _viewModel.AddLinkedChartAsync();
         CreateAdditionalChartDocument(pane, activate: true);
+    }
+
+    private void OpenCommandPalette(string? query = null)
+    {
+        _viewModel.OpenCommandPalette(query);
+    }
+
+    private void MoveCommandPaletteSelection(int delta)
+    {
+        if (CommandPaletteResultsList.Items.Count == 0)
+        {
+            return;
+        }
+
+        var current = CommandPaletteResultsList.SelectedIndex;
+        var next = current < 0
+            ? 0
+            : Math.Clamp(current + delta, 0, CommandPaletteResultsList.Items.Count - 1);
+        CommandPaletteResultsList.SelectedIndex = next;
+        CommandPaletteResultsList.ScrollIntoView(CommandPaletteResultsList.SelectedItem);
+    }
+
+    private async Task ExecuteCommandPaletteItemAsync(CommandPaletteItem? item = null)
+    {
+        var result = await _viewModel.ExecuteCommandPaletteItemAsync(item);
+        if (!result.Executed)
+        {
+            return;
+        }
+
+        switch (result.Action)
+        {
+            case CommandPaletteAction.AddChart when result.AddedPane is not null:
+                CreateAdditionalChartDocument(result.AddedPane, activate: true);
+                break;
+            case CommandPaletteAction.ToggleActivity:
+                SetContentVisibility(ActivityContentId, _viewModel.IsActivityOpen);
+                break;
+            case CommandPaletteAction.ViewDiagnostics:
+                SetContentVisibility(DiagnosticsContentId, true);
+                break;
+        }
     }
 
     private async void TradePlanActionButton_Click(object sender, RoutedEventArgs e)
