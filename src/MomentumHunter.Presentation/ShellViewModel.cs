@@ -206,6 +206,14 @@ public sealed partial class ShellViewModel : ObservableObject
     private string _backgroundStatusDetail = "Waiting for background monitoring to start.";
 
     [ObservableProperty]
+    private BackgroundCollectionStatus _backgroundCollectionStatus = new(
+        BackgroundCollectionState.Starting,
+        null,
+        0,
+        0,
+        "Waiting for background monitoring to start.");
+
+    [ObservableProperty]
     private bool _isMonitoringPaused;
 
     [ObservableProperty]
@@ -215,6 +223,8 @@ public sealed partial class ShellViewModel : ObservableObject
     private bool _isPythonSimulationWorkspaceMode;
 
     public string MonitoringToggleLabel => IsMonitoringPaused ? "Resume Monitoring" : "Pause Monitoring";
+
+    public MonitoringStatusView MonitoringStatus => MonitoringStatusView.From(BackgroundCollectionStatus);
 
     public EnvironmentMode Environment => Workspace switch
     {
@@ -797,6 +807,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public void UpdateBackgroundStatus(BackgroundCollectionStatus status)
     {
+        BackgroundCollectionStatus = status;
         BackgroundStatusLabel = BackgroundStatusText.Label(status);
         BackgroundStatusDetail = BackgroundStatusText.Detail(status);
         IsMonitoringPaused = status.State == BackgroundCollectionState.Paused;
@@ -822,6 +833,9 @@ public sealed partial class ShellViewModel : ObservableObject
     partial void OnHealthChanged(SystemHealthSnapshot? value) => OnPropertyChanged(nameof(Diagnostics));
 
     partial void OnReplaySessionChanged(ReplaySnapshot? value) => OnPropertyChanged(nameof(ReplayContext));
+
+    partial void OnBackgroundCollectionStatusChanged(BackgroundCollectionStatus value) =>
+        OnPropertyChanged(nameof(MonitoringStatus));
 
     private void SetRegistry(PaneRegistry registry)
     {

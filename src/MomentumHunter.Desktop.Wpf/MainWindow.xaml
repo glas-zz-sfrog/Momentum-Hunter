@@ -479,11 +479,83 @@
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="AutomationAnchor" ContentId="pane-automation" Title="Automation" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="12">
-                                <StackPanel>
-                                    <TextBlock Text="Automation" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Automation status and scheduled research work appear here when that capability is added." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
-                                    <TextBlock Text="This shell exposes no automatic trading controls." TextWrapping="Wrap" />
-                                </StackPanel>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <DockPanel LastChildFill="False">
+                                        <TextBlock DockPanel.Dock="Left" Text="Research Monitoring" FontSize="16" FontWeight="SemiBold" />
+                                        <Border DockPanel.Dock="Right" Padding="7,3" CornerRadius="3">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#263846" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding MonitoringStatus.StateLabel}" Value="HEALTHY">
+                                                            <Setter Property="Background" Value="#173C37" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding MonitoringStatus.StateLabel}" Value="DEGRADED">
+                                                            <Setter Property="Background" Value="#3A3524" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding MonitoringStatus.StateLabel}" Value="PAUSED">
+                                                            <Setter Property="Background" Value="#3A3524" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding MonitoringStatus.StateLabel}" Value="BLOCKED">
+                                                            <Setter Property="Background" Value="#47272B" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding MonitoringStatus.StateLabel}" FontSize="10" FontWeight="SemiBold">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding MonitoringStatus.StateLabel}" Value="HEALTHY">
+                                                                <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding MonitoringStatus.StateLabel}" Value="DEGRADED">
+                                                                <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding MonitoringStatus.StateLabel}" Value="PAUSED">
+                                                                <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding MonitoringStatus.StateLabel}" Value="BLOCKED">
+                                                                <Setter Property="Foreground" Value="#F2868D" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </DockPanel>
+                                    <StackPanel Grid.Row="1" Margin="0,6,0,12">
+                                        <TextBlock Text="{Binding MonitoringStatus.Summary}" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding MonitoringStatus.SourceDetail}" Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                    </StackPanel>
+                                    <Grid Grid.Row="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1*" />
+                                            <ColumnDefinition Width="1*" />
+                                            <ColumnDefinition Width="2*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock Text="Coverage" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <TextBlock Text="{Binding MonitoringStatus.MonitoredSymbolsLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="0,0,16,0">
+                                            <TextBlock Text="Cycles" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <TextBlock Text="{Binding MonitoringStatus.CompletedCyclesLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Last completed scan (UTC)" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <TextBlock Text="{Binding MonitoringStatus.LastCompletedLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Grid.Row="3" Text="Read-only research monitoring status. No scheduler, provider, broker, order, Paper, Live, or automatic-trading control is available here." Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" Margin="0,12,0,0" />
+                                </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="OrdersAnchor" ContentId="pane-orders" Title="Orders" CanClose="True" CanFloat="True">
