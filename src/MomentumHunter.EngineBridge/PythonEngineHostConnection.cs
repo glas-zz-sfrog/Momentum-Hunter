@@ -218,6 +218,38 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         return result.Payload.Value.Clone();
     }
 
+    public async Task<JsonElement> GetChartSnapshotAsync(
+        string symbol,
+        string interval,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            throw new ArgumentException("A symbol is required for a chart snapshot.", nameof(symbol));
+        }
+        if (string.IsNullOrWhiteSpace(interval))
+        {
+            throw new ArgumentException("An interval is required for a chart snapshot.", nameof(interval));
+        }
+
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetChartSnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["symbol"] = symbol.Trim().ToUpperInvariant(),
+                ["interval"] = interval.Trim(),
+            },
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException($"The Python Engine Host did not provide a chart snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
     public async Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(symbol))

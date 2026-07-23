@@ -31,6 +31,7 @@ COMMAND_RUN_CYCLE = "run_collection_cycle"
 COMMAND_SHUTDOWN = "shutdown_host"
 COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT = "get_readonly_workspace_snapshot"
 COMMAND_SIMULATION_WORKSPACE_SNAPSHOT = "get_simulation_workspace_snapshot"
+COMMAND_CHART_SNAPSHOT = "get_chart_snapshot"
 COMMAND_RUN_SIMULATION = "run_simulation"
 SUPPORTED_COMMANDS = frozenset(
     {
@@ -41,6 +42,7 @@ SUPPORTED_COMMANDS = frozenset(
         COMMAND_SHUTDOWN,
         COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
         COMMAND_SIMULATION_WORKSPACE_SNAPSHOT,
+        COMMAND_CHART_SNAPSHOT,
         COMMAND_RUN_SIMULATION,
     }
 )
@@ -208,6 +210,7 @@ class EngineHostRuntime:
         workspace_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
         simulation_workspace_loader: Callable[[], dict[str, Any]] | None = None,
         simulation_runner: Callable[[str], dict[str, Any]] | None = None,
+        chart_snapshot_loader: Callable[[str, str], dict[str, Any]] | None = None,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
@@ -222,6 +225,13 @@ class EngineHostRuntime:
             self._simulation_workspace_service = SimulationWorkspaceService()
         self._simulation_workspace_loader = simulation_workspace_loader or self._simulation_workspace_service.snapshot
         self._simulation_runner = simulation_runner or self._simulation_workspace_service.run_simulation
+        if chart_snapshot_loader is None:
+            from momentum_hunter.workstation_charts import WorkstationChartService
+
+            self._chart_service = WorkstationChartService()
+        else:
+            self._chart_service = None
+        self._chart_snapshot_loader = chart_snapshot_loader or self._chart_service.snapshot
         self._state_lock = threading.RLock()
         self._command_condition = threading.Condition(self._state_lock)
         self._cycle_lock = threading.Lock()
@@ -362,6 +372,39 @@ class EngineHostRuntime:
                 True,
                 "SIMULATION_WORKSPACE_SNAPSHOT",
                 "Simulation workspace snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_CHART_SNAPSHOT:
+            symbol = arguments.get("symbol")
+            interval = arguments.get("interval")
+            if not isinstance(symbol, str) or not symbol.strip():
+                return EngineHostCommandResult(
+                    False,
+                    "CHART_SYMBOL_REQUIRED",
+                    "A non-empty symbol is required for a chart snapshot.",
+                    self.snapshot(),
+                )
+            if not isinstance(interval, str) or not interval.strip():
+                return EngineHostCommandResult(
+                    False,
+                    "CHART_INTERVAL_REQUIRED",
+                    "A supported interval is required for a chart snapshot.",
+                    self.snapshot(),
+                )
+            try:
+                payload = self._chart_snapshot_loader(symbol, interval)
+            except ValueError as exc:
+                return EngineHostCommandResult(
+                    False,
+                    "INVALID_CHART_REQUEST",
+                    str(exc),
+                    self.snapshot(),
+                )
+            return EngineHostCommandResult(
+                True,
+                "CHART_SNAPSHOT",
+                "Read-only chart snapshot returned.",
                 self.snapshot(),
                 payload=payload,
             )

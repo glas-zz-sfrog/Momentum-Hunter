@@ -21,6 +21,7 @@
 | R-017 | Simulation engine adapter injection becomes a paper/live transmit path if reused without guards. | Broker safety | High | Before A017/A018, require FakeBroker-only metadata checks and tests proving non-Fake or transmit-capable adapters are rejected before adapter calls. | Open |
 | R-018 | Execution Auditor is treated as a hard paper gate before it validates chronology, preview-before-submit, and event consistency. | Broker safety | High | Harden auditor rules and tests before any paper broker skeleton or paper pilot. | Open |
 | R-019 | Competing status documents or stale roadmap entries send work down an obsolete architectural path. | Operations | High | Treat `ROADMAP.md` as the sole current-status authority; reconcile it from Git at every substantive task closeout. | Open |
+| R-020 | Sparse or stale stored chart bars look like current market data in the workstation. | Product trust | High | Label chart state, source, timeframe, and as-of timestamp; preserve stale candles only with explicit `STALE`; use `UNAVAILABLE` rather than mock, daily, interpolated, or provider fallback. | Mitigated in R011; monitor source coverage |
 
 ## Protected Areas
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.

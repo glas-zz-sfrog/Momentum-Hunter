@@ -150,9 +150,9 @@ public partial class MainWindow : Window, IWorkstationPresentation
         SetContentVisibility(DiagnosticsContentId, _viewModel.IsDiagnosticsOpen);
     }
 
-    private void NewChartButton_Click(object sender, RoutedEventArgs e)
+    private async void NewChartButton_Click(object sender, RoutedEventArgs e)
     {
-        var pane = _viewModel.AddLinkedChart();
+        var pane = await _viewModel.AddLinkedChartAsync();
         CreateAdditionalChartDocument(pane, activate: true);
     }
 
@@ -485,6 +485,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             ?? new ChartPaneViewModel(pane, _viewModel.Candles);
         var chart = new CandleChart { Margin = new Thickness(12), DataContext = chartViewModel };
         chart.SetBinding(CandleChart.CandlesProperty, new Binding(nameof(ChartPaneViewModel.Candles)));
+        chart.SetBinding(CandleChart.EmptyStateTextProperty, new Binding(nameof(ChartPaneViewModel.EmptyStateText)));
         var symbol = new TextBlock
         {
             FontFamily = new FontFamily("Segoe UI"),
@@ -503,7 +504,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             Margin = new Thickness(12, 2, 12, 0),
             DataContext = chartViewModel,
         };
-        note.SetBinding(TextBlock.TextProperty, new Binding(nameof(ChartPaneViewModel.ContextLabel)));
+        note.SetBinding(TextBlock.TextProperty, new Binding(nameof(ChartPaneViewModel.DetailLabel)));
         var content = new Grid { Background = new SolidColorBrush(Color.FromRgb(23, 33, 43)) };
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

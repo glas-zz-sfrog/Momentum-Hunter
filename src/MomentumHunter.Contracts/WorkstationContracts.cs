@@ -77,6 +77,14 @@ public enum SimulationResultState
     Unavailable,
 }
 
+public enum ChartDataState
+{
+    Available,
+    Stale,
+    InsufficientData,
+    Unavailable,
+}
+
 public sealed record CatalystSummary(string Headline, string SourceLabel, DateTimeOffset ObservedAt);
 
 public sealed record DataLineage(string SourceLabel, DateTimeOffset AsOf, string Summary);
@@ -116,6 +124,17 @@ public sealed record CandleSnapshot(
     decimal Low,
     decimal Close,
     long Volume);
+
+public sealed record ChartSnapshot(
+    int SchemaVersion,
+    string Symbol,
+    string Interval,
+    ChartDataState State,
+    DateTimeOffset ObservedAt,
+    DateTimeOffset AsOf,
+    string Summary,
+    DataLineage DataLineage,
+    IReadOnlyList<CandleSnapshot> Candles);
 
 public sealed record ReadinessCheck(string Name, bool Passed, string Detail);
 

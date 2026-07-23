@@ -14,10 +14,22 @@ public sealed class CandleChart : FrameworkElement
         typeof(CandleChart),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, OnCandlesChanged));
 
+    public static readonly DependencyProperty EmptyStateTextProperty = DependencyProperty.Register(
+        nameof(EmptyStateText),
+        typeof(string),
+        typeof(CandleChart),
+        new FrameworkPropertyMetadata("No deterministic candles available", FrameworkPropertyMetadataOptions.AffectsRender));
+
     public IEnumerable? Candles
     {
         get => (IEnumerable?)GetValue(CandlesProperty);
         set => SetValue(CandlesProperty, value);
+    }
+
+    public string EmptyStateText
+    {
+        get => (string)GetValue(EmptyStateTextProperty);
+        set => SetValue(EmptyStateTextProperty, value);
     }
 
     private static void OnCandlesChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
@@ -44,7 +56,7 @@ public sealed class CandleChart : FrameworkElement
         var candles = Candles?.OfType<CandleSnapshot>().ToArray() ?? [];
         if (candles.Length == 0 || ActualWidth < 40 || ActualHeight < 40)
         {
-            DrawEmptyState(drawingContext, bounds);
+            DrawEmptyState(drawingContext, bounds, EmptyStateText);
             return;
         }
 
@@ -77,7 +89,9 @@ public sealed class CandleChart : FrameworkElement
             drawingContext.DrawLine(pen, new Point(x, highY), new Point(x, lowY));
             drawingContext.DrawRectangle(brush, null, new Rect(x - bodyWidth / 2, Math.Min(openY, closeY), bodyWidth, Math.Max(1.5, Math.Abs(closeY - openY))));
 
-            var volumeHeight = Math.Max(1, candle.Volume / (double)maximumVolume * 24);
+            var volumeHeight = maximumVolume > 0
+                ? Math.Max(1, candle.Volume / (double)maximumVolume * 24)
+                : 1;
             var volumeBrush = new SolidColorBrush(Color.FromArgb(100, isUp ? (byte)74 : (byte)221, isUp ? (byte)199 : (byte)106, isUp ? (byte)182 : (byte)106));
             drawingContext.DrawRectangle(volumeBrush, null, new Rect(x - bodyWidth / 2, ActualHeight - volumeHeight - 4, bodyWidth, volumeHeight));
         }
@@ -86,10 +100,10 @@ public sealed class CandleChart : FrameworkElement
     private static double ToY(decimal value, decimal min, decimal range, double top, double height) =>
         top + (double)(min + range - value) / (double)range * height;
 
-    private static void DrawEmptyState(DrawingContext context, Rect bounds)
+    private static void DrawEmptyState(DrawingContext context, Rect bounds, string message)
     {
         var text = new FormattedText(
-            "No deterministic candles available",
+            string.IsNullOrWhiteSpace(message) ? "No deterministic candles available" : message,
             System.Globalization.CultureInfo.InvariantCulture,
             FlowDirection.LeftToRight,
             new Typeface("Segoe UI"),

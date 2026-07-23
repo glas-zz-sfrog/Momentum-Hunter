@@ -12,6 +12,7 @@ public static class PythonEngineHostProtocol
     public const string ShutdownHost = "shutdown_host";
     public const string GetReadOnlyWorkspaceSnapshot = "get_readonly_workspace_snapshot";
     public const string GetSimulationWorkspaceSnapshot = "get_simulation_workspace_snapshot";
+    public const string GetChartSnapshot = "get_chart_snapshot";
     public const string RunSimulation = "run_simulation";
 }
 

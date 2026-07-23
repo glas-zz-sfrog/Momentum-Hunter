@@ -17,6 +17,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IEngineClient _engineClient;
     private readonly IReadOnlyWorkspaceClient? _readOnlyWorkspaceClient;
     private readonly ISimulationWorkspaceClient? _simulationWorkspaceClient;
+    private readonly IChartWorkspaceClient? _chartWorkspaceClient;
     private readonly IWorkspaceLayoutStore? _layoutStore;
     private readonly LayoutAutosaveCoordinator? _layoutAutosave;
     private LinkGroupCoordinator _linkGroups = null!;
@@ -26,17 +27,17 @@ public sealed partial class ShellViewModel : ObservableObject
     private SimulationWorkspaceSnapshot? _simulationWorkspaceSnapshot;
 
     public ShellViewModel(IEngineClient engineClient)
-        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
     public ShellViewModel(IEngineClient engineClient, IWorkspaceLayoutStore layoutStore)
-        : this(engineClient, layoutStore, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
     public ShellViewModel(IEngineClient engineClient, IReadOnlyWorkspaceClient readOnlyWorkspaceClient)
-        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient, simulationWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
@@ -46,6 +47,7 @@ public sealed partial class ShellViewModel : ObservableObject
             layoutStore: null,
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
+            chartWorkspaceClient: null,
             isInternalConstruction: true)
     {
     }
@@ -54,7 +56,7 @@ public sealed partial class ShellViewModel : ObservableObject
         IEngineClient engineClient,
         IWorkspaceLayoutStore layoutStore,
         IReadOnlyWorkspaceClient readOnlyWorkspaceClient)
-        : this(engineClient, layoutStore, readOnlyWorkspaceClient, simulationWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore, readOnlyWorkspaceClient, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
@@ -67,6 +69,36 @@ public sealed partial class ShellViewModel : ObservableObject
             layoutStore,
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
+            chartWorkspaceClient: null,
+            isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: simulationWorkspaceClient,
+            chartWorkspaceClient: chartWorkspaceClient,
+            isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: simulationWorkspaceClient,
+            chartWorkspaceClient: chartWorkspaceClient,
             isInternalConstruction: true)
     {
     }
@@ -76,12 +108,14 @@ public sealed partial class ShellViewModel : ObservableObject
         IWorkspaceLayoutStore? layoutStore,
         IReadOnlyWorkspaceClient? readOnlyWorkspaceClient,
         ISimulationWorkspaceClient? simulationWorkspaceClient,
+        IChartWorkspaceClient? chartWorkspaceClient,
         bool isInternalConstruction)
     {
         _engineClient = engineClient;
         _layoutStore = layoutStore;
         _readOnlyWorkspaceClient = readOnlyWorkspaceClient;
         _simulationWorkspaceClient = simulationWorkspaceClient;
+        _chartWorkspaceClient = chartWorkspaceClient;
         SetRegistry(WorkspaceFactory.Create(WorkspaceKind.Live));
         if (_layoutStore is not null)
         {
@@ -224,11 +258,11 @@ public sealed partial class ShellViewModel : ObservableObject
     public string TradePlanRiskStatusLabel => TradePlan?.RiskDecision?.State ?? "Plan unavailable";
 
     public string PlanningStatus => IsReadOnlySnapshotMode
-        ? "Trade planning, Risk Governor, charts, and simulation are deferred to Phase 10. This pane will not create a substitute plan."
+        ? "Trade planning, Risk Governor, and simulation are unavailable at this read-only boundary. Stored chart evidence is independent and cannot create a substitute plan."
         : IsPythonSimulationWorkspaceMode && TradePlan is null
             ? $"No persisted TradePlan is available for {SelectedSymbol}. Simulation is unavailable; no substitute plan was created."
         : IsPythonSimulationWorkspaceMode
-            ? "TradePlan and Risk Governor evidence are supplied by the Python FakeBroker-only simulation boundary. Chart integration remains deferred."
+            ? "TradePlan and Risk Governor evidence are supplied by the Python FakeBroker-only simulation boundary. Stored chart candles remain read-only evidence."
         : TradePlan is null
             ? "No TradePlan is available for the selected candidate."
             : "TradePlan data is supplied by the current engine client.";
@@ -237,9 +271,10 @@ public sealed partial class ShellViewModel : ObservableObject
         ? "Planning Deferred"
         : TradePlan?.PrimaryAction ?? "No Plan Available";
 
-    public string ChartSourceLabel => IsReadOnlySnapshotMode || IsPythonSimulationWorkspaceMode
-        ? "Chart integration is deferred; no simulated candle fallback is shown."
-        : "Local simulation candle data";
+    public string ChartSourceLabel => PrimaryChart?.SourceSummary
+        ?? (UsesPythonWorkspaceBoundary
+            ? "Chart evidence unavailable; no simulated candle fallback is shown."
+            : "Local simulation candle data");
 
     public string ActivitySourceLabel => IsPythonSimulationWorkspaceMode
         ? "Activity combines persisted Python evidence with the in-memory simulation ledger."
@@ -276,10 +311,7 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         await RefreshWorkspaceDataAsync(cancellationToken);
-        if (!UsesPythonWorkspaceBoundary)
-        {
-            await RefreshChartPaneDataAsync(cancellationToken);
-        }
+        await RefreshChartPaneDataAsync(cancellationToken);
     }
 
     public async Task SelectCandidateAsync(CandidateSnapshot candidate, CancellationToken cancellationToken = default)
@@ -290,10 +322,8 @@ public sealed partial class ShellViewModel : ObservableObject
         if (IsReadOnlySnapshotMode)
         {
             TradePlan = null;
-            Candles.Clear();
-            PrimaryChart = null;
-            SecondaryCharts.Clear();
-            StatusMessage = "Read-only Python candidate selected. Trade planning, charts, risk, and simulation remain deferred to Phase 10.";
+            await RefreshChartPaneDataAsync(cancellationToken);
+            StatusMessage = "Read-only Python candidate selected. Stored chart evidence refreshed; trade planning, risk, and simulation remain unavailable.";
             RaisePresentationProperties();
             RequestLayoutSave();
             return;
@@ -302,10 +332,8 @@ public sealed partial class ShellViewModel : ObservableObject
         if (IsPythonSimulationWorkspaceMode)
         {
             ApplySimulationTradePlan(candidate.Symbol);
-            Candles.Clear();
-            PrimaryChart = null;
-            SecondaryCharts.Clear();
-            StatusMessage = "Python persisted TradePlan selected. Risk Governor evidence is current; chart data remains deferred.";
+            await RefreshChartPaneDataAsync(cancellationToken);
+            StatusMessage = "Python persisted TradePlan selected. Risk Governor evidence and read-only stored chart context are refreshed.";
             RaisePresentationProperties();
             RequestLayoutSave();
             return;
@@ -338,11 +366,10 @@ public sealed partial class ShellViewModel : ObservableObject
     public async Task ChangeIntervalAsync(string interval, CancellationToken cancellationToken = default)
     {
         ChangeInterval(interval);
-        if (UsesPythonWorkspaceBoundary)
+        if (!UsesPythonWorkspaceBoundary)
         {
-            return;
+            await RefreshCandlesAsync(cancellationToken);
         }
-        await RefreshCandlesAsync(cancellationToken);
         await RefreshChartPaneDataAsync(cancellationToken);
     }
 
@@ -383,10 +410,7 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         await RefreshWorkspaceDataAsync(cancellationToken);
-        if (!UsesPythonWorkspaceBoundary)
-        {
-            await RefreshChartPaneDataAsync(cancellationToken);
-        }
+        await RefreshChartPaneDataAsync(cancellationToken);
     }
 
     public async Task RestoreNamedLayoutAsync(string name, CancellationToken cancellationToken = default)
@@ -542,6 +566,15 @@ public sealed partial class ShellViewModel : ObservableObject
         return pane;
     }
 
+    public async Task<PaneState> AddLinkedChartAsync(CancellationToken cancellationToken = default)
+    {
+        var pane = Registry.Create(PaneKind.Chart, "Chart", LinkGroup.B, DockRegion.Center, SelectedSymbol, SelectedInterval);
+        var snapshot = await LoadChartSnapshotAsync(pane.Symbol, pane.Interval, cancellationToken);
+        SecondaryCharts.Add(new ChartPaneViewModel(pane, snapshot));
+        OnPropertyChanged(nameof(PrimaryChartLinkLabel));
+        return pane;
+    }
+
     public async Task RunPrimaryActionAsync(CancellationToken cancellationToken = default)
     {
         if (IsReadOnlySnapshotMode)
@@ -568,6 +601,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
             LastSimulationResult = await _simulationWorkspaceClient!.RunSimulationAsync(TradePlan.Symbol, cancellationToken);
             await RefreshSimulationWorkspaceDataAsync(cancellationToken);
+            await RefreshChartPaneDataAsync(cancellationToken);
             StatusMessage = LastSimulationResult.Summary;
             RaisePresentationProperties();
             RequestLayoutSave();
@@ -766,10 +800,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private async Task RefreshChartPaneDataAsync(CancellationToken cancellationToken = default)
     {
-        if (UsesPythonWorkspaceBoundary)
+        if (UsesPythonWorkspaceBoundary && _chartWorkspaceClient is null)
         {
             PrimaryChart = null;
             SecondaryCharts.Clear();
+            OnPropertyChanged(nameof(ChartSourceLabel));
             return;
         }
 
@@ -781,14 +816,14 @@ public sealed partial class ShellViewModel : ObservableObject
             return;
         }
 
-        var primaryCandles = await _engineClient.GetCandlesAsync(primaryPane.Symbol, primaryPane.Interval, cancellationToken);
+        var primarySnapshot = await LoadChartSnapshotAsync(primaryPane.Symbol, primaryPane.Interval, cancellationToken);
         if (PrimaryChart is null || PrimaryChart.Pane.InstanceId != primaryPane.InstanceId)
         {
-            PrimaryChart = new ChartPaneViewModel(primaryPane, primaryCandles);
+            PrimaryChart = new ChartPaneViewModel(primaryPane, primarySnapshot);
         }
         else
         {
-            PrimaryChart.ReplaceCandles(primaryCandles);
+            PrimaryChart.ApplySnapshot(primarySnapshot);
         }
 
         var secondaryPanes = Registry.Panes
@@ -802,16 +837,60 @@ public sealed partial class ShellViewModel : ObservableObject
 
         foreach (var pane in secondaryPanes)
         {
-            var candles = await _engineClient.GetCandlesAsync(pane.Symbol, pane.Interval, cancellationToken);
+            var snapshot = await LoadChartSnapshotAsync(pane.Symbol, pane.Interval, cancellationToken);
             var chart = SecondaryCharts.FirstOrDefault(item => item.Pane.InstanceId == pane.InstanceId);
             if (chart is null)
             {
-                SecondaryCharts.Add(new ChartPaneViewModel(pane, candles));
+                SecondaryCharts.Add(new ChartPaneViewModel(pane, snapshot));
             }
             else
             {
-                chart.ReplaceCandles(candles);
+                chart.ApplySnapshot(snapshot);
             }
+        }
+        OnPropertyChanged(nameof(ChartSourceLabel));
+    }
+
+    private async Task<ChartSnapshot> LoadChartSnapshotAsync(
+        string symbol,
+        string interval,
+        CancellationToken cancellationToken)
+    {
+        if (!UsesPythonWorkspaceBoundary)
+        {
+            var candles = await _engineClient.GetCandlesAsync(symbol, interval, cancellationToken);
+            var observedAt = candles.Count > 0 ? candles[^1].Timestamp : DateTimeOffset.UtcNow;
+            return new ChartSnapshot(
+                1,
+                symbol,
+                interval,
+                candles.Count > 0 ? ChartDataState.Available : ChartDataState.Unavailable,
+                DateTimeOffset.UtcNow,
+                observedAt,
+                candles.Count > 0
+                    ? "Local deterministic simulation candles."
+                    : "No local deterministic simulation candles are available.",
+                new DataLineage("Local simulation", observedAt, "Deterministic local shell data."),
+                candles);
+        }
+
+        try
+        {
+            return await _chartWorkspaceClient!.GetSnapshotAsync(symbol, interval, cancellationToken);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        {
+            var now = DateTimeOffset.UtcNow;
+            return new ChartSnapshot(
+                1,
+                symbol,
+                interval,
+                ChartDataState.Unavailable,
+                now,
+                now,
+                $"UNAVAILABLE | Stored chart evidence could not be loaded: {exception.Message} No simulated fallback was created.",
+                new DataLineage("Unavailable chart source", now, "The Python chart boundary did not return usable stored OHLC evidence."),
+                []);
         }
     }
 

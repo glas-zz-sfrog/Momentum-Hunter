@@ -1,6 +1,11 @@
 # Argus Changelog
 
 ## Unreleased
+- Added R011's versioned read-only local chart snapshot boundary and WPF candle/wick/volume rendering for stored `1m`, aggregated `5m`/`15m`, and `Daily` evidence.
+- Added explicit chart `AVAILABLE`, `STALE`, `INSUFFICIENT_DATA`, and `UNAVAILABLE` states, source/as-of lineage, request identity validation, and no mock or cross-timeframe fallback.
+- Added chart selection, interval, linked-pane, pinned-pane, malformed-data, source-integrity, and live Python-host integration coverage.
+- Preserved CLI-rendered full-workstation and renderer-only proof showing nonblank CRWV 5-minute candles, simulation-only language, and paper/live locks without taking over the desktop.
+- Recorded the branch-only A016/A016S Schwab decision and official support request; A017 remains blocked pending an official machine-verifiable paper boundary.
 - Locally fast-forwarded Steven-approved Phase 10 into `master` through `7efd48d`; no merge commit and no master push occurred.
 - Added persisted TradePlan and Risk Governor evidence to the WPF workstation, with symbol-scoped FakeBroker-only simulation, Execution Ledger events, and Execution Auditor results supplied through the versioned Python host.
 - Exposed valid persisted plans for all candidate rows and made missing plans explicit as `Plan unavailable`, with simulation disabled and no empty status badge.

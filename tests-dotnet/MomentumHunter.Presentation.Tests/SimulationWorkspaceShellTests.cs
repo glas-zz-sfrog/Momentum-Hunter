@@ -10,19 +10,24 @@ public sealed class SimulationWorkspaceShellTests
     public async Task PythonSimulationWorkspaceUsesPersistedPlanAndDoesNotCallMockEngine()
     {
         var client = new StaticSimulationWorkspaceClient(Snapshot(allowed: true));
-        var viewModel = new ShellViewModel(new ThrowingEngineClient(), client);
+        var chartClient = new RecordingChartWorkspaceClient(ChartDataState.Stale);
+        var viewModel = new ShellViewModel(new ThrowingEngineClient(), client, chartClient);
 
         await viewModel.InitializeAsync();
 
         Assert.True(viewModel.IsPythonSimulationWorkspaceMode);
         Assert.False(viewModel.IsReadOnlySnapshotMode);
         Assert.NotNull(viewModel.TradePlan);
-        Assert.Empty(viewModel.Candles);
+        Assert.NotNull(viewModel.PrimaryChart);
+        Assert.Equal(2, viewModel.PrimaryChart!.Candles.Count);
+        Assert.Equal(ChartDataState.Stale, viewModel.PrimaryChart.DataState);
         Assert.True(viewModel.CanRunSimulation);
         Assert.Contains("Python FakeBroker Only", viewModel.EnvironmentLabel, StringComparison.Ordinal);
         Assert.Equal("NVDA", viewModel.TradePlanSymbolLabel);
         Assert.Equal("Simulation-only", viewModel.TradePlanRiskStatusLabel);
-        Assert.Contains("chart integration remains deferred", viewModel.PlanningStatus, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("read-only evidence", viewModel.PlanningStatus, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STALE", viewModel.ChartSourceLabel, StringComparison.Ordinal);
+        Assert.Equal([("NVDA", "5m")], chartClient.Requests);
 
         await viewModel.RunPrimaryActionAsync();
 
@@ -30,6 +35,68 @@ public sealed class SimulationWorkspaceShellTests
         Assert.NotNull(viewModel.LastSimulationResult);
         Assert.Equal(SimulationResultState.Completed, viewModel.LastSimulationResult!.State);
         Assert.Contains("simulated order", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PythonChartRefreshUsesSelectedSymbolIntervalAndLinkedPaneContext()
+    {
+        var client = new StaticSimulationWorkspaceClient(Snapshot(allowed: true));
+        var chartClient = new RecordingChartWorkspaceClient(ChartDataState.Available);
+        var viewModel = new ShellViewModel(new ThrowingEngineClient(), client, chartClient);
+        await viewModel.InitializeAsync();
+        chartClient.Requests.Clear();
+
+        await viewModel.ChangeIntervalAsync("Daily");
+        var linkedPane = await viewModel.AddLinkedChartAsync();
+        var selected = viewModel.Candidates[0] with { Symbol = "EQX", Company = "Equinox Gold" };
+        await viewModel.SelectCandidateAsync(selected);
+
+        Assert.Contains(("NVDA", "Daily"), chartClient.Requests);
+        Assert.Equal("Daily", linkedPane.Interval);
+        Assert.Contains(("EQX", "Daily"), chartClient.Requests);
+        Assert.Equal("EQX", viewModel.PrimaryChart!.Pane.Symbol);
+        Assert.Equal("Daily", viewModel.PrimaryChart.Pane.Interval);
+        Assert.All(viewModel.SecondaryCharts, chart => Assert.Equal("NVDA", chart.Pane.Symbol));
+        Assert.All(viewModel.SecondaryCharts, chart => Assert.Equal("Daily", chart.Pane.Interval));
+        Assert.Contains(("NVDA", "Daily"), chartClient.Requests);
+    }
+
+    [Fact]
+    public async Task PinnedPrimaryChartRetainsItsSymbolWhenCandidateSelectionChanges()
+    {
+        var client = new StaticSimulationWorkspaceClient(Snapshot(allowed: true));
+        var chartClient = new RecordingChartWorkspaceClient(ChartDataState.Available);
+        var viewModel = new ShellViewModel(new ThrowingEngineClient(), client, chartClient);
+        await viewModel.InitializeAsync();
+        chartClient.Requests.Clear();
+
+        await viewModel.TogglePrimaryChartPinCommand.ExecuteAsync(null);
+        await viewModel.ChangeIntervalAsync("Daily");
+        var selected = viewModel.Candidates[0] with { Symbol = "EQX", Company = "Equinox Gold" };
+        await viewModel.SelectCandidateAsync(selected);
+
+        Assert.True(viewModel.PrimaryChart!.Pane.IsPinned);
+        Assert.Equal("NVDA", viewModel.PrimaryChart.Pane.Symbol);
+        Assert.Equal("5m", viewModel.PrimaryChart.Pane.Interval);
+        Assert.Equal("Pinned", viewModel.PrimaryChartLinkLabel);
+        Assert.Contains(("NVDA", "5m"), chartClient.Requests);
+        Assert.All(chartClient.Requests, request => Assert.Equal(("NVDA", "5m"), request));
+    }
+
+    [Fact]
+    public async Task MissingStoredChartDataIsExplicitAndNeverUsesMockCandles()
+    {
+        var client = new StaticSimulationWorkspaceClient(Snapshot(allowed: true));
+        var chartClient = new RecordingChartWorkspaceClient(ChartDataState.Unavailable);
+        var viewModel = new ShellViewModel(new ThrowingEngineClient(), client, chartClient);
+
+        await viewModel.InitializeAsync();
+
+        Assert.NotNull(viewModel.PrimaryChart);
+        Assert.Empty(viewModel.PrimaryChart!.Candles);
+        Assert.Equal("No stored candles available", viewModel.PrimaryChart.EmptyStateText);
+        Assert.Contains("UNAVAILABLE", viewModel.ChartSourceLabel, StringComparison.Ordinal);
+        Assert.Contains("No simulated fallback", viewModel.ChartSourceLabel, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -148,6 +215,46 @@ public sealed class SimulationWorkspaceShellTests
                 $"{symbol} simulated order filled through FakeBroker only.",
                 plan.RiskDecision!,
                 new ExecutionAuditSnapshot("audit-nvda", EnvironmentMode.Simulation, "PASS", "Simulation audit passed.", DateTimeOffset.UtcNow)));
+        }
+    }
+
+    private sealed class RecordingChartWorkspaceClient : IChartWorkspaceClient
+    {
+        private readonly ChartDataState _state;
+
+        public RecordingChartWorkspaceClient(ChartDataState state)
+        {
+            _state = state;
+        }
+
+        public List<(string Symbol, string Interval)> Requests { get; } = [];
+
+        public Task<ChartSnapshot> GetSnapshotAsync(
+            string symbol,
+            string interval,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add((symbol, interval));
+            var at = DateTimeOffset.Parse("2026-06-18T20:00:00Z");
+            var candles = _state == ChartDataState.Unavailable
+                ? Array.Empty<CandleSnapshot>()
+                : [
+                    new CandleSnapshot(at.AddMinutes(-5), 118.90m, 119.20m, 118.70m, 119.10m, 0),
+                    new CandleSnapshot(at, 119.10m, 119.40m, 118.80m, 119.00m, 1500),
+                ];
+            var label = _state.ToString().ToUpperInvariant();
+            return Task.FromResult(new ChartSnapshot(
+                1,
+                symbol,
+                interval,
+                _state,
+                DateTimeOffset.Parse("2026-07-23T05:03:00Z"),
+                at,
+                _state == ChartDataState.Unavailable
+                    ? "UNAVAILABLE | No stored bars are available. No simulated fallback was created."
+                    : $"{label} | {candles.Length} stored {interval} candle(s) | no provider fetch",
+                new DataLineage("stored-bars.json", at, "Read-only local evidence."),
+                candles));
         }
     }
 

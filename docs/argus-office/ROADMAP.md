@@ -12,17 +12,17 @@ Supporting records have narrower roles:
 
 ## Now
 
-Last reconciled: 2026-07-22 after Steven approved Phase 10 and Git Steward fast-forwarded `codex/ARGUS-R010-tradeplan-risk-simulation-integration` into local `master` through `7efd48d`; local `master` remains ahead of `origin/master` and has not been pushed.
+Last reconciled: 2026-07-23 after R011 read-only WPF chart-candle integration passed implementation, contract, regression, source-integrity, and CLI-only WPF visual proof on `codex/ARGUS-R011-wpf-chart-candle-integration`. Local `master` remains at `a17eff8`, 12 commits ahead of `origin/master` at `30c0e0b`, and has not been pushed.
 
 | Item | Current truth |
 | --- | --- |
-| Canonical product baseline | Local `master` contains the Phase 10 TradePlan, Risk Governor, FakeBroker-only simulation, ledger, and auditor integration through `7efd48d`. `origin/master` remains at `30c0e0b`; no `master` push has occurred. |
-| Active product decision | The Windows-first WPF workstation is the accepted operator-surface direction, while Python remains the canonical trading and evidence engine. |
-| Integrated implementation | Phases 8, 9, and 10 are `COMPLETE` on local `master`. The Python host supplies every valid persisted TradePlan, Risk Governor, FakeBroker-only simulation, ledger, and audit evidence to WPF; real chart candles remain explicitly deferred with no synthetic fallback. |
+| Canonical product baseline | Local `master` contains the Phase 10 TradePlan, Risk Governor, FakeBroker-only simulation, ledger, and auditor integration through `a17eff8`. `origin/master` remains at `30c0e0b`; no `master` push has occurred. |
+| Active product decision | The Windows-first WPF workstation is the accepted operator surface, Python remains the canonical trading and evidence engine, and Schwab/thinkorswim is the selected broker direction for both paper and eventual live trading. An interim Alpaca adapter is not approved. |
+| Integrated implementation | Phases 8, 9, and 10 are `COMPLETE` on local `master`. Phase 11/A016 and A016S remain branch-only through `c979866`: the Schwab support request is sent and A017 remains blocked pending an official paper-API answer. Phase 12/R011 is `IMPLEMENTED_PENDING_MERGE`: the Python host now supplies versioned local chart snapshots to WPF with explicit stale, insufficient, and unavailable states and no synthetic fallback. |
 | R004 status | `COMPLETE`: workstation-shell feasibility is integrated into `origin/master`. |
 | R005 status | `COMPLETE`: close-to-tray, lifecycle controls, single-instance activation, and physical Windows tray QA are integrated into `origin/master`. |
-| Immediate next action | Frame Phase 11/A016 with a Goal Charter, then perform broker research and safety-boundary analysis before any paper adapter or credential work. Real chart-candle integration remains a separate deferred workstation capability and is not a Phase 10 blocker. |
-| Remote backup action | Do not push local `master` without Steven's separate explicit approval. R010 and the Phase 10 commits are not on `origin`; they currently exist only in the local repository and its local branch history. |
+| Immediate next action | Steven reviews the R011 CLI-rendered full-workstation proof and, if accepted, authorizes Git Steward to fast-forward R011 into local `master`. Separately, preserve and reconcile Schwab's written support response before proposing A017. |
+| Remote backup action | Do not push local `master`, A016/A016S, or R011 without Steven's separate explicit approval. These newer commits currently exist only in local repository history. |
 | Broker and execution state | No paper or live broker path, credentials, API keys, or real order path exists. Paper and live remain locked. |
 
 ### Status Legend
@@ -131,26 +131,34 @@ Status: `COMPLETE` on local `master` through `a886c90`; not pushed to `origin/ma
 
 ### Phase 10 - Trade Planning, Risk, And Simulation Integration
 
-Status: `COMPLETE` on local `master` through `7efd48d`; not pushed to `origin/master`
+Status: `COMPLETE` on local `master` through `a17eff8`; not pushed to `origin/master`
 
 - The versioned Python host exposes a persisted-plan simulation workspace snapshot and a symbol-scoped FakeBroker-only simulation command.
-- WPF consumes the canonical persisted TradePlan, Risk Governor, Execution Ledger, and Execution Auditor evidence rather than a mock fallback; charts intentionally remain deferred with no synthetic candles.
+- WPF consumes the canonical persisted TradePlan, Risk Governor, Execution Ledger, and Execution Auditor evidence rather than a mock fallback. R011 adds chart evidence separately and does not alter these planning or simulation contracts.
 - A Risk Governor block prevents the simulation call and states that no evidence changed. A permitted simulation records risk, preview, FakeBroker outcome, and audit evidence in the in-memory host ledger.
 - Follow-up commits `14fe317` and `893a6da` remove the Top-5-only plan mapping mismatch and the empty Risk Governor badge: all valid persisted candidate plans are exposed, and a missing plan explicitly shows `Plan unavailable` with simulation unavailable rather than a blank colored state.
 - Steven accepted the manual visual proof and approved the local merge with real chart candles still explicitly deferred. Release compilation passed; focused Python simulation/autonomy tests passed 29 tests, and the full .NET workstation solution passed 71 tests immediately before merge. Full Python discovery was previously bounded at 120 seconds and did not complete; retain that test-harness timeout as a follow-up risk.
 
 ### Phase 11 - Broker Research And Hardening Before Paper Execution
 
-Status: `NOT_STARTED`
+Status: `ACTIVE`; A016 and A016S are `IMPLEMENTED_PENDING_MERGE`, with A016S awaiting an official Schwab response through `c979866`
 
-- A016 broker research is the immediate next roadmap task, beginning with a separate Goal Charter and a docs/research-only broker matrix.
-- The WPF direction and Python engine boundary are now proven through the Phase 10 simulation integration, but no paper capability is approved.
+- A016 produced a current broker matrix and Steven selected Schwab/thinkorswim continuity for both paper and eventual live trading; an interim Alpaca implementation is not approved.
+- A016S verified that public official evidence does not prove retail Trader API access to paperMoney. A credential-free question set was sent to `TraderAPI@Schwab.com` and verified in Outlook Sent Items.
+- A017 is `BLOCKED_OFFICIAL_CONFIRMATION_REQUIRED`: no adapter work may begin until Schwab confirms a machine-verifiable paper boundary.
+- The WPF direction and Python engine boundary are proven through Phase 10, but no paper capability is approved.
 - No credentials, API keys, paper adapter, order routing, or paper execution code belongs in this phase without a separate Goal Charter.
 
 ### Phase 12 - Incremental Capability Migration And Qt Retirement
 
-Status: `NOT_STARTED`
+Status: `ACTIVE`; R011 is `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R011-wpf-chart-candle-integration`
 
+- R011 adds one versioned `get_chart_snapshot` host command backed only by stored `opportunity-minute-bars.json` and `daily-ohlc-bars.json` evidence.
+- WPF renders `1m`, deterministically aggregated `5m`/`15m`, and `Daily` candles with bodies, wicks, and volume. Source lineage and `AVAILABLE`, `STALE`, `INSUFFICIENT_DATA`, or `UNAVAILABLE` state remain visible.
+- Missing intraday evidence never falls back to daily or mock candles. No provider call, background fetch, or source-data write was added.
+- Candidate, interval, linked-pane, and pinned-pane context are covered by tests. The full CLI-only WPF proof shows CRWV with 143 stored stale 5-minute candles, source/as-of text, simulation-only language, and paper/live locks.
+- R011 requires Steven review and a separate fast-forward approval before it becomes `COMPLETE` on local `master`.
+- The next proposed bounded slice after R011 is R012 chart readability: deterministic price/time axes and latest-bar details, still read-only and without provider or execution scope.
 - Migrate individual proven workflows to the WPF shell only after their Python contracts and operator proof are complete.
 - Retire corresponding Qt screens incrementally, with acceptance evidence and rollback paths. Do not perform a broad rewrite.
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from momentum_hunter.engine_host import (
+    COMMAND_CHART_SNAPSHOT,
     COMMAND_PAUSE,
     COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
     COMMAND_RESUME,
@@ -154,6 +155,47 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertEqual({"schemaVersion": 1, "planningAvailable": False, "candidates": []}, result.payload)
         self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
 
+    def test_chart_command_returns_injected_read_only_payload_without_starting_collection(self) -> None:
+        calls: list[tuple[str, str]] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(AssertionError("collection should not run")),
+            chart_snapshot_loader=lambda symbol, interval: calls.append((symbol, interval))
+            or {"schemaVersion": 1, "symbol": symbol, "interval": interval, "state": "AVAILABLE", "candles": []},
+        )
+
+        result = runtime.execute(
+            COMMAND_CHART_SNAPSHOT,
+            "chart-snapshot",
+            {"symbol": "AAA", "interval": "5m"},
+        )
+        repeated = runtime.execute(
+            COMMAND_CHART_SNAPSHOT,
+            "chart-snapshot",
+            {"symbol": "AAA", "interval": "5m"},
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual("CHART_SNAPSHOT", result.code)
+        self.assertEqual(result, repeated)
+        self.assertEqual([("AAA", "5m")], calls)
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+
+    def test_chart_command_rejects_missing_or_invalid_arguments(self) -> None:
+        runtime = EngineHostRuntime(
+            chart_snapshot_loader=lambda symbol, interval: (_ for _ in ()).throw(ValueError("unsupported interval"))
+        )
+
+        missing_symbol = runtime.execute(COMMAND_CHART_SNAPSHOT, "missing-symbol", {"interval": "5m"})
+        missing_interval = runtime.execute(COMMAND_CHART_SNAPSHOT, "missing-interval", {"symbol": "AAA"})
+        invalid = runtime.execute(COMMAND_CHART_SNAPSHOT, "invalid", {"symbol": "AAA", "interval": "60m"})
+
+        self.assertFalse(missing_symbol.accepted)
+        self.assertEqual("CHART_SYMBOL_REQUIRED", missing_symbol.code)
+        self.assertFalse(missing_interval.accepted)
+        self.assertEqual("CHART_INTERVAL_REQUIRED", missing_interval.code)
+        self.assertFalse(invalid.accepted)
+        self.assertEqual("INVALID_CHART_REQUEST", invalid.code)
+
 
 class EngineHostProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -185,6 +227,7 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertEqual(PROTOCOL_VERSION, response["protocolVersion"])
         self.assertEqual("loopback-tcp", snapshot["identity"]["transport"])
         self.assertIn(COMMAND_RUN_CYCLE, snapshot["capabilities"])
+        self.assertIn(COMMAND_CHART_SNAPSHOT, snapshot["capabilities"])
         self.assertNotIn("submit_order", snapshot["capabilities"])
         self.assertNotIn("paper_order", snapshot["capabilities"])
         self.assertNotIn("live_order", snapshot["capabilities"])
@@ -198,6 +241,26 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertEqual("READ_ONLY_WORKSPACE_SNAPSHOT", response["result"]["code"])
         self.assertEqual([], response["result"]["payload"]["candidates"])
         self.assertFalse(response["result"]["payload"]["planningAvailable"])
+
+    def test_protocol_returns_chart_payload_with_arguments(self) -> None:
+        self.runtime._chart_snapshot_loader = lambda symbol, interval: {
+            "schemaVersion": 1,
+            "symbol": symbol,
+            "interval": interval,
+            "state": "AVAILABLE",
+            "candles": [],
+        }
+
+        response = self.send(
+            command=COMMAND_CHART_SNAPSHOT,
+            command_id="chart",
+            arguments={"symbol": "AAA", "interval": "Daily"},
+        )
+
+        self.assertTrue(response["accepted"])
+        self.assertEqual("CHART_SNAPSHOT", response["result"]["code"])
+        self.assertEqual("AAA", response["result"]["payload"]["symbol"])
+        self.assertEqual("Daily", response["result"]["payload"]["interval"])
 
     def test_shutdown_command_stops_server_after_a_response(self) -> None:
         response = self.send(command=COMMAND_SHUTDOWN, command_id="shutdown")
@@ -214,6 +277,7 @@ class EngineHostProtocolTests(unittest.TestCase):
         command_id: str,
         token: str | None = None,
         version: str = PROTOCOL_VERSION,
+        arguments: dict[str, str] | None = None,
     ) -> dict:
         address, port = self.server.server_address
         payload = {
@@ -222,6 +286,7 @@ class EngineHostProtocolTests(unittest.TestCase):
             "accessToken": self.token if token is None else token,
             "command": command,
             "commandId": command_id,
+            "arguments": arguments or {},
         }
         with socket.create_connection((address, port), timeout=3) as connection:
             connection.sendall((json.dumps(payload) + "\n").encode("utf-8"))
