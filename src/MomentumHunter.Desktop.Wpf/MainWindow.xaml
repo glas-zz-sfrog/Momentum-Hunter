@@ -818,6 +818,166 @@
                                 </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
+                    </avalon:LayoutAnchorablePane>
+
+                    <avalon:LayoutAnchorablePane DockHeight="520" DockMinHeight="260">
+                        <avalon:LayoutAnchorable x:Name="DailyWorkflowAnchor" ContentId="pane-daily-workflow" Title="Daily Workflow" CanClose="True" CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="12">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="Daily Workflow Evidence" FontSize="16" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding DailyWorkflowSourceLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,3,12,0" />
+                                                <TextBlock Text="{Binding DailyWorkflowSourceContextLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,2,12,0" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding DailyWorkflowStateLabel}" FontWeight="SemiBold" HorizontalAlignment="Right">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding DailyWorkflow.State}" Value="{x:Static contracts:DailyWorkflowEvidenceState.Available}">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding DailyWorkflow.State}" Value="{x:Static contracts:DailyWorkflowEvidenceState.Stale}">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding DailyWorkflow.State}" Value="{x:Static contracts:DailyWorkflowEvidenceState.Partial}">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding DailyWorkflow.State}" Value="{x:Static contracts:DailyWorkflowEvidenceState.Unavailable}">
+                                                                    <Setter Property="Foreground" Value="#FF7B86" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding DailyWorkflowScoreLabel}" Foreground="{StaticResource TextPrimary}" FontSize="11" Margin="0,3,0,0" HorizontalAlignment="Right" />
+                                                <TextBlock Text="{Binding DailyWorkflowAsOfLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,2,0,0" HorizontalAlignment="Right" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <TextBlock Text="{Binding DailyWorkflow.Summary}" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,10,0,0" />
+                                        <TextBlock Text="{Binding DailyWorkflowReviewLabel}" TextWrapping="Wrap" FontSize="11" Margin="0,8,0,0" />
+                                        <TextBlock Text="{Binding DailyWorkflowPlanLabel}" TextWrapping="Wrap" FontSize="11" Margin="0,3,0,0" />
+                                        <TextBlock Text="{Binding DailyWorkflowOutcomeLabel}" TextWrapping="Wrap" FontSize="11" Margin="0,3,0,0" />
+                                        <TextBlock Text="{Binding DailyWorkflowReadinessLabel}" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" FontSize="11" Margin="0,3,0,0" />
+
+                                        <Border Background="#17212B" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,10,0,10">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding DailyWorkflow.NextAction.Level}" Value="{x:Static contracts:DailyWorkflowStepLevel.Complete}">
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Teal}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding DailyWorkflow.NextAction.Level}" Value="{x:Static contracts:DailyWorkflowStepLevel.Active}">
+                                                            <Setter Property="BorderBrush" Value="#5BA8FF" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding DailyWorkflow.NextAction.Level}" Value="{x:Static contracts:DailyWorkflowStepLevel.Attention}">
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding DailyWorkflow.NextAction.Level}" Value="{x:Static contracts:DailyWorkflowStepLevel.Blocked}">
+                                                            <Setter Property="BorderBrush" Value="#FF7B86" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding DailyWorkflow.NextAction.Title}" FontWeight="SemiBold" FontSize="13" />
+                                                <TextBlock Text="{Binding DailyWorkflow.NextAction.Detail}" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <TextBlock Text="Capture Health  >  Morning Review  >  Watchlist Plans  >  Watchlist Report  >  Readiness Gate"
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   FontSize="11"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,0,0,8" />
+
+                                        <ItemsControl ItemsSource="{Binding DailyWorkflow.Steps}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Width="250" MinHeight="178" Background="#17212B" BorderThickness="1" CornerRadius="3" Padding="9" Margin="0,0,8,8">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Level}" Value="{x:Static contracts:DailyWorkflowStepLevel.Complete}">
+                                                                        <Setter Property="BorderBrush" Value="{StaticResource Teal}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Level}" Value="{x:Static contracts:DailyWorkflowStepLevel.Active}">
+                                                                        <Setter Property="BorderBrush" Value="#5BA8FF" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Level}" Value="{x:Static contracts:DailyWorkflowStepLevel.Attention}">
+                                                                        <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Level}" Value="{x:Static contracts:DailyWorkflowStepLevel.Blocked}">
+                                                                        <Setter Property="BorderBrush" Value="#FF7B86" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <StackPanel>
+                                                            <DockPanel>
+                                                                <Ellipse Width="9" Height="9" Margin="0,0,7,0" VerticalAlignment="Center" DockPanel.Dock="Left">
+                                                                    <Ellipse.Style>
+                                                                        <Style TargetType="Ellipse">
+                                                                            <Setter Property="Fill" Value="#75818C" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding Light}" Value="{x:Static contracts:DailyWorkflowLight.Green}">
+                                                                                    <Setter Property="Fill" Value="{StaticResource Teal}" />
+                                                                                </DataTrigger>
+                                                                                <DataTrigger Binding="{Binding Light}" Value="{x:Static contracts:DailyWorkflowLight.Blue}">
+                                                                                    <Setter Property="Fill" Value="#5BA8FF" />
+                                                                                </DataTrigger>
+                                                                                <DataTrigger Binding="{Binding Light}" Value="{x:Static contracts:DailyWorkflowLight.Yellow}">
+                                                                                    <Setter Property="Fill" Value="{StaticResource Amber}" />
+                                                                                </DataTrigger>
+                                                                                <DataTrigger Binding="{Binding Light}" Value="{x:Static contracts:DailyWorkflowLight.Red}">
+                                                                                    <Setter Property="Fill" Value="#FF7B86" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Ellipse.Style>
+                                                                </Ellipse>
+                                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                                <TextBlock Text="{Binding Status}" Foreground="{StaticResource TextMuted}" FontSize="10" HorizontalAlignment="Right" />
+                                                            </DockPanel>
+                                                            <TextBlock Text="{Binding Dependency, StringFormat=Depends on: {0}}" Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" Margin="0,8,0,0" />
+                                                            <TextBlock Text="{Binding Blocker, StringFormat=Blocker: {0}}" Foreground="{StaticResource Amber}" FontSize="10" TextWrapping="Wrap" Margin="0,5,0,0" />
+                                                            <TextBlock Text="{Binding Detail}" FontSize="10" TextWrapping="Wrap" Margin="0,5,0,0" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <Expander Header="Warnings" Margin="0,2,0,0">
+                                            <TextBlock Text="{Binding DailyWorkflowWarningsLabel}" Foreground="{StaticResource Amber}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0" />
+                                        </Expander>
+                                        <TextBlock Text="Read-only persisted evidence. Workflow lights describe operator discipline, not trade quality, readiness approval, or an order instruction."
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   FontSize="10"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,8,0,0" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+                        </avalon:LayoutAnchorable>
+                    </avalon:LayoutAnchorablePane>
+
+                    <avalon:LayoutAnchorablePane DockHeight="180" DockMinHeight="90">
                         <avalon:LayoutAnchorable x:Name="AutomationAnchor" ContentId="pane-automation" Title="Automation" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="12">
                                 <Grid>

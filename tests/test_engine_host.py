@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 from momentum_hunter.engine_host import (
     COMMAND_CHART_SNAPSHOT,
+    COMMAND_DAILY_WORKFLOW_SNAPSHOT,
     COMMAND_PAUSE,
     COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
     COMMAND_RESUME,
@@ -248,6 +249,28 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertEqual(["read"], calls)
         self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
 
+    def test_daily_workflow_snapshot_is_read_only_argument_free_and_idempotent(self) -> None:
+        cycle_runs: list[str] = []
+        loads: list[str] = []
+        payload = {"schemaVersion": 1, "state": "AVAILABLE", "readOnly": True}
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: cycle_runs.append("cycle") or SimpleNamespace(target_count=1),
+            daily_workflow_snapshot_loader=lambda: loads.append("load") or payload,
+        )
+
+        first = runtime.execute(COMMAND_DAILY_WORKFLOW_SNAPSHOT, "daily-workflow")
+        repeated = runtime.execute(COMMAND_DAILY_WORKFLOW_SNAPSHOT, "daily-workflow")
+        invalid = runtime.execute(COMMAND_DAILY_WORKFLOW_SNAPSHOT, "daily-workflow-invalid", {"refresh": "true"})
+
+        self.assertTrue(first.accepted)
+        self.assertEqual("DAILY_WORKFLOW_SNAPSHOT", first.code)
+        self.assertEqual(payload, first.payload)
+        self.assertEqual(first, repeated)
+        self.assertEqual(["load"], loads)
+        self.assertEqual([], cycle_runs)
+        self.assertFalse(invalid.accepted)
+        self.assertEqual("INVALID_DAILY_WORKFLOW_REQUEST", invalid.code)
+
 
 class EngineHostProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -282,6 +305,7 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertIn(COMMAND_CHART_SNAPSHOT, snapshot["capabilities"])
         self.assertIn(COMMAND_TECHNICAL_RESEARCH_SNAPSHOT, snapshot["capabilities"])
         self.assertIn(COMMAND_SAVED_WATCHLIST_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(COMMAND_DAILY_WORKFLOW_SNAPSHOT, snapshot["capabilities"])
         self.assertNotIn("submit_order", snapshot["capabilities"])
         self.assertNotIn("paper_order", snapshot["capabilities"])
         self.assertNotIn("live_order", snapshot["capabilities"])

@@ -292,6 +292,22 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         return result.Payload.Value.Clone();
     }
 
+    public async Task<JsonElement> GetDailyWorkflowSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandAsync(
+            PythonEngineHostProtocol.GetDailyWorkflowSnapshot,
+            Guid.NewGuid().ToString("N"),
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException(
+                $"The Python Engine Host did not provide a read-only Daily Workflow snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
     public async Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(symbol))

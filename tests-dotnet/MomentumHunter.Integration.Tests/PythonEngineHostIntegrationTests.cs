@@ -54,6 +54,7 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Contains(PythonEngineHostProtocol.GetChartSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetTechnicalResearchSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetSavedWatchlistSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetDailyWorkflowSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.RunSimulation, first.Capabilities);
             Assert.DoesNotContain("submit_order", first.Capabilities);
 
@@ -83,6 +84,13 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Equal("EMPTY", savedWatchlistPayload.GetProperty("state").GetString());
             Assert.Equal(0, savedWatchlistPayload.GetProperty("totalItemCount").GetInt32());
             Assert.Empty(savedWatchlistPayload.GetProperty("items").EnumerateArray());
+
+            var dailyWorkflowPayload = await firstConnection.GetDailyWorkflowSnapshotAsync();
+            Assert.Equal(1, dailyWorkflowPayload.GetProperty("schemaVersion").GetInt32());
+            Assert.True(dailyWorkflowPayload.GetProperty("readOnly").GetBoolean());
+            Assert.True(dailyWorkflowPayload.TryGetProperty("state", out _));
+            Assert.True(dailyWorkflowPayload.TryGetProperty("nextAction", out _));
+            Assert.True(dailyWorkflowPayload.TryGetProperty("steps", out _));
 
             var simulationWorkspacePayload = await firstConnection.GetSimulationWorkspaceSnapshotAsync();
             Assert.Equal("SIMULATION_ONLY_FAKE_BROKER", simulationWorkspacePayload.GetProperty("mode").GetString());

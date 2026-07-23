@@ -20,6 +20,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IChartWorkspaceClient? _chartWorkspaceClient;
     private readonly ITechnicalResearchWorkspaceClient? _technicalResearchWorkspaceClient;
     private readonly ISavedWatchlistWorkspaceClient? _savedWatchlistWorkspaceClient;
+    private readonly IDailyWorkflowWorkspaceClient? _dailyWorkflowWorkspaceClient;
     private readonly IWorkspaceLayoutStore? _layoutStore;
     private readonly LayoutAutosaveCoordinator? _layoutAutosave;
     private LinkGroupCoordinator _linkGroups = null!;
@@ -208,11 +209,45 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public ShellViewModel(
         IEngineClient engineClient,
+        IDailyWorkflowWorkspaceClient dailyWorkflowWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            dailyWorkflowWorkspaceClient: dailyWorkflowWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        IDailyWorkflowWorkspaceClient dailyWorkflowWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: simulationWorkspaceClient,
+            chartWorkspaceClient: chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            dailyWorkflowWorkspaceClient: dailyWorkflowWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
         IWorkspaceLayoutStore layoutStore,
         ISimulationWorkspaceClient simulationWorkspaceClient,
         IChartWorkspaceClient chartWorkspaceClient,
         ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient,
-        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient)
+        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient,
+        IDailyWorkflowWorkspaceClient dailyWorkflowWorkspaceClient)
         : this(
             engineClient,
             layoutStore,
@@ -221,7 +256,8 @@ public sealed partial class ShellViewModel : ObservableObject
             chartWorkspaceClient,
             savedWatchlistWorkspaceClient,
             isInternalConstruction: true,
-            technicalResearchWorkspaceClient)
+            technicalResearchWorkspaceClient,
+            dailyWorkflowWorkspaceClient: dailyWorkflowWorkspaceClient)
     {
     }
 
@@ -233,7 +269,8 @@ public sealed partial class ShellViewModel : ObservableObject
         IChartWorkspaceClient? chartWorkspaceClient,
         ISavedWatchlistWorkspaceClient? savedWatchlistWorkspaceClient,
         bool isInternalConstruction,
-        ITechnicalResearchWorkspaceClient? technicalResearchWorkspaceClient = null)
+        ITechnicalResearchWorkspaceClient? technicalResearchWorkspaceClient = null,
+        IDailyWorkflowWorkspaceClient? dailyWorkflowWorkspaceClient = null)
     {
         _engineClient = engineClient;
         _layoutStore = layoutStore;
@@ -242,6 +279,7 @@ public sealed partial class ShellViewModel : ObservableObject
         _chartWorkspaceClient = chartWorkspaceClient;
         _technicalResearchWorkspaceClient = technicalResearchWorkspaceClient;
         _savedWatchlistWorkspaceClient = savedWatchlistWorkspaceClient;
+        _dailyWorkflowWorkspaceClient = dailyWorkflowWorkspaceClient;
         SetRegistry(WorkspaceFactory.Create(WorkspaceKind.Live));
         if (_layoutStore is not null)
         {
@@ -315,6 +353,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty]
     private TechnicalResearchSnapshot? _technicalResearch;
+
+    [ObservableProperty]
+    private DailyWorkflowSnapshot? _dailyWorkflow;
 
     [ObservableProperty]
     private SimulationResult? _lastSimulationResult;
@@ -599,6 +640,45 @@ public sealed partial class ShellViewModel : ObservableObject
         }
         : string.Empty;
 
+    public string DailyWorkflowStateLabel =>
+        DailyWorkflow?.State.ToString().ToUpperInvariant() ?? "UNAVAILABLE";
+
+    public string DailyWorkflowSourceLabel =>
+        DailyWorkflow?.SourceLabel ?? "Daily Workflow source unavailable";
+
+    public string DailyWorkflowSourceContextLabel =>
+        DailyWorkflow?.SourceContext ?? "Capture identity unavailable";
+
+    public string DailyWorkflowAsOfLabel => DailyWorkflow?.SourceAsOf is { } timestamp
+        ? $"Source as of {timestamp.UtcDateTime:yyyy-MM-dd HH:mm:ss} UTC"
+        : "Source time unavailable";
+
+    public string DailyWorkflowScoreLabel => DailyWorkflow is { } workflow
+        ? $"Workflow discipline {workflow.WorkflowScore}%"
+        : "Workflow discipline unavailable";
+
+    public string DailyWorkflowReviewLabel => DailyWorkflow is { } workflow
+        ? $"Reviews {workflow.Review.Reviewed}/{workflow.Review.Total} | Unreviewed {workflow.Review.Unreviewed} | "
+            + $"Interested {workflow.Review.Interested} | Rejected {workflow.Review.Rejected} | Watchlist {workflow.Review.Watchlist}"
+        : "Review counts unavailable";
+
+    public string DailyWorkflowPlanLabel => DailyWorkflow is { } workflow
+        ? $"Plans {workflow.Plans.Complete}/{workflow.Plans.Watchlist} complete | "
+            + $"Incomplete {workflow.Plans.Incomplete} | Without plan {workflow.Plans.WithoutPlan}"
+        : "Plan counts unavailable";
+
+    public string DailyWorkflowOutcomeLabel => DailyWorkflow is { } workflow
+        ? $"Outcomes: next-day {workflow.Outcomes.CompletedNextDay} | five-day {workflow.Outcomes.CompletedFiveDay} | pending {workflow.Outcomes.Pending}"
+        : "Outcome counts unavailable";
+
+    public string DailyWorkflowReadinessLabel => DailyWorkflow?.Readiness.Count > 0
+        ? string.Join(" | ", DailyWorkflow.Readiness.Select(item => $"{item.Name}: {item.Status}"))
+        : "Readiness evidence unavailable";
+
+    public string DailyWorkflowWarningsLabel => DailyWorkflow?.Warnings.Count > 0
+        ? string.Join(System.Environment.NewLine, DailyWorkflow.Warnings.Select(warning => $"\u2022 {warning}"))
+        : "No workflow warnings were reported by the persisted evidence.";
+
     public RectGeometry? RestoredWindowBounds => _windowBounds;
 
     public string? RestoredDockLayoutXml => _dockLayoutXml;
@@ -619,6 +699,7 @@ public sealed partial class ShellViewModel : ObservableObject
             }
         }
 
+        await RefreshDailyWorkflowDataAsync(cancellationToken);
         await RefreshWorkspaceDataAsync(cancellationToken);
         await RefreshChartPaneDataAsync(cancellationToken);
     }
@@ -1069,6 +1150,20 @@ public sealed partial class ShellViewModel : ObservableObject
     partial void OnBackgroundCollectionStatusChanged(BackgroundCollectionStatus value) =>
         OnPropertyChanged(nameof(MonitoringStatus));
 
+    partial void OnDailyWorkflowChanged(DailyWorkflowSnapshot? value)
+    {
+        OnPropertyChanged(nameof(DailyWorkflowStateLabel));
+        OnPropertyChanged(nameof(DailyWorkflowSourceLabel));
+        OnPropertyChanged(nameof(DailyWorkflowSourceContextLabel));
+        OnPropertyChanged(nameof(DailyWorkflowAsOfLabel));
+        OnPropertyChanged(nameof(DailyWorkflowScoreLabel));
+        OnPropertyChanged(nameof(DailyWorkflowReviewLabel));
+        OnPropertyChanged(nameof(DailyWorkflowPlanLabel));
+        OnPropertyChanged(nameof(DailyWorkflowOutcomeLabel));
+        OnPropertyChanged(nameof(DailyWorkflowReadinessLabel));
+        OnPropertyChanged(nameof(DailyWorkflowWarningsLabel));
+    }
+
     private void SetRegistry(PaneRegistry registry)
     {
         if (Registry is not null)
@@ -1112,7 +1207,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private WorkspaceLayoutSnapshot CreateAutomaticLayoutSnapshot() => CreateLayoutSnapshot(isNamedLayout: false, name: null);
 
     private WorkspaceLayoutSnapshot CreateLayoutSnapshot(bool isNamedLayout, string? name) => new(
-        SchemaVersion: 4,
+        SchemaVersion: 5,
         Workspace,
         Guid.NewGuid(),
         DateTimeOffset.UtcNow,
@@ -1146,17 +1241,27 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void MigrateLegacyContextualPanes(int schemaVersion)
     {
-        if (schemaVersion >= 4 || Workspace != WorkspaceKind.Live)
+        if (Workspace != WorkspaceKind.Live)
         {
             return;
         }
 
-        foreach (var (kind, title) in new[]
+        var missingPanes = new List<(PaneKind Kind, string Title)>();
+        if (schemaVersion < 5)
         {
-            (PaneKind.Automation, "Automation"),
-            (PaneKind.Orders, "Orders"),
-            (PaneKind.Positions, "Positions"),
-        })
+            missingPanes.Add((PaneKind.DailyWorkflow, "Daily Workflow"));
+        }
+        if (schemaVersion < 4)
+        {
+            missingPanes.AddRange(
+            [
+                (PaneKind.Automation, "Automation"),
+                (PaneKind.Orders, "Orders"),
+                (PaneKind.Positions, "Positions"),
+            ]);
+        }
+
+        foreach (var (kind, title) in missingPanes)
         {
             if (Registry.Panes.Any(pane => pane.Kind == kind))
             {
@@ -1206,6 +1311,46 @@ public sealed partial class ShellViewModel : ObservableObject
         if (candidateToSelect is not null)
         {
             await SelectCandidateAsync(candidateToSelect, cancellationToken);
+        }
+    }
+
+    private async Task RefreshDailyWorkflowDataAsync(CancellationToken cancellationToken)
+    {
+        if (_dailyWorkflowWorkspaceClient is null)
+        {
+            return;
+        }
+        try
+        {
+            DailyWorkflow = await _dailyWorkflowWorkspaceClient.GetSnapshotAsync(cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        {
+            var now = DateTimeOffset.UtcNow;
+            DailyWorkflow = new DailyWorkflowSnapshot(
+                1,
+                DailyWorkflowEvidenceState.Unavailable,
+                now,
+                null,
+                "Daily Workflow source unavailable",
+                "Capture identity unavailable",
+                "CAPTURE_MISSING",
+                "Capture Missing",
+                $"UNAVAILABLE | The Daily Workflow boundary failed closed: {exception.Message}",
+                0,
+                "unavailable",
+                new DailyWorkflowReviewCounts(0, 0, 0, 0, 0, 0),
+                new DailyWorkflowPlanCounts(0, 0, 0, 0, 0, 0, 0, 0),
+                new DailyWorkflowOutcomeCounts(0, 0, 0),
+                [],
+                new DailyWorkflowNextAction(
+                    "Next Required Action: restore persisted workflow evidence",
+                    "The read-only host did not return a valid Daily Workflow snapshot.",
+                    DailyWorkflowStepLevel.Blocked),
+                [],
+                ["The Daily Workflow snapshot is unavailable; no fallback or recalculation was created."],
+                true);
         }
     }
 
@@ -1376,6 +1521,7 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(SavedWatchlistSummary));
         OnPropertyChanged(nameof(SavedWatchlistWarnings));
         OnPropertyChanged(nameof(SavedWatchlistEmptyState));
+        OnPropertyChanged(nameof(DailyWorkflow));
     }
 
     private async Task RefreshSavedWatchlistAsync(CancellationToken cancellationToken)

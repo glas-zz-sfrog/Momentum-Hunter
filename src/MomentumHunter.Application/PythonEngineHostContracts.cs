@@ -34,6 +34,9 @@ public interface IPythonEngineHostConnection
     Task<JsonElement> GetSavedWatchlistSnapshotAsync(CancellationToken cancellationToken = default) =>
         Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose saved-watchlist snapshots."));
 
+    Task<JsonElement> GetDailyWorkflowSnapshotAsync(CancellationToken cancellationToken = default) =>
+        Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose read-only Daily Workflow snapshots."));
+
     Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default) =>
         Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose FakeBroker simulation commands."));
 }

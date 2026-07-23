@@ -34,6 +34,7 @@ COMMAND_SIMULATION_WORKSPACE_SNAPSHOT = "get_simulation_workspace_snapshot"
 COMMAND_CHART_SNAPSHOT = "get_chart_snapshot"
 COMMAND_TECHNICAL_RESEARCH_SNAPSHOT = "get_technical_research_snapshot"
 COMMAND_SAVED_WATCHLIST_SNAPSHOT = "get_saved_watchlist_snapshot"
+COMMAND_DAILY_WORKFLOW_SNAPSHOT = "get_daily_workflow_snapshot"
 COMMAND_RUN_SIMULATION = "run_simulation"
 SUPPORTED_COMMANDS = frozenset(
     {
@@ -47,6 +48,7 @@ SUPPORTED_COMMANDS = frozenset(
         COMMAND_CHART_SNAPSHOT,
         COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
         COMMAND_SAVED_WATCHLIST_SNAPSHOT,
+        COMMAND_DAILY_WORKFLOW_SNAPSHOT,
         COMMAND_RUN_SIMULATION,
     }
 )
@@ -217,6 +219,7 @@ class EngineHostRuntime:
         chart_snapshot_loader: Callable[[str, str], dict[str, Any]] | None = None,
         technical_research_snapshot_loader: Callable[[str], dict[str, Any]] | None = None,
         saved_watchlist_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
+        daily_workflow_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
@@ -255,6 +258,9 @@ class EngineHostRuntime:
             self._saved_watchlist_service = None
         self._saved_watchlist_snapshot_loader = (
             saved_watchlist_snapshot_loader or self._saved_watchlist_service.snapshot
+        )
+        self._daily_workflow_snapshot_loader = (
+            daily_workflow_snapshot_loader or self._load_daily_workflow_snapshot
         )
         self._state_lock = threading.RLock()
         self._command_condition = threading.Condition(self._state_lock)
@@ -466,6 +472,22 @@ class EngineHostRuntime:
                 self.snapshot(),
                 payload=payload,
             )
+        if command == COMMAND_DAILY_WORKFLOW_SNAPSHOT:
+            if arguments:
+                return EngineHostCommandResult(
+                    False,
+                    "INVALID_DAILY_WORKFLOW_REQUEST",
+                    "The read-only Daily Workflow snapshot does not accept arguments.",
+                    self.snapshot(),
+                )
+            payload = self._daily_workflow_snapshot_loader()
+            return EngineHostCommandResult(
+                True,
+                "DAILY_WORKFLOW_SNAPSHOT",
+                "Read-only Daily Workflow snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
         if command == COMMAND_RUN_SIMULATION:
             symbol = arguments.get("symbol")
             if not isinstance(symbol, str) or not symbol.strip():
@@ -588,6 +610,12 @@ class EngineHostRuntime:
         from momentum_hunter.workstation_read_models import build_read_only_workspace_snapshot
 
         return build_read_only_workspace_snapshot()
+
+    @staticmethod
+    def _load_daily_workflow_snapshot() -> dict[str, Any]:
+        from momentum_hunter.workstation_daily_workflow import build_daily_workflow_snapshot
+
+        return build_daily_workflow_snapshot()
 
     @staticmethod
     def _is_legacy_monitor_runner_active() -> bool:

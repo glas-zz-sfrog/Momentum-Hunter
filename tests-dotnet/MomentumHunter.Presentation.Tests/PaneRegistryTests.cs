@@ -74,7 +74,7 @@ public sealed class PaneRegistryTests
     {
         var registry = WorkspaceFactory.Create(workspace);
 
-        var expectedPaneCount = workspace == WorkspaceKind.Live ? 10 : 5;
+        var expectedPaneCount = workspace == WorkspaceKind.Live ? 11 : 5;
         Assert.Equal(expectedPaneCount, registry.Panes.Count);
         Assert.Equal(hunterTitle, registry.Panes.Single(pane => pane.Kind == PaneKind.Hunter).Title);
         Assert.Equal(lowerPaneVisible, registry.Panes.Single(pane => pane.Kind == lowerPaneKind).IsVisible);
@@ -88,6 +88,7 @@ public sealed class PaneRegistryTests
 
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Research).IsVisible);
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Watchlist).IsVisible);
+        Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
     }
 
     [Fact]
@@ -102,6 +103,7 @@ public sealed class PaneRegistryTests
             Assert.Equal(LinkGroup.Unlinked, pane.LinkGroup);
             Assert.Equal(DockRegion.Bottom, pane.DockRegion);
         }
+        Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
     }
 
     [Fact]
@@ -187,6 +189,7 @@ public sealed class PaneRegistryTests
         {
             Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == kind).IsVisible);
         }
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
     }
 
     [Fact]
@@ -200,6 +203,7 @@ public sealed class PaneRegistryTests
         Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Automation);
         Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Orders);
         Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Positions);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
     }
 
     [Fact]

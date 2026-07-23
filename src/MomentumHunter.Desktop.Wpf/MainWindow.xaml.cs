@@ -22,6 +22,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
     private const string DiagnosticsContentId = "pane-diagnostics";
     private const string ResearchContentId = "pane-research";
     private const string WatchlistContentId = "pane-watchlist";
+    private const string DailyWorkflowContentId = "pane-daily-workflow";
     private const string AutomationContentId = "pane-automation";
     private const string OrdersContentId = "pane-orders";
     private const string PositionsContentId = "pane-positions";
@@ -521,6 +522,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
         _contentById[DiagnosticsContentId] = DiagnosticsAnchor.Content;
         _contentById[ResearchContentId] = ResearchAnchor.Content;
         _contentById[WatchlistContentId] = WatchlistAnchor.Content;
+        _contentById[DailyWorkflowContentId] = DailyWorkflowAnchor.Content;
         _contentById[AutomationContentId] = AutomationAnchor.Content;
         _contentById[OrdersContentId] = OrdersAnchor.Content;
         _contentById[PositionsContentId] = PositionsAnchor.Content;
@@ -595,6 +597,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             return;
         }
 
+        EnsureDailyWorkflowAnchorable();
         foreach (var (contentId, title) in new[]
         {
             (AutomationContentId, "Automation"),
@@ -614,6 +617,31 @@ public partial class MainWindow : Window, IWorkstationPresentation
                 });
             }
         }
+    }
+
+    private void EnsureDailyWorkflowAnchorable()
+    {
+        if (FindLayoutContent(DailyWorkflowContentId) is not null
+            || !_contentById.TryGetValue(DailyWorkflowContentId, out var content))
+        {
+            return;
+        }
+
+        var rootPanel = DockManager.Layout.RootPanel;
+        var dailyWorkflowPane = new LayoutAnchorablePane
+        {
+            DockHeight = new GridLength(520),
+            DockMinHeight = 260,
+        };
+        dailyWorkflowPane.Children.Add(new LayoutAnchorable
+        {
+            Title = "Daily Workflow",
+            ContentId = DailyWorkflowContentId,
+            Content = content,
+            CanClose = true,
+            CanFloat = true,
+        });
+        rootPanel.Children.Add(dailyWorkflowPane);
     }
 
     private void CreateAdditionalChartDocument(PaneState pane, bool activate)
@@ -728,6 +756,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             DiagnosticsContentId,
             ResearchContentId,
             WatchlistContentId,
+            DailyWorkflowContentId,
             AutomationContentId,
             OrdersContentId,
             PositionsContentId,
@@ -824,6 +853,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             PaneKind.Diagnostics => DiagnosticsContentId,
             PaneKind.Research => ResearchContentId,
             PaneKind.Watchlist => WatchlistContentId,
+            PaneKind.DailyWorkflow => DailyWorkflowContentId,
             PaneKind.Automation => AutomationContentId,
             PaneKind.Orders => OrdersContentId,
             PaneKind.Positions => PositionsContentId,
@@ -849,6 +879,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             DiagnosticsContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Diagnostics),
             ResearchContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Research),
             WatchlistContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Watchlist),
+            DailyWorkflowContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.DailyWorkflow),
             AutomationContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Automation),
             OrdersContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Orders),
             PositionsContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Positions),

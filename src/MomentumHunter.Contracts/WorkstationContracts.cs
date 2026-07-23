@@ -17,6 +17,7 @@ public enum PaneKind
     MarketClock,
     Research,
     Watchlist,
+    DailyWorkflow,
     Automation,
     Orders,
     Positions,
@@ -101,6 +102,15 @@ public enum TechnicalResearchState
     Unavailable,
 }
 
+public enum DailyWorkflowEvidenceState
+{
+    Available,
+    Stale,
+    Partial,
+    Empty,
+    Unavailable,
+}
+
 public enum SavedWatchlistState
 {
     Available,
@@ -108,6 +118,25 @@ public enum SavedWatchlistState
     Partial,
     Empty,
     Unavailable,
+}
+
+public enum DailyWorkflowStepLevel
+{
+    Complete,
+    Active,
+    Attention,
+    Blocked,
+    Waiting,
+    Locked,
+}
+
+public enum DailyWorkflowLight
+{
+    Green,
+    Blue,
+    Yellow,
+    Red,
+    Gray,
 }
 
 public sealed record CatalystSummary(string Headline, string SourceLabel, DateTimeOffset ObservedAt);
@@ -347,6 +376,67 @@ public sealed record ReadOnlyWorkspaceSnapshot(
     AlertEvidenceSnapshot AlertEvidence,
     ReplaySnapshot Replay,
     bool PlanningAvailable);
+
+public sealed record DailyWorkflowReviewCounts(
+    int Total,
+    int Reviewed,
+    int Unreviewed,
+    int Interested,
+    int Rejected,
+    int Watchlist);
+
+public sealed record DailyWorkflowPlanCounts(
+    int Watchlist,
+    int Complete,
+    int Incomplete,
+    int MissingTrigger,
+    int MissingStop,
+    int MissingInvalidation,
+    int MissingMaxLoss,
+    int WithoutPlan);
+
+public sealed record DailyWorkflowOutcomeCounts(
+    int CompletedNextDay,
+    int CompletedFiveDay,
+    int Pending);
+
+public sealed record DailyWorkflowReadinessGate(string Name, string Status);
+
+public sealed record DailyWorkflowNextAction(
+    string Title,
+    string Detail,
+    DailyWorkflowStepLevel Level);
+
+public sealed record DailyWorkflowStepSnapshot(
+    string Id,
+    string Name,
+    DailyWorkflowStepLevel Level,
+    string Status,
+    DailyWorkflowLight Light,
+    string Dependency,
+    string Blocker,
+    string Detail);
+
+public sealed record DailyWorkflowSnapshot(
+    int SchemaVersion,
+    DailyWorkflowEvidenceState State,
+    DateTimeOffset ObservedAt,
+    DateTimeOffset? SourceAsOf,
+    string SourceLabel,
+    string SourceContext,
+    string OperatorContextState,
+    string OperatorContextLabel,
+    string Summary,
+    int WorkflowScore,
+    string CaptureStatus,
+    DailyWorkflowReviewCounts Review,
+    DailyWorkflowPlanCounts Plans,
+    DailyWorkflowOutcomeCounts Outcomes,
+    IReadOnlyList<DailyWorkflowReadinessGate> Readiness,
+    DailyWorkflowNextAction NextAction,
+    IReadOnlyList<DailyWorkflowStepSnapshot> Steps,
+    IReadOnlyList<string> Warnings,
+    bool ReadOnly);
 
 public sealed record SimulationWorkspaceSnapshot(
     int SchemaVersion,
