@@ -36,8 +36,11 @@ Do not change these areas without explicit approval: core scoring logic, trade r
 
 ## Roadmap Authority And Reporting
 - `docs/argus-office/ROADMAP.md` is the sole authoritative current-status and next-work document. `CURRENT_STATE.md` is retired.
+- `docs/argus-office/VERIFICATION_QUEUE.md` is the authoritative list of deferred Steven checks. It records verification work but does not replace the Roadmap or grant merge approval.
 - Before starting substantive work, read the Roadmap `Now` section and reconcile any mismatch with Git before relying on it.
 - Before reporting a substantive task complete, update the Roadmap from actual branch, commit, test, merge, push, and next-action evidence. Branch-only work must be `IMPLEMENTED_PENDING_MERGE`, not `COMPLETE`.
+- For every user-visible change, add exact numbered operator checks to the Verification Queue and keep automated evidence separate from Steven's manual result. `MANUAL_PENDING` may coexist with continued unrelated Builder work, but it is never equivalent to manual acceptance or merge approval.
+- Never ask Steven to broadly "check the app." State what to open, what action to take, what should appear, what must remain absent or locked, and how to report a failure.
 - Give Steven detailed progress updates for substantive work: what is being checked or changed, why it matters, evidence found, verification planned, and unresolved risk.
 
 ## Shared Subagent Rule: Artifact-First Work
