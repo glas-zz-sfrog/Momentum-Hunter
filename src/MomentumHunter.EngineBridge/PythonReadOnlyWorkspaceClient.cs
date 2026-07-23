@@ -78,7 +78,12 @@ public static class PythonReadOnlyWorkspaceSnapshotMapper
                 String(lineagePayload, "sourceLabel") ?? "Unavailable source lineage",
                 Timestamp(lineagePayload, "asOf", observedAt),
                 String(lineagePayload, "summary") ?? "No source lineage was supplied."),
-            readinessLabel);
+            readinessLabel,
+            Array(item, "notes")
+                .Where(note => note.ValueKind == JsonValueKind.String)
+                .Select(note => note.GetString()?.Trim() ?? string.Empty)
+                .Where(note => !string.IsNullOrWhiteSpace(note))
+                .ToArray());
     }
 
     private static ActivityEvent Activity(JsonElement item, DateTimeOffset fallback) => new(

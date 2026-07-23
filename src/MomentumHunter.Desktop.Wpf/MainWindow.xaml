@@ -285,8 +285,58 @@
                                                     </StackPanel>
                                                 </ScrollViewer>
                                             </TabItem>
-                                            <TabItem Header="Why"><TextBlock Text="Research evidence and catalyst context are supplied through the engine boundary." Margin="12" TextWrapping="Wrap" /></TabItem>
-                                            <TabItem Header="Research"><TextBlock Text="Technical details are intentionally a disclosure, not a trade recommendation." Margin="12" TextWrapping="Wrap" /></TabItem>
+                                            <TabItem Header="Why">
+                                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                    <StackPanel Margin="12">
+                                                        <TextBlock Text="{Binding CandidateEvidenceSymbolLabel}" FontSize="16" FontWeight="SemiBold" />
+                                                        <TextBlock Text="Persisted catalyst" Foreground="{StaticResource Teal}" FontSize="11" Margin="0,12,0,3" />
+                                                        <TextBlock Text="{Binding CandidateCatalystHeadline}" TextWrapping="Wrap" FontSize="13" />
+                                                        <TextBlock Text="{Binding CandidateCatalystSourceLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,5,0,0" />
+                                                        <TextBlock Text="{Binding CandidateCatalystObservedAtLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" />
+                                                        <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,1,0,0" Margin="0,12,0,10" />
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="92" />
+                                                                <ColumnDefinition Width="1*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto" />
+                                                                <RowDefinition Height="Auto" />
+                                                            </Grid.RowDefinitions>
+                                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Source state" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,0,8,7" />
+                                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CandidateReadinessLabel}" TextWrapping="Wrap" Margin="0,0,0,7" />
+                                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Liquidity" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,0,8,0" />
+                                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CandidateLiquidityLabel}" TextWrapping="Wrap" />
+                                                        </Grid>
+                                                        <TextBlock Text="Persisted evidence disclosure only; this is not a trade recommendation." Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" Margin="0,14,0,0" />
+                                                    </StackPanel>
+                                                </ScrollViewer>
+                                            </TabItem>
+                                            <TabItem Header="Research">
+                                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                    <StackPanel Margin="12">
+                                                        <TextBlock Text="Evidence quality" Foreground="{StaticResource Teal}" FontSize="11" />
+                                                        <TextBlock Text="{Binding CandidateQualityLabel}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                                        <TextBlock Text="Source lineage" Foreground="{StaticResource Teal}" FontSize="11" Margin="0,14,0,3" />
+                                                        <TextBlock Text="{Binding CandidateLineageSourceLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding CandidateLineageAsOfLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" />
+                                                        <TextBlock Text="{Binding CandidateLineageSummary}" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,5,0,0" />
+                                                        <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,1,0,0" Margin="0,12,0,10" />
+                                                        <TextBlock Text="Opportunity notes" Foreground="{StaticResource Teal}" FontSize="11" />
+                                                        <TextBlock Text="{Binding CandidateOpportunityNotesLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,3,0,5" />
+                                                        <ItemsControl ItemsSource="{Binding CandidateOpportunityNotes}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,0,1" Padding="0,5">
+                                                                        <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                        <TextBlock Text="Read-only research evidence. No score, readiness, alert, or execution rule is recalculated here." Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" Margin="0,14,0,0" />
+                                                    </StackPanel>
+                                                </ScrollViewer>
+                                            </TabItem>
                                             <TabItem Header="History"><TextBlock Text="No order or broker history exists in this simulation-only shell." Margin="12" TextWrapping="Wrap" /></TabItem>
                                         </TabControl>
                                     </Grid>

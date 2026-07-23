@@ -305,6 +305,53 @@ public sealed partial class ShellViewModel : ObservableObject
         ? "Candidate, evidence, health, and source lineage come from the Python read-only boundary. Scores and readiness labels are not recalculated here."
         : "Evidence context for the linked symbol stays available without becoming a permanent route.";
 
+    public string CandidateEvidenceSymbolLabel => CandidateEvidence?.Symbol ?? TradePlanSymbolLabel;
+
+    public string CandidateCatalystHeadline => TextOrUnavailable(
+        string.IsNullOrWhiteSpace(CandidateEvidence?.CatalystSummary?.Headline)
+            ? CandidateEvidence?.Catalyst
+            : CandidateEvidence.CatalystSummary.Headline,
+        "No stored catalyst summary is available.");
+
+    public string CandidateCatalystSourceLabel => TextOrUnavailable(
+        CandidateEvidence?.CatalystSummary?.SourceLabel,
+        "Catalyst source unavailable");
+
+    public string CandidateCatalystObservedAtLabel => CandidateEvidence?.CatalystSummary is { } catalyst
+        ? $"Observed {catalyst.ObservedAt.ToUniversalTime():yyyy-MM-dd HH:mm} UTC"
+        : "Catalyst timestamp unavailable";
+
+    public string CandidateReadinessLabel => TextOrUnavailable(
+        CandidateEvidence?.OperatorState,
+        "Readiness unavailable");
+
+    public string CandidateQualityLabel => TextOrUnavailable(
+        CandidateEvidence?.QualityLabel,
+        "Source quality unavailable");
+
+    public string CandidateLiquidityLabel => TextOrUnavailable(
+        CandidateEvidence?.FloatOrLiquidity,
+        "Liquidity data unavailable");
+
+    public string CandidateLineageSourceLabel => TextOrUnavailable(
+        CandidateEvidence?.DataLineage?.SourceLabel,
+        "Source lineage unavailable");
+
+    public string CandidateLineageAsOfLabel => CandidateEvidence?.DataLineage is { } lineage
+        ? $"As of {lineage.AsOf.ToUniversalTime():yyyy-MM-dd HH:mm} UTC"
+        : "Lineage timestamp unavailable";
+
+    public string CandidateLineageSummary => TextOrUnavailable(
+        CandidateEvidence?.DataLineage?.Summary,
+        "No source lineage summary was supplied.");
+
+    public IReadOnlyList<string> CandidateOpportunityNotes =>
+        CandidateEvidence?.OpportunityNotes ?? [];
+
+    public string CandidateOpportunityNotesLabel => CandidateOpportunityNotes.Count == 0
+        ? "No stored opportunity notes are available."
+        : $"{CandidateOpportunityNotes.Count} persisted opportunity note{(CandidateOpportunityNotes.Count == 1 ? string.Empty : "s")}";
+
     public string ReplaySummary => ReplaySession?.Summary ?? "Replay context is unavailable.";
 
     public RectGeometry? RestoredWindowBounds => _windowBounds;
@@ -1037,8 +1084,28 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(ChartSourceLabel));
         OnPropertyChanged(nameof(ActivitySourceLabel));
         OnPropertyChanged(nameof(ResearchSummary));
+        OnPropertyChanged(nameof(CandidateEvidenceSymbolLabel));
+        OnPropertyChanged(nameof(CandidateCatalystHeadline));
+        OnPropertyChanged(nameof(CandidateCatalystSourceLabel));
+        OnPropertyChanged(nameof(CandidateCatalystObservedAtLabel));
+        OnPropertyChanged(nameof(CandidateReadinessLabel));
+        OnPropertyChanged(nameof(CandidateQualityLabel));
+        OnPropertyChanged(nameof(CandidateLiquidityLabel));
+        OnPropertyChanged(nameof(CandidateLineageSourceLabel));
+        OnPropertyChanged(nameof(CandidateLineageAsOfLabel));
+        OnPropertyChanged(nameof(CandidateLineageSummary));
+        OnPropertyChanged(nameof(CandidateOpportunityNotes));
+        OnPropertyChanged(nameof(CandidateOpportunityNotesLabel));
         OnPropertyChanged(nameof(ReplaySummary));
     }
+
+    private static string TextOrUnavailable(string? value, string unavailable) =>
+        string.IsNullOrWhiteSpace(value) ? unavailable : value.Trim();
+
+    private CandidateSnapshot? CandidateEvidence => TradePlan is null
+        ? SelectedCandidate
+        : Candidates.FirstOrDefault(candidate =>
+            string.Equals(candidate.Symbol, TradePlan.Symbol, StringComparison.OrdinalIgnoreCase));
 
     private async Task RefreshSimulationWorkspaceDataAsync(CancellationToken cancellationToken)
     {

@@ -32,6 +32,7 @@ class WorkstationReadModelTests(unittest.TestCase):
             self.assertEqual(97, candidate["score"])
             self.assertEqual("PLANNING_SCAFFOLD", candidate["sourceReadinessLabel"])
             self.assertEqual("Persisted trade-planning report", candidate["dataLineage"]["sourceLabel"])
+            self.assertEqual(["Stored note"], candidate["notes"])
             self.assertFalse(snapshot["planningAvailable"])
             self.assertEqual("NOT_SELECTED", snapshot["replay"]["replayId"])
             self.assertIn("No candidate replay identity was synthesized", snapshot["replay"]["summary"])

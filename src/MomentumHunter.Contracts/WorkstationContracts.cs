@@ -104,7 +104,8 @@ public sealed record CandidateSnapshot(
     string FloatOrLiquidity = "Unavailable",
     CatalystSummary? CatalystSummary = null,
     DataLineage? DataLineage = null,
-    string? SourceReadinessLabel = null)
+    string? SourceReadinessLabel = null,
+    IReadOnlyList<string>? OpportunityNotes = null)
 {
     public string OperatorState => !string.IsNullOrWhiteSpace(SourceReadinessLabel)
         ? SourceReadinessLabel
