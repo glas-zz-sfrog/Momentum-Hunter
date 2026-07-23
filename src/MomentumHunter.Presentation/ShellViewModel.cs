@@ -124,6 +124,12 @@ public sealed partial class ShellViewModel : ObservableObject
 
         Candidates = [];
         Activity = [];
+        Activity.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(ActivityRows));
+            OnPropertyChanged(nameof(ActivityLabel));
+            OnPropertyChanged(nameof(ActivityCountLabel));
+        };
         Candles = [];
         CommandPaletteResults = [];
         WorkspaceOptions = Enum.GetValues<WorkspaceKind>();
@@ -137,6 +143,9 @@ public sealed partial class ShellViewModel : ObservableObject
     public ObservableCollection<CandidateSnapshot> Candidates { get; }
 
     public ObservableCollection<ActivityEvent> Activity { get; }
+
+    public IReadOnlyList<ActivityEventView> ActivityRows =>
+        Activity.Select(ActivityEventView.From).ToArray();
 
     public ObservableCollection<CandleSnapshot> Candles { get; }
 
@@ -275,6 +284,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public string CommandPaletteEmptyText => string.IsNullOrWhiteSpace(CommandQuery)
         ? "No commands or candidates are available."
         : $"No candidate or command matches '{CommandQuery.Trim()}'.";
+
+    public string ActivityCountLabel => Activity.Count == 1 ? "1 source event" : $"{Activity.Count} source events";
 
     public bool CanRunSimulation => !IsReadOnlySnapshotMode && TradePlan?.RiskDecision?.Allowed == true && Environment == EnvironmentMode.Simulation;
 

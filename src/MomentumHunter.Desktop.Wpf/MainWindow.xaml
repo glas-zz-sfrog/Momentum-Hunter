@@ -351,20 +351,52 @@
                             <Border Background="{StaticResource PanelBackground}" Padding="10">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="1*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
-                                    <ListBox ItemsSource="{Binding Activity}" Background="#17212B" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource PanelBorder}">
+                                    <ListBox ItemsSource="{Binding ActivityRows}" Background="#17212B" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource PanelBorder}" HorizontalContentAlignment="Stretch">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
-                                                <StackPanel Orientation="Horizontal" Margin="4">
-                                                    <TextBlock Text="{Binding Timestamp, StringFormat={}{0:HH:mm}}" Foreground="{StaticResource TextMuted}" Width="52" />
-                                                    <TextBlock Text="{Binding Category}" Foreground="{StaticResource Teal}" Width="84" />
-                                                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
-                                                </StackPanel>
+                                                <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,0,1" Padding="7,6">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="150" />
+                                                            <ColumnDefinition Width="90" />
+                                                            <ColumnDefinition Width="1*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding TimestampLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding CategoryLabel}" Foreground="{StaticResource Teal}" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding ScopeLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="3" Text="{Binding StateLabel}" Margin="10,0,0,0" FontSize="10" FontWeight="SemiBold">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding StateLabel}" Value="HEALTHY">
+                                                                            <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding StateLabel}" Value="DEGRADED">
+                                                                            <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding StateLabel}" Value="UNAVAILABLE">
+                                                                            <Setter Property="Foreground" Value="#F2868D" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Text="{Binding Message}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                                    </Grid>
+                                                </Border>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>
                                     </ListBox>
                                     <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                        <TextBlock Text="{Binding ActivityCountLabel}" FontSize="16" FontWeight="SemiBold" />
                                         <TextBlock Text="{Binding ActivitySourceLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                        <TextBlock Text="Recent workspace and evidence events appear here; reopen it any time from the top bar." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                        <TextBlock Text="Newest source event appears first. Displaying this stream does not create, reorder, or persist events." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,4,0,0" />
                                         <Button Content="Diagnostics" Click="DiagnosticsButton_Click" Margin="0,12,0,0" HorizontalAlignment="Left" />
                                     </StackPanel>
                                 </Grid>
