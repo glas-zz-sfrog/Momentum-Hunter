@@ -182,6 +182,9 @@ public sealed partial class ShellViewModel : ObservableObject
     private ReplaySnapshot? _replaySession;
 
     [ObservableProperty]
+    private AlertEvidenceSnapshot? _alertEvidence;
+
+    [ObservableProperty]
     private SimulationResult? _lastSimulationResult;
 
     [ObservableProperty]
@@ -378,6 +381,32 @@ public sealed partial class ShellViewModel : ObservableObject
     public string ReplaySummary => ReplaySession?.Summary ?? "Replay context is unavailable.";
 
     public ReplayContextView ReplayContext => ReplayContextView.From(ReplaySession);
+
+    public AlertEvidenceOverviewView AlertEvidenceOverview => AlertEvidenceOverviewView.From(AlertEvidence);
+
+    public IReadOnlyList<AlertEventRowView> AlertRows =>
+        AlertEvidence?.ActiveAlerts.Select(AlertEventRowView.From).ToArray() ?? [];
+
+    public IReadOnlyList<OutcomeRowView> OutcomeRows =>
+        AlertEvidence?.Outcomes.Select(OutcomeRowView.From).ToArray() ?? [];
+
+    public bool HasAlertRows => AlertRows.Count > 0;
+
+    public bool HasOutcomeRows => OutcomeRows.Count > 0;
+
+    public string AlertRowsEmptyLabel => AlertEvidence?.State switch
+    {
+        AlertEvidenceState.Empty => "No alerts are stored yet.",
+        AlertEvidenceState.Unavailable => "Active and pending alert evidence is unavailable.",
+        _ => "No active or pending alerts are present in the stored evidence.",
+    };
+
+    public string OutcomeRowsEmptyLabel => AlertEvidence?.State switch
+    {
+        AlertEvidenceState.Empty => "No outcomes are stored yet.",
+        AlertEvidenceState.Unavailable => "Recorded outcome evidence is unavailable.",
+        _ => "No completed or unscorable outcomes are present in the stored evidence.",
+    };
 
     public RectGeometry? RestoredWindowBounds => _windowBounds;
 
@@ -962,6 +991,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         IsReadOnlySnapshotMode = false;
         IsPythonSimulationWorkspaceMode = false;
+        AlertEvidence = null;
         Candidates.Clear();
         foreach (var candidate in await _engineClient.GetCandidatesAsync(cancellationToken))
         {
@@ -1130,8 +1160,14 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(CandidateOpportunityNotes));
         OnPropertyChanged(nameof(CandidateOpportunityNotesLabel));
         OnPropertyChanged(nameof(ReplaySummary));
-
         OnPropertyChanged(nameof(ReplayContext));
+        OnPropertyChanged(nameof(AlertEvidenceOverview));
+        OnPropertyChanged(nameof(AlertRows));
+        OnPropertyChanged(nameof(OutcomeRows));
+        OnPropertyChanged(nameof(HasAlertRows));
+        OnPropertyChanged(nameof(HasOutcomeRows));
+        OnPropertyChanged(nameof(AlertRowsEmptyLabel));
+        OnPropertyChanged(nameof(OutcomeRowsEmptyLabel));
     }
 
     private static string TextOrUnavailable(string? value, string unavailable) =>
@@ -1163,6 +1199,7 @@ public sealed partial class ShellViewModel : ObservableObject
             }
 
             Health = snapshot.Workspace.Health;
+            AlertEvidence = snapshot.Workspace.AlertEvidence;
             ReplaySession = snapshot.Workspace.Replay;
             Candles.Clear();
             PrimaryChart = null;
@@ -1195,6 +1232,7 @@ public sealed partial class ShellViewModel : ObservableObject
             Health = new SystemHealthSnapshot(
                 [new HealthComponentSnapshot("Python simulation workspace", HealthState.Unavailable, detail, now)],
                 now);
+            AlertEvidence = UnavailableAlertEvidence(now, detail);
             ReplaySession = new ReplaySnapshot("UNAVAILABLE", now, string.Empty, "source capture", "Replay context is unavailable because the Python simulation workspace could not be loaded.");
             TradePlan = null;
             Candles.Clear();
@@ -1237,6 +1275,7 @@ public sealed partial class ShellViewModel : ObservableObject
             }
 
             Health = snapshot.Health;
+            AlertEvidence = snapshot.AlertEvidence;
             ReplaySession = snapshot.Replay;
             StatusMessage = snapshot.Summary;
             OnPropertyChanged(nameof(ActivityLabel));
@@ -1264,6 +1303,7 @@ public sealed partial class ShellViewModel : ObservableObject
             Health = new SystemHealthSnapshot(
                 [new HealthComponentSnapshot("Python read-only workspace", HealthState.Unavailable, detail, now)],
                 now);
+            AlertEvidence = UnavailableAlertEvidence(now, detail);
             ReplaySession = new ReplaySnapshot("UNAVAILABLE", now, string.Empty, "source capture", "Replay context is unavailable because the Python snapshot could not be loaded.");
             TradePlan = null;
             Candles.Clear();
@@ -1274,4 +1314,26 @@ public sealed partial class ShellViewModel : ObservableObject
             RaisePresentationProperties();
         }
     }
+
+    partial void OnAlertEvidenceChanged(AlertEvidenceSnapshot? value)
+    {
+        OnPropertyChanged(nameof(AlertEvidenceOverview));
+        OnPropertyChanged(nameof(AlertRows));
+        OnPropertyChanged(nameof(OutcomeRows));
+        OnPropertyChanged(nameof(HasAlertRows));
+        OnPropertyChanged(nameof(HasOutcomeRows));
+        OnPropertyChanged(nameof(AlertRowsEmptyLabel));
+        OnPropertyChanged(nameof(OutcomeRowsEmptyLabel));
+    }
+
+    private static AlertEvidenceSnapshot UnavailableAlertEvidence(DateTimeOffset observedAt, string summary) => new(
+        AlertEvidenceState.Unavailable,
+        observedAt,
+        summary,
+        0,
+        0,
+        0,
+        0,
+        [],
+        []);
 }

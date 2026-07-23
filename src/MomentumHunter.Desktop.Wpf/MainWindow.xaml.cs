@@ -381,6 +381,11 @@ public partial class MainWindow : Window, IWorkstationPresentation
                 SetContentVisibility(ContentIdForPane(pane), true);
             }
 
+            if (pane.Kind == PaneKind.ReviewOutcomes)
+            {
+                EnsureAnchorablePaneHeight(ReviewOutcomesContentId, 340);
+            }
+
             PanesPopup.IsOpen = false;
         }
     }

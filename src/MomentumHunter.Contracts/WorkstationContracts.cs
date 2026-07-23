@@ -85,6 +85,13 @@ public enum ChartDataState
     Unavailable,
 }
 
+public enum AlertEvidenceState
+{
+    Available,
+    Empty,
+    Unavailable,
+}
+
 public sealed record CatalystSummary(string Headline, string SourceLabel, DateTimeOffset ObservedAt);
 
 public sealed record DataLineage(string SourceLabel, DateTimeOffset AsOf, string Summary);
@@ -179,9 +186,32 @@ public sealed record ActivityEvent(
     string Symbol,
     HealthState State);
 
-public sealed record AlertEvent(DateTimeOffset Timestamp, string Symbol, string State, string Summary);
+public sealed record AlertEvent(
+    string AlertId,
+    DateTimeOffset? Timestamp,
+    string Symbol,
+    string AlertType,
+    string State,
+    string Summary);
 
-public sealed record OutcomeSnapshot(string Symbol, DateTimeOffset ObservedAt, string Outcome, string Summary);
+public sealed record OutcomeSnapshot(
+    string AlertId,
+    string Symbol,
+    DateTimeOffset? AlertTimestamp,
+    string Status,
+    string Classification,
+    string Summary);
+
+public sealed record AlertEvidenceSnapshot(
+    AlertEvidenceState State,
+    DateTimeOffset AsOf,
+    string Summary,
+    int TotalAlertCount,
+    int ActiveAlertCount,
+    int RecordedOutcomeCount,
+    int UnscorableOutcomeCount,
+    IReadOnlyList<AlertEvent> ActiveAlerts,
+    IReadOnlyList<OutcomeSnapshot> Outcomes);
 
 public sealed record ExecutionAuditSnapshot(string AuditId, EnvironmentMode Mode, string State, string Summary, DateTimeOffset RecordedAt);
 
@@ -211,6 +241,7 @@ public sealed record ReadOnlyWorkspaceSnapshot(
     IReadOnlyList<CandidateSnapshot> Candidates,
     IReadOnlyList<ActivityEvent> Activity,
     SystemHealthSnapshot Health,
+    AlertEvidenceSnapshot AlertEvidence,
     ReplaySnapshot Replay,
     bool PlanningAvailable);
 

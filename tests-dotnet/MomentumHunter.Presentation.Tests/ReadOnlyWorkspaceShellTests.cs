@@ -26,6 +26,9 @@ public sealed class ReadOnlyWorkspaceShellTests
         Assert.Contains("unavailable at this read-only boundary", viewModel.PlanningStatus, StringComparison.Ordinal);
         Assert.Contains("Stored chart evidence is independent", viewModel.PlanningStatus, StringComparison.Ordinal);
         Assert.Contains("not create a substitute plan", viewModel.PlanningStatus, StringComparison.Ordinal);
+        Assert.Equal(AlertEvidenceState.Available, viewModel.AlertEvidenceOverview.State);
+        Assert.Equal("NVDA", Assert.Single(viewModel.AlertRows).SymbolLabel);
+        Assert.Equal("SUCCESSFUL", Assert.Single(viewModel.OutcomeRows).ClassificationLabel);
     }
 
     [Fact]
@@ -75,12 +78,22 @@ public sealed class ReadOnlyWorkspaceShellTests
             new DataLineage("Persisted trade-planning report", observedAt, "No recalculation occurred."),
             "PLANNING_SCAFFOLD");
         return new ReadOnlyWorkspaceSnapshot(
-            1,
+            2,
             observedAt,
             "Read-only Python evidence snapshot.",
             [candidate],
             [new ActivityEvent(observedAt, "Research", "Persisted report loaded.", "NVDA", HealthState.Healthy)],
             new SystemHealthSnapshot([new HealthComponentSnapshot("Trade planning report", HealthState.Healthy, "Loaded", observedAt)], observedAt),
+            new AlertEvidenceSnapshot(
+                AlertEvidenceState.Available,
+                observedAt,
+                "Stored alert evidence.",
+                2,
+                1,
+                1,
+                0,
+                [new AlertEvent("alert-active", observedAt, "NVDA", "BREAKOUT", "ACTIVE", "Stored alert.")],
+                [new OutcomeSnapshot("alert-complete", "CRWD", observedAt, "COMPLETED", "SUCCESSFUL", "Stored outcome.")]),
             new ReplaySnapshot("NOT_SELECTED", observedAt, string.Empty, "source capture", "No candidate replay identity was synthesized."),
             false);
     }

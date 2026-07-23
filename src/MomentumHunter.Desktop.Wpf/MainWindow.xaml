@@ -681,11 +681,140 @@
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="ReviewOutcomesAnchor" ContentId="pane-review-outcomes" Title="Outcomes" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="12">
-                                <StackPanel>
-                                    <TextBlock Text="Outcomes" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Insufficient local sample: outcome analytics are intentionally withheld rather than implied." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
-                                    <TextBlock Text="Use this pane for future outcome and discipline review once a suitable evidence sample exists." TextWrapping="Wrap" />
-                                </StackPanel>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="1*" />
+                                    </Grid.RowDefinitions>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Alert Evidence &amp; Outcomes" FontSize="16" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding AlertEvidenceOverview.AsOfLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Background="#253440" Padding="8,4" CornerRadius="3" VerticalAlignment="Top">
+                                            <TextBlock Text="{Binding AlertEvidenceOverview.StateLabel}" FontWeight="SemiBold" FontSize="10">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="#F2868D" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding AlertEvidenceOverview.StateLabel}" Value="AVAILABLE">
+                                                                <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding AlertEvidenceOverview.StateLabel}" Value="EMPTY">
+                                                                <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </Grid>
+                                    <StackPanel Grid.Row="1" Margin="0,8,0,0">
+                                        <TextBlock Text="{Binding AlertEvidenceOverview.CountSummary}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding AlertEvidenceOverview.Summary}" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="2"
+                                               Text="Research display only. Stored alert states and outcome classifications are not recalculated; no thresholds or source files are changed."
+                                               Foreground="{StaticResource Amber}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,8,0,8" />
+                                    <TabControl x:Name="AlertEvidenceTabs" Grid.Row="3">
+                                        <TabItem Header="Active / Pending">
+                                            <Grid Background="#17212B">
+                                                <ListBox ItemsSource="{Binding AlertRows}"
+                                                         Background="#17212B"
+                                                         Foreground="{StaticResource TextPrimary}"
+                                                         BorderBrush="{StaticResource PanelBorder}"
+                                                         HorizontalContentAlignment="Stretch"
+                                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                                    <ListBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,0,1" Padding="7,6">
+                                                                <StackPanel>
+                                                                    <WrapPanel>
+                                                                        <TextBlock Text="{Binding TimestampLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" Width="155" />
+                                                                        <TextBlock Text="{Binding SymbolLabel}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" FontSize="10" Width="75" />
+                                                                        <TextBlock Text="{Binding TypeLabel}" Foreground="{StaticResource Teal}" FontSize="10" Width="120" TextTrimming="CharacterEllipsis" />
+                                                                        <TextBlock Text="{Binding StateLabel}" Foreground="{StaticResource Amber}" FontWeight="SemiBold" FontSize="10" Width="120" TextTrimming="CharacterEllipsis" />
+                                                                        <TextBlock Text="{Binding AlertIdLabel, StringFormat=ID: {0}}" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                                    </WrapPanel>
+                                                                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ListBox.ItemTemplate>
+                                                </ListBox>
+                                                <TextBlock Text="{Binding AlertRowsEmptyLabel}"
+                                                           Foreground="{StaticResource TextMuted}"
+                                                           TextWrapping="Wrap"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Margin="24">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasAlertRows}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Grid>
+                                        </TabItem>
+                                        <TabItem Header="Recorded Outcomes">
+                                            <Grid Background="#17212B">
+                                                <ListBox ItemsSource="{Binding OutcomeRows}"
+                                                         Background="#17212B"
+                                                         Foreground="{StaticResource TextPrimary}"
+                                                         BorderBrush="{StaticResource PanelBorder}"
+                                                         HorizontalContentAlignment="Stretch"
+                                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                                    <ListBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,0,1" Padding="7,6">
+                                                                <StackPanel>
+                                                                    <WrapPanel>
+                                                                        <TextBlock Text="{Binding TimestampLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" Width="155" />
+                                                                        <TextBlock Text="{Binding SymbolLabel}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" FontSize="10" Width="75" />
+                                                                        <TextBlock Text="{Binding StatusLabel}" Foreground="{StaticResource Teal}" FontSize="10" Width="135" TextTrimming="CharacterEllipsis" />
+                                                                        <TextBlock Text="{Binding ClassificationLabel}" Foreground="{StaticResource Amber}" FontWeight="SemiBold" FontSize="10" Width="205" TextTrimming="CharacterEllipsis" />
+                                                                        <TextBlock Text="{Binding AlertIdLabel, StringFormat=ID: {0}}" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                                    </WrapPanel>
+                                                                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ListBox.ItemTemplate>
+                                                </ListBox>
+                                                <TextBlock Text="{Binding OutcomeRowsEmptyLabel}"
+                                                           Foreground="{StaticResource TextMuted}"
+                                                           TextWrapping="Wrap"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Margin="24">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasOutcomeRows}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Grid>
+                                        </TabItem>
+                                    </TabControl>
+                                </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
                     </avalon:LayoutAnchorablePane>

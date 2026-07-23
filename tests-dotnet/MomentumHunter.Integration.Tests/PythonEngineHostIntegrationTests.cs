@@ -56,7 +56,7 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.DoesNotContain("submit_order", first.Capabilities);
 
             var readOnlyWorkspacePayload = await firstConnection.GetReadOnlyWorkspaceSnapshotAsync();
-            Assert.Equal(1, readOnlyWorkspacePayload.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(2, readOnlyWorkspacePayload.GetProperty("schemaVersion").GetInt32());
             Assert.False(readOnlyWorkspacePayload.GetProperty("planningAvailable").GetBoolean());
             Assert.True(readOnlyWorkspacePayload.TryGetProperty("candidates", out _));
             Assert.True(readOnlyWorkspacePayload.TryGetProperty("health", out _));

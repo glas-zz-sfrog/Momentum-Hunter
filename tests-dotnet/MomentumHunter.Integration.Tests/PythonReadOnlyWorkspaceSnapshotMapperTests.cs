@@ -11,7 +11,7 @@ public sealed class PythonReadOnlyWorkspaceSnapshotMapperTests
     {
         using var document = JsonDocument.Parse("""
             {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "observedAt": "2026-07-17T15:00:00Z",
               "summary": "Read-only Python evidence snapshot.",
               "planningAvailable": false,
@@ -42,6 +42,35 @@ public sealed class PythonReadOnlyWorkspaceSnapshotMapperTests
                   { "name": "Trade planning report", "state": "Healthy", "summary": "Loaded", "checkedAt": "2026-07-17T14:30:00Z" }
                 ]
               },
+              "alertEvidence": {
+                "state": "AVAILABLE",
+                "asOf": "2026-07-17T14:40:00Z",
+                "summary": "Stored alert states and outcomes.",
+                "totalAlertCount": 3,
+                "activeAlertCount": 1,
+                "recordedOutcomeCount": 2,
+                "unscorableOutcomeCount": 1,
+                "activeAlerts": [
+                  {
+                    "alertId": "alert-active",
+                    "timestamp": "2026-07-17T14:35:00Z",
+                    "symbol": "NVDA",
+                    "alertType": "BREAKOUT",
+                    "state": "ACTIVE",
+                    "summary": "Range breakout persisted."
+                  }
+                ],
+                "outcomes": [
+                  {
+                    "alertId": "",
+                    "symbol": "AMD",
+                    "alertTimestamp": null,
+                    "status": "UNSCORABLE_OUTCOME",
+                    "classification": "UNSCORABLE_MISSING_ENTRY_PRICE",
+                    "summary": "Stored status and classification."
+                  }
+                ]
+              },
               "replay": {
                 "replayId": "NOT_SELECTED",
                 "asOf": "2026-07-17T14:25:00Z",
@@ -62,6 +91,17 @@ public sealed class PythonReadOnlyWorkspaceSnapshotMapperTests
         Assert.Equal("Persisted trade-planning report", candidate.DataLineage!.SourceLabel);
         Assert.False(snapshot.PlanningAvailable);
         Assert.Equal("NOT_SELECTED", snapshot.Replay.ReplayId);
+        Assert.Equal(AlertEvidenceState.Available, snapshot.AlertEvidence.State);
+        Assert.Equal(3, snapshot.AlertEvidence.TotalAlertCount);
+        Assert.Equal(1, snapshot.AlertEvidence.ActiveAlertCount);
+        var alert = Assert.Single(snapshot.AlertEvidence.ActiveAlerts);
+        Assert.Equal("alert-active", alert.AlertId);
+        Assert.Equal("BREAKOUT", alert.AlertType);
+        Assert.Equal(DateTimeOffset.Parse("2026-07-17T14:35:00Z"), alert.Timestamp);
+        var outcome = Assert.Single(snapshot.AlertEvidence.Outcomes);
+        Assert.Equal("UNSCORABLE_OUTCOME", outcome.Status);
+        Assert.Equal("UNSCORABLE_MISSING_ENTRY_PRICE", outcome.Classification);
+        Assert.Null(outcome.AlertTimestamp);
     }
 
     [Fact]
@@ -95,6 +135,8 @@ public sealed class PythonReadOnlyWorkspaceSnapshotMapperTests
         Assert.Null(candidate.RelativeVolume);
         Assert.Equal("UNAVAILABLE", candidate.OperatorState);
         Assert.Equal(ReadinessState.StaleData, candidate.Readiness);
+        Assert.Equal(AlertEvidenceState.Unavailable, snapshot.AlertEvidence.State);
+        Assert.Contains("schema v1", snapshot.AlertEvidence.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -103,5 +145,47 @@ public sealed class PythonReadOnlyWorkspaceSnapshotMapperTests
         using var document = JsonDocument.Parse("[]");
 
         Assert.Throws<InvalidDataException>(() => PythonReadOnlyWorkspaceSnapshotMapper.Map(document.RootElement));
+    }
+
+    [Fact]
+    public void RejectsAnUnsupportedSchemaVersion()
+    {
+        using var document = JsonDocument.Parse("""{ "schemaVersion": 3 }""");
+
+        Assert.Throws<InvalidDataException>(() => PythonReadOnlyWorkspaceSnapshotMapper.Map(document.RootElement));
+    }
+
+    [Fact]
+    public void ClampsMalformedNegativeEvidenceCountsWithoutCreatingRows()
+    {
+        using var document = JsonDocument.Parse("""
+            {
+              "schemaVersion": 2,
+              "observedAt": "2026-07-17T15:00:00Z",
+              "candidates": [],
+              "activity": [],
+              "health": { "checkedAt": "2026-07-17T15:00:00Z", "components": [] },
+              "alertEvidence": {
+                "state": "EMPTY",
+                "asOf": "2026-07-17T15:00:00Z",
+                "totalAlertCount": -1,
+                "activeAlertCount": -2,
+                "recordedOutcomeCount": -3,
+                "unscorableOutcomeCount": -4,
+                "activeAlerts": [],
+                "outcomes": []
+              },
+              "replay": { "replayId": "NOT_SELECTED", "asOf": "2026-07-17T15:00:00Z" }
+            }
+            """);
+
+        var snapshot = PythonReadOnlyWorkspaceSnapshotMapper.Map(document.RootElement);
+
+        Assert.Equal(0, snapshot.AlertEvidence.TotalAlertCount);
+        Assert.Equal(0, snapshot.AlertEvidence.ActiveAlertCount);
+        Assert.Equal(0, snapshot.AlertEvidence.RecordedOutcomeCount);
+        Assert.Equal(0, snapshot.AlertEvidence.UnscorableOutcomeCount);
+        Assert.Empty(snapshot.AlertEvidence.ActiveAlerts);
+        Assert.Empty(snapshot.AlertEvidence.Outcomes);
     }
 }

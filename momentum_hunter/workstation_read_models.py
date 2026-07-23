@@ -12,8 +12,11 @@ from momentum_hunter.monitor_targets import latest_trade_report_path
 from momentum_hunter.opportunity_alerts import OPPORTUNITY_ALERTS_PATH
 
 
-WORKSTATION_SNAPSHOT_SCHEMA_VERSION = 1
+WORKSTATION_SNAPSHOT_SCHEMA_VERSION = 2
 READ_ONLY_MODE_LABEL = "READ_ONLY_PERSISTED_EVIDENCE"
+ACTIVE_ALERT_STATUSES = frozenset({"PENDING_OUTCOME", "ACTIVE"})
+ALERT_ROW_LIMIT = 50
+OUTCOME_ROW_LIMIT = 100
 
 
 @dataclass(frozen=True)
@@ -99,18 +102,30 @@ def build_read_only_workspace_snapshot(
     alerts_payload = load_json_object(paths.alerts_path)
     if alerts_payload is None:
         alerts_summary = "No readable opportunity-alert store is available. Evidence alert counts are unavailable."
+        alert_evidence = unavailable_alert_evidence(alerts_summary, observed_at)
         health_components.append(health_component("Evidence alerts", "Unavailable", alerts_summary, observed_at))
         activity.append(activity_event(observed_at, "Evidence", alerts_summary, "", "Unavailable"))
+    elif not isinstance(alerts_payload.get("alerts"), list) or any(
+        not isinstance(item, dict) for item in alerts_payload["alerts"]
+    ):
+        alerts_checked_at = file_timestamp(paths.alerts_path, observed_at)
+        alerts_summary = (
+            "The opportunity-alert store is readable, but its alerts collection is structurally invalid. "
+            "Evidence alert counts and rows are unavailable."
+        )
+        alert_evidence = unavailable_alert_evidence(alerts_summary, alerts_checked_at)
+        health_components.append(health_component("Evidence alerts", "Unavailable", alerts_summary, alerts_checked_at))
+        activity.append(activity_event(alerts_checked_at, "Evidence", alerts_summary, "", "Unavailable"))
     else:
-        alerts = list_value(alerts_payload, "alerts")
+        alerts = alerts_payload["alerts"]
         active_alerts = [
             alert
             for alert in alerts
-            if isinstance(alert, dict)
-            and object_value(alert, "outcome").get("status", "PENDING_OUTCOME") in {"PENDING_OUTCOME", "ACTIVE"}
+            if alert_outcome_status(alert) in ACTIVE_ALERT_STATUSES
         ]
         alerts_summary = f"Read-only alert store contains {len(alerts)} alert(s), including {len(active_alerts)} active or pending outcome(s)."
         alerts_checked_at = file_timestamp(paths.alerts_path, observed_at)
+        alert_evidence = build_alert_evidence_snapshot(alerts, alerts_checked_at)
         health_components.append(health_component("Evidence alerts", "Healthy", alerts_summary, alerts_checked_at))
         activity.append(activity_event(alerts_checked_at, "Evidence", alerts_summary, "", "Healthy"))
 
@@ -132,6 +147,7 @@ def build_read_only_workspace_snapshot(
             "checkedAt": timestamp_text(observed_at),
             "components": health_components,
         },
+        "alertEvidence": alert_evidence,
         "replay": replay,
         "planningAvailable": False,
     }
@@ -216,6 +232,127 @@ def activity_event(timestamp: datetime, category: str, message: str, symbol: str
         "symbol": symbol,
         "state": state,
     }
+
+
+def unavailable_alert_evidence(summary: str, observed_at: datetime) -> dict[str, Any]:
+    return {
+        "state": "UNAVAILABLE",
+        "asOf": timestamp_text(observed_at),
+        "summary": summary,
+        "totalAlertCount": 0,
+        "activeAlertCount": 0,
+        "recordedOutcomeCount": 0,
+        "unscorableOutcomeCount": 0,
+        "activeAlerts": [],
+        "outcomes": [],
+    }
+
+
+def build_alert_evidence_snapshot(alerts: list[dict[str, Any]], as_of: datetime) -> dict[str, Any]:
+    ordered = sorted(alerts, key=alert_timestamp_sort_key, reverse=True)
+    active = [item for item in ordered if alert_outcome_status(item) in ACTIVE_ALERT_STATUSES]
+    outcomes = [item for item in ordered if alert_outcome_status(item) not in ACTIVE_ALERT_STATUSES]
+    unscorable_count = sum(
+        1
+        for item in outcomes
+        if alert_outcome_status(item) == "UNSCORABLE_OUTCOME"
+        or str(object_value(item, "outcome").get("classification", "")).strip().upper().startswith("UNSCORABLE")
+    )
+    if not alerts:
+        state = "EMPTY"
+        summary = (
+            "The persisted opportunity-alert store is readable but contains no alerts. "
+            "Outcome evidence is insufficient; no analytics or classifications were inferred."
+        )
+    else:
+        state = "AVAILABLE"
+        summary = (
+            f"Persisted alert evidence: {len(alerts)} total, {len(active)} active or pending, "
+            f"{len(outcomes)} recorded outcome(s), {unscorable_count} unscorable. "
+            f"Stored alert states and outcome classifications are displayed without recalculation. "
+            f"Counts cover the full store; row detail is limited to the newest {ALERT_ROW_LIMIT} active alerts "
+            f"and {OUTCOME_ROW_LIMIT} outcomes."
+        )
+    return {
+        "state": state,
+        "asOf": timestamp_text(as_of),
+        "summary": summary,
+        "totalAlertCount": len(alerts),
+        "activeAlertCount": len(active),
+        "recordedOutcomeCount": len(outcomes),
+        "unscorableOutcomeCount": unscorable_count,
+        "activeAlerts": [alert_event_snapshot(item) for item in active[:ALERT_ROW_LIMIT]],
+        "outcomes": [alert_outcome_snapshot(item) for item in outcomes[:OUTCOME_ROW_LIMIT]],
+    }
+
+
+def alert_event_snapshot(item: dict[str, Any]) -> dict[str, Any]:
+    outcome = object_value(item, "outcome")
+    return {
+        "alertId": str(item.get("alert_id", "")).strip(),
+        "timestamp": optional_timestamp_text(item.get("timestamp")),
+        "symbol": str(item.get("symbol", "")).strip().upper(),
+        "alertType": str(item.get("alert_type", "")).strip(),
+        "state": str(item.get("current_state", "")).strip() or str(outcome.get("status", "")).strip() or "UNAVAILABLE",
+        "summary": str(item.get("reason", "")).strip() or "No alert reason was recorded.",
+    }
+
+
+def alert_outcome_snapshot(item: dict[str, Any]) -> dict[str, Any]:
+    outcome = object_value(item, "outcome")
+    status = str(outcome.get("status", "")).strip() or "UNAVAILABLE"
+    classification = str(outcome.get("classification", "")).strip() or "UNAVAILABLE"
+    return {
+        "alertId": str(item.get("alert_id", "")).strip(),
+        "symbol": str(item.get("symbol", "")).strip().upper(),
+        "alertTimestamp": optional_timestamp_text(item.get("timestamp")),
+        "status": status,
+        "classification": classification,
+        "summary": stored_outcome_summary(outcome, status=status, classification=classification),
+    }
+
+
+def alert_outcome_status(item: dict[str, Any]) -> str:
+    return str(object_value(item, "outcome").get("status", "PENDING_OUTCOME")).strip().upper() or "PENDING_OUTCOME"
+
+
+def alert_timestamp_sort_key(item: dict[str, Any]) -> tuple[bool, str]:
+    timestamp = optional_timestamp_text(item.get("timestamp"))
+    return timestamp is not None, timestamp or ""
+
+
+def stored_outcome_summary(outcome: dict[str, Any], *, status: str, classification: str) -> str:
+    details = [f"Stored status {status}", f"classification {classification}"]
+    for key, label in (
+        ("five_minute_return_pct", "5m"),
+        ("fifteen_minute_return_pct", "15m"),
+        ("thirty_minute_return_pct", "30m"),
+        ("sixty_minute_return_pct", "60m"),
+        ("mfe_30m_pct", "MFE 30m"),
+        ("mae_30m_pct", "MAE 30m"),
+    ):
+        value = number_or_none(outcome.get(key))
+        if value is not None:
+            details.append(f"{label} {value:+.2f}%")
+    for key, label in (
+        ("target_1_hit", "target 1"),
+        ("target_2_hit", "target 2"),
+        ("stop_hit", "stop"),
+    ):
+        value = outcome.get(key)
+        if isinstance(value, bool):
+            details.append(f"{label} {'hit' if value else 'not hit'}")
+    return "; ".join(details) + "."
+
+
+def optional_timestamp_text(value: object) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return timestamp_text(datetime.fromisoformat(text.replace("Z", "+00:00")))
+    except ValueError:
+        return None
 
 
 def load_json_object(path: Path | None) -> dict[str, Any] | None:
