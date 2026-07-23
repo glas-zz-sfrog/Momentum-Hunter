@@ -486,6 +486,10 @@ public partial class MainWindow : Window, IWorkstationPresentation
         var chart = new CandleChart { Margin = new Thickness(12), DataContext = chartViewModel };
         chart.SetBinding(CandleChart.CandlesProperty, new Binding(nameof(ChartPaneViewModel.Candles)));
         chart.SetBinding(CandleChart.EmptyStateTextProperty, new Binding(nameof(ChartPaneViewModel.EmptyStateText)));
+        chart.SetBinding(CandleChart.IntervalProperty, new Binding($"{nameof(ChartPaneViewModel.Pane)}.{nameof(PaneState.Interval)}"));
+        chart.SetBinding(
+            CandleChart.InspectedCandleProperty,
+            new Binding(nameof(ChartPaneViewModel.InspectedBar)) { Mode = BindingMode.TwoWay });
         var symbol = new TextBlock
         {
             FontFamily = new FontFamily("Segoe UI"),
@@ -505,16 +509,49 @@ public partial class MainWindow : Window, IWorkstationPresentation
             DataContext = chartViewModel,
         };
         note.SetBinding(TextBlock.TextProperty, new Binding(nameof(ChartPaneViewModel.DetailLabel)));
+        var inspectionLabel = new TextBlock
+        {
+            FontFamily = new FontFamily("Segoe UI"),
+            Foreground = new SolidColorBrush(Color.FromRgb(74, 199, 182)),
+            FontSize = 10,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 12, 0),
+            DataContext = chartViewModel,
+        };
+        inspectionLabel.SetBinding(TextBlock.TextProperty, new Binding(nameof(ChartPaneViewModel.ActiveBarLabel)));
+        DockPanel.SetDock(inspectionLabel, Dock.Left);
+        var inspectionSummary = new TextBlock
+        {
+            FontFamily = new FontFamily("Segoe UI"),
+            Foreground = new SolidColorBrush(Color.FromRgb(231, 237, 242)),
+            FontSize = 11,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            DataContext = chartViewModel,
+        };
+        inspectionSummary.SetBinding(TextBlock.TextProperty, new Binding(nameof(ChartPaneViewModel.ActiveBarSummary)));
+        var inspectionContent = new DockPanel { LastChildFill = true };
+        inspectionContent.Children.Add(inspectionLabel);
+        inspectionContent.Children.Add(inspectionSummary);
+        var inspectionBar = new Border
+        {
+            BorderBrush = new SolidColorBrush(Color.FromRgb(53, 70, 82)),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(12, 7, 12, 7),
+            Child = inspectionContent,
+        };
         var content = new Grid { Background = new SolidColorBrush(Color.FromRgb(23, 33, 43)) };
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(symbol, 0);
         Grid.SetRow(note, 1);
         Grid.SetRow(chart, 2);
+        Grid.SetRow(inspectionBar, 3);
         content.Children.Add(symbol);
         content.Children.Add(note);
         content.Children.Add(chart);
+        content.Children.Add(inspectionBar);
         _contentById[contentId] = content;
 
         var document = new LayoutDocument

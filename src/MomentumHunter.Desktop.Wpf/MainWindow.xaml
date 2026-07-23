@@ -173,6 +173,7 @@
                                                               Candles="{Binding PrimaryChart.Candles}"
                                                               EmptyStateText="{Binding PrimaryChart.EmptyStateText}"
                                                               Interval="{Binding PrimaryChart.Pane.Interval}"
+                                                              InspectedCandle="{Binding PrimaryChart.InspectedBar, Mode=TwoWay}"
                                                               Margin="0,12,0,8" />
                                         <Border Grid.Row="2"
                                                 BorderBrush="{StaticResource PanelBorder}"
@@ -180,16 +181,16 @@
                                                 Padding="0,7,0,6">
                                             <DockPanel LastChildFill="True">
                                                 <TextBlock DockPanel.Dock="Left"
-                                                           Text="LATEST BAR"
+                                                           Text="{Binding PrimaryChart.ActiveBarLabel}"
                                                            Foreground="{StaticResource Teal}"
                                                            FontSize="10"
                                                            FontWeight="SemiBold"
                                                            Margin="0,0,12,0" />
-                                                <TextBlock Text="{Binding PrimaryChart.LatestBarSummary}"
+                                                <TextBlock Text="{Binding PrimaryChart.ActiveBarSummary}"
                                                            Foreground="{StaticResource TextPrimary}"
                                                            FontSize="11"
                                                            TextTrimming="CharacterEllipsis"
-                                                           ToolTip="{Binding PrimaryChart.LatestBarSummary}" />
+                                                           ToolTip="{Binding PrimaryChart.ActiveBarSummary}" />
                                             </DockPanel>
                                         </Border>
                                         <StackPanel Grid.Row="3" Orientation="Horizontal">
