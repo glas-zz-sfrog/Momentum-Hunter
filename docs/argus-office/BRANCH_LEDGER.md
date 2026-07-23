@@ -4,15 +4,15 @@ Date reconciled: 2026-07-23
 
 ## Current Truth
 
-Local `master` is the canonical merged product baseline for Momentum Hunter. It contains the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, R005 tray/lifecycle work, the independent Python Engine Host, Phase 9 read-only workstation integration, and Phase 10 persisted TradePlan/Risk Governor/FakeBroker simulation integration through `a17eff8 Record Phase 10 local integration`. `origin/master` remains at `30c0e0b` because no master push was authorized.
+Local `master` is the canonical merged product baseline for Momentum Hunter. It contains the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, R005 tray/lifecycle work, the independent Python Engine Host, Phase 9 read-only workstation integration, Phase 10 persisted TradePlan/Risk Governor/FakeBroker simulation integration, and R011 read-only WPF chart-candle integration through `268f3f8 Add read-only WPF chart candles`. Steven explicitly approved the R011 fast-forward and master push; local and remote `master` are synchronized after this reconciliation.
 
 Git evidence at reconciliation time:
 
-- `git status --short --branch` on `master`: clean after the fast-forward.
-- Local `master` is 12 commits ahead of `origin/master` at `a17eff8a2bf16e9d379a83519beb18776f79d897`; `origin/master` resolves to `30c0e0b4e3c3b80ec946681015f3b6f0a7dd729b`.
-- Steven approved Phase 10, and the task branch fast-forwarded locally with no merge commit and no master push.
+- `git status --short --branch` on `master`: clean after the R011 fast-forward and reconciliation commit.
+- Local and remote `master` contain the R011 runtime integration at `268f3f80fe258d803b827823b4a500cd5aaa9a94`; the reconciliation commit records the final merge and push state.
+- Steven approved R011, and the task branch fast-forwarded locally with no merge commit before the approved master push.
 - `codex/ARGUS-A016S-schwab-paper-api-verification` is branch-only through `c979866`; its official support request is sent, but no A017 implementation gate has opened.
-- `codex/ARGUS-R011-wpf-chart-candle-integration` starts cleanly from `a17eff8`; its implementation and proof are branch-only and require Steven's merge approval.
+- `codex/ARGUS-R011-wpf-chart-candle-integration` starts from `a17eff8`; its implementation and proof are merged into `master`, and commit `268f3f8` is remotely backed up through `origin/master`.
 - R004 and R005 are integrated through the `d3a98d9` and `e141054` history; their historical feature branches remain preserved but are not active work bases.
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
@@ -44,13 +44,14 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `893a6da` | Clarify unavailable TradePlan state | Yes |
 | `7efd48d` | Reconcile Phase 10 follow-up state | Yes |
 | `a17eff8` | Record Phase 10 local integration | Yes |
+| `268f3f8` | Add read-only WPF chart candles | Yes |
 
 ## Branch Classifications
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | `a17eff8` | No; local master is 12 commits ahead of `origin/master` | Yes | `ACTIVE` | Canonical merged Python engine, WPF operator surface, independent host, read-only evidence, and FakeBroker-only Phase 10 simulation baseline. | Review R011 for a possible fast-forward; do not push master without explicit approval. |
-| `codex/ARGUS-R011-wpf-chart-candle-integration` | R011 task commit, parent `a17eff8` | No | No | `NEEDS_REVIEW` | Versioned read-only local chart snapshots and WPF candle/wick/volume rendering with explicit stale/unavailable behavior. | Steven reviews proof; Git Steward may fast-forward only after explicit approval. |
+| `master` | `268f3f8` plus this reconciliation commit | Yes; synchronized with `origin/master` after Steven's explicit approval | Yes | `ACTIVE` | Canonical merged Python engine, WPF operator surface, independent host, read-only evidence, FakeBroker-only Phase 10 simulation, and R011 chart-candle baseline. | Start R012 from clean synchronized `master`; keep broker work blocked at A017 pending Schwab evidence. |
+| `codex/ARGUS-R011-wpf-chart-candle-integration` | `268f3f8` | No branch ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Versioned read-only local chart snapshots and WPF candle/wick/volume rendering with explicit stale/unavailable behavior. | Historical integration branch; begin R012 from `master`. |
 | `codex/ARGUS-A016S-schwab-paper-api-verification` | `c979866` | No | No | `ACTIVE` | Schwab paper API evidence gate and verified support request. | Await and preserve official response; do not begin A017. |
 | `codex/ARGUS-A016-broker-research-matrix` | `90259e4` | No | No | `NEEDS_REVIEW` | Broker matrix plus Steven's Schwab/thinkorswim continuity decision. | Preserve under A016S; review before any local merge. |
 | `codex/ARGUS-R010-tradeplan-risk-simulation-integration` | `7efd48d` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Persisted TradePlan and Risk Governor evidence, FakeBroker-only simulation, ledger/auditor results, and explicit unavailable-plan handling in WPF. | Historical integration branch; start Phase 11 from local `master`. |
