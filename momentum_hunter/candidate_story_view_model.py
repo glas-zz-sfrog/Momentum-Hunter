@@ -5,6 +5,7 @@ from datetime import datetime
 from html import escape
 
 from momentum_hunter.replay import TimelineRow
+from momentum_hunter.time_utils import CENTRAL_TZ
 
 
 @dataclass(frozen=True)
@@ -76,7 +77,15 @@ def build_candidate_story_summary(rows: list[TimelineRow]) -> CandidateStorySumm
             warnings=["No trusted captures found for this ticker."],
         )
 
-    ordered_rows = sorted(rows, key=lambda row: (row.capture_time or datetime.min, row.session, row.scanner, row.provider))
+    ordered_rows = sorted(
+        rows,
+        key=lambda row: (
+            _sortable_capture_time(row.capture_time),
+            row.session,
+            row.scanner,
+            row.provider,
+        ),
+    )
     first_row = ordered_rows[0]
     latest_row = ordered_rows[-1]
     ticker = first_row.ticker
@@ -210,6 +219,14 @@ def classify_candidate_story_status(
     if move is not None and abs(move) <= 2.0:
         return "Stale", "Price has not moved much across trusted captures."
     return "Holding", "The capture trail remains active without a clear acceleration or breakdown."
+
+
+def _sortable_capture_time(value: datetime | None) -> datetime:
+    if value is None:
+        return datetime.min.replace(tzinfo=CENTRAL_TZ)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=CENTRAL_TZ)
+    return value.astimezone(CENTRAL_TZ)
 
 
 def first_non_none(values: object) -> object | None:

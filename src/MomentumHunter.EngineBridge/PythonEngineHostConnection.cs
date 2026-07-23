@@ -308,6 +308,26 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         return result.Payload.Value.Clone();
     }
 
+    public async Task<JsonElement> GetCandidateStorySnapshotAsync(
+        string symbol,
+        CancellationToken cancellationToken = default)
+    {
+        var requestedSymbol = CandidateStorySnapshotMapper.NormalizeSymbol(symbol);
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetCandidateStorySnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["symbol"] = requestedSymbol },
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException(
+                $"The Python Engine Host did not provide a Candidate Story snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
     public async Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(symbol))

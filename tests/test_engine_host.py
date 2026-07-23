@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from momentum_hunter.engine_host import (
+    COMMAND_CANDIDATE_STORY_SNAPSHOT,
     COMMAND_CHART_SNAPSHOT,
     COMMAND_DAILY_WORKFLOW_SNAPSHOT,
     COMMAND_PAUSE,
@@ -271,6 +272,55 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertFalse(invalid.accepted)
         self.assertEqual("INVALID_DAILY_WORKFLOW_REQUEST", invalid.code)
 
+    def test_candidate_story_command_is_read_only_idempotent_and_argument_scoped(self) -> None:
+        calls: list[str] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(AssertionError("collection should not run")),
+            candidate_story_loader=lambda symbol: calls.append(symbol)
+            or {
+                "schemaVersion": 1,
+                "symbol": symbol,
+                "state": "EMPTY",
+                "points": [],
+                "readOnly": True,
+            },
+        )
+
+        result = runtime.execute(
+            COMMAND_CANDIDATE_STORY_SNAPSHOT,
+            "candidate-story",
+            {"symbol": "COO"},
+        )
+        repeated = runtime.execute(
+            COMMAND_CANDIDATE_STORY_SNAPSHOT,
+            "candidate-story",
+            {"symbol": "COO"},
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual("CANDIDATE_STORY_SNAPSHOT", result.code)
+        self.assertEqual(result, repeated)
+        self.assertEqual(["COO"], calls)
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+        self.assertTrue(result.payload["readOnly"])
+
+    def test_candidate_story_command_rejects_missing_or_invalid_symbol(self) -> None:
+        runtime = EngineHostRuntime(
+            candidate_story_loader=lambda symbol: (_ for _ in ()).throw(ValueError("invalid symbol"))
+        )
+
+        missing = runtime.execute(COMMAND_CANDIDATE_STORY_SNAPSHOT, "missing-story-symbol", {})
+        invalid = runtime.execute(
+            COMMAND_CANDIDATE_STORY_SNAPSHOT,
+            "invalid-story-symbol",
+            {"symbol": "../COO"},
+        )
+
+        self.assertFalse(missing.accepted)
+        self.assertEqual("CANDIDATE_STORY_SYMBOL_REQUIRED", missing.code)
+        self.assertFalse(invalid.accepted)
+        self.assertEqual("INVALID_CANDIDATE_STORY_REQUEST", invalid.code)
+
 
 class EngineHostProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -306,6 +356,7 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertIn(COMMAND_TECHNICAL_RESEARCH_SNAPSHOT, snapshot["capabilities"])
         self.assertIn(COMMAND_SAVED_WATCHLIST_SNAPSHOT, snapshot["capabilities"])
         self.assertIn(COMMAND_DAILY_WORKFLOW_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(COMMAND_CANDIDATE_STORY_SNAPSHOT, snapshot["capabilities"])
         self.assertNotIn("submit_order", snapshot["capabilities"])
         self.assertNotIn("paper_order", snapshot["capabilities"])
         self.assertNotIn("live_order", snapshot["capabilities"])
@@ -376,6 +427,26 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertEqual("SAVED_WATCHLIST_SNAPSHOT", response["result"]["code"])
         self.assertEqual("EMPTY", response["result"]["payload"]["state"])
         self.assertEqual([], response["result"]["payload"]["items"])
+
+    def test_protocol_returns_candidate_story_payload_with_symbol(self) -> None:
+        self.runtime._candidate_story_loader = lambda symbol: {
+            "schemaVersion": 1,
+            "symbol": symbol,
+            "state": "EMPTY",
+            "points": [],
+            "readOnly": True,
+        }
+
+        response = self.send(
+            command=COMMAND_CANDIDATE_STORY_SNAPSHOT,
+            command_id="candidate-story",
+            arguments={"symbol": "COO"},
+        )
+
+        self.assertTrue(response["accepted"])
+        self.assertEqual("CANDIDATE_STORY_SNAPSHOT", response["result"]["code"])
+        self.assertEqual("COO", response["result"]["payload"]["symbol"])
+        self.assertTrue(response["result"]["payload"]["readOnly"])
 
     def test_shutdown_command_stops_server_after_a_response(self) -> None:
         response = self.send(command=COMMAND_SHUTDOWN, command_id="shutdown")

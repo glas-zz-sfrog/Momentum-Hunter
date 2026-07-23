@@ -23,6 +23,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
     private const string ResearchContentId = "pane-research";
     private const string WatchlistContentId = "pane-watchlist";
     private const string DailyWorkflowContentId = "pane-daily-workflow";
+    private const string CandidateStoryContentId = "pane-candidate-story";
     private const string AutomationContentId = "pane-automation";
     private const string OrdersContentId = "pane-orders";
     private const string PositionsContentId = "pane-positions";
@@ -523,6 +524,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
         _contentById[ResearchContentId] = ResearchAnchor.Content;
         _contentById[WatchlistContentId] = WatchlistAnchor.Content;
         _contentById[DailyWorkflowContentId] = DailyWorkflowAnchor.Content;
+        _contentById[CandidateStoryContentId] = CandidateStoryAnchor.Content;
         _contentById[AutomationContentId] = AutomationAnchor.Content;
         _contentById[OrdersContentId] = OrdersAnchor.Content;
         _contentById[PositionsContentId] = PositionsAnchor.Content;
@@ -598,6 +600,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
         }
 
         EnsureDailyWorkflowAnchorable();
+        EnsureCandidateStoryAnchorable();
         foreach (var (contentId, title) in new[]
         {
             (AutomationContentId, "Automation"),
@@ -642,6 +645,30 @@ public partial class MainWindow : Window, IWorkstationPresentation
             CanFloat = true,
         });
         rootPanel.Children.Add(dailyWorkflowPane);
+    }
+
+    private void EnsureCandidateStoryAnchorable()
+    {
+        if (FindLayoutContent(CandidateStoryContentId) is not null
+            || !_contentById.TryGetValue(CandidateStoryContentId, out var content))
+        {
+            return;
+        }
+
+        var candidateStoryPane = new LayoutAnchorablePane
+        {
+            DockHeight = new GridLength(520),
+            DockMinHeight = 300,
+        };
+        candidateStoryPane.Children.Add(new LayoutAnchorable
+        {
+            Title = "Candidate Story",
+            ContentId = CandidateStoryContentId,
+            Content = content,
+            CanClose = true,
+            CanFloat = true,
+        });
+        DockManager.Layout.RootPanel.Children.Add(candidateStoryPane);
     }
 
     private void CreateAdditionalChartDocument(PaneState pane, bool activate)
@@ -757,6 +784,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             ResearchContentId,
             WatchlistContentId,
             DailyWorkflowContentId,
+            CandidateStoryContentId,
             AutomationContentId,
             OrdersContentId,
             PositionsContentId,
@@ -854,6 +882,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             PaneKind.Research => ResearchContentId,
             PaneKind.Watchlist => WatchlistContentId,
             PaneKind.DailyWorkflow => DailyWorkflowContentId,
+            PaneKind.CandidateStory => CandidateStoryContentId,
             PaneKind.Automation => AutomationContentId,
             PaneKind.Orders => OrdersContentId,
             PaneKind.Positions => PositionsContentId,
@@ -880,6 +909,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             ResearchContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Research),
             WatchlistContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Watchlist),
             DailyWorkflowContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.DailyWorkflow),
+            CandidateStoryContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.CandidateStory),
             AutomationContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Automation),
             OrdersContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Orders),
             PositionsContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Positions),

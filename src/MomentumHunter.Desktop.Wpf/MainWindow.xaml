@@ -346,6 +346,133 @@
                         </avalon:LayoutAnchorablePane>
                     </avalon:LayoutPanel>
 
+                    <avalon:LayoutAnchorablePane DockHeight="520" DockMinHeight="300">
+                        <avalon:LayoutAnchorable x:Name="CandidateStoryAnchor" ContentId="pane-candidate-story" Title="Candidate Story" CanClose="True" CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="12">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Candidate Story" FontSize="18" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding CandidateStoryOverview.Symbol}" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Teal}" Margin="10,0,0,0" />
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding CandidateStoryOverview.CompanyContext}" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Background="#253440" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="8,4">
+                                            <TextBlock Text="{Binding CandidateStoryOverview.State}" FontWeight="SemiBold" />
+                                        </Border>
+                                    </Grid>
+
+                                    <Border Grid.Row="1" Background="#121C24" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,10,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="220" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding CandidateStoryOverview.Status}" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Teal}" />
+                                                <TextBlock Text="{Binding CandidateStoryOverview.StatusDetail}" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,3,12,0" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding CandidateStoryOverview.Summary}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Border>
+
+                                    <StackPanel Grid.Row="2">
+                                        <WrapPanel>
+                                            <Border Width="210" Background="#1A2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="8" Margin="0,0,8,8">
+                                                <StackPanel><TextBlock Text="First Seen" Foreground="{StaticResource TextMuted}" FontSize="10" /><TextBlock Text="{Binding CandidateStoryOverview.FirstSeen}" TextWrapping="Wrap" /></StackPanel>
+                                            </Border>
+                                            <Border Width="210" Background="#1A2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="8" Margin="0,0,8,8">
+                                                <StackPanel><TextBlock Text="Latest" Foreground="{StaticResource TextMuted}" FontSize="10" /><TextBlock Text="{Binding CandidateStoryOverview.LatestSeen}" TextWrapping="Wrap" /></StackPanel>
+                                            </Border>
+                                            <Border Width="150" Background="#1A2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="8" Margin="0,0,8,8">
+                                                <StackPanel><TextBlock Text="Move" Foreground="{StaticResource TextMuted}" FontSize="10" /><TextBlock Text="{Binding CandidateStoryOverview.Move}" /></StackPanel>
+                                            </Border>
+                                            <Border Width="165" Background="#1A2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="8" Margin="0,0,8,8">
+                                                <StackPanel><TextBlock Text="Score Path" Foreground="{StaticResource TextMuted}" FontSize="10" /><TextBlock Text="{Binding CandidateStoryOverview.ScorePath}" /></StackPanel>
+                                            </Border>
+                                            <Border Width="230" Background="#1A2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="8" Margin="0,0,8,8">
+                                                <StackPanel><TextBlock Text="Peak Score" Foreground="{StaticResource TextMuted}" FontSize="10" /><TextBlock Text="{Binding CandidateStoryOverview.PeakScore}" TextWrapping="Wrap" /></StackPanel>
+                                            </Border>
+                                            <Border Width="170" Background="#1A2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="8" Margin="0,0,0,8">
+                                                <StackPanel><TextBlock Text="Evidence" Foreground="{StaticResource TextMuted}" FontSize="10" /><TextBlock Text="{Binding CandidateStoryOverview.CaptureCount}" /></StackPanel>
+                                            </Border>
+                                        </WrapPanel>
+                                    </StackPanel>
+
+                                    <Grid Grid.Row="3">
+                                        <DataGrid ItemsSource="{Binding CandidateStoryRows}"
+                                                  AutoGenerateColumns="False"
+                                                  IsReadOnly="True"
+                                                  CanUserAddRows="False"
+                                                  CanUserDeleteRows="False"
+                                                  CanUserReorderColumns="False"
+                                                  HeadersVisibility="Column"
+                                                  GridLinesVisibility="Horizontal"
+                                                  AlternationCount="2"
+                                                  Background="#17212B"
+                                                  BorderBrush="{StaticResource PanelBorder}"
+                                                  HorizontalScrollBarVisibility="Auto"
+                                                  VerticalScrollBarVisibility="Auto">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="#" Binding="{Binding Sequence}" Width="38" />
+                                                <DataGridTextColumn Header="Captured At" Binding="{Binding CapturedAt}" Width="175" />
+                                                <DataGridTextColumn Header="Session" Binding="{Binding Session}" Width="60" />
+                                                <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
+                                                <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="58" />
+                                                <DataGridTextColumn Header="Move From First" Binding="{Binding MoveFromFirst}" Width="105" />
+                                                <DataGridTextColumn Header="RVOL" Binding="{Binding RelativeVolume}" Width="68" />
+                                                <DataGridTextColumn Header="Capture-Time Fact" Binding="{Binding CaptureNote}" Width="180" />
+                                                <DataGridTextColumn Header="Later Annotation" Binding="{Binding LaterAnnotation}" Width="280" />
+                                                <DataGridTextColumn Header="Source Context" Binding="{Binding SourceContext}" Width="320" />
+                                                <DataGridTextColumn Header="Trust" Binding="{Binding Trust}" Width="200" />
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                        <TextBlock Text="{Binding CandidateStoryEmptyLabel}" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap">
+                                            <TextBlock.Style>
+                                                <Style TargetType="{x:Type TextBlock}" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasCandidateStoryPoints}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+
+                                    <Grid Grid.Row="4" Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding CandidateStoryOverview.Source}" Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding CandidateStoryOverview.AsOf}" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <TextBlock Text="READ ONLY | Capture-time facts and later annotations remain separately labeled." Foreground="{StaticResource Teal}" FontSize="10" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <ScrollViewer Grid.Column="1" MaxHeight="54" VerticalScrollBarVisibility="Auto" Margin="12,0,0,0">
+                                            <TextBlock Text="{Binding CandidateStoryOverview.Warnings}" Foreground="{StaticResource Amber}" FontSize="10" TextWrapping="Wrap" />
+                                        </ScrollViewer>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </avalon:LayoutAnchorable>
+                    </avalon:LayoutAnchorablePane>
+
                     <avalon:LayoutAnchorablePane DockHeight="180" DockMinHeight="90">
                         <avalon:LayoutAnchorable x:Name="ActivityAnchor" ContentId="pane-activity" Title="Activity" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="10">

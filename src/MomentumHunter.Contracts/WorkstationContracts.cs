@@ -18,6 +18,7 @@ public enum PaneKind
     Research,
     Watchlist,
     DailyWorkflow,
+    CandidateStory,
     Automation,
     Orders,
     Positions,
@@ -102,6 +103,14 @@ public enum TechnicalResearchState
     Unavailable,
 }
 
+public enum CandidateStoryEvidenceState
+{
+    Available,
+    Partial,
+    Empty,
+    Unavailable,
+}
+
 public enum DailyWorkflowEvidenceState
 {
     Available,
@@ -138,7 +147,6 @@ public enum DailyWorkflowLight
     Red,
     Gray,
 }
-
 public sealed record CatalystSummary(string Headline, string SourceLabel, DateTimeOffset ObservedAt);
 
 public sealed record DataLineage(string SourceLabel, DateTimeOffset AsOf, string Summary);
@@ -275,6 +283,63 @@ public sealed record SavedWatchlistSnapshot(
     int DisplayedItemCount,
     IReadOnlyList<string> Warnings,
     IReadOnlyList<SavedWatchlistItemSnapshot> Items);
+
+public sealed record CandidateStoryPointSnapshot(
+    int Sequence,
+    string IdentityKey,
+    string CaptureId,
+    DateTimeOffset? CapturedAt,
+    string CapturedAtLabel,
+    string CaptureLabel,
+    string Session,
+    string SessionMarker,
+    string Provider,
+    string Scanner,
+    string Mode,
+    string CalendarLabel,
+    string TrustLabel,
+    decimal? Price,
+    decimal? Score,
+    long? Volume,
+    decimal? RelativeVolume,
+    decimal? PriceChangePreviousPercent,
+    decimal? PriceChangeFirstPercent,
+    decimal? ScoreChangePrevious,
+    string CaptureNote,
+    string LaterAnnotation,
+    string CaptureFactSource,
+    string LaterAnnotationSource,
+    IReadOnlyList<string> Warnings,
+    bool Trusted);
+
+public sealed record CandidateStorySnapshot(
+    int SchemaVersion,
+    string Symbol,
+    CandidateStoryEvidenceState State,
+    DateTimeOffset ObservedAt,
+    DateTimeOffset? SourceAsOf,
+    string SourceLabel,
+    string Summary,
+    string Company,
+    string Sector,
+    string Industry,
+    string Status,
+    string StatusDetail,
+    string FirstSeenLabel,
+    string LatestSeenLabel,
+    string PeakScoreLabel,
+    decimal? FirstPrice,
+    decimal? LatestPrice,
+    decimal? MoveSinceFirstPercent,
+    decimal? FirstScore,
+    decimal? LatestScore,
+    decimal? PeakScore,
+    int TrustedCaptureCount,
+    int TotalPointCount,
+    int DisplayedPointCount,
+    IReadOnlyList<CandidateStoryPointSnapshot> Points,
+    IReadOnlyList<string> Warnings,
+    bool ReadOnly);
 
 public sealed record ReadinessCheck(string Name, bool Passed, string Detail);
 
