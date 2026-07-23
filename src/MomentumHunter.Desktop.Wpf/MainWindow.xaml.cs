@@ -240,6 +240,10 @@ public partial class MainWindow : Window, IWorkstationPresentation
     {
         _viewModel.ToggleDiagnosticsCommand.Execute(null);
         SetContentVisibility(DiagnosticsContentId, _viewModel.IsDiagnosticsOpen);
+        if (_viewModel.IsDiagnosticsOpen)
+        {
+            EnsureAnchorablePaneHeight(DiagnosticsContentId, 300);
+        }
     }
 
     private async void NewChartButton_Click(object sender, RoutedEventArgs e)
@@ -763,6 +767,21 @@ public partial class MainWindow : Window, IWorkstationPresentation
     private LayoutContent? FindLayoutContent(string contentId) =>
         DockManager.Layout.Descendents().OfType<LayoutContent>()
             .FirstOrDefault(content => string.Equals(content.ContentId, contentId, StringComparison.Ordinal));
+
+    private void EnsureAnchorablePaneHeight(string contentId, double minimumHeight)
+    {
+        var current = FindLayoutContent(contentId)?.Parent;
+        while (current is not null && current is not LayoutAnchorablePane)
+        {
+            current = (current as LayoutElement)?.Parent;
+        }
+
+        if (current is LayoutAnchorablePane pane &&
+            (!pane.DockHeight.IsAbsolute || pane.DockHeight.Value < minimumHeight))
+        {
+            pane.DockHeight = new GridLength(minimumHeight);
+        }
+    }
 
     private string ContentIdForPane(PaneState pane)
     {

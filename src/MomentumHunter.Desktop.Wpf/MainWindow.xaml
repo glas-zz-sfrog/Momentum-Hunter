@@ -5,6 +5,7 @@
         xmlns:avalon="https://github.com/Dirkster99/AvalonDock"
         xmlns:themes="clr-namespace:AvalonDock.Themes;assembly=AvalonDock.Themes.VS2013"
         xmlns:controls="clr-namespace:MomentumHunter.Desktop.Wpf.Controls"
+        xmlns:contracts="clr-namespace:MomentumHunter.Contracts;assembly=MomentumHunter.Contracts"
         Title="Momentum Hunter Workstation"
         Height="920"
         Width="1440"
@@ -371,17 +372,91 @@
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="DiagnosticsAnchor" ContentId="pane-diagnostics" Title="Diagnostics" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="12">
-                                <StackPanel>
-                                    <TextBlock Text="Diagnostics" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Health detail and raw diagnostic names are intentionally separate from the everyday workflow." Foreground="{StaticResource TextMuted}" Margin="0,4,0,10" />
-                                    <ItemsControl ItemsSource="{Binding Health.Components}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="1*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <DockPanel LastChildFill="False">
+                                        <TextBlock DockPanel.Dock="Left" Text="Diagnostics" FontSize="16" FontWeight="SemiBold" />
+                                        <Border DockPanel.Dock="Right" Padding="7,3" CornerRadius="3">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#263846" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Diagnostics.StatusLabel}" Value="HEALTHY">
+                                                            <Setter Property="Background" Value="#173C37" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Diagnostics.StatusLabel}" Value="DEGRADED">
+                                                            <Setter Property="Background" Value="#3A3524" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding Diagnostics.StatusLabel}" FontSize="10" FontWeight="SemiBold">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Diagnostics.StatusLabel}" Value="HEALTHY">
+                                                                <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Diagnostics.StatusLabel}" Value="DEGRADED">
+                                                                <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </DockPanel>
+                                    <StackPanel Grid.Row="1" Margin="0,5,0,9">
+                                        <TextBlock Text="{Binding Diagnostics.Summary}" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding Diagnostics.CheckedAtLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" />
+                                    </StackPanel>
+                                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding Diagnostics.Components}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <TextBlock Text="{Binding Name}" Margin="0,3" />
+                                                <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,0,1" Padding="0,7">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="1*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
+                                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding StateLabel}" Margin="12,0,0,0" FontSize="11" FontWeight="SemiBold">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static contracts:HealthState.Healthy}">
+                                                                            <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding State}" Value="{x:Static contracts:HealthState.Degraded}">
+                                                                            <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Summary}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                                        <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding CheckedAtLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,2,0,0" />
+                                                    </Grid>
+                                                </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <TextBlock Grid.Row="3" Text="Read-only engine health evidence. No repair, provider, broker, or execution action is available here." Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" Margin="0,9,0,0" />
+                                </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="ResearchAnchor" ContentId="pane-research" Title="Research" CanClose="True" CanFloat="True">

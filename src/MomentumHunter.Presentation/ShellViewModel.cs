@@ -352,6 +352,8 @@ public sealed partial class ShellViewModel : ObservableObject
         ? "No stored opportunity notes are available."
         : $"{CandidateOpportunityNotes.Count} persisted opportunity note{(CandidateOpportunityNotes.Count == 1 ? string.Empty : "s")}";
 
+    public HealthDiagnosticsView Diagnostics => HealthDiagnosticsView.From(Health);
+
     public string ReplaySummary => ReplaySession?.Summary ?? "Replay context is unavailable.";
 
     public RectGeometry? RestoredWindowBounds => _windowBounds;
@@ -814,6 +816,8 @@ public sealed partial class ShellViewModel : ObservableObject
     partial void OnIsMonitoringPausedChanged(bool value) => OnPropertyChanged(nameof(MonitoringToggleLabel));
 
     partial void OnCommandQueryChanged(string value) => RefreshCommandPaletteResults();
+
+    partial void OnHealthChanged(SystemHealthSnapshot? value) => OnPropertyChanged(nameof(Diagnostics));
 
     private void SetRegistry(PaneRegistry registry)
     {
