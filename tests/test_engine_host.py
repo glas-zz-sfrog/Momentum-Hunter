@@ -18,6 +18,7 @@ from momentum_hunter.engine_host import (
     COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
     COMMAND_RESUME,
     COMMAND_RUN_CYCLE,
+    COMMAND_SAVED_WATCHLIST_SNAPSHOT,
     COMMAND_SHUTDOWN,
     COMMAND_SNAPSHOT,
     COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
@@ -224,6 +225,29 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertEqual(["NVDA"], calls)
         self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
 
+    def test_saved_watchlist_command_returns_injected_payload_without_starting_collection(self) -> None:
+        calls: list[str] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(AssertionError("collection should not run")),
+            saved_watchlist_snapshot_loader=lambda: calls.append("read")
+            or {
+                "schemaVersion": 1,
+                "state": "STALE",
+                "sourceLabel": "watchlist-2026-06-18.json",
+                "items": [],
+            },
+        )
+
+        result = runtime.execute(COMMAND_SAVED_WATCHLIST_SNAPSHOT, "saved-watchlist")
+        repeated = runtime.execute(COMMAND_SAVED_WATCHLIST_SNAPSHOT, "saved-watchlist")
+
+        self.assertTrue(result.accepted)
+        self.assertEqual("SAVED_WATCHLIST_SNAPSHOT", result.code)
+        self.assertEqual("STALE", result.payload["state"])
+        self.assertEqual(result, repeated)
+        self.assertEqual(["read"], calls)
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+
 
 class EngineHostProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -257,6 +281,7 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertIn(COMMAND_RUN_CYCLE, snapshot["capabilities"])
         self.assertIn(COMMAND_CHART_SNAPSHOT, snapshot["capabilities"])
         self.assertIn(COMMAND_TECHNICAL_RESEARCH_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(COMMAND_SAVED_WATCHLIST_SNAPSHOT, snapshot["capabilities"])
         self.assertNotIn("submit_order", snapshot["capabilities"])
         self.assertNotIn("paper_order", snapshot["capabilities"])
         self.assertNotIn("live_order", snapshot["capabilities"])
@@ -309,6 +334,24 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertTrue(response["accepted"])
         self.assertEqual("TECHNICAL_RESEARCH_SNAPSHOT", response["result"]["code"])
         self.assertEqual("NVDA", response["result"]["payload"]["symbol"])
+
+    def test_protocol_returns_saved_watchlist_payload_without_arguments(self) -> None:
+        self.runtime._saved_watchlist_snapshot_loader = lambda: {
+            "schemaVersion": 1,
+            "state": "EMPTY",
+            "sourceLabel": "No saved watchlist file",
+            "items": [],
+        }
+
+        response = self.send(
+            command=COMMAND_SAVED_WATCHLIST_SNAPSHOT,
+            command_id="saved-watchlist",
+        )
+
+        self.assertTrue(response["accepted"])
+        self.assertEqual("SAVED_WATCHLIST_SNAPSHOT", response["result"]["code"])
+        self.assertEqual("EMPTY", response["result"]["payload"]["state"])
+        self.assertEqual([], response["result"]["payload"]["items"])
 
     def test_shutdown_command_stops_server_after_a_response(self) -> None:
         response = self.send(command=COMMAND_SHUTDOWN, command_id="shutdown")

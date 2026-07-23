@@ -45,6 +45,8 @@ public partial class App : System.Windows.Application
             new PythonChartWorkspaceClient(serviceProvider.GetRequiredService<IPythonEngineHostConnection>()));
         services.AddSingleton<ITechnicalResearchWorkspaceClient>(serviceProvider =>
             new PythonTechnicalResearchWorkspaceClient(serviceProvider.GetRequiredService<IPythonEngineHostConnection>()));
+        services.AddSingleton<ISavedWatchlistWorkspaceClient>(serviceProvider =>
+            new PythonSavedWatchlistWorkspaceClient(serviceProvider.GetRequiredService<IPythonEngineHostConnection>()));
         services.AddSingleton<IWorkspaceLayoutStore>(_ =>
             new SqliteWorkspaceLayoutStore(Path.Combine(settingsDirectory, "workstation-layouts.db")));
         services.AddSingleton<ITraySettingsStore>(_ =>
@@ -59,7 +61,8 @@ public partial class App : System.Windows.Application
             serviceProvider.GetRequiredService<IWorkspaceLayoutStore>(),
             serviceProvider.GetRequiredService<ISimulationWorkspaceClient>(),
             serviceProvider.GetRequiredService<IChartWorkspaceClient>(),
-            serviceProvider.GetRequiredService<ITechnicalResearchWorkspaceClient>()));
+            serviceProvider.GetRequiredService<ITechnicalResearchWorkspaceClient>(),
+            serviceProvider.GetRequiredService<ISavedWatchlistWorkspaceClient>()));
         services.AddSingleton<MainWindow>();
         _services = services.BuildServiceProvider();
 

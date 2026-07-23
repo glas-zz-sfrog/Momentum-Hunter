@@ -390,6 +390,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
                 EnsureAnchorablePaneHeight(ResearchContentId, 390);
             }
 
+            EnsureEvidencePaneHeight(ContentIdForPane(pane));
             PanesPopup.IsOpen = false;
         }
     }
@@ -743,7 +744,23 @@ public partial class MainWindow : Window, IWorkstationPresentation
         foreach (var pane in _viewModel.Registry.Panes)
         {
             SetContentVisibility(ContentIdForPane(pane), pane.IsVisible);
+            if (pane.IsVisible)
+            {
+                EnsureEvidencePaneHeight(ContentIdForPane(pane));
+            }
         }
+    }
+
+    private void EnsureEvidencePaneHeight(string contentId)
+    {
+        if (!string.Equals(contentId, WatchlistContentId, StringComparison.Ordinal)
+            || FindLayoutContent(contentId)?.Parent is not LayoutAnchorablePane pane
+            || pane.DockHeight.Value >= 390)
+        {
+            return;
+        }
+
+        pane.DockHeight = new GridLength(390);
     }
 
     private void SetContentVisibility(string contentId, bool visible)

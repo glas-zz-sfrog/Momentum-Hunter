@@ -101,6 +101,15 @@ public enum TechnicalResearchState
     Unavailable,
 }
 
+public enum SavedWatchlistState
+{
+    Available,
+    Stale,
+    Partial,
+    Empty,
+    Unavailable,
+}
+
 public sealed record CatalystSummary(string Headline, string SourceLabel, DateTimeOffset ObservedAt);
 
 public sealed record DataLineage(string SourceLabel, DateTimeOffset AsOf, string Summary);
@@ -207,6 +216,36 @@ public sealed record TechnicalResearchSnapshot(
     IReadOnlyList<string> Warnings,
     IReadOnlyList<TechnicalResearchEventSnapshot> Events,
     IReadOnlyList<TechnicalResearchStudySnapshot> Studies);
+
+public sealed record SavedWatchlistItemSnapshot(
+    int SourceRank,
+    string Symbol,
+    string Company,
+    int? Score,
+    decimal? Price,
+    decimal? PercentChange,
+    long? Volume,
+    decimal? RelativeVolume,
+    string Sector,
+    string Industry,
+    string Freshness,
+    DateTimeOffset? SavedAt,
+    string FreshestHeadline,
+    string UserNotes);
+
+public sealed record SavedWatchlistSnapshot(
+    int SchemaVersion,
+    SavedWatchlistState State,
+    DateTimeOffset ObservedAt,
+    DateTimeOffset? AsOf,
+    string? WatchlistDate,
+    string Summary,
+    string SourceLabel,
+    int TotalItemCount,
+    int UsableItemCount,
+    int DisplayedItemCount,
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<SavedWatchlistItemSnapshot> Items);
 
 public sealed record ReadinessCheck(string Name, bool Passed, string Detail);
 

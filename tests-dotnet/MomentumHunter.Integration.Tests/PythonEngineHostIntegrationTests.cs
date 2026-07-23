@@ -53,6 +53,7 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Contains(PythonEngineHostProtocol.GetSimulationWorkspaceSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetChartSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetTechnicalResearchSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetSavedWatchlistSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.RunSimulation, first.Capabilities);
             Assert.DoesNotContain("submit_order", first.Capabilities);
 
@@ -76,6 +77,12 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Equal("UNAVAILABLE", researchPayload.GetProperty("state").GetString());
             Assert.Empty(researchPayload.GetProperty("events").EnumerateArray());
             Assert.Empty(researchPayload.GetProperty("studies").EnumerateArray());
+
+            var savedWatchlistPayload = await firstConnection.GetSavedWatchlistSnapshotAsync();
+            Assert.Equal(1, savedWatchlistPayload.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal("EMPTY", savedWatchlistPayload.GetProperty("state").GetString());
+            Assert.Equal(0, savedWatchlistPayload.GetProperty("totalItemCount").GetInt32());
+            Assert.Empty(savedWatchlistPayload.GetProperty("items").EnumerateArray());
 
             var simulationWorkspacePayload = await firstConnection.GetSimulationWorkspaceSnapshotAsync();
             Assert.Equal("SIMULATION_ONLY_FAKE_BROKER", simulationWorkspacePayload.GetProperty("mode").GetString());

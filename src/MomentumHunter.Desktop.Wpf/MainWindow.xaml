@@ -664,11 +664,158 @@
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="WatchlistAnchor" ContentId="pane-watchlist" Title="Watchlist" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="12">
-                                <StackPanel>
-                                    <TextBlock Text="Watchlist" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Saved symbol collections are an optional workspace pane in this shell spike." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
-                                    <TextBlock Text="Use the Hunter pane for the active ranked candidate list." TextWrapping="Wrap" />
-                                </StackPanel>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="1*" />
+                                    </Grid.RowDefinitions>
+                                    <DockPanel LastChildFill="True">
+                                        <Border DockPanel.Dock="Right"
+                                                Background="#263846"
+                                                BorderBrush="{StaticResource PanelBorder}"
+                                                BorderThickness="1"
+                                                CornerRadius="3"
+                                                Padding="8,4"
+                                                Margin="12,0,0,0"
+                                                VerticalAlignment="Top">
+                                            <TextBlock Text="{Binding SavedWatchlistStateLabel}"
+                                                       FontSize="10"
+                                                       FontWeight="SemiBold">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding SavedWatchlist.State}" Value="{x:Static contracts:SavedWatchlistState.Available}">
+                                                                <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding SavedWatchlist.State}" Value="{x:Static contracts:SavedWatchlistState.Stale}">
+                                                                <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding SavedWatchlist.State}" Value="{x:Static contracts:SavedWatchlistState.Partial}">
+                                                                <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding SavedWatchlist.State}" Value="{x:Static contracts:SavedWatchlistState.Unavailable}">
+                                                                <Setter Property="Foreground" Value="#F07C82" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                        <StackPanel>
+                                            <TextBlock Text="Saved Watchlist Evidence" FontSize="16" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding SavedWatchlistSourceLabel}"
+                                                       Foreground="{StaticResource Teal}"
+                                                       FontSize="11"
+                                                       Margin="0,3,0,0"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding SavedWatchlistSourceLabel}" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                    <StackPanel Grid.Row="1" Margin="0,10,0,10">
+                                        <WrapPanel>
+                                            <TextBlock Text="{Binding SavedWatchlistAsOfLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,0,18,0" />
+                                            <TextBlock Text="{Binding SavedWatchlistCountLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" />
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding SavedWatchlistSummary}"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   FontSize="11"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,6,0,0" />
+                                        <Border Background="#3A3524"
+                                                BorderBrush="#715C24"
+                                                BorderThickness="1"
+                                                CornerRadius="3"
+                                                Padding="8,5"
+                                                Margin="0,7,0,0">
+                                            <TextBlock Text="{Binding SavedWatchlistWarnings}"
+                                                       Foreground="{StaticResource Amber}"
+                                                       FontSize="10"
+                                                       TextWrapping="Wrap" />
+                                        </Border>
+                                        <TextBlock Text="Read-only historical artifact. It is not the active Hunter ranking, approval state, TradePlan, alert, or order instruction."
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   FontSize="10"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,6,0,0" />
+                                    </StackPanel>
+                                    <ScrollViewer Grid.Row="2"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding SavedWatchlistEmptyState}"
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap"
+                                                       HorizontalAlignment="Center"
+                                                       Margin="12,18">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <Trigger Property="Text" Value="">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <ItemsControl ItemsSource="{Binding SavedWatchlistItems}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="#17212B"
+                                                                BorderBrush="{StaticResource PanelBorder}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="3"
+                                                                Padding="10"
+                                                                Margin="0,0,0,8">
+                                                            <Grid>
+                                                                <Grid.RowDefinitions>
+                                                                    <RowDefinition Height="Auto" />
+                                                                    <RowDefinition Height="Auto" />
+                                                                    <RowDefinition Height="Auto" />
+                                                                    <RowDefinition Height="Auto" />
+                                                                </Grid.RowDefinitions>
+                                                                <DockPanel>
+                                                                    <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
+                                                                        <TextBlock Text="{Binding ScoreLabel}" Foreground="{StaticResource Teal}" FontSize="11" HorizontalAlignment="Right" />
+                                                                        <TextBlock Text="{Binding PriceChangeLabel}" Foreground="{StaticResource TextPrimary}" FontSize="11" HorizontalAlignment="Right" Margin="0,2,0,0" />
+                                                                    </StackPanel>
+                                                                    <StackPanel Orientation="Horizontal">
+                                                                        <TextBlock Text="{Binding RankLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" Width="34" VerticalAlignment="Center" />
+                                                                        <StackPanel>
+                                                                            <TextBlock Text="{Binding Symbol}" FontWeight="SemiBold" FontSize="14" />
+                                                                            <TextBlock Text="{Binding CompanyLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                                        </StackPanel>
+                                                                    </StackPanel>
+                                                                </DockPanel>
+                                                                <WrapPanel Grid.Row="1" Margin="34,7,0,0">
+                                                                    <TextBlock Text="{Binding VolumeLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,0,16,0" />
+                                                                    <TextBlock Text="{Binding ClassificationLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,0,16,0" />
+                                                                    <TextBlock Text="{Binding FreshnessLabel}" Foreground="{StaticResource Amber}" FontSize="10" Margin="0,0,16,0" />
+                                                                    <TextBlock Text="{Binding SavedAtLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                                </WrapPanel>
+                                                                <TextBlock Grid.Row="2"
+                                                                           Text="{Binding HeadlineLabel}"
+                                                                           Foreground="{StaticResource TextPrimary}"
+                                                                           FontSize="11"
+                                                                           TextWrapping="Wrap"
+                                                                           Margin="34,7,0,0" />
+                                                                <TextBlock Grid.Row="3"
+                                                                           Text="{Binding NotesLabel}"
+                                                                           Foreground="{StaticResource TextMuted}"
+                                                                           FontSize="10"
+                                                                           FontStyle="Italic"
+                                                                           TextWrapping="Wrap"
+                                                                           Margin="34,4,0,0" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="AutomationAnchor" ContentId="pane-automation" Title="Automation" CanClose="True" CanFloat="True">

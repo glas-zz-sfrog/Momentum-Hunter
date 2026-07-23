@@ -276,6 +276,22 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         return result.Payload.Value.Clone();
     }
 
+    public async Task<JsonElement> GetSavedWatchlistSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetSavedWatchlistSnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(),
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException($"The Python Engine Host did not provide a saved-watchlist snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
     public async Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(symbol))

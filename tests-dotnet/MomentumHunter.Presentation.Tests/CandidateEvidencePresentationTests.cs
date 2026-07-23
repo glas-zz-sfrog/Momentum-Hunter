@@ -159,12 +159,22 @@ public sealed class CandidateEvidencePresentationTests
         DateTimeOffset observedAt,
         params CandidateSnapshot[] candidates) =>
         new(
-            1,
+            2,
             observedAt,
             "Read-only Python evidence snapshot.",
             candidates,
             [],
             new SystemHealthSnapshot([], observedAt),
+            new AlertEvidenceSnapshot(
+                AlertEvidenceState.Empty,
+                observedAt,
+                "No stored alert evidence was supplied for this candidate-evidence fixture.",
+                0,
+                0,
+                0,
+                0,
+                [],
+                []),
             new ReplaySnapshot("NOT_SELECTED", observedAt, string.Empty, "source capture", "No replay identity was synthesized."),
             false);
 

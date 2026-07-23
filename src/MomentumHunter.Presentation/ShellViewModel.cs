@@ -19,6 +19,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly ISimulationWorkspaceClient? _simulationWorkspaceClient;
     private readonly IChartWorkspaceClient? _chartWorkspaceClient;
     private readonly ITechnicalResearchWorkspaceClient? _technicalResearchWorkspaceClient;
+    private readonly ISavedWatchlistWorkspaceClient? _savedWatchlistWorkspaceClient;
     private readonly IWorkspaceLayoutStore? _layoutStore;
     private readonly LayoutAutosaveCoordinator? _layoutAutosave;
     private LinkGroupCoordinator _linkGroups = null!;
@@ -28,17 +29,17 @@ public sealed partial class ShellViewModel : ObservableObject
     private SimulationWorkspaceSnapshot? _simulationWorkspaceSnapshot;
 
     public ShellViewModel(IEngineClient engineClient)
-        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, savedWatchlistWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
     public ShellViewModel(IEngineClient engineClient, IWorkspaceLayoutStore layoutStore)
-        : this(engineClient, layoutStore, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, savedWatchlistWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
     public ShellViewModel(IEngineClient engineClient, IReadOnlyWorkspaceClient readOnlyWorkspaceClient)
-        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient, simulationWorkspaceClient: null, chartWorkspaceClient: null, savedWatchlistWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
@@ -49,6 +50,7 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
             chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true)
     {
     }
@@ -57,7 +59,7 @@ public sealed partial class ShellViewModel : ObservableObject
         IEngineClient engineClient,
         IWorkspaceLayoutStore layoutStore,
         IReadOnlyWorkspaceClient readOnlyWorkspaceClient)
-        : this(engineClient, layoutStore, readOnlyWorkspaceClient, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore, readOnlyWorkspaceClient, simulationWorkspaceClient: null, chartWorkspaceClient: null, savedWatchlistWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
@@ -71,6 +73,7 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
             chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true)
     {
     }
@@ -85,6 +88,7 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
             chartWorkspaceClient: chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true)
     {
     }
@@ -100,6 +104,54 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
             chartWorkspaceClient: chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient,
+            isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient,
+            chartWorkspaceClient,
+            savedWatchlistWorkspaceClient,
+            isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient,
+            chartWorkspaceClient,
+            savedWatchlistWorkspaceClient,
             isInternalConstruction: true)
     {
     }
@@ -113,6 +165,7 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: null,
             chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true,
             technicalResearchWorkspaceClient: technicalResearchWorkspaceClient)
     {
@@ -129,6 +182,7 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
             chartWorkspaceClient: chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true,
             technicalResearchWorkspaceClient: technicalResearchWorkspaceClient)
     {
@@ -146,8 +200,28 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
             chartWorkspaceClient: chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true,
             technicalResearchWorkspaceClient: technicalResearchWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient,
+        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient,
+            chartWorkspaceClient,
+            savedWatchlistWorkspaceClient,
+            isInternalConstruction: true,
+            technicalResearchWorkspaceClient)
     {
     }
 
@@ -157,6 +231,7 @@ public sealed partial class ShellViewModel : ObservableObject
         IReadOnlyWorkspaceClient? readOnlyWorkspaceClient,
         ISimulationWorkspaceClient? simulationWorkspaceClient,
         IChartWorkspaceClient? chartWorkspaceClient,
+        ISavedWatchlistWorkspaceClient? savedWatchlistWorkspaceClient,
         bool isInternalConstruction,
         ITechnicalResearchWorkspaceClient? technicalResearchWorkspaceClient = null)
     {
@@ -166,6 +241,7 @@ public sealed partial class ShellViewModel : ObservableObject
         _simulationWorkspaceClient = simulationWorkspaceClient;
         _chartWorkspaceClient = chartWorkspaceClient;
         _technicalResearchWorkspaceClient = technicalResearchWorkspaceClient;
+        _savedWatchlistWorkspaceClient = savedWatchlistWorkspaceClient;
         SetRegistry(WorkspaceFactory.Create(WorkspaceKind.Live));
         if (_layoutStore is not null)
         {
@@ -182,6 +258,7 @@ public sealed partial class ShellViewModel : ObservableObject
         };
         Candles = [];
         CommandPaletteResults = [];
+        SavedWatchlistItems = [];
         WorkspaceOptions = Enum.GetValues<WorkspaceKind>();
         IntervalOptions = ["1m", "5m", "15m", "Daily"];
         Candidates.CollectionChanged += (_, _) => RefreshCommandPaletteResults();
@@ -198,6 +275,8 @@ public sealed partial class ShellViewModel : ObservableObject
         Activity.Select(ActivityEventView.From).ToArray();
 
     public ObservableCollection<CandleSnapshot> Candles { get; }
+
+    public ObservableCollection<SavedWatchlistItemViewModel> SavedWatchlistItems { get; }
 
     public ObservableCollection<ChartPaneViewModel> SecondaryCharts { get; } = [];
 
@@ -286,6 +365,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isPythonSimulationWorkspaceMode;
+
+    [ObservableProperty]
+    private SavedWatchlistSnapshot? _savedWatchlist;
 
     public string MonitoringToggleLabel => IsMonitoringPaused ? "Resume Monitoring" : "Pause Monitoring";
 
@@ -488,6 +570,34 @@ public sealed partial class ShellViewModel : ObservableObject
         AlertEvidenceState.Unavailable => "Recorded outcome evidence is unavailable.",
         _ => "No completed or unscorable outcomes are present in the stored evidence.",
     };
+
+    public string SavedWatchlistStateLabel => SavedWatchlist?.State.ToString().ToUpperInvariant() ?? "UNAVAILABLE";
+
+    public string SavedWatchlistSourceLabel => SavedWatchlist?.SourceLabel ?? "Saved watchlist source unavailable";
+
+    public string SavedWatchlistCountLabel => SavedWatchlist is null
+        ? "0 displayed | 0 usable | 0 stored"
+        : $"{SavedWatchlist.DisplayedItemCount} displayed | {SavedWatchlist.UsableItemCount} usable | {SavedWatchlist.TotalItemCount} stored";
+
+    public string SavedWatchlistAsOfLabel => SavedWatchlist?.AsOf is { } asOf
+        ? $"Newest stored save: {asOf.ToUniversalTime():yyyy-MM-dd HH:mm} UTC"
+        : "Newest stored save time unavailable";
+
+    public string SavedWatchlistSummary => SavedWatchlist?.Summary
+        ?? "UNAVAILABLE | The saved-watchlist evidence boundary has not returned a snapshot.";
+
+    public string SavedWatchlistWarnings => SavedWatchlist?.Warnings.Count > 0
+        ? string.Join(" | ", SavedWatchlist.Warnings)
+        : "No source warnings reported.";
+
+    public string SavedWatchlistEmptyState => SavedWatchlistItems.Count == 0
+        ? SavedWatchlist?.State switch
+        {
+            SavedWatchlistState.Empty => "No persisted saved-watchlist candidates are available.",
+            SavedWatchlistState.Unavailable => "Saved-watchlist evidence is unavailable. No current candidate state was inferred.",
+            _ => "No saved-watchlist rows are available for display.",
+        }
+        : string.Empty;
 
     public RectGeometry? RestoredWindowBounds => _windowBounds;
 
@@ -1059,6 +1169,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private async Task RefreshWorkspaceDataAsync(CancellationToken cancellationToken)
     {
+        await RefreshSavedWatchlistAsync(cancellationToken);
+
         if (_simulationWorkspaceClient is not null)
         {
             await RefreshSimulationWorkspaceDataAsync(cancellationToken);
@@ -1257,6 +1369,57 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(HasOutcomeRows));
         OnPropertyChanged(nameof(AlertRowsEmptyLabel));
         OnPropertyChanged(nameof(OutcomeRowsEmptyLabel));
+        OnPropertyChanged(nameof(SavedWatchlistStateLabel));
+        OnPropertyChanged(nameof(SavedWatchlistSourceLabel));
+        OnPropertyChanged(nameof(SavedWatchlistCountLabel));
+        OnPropertyChanged(nameof(SavedWatchlistAsOfLabel));
+        OnPropertyChanged(nameof(SavedWatchlistSummary));
+        OnPropertyChanged(nameof(SavedWatchlistWarnings));
+        OnPropertyChanged(nameof(SavedWatchlistEmptyState));
+    }
+
+    private async Task RefreshSavedWatchlistAsync(CancellationToken cancellationToken)
+    {
+        if (_savedWatchlistWorkspaceClient is null)
+        {
+            return;
+        }
+
+        try
+        {
+            SavedWatchlist = await _savedWatchlistWorkspaceClient.GetSnapshotAsync(cancellationToken);
+            SavedWatchlistItems.Clear();
+            foreach (var item in SavedWatchlist.Items)
+            {
+                SavedWatchlistItems.Add(SavedWatchlistItemViewModel.From(item));
+            }
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        {
+            var now = DateTimeOffset.UtcNow;
+            SavedWatchlist = new SavedWatchlistSnapshot(
+                1,
+                SavedWatchlistState.Unavailable,
+                now,
+                null,
+                null,
+                $"UNAVAILABLE | Saved-watchlist evidence could not be loaded: {exception.Message} No current candidate state was inferred.",
+                "Unavailable saved-watchlist source",
+                0,
+                0,
+                0,
+                ["The Python saved-watchlist boundary did not return usable persisted evidence."],
+                []);
+            SavedWatchlistItems.Clear();
+        }
+
+        OnPropertyChanged(nameof(SavedWatchlistStateLabel));
+        OnPropertyChanged(nameof(SavedWatchlistSourceLabel));
+        OnPropertyChanged(nameof(SavedWatchlistCountLabel));
+        OnPropertyChanged(nameof(SavedWatchlistAsOfLabel));
+        OnPropertyChanged(nameof(SavedWatchlistSummary));
+        OnPropertyChanged(nameof(SavedWatchlistWarnings));
+        OnPropertyChanged(nameof(SavedWatchlistEmptyState));
     }
 
     private static string TextOrUnavailable(string? value, string unavailable) =>

@@ -33,6 +33,7 @@ COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT = "get_readonly_workspace_snapshot"
 COMMAND_SIMULATION_WORKSPACE_SNAPSHOT = "get_simulation_workspace_snapshot"
 COMMAND_CHART_SNAPSHOT = "get_chart_snapshot"
 COMMAND_TECHNICAL_RESEARCH_SNAPSHOT = "get_technical_research_snapshot"
+COMMAND_SAVED_WATCHLIST_SNAPSHOT = "get_saved_watchlist_snapshot"
 COMMAND_RUN_SIMULATION = "run_simulation"
 SUPPORTED_COMMANDS = frozenset(
     {
@@ -45,6 +46,7 @@ SUPPORTED_COMMANDS = frozenset(
         COMMAND_SIMULATION_WORKSPACE_SNAPSHOT,
         COMMAND_CHART_SNAPSHOT,
         COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
+        COMMAND_SAVED_WATCHLIST_SNAPSHOT,
         COMMAND_RUN_SIMULATION,
     }
 )
@@ -214,6 +216,7 @@ class EngineHostRuntime:
         simulation_runner: Callable[[str], dict[str, Any]] | None = None,
         chart_snapshot_loader: Callable[[str, str], dict[str, Any]] | None = None,
         technical_research_snapshot_loader: Callable[[str], dict[str, Any]] | None = None,
+        saved_watchlist_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
@@ -243,6 +246,15 @@ class EngineHostRuntime:
             self._technical_research_service = None
         self._technical_research_snapshot_loader = (
             technical_research_snapshot_loader or self._technical_research_service.snapshot
+        )
+        if saved_watchlist_snapshot_loader is None:
+            from momentum_hunter.workstation_saved_watchlist import WorkstationSavedWatchlistService
+
+            self._saved_watchlist_service = WorkstationSavedWatchlistService()
+        else:
+            self._saved_watchlist_service = None
+        self._saved_watchlist_snapshot_loader = (
+            saved_watchlist_snapshot_loader or self._saved_watchlist_service.snapshot
         )
         self._state_lock = threading.RLock()
         self._command_condition = threading.Condition(self._state_lock)
@@ -442,6 +454,15 @@ class EngineHostRuntime:
                 True,
                 "TECHNICAL_RESEARCH_SNAPSHOT",
                 "Read-only technical research snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_SAVED_WATCHLIST_SNAPSHOT:
+            payload = self._saved_watchlist_snapshot_loader()
+            return EngineHostCommandResult(
+                True,
+                "SAVED_WATCHLIST_SNAPSHOT",
+                "Read-only saved-watchlist snapshot returned.",
                 self.snapshot(),
                 payload=payload,
             )
