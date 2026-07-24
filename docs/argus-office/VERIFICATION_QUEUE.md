@@ -15,6 +15,7 @@ mode.
 - `MANUAL_NOT_YET_AVAILABLE`: implementation exists below the current operator UI.
 - `MANUAL_PASS`: Steven completed and accepted every numbered check.
 - `MANUAL_FAIL`: Steven found a defect; record the failed step.
+- `MERGE_APPROVED`: Steven explicitly authorized local integration; this does not imply every manual check was separately reported.
 - `CEO_DECISION_PENDING`: Steven must choose the recorded direction.
 - `BLOCKED_VENDOR_CAPABILITY`: the required vendor capability does not exist.
 - `NOT_STARTED`: the operational evidence run has not begun.
@@ -24,9 +25,9 @@ mode.
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
 | ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `MANUAL_PENDING` through Shadow-002 | Integrated into local `master` at `bb962be`; remotely backed up on its feature branch | Confirm the frozen Python lifecycle is represented read-only and without order authority in Shadow-002 |
-| ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MANUAL_PENDING` | Feature branch at implementation commit `7fee390`; not merged or pushed | Review the preserved UI proof, sample counts/gating, lock evidence, execution detail, linked panes, and absence of order actions |
+| ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated into local `master`; not pushed | The preserved checklist remains an audit reference; merge approval does not start the official sample |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
-| Official Shadow sample start gate | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Requires accepted/merged Shadow-002 plus a separate gate proof | Prove versioning, immutable identity/evidence, deterministic execution assumptions, eligibility, and checkpoint rules before collecting trade 1 |
+| Official Shadow sample start gate | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-002 is integrated; a separate gate proof is still required | Prove versioning, immutable identity/evidence, deterministic execution assumptions, eligibility, and checkpoint rules before collecting trade 1 |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | `MANUAL_PENDING` | Separate branch; not merged here | Complete the R026 workstation checklist from its isolated review build; it is not part of ARGUS-SHADOW-001 |
 
@@ -68,7 +69,11 @@ Implementation commit: `7fee390`
 
 Automated result: `AUTOMATED_PASS`
 
-Steven status: `MANUAL_PENDING`
+Steven status: `MERGE_APPROVED`; the numbered checklist remains available as an audit
+reference.
+
+Integration status: `COMPLETE` on local `master` after Steven's explicit fast-forward
+approval on 2026-07-24. Nothing was pushed.
 
 Check these one by one:
 
@@ -95,9 +100,10 @@ Check these one by one:
 10. Report `PASS SHADOW-002 UI PROOF` if checks 1-9 pass. On failure, report the step
     and attach the marked screenshot.
 
-This proof uses synthetic fixtures. Passing it approves the review design only; it does
-not count a trade, start the official sample, authorize a merge/push, or create broker
-authority.
+This proof uses synthetic fixtures. Steven separately granted local merge approval on
+2026-07-24; that approval is not recorded as a claim that every manual item was
+individually reported. The proof and merge do not count a trade, start the official
+sample, authorize a push, or create broker authority.
 
 ## Credential-Free Schwab Setup CLI
 

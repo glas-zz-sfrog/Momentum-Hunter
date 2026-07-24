@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Fast-forwarded Steven-approved ARGUS-SHADOW-002 into local `master` after fresh Python compileall, 84 bounded Python tests, all 98 .NET tests, and a zero-warning Release build; nothing was pushed and the official sample remains locked.
+- Added the read-only WPF Shadow Review with strict frozen-identity audit, lifecycle and eligibility filters, linked Chart/Trade Plan/Why/Activity context, explicit FakeBroker nontransmitting language, and metrics withheld below 30 eligible completed trades.
 - Added prospective Shadow Trading with frozen source/plan/risk evidence, restart-safe command receipts, stable lifecycle IDs, quote-driven conservative FakeBroker fills/exits, durable ledger/audit/outcomes, executable P&L/R/MFE/MAE, sample-gated metrics, and nontransmitting thinkorswim paperMoney tickets.
 - Added credential-free, network-free Schwab preparation: physically read-only contracts, exact single-cash-account isolation, synthetic OAuth/account/order failures, masked secret entry, strict callback-state handling, Windows DPAPI fake-token proof, redaction, and no transmitting methods.
 - Reconciled the Roadmap to Schwab Support's live-only/no-paperMoney/no-sandbox answer: A017 is blocked by vendor capability, Shadow plus manual paperMoney is the current validation bridge, and no live canary testing is authorized.
