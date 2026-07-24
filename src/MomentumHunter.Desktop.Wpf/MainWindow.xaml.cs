@@ -35,7 +35,6 @@ public partial class MainWindow : Window, IWorkstationPresentation
     private readonly ShellViewModel _viewModel;
     private readonly IApplicationLifetimeCoordinator _lifetime;
     private readonly Dictionary<string, object> _contentById = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _permanentlyRemovingContent = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _layoutCaptureTimer;
     private string? _builtInDockLayoutXml;
     private bool _isRestoringDockLayout;
@@ -166,25 +165,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
         }
     }
 
-    private async void GlobalSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter)
-        {
-            return;
-        }
-
-        var exact = _viewModel.FindExactCommandPaletteItem(GlobalSearchBox.Text);
-        if (exact is null)
-        {
-            OpenCommandPalette(GlobalSearchBox.Text);
-        }
-        else
-        {
-            await ExecuteCommandPaletteItemAsync(exact);
-        }
-
-        e.Handled = true;
-    }
+    private void OpenCommandPaletteButton_Click(object sender, RoutedEventArgs e) => OpenCommandPalette();
 
     private async void CommandPaletteSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -369,57 +350,47 @@ public partial class MainWindow : Window, IWorkstationPresentation
         System.Windows.Application.Current.Shutdown();
     }
 
-    private void ReopenPaneButton_Click(object sender, RoutedEventArgs e)
+    private void ShowPaneButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: Guid instanceId } && _viewModel.ReopenPane(instanceId))
-        {
-            var pane = _viewModel.Registry.Find(instanceId)!;
-            if (pane.Kind == PaneKind.Chart && pane != _viewModel.PrimaryChartPane)
-            {
-                if (!string.IsNullOrWhiteSpace(pane.SoftClosedDockLayoutXml))
-                {
-                    CreateAdditionalChartDocument(pane, activate: false);
-                    RestoreDockLayout(pane.SoftClosedDockLayoutXml);
-                    pane.SoftClosedDockLayoutXml = null;
-                }
-                else
-                {
-                    CreateAdditionalChartDocument(pane, activate: true);
-                }
-
-                SetContentVisibility(ContentIdForPane(pane), true);
-            }
-            else
-            {
-                SetContentVisibility(ContentIdForPane(pane), true);
-            }
-
-            if (pane.Kind == PaneKind.ReviewOutcomes)
-            {
-                EnsureAnchorablePaneHeight(ReviewOutcomesContentId, 340);
-            }
-            else if (pane.Kind == PaneKind.Research)
-            {
-                EnsureAnchorablePaneHeight(ResearchContentId, 390);
-            }
-
-            EnsureEvidencePaneHeight(ContentIdForPane(pane));
-            PanesPopup.IsOpen = false;
-        }
-    }
-
-    private void RemovePaneButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: Guid instanceId } || _viewModel.Registry.Find(instanceId) is not { } pane)
+        if (sender is not Button { Tag: Guid instanceId }
+            || _viewModel.Registry.Find(instanceId) is not { } pane)
         {
             return;
         }
 
-        var contentId = ContentIdForPane(pane);
-        if (_viewModel.RemovePane(instanceId))
+        var wasHidden = !pane.IsVisible;
+        if (wasHidden && !_viewModel.ReopenPane(instanceId))
         {
-            RemoveDockContent(contentId);
+            return;
         }
+
+        if (wasHidden && pane.Kind == PaneKind.Chart && pane != _viewModel.PrimaryChartPane)
+        {
+            if (!string.IsNullOrWhiteSpace(pane.SoftClosedDockLayoutXml))
+            {
+                CreateAdditionalChartDocument(pane, activate: false);
+                RestoreDockLayout(pane.SoftClosedDockLayoutXml);
+                pane.SoftClosedDockLayoutXml = null;
+            }
+            else
+            {
+                CreateAdditionalChartDocument(pane, activate: true);
+            }
+        }
+
+        SetContentVisibility(ContentIdForPane(pane), true);
+
+        if (pane.Kind == PaneKind.ReviewOutcomes)
+        {
+            EnsureAnchorablePaneHeight(ReviewOutcomesContentId, 340);
+        }
+        else if (pane.Kind == PaneKind.Research)
+        {
+            EnsureAnchorablePaneHeight(ResearchContentId, 390);
+        }
+
+        EnsureEvidencePaneHeight(ContentIdForPane(pane));
+        PanesPopup.IsOpen = false;
     }
 
     private async void OnClosing(object? sender, CancelEventArgs e)
@@ -874,6 +845,8 @@ public partial class MainWindow : Window, IWorkstationPresentation
             if (content is LayoutAnchorable anchorable)
             {
                 anchorable.Show();
+                anchorable.IsSelected = true;
+                anchorable.IsActive = true;
             }
             else if (content is LayoutDocument document)
             {
@@ -972,11 +945,6 @@ public partial class MainWindow : Window, IWorkstationPresentation
         }
 
         var contentId = ContentIdForPane(pane);
-        if (_permanentlyRemovingContent.Remove(contentId))
-        {
-            return;
-        }
-
         if (content is LayoutDocument)
         {
             pane.SoftClosedDockLayoutXml = DockLayoutPersistence.Serialize(DockManager);
@@ -993,18 +961,6 @@ public partial class MainWindow : Window, IWorkstationPresentation
         {
             Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => SetContentVisibility(contentId, false)));
         }
-    }
-
-    private void RemoveDockContent(string contentId)
-    {
-        if (FindLayoutContent(contentId) is not { } content)
-        {
-            return;
-        }
-
-        _permanentlyRemovingContent.Add(contentId);
-        content.Close();
-        _contentById.Remove(contentId);
     }
 
     private void ScheduleShellStateCapture()

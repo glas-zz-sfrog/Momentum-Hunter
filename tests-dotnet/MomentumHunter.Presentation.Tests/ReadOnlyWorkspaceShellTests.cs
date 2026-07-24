@@ -22,7 +22,8 @@ public sealed class ReadOnlyWorkspaceShellTests
         Assert.Empty(viewModel.Candles);
         Assert.False(viewModel.CanRunSimulation);
         Assert.False(viewModel.CanRunPrimaryAction);
-        Assert.Contains("Planning Deferred", viewModel.EnvironmentLabel, StringComparison.Ordinal);
+        Assert.Equal("READ-ONLY", viewModel.EnvironmentLabel);
+        Assert.Contains("Planning and order actions are unavailable", viewModel.EnvironmentDetail, StringComparison.Ordinal);
         Assert.Contains("unavailable at this read-only boundary", viewModel.PlanningStatus, StringComparison.Ordinal);
         Assert.Contains("Stored chart evidence is independent", viewModel.PlanningStatus, StringComparison.Ordinal);
         Assert.Contains("not create a substitute plan", viewModel.PlanningStatus, StringComparison.Ordinal);

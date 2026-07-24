@@ -96,9 +96,9 @@ public sealed class ShellWorkflowTests
     }
 
     [Theory]
-    [InlineData(WorkspaceKind.Live, "SIMULATION \u2022 FakeBroker")]
-    [InlineData(WorkspaceKind.Replay, "REPLAY \u2022 Read Only")]
-    [InlineData(WorkspaceKind.Review, "REVIEW \u2022 Read Only")]
+    [InlineData(WorkspaceKind.Live, "SIMULATION")]
+    [InlineData(WorkspaceKind.Replay, "REPLAY ONLY")]
+    [InlineData(WorkspaceKind.Review, "REVIEW ONLY")]
     public async Task EnvironmentIdentityReflectsTheActiveWorkspace(WorkspaceKind workspace, string expectedLabel)
     {
         var viewModel = new ShellViewModel(new MockEngineClient());

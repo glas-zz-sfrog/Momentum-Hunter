@@ -381,7 +381,11 @@ public sealed partial class ShellViewModel : ObservableObject
         SavedWatchlistItems = [];
         WorkspaceOptions = Enum.GetValues<WorkspaceKind>();
         IntervalOptions = ["1m", "5m", "15m", "Daily"];
-        Candidates.CollectionChanged += (_, _) => RefreshCommandPaletteResults();
+        Candidates.CollectionChanged += (_, _) =>
+        {
+            RefreshCommandPaletteResults();
+            OnPropertyChanged(nameof(CommandPaletteScopeLabel));
+        };
         RefreshCommandPaletteResults();
     }
 
@@ -591,7 +595,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public string WorkspaceTitle => Workspace switch
     {
-        WorkspaceKind.Live => "Live Hunter",
+        WorkspaceKind.Live => "Current Hunter",
         WorkspaceKind.Replay => "Replay",
         _ => "Review",
     };
@@ -609,31 +613,53 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public PaneState? ShadowReviewPane => Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.ShadowReview);
 
-    public string PrimaryChartLinkLabel => PrimaryChartPane?.IsPinned == true
-        ? "Pinned"
-        : $"Link {PrimaryChartPane?.LinkGroup ?? LinkGroup.Unlinked}";
+    public string PrimaryChartLinkLabel => PaneSyncLabel(PrimaryChartPane);
 
-    public string PrimaryTradePlanLinkLabel => PrimaryTradePlanPane?.IsPinned == true
-        ? "Pinned"
-        : $"Link {PrimaryTradePlanPane?.LinkGroup ?? LinkGroup.Unlinked}";
+    public string PrimaryTradePlanLinkLabel => PaneSyncLabel(PrimaryTradePlanPane);
 
     public string EnvironmentLabel => Environment switch
     {
-        _ when Workspace == WorkspaceKind.Review => "REVIEW \u2022 Read Only",
-        _ when IsReadOnlySnapshotMode => "READ-ONLY SNAPSHOT \u2022 Planning Deferred",
-        _ when IsPythonSimulationWorkspaceMode => "SIMULATION \u2022 Python FakeBroker Only",
-        EnvironmentMode.Simulation => "SIMULATION \u2022 FakeBroker",
-        EnvironmentMode.Replay => "REPLAY \u2022 Read Only",
-        _ => "REVIEW \u2022 Read Only",
+        _ when Workspace == WorkspaceKind.Review => "REVIEW ONLY",
+        _ when IsReadOnlySnapshotMode => "READ-ONLY",
+        _ when IsPythonSimulationWorkspaceMode => "SIMULATION",
+        EnvironmentMode.Simulation => "SIMULATION",
+        EnvironmentMode.Replay => "REPLAY ONLY",
+        _ => "REVIEW ONLY",
+    };
+
+    public string EnvironmentDetail => Environment switch
+    {
+        _ when Workspace == WorkspaceKind.Review => "Review workspace. No broker or order actions are available.",
+        _ when IsReadOnlySnapshotMode => "Persisted evidence only. Planning and order actions are unavailable.",
+        _ when IsPythonSimulationWorkspaceMode => "FakeBroker simulation only. No brokerage connection.",
+        EnvironmentMode.Simulation => "Local simulation only. No brokerage connection.",
+        EnvironmentMode.Replay => "Historical replay only. No broker or order actions are available.",
+        _ => "Review only. No broker or order actions are available.",
     };
 
     public string ActivityLabel => Activity.Count == 0 ? "Activity" : $"Activity {Activity.Count}";
 
     public bool HasCommandPaletteResults => CommandPaletteResults.Count > 0;
 
-    public string CommandPaletteEmptyText => string.IsNullOrWhiteSpace(CommandQuery)
-        ? "No commands or candidates are available."
-        : $"No candidate or command matches '{CommandQuery.Trim()}'.";
+    public string CommandPaletteScopeLabel =>
+        $"{Candidates.Count} current Hunter symbols | Commands: chart, activity, diagnostics";
+
+    public string CommandPaletteEmptyText
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(CommandQuery))
+            {
+                return "No current Hunter symbols or commands are available.";
+            }
+
+            var examples = string.Join(", ", Candidates.Take(3).Select(candidate => candidate.Symbol));
+            var suggestion = string.IsNullOrWhiteSpace(examples)
+                ? "Try chart, activity, or diagnostics."
+                : $"Try {examples}, or a command such as chart.";
+            return $"'{CommandQuery.Trim()}' is not in the current Hunter list. {suggestion}";
+        }
+    }
 
     public string ActivityCountLabel => Activity.Count == 1 ? "1 source event" : $"{Activity.Count} source events";
 
@@ -653,7 +679,7 @@ public sealed partial class ShellViewModel : ObservableObject
         : IsPythonSimulationWorkspaceMode && TradePlan is null
             ? $"No persisted TradePlan is available for {SelectedSymbol}. Simulation is unavailable; no substitute plan was created."
         : IsPythonSimulationWorkspaceMode
-            ? "TradePlan and Risk Governor evidence are supplied by the Python FakeBroker-only simulation boundary. Stored chart candles remain read-only evidence."
+            ? "Stored TradePlan and Risk Governor evidence for the selected candidate."
         : TradePlan is null
             ? "No TradePlan is available for the selected candidate."
             : "TradePlan data is supplied by the current engine client.";
@@ -1043,12 +1069,12 @@ public sealed partial class ShellViewModel : ObservableObject
             0,
             new ActivityEvent(
                 DateTimeOffset.UtcNow,
-                "Shadow Review",
+                "Test Trade Review",
                 $"{trade.ShadowTradeId} selected; linked unpinned review panes now show {trade.Symbol}.",
                 trade.Symbol,
                 trade.EvidenceEligible ? HealthState.Healthy : HealthState.Degraded));
         OnPropertyChanged(nameof(ActivityLabel));
-        StatusMessage = $"{trade.Symbol} Shadow Trade selected for read-only evidence review.";
+        StatusMessage = $"{trade.Symbol} test trade selected for read-only evidence review.";
         RaisePresentationProperties();
         RequestLayoutSave();
     }
@@ -1172,7 +1198,7 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             StatusMessage = string.IsNullOrWhiteSpace(CommandQuery)
                 ? "Choose a candidate or command."
-                : $"No candidate or command matches '{CommandQuery.Trim()}'.";
+                : CommandPaletteEmptyText;
             return new CommandPaletteExecution(false);
         }
 
@@ -1486,6 +1512,7 @@ public sealed partial class ShellViewModel : ObservableObject
         SelectedInterval = IntervalOptions.Contains(snapshot.SelectedInterval, StringComparer.Ordinal) ? snapshot.SelectedInterval : "5m";
         SetRegistry(new PaneRegistry());
         Registry.Restore(snapshot.Panes);
+        WorkspaceFactory.EnsureStandardPanes(Registry, Workspace, SelectedSymbol, SelectedInterval);
         MigrateLegacyContextualPanes(snapshot.SchemaVersion);
         EnsureShadowReviewPane();
         _dockLayoutXml = snapshot.DockLayoutXml;
@@ -1495,6 +1522,23 @@ public sealed partial class ShellViewModel : ObservableObject
         IsDiagnosticsOpen = Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Diagnostics)?.IsVisible == true;
         PrimaryChart = null;
         RaisePresentationProperties();
+    }
+
+    private static string PaneSyncLabel(PaneState? pane)
+    {
+        if (pane is null)
+        {
+            return "Independent";
+        }
+
+        if (pane.IsPinned)
+        {
+            return $"Pinned to {pane.Symbol}";
+        }
+
+        return pane.LinkGroup == LinkGroup.A
+            ? "Follows Hunter"
+            : "Independent";
     }
 
     private void MigrateLegacyContextualPanes(int schemaVersion)
@@ -1545,7 +1589,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         Registry.Create(
             PaneKind.ShadowReview,
-            "Shadow Review",
+            "Test Trade Review",
             LinkGroup.A,
             DockRegion.Bottom,
             SelectedSymbol,
@@ -1837,6 +1881,7 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(Registry));
         OnPropertyChanged(nameof(Environment));
         OnPropertyChanged(nameof(EnvironmentLabel));
+        OnPropertyChanged(nameof(EnvironmentDetail));
         OnPropertyChanged(nameof(ActivityLabel));
         OnPropertyChanged(nameof(WorkspaceTitle));
         OnPropertyChanged(nameof(WorkspaceNarrative));
@@ -2091,7 +2136,7 @@ public sealed partial class ShellViewModel : ObservableObject
             new RiskDecision(
                 false,
                 trade.Plan.RiskDecision,
-                $"{riskSummary} Shadow Review is read-only.",
+                $"{riskSummary} Test Trade Review is read-only.",
                 trade.Plan.RiskReasons));
     }
 

@@ -56,6 +56,20 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="ToolbarIconButtonStyle"
+               TargetType="{x:Type Button}"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="3,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="ToolTipService.InitialShowDelay" Value="150" />
+            <Setter Property="ToolTipService.BetweenShowDelay" Value="0" />
+            <Setter Property="ToolTipService.ShowDuration" Value="10000" />
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+        </Style>
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
@@ -67,11 +81,11 @@
         <Border Grid.Row="0" Background="#121C24" BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,0,1">
             <Grid Margin="16,8">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="260" />
-                    <ColumnDefinition Width="185" />
-                    <ColumnDefinition Width="180" />
-                    <ColumnDefinition Width="1*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="1*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -83,7 +97,7 @@
                     <TextBlock Text="  WORKSTATION" Foreground="{StaticResource TextMuted}" FontSize="12" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="Live" Tag="Live" Click="WorkspaceButton_Click" />
+                    <Button Content="Current" Tag="Live" Click="WorkspaceButton_Click" />
                     <Button Content="Replay" Tag="Replay" Click="WorkspaceButton_Click" />
                     <Button Content="Review" Tag="Review" Click="WorkspaceButton_Click" />
                 </StackPanel>
@@ -93,54 +107,39 @@
                     <Button Content="15m" Tag="15m" Click="IntervalButton_Click" />
                     <Button Content="Daily" Tag="Daily" Click="IntervalButton_Click" />
                 </StackPanel>
-                <Grid Grid.Column="3"
-                      MinWidth="120"
-                      MaxWidth="360"
-                      HorizontalAlignment="Stretch"
-                      VerticalAlignment="Center">
-                    <TextBox x:Name="GlobalSearchBox"
-                             Background="#1A2731"
-                             BorderBrush="{StaticResource PanelBorder}"
-                             Foreground="{StaticResource TextPrimary}"
-                             Padding="9,5"
-                             Text="{Binding CommandQuery, UpdateSourceTrigger=PropertyChanged}"
-                             PreviewKeyDown="GlobalSearchBox_PreviewKeyDown" />
-                    <TextBlock Text="Search (Ctrl+K)"
-                               Foreground="{StaticResource TextMuted}"
-                               Margin="10,0,0,0"
-                               VerticalAlignment="Center"
-                               IsHitTestVisible="False">
-                        <TextBlock.Style>
-                            <Style TargetType="{x:Type TextBlock}">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Text, ElementName=GlobalSearchBox}" Value="">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Grid>
-                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Width="32"
-                            ToolTip="Save layout"
+                <Button Grid.Column="3"
+                        Style="{StaticResource ToolbarIconButtonStyle}"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        ToolTip="Search current Hunter symbols and commands (Ctrl+K)"
+                        AutomationProperties.HelpText="Search current Hunter symbols and commands. Keyboard shortcut Control K."
+                        AutomationProperties.Name="Open Command Palette"
+                        Click="OpenCommandPaletteButton_Click">
+                    <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="{StaticResource TextPrimary}" />
+                </Button>
+                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource ToolbarIconButtonStyle}"
+                            ToolTip="Save current workspace layout"
+                            AutomationProperties.HelpText="Save current workspace layout."
                             AutomationProperties.Name="Save layout"
                             Click="SaveLayoutButton_Click">
-                        <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource TextPrimary}" />
+                        <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="{StaticResource TextPrimary}" />
                     </Button>
-                    <Button Width="32"
-                            ToolTip="Restore layout"
+                    <Button Style="{StaticResource ToolbarIconButtonStyle}"
+                            ToolTip="Restore the last saved workspace layout"
+                            AutomationProperties.HelpText="Restore the last saved workspace layout."
                             AutomationProperties.Name="Restore layout"
                             Click="RestoreLayoutButton_Click">
-                        <TextBlock Text="&#xE777;" FontFamily="Segoe MDL2 Assets" Foreground="{StaticResource TextPrimary}" />
+                        <TextBlock Text="&#xE777;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="{StaticResource TextPrimary}" />
                     </Button>
                     <Button x:Name="PanesButton" Content="Panes" Click="PanesButton_Click" />
                 </StackPanel>
-                <Border Grid.Column="5" Padding="10,5" Margin="5,0" Background="#253440" CornerRadius="3">
-                    <TextBlock Text="{Binding BackgroundStatusLabel}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" FontSize="11" />
-                </Border>
-                <Border Grid.Column="6" Padding="10,5" Margin="5,0" Background="#203A38" CornerRadius="3">
+                <Border Grid.Column="6"
+                        Padding="10,5"
+                        Margin="5,0"
+                        Background="#203A38"
+                        CornerRadius="3"
+                        ToolTip="{Binding EnvironmentDetail}">
                     <TextBlock Text="{Binding EnvironmentLabel}" Foreground="{StaticResource Teal}" FontWeight="SemiBold" FontSize="11" />
                 </Border>
                 <Button Grid.Column="7" Content="{Binding ActivityLabel}" Click="ActivityButton_Click" VerticalAlignment="Center" />
@@ -294,9 +293,6 @@
                                                 <Border Padding="7,3" Margin="0,0,4,0" Background="#263846" CornerRadius="3">
                                                     <TextBlock Text="{Binding PrimaryTradePlanLinkLabel}" Foreground="{StaticResource Teal}" FontSize="10" />
                                                 </Border>
-                                                <Border Padding="7,3" Margin="0,0,4,0" Background="#3A3524" CornerRadius="3">
-                                                    <TextBlock Text="{Binding TradePlanRiskStatusLabel}" Foreground="{StaticResource Amber}" FontSize="10" />
-                                                </Border>
                                                 <Button Content="Pin" Command="{Binding TogglePrimaryTradePlanPinCommand}" />
                                             </StackPanel>
                                         </DockPanel>
@@ -365,7 +361,7 @@
                                                                 </Style>
                                                             </StackPanel.Style>
                                                             <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,1,0,0" Margin="0,0,0,10" />
-                                                            <TextBlock Text="Frozen Shadow decision context" FontWeight="SemiBold" />
+                                                            <TextBlock Text="Frozen test-trade context" FontWeight="SemiBold" />
                                                             <TextBlock Text="{Binding SelectedShadowTrade.Setup, StringFormat=Setup: {0}}" Margin="0,8,0,0" TextWrapping="Wrap" />
                                                             <TextBlock Text="{Binding SelectedShadowTrade.Catalyst, StringFormat=Catalyst: {0}}" Margin="0,4,0,0" TextWrapping="Wrap" />
                                                             <TextBlock Text="{Binding SelectedShadowTrade.Identity.MarketRegime, StringFormat=Market regime: {0}}" Margin="0,4,0,0" TextWrapping="Wrap" />
@@ -414,7 +410,7 @@
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </StackPanel.Style>
-                                                            <TextBlock Text="Prospective FakeBroker history" FontWeight="SemiBold" />
+                                                            <TextBlock Text="Test-trade history" FontWeight="SemiBold" />
                                                             <TextBlock Text="{Binding SelectedShadowTrade.Execution.LifecycleState, StringFormat=Lifecycle: {0}}" Margin="0,8,0,0" />
                                                             <TextBlock Text="{Binding SelectedShadowTrade.Execution.LastReason}" Foreground="{StaticResource TextMuted}" Margin="0,4,0,0" TextWrapping="Wrap" />
                                                             <TextBlock Text="{Binding SelectedShadowTrade.Execution.Quality.Summary}" Margin="0,8,0,0" TextWrapping="Wrap" />
@@ -1635,7 +1631,7 @@
                                 </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
-                        <avalon:LayoutAnchorable x:Name="ShadowReviewAnchor" ContentId="pane-shadow-review" Title="Shadow Review" CanClose="True" CanFloat="True">
+                        <avalon:LayoutAnchorable x:Name="ShadowReviewAnchor" ContentId="pane-shadow-review" Title="Test Trade Review" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="12">
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -1646,11 +1642,12 @@
                                         <RowDefinition Height="1*" />
                                     </Grid.RowDefinitions>
                                     <DockPanel>
-                                        <Border DockPanel.Dock="Right" Padding="8,4" Background="#203A38" CornerRadius="3">
-                                            <TextBlock Text="FAKEBROKER • NONTRANSMITTING" Foreground="{StaticResource Teal}" FontSize="10" FontWeight="SemiBold" />
-                                        </Border>
                                         <StackPanel>
-                                            <TextBlock Text="Shadow Review" FontSize="17" FontWeight="SemiBold" />
+                                            <TextBlock Text="Test Trade Review" FontSize="17" FontWeight="SemiBold" />
+                                            <TextBlock Text="Review simulated test trades and their evidence. No brokerage connection."
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       FontSize="11"
+                                                       TextWrapping="Wrap" />
                                             <TextBlock Text="{Binding ShadowReviewStatus}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" />
                                             <TextBlock Text="{Binding ShadowSample.ReadinessLabel}" Foreground="{StaticResource Amber}" FontSize="11" FontWeight="SemiBold" Margin="0,5,0,0" />
                                             <TextBlock Text="{Binding ShadowSample.DefinitionLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" />
@@ -2011,23 +2008,42 @@
             <Border Width="360" Padding="12" Background="#1B2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="4">
                 <StackPanel>
                     <TextBlock Text="Workspace Panes" FontSize="15" FontWeight="SemiBold" />
-                    <TextBlock Text="Close hides a pane. Remove permanently deletes that pane instance from this workspace." Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,8" />
-                    <ItemsControl ItemsSource="{Binding Registry.Panes}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <DockPanel Margin="0,3">
-                                    <StackPanel DockPanel.Dock="Left">
-                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding Symbol}" Foreground="{StaticResource TextMuted}" FontSize="10" />
-                                    </StackPanel>
-                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                        <Button Content="Open" Tag="{Binding InstanceId}" Click="ReopenPaneButton_Click" />
-                                        <Button Content="Remove" Tag="{Binding InstanceId}" Click="RemovePaneButton_Click" />
-                                    </StackPanel>
-                                </DockPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <TextBlock Text="The X in a pane title hides it. Hidden panes can be reopened here; visible panes can be brought to the front." Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,8" />
+                    <ScrollViewer MaxHeight="620" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Registry.Panes}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,3" LastChildFill="False">
+                                        <StackPanel DockPanel.Dock="Left">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding VisibilityLabel}" FontSize="10">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsVisible}" Value="True">
+                                                                <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <Button Content="{Binding VisibilityActionLabel}"
+                                                Tag="{Binding InstanceId}"
+                                                DockPanel.Dock="Right"
+                                                MinWidth="58"
+                                                Height="27"
+                                                Padding="9,2"
+                                                Margin="8,0,0,0"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Click="ShowPaneButton_Click" />
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </StackPanel>
             </Border>
         </Popup>
@@ -2066,7 +2082,7 @@
                                  Padding="8"
                                  Text="{Binding CommandQuery, UpdateSourceTrigger=PropertyChanged}"
                                  PreviewKeyDown="CommandPaletteSearchBox_PreviewKeyDown" />
-                        <TextBlock Text="Type a symbol or command"
+                        <TextBlock Text="Current Hunter symbol or command"
                                    Foreground="{StaticResource TextMuted}"
                                    Margin="9,0,0,0"
                                    VerticalAlignment="Center"
@@ -2083,6 +2099,11 @@
                             </TextBlock.Style>
                         </TextBlock>
                     </Grid>
+                    <TextBlock Text="{Binding CommandPaletteScopeLabel}"
+                               Foreground="{StaticResource TextMuted}"
+                               FontSize="10"
+                               Margin="0,0,0,8"
+                               TextWrapping="Wrap" />
                     <ListBox x:Name="CommandPaletteResultsList"
                              ItemsSource="{Binding CommandPaletteResults}"
                              SelectedItem="{Binding SelectedCommandPaletteItem, Mode=TwoWay}"

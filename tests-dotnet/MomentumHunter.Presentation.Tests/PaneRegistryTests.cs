@@ -26,12 +26,18 @@ public sealed class PaneRegistryTests
         var registry = new PaneRegistry();
         var pane = registry.Create(PaneKind.TradePlan, "Trade Plan");
 
+        Assert.Equal("Visible", pane.VisibilityLabel);
+        Assert.Equal("Focus", pane.VisibilityActionLabel);
         Assert.True(registry.SoftClose(pane.InstanceId));
         Assert.False(pane.IsVisible);
+        Assert.Equal("Hidden", pane.VisibilityLabel);
+        Assert.Equal("Open", pane.VisibilityActionLabel);
         Assert.Same(pane, registry.Find(pane.InstanceId));
 
         Assert.True(registry.Reopen(pane.InstanceId));
         Assert.True(pane.IsVisible);
+        Assert.Equal("Visible", pane.VisibilityLabel);
+        Assert.Equal("Focus", pane.VisibilityActionLabel);
     }
 
     [Fact]
@@ -222,23 +228,23 @@ public sealed class PaneRegistryTests
     }
 
     [Fact]
-    public async Task ShellMigratesSchemaFiveLayoutWithoutRecreatingRemovedAutomationPanes()
+    public async Task ShellRestoresStandardPanesMissingFromSchemaFiveLayout()
     {
         var currentLayoutWithoutContextualPanes = CreateSnapshot("NVDA") with { SchemaVersion = 5 };
         var viewModel = new ShellViewModel(new MockEngineClient(), new InMemoryLayoutStore(currentLayoutWithoutContextualPanes));
 
         await viewModel.InitializeAsync();
 
-        Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Automation);
-        Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Orders);
-        Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Positions);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.Automation).IsVisible);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.Orders).IsVisible);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.Positions).IsVisible);
         Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
         Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.CandidateStory).IsVisible);
         Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.ResearchMaturity).IsVisible);
     }
 
     [Fact]
-    public async Task ShellDoesNotRecreateResearchMaturityRemovedFromSchemaSevenLayout()
+    public async Task ShellRestoresStandardPaneRemovedFromCurrentLayout()
     {
         var currentLayoutWithoutResearchMaturity = CreateSnapshot("NVDA") with
         {
@@ -250,9 +256,42 @@ public sealed class PaneRegistryTests
 
         await viewModel.InitializeAsync();
 
-        Assert.DoesNotContain(
+        var restored = Assert.Single(
             viewModel.Registry.Panes,
             pane => pane.Kind == PaneKind.ResearchMaturity);
+        Assert.False(restored.IsVisible);
+        Assert.Equal("NVDA", restored.Symbol);
+        Assert.Equal("5m", restored.Interval);
+    }
+
+    [Fact]
+    public void EnsureStandardPanesPreservesExistingPaneStateAndRestoresOnlyMissingKinds()
+    {
+        var registry = WorkspaceFactory.Create(WorkspaceKind.Live, "CRWV", "5m");
+        var chart = registry.Panes.Single(pane => pane.Kind == PaneKind.Chart);
+        chart.IsPinned = true;
+        var researchMaturity = registry.Panes.Single(pane => pane.Kind == PaneKind.ResearchMaturity);
+        registry.Remove(researchMaturity.InstanceId);
+
+        WorkspaceFactory.EnsureStandardPanes(registry, WorkspaceKind.Live, "CRWV", "5m");
+
+        Assert.True(chart.IsPinned);
+        Assert.Equal(13, registry.Panes.Count);
+        var restored = Assert.Single(registry.Panes, pane => pane.Kind == PaneKind.ResearchMaturity);
+        Assert.False(restored.IsVisible);
+        Assert.Equal("CRWV", restored.Symbol);
+    }
+
+    [Fact]
+    public void EnsureStandardPanesMigratesLegacyShadowReviewTitle()
+    {
+        var registry = WorkspaceFactory.Create(WorkspaceKind.Review, "CRWV", "5m");
+        var review = registry.Panes.Single(pane => pane.Kind == PaneKind.ShadowReview);
+        review.Title = "Shadow Review";
+
+        WorkspaceFactory.EnsureStandardPanes(registry, WorkspaceKind.Review, "CRWV", "5m");
+
+        Assert.Equal("Test Trade Review", review.Title);
     }
 
     [Fact]

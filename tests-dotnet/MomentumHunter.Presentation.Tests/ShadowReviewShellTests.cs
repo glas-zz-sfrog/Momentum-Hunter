@@ -25,8 +25,9 @@ public sealed class ShadowReviewShellTests
         Assert.Contains("Frozen Shadow evidence", viewModel.TradePlan.DataLineage.SourceLabel, StringComparison.Ordinal);
         Assert.Equal(1, viewModel.TradePlanTabIndex);
         Assert.False(viewModel.CanRunPrimaryAction);
-        Assert.Equal("REVIEW \u2022 Read Only", viewModel.EnvironmentLabel);
-        Assert.Contains(viewModel.Activity, item => item.Category == "Shadow Review" && item.Symbol == "EQX");
+        Assert.Equal("REVIEW ONLY", viewModel.EnvironmentLabel);
+        Assert.Contains("No broker or order actions", viewModel.EnvironmentDetail, StringComparison.Ordinal);
+        Assert.Contains(viewModel.Activity, item => item.Category == "Test Trade Review" && item.Symbol == "EQX");
         Assert.Contains(("EQX", "5m"), chartClient.Requests);
         Assert.Equal(2, shadowClient.SnapshotReads);
         Assert.True(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.ShadowReview).IsVisible);

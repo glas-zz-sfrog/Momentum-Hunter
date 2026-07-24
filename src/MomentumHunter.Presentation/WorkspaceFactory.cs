@@ -35,7 +35,7 @@ public static class WorkspaceFactory
                 registry.Create(PaneKind.Hunter, "Outcome Explorer", LinkGroup.A, DockRegion.Left, symbol, interval);
                 registry.Create(PaneKind.Chart, "Review Chart", LinkGroup.A, DockRegion.Center, symbol, interval);
                 registry.Create(PaneKind.TradePlan, "Audit Detail", LinkGroup.A, DockRegion.Right, symbol, interval);
-                registry.Create(PaneKind.ShadowReview, "Shadow Review", LinkGroup.A, DockRegion.Bottom, symbol, interval);
+                registry.Create(PaneKind.ShadowReview, "Test Trade Review", LinkGroup.A, DockRegion.Bottom, symbol, interval);
                 registry.Create(PaneKind.ReviewOutcomes, "Outcomes", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.Diagnostics, "Diagnostics", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 break;
@@ -44,5 +44,37 @@ public static class WorkspaceFactory
         }
 
         return registry;
+    }
+
+    public static void EnsureStandardPanes(
+        PaneRegistry registry,
+        WorkspaceKind workspace,
+        string symbol,
+        string interval)
+    {
+        var defaults = Create(workspace, symbol, interval);
+        foreach (var defaultPane in defaults.Panes)
+        {
+            var existing = registry.Panes.FirstOrDefault(pane => pane.Kind == defaultPane.Kind);
+            if (existing is not null)
+            {
+                if (existing.Kind == PaneKind.ShadowReview
+                    && string.Equals(existing.Title, "Shadow Review", StringComparison.Ordinal))
+                {
+                    existing.Title = defaultPane.Title;
+                }
+
+                continue;
+            }
+
+            var restored = registry.Create(
+                defaultPane.Kind,
+                defaultPane.Title,
+                defaultPane.LinkGroup,
+                defaultPane.DockRegion,
+                symbol,
+                interval);
+            restored.IsVisible = defaultPane.IsVisible;
+        }
     }
 }

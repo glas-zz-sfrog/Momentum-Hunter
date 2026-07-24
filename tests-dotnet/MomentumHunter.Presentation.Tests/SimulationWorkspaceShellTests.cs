@@ -25,10 +25,11 @@ public sealed class SimulationWorkspaceShellTests
         Assert.Contains("O 119.10", viewModel.PrimaryChart.LatestBarSummary, StringComparison.Ordinal);
         Assert.Contains("V 1,500", viewModel.PrimaryChart.LatestBarSummary, StringComparison.Ordinal);
         Assert.True(viewModel.CanRunSimulation);
-        Assert.Contains("Python FakeBroker Only", viewModel.EnvironmentLabel, StringComparison.Ordinal);
+        Assert.Equal("SIMULATION", viewModel.EnvironmentLabel);
+        Assert.Contains("No brokerage connection", viewModel.EnvironmentDetail, StringComparison.Ordinal);
         Assert.Equal("NVDA", viewModel.TradePlanSymbolLabel);
         Assert.Equal("Simulation-only", viewModel.TradePlanRiskStatusLabel);
-        Assert.Contains("read-only evidence", viewModel.PlanningStatus, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Stored TradePlan and Risk Governor evidence for the selected candidate.", viewModel.PlanningStatus);
         Assert.Contains("STALE", viewModel.ChartSourceLabel, StringComparison.Ordinal);
         Assert.Equal([("NVDA", "5m")], chartClient.Requests);
 
@@ -81,9 +82,25 @@ public sealed class SimulationWorkspaceShellTests
         Assert.True(viewModel.PrimaryChart!.Pane.IsPinned);
         Assert.Equal("NVDA", viewModel.PrimaryChart.Pane.Symbol);
         Assert.Equal("5m", viewModel.PrimaryChart.Pane.Interval);
-        Assert.Equal("Pinned", viewModel.PrimaryChartLinkLabel);
+        Assert.Equal("Pinned to NVDA", viewModel.PrimaryChartLinkLabel);
         Assert.Contains(("NVDA", "5m"), chartClient.Requests);
         Assert.All(chartClient.Requests, request => Assert.Equal(("NVDA", "5m"), request));
+    }
+
+    [Fact]
+    public async Task PaneSynchronizationLabelsUseOperatorLanguage()
+    {
+        var viewModel = new ShellViewModel(
+            new ThrowingEngineClient(),
+            new StaticSimulationWorkspaceClient(Snapshot(allowed: true)));
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("Follows Hunter", viewModel.PrimaryChartLinkLabel);
+        Assert.Equal("Follows Hunter", viewModel.PrimaryTradePlanLinkLabel);
+
+        viewModel.PrimaryChartPane!.LinkGroup = LinkGroup.B;
+
+        Assert.Equal("Independent", viewModel.PrimaryChartLinkLabel);
     }
 
     [Fact]

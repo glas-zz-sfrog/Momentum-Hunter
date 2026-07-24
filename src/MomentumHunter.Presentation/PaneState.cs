@@ -47,6 +47,10 @@ public sealed partial class PaneState : ObservableObject
     [ObservableProperty]
     private bool _isVisible = true;
 
+    public string VisibilityLabel => IsVisible ? "Visible" : "Hidden";
+
+    public string VisibilityActionLabel => IsVisible ? "Focus" : "Open";
+
     [ObservableProperty]
     private DockRegion _dockRegion;
 
@@ -93,4 +97,10 @@ public sealed partial class PaneState : ObservableObject
         FloatingBounds = layout.FloatingBounds,
         SoftClosedDockLayoutXml = layout.SoftClosedDockLayoutXml,
     };
+
+    partial void OnIsVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(VisibilityLabel));
+        OnPropertyChanged(nameof(VisibilityActionLabel));
+    }
 }

@@ -19,6 +19,10 @@ public sealed class CommandPaletteTests
         Assert.Contains(viewModel.CommandPaletteResults, item => item.Action == CommandPaletteAction.ViewDiagnostics);
         Assert.Contains(viewModel.CommandPaletteResults, item => item.Symbol == "NVDA");
         Assert.Same(viewModel.CommandPaletteResults[0], viewModel.SelectedCommandPaletteItem);
+        Assert.Contains(
+            $"{viewModel.Candidates.Count} current Hunter symbols",
+            viewModel.CommandPaletteScopeLabel,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -107,7 +111,9 @@ public sealed class CommandPaletteTests
         Assert.False(noMatch.Executed);
         Assert.True(viewModel.IsCommandPaletteOpen);
         Assert.False(viewModel.HasCommandPaletteResults);
-        Assert.Contains("No candidate or command matches", viewModel.StatusMessage, StringComparison.Ordinal);
+        Assert.Contains("'zzzz' is not in the current Hunter list", viewModel.StatusMessage, StringComparison.Ordinal);
+        var examples = string.Join(", ", viewModel.Candidates.Take(3).Select(candidate => candidate.Symbol));
+        Assert.Contains(examples, viewModel.CommandPaletteEmptyText, StringComparison.Ordinal);
 
         var stale = Assert.IsType<CommandPaletteItem>(viewModel.FindExactCommandPaletteItem("NVDA"));
         viewModel.Candidates.Clear();
