@@ -57,6 +57,21 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertEqual(1, first.snapshot["collection"]["cycleCount"])
         self.assertEqual(3, first.snapshot["collection"]["monitoredSymbolCount"])
 
+    def test_production_collection_advances_shadow_observations_once_after_capture(self) -> None:
+        calls: list[str] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: calls.append("capture") or SimpleNamespace(target_count=3),
+            shadow_workspace_loader=lambda: {},
+            shadow_starter=lambda _symbol, _command_id: {},
+            shadow_observation_runner=lambda: calls.append("shadow") or {},
+            advance_shadow_after_collection=True,
+        )
+
+        result = runtime.execute(COMMAND_RUN_CYCLE, "capture-and-shadow")
+
+        self.assertTrue(result.accepted)
+        self.assertEqual(["capture", "shadow"], calls)
+
     def test_pause_blocks_collection_until_resume(self) -> None:
         runs: list[str] = []
         runtime = EngineHostRuntime(cycle_runner=lambda: runs.append("cycle") or SimpleNamespace(target_count=1))

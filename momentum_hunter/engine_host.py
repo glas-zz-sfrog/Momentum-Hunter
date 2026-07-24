@@ -33,6 +33,9 @@ COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT = "get_readonly_workspace_snapshot"
 COMMAND_SIMULATION_WORKSPACE_SNAPSHOT = "get_simulation_workspace_snapshot"
 COMMAND_CHART_SNAPSHOT = "get_chart_snapshot"
 COMMAND_RUN_SIMULATION = "run_simulation"
+COMMAND_SHADOW_WORKSPACE_SNAPSHOT = "get_shadow_trading_snapshot"
+COMMAND_START_SHADOW_TRADE = "start_shadow_trade"
+COMMAND_ADVANCE_SHADOW_TRADES = "advance_shadow_trades"
 SUPPORTED_COMMANDS = frozenset(
     {
         COMMAND_SNAPSHOT,
@@ -44,6 +47,9 @@ SUPPORTED_COMMANDS = frozenset(
         COMMAND_SIMULATION_WORKSPACE_SNAPSHOT,
         COMMAND_CHART_SNAPSHOT,
         COMMAND_RUN_SIMULATION,
+        COMMAND_SHADOW_WORKSPACE_SNAPSHOT,
+        COMMAND_START_SHADOW_TRADE,
+        COMMAND_ADVANCE_SHADOW_TRADES,
     }
 )
 
@@ -211,6 +217,10 @@ class EngineHostRuntime:
         simulation_workspace_loader: Callable[[], dict[str, Any]] | None = None,
         simulation_runner: Callable[[str], dict[str, Any]] | None = None,
         chart_snapshot_loader: Callable[[str, str], dict[str, Any]] | None = None,
+        shadow_workspace_loader: Callable[[], dict[str, Any]] | None = None,
+        shadow_starter: Callable[[str, str], dict[str, Any]] | None = None,
+        shadow_observation_runner: Callable[[], dict[str, Any]] | None = None,
+        advance_shadow_after_collection: bool = False,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
@@ -232,6 +242,15 @@ class EngineHostRuntime:
         else:
             self._chart_service = None
         self._chart_snapshot_loader = chart_snapshot_loader or self._chart_service.snapshot
+        self._shadow_workspace_service = None
+        if shadow_workspace_loader is None or shadow_starter is None or shadow_observation_runner is None:
+            from momentum_hunter.workstation_shadow import ShadowWorkspaceService
+
+            self._shadow_workspace_service = ShadowWorkspaceService()
+        self._shadow_workspace_loader = shadow_workspace_loader or self._shadow_workspace_service.snapshot
+        self._shadow_starter = shadow_starter or self._shadow_workspace_service.start
+        self._shadow_observation_runner = shadow_observation_runner or self._shadow_workspace_service.advance_observations
+        self._advance_shadow_after_collection = advance_shadow_after_collection
         self._state_lock = threading.RLock()
         self._command_condition = threading.Condition(self._state_lock)
         self._cycle_lock = threading.Lock()
@@ -337,7 +356,7 @@ class EngineHostRuntime:
             self._commands_in_progress.add(command_id)
 
         try:
-            result = self._execute_once(command, normalized_arguments)
+            result = self._execute_once(command, command_id, normalized_arguments)
         except Exception:
             result = EngineHostCommandResult(
                 False,
@@ -354,7 +373,7 @@ class EngineHostRuntime:
                 self._command_condition.notify_all()
         return result
 
-    def _execute_once(self, command: str, arguments: dict[str, Any]) -> EngineHostCommandResult:
+    def _execute_once(self, command: str, command_id: str, arguments: dict[str, Any]) -> EngineHostCommandResult:
         if command == COMMAND_SNAPSHOT:
             return EngineHostCommandResult(True, "SNAPSHOT", "Host snapshot returned.", self.snapshot())
         if command == COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT:
@@ -372,6 +391,15 @@ class EngineHostRuntime:
                 True,
                 "SIMULATION_WORKSPACE_SNAPSHOT",
                 "Simulation workspace snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_SHADOW_WORKSPACE_SNAPSHOT:
+            payload = self._shadow_workspace_loader()
+            return EngineHostCommandResult(
+                True,
+                "SHADOW_TRADING_SNAPSHOT",
+                "Prospective nontransmitting Shadow Trading snapshot returned.",
                 self.snapshot(),
                 payload=payload,
             )
@@ -422,6 +450,32 @@ class EngineHostRuntime:
                 True,
                 "SIMULATION_COMPLETED",
                 "Simulation command completed through the FakeBroker-only boundary.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_START_SHADOW_TRADE:
+            symbol = arguments.get("symbol")
+            if not isinstance(symbol, str) or not symbol.strip():
+                return EngineHostCommandResult(
+                    False,
+                    "SHADOW_SYMBOL_REQUIRED",
+                    "A non-empty symbol is required to freeze a Shadow Trade.",
+                    self.snapshot(),
+                )
+            payload = self._shadow_starter(symbol.strip().upper(), command_id)
+            return EngineHostCommandResult(
+                True,
+                "SHADOW_TRADE_STARTED",
+                "Shadow Trade was frozen and submitted to the prospective FakeBroker boundary.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_ADVANCE_SHADOW_TRADES:
+            payload = self._shadow_observation_runner()
+            return EngineHostCommandResult(
+                True,
+                "SHADOW_TRADES_ADVANCED",
+                "Active Shadow Trades consumed persisted current-price observations.",
                 self.snapshot(),
                 payload=payload,
             )
@@ -489,6 +543,8 @@ class EngineHostRuntime:
                 self._state = "Healthy"
                 self._detail = "Background collection cycle is running."
             report = self._cycle_runner()
+            if self._advance_shadow_after_collection:
+                self._shadow_observation_runner()
             monitored_count = int(getattr(report, "target_count", 0))
             with self._state_lock:
                 self._cycle_in_progress = False
@@ -629,7 +685,10 @@ def remove_endpoint_if_owned(path: Path, host_instance_id: str) -> None:
 
 def run_host(*, state_directory: Path, collection_interval_seconds: int = DEFAULT_COLLECTION_INTERVAL_SECONDS) -> int:
     state_directory.mkdir(parents=True, exist_ok=True)
-    runtime = EngineHostRuntime(collection_interval_seconds=collection_interval_seconds)
+    runtime = EngineHostRuntime(
+        collection_interval_seconds=collection_interval_seconds,
+        advance_shadow_after_collection=True,
+    )
     lease = HostLease(state_directory / HOST_LOCK_FILENAME, runtime.host_instance_id)
     if not lease.acquire():
         return 2
