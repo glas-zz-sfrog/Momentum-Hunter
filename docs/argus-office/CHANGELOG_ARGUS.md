@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Fast-forwarded Steven-approved ARGUS-SHADOW-003 into local `master`; nothing was pushed, and official sample collection remains separately locked and unauthorized.
 - Added ARGUS-SHADOW-003's immutable sample version, strategy/configuration fingerprint, fill-model version, evidence-schema version, and explicit sample-authorization metadata to prospective Shadow records and nontransmitting tickets.
 - Added a deterministic fail-closed sample-readiness audit and strict Python/.NET projection checks that preserve but exclude legacy, unauthorized, obsolete, malformed, tampered, or configuration-mismatched evidence and withhold all profitability metrics until the exact active sample reaches its gate.
 - Added the read-only `SAMPLE START LOCKED` WPF state and CLI-rendered proof; no start action, official trade, broker capability, Paper/Live authority, merge, or push was added.

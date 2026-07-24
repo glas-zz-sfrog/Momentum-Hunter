@@ -26,7 +26,7 @@ mode.
 | --- | --- | --- | --- | --- |
 | ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `MANUAL_PENDING` through Shadow-002 | Integrated into local `master` at `bb962be`; remotely backed up on its feature branch | Confirm the frozen Python lifecycle is represented read-only and without order authority in Shadow-002 |
 | ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated into local `master`; not pushed | The preserved checklist remains an audit reference; merge approval does not start the official sample |
-| ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MANUAL_PENDING` | `IMPLEMENTED_PENDING_MERGE` at `9002df0`; not pushed | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
+| ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated into local `master`; not pushed | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 engineering gate is branch-only; sample authorization has not been granted | Do not collect trade 1 until Shadow-003 is accepted and integrated and Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
@@ -114,9 +114,11 @@ Implementation commit: `9002df0`
 
 Automated result: `AUTOMATED_PASS`
 
-Steven status: `MANUAL_PENDING`
+Steven status: `MERGE_APPROVED`; the numbered visual checklist remains available as an
+audit reference and has not been converted into sample-start authorization.
 
-Integration status: `IMPLEMENTED_PENDING_MERGE`; nothing was pushed.
+Integration status: `COMPLETE` on local `master` after Steven's explicit fast-forward
+approval. Nothing was pushed.
 
 Automated proof:
 
@@ -153,9 +155,9 @@ Check these one by one:
 7. Report `PASS SHADOW-003 UI PROOF` if checks 1-6 pass. On failure, report the failed
    step and attach the marked screenshot.
 
-Passing this checklist does not merge or push the branch and does not authorize
-official sample trade 1. Merge and exact sample-start authorization remain separate
-Steven decisions.
+Steven separately approved the local fast-forward. Passing this checklist still does
+not authorize official sample trade 1. Exact sample-start authorization remains a
+separate Steven decision.
 
 ## Credential-Free Schwab Setup CLI
 

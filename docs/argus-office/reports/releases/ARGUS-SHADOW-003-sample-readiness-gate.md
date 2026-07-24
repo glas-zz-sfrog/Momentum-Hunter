@@ -4,10 +4,12 @@
 
 - Branch: `codex/ARGUS-SHADOW-003-sample-readiness-gate`
 - Implementation commit: `9002df0`
-- Classification: `IMPLEMENTED_PENDING_MERGE`
-- Local `master`: `fe3326d`, seven commits ahead of `origin/master` at `69feedf`
+- Verification commit: `bb7aec6`
+- Classification: `COMPLETE` on local `master`
+- Local `master`: contains this merge-state closeout and is ten commits ahead of
+  `origin/master` at `69feedf`
 - Push: none
-- Merge: none
+- Merge: Steven-approved local fast-forward
 - Official sample: not started
 
 ## Scope
@@ -99,7 +101,7 @@ but cannot count toward the new sample.
 
 ## Risks And Limits
 
-- Shadow-003 is local branch work and is not remotely backed up.
+- Shadow-003 is integrated locally but is not remotely backed up.
 - The two legacy Qt test modules retain their pre-existing timeout problem.
 - Strategy/configuration integrity depends on deliberately versioning the frozen
   strategy contract when a material rule changes; the audit prevents silent mismatch
@@ -123,7 +125,5 @@ authorize a merge or official sample start.
 
 ## Recommendation
 
-Review `9002df0` and the proof, then make a separate local fast-forward decision.
-After integration, retain the default lock until Steven separately authorizes the exact
-official sample definition. Do not begin trade 1 or a stacked Shadow branch before
-those decisions.
+Retain the default lock until Steven separately authorizes the exact official sample
+definition. Do not begin trade 1 or a stacked Shadow branch before that decision.
