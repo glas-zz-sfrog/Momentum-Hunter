@@ -32,7 +32,7 @@ mode.
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
-| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS` | `MANUAL_PENDING` | `IMPLEMENTED_PENDING_MERGE`; not merged or pushed | Use the versioned R027 launcher and check both Shadow Review and every R013-R025 workstation surface |
+| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; fresh repair verification passes 162 focused and 209 total .NET tests, 641 Python tests, Python compileall, and a zero-warning Release build | `MANUAL_IN_PROGRESS`; checks 5-7 and 15-17 pass, check 11 is independently verified, checks 4, 8-10, and 14 are `CODEX_UI_PASS` pending Steven acceptance, and checks 12-13 are unavailable with zero test trades | `IMPLEMENTED_PENDING_MERGE`; repair commit `f84106a` is not merged or pushed | Steven accepts or rejects the four repaired visual surfaces in the `R027-manual-qa-repair-review` build; Git mechanics do not require a separate operator review |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
 
@@ -291,44 +291,184 @@ Automated result: `AUTOMATED_PASS`
 Integration state: `IMPLEMENTED_PENDING_MERGE` on the branch only; local `master`
 remains `164e32e`. Nothing is pushed, and the official Shadow sample remains locked.
 
-Automated evidence: Python compileall, 146 focused Python tests, 641 full-discovery
-Python tests, all 206 .NET tests, zero-warning Release build, protected-path review,
-source-nonmutation checks, and two fresh nonblank R027 proof boards pass.
+Automated evidence: fresh Python compileall, 641 full-discovery Python tests, 162
+focused presentation tests, all 209 .NET tests, zero-warning Release build,
+protected-path review, source-nonmutation checks, and fresh nonblank R027 proof
+artifacts pass.
+
+Manual evidence recorded 2026-07-24:
+
+- Manual review display convention: strikethrough means Steven addressed the item,
+  orange means a newly added finding that still requires repair or physical
+  reverification, and plain text means Steven has not addressed the item.
+- Check 5: `MANUAL_PASS` for the required `CRWV` / `5m` proof case. The persisted
+  minute-bar source contains only `CRWV`; other symbols must show an honest no-candles
+  state rather than fallback or fabricated candles. Daily OHLC coverage is broader
+  and is a separate source.
+- Check 6: `MANUAL_PASS`; hover inspection changes the inspected candle evidence.
+- Check 7: `MANUAL_PASS_PROVISIONAL`; `Plan`, `Why`, `Research`, and `History` look
+  acceptable for the evidence currently available. A deeper content-quality review is
+  deferred until broader market data exists; this pass does not claim that `CRWV`
+  proves broader evidence quality.
+- Check 4: `CODEX_UI_PASS`, `STEVEN_ACCEPTANCE_PENDING`. Live Windows automation
+  confirms the palette states `14 current Hunter symbols | Commands: chart, activity,
+  diagnostics`; initially shows `Add chart` and `CRWV`; reports that `nvda` is not in
+  the current Hunter list and suggests available symbols; and closes on `Esc`.
+- Operator-language finding: `Link A` / `Link B` has no useful meaning to Steven.
+  Replace the internal group designator with an explicit state such as `Follows Hunter
+  selection`, `Pinned to CRWV`, or `Independent`, while preserving the existing link
+  behavior.
+- Checks 8-9: `CODEX_UI_PASS`, `STEVEN_ACCEPTANCE_PENDING`. The live Current pane
+  menu lists every expected standard pane with `Visible` / `Focus` or `Hidden` /
+  `Open`; opening `Research Maturity` produces the correctly titled pane with
+  `STRATEGY OPTIMIZATION LOCKED`, `Allowed now: Collect evidence only`, the separate
+  maturity/census denominators, and the three evidence tabs.
+- Check 10: `CODEX_UI_PASS`, `STEVEN_ACCEPTANCE_PENDING`. The live Review workspace
+  shows one global `REVIEW ONLY` state and the first-class `Test Trade Review` pane
+  with the sentence `Review simulated test trades and their evidence. No brokerage
+  connection.` No repeated technical warning badge appears on ordinary controls.
+- Check 14: `CODEX_UI_PASS`, `STEVEN_ACCEPTANCE_PENDING`. The canonical final
+  `1180 x 820` proof and the `1440 x 900` proof show `Daily`, search, save, restore,
+  `Panes`, mode, Activity, Health, and Menu without overlap. The prior canonical
+  compact capture was replaced after screenshot review found it predated the final
+  icon-width repair. Steven only needs to judge whether the compact presentation is
+  acceptable; no manual pixel measurement is required.
+- Check 15: `MANUAL_PASS`; hiding and reopening panes works without duplicates.
+- Check 16: `MANUAL_PASS`; no prohibited provider, scoring, readiness, replay,
+  alert, watchlist, broker, Paper, Live-money, credential, sample-start, or
+  real-order action was found.
+- Check 17: `MANUAL_PASS`; rejected icon artwork remains absent.
+- Check 11: `CODEX_VERIFIED`. The canonical snapshot and rendered UI agree:
+  `SAMPLE START LOCKED`, official authorization false, gate false, `0 / 30`,
+  completed/active/unfilled/risk-rejected/data-invalid/excluded all zero, sample
+  status `INSUFFICIENT_SAMPLE`, and every profitability metric withheld.
+- Checks 12-13: `MANUAL_NOT_YET_AVAILABLE`. The canonical review snapshot contains
+  zero test trades, so there is no row to select and no populated result set through
+  which filters can be behaviorally verified. Do not fabricate a trade or start the
+  official sample merely to satisfy UI review.
+- New visual findings: pane-menu actions are too large, `Shadow Review` is unclear
+  operator language, and technical safety labels create clutter. Keep one prominent
+  global mode indicator; reserve a future red `LIVE MONEY` treatment for a separately
+  approved real brokerage mode rather than repeating warnings on ordinary controls.
+
+Manual-QA repair implemented in the working tree:
+
+- The pane menu now labels each standard pane `Visible` or `Hidden` and offers
+  `Focus` or `Open`; focusing activates the corresponding dock tab.
+- Destructive `Remove` is no longer exposed in the standard pane menu. The small
+  title-bar `X` is explicitly described as hiding the pane.
+- Loading a saved layout restores standard pane records that an earlier build
+  permanently removed. Read-only inspection of the running repair build's latest
+  saved Live layout confirms all 13 standard Live pane records are present.
+- Hidden secondary chart panes use the same restore-and-focus path as every other
+  pane.
+- Sync labels now use `Follows Hunter`, `Independent`, or `Pinned to SYMBOL`.
+- The interval toolbar allocation is widened so `Daily` is no longer constrained by
+  the previous 180-pixel group.
+- The `Live` workspace label is now `Current`, while its internal workspace identity
+  remains unchanged. The single top mode badge is concise and exposes exact boundary
+  detail by tooltip.
+- `Shadow Review` is now displayed as `Test Trade Review`; the repeated technical
+  badge inside the pane is removed.
+- The Command Palette now states that it searches current Hunter symbols plus named
+  workstation commands, and a miss names available examples instead of implying a
+  broken global ticker lookup.
+- Pane-menu actions are compact right-aligned buttons rather than filling the row.
+- Search, save-layout, and restore-layout icons use a dedicated `34 x 30` toolbar
+  style with centered glyphs, zero inherited padding, fast tooltips, and explicit
+  accessibility help text.
+- Fresh verification passes 162/162 presentation tests, 209/209 complete .NET
+  solution tests, 641/641 Python tests, Python compileall, and a zero-warning Release
+  build.
+- UI proof:
+  `reports/releases/ARGUS-R027-manual-qa-repair-1180x820.png`,
+  `reports/releases/ARGUS-R027-manual-qa-repair-1440x900.png`, and
+  `reports/releases/ARGUS-R027-manual-qa-repair-panes.png`.
+- Review-state proof:
+  `reports/releases/ARGUS-R027-manual-qa-repair-test-trade-review-empty.png`.
+- During physical review, a Python Engine Host left running since 2026-07-23
+  returned `UNSUPPORTED_COMMAND` for the newer review contract. It was shut down
+  through its authenticated local protocol; the current packaged host replaced it
+  and the UI then rendered the canonical locked snapshot. No state or sample data
+  was created.
+- Review build:
+  `%LOCALAPPDATA%\MomentumHunter\Builds\R027-manual-qa-repair-review\Launch R027 Manual QA Repair Review.lnk`
+- These repairs remain `MANUAL_RECHECK_REQUIRED`; they are not accepted merely
+  because automated checks pass.
 
 Check these one by one:
 
 1. Exit any current Momentum Hunter process using `Menu` and the explicit Exit command.
-2. Open `%LOCALAPPDATA%\MomentumHunter\Builds\R027-shadow-phase12-integrated-review\Launch R027 Shadow Phase 12 Integrated Review.lnk`. Do not use the pinned shortcut.
-3. Confirm the title is `Momentum Hunter Workstation` and the top boundary says
-   `SIMULATION` / `Python FakeBroker Only`. No Paper, Live-broker, credential, or real
-   order mode may appear.
-4. Press `Ctrl+K`; confirm the Command Palette filters symbols and commands, opens an
-   exact candidate, shows a no-match state, and closes with `Esc`.
-5. Select `CRWV` and `5m`; confirm stored candles, bodies, wicks, volume, price/time
-   axes, source lineage, stale/available state, and latest UTC/OHLCV are visible.
-6. Hover candles; confirm the crosshair snaps to the nearest candle, inspected UTC and
-   OHLCV change, and leaving the chart restores latest-bar details.
-7. In Trade Plan, confirm simulation-only planning/risk evidence plus persisted
-   Why/Research facts. Candidate changes must update unpinned linked panes.
-8. Open Diagnostics, Replay Events, Automation, Activity, Outcomes, Research,
-   Watchlist, Daily Workflow, Candidate Story, and Research Maturity. Each must show
-   persisted source/state/time/count evidence and honest unavailable/partial/stale
-   states.
-9. In Research Maturity, confirm `STRATEGY OPTIMIZATION LOCKED`, `Collect evidence
-   only`, separate maturity/census denominators, and no strategy-modification action.
-10. Switch to Review and confirm `Shadow Review` appears as a first-class pane with
-    `REVIEW - Read Only` and `FAKEBROKER - NONTRANSMITTING`.
-11. Confirm Shadow Review shows `SAMPLE START LOCKED`, the exact sample/configuration/
-    fill/evidence definition, `0 / 30` or the truthful eligible count, and withheld
-    aggregate metrics below the gate. There must be no start button.
-12. Select a Shadow row. Confirm linked unpinned Chart, Trade Plan, Why, and History
-    display that frozen trade identity without changing the stored plan or evidence.
-13. Exercise Shadow date/session, setup, catalyst, regime, outcome, and eligibility
-    filters. Confirm counts and selected detail remain internally consistent.
-14. Resize to roughly 1440x900 and 1180x820. Confirm panes remain readable or
-    scrollable without overlapping controls or clipped longest words.
-15. Close and reopen optional panes through `Panes`; confirm each returns once at a
-    useful size and no duplicate appears.
+2. Open `%LOCALAPPDATA%\MomentumHunter\Builds\R027-manual-qa-repair-review\Launch R027 Manual QA Repair Review.lnk`. Do not use the pinned shortcut.
+3. Confirm the title is `Momentum Hunter Workstation` and the single top mode badge
+   says `SIMULATION`. Hover that badge and confirm the tooltip says there is no
+   brokerage connection. No Paper, Live-money, credential, or real-order mode may
+   appear.
+4. Press `Ctrl+K`. Confirm the scope line names the current Hunter symbol count and
+   the commands `chart`, `activity`, and `diagnostics`. Search `CRWV` and confirm it
+   appears. Search `nvda`; because it is not in the current Hunter list, confirm the
+   message says that directly and suggests available symbols. Search `chart` and
+   confirm `Add chart` appears. Press `Esc` and confirm the palette closes.
+5. Stay in `Current`. In the left `Hunter` pane, select `CRWV`, then click `5m` in the
+   top interval bar. In the center `Chart`, confirm the title is `CRWV`; candle bodies,
+   wicks, volume bars, price labels, and time labels are visible; the source line sits
+   directly below the symbol; and the strip below the chart shows latest UTC/OHLCV.
+   This check is specifically for `CRWV`: it is the only symbol in the persisted
+   minute-bar source. Selecting another symbol must show an honest no-candles state,
+   not a daily or mock fallback.
+6. Still on `CRWV` / `5m`, move the pointer over several candle bodies and wicks in
+   the center chart. Confirm the crosshair snaps to the nearest candle and the strip
+   below the chart changes to that candle's UTC/OHLCV. Move the pointer out of the
+   plot area and confirm the strip returns to the latest-bar UTC/OHLCV.
+7. There is no standalone pane named `Evidence`. Use the visible right-side
+   `Trade Plan` pane for candidate evidence. With `CRWV` selected, inspect:
+   `Plan` for Entry, Stop, Target, Reward/Risk, Readiness Gate checks, and the Risk
+   Governor summary; `Why` for persisted catalyst, source/time, source state, and
+   liquidity; and `Research` for evidence quality, source lineage, and opportunity
+   notes. The pane must remain simulation-only. Leave Chart and Trade Plan as
+   `Follows Hunter` and unpinned, select another Hunter row, and confirm both panes
+   change to that symbol without inventing a plan or chart when its persisted
+   evidence is absent.
+8. Optional panes are hidden by default. In `Current`, click the top `Panes` button,
+   confirm each row says `Visible` / `Focus` or `Hidden` / `Open`, and use its action
+   for `Activity`,
+   `Diagnostics`, `Automation`, `Research`, `Watchlist`, `Daily Workflow`,
+   `Candidate Story`, and `Research Maturity`. Confirm the opened pane title matches
+   the row and its body shows a persisted source/state/time/count or an explicit
+   unavailable/partial/stale explanation. Switch to `Replay`, then use
+   `Panes > Replay Events > Open`. Switch to `Review`, then use
+   `Panes > Outcomes > Open`. Close each optional pane with its pane `X` before
+   opening the next one if screen space becomes crowded. If a named row is absent
+   from `Panes`, or `Open` produces no pane, record that exact name as a failure.
+9. Return to `Current`, click `Panes`, locate `Research Maturity`, and click `Open`.
+   The bottom pane must be titled `Research Maturity`. At its top, confirm
+   `STRATEGY OPTIMIZATION LOCKED` and `Allowed now: Collect evidence only`. Confirm
+   the separate cards `Maturity Outcome Coverage` / `Scorable denominator only` and
+   `Census Outcome Coverage` / `All-alert denominator`. Open the `Evidence Gates`,
+   `Census Counts`, and `Research Questions` tabs. There must be no button or command
+   that modifies a strategy, score, readiness state, alert threshold, plan, or order.
+10. Switch to `Review` and confirm `Test Trade Review` appears as a first-class pane.
+    The single top mode badge must say `REVIEW ONLY`; the pane should explain in one
+    sentence that it reviews simulated test trades with no brokerage connection.
+    It must not repeat technical warning badges on ordinary controls.
+11. `CODEX_VERIFIED`: Test Trade Review shows `SAMPLE START LOCKED`, the exact
+    sample/configuration/fill/evidence definition, `0 / 30`, zero lifecycle counts,
+    and withheld aggregate metrics. There is no start button.
+12. `MANUAL_NOT_YET_AVAILABLE`: no test-trade row exists. When a separately
+    authorized non-official fixture or real future test trade exists, select it and
+    confirm linked unpinned Chart, Trade Plan, Why, and History display its frozen
+    identity without changing stored plan or evidence.
+13. `MANUAL_NOT_YET_AVAILABLE`: filters have no rows to exercise. Verify them only
+    after a safe test-trade fixture or future test-trade record exists.
+14. If the app is maximized, click the overlapping-squares `Restore Down` control
+    beside the title-bar `X`. Drag the lower-right window corner inward until the
+    workstation is roughly two-thirds of the screen width. Confirm `Daily` remains
+    fully visible and panes remain readable or scrollable without overlaps. Exact
+    pixel measurement is not required from Steven.
+15. Hide an optional pane with the small `X` in its dock title. Confirm the row
+    remains in `Panes` as `Hidden` / `Open`, then reopen it and confirm it returns
+    once at a useful size with no duplicate. Confirm there is no destructive
+    `Remove` action in the standard pane menu.
 16. Confirm no provider-refresh, score-change, readiness-change, replay-selection,
     alert-generation, watchlist-generation, broker, Paper, Live, credential, sample-
     start, or real-order action exists. FakeBroker simulation remains the only
@@ -339,3 +479,36 @@ Check these one by one:
     screenshot.
 
 Passing this checklist will not itself authorize merge or push.
+
+## R028 Integrated Workstation Chrome
+
+Status: `APPROVED_DIRECTION_NOT_STARTED`
+
+Steven approved replacing the separate light Windows title strip with an integrated
+dark workstation surface after R027 closes. The thinkorswim screenshot supplied as
+visual reference is intentionally not stored in the repository because it contains
+account information.
+
+When implemented, verify these one by one:
+
+1. Confirm no separate light Windows title strip appears above the workstation.
+2. Confirm app identity, workspace navigation, the single global mode state, and
+   minimize/maximize/close controls form one continuous dark top surface.
+3. Drag the window from empty space in the integrated top surface and confirm it
+   moves normally.
+4. Double-click that draggable area and confirm maximize/restore works.
+5. Drag the window to each screen edge and confirm Windows Snap still works.
+6. Confirm every resize edge and corner remains usable.
+7. Confirm minimize, maximize/restore, close, and `Alt+Space` behavior remain
+   available through mouse and keyboard.
+8. Move the window between monitors with different scaling, when available, and
+   confirm the top surface stays aligned and readable.
+9. Confirm `SIMULATION` and `REVIEW ONLY` remain concise global states. No ordinary
+   control should repeat brokerage warnings.
+10. Confirm any future separately approved real-money mode uses one unmistakable
+    global red treatment, without authorizing or adding live execution in this task.
+11. At compact and maximized sizes, confirm top controls do not clip, overlap, or
+    steal space needed by the workspace panes.
+
+This item is visual shell work only. It does not authorize broker integration,
+credentials, paper/live execution, or changes to trading behavior.
