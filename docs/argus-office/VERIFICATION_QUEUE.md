@@ -16,16 +16,18 @@ mode.
 - `MANUAL_PASS`: Steven completed and accepted every numbered check.
 - `MANUAL_FAIL`: Steven found a defect; record the failed step.
 - `CEO_DECISION_PENDING`: Steven must choose the recorded direction.
+- `BLOCKED_VENDOR_CAPABILITY`: the required vendor capability does not exist.
 - `NOT_STARTED`: the operational evidence run has not begun.
 
 ## Queue Summary
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
-| ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `MANUAL_NOT_YET_AVAILABLE` | Feature branch only; remotely backed up; not merged | No WPF control was added; review is code/evidence until an operator surface is separately approved |
-| Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
-| First 30 completed Shadow Trades | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Requires accepted Shadow foundation | Prospective results and manual paperMoney reconciliation, not historical backfill |
-| Schwab automated-paper direction | `AUTOMATED_PASS` | `CEO_DECISION_PENDING` | Vendor response is branch-only evidence | Wait for a Schwab sandbox, research an alternate paper broker, or defer automated paper execution |
+| ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `MANUAL_PENDING` through Shadow-002 | Integrated into local `master` at `bb962be`; remotely backed up on its feature branch | Confirm the frozen Python lifecycle is represented read-only and without order authority in Shadow-002 |
+| ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MANUAL_PENDING` | Feature branch at implementation commit `7fee390`; not merged or pushed | Review the preserved UI proof, sample counts/gating, lock evidence, execution detail, linked panes, and absence of order actions |
+| Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
+| Official Shadow sample start gate | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Requires accepted/merged Shadow-002 plus a separate gate proof | Prove versioning, immutable identity/evidence, deterministic execution assumptions, eligibility, and checkpoint rules before collecting trade 1 |
+| Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | `MANUAL_PENDING` | Separate branch; not merged here | Complete the R026 workstation checklist from its isolated review build; it is not part of ARGUS-SHADOW-001 |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
@@ -33,6 +35,9 @@ mode.
 Branch: `codex/ARGUS-SHADOW-001-shadow-trading-wiring-audit`
 
 Automated result: `AUTOMATED_PASS`
+
+Integration state: `COMPLETE` on local `master` at `bb962be`; the matching feature
+branch is remotely backed up. Remote `master` remains at `69feedf`.
 
 - The decision freezes the exact source-report text, source hash, candidate row,
   decision timestamp, canonical TradePlan, plan fingerprint, and Risk Governor result.
@@ -43,19 +48,56 @@ Automated result: `AUTOMATED_PASS`
   buying-power, position-count, daily-loss, restart, and duplicate-command cases.
 - A nontransmitting JSON and Markdown ticket contains manual thinkorswim paperMoney
   entry and reconciliation fields.
-- The current WPF workstation has no Start Shadow Trade, Shadow Positions, Shadow
-  Outcomes, or paperMoney reconciliation control. Nothing new is available for Steven
-  to click in the UI, and the absence of those controls is intentional for this slice.
+- Shadow-001 intentionally added no WPF mutation control. Shadow-002 now supplies a
+  separate read-only review surface; it still adds no Start, advance, submit, cancel,
+  modify, Paper, Live, credential, broker, or thinkorswim automation control.
 - Sixty focused Shadow/Schwab/host/simulation tests and 68 adjacent tests pass. Python
   compileall, all 88 .NET tests, and the zero-warning Release build pass. Repository-wide
   Python discovery timed out after 10 minutes and is not represented as a pass.
 
-Steven status: `MANUAL_NOT_YET_AVAILABLE`
+Steven status: review through the separate Shadow-002 checklist below.
 
-Do not broadly check the current app for this task. The next operator-facing slice must
-first add a safe review surface. When that separate slice exists, it must provide exact
-checks for starting one frozen decision, observing order/position chronology, reading
-the outcome, exporting the ticket, and confirming Paper/Live remain absent.
+Shadow-001 is already integrated locally. Reviewing Shadow-002 does not reopen or
+rewrite its frozen Python evidence lifecycle.
+
+## ARGUS-SHADOW-002 - WPF Shadow Review
+
+Branch: `codex/ARGUS-SHADOW-002-wpf-shadow-review`
+
+Implementation commit: `7fee390`
+
+Automated result: `AUTOMATED_PASS`
+
+Steven status: `MANUAL_PENDING`
+
+Check these one by one:
+
+1. Open
+   `docs/argus-office/reports/releases/ARGUS-SHADOW-002-wpf-shadow-review-overview-proof.png`.
+2. Confirm the workstation says `REVIEW - Read Only` and the Shadow pane says
+   `FAKEBROKER - NONTRANSMITTING`.
+3. Confirm the pane shows `Prospective Shadow Trades: 1 / 30` and separate counts for
+   completed, active, unfilled, risk-rejected, data-invalid, and excluded records.
+4. Confirm win rate, average win/loss, expectancy, average R, maximum drawdown, profit
+   factor, and ideal/executable gap are visibly `Withheld` below 30 eligible completed
+   trades.
+5. Confirm the selected record shows `Evidence frozen`, `Plan frozen`, no
+   post-decision correction, decision/evidence timestamps, lifecycle, and eligibility.
+6. Confirm the record detail distinguishes proposed entry from simulated fill and
+   exposes spread, slippage, stop, targets, exit, exit reason, P&L, R, MFE, MAE, and
+   duration where the selected lifecycle makes them available.
+7. Confirm the linked Chart, frozen Trade Plan, Why context, and History/Activity
+   review remain read-only and use the selected Shadow symbol.
+8. Confirm date/session, setup, catalyst, regime, outcome, and evidence-eligibility
+   filters are present.
+9. Confirm there is no Start Trade, submit, replace, cancel, broker, Paper, Live,
+   credential, OAuth, account, or thinkorswim automation action.
+10. Report `PASS SHADOW-002 UI PROOF` if checks 1-9 pass. On failure, report the step
+    and attach the marked screenshot.
+
+This proof uses synthetic fixtures. Passing it approves the review design only; it does
+not count a trade, start the official sample, authorize a merge/push, or create broker
+authority.
 
 ## Credential-Free Schwab Setup CLI
 
@@ -80,39 +122,54 @@ Check these one by one:
 Passing this check proves only the locked credential-free CLI. It does not authorize
 OAuth, an account connection, a callback registration, or broker requests.
 
-## First Prospective Sample
+## Official Shadow Sample Start Gate
 
 Status: `NOT_STARTED`
 
 The first accepted operational run must:
 
-1. Start only after the Shadow foundation is merged and a bounded operator workflow is
-   approved.
-2. Freeze decisions prospectively before later quotes are consumed.
-3. Use FakeBroker only and supplied Momentum Hunter observations.
-4. Reconcile selected tickets manually in thinkorswim paperMoney without GUI automation.
-5. Accumulate at least 30 completed Shadow Trades before any strategy comparison.
-6. Keep ideal results separate from estimated executable results.
-7. Record every unfilled, blocked, partial, ambiguous, and failed trade rather than
-   deleting inconvenient evidence.
+1. Start only after Shadow-001 is in the active baseline, Shadow-002 is accepted and
+   merged, and a separate sample-start proof passes.
+2. Record `SampleVersion`, strategy/configuration fingerprint, fill-model version, and
+   evidence-schema version on every counted Shadow Trade.
+3. Freeze candidate evidence, TradePlan, Risk Governor decision, and execution rules
+   prospectively before later quotes are consumed.
+4. Prove stable candidate/evidence/plan/risk/command/ledger/outcome identities,
+   duplicate-command prevention, and restart recovery without duplicate trades or
+   positions.
+5. Prove reproducible P&L, R, MFE, and MAE; documented and locked fill/spread/slippage
+   assumptions; aware timestamp/session behavior; and deterministic data-quality
+   eligibility.
+6. Use FakeBroker only and supplied Momentum Hunter observations. Reconcile selected
+   tickets manually in thinkorswim paperMoney without GUI automation.
+7. Track ideal setup results separately from estimated executable results and use the
+   estimated executable result as the primary evidence metric.
+8. Preserve every unfilled, blocked, partial, ambiguous, invalid, excluded, and failed
+   record. Do not backfill history, delete losers, select exclusions, or silently
+   recompute evidence.
+9. Make no scoring, readiness, risk, entry, stop, target, spread, slippage, or fill-model
+   change after a sample version begins. A material defect closes and preserves that
+   version before a fixed version starts.
+10. Report mechanics and evidence quality at 5, 10, 20, and 30 completed eligible
+    trades without tuning the strategy to the developing sample.
+11. Treat 30 trades as an initial engineering gate, not proof of profitability, a
+    durable edge, broker readiness, or permission to transmit an order.
 
-## Schwab Automated-Paper Decision
+## Schwab Vendor Capability And Direction
 
-Automated evidence: `AUTOMATED_PASS`
+Status: `BLOCKED_VENDOR_CAPABILITY`
 
 Schwab Support states Trader API works with live brokerage accounts only, cannot access
 paperMoney balances, positions, or orders, and has no current sandbox.
 
-Steven status: `CEO_DECISION_PENDING`
+Current direction: continue credential-free FakeBroker Shadow evidence plus manual
+thinkorswim paperMoney ticket/reconciliation. Schwab Trader API remains the eventual
+read-only and separately supervised-live target after developer access and separate
+Steven checkpoints. No interim alternate broker is approved.
 
-Choose one later:
-
-1. `WAIT_FOR_SCHWAB_SANDBOX` - recommended; continue Shadow plus manual paperMoney.
-2. `RESEARCH_ALTERNATE_PAPER_BROKER` - research only; no adapter is approved.
-3. `DEFER_BROKER_AUTOMATION` - remain on Shadow plus manual reconciliation.
-
-None of these choices authorizes use of the $100 live account, credentials, OAuth,
-broker reads, order transmission, Paper controls, or Live controls.
+This status does not authorize use of the $100 live account, credentials, OAuth,
+account access, broker reads, preview, order transmission, Paper controls, or Live
+controls.
 
 ## R026 Phase 12 Combined WPF Review
 
