@@ -4,12 +4,13 @@ Date reconciled: 2026-07-24
 
 ## Current Truth
 
-Local `master` is the canonical merged product baseline for Momentum Hunter. It contains the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, R005 tray/lifecycle work, the independent Python Engine Host, Phase 9 read-only workstation integration, Phase 10 persisted TradePlan/Risk Governor/FakeBroker simulation integration, R011/R012 chart work, ARGUS-SHADOW-001 prospective Shadow Trading, and the ARGUS-SHADOW-002 read-only WPF Shadow Review. Local `master` is seven commits ahead of `origin/master`; nothing from Shadow-001/002 was pushed to `master`.
+Local `master` at `fe3326d` is the canonical merged product baseline for Momentum Hunter. It contains the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, R005 tray/lifecycle work, the independent Python Engine Host, Phase 9 read-only workstation integration, Phase 10 persisted TradePlan/Risk Governor/FakeBroker simulation integration, R011/R012 chart work, ARGUS-SHADOW-001 prospective Shadow Trading, and the ARGUS-SHADOW-002 read-only WPF Shadow Review. Local `master` is seven commits ahead of `origin/master`; nothing from Shadow-001/002 was pushed to `master`. ARGUS-SHADOW-003 is a clean two-commit local branch ahead of `master` and is not yet canonical.
 
 Git evidence at reconciliation time:
 
 - Steven approved the local fast-forward of `codex/ARGUS-SHADOW-002-wpf-shadow-review`.
 - Local `master` contains ARGUS-SHADOW-001 through `bb962be` and ARGUS-SHADOW-002 implementation `7fee390` plus governance closeout.
+- `codex/ARGUS-SHADOW-003-sample-readiness-gate` contains implementation commit `9002df0` one commit beyond local `master` plus this governance closeout; it has no remote branch or merge approval.
 - Remote `master` remains at `69feedf46c6e2c94499d4256b63b355f1619bf14`.
 - ARGUS-SHADOW-001's matching feature branch is remotely backed up at `bb962be`; ARGUS-SHADOW-002 is not pushed.
 - `codex/ARGUS-A016T-schwab-paper-api-response` records Schwab's live-only, no-paperMoney, no-sandbox answer on a separate unmerged branch. A017 is blocked by vendor capability.
@@ -52,14 +53,16 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `54c58a8` | Map Shadow Trading lifecycle wiring | Yes |
 | `5d11f02` | Build prospective Shadow Trading validation | Yes |
 | `7fee390` | Add WPF Shadow Trading review surface | Yes |
+| `9002df0` | Add Shadow sample readiness gate | No; branch-only |
 
 ## Branch Classifications
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | Shadow-002 integration tip containing `7fee390` | No; `origin/master` remains at `69feedf` | Yes | `ACTIVE` | Canonical Python engine, WPF operator surface, Shadow-001 lifecycle, and Shadow-002 read-only review. | Implement and prove the separate sample-start gate; do not start official trade 1 yet. |
+| `master` | `fe3326d` | No; `origin/master` remains at `69feedf` | Yes | `ACTIVE` | Canonical Python engine, WPF operator surface, Shadow-001 lifecycle, and Shadow-002 read-only review. | Review Shadow-003 for a separate fast-forward decision; do not start official trade 1. |
+| `codex/ARGUS-SHADOW-003-sample-readiness-gate` | `9002df0` plus this governance closeout | No | No | `IMPLEMENTED_PENDING_MERGE` | Immutable sample/config/fill/evidence metadata, fail-closed eligibility and readiness audit, gated metrics, and read-only locked WPF proof. | Steven reviews the exact checklist and separately approves or declines a local fast-forward. No sample start or stacked Shadow branch yet. |
 | `codex/ARGUS-SHADOW-001-shadow-trading-wiring-audit` | `bb962be` | Yes; feature branch only | Yes | `MERGED_TO_LOCAL_MASTER` | Prospective frozen-evidence Shadow Trading, quote-driven FakeBroker lifecycle/outcomes, durable audit/metrics, manual paperMoney ticket, and network-free Schwab read-only preparation. | Preserve as remotely backed-up audit history. |
-| `codex/ARGUS-SHADOW-002-wpf-shadow-review` | `7fee390` plus governance closeout | No | Yes | `MERGED_TO_LOCAL_MASTER` | Read-only WPF Shadow review, strict identity-chain audit, filters, linked review panes, and minimum-sample metric gating. | Preserve locally; next work starts from local `master`, not this branch. |
+| `codex/ARGUS-SHADOW-002-wpf-shadow-review` | `fe3326d` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Read-only WPF Shadow review, strict identity-chain audit, filters, linked review panes, and minimum-sample metric gating. | Preserve locally; next work starts from local `master`, not this branch. |
 | `codex/ARGUS-R026-wpf-phase12-clean-room-integration` | `838ed22` | No | No | `NEEDS_REVIEW` | Consolidated R013-R025 WPF implementation and unattended Qt test hardening. | Complete its separate operator checklist; do not combine its merge decision with Shadow Trading. |
 | `codex/ARGUS-A016T-schwab-paper-api-response` | `1bc90a8` | No | No | `NEEDS_REVIEW` | Preserves Schwab Support's live-only, no-paperMoney, no-sandbox response and broker decision consequences. | Keep A017 blocked; preserve as branch evidence. |
 | `codex/ARGUS-R012-wpf-chart-readability` | `69feedf` | Commit backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Deterministic WPF chart price/time axes and latest stored-bar OHLCV details with no engine or provider change. | Historical integration branch. |

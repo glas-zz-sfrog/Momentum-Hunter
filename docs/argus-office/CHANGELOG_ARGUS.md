@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added ARGUS-SHADOW-003's immutable sample version, strategy/configuration fingerprint, fill-model version, evidence-schema version, and explicit sample-authorization metadata to prospective Shadow records and nontransmitting tickets.
+- Added a deterministic fail-closed sample-readiness audit and strict Python/.NET projection checks that preserve but exclude legacy, unauthorized, obsolete, malformed, tampered, or configuration-mismatched evidence and withhold all profitability metrics until the exact active sample reaches its gate.
+- Added the read-only `SAMPLE START LOCKED` WPF state and CLI-rendered proof; no start action, official trade, broker capability, Paper/Live authority, merge, or push was added.
 - Fast-forwarded Steven-approved ARGUS-SHADOW-002 into local `master` after fresh Python compileall, 84 bounded Python tests, all 98 .NET tests, and a zero-warning Release build; nothing was pushed and the official sample remains locked.
 - Added the read-only WPF Shadow Review with strict frozen-identity audit, lifecycle and eligibility filters, linked Chart/Trade Plan/Why/Activity context, explicit FakeBroker nontransmitting language, and metrics withheld below 30 eligible completed trades.
 - Added prospective Shadow Trading with frozen source/plan/risk evidence, restart-safe command receipts, stable lifecycle IDs, quote-driven conservative FakeBroker fills/exits, durable ledger/audit/outcomes, executable P&L/R/MFE/MAE, sample-gated metrics, and nontransmitting thinkorswim paperMoney tickets.

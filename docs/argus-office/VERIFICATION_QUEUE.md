@@ -26,8 +26,9 @@ mode.
 | --- | --- | --- | --- | --- |
 | ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `MANUAL_PENDING` through Shadow-002 | Integrated into local `master` at `bb962be`; remotely backed up on its feature branch | Confirm the frozen Python lifecycle is represented read-only and without order authority in Shadow-002 |
 | ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated into local `master`; not pushed | The preserved checklist remains an audit reference; merge approval does not start the official sample |
+| ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MANUAL_PENDING` | `IMPLEMENTED_PENDING_MERGE` at `9002df0`; not pushed | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
-| Official Shadow sample start gate | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-002 is integrated; a separate gate proof is still required | Prove versioning, immutable identity/evidence, deterministic execution assumptions, eligibility, and checkpoint rules before collecting trade 1 |
+| Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 engineering gate is branch-only; sample authorization has not been granted | Do not collect trade 1 until Shadow-003 is accepted and integrated and Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | `MANUAL_PENDING` | Separate branch; not merged here | Complete the R026 workstation checklist from its isolated review build; it is not part of ARGUS-SHADOW-001 |
 
@@ -105,6 +106,57 @@ This proof uses synthetic fixtures. Steven separately granted local merge approv
 individually reported. The proof and merge do not count a trade, start the official
 sample, authorize a push, or create broker authority.
 
+## ARGUS-SHADOW-003 - Sample Readiness Gate
+
+Branch: `codex/ARGUS-SHADOW-003-sample-readiness-gate`
+
+Implementation commit: `9002df0`
+
+Automated result: `AUTOMATED_PASS`
+
+Steven status: `MANUAL_PENDING`
+
+Integration status: `IMPLEMENTED_PENDING_MERGE`; nothing was pushed.
+
+Automated proof:
+
+- Every new Shadow Trade and nontransmitting ticket freezes sample version,
+  strategy/configuration fingerprint, fill-model version, and evidence-schema version.
+- The fingerprint is deterministic from the existing Shadow execution policy and
+  versioned strategy/fill/evidence contracts.
+- Legacy/unversioned state remains byte-identical when read and is excluded rather
+  than backfilled. Tampered, malformed, unauthorized, obsolete, or configuration-
+  mismatched records fail closed.
+- Both raw and review aggregate metric paths are withheld below 30 eligible completed
+  records and exclude records outside the exact active sample definition.
+- Default runtime readiness is `BLOCKED`; opening a snapshot creates no state. The
+  engineering pass object has no start method, broker method, or side effect.
+- Python compileall, 112 bounded Python tests, all 100 .NET tests, and the zero-warning
+  Release build passed. Ninety of 92 bounded Python test modules passed; unchanged
+  legacy Qt modules `tests.test_entry_plans` and `tests.test_gui_states` exceeded a
+  fresh 120-second bound.
+
+Check these one by one:
+
+1. Open
+   `docs/argus-office/reports/releases/ARGUS-SHADOW-003-sample-readiness-gate-overview-proof.png`.
+2. Confirm the pane says `SAMPLE START LOCKED` and explains that official sample
+   collection has not received its separate authorization checkpoint.
+3. Confirm the definition line identifies `engineering-preflight-v1`, fill model
+   `prospective-fakebroker-v1`, evidence schema `v1`, and a configuration fingerprint.
+4. Confirm the pane says `Prospective Shadow Trades: 0 / 30`, all aggregate metrics are
+   `Withheld`, and every synthetic preflight record is `EXCLUDED`.
+5. Confirm the workstation remains `REVIEW - Read Only` and the pane says
+   `FAKEBROKER - NONTRANSMITTING`.
+6. Confirm there is no start-sample, create-trade, submit, replace, cancel, broker,
+   Paper, Live, credential, OAuth, account, or thinkorswim automation action.
+7. Report `PASS SHADOW-003 UI PROOF` if checks 1-6 pass. On failure, report the failed
+   step and attach the marked screenshot.
+
+Passing this checklist does not merge or push the branch and does not authorize
+official sample trade 1. Merge and exact sample-start authorization remain separate
+Steven decisions.
+
 ## Credential-Free Schwab Setup CLI
 
 Automated result: `AUTOMATED_PASS`
@@ -130,7 +182,8 @@ OAuth, an account connection, a callback registration, or broker requests.
 
 ## Official Shadow Sample Start Gate
 
-Status: `NOT_STARTED`
+Status: `NOT_STARTED`; the engineering gate is implemented on an unmerged branch, and
+official sample authorization has not been granted.
 
 The first accepted operational run must:
 
