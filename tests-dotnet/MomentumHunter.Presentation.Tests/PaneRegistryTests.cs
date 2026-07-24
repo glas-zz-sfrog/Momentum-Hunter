@@ -74,11 +74,22 @@ public sealed class PaneRegistryTests
     {
         var registry = WorkspaceFactory.Create(workspace);
 
-        var expectedPaneCount = workspace == WorkspaceKind.Live ? 10 : 5;
+        var expectedPaneCount = workspace switch
+        {
+            WorkspaceKind.Live => 10,
+            WorkspaceKind.Review => 6,
+            _ => 5,
+        };
         Assert.Equal(expectedPaneCount, registry.Panes.Count);
         Assert.Equal(hunterTitle, registry.Panes.Single(pane => pane.Kind == PaneKind.Hunter).Title);
         Assert.Equal(lowerPaneVisible, registry.Panes.Single(pane => pane.Kind == lowerPaneKind).IsVisible);
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Diagnostics).IsVisible);
+        if (workspace == WorkspaceKind.Review)
+        {
+            var shadowReview = registry.Panes.Single(pane => pane.Kind == PaneKind.ShadowReview);
+            Assert.True(shadowReview.IsVisible);
+            Assert.Equal(LinkGroup.A, shadowReview.LinkGroup);
+        }
     }
 
     [Fact]

@@ -667,6 +667,7 @@ class ShadowTradingService:
     def snapshot(self) -> dict[str, Any]:
         state = self.store.load()
         audits = {trade.shadow_trade_id: audit_shadow_trade(trade) for trade in state.trades}
+        review = build_shadow_review_snapshot(state.trades, audits)
         return {
             "schemaVersion": SHADOW_SCHEMA_VERSION,
             "mode": SHADOW_MODE,
@@ -675,6 +676,9 @@ class ShadowTradingService:
             "summary": "Prospective Shadow Trading uses supplied evidence and FakeBroker execution only.",
             "trades": [shadow_trade_to_dict(trade) for trade in state.trades],
             "metrics": shadow_metrics(state.trades),
+            "reviewTrades": review["trades"],
+            "sample": review["sample"],
+            "reviewMetrics": review["metrics"],
             "audits": {
                 trade_id: {
                     "status": report.status,
@@ -1017,12 +1021,22 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
     for field_name, value in required.items():
         if not value.strip():
             findings.append(AuditFinding(trade.shadow_trade_id, field_name, f"Missing Shadow Trading identifier: {field_name}"))
-    if hashlib.sha256(trade.trade_plan_json.encode("utf-8")).hexdigest() != trade.plan_fingerprint:
-        findings.append(AuditFinding(trade.shadow_trade_id, "plan_fingerprint", "Frozen TradePlan fingerprint does not match."))
-    if trade.evidence.evidence_snapshot_id != trade.evidence_snapshot_id:
-        findings.append(AuditFinding(trade.shadow_trade_id, "evidence_snapshot_id", "Evidence identity does not match the trade."))
-    if hashlib.sha256(trade.evidence.source_report_json.encode("utf-8")).hexdigest() != trade.evidence.source_sha256:
-        findings.append(AuditFinding(trade.shadow_trade_id, "source_sha256", "Frozen source report does not match its hash."))
+    findings.extend(frozen_evidence_findings(trade))
+    findings.extend(frozen_plan_findings(trade))
+    expected_shadow_trade_id = stable_id("shadow-trade", trade.simulation_command_id, trade.evidence_snapshot_id)
+    if trade.shadow_trade_id != expected_shadow_trade_id:
+        findings.append(AuditFinding(trade.shadow_trade_id, "shadow_trade_id", "Shadow Trade identity does not match its command and evidence identities."))
+    if trade.outcome_id != stable_id("shadow-outcome", trade.shadow_trade_id):
+        findings.append(AuditFinding(trade.shadow_trade_id, "outcome_id", "Outcome identity does not match its Shadow Trade."))
+    expected_risk_id = stable_id("risk", trade.evidence_snapshot_id, trade.trade_plan_id)
+    if trade.risk_decision_id != expected_risk_id:
+        findings.append(AuditFinding(trade.shadow_trade_id, "risk_decision_id", "Risk decision identity does not match the frozen evidence and TradePlan."))
+    try:
+        risk_payload = trade.risk_result_payload()
+    except (json.JSONDecodeError, TypeError, ValueError):
+        risk_payload = {}
+    if str(risk_payload.get("result_id", "")) != trade.risk_decision_id:
+        findings.append(AuditFinding(trade.shadow_trade_id, "risk_result_json", "Frozen Risk Governor result does not match its identity."))
     ledger_report = audit_execution_ledger(ExecutionLedger(list(trade.ledger_events)))
     findings.extend(ledger_report.findings)
     actions = [event.requested_action for event in trade.ledger_events]
@@ -1041,6 +1055,340 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
     if len({event.event_id for event in trade.ledger_events}) != len(trade.ledger_events):
         findings.append(AuditFinding(trade.shadow_trade_id, "event_id", "Duplicate ledger event identifier."))
     return AuditReport("PASS" if not findings else "FAIL", findings)
+
+
+def frozen_evidence_findings(trade: ShadowTrade) -> list[AuditFinding]:
+    findings: list[AuditFinding] = []
+    if trade.evidence.evidence_snapshot_id != trade.evidence_snapshot_id:
+        findings.append(AuditFinding(trade.shadow_trade_id, "evidence_snapshot_id", "Evidence identity does not match the trade."))
+    if trade.evidence.candidate_id != trade.candidate_id:
+        findings.append(AuditFinding(trade.shadow_trade_id, "candidate_id", "Frozen evidence candidate identity does not match the trade."))
+    if trade.evidence.decision_timestamp != trade.decision_timestamp:
+        findings.append(AuditFinding(trade.shadow_trade_id, "decision_timestamp", "Frozen evidence decision timestamp does not match the trade."))
+    if hashlib.sha256(trade.evidence.source_report_json.encode("utf-8")).hexdigest() != trade.evidence.source_sha256:
+        findings.append(AuditFinding(trade.shadow_trade_id, "source_sha256", "Frozen source report does not match its hash."))
+    try:
+        source_report = json.loads(trade.evidence.source_report_json)
+        candidate_payload = json.loads(trade.evidence.candidate_json)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        findings.append(AuditFinding(trade.shadow_trade_id, "candidate_json", "Frozen source or candidate evidence is not valid JSON."))
+        return findings
+    if not isinstance(source_report, dict) or not isinstance(candidate_payload, dict):
+        findings.append(AuditFinding(trade.shadow_trade_id, "candidate_json", "Frozen source and candidate evidence must be objects."))
+        return findings
+    metadata = source_report.get("metadata", {}) if isinstance(source_report.get("metadata"), dict) else {}
+    if str(metadata.get("generated_at", "")) != trade.evidence.source_generated_at:
+        findings.append(AuditFinding(trade.shadow_trade_id, "source_generated_at", "Frozen source generation timestamp does not match its report."))
+    if str(metadata.get("source_capture_path", "")) != trade.evidence.source_capture_path:
+        findings.append(AuditFinding(trade.shadow_trade_id, "source_capture_path", "Frozen capture path does not match its report."))
+    if str(metadata.get("source_capture_time", "")) != trade.evidence.source_capture_time:
+        findings.append(AuditFinding(trade.shadow_trade_id, "source_capture_time", "Frozen capture timestamp does not match its report."))
+    rows = source_report.get("candidates") or source_report.get("top_5_for_capital") or []
+    matches = [
+        (index, row)
+        for index, row in enumerate(rows, 1)
+        if isinstance(row, dict) and str(row.get("symbol", "")).upper() == trade.symbol.upper()
+    ] if isinstance(rows, list) else []
+    if len(matches) != 1 or canonical_json(matches[0][1]) != trade.evidence.candidate_json:
+        findings.append(AuditFinding(trade.shadow_trade_id, "candidate_json", "Frozen candidate evidence does not match the frozen source report."))
+        return findings
+    rank, _ = matches[0]
+    source_capture_key = "|".join(
+        [
+            trade.evidence.source_capture_path,
+            trade.evidence.source_capture_time,
+            trade.symbol.upper(),
+            str(rank),
+        ]
+    )
+    expected_candidate_id = stable_id(
+        "candidate",
+        source_capture_key,
+        trade.evidence.source_sha256,
+        trade.evidence.candidate_json,
+    )
+    if trade.candidate_id != expected_candidate_id:
+        findings.append(AuditFinding(trade.shadow_trade_id, "candidate_id", "Candidate identity does not match the frozen candidate evidence."))
+    expected_evidence_id = stable_id(
+        "evidence",
+        trade.evidence.source_sha256,
+        trade.evidence.candidate_json,
+        trade.decision_timestamp,
+    )
+    if trade.evidence_snapshot_id != expected_evidence_id:
+        findings.append(AuditFinding(trade.shadow_trade_id, "evidence_snapshot_id", "Evidence identity does not match the frozen source, candidate, and decision time."))
+    return findings
+
+
+def frozen_plan_findings(trade: ShadowTrade) -> list[AuditFinding]:
+    findings: list[AuditFinding] = []
+    if hashlib.sha256(trade.trade_plan_json.encode("utf-8")).hexdigest() != trade.plan_fingerprint:
+        findings.append(AuditFinding(trade.shadow_trade_id, "plan_fingerprint", "Frozen TradePlan fingerprint does not match."))
+    try:
+        plan = trade.trade_plan()
+        candidate_payload = trade.evidence.candidate_payload()
+    except (json.JSONDecodeError, TypeError, ValueError):
+        findings.append(AuditFinding(trade.shadow_trade_id, "trade_plan_json", "Frozen TradePlan evidence is not valid."))
+        return findings
+    if stable_trade_plan_id(trade.symbol, plan) != trade.trade_plan_id:
+        findings.append(AuditFinding(trade.shadow_trade_id, "trade_plan_id", "TradePlan identity does not match the frozen plan."))
+    candidate_plan = candidate_payload.get("trade_plan")
+    if not isinstance(candidate_plan, dict) or canonical_json(candidate_plan) != trade.trade_plan_json:
+        findings.append(AuditFinding(trade.shadow_trade_id, "trade_plan_json", "Frozen TradePlan does not match the candidate evidence snapshot."))
+    return findings
+
+
+def build_shadow_review_snapshot(
+    trades: Iterable[ShadowTrade],
+    audits: dict[str, AuditReport] | None = None,
+) -> dict[str, Any]:
+    items = list(trades)
+    audit_by_id = audits or {trade.shadow_trade_id: audit_shadow_trade(trade) for trade in items}
+    review_trades = [
+        shadow_review_trade_to_dict(trade, audit_by_id[trade.shadow_trade_id])
+        for trade in items
+    ]
+    eligible_completed = [
+        trade
+        for trade, review in zip(items, review_trades)
+        if review["countsTowardSample"]
+    ]
+    metrics = shadow_metrics(eligible_completed)
+    gated_fields = (
+        "winRatePercent",
+        "averageWin",
+        "averageLoss",
+        "expectancy",
+        "averageR",
+        "maximumDrawdown",
+        "profitFactor",
+        "idealPnl",
+        "executablePnl",
+        "idealVsExecutableGap",
+    )
+    if metrics["sampleStatus"] != "MEANINGFUL":
+        for field_name in gated_fields:
+            metrics[field_name] = None
+        metrics["conclusion"] = (
+            "Evidence collection in progress. Results are not yet sufficient for strategy conclusions."
+        )
+    active_count = sum(1 for trade in items if trade.status in ACTIVE_TRADE_STATES)
+    sample = {
+        "minimumRequired": MIN_MEANINGFUL_SAMPLE_SIZE,
+        "eligibleCompleted": len(eligible_completed),
+        "completed": sum(1 for trade in items if trade.status == "completed"),
+        "active": active_count,
+        "unfilled": sum(1 for trade in items if trade.status == "pending_entry"),
+        "riskRejected": sum(1 for trade in items if trade.status == "blocked"),
+        "dataQualityInvalidated": sum(1 for trade in items if trade.data_quality_state != "COMPLETE"),
+        "excluded": sum(1 for review in review_trades if not review["evidenceEligible"]),
+        "gateSatisfied": len(eligible_completed) >= MIN_MEANINGFUL_SAMPLE_SIZE,
+        "status": (
+            "Evidence sample is sufficient for descriptive aggregate metrics."
+            if len(eligible_completed) >= MIN_MEANINGFUL_SAMPLE_SIZE
+            else "Evidence collection in progress. Results are not yet sufficient for strategy conclusions."
+        ),
+    }
+    return {"trades": review_trades, "sample": sample, "metrics": metrics}
+
+
+def shadow_review_trade_to_dict(trade: ShadowTrade, audit: AuditReport) -> dict[str, Any]:
+    plan = trade.trade_plan()
+    risk = trade.risk_result_payload()
+    plan_frozen = not frozen_plan_findings(trade)
+    evidence_frozen = not frozen_evidence_findings(trade)
+    correction_terms = ("correct", "override", "amend", "edit", "mutat")
+    correction_events = [
+        event
+        for event in trade.ledger_events
+        if any(
+            term in f"{event.event_type} {event.requested_action}".lower()
+            for term in correction_terms
+        )
+    ]
+    post_decision_correction = bool(correction_events)
+    lock_reasons: list[str] = []
+    if not evidence_frozen:
+        lock_reasons.append("Frozen evidence identity or source hash does not match.")
+    if not plan_frozen:
+        lock_reasons.append("Frozen TradePlan fingerprint does not match.")
+    if post_decision_correction:
+        lock_reasons.append("A post-decision correction or override event exists.")
+    if audit.status != "PASS":
+        lock_reasons.extend(finding.message for finding in audit.findings)
+    if trade.data_quality_state != "COMPLETE":
+        lock_reasons.append(f"Data quality is {trade.data_quality_state}; this record is excluded.")
+    evidence_eligible = (
+        evidence_frozen
+        and plan_frozen
+        and not post_decision_correction
+        and audit.status == "PASS"
+        and trade.data_quality_state == "COMPLETE"
+    )
+    counts_toward_sample = (
+        evidence_eligible
+        and trade.status == "completed"
+        and trade.outcome is not None
+        and trade.outcome.status == "COMPLETED"
+    )
+    fill_events = [
+        event
+        for event in trade.ledger_events
+        if event.requested_action == "fake_order_filled"
+    ]
+    last_fill = fill_events[-1] if fill_events else None
+    spread_percent = numeric_payload(last_fill, "spread_percent")
+    slippage_bps = numeric_payload(last_fill, "slippage_bps")
+    if (
+        slippage_bps is None
+        and trade.order is not None
+        and trade.order.average_fill_price is not None
+        and plan.bullish_entry
+    ):
+        slippage_bps = round(
+            (trade.order.average_fill_price - plan.bullish_entry) / plan.bullish_entry * 10_000,
+            4,
+        )
+    execution_explanation = shadow_execution_quality_explanation(
+        trade,
+        spread_percent=spread_percent,
+        slippage_bps=slippage_bps,
+    )
+    outcome = trade.outcome
+    return {
+        "shadowTradeId": trade.shadow_trade_id,
+        "symbol": trade.symbol,
+        "setup": trade.setup_type or "Unknown",
+        "catalyst": trade.catalyst or "Unknown",
+        "marketRegime": trade.market_regime or "Unknown",
+        "session": trade.ticket.session if trade.ticket is not None else "Unknown",
+        "decisionTimestamp": trade.decision_timestamp,
+        "evidenceSnapshotTimestamp": (
+            trade.evidence.source_capture_time
+            or trade.evidence.source_generated_at
+            or trade.evidence.decision_timestamp
+        ),
+        "tradePlanId": trade.trade_plan_id,
+        "riskDecisionId": trade.risk_decision_id,
+        "riskDecision": str(risk.get("status") or "Unavailable"),
+        "riskReasons": [str(reason) for reason in risk.get("reasons", []) if str(reason).strip()],
+        "proposedEntry": plan.bullish_entry,
+        "simulatedFill": trade.order.average_fill_price if trade.order is not None else None,
+        "spreadPercent": spread_percent,
+        "slippageBps": slippage_bps,
+        "stop": plan.bullish_stop,
+        "targets": [
+            value
+            for value in (plan.bullish_target_1, plan.bullish_target_2)
+            if value is not None
+        ],
+        "exit": outcome.exit_price if outcome is not None else None,
+        "exitReason": outcome.exit_reason if outcome is not None else "",
+        "idealPnl": outcome.gross_pnl if outcome is not None else None,
+        "executablePnl": outcome.executable_pnl if outcome is not None else None,
+        "rMultiple": outcome.r_multiple if outcome is not None else None,
+        "mfeDollars": outcome.mfe_dollars if outcome is not None else None,
+        "maeDollars": outcome.mae_dollars if outcome is not None else None,
+        "durationSeconds": outcome.duration_seconds if outcome is not None else None,
+        "outcome": (
+            outcome.classification
+            if outcome is not None
+            else "RISK_REJECTED"
+            if trade.status == "blocked"
+            else "UNFILLED"
+            if trade.status == "pending_entry"
+            else "ACTIVE"
+            if trade.status in ACTIVE_TRADE_STATES
+            else trade.status.upper()
+        ),
+        "lifecycleState": trade.status,
+        "dataQualityState": trade.data_quality_state,
+        "lastReason": trade.last_reason,
+        "evidenceLock": {
+            "evidenceFrozen": evidence_frozen,
+            "planFrozen": plan_frozen,
+            "decisionTimestamp": trade.decision_timestamp,
+            "postDecisionCorrectionOccurred": post_decision_correction,
+            "auditStatus": audit.status,
+            "reasons": lock_reasons,
+        },
+        "evidenceEligible": evidence_eligible,
+        "countsTowardSample": counts_toward_sample,
+        "executionQuality": {
+            "summary": execution_explanation[0],
+            "factors": execution_explanation,
+            "technicalCodes": [
+                {
+                    "timestamp": event.timestamp,
+                    "eventType": event.event_type,
+                    "action": event.requested_action,
+                    "result": event.result,
+                    "reason": event.reason,
+                }
+                for event in trade.ledger_events
+            ],
+        },
+    }
+
+
+def shadow_execution_quality_explanation(
+    trade: ShadowTrade,
+    *,
+    spread_percent: float | None,
+    slippage_bps: float | None,
+) -> list[str]:
+    explanations: list[str] = []
+    if trade.status == "blocked":
+        explanations.append("Risk Governor rejected the prospective trade before FakeBroker execution.")
+    if trade.status == "pending_entry":
+        explanations.append("No fill has occurred; the FakeBroker limit remains pending.")
+    if trade.order is not None and trade.order.status == "partially_filled":
+        explanations.append(
+            f"Partial fill: {trade.order.filled_quantity} of {trade.order.quantity} simulated shares filled."
+        )
+    if trade.order is not None and trade.order.average_fill_price is not None:
+        if spread_percent is not None:
+            explanations.append(f"Observed spread at fill was {spread_percent:.2f}%.")
+        if slippage_bps is not None:
+            explanations.append(f"FakeBroker applied {slippage_bps:.2f} basis points of entry slippage.")
+        submitted = parse_datetime(trade.order.submitted_at)
+        filled = parse_datetime(trade.order.last_update_at)
+        if submitted is not None and filled is not None and filled > submitted:
+            delay_seconds = int((filled - submitted).total_seconds())
+            explanations.append(f"Simulated fill arrived {delay_seconds} seconds after the frozen decision.")
+    for event in trade.ledger_events:
+        combined = f"{event.event_type} {event.result} {event.reason}".lower()
+        if event.requested_action == "fake_order_unfilled":
+            explanations.append(f"No fill: {event.reason or 'the later quote did not satisfy the limit.'}")
+        elif event.requested_action == "shadow_quote_rejected":
+            if "stale" in combined:
+                explanations.append(f"Stale quote rejected: {event.reason}")
+            elif "no quote" in combined or "missing" in combined:
+                explanations.append(f"Missing quote: {event.reason}")
+            elif "halt" in combined:
+                explanations.append(f"Trading halt: {event.reason}")
+            else:
+                explanations.append(f"Quote rejected: {event.reason}")
+    if (
+        trade.outcome is not None
+        and trade.outcome.exit_reason == "stop"
+        and trade.position is not None
+        and trade.outcome.exit_price < trade.position.stop_price
+    ):
+        gap = trade.position.stop_price - trade.outcome.exit_price
+        explanations.append(f"Stop gap: executable exit was ${gap:.4f} below the frozen stop.")
+    if not explanations:
+        explanations.append("No execution-quality difference is recorded yet.")
+    return list(dict.fromkeys(explanations))
+
+
+def numeric_payload(event: ExecutionLedgerEvent | None, name: str) -> float | None:
+    if event is None:
+        return None
+    value = event.payload.get(name)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
 
 
 def shadow_metrics(trades: Iterable[ShadowTrade]) -> dict[str, Any]:

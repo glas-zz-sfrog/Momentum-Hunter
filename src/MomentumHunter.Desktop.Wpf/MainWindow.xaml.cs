@@ -27,6 +27,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
     private const string PositionsContentId = "pane-positions";
     private const string ReplayEventsContentId = "pane-replay-events";
     private const string ReviewOutcomesContentId = "pane-review-outcomes";
+    private const string ShadowReviewContentId = "pane-shadow-review";
 
     private readonly ShellViewModel _viewModel;
     private readonly IApplicationLifetimeCoordinator _lifetime;
@@ -110,6 +111,15 @@ public partial class MainWindow : Window, IWorkstationPresentation
         if (e.AddedItems.OfType<CandidateSnapshot>().FirstOrDefault() is { } candidate && candidate != _viewModel.SelectedCandidate)
         {
             await _viewModel.SelectCandidateAsync(candidate);
+        }
+    }
+
+    private async void ShadowTradesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_viewModel.Workspace == WorkspaceKind.Review
+            && e.AddedItems.OfType<ShadowTradeReviewSnapshot>().FirstOrDefault() is { } trade)
+        {
+            await _viewModel.SelectShadowTradeAsync(trade);
         }
     }
 
@@ -378,6 +388,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
         _contentById[PositionsContentId] = PositionsAnchor.Content;
         _contentById[ReplayEventsContentId] = ReplayEventsAnchor.Content;
         _contentById[ReviewOutcomesContentId] = ReviewOutcomesAnchor.Content;
+        _contentById[ShadowReviewContentId] = ShadowReviewAnchor.Content;
     }
 
     private void RestoreDockLayout(string? explicitLayoutXml = null)
@@ -415,6 +426,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             WatchlistContentId,
             ReplayEventsContentId,
             ReviewOutcomesContentId,
+            ShadowReviewContentId,
         }.All(contentId => xml.Contains(contentId, StringComparison.Ordinal));
     }
 
@@ -548,6 +560,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             PositionsContentId,
             ReplayEventsContentId,
             ReviewOutcomesContentId,
+            ShadowReviewContentId,
         })
         {
             if (FindLayoutContent(contentId) is { } content)
@@ -613,6 +626,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             PaneKind.Positions => PositionsContentId,
             PaneKind.ReplayEvents => ReplayEventsContentId,
             PaneKind.ReviewOutcomes => ReviewOutcomesContentId,
+            PaneKind.ShadowReview => ShadowReviewContentId,
             _ => pane.InstanceId.ToString("N"),
         };
     }
@@ -638,6 +652,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
             PositionsContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Positions),
             ReplayEventsContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.ReplayEvents),
             ReviewOutcomesContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.ReviewOutcomes),
+            ShadowReviewContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.ShadowReview),
             _ => null,
         };
     }

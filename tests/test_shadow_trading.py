@@ -24,6 +24,7 @@ from momentum_hunter.shadow_trading import (
     ShadowTradingService,
     ProspectiveFakeBroker,
     audit_shadow_trade,
+    build_shadow_review_snapshot,
     shadow_metrics,
 )
 from momentum_hunter.workstation_shadow import ShadowWorkspacePaths, ShadowWorkspaceService
@@ -456,6 +457,83 @@ class ShadowMetricsTests(unittest.TestCase):
         self.assertEqual("MEANINGFUL", meaningful["sampleStatus"])
         self.assertEqual(2.0, meaningful["profitFactor"])
 
+    def test_review_projection_gates_metrics_and_proves_frozen_evidence(self) -> None:
+        trade = completed_auditable_trade(1)
+
+        review = build_shadow_review_snapshot([trade])
+
+        item = review["trades"][0]
+        self.assertTrue(item["evidenceLock"]["evidenceFrozen"])
+        self.assertTrue(item["evidenceLock"]["planFrozen"])
+        self.assertFalse(item["evidenceLock"]["postDecisionCorrectionOccurred"])
+        self.assertEqual("PASS", item["evidenceLock"]["auditStatus"])
+        self.assertTrue(item["evidenceEligible"])
+        self.assertTrue(item["countsTowardSample"])
+        self.assertEqual(1, review["sample"]["eligibleCompleted"])
+        self.assertFalse(review["sample"]["gateSatisfied"])
+        self.assertIsNone(review["metrics"]["winRatePercent"])
+        self.assertIn("not yet sufficient", review["sample"]["status"])
+        self.assertIn("basis points", " ".join(item["executionQuality"]["factors"]))
+
+    def test_review_projection_fails_closed_for_mutated_plan_and_post_decision_correction(self) -> None:
+        trade = completed_auditable_trade(2)
+        correction = replace(
+            trade.ledger_events[-1],
+            event_id="manual-correction-event",
+            event_type="manual_override",
+            requested_action="manual_override",
+            result="changed",
+            reason="Synthetic post-decision correction.",
+        )
+        mutated = replace(
+            trade,
+            trade_plan_json=trade.trade_plan_json.replace('"bullish_entry":10.0', '"bullish_entry":10.1'),
+            ledger_events=(*trade.ledger_events, correction),
+        )
+
+        review = build_shadow_review_snapshot([mutated])
+
+        item = review["trades"][0]
+        self.assertFalse(item["evidenceLock"]["planFrozen"])
+        self.assertTrue(item["evidenceLock"]["postDecisionCorrectionOccurred"])
+        self.assertFalse(item["evidenceEligible"])
+        self.assertFalse(item["countsTowardSample"])
+        self.assertEqual(1, review["sample"]["excluded"])
+        self.assertEqual(0, review["sample"]["eligibleCompleted"])
+
+    def test_review_projection_recomputes_candidate_and_evidence_identity_chain(self) -> None:
+        trade = completed_auditable_trade(3)
+        candidate_payload = trade.evidence.candidate_payload()
+        candidate_payload["symbol"] = "ALTERED"
+        mutated = replace(
+            trade,
+            evidence=replace(
+                trade.evidence,
+                candidate_json=json.dumps(candidate_payload, sort_keys=True, separators=(",", ":")),
+            ),
+        )
+
+        review = build_shadow_review_snapshot([mutated])
+
+        item = review["trades"][0]
+        self.assertFalse(item["evidenceLock"]["evidenceFrozen"])
+        self.assertEqual("FAIL", item["evidenceLock"]["auditStatus"])
+        self.assertFalse(item["countsTowardSample"])
+        self.assertTrue(
+            any("candidate evidence" in reason.lower() for reason in item["evidenceLock"]["reasons"])
+        )
+
+    def test_review_projection_releases_aggregate_metrics_at_thirty_eligible_completed_trades(self) -> None:
+        trades = [completed_auditable_trade(index) for index in range(MIN_MEANINGFUL_SAMPLE_SIZE)]
+
+        review = build_shadow_review_snapshot(trades)
+
+        self.assertTrue(review["sample"]["gateSatisfied"])
+        self.assertEqual(MIN_MEANINGFUL_SAMPLE_SIZE, review["sample"]["eligibleCompleted"])
+        self.assertEqual("MEANINGFUL", review["metrics"]["sampleStatus"])
+        self.assertIsNotNone(review["metrics"]["winRatePercent"])
+        self.assertIsNotNone(review["metrics"]["expectancy"])
+
 
 class ShadowWorkspaceIntegrationTests(unittest.TestCase):
     def test_persisted_monitor_observation_advances_active_trade(self) -> None:
@@ -642,6 +720,50 @@ def completed_trade(index: int, *, executable_pnl: float):
         duration_seconds=1800,
     )
     return replace(trade, status="completed", outcome=outcome, setup_type="setup", catalyst="catalyst")
+
+
+def completed_auditable_trade(index: int):
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        report = root / "report.json"
+        report.write_text(json.dumps(report_payload()), encoding="utf-8")
+        service = ShadowTradingService(
+            store=ShadowStateStore(root / "state.json"),
+            policy=ShadowExecutionPolicy(
+                slippage_bps=10,
+                minimum_fill_delay_seconds=1,
+                buying_power=10_000,
+                max_open_positions=100,
+            ),
+        )
+        decision = at(f"2026-07-{(index % 20) + 1:02d}T10:00:00-05:00")
+        trade = service.start_trade(
+            report,
+            symbol="TEST",
+            simulation_command_id=f"review-{index}",
+            decision_at=decision,
+        )
+        service.process_quote(
+            quote(
+                (decision + timedelta(seconds=5)).isoformat(),
+                bid=9.94,
+                ask=9.95,
+                high=9.96,
+                low=9.93,
+            ),
+            received_at=decision + timedelta(seconds=5),
+        )
+        service.process_quote(
+            quote(
+                (decision + timedelta(minutes=30)).isoformat(),
+                bid=10.55,
+                ask=10.56,
+                high=10.57,
+                low=10.50,
+            ),
+            received_at=decision + timedelta(minutes=30),
+        )
+        return service.store.load().trades[0]
 
 
 def at(value: str) -> datetime:

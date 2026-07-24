@@ -22,6 +22,7 @@ public enum PaneKind
     Positions,
     ReplayEvents,
     ReviewOutcomes,
+    ShadowReview,
 }
 
 public enum LinkGroup
@@ -220,6 +221,176 @@ public sealed record SimulationWorkspaceSnapshot(
     ReadOnlyWorkspaceSnapshot Workspace,
     IReadOnlyList<TradePlanSnapshot> TradePlans,
     bool PlanningAvailable);
+
+public sealed record ShadowTradeIdentity(
+    string ShadowTradeId,
+    string Symbol,
+    string Setup,
+    string Catalyst,
+    string MarketRegime,
+    string Session,
+    DateTimeOffset DecisionTimestamp,
+    DateTimeOffset EvidenceSnapshotTimestamp,
+    string TradePlanId,
+    string RiskDecisionId);
+
+public sealed record ShadowPlanReview(
+    string RiskDecision,
+    IReadOnlyList<string> RiskReasons,
+    decimal? ProposedEntry,
+    decimal? Stop,
+    IReadOnlyList<decimal> Targets)
+{
+    public string ProposedEntryDisplay => ProposedEntry?.ToString("C4") ?? "Unavailable";
+    public string StopDisplay => Stop?.ToString("C4") ?? "Unavailable";
+    public string TargetsDisplay => Targets.Count == 0
+        ? "Unavailable"
+        : string.Join(" / ", Targets.Select(target => target.ToString("C4")));
+    public string RiskReasonDisplay => RiskReasons.Count == 0 ? "No risk reason supplied." : string.Join(" | ", RiskReasons);
+}
+
+public sealed record ShadowTechnicalEvent(
+    DateTimeOffset Timestamp,
+    string EventType,
+    string Action,
+    string Result,
+    string Reason);
+
+public sealed record ShadowExecutionQuality(
+    string Summary,
+    IReadOnlyList<string> Factors,
+    IReadOnlyList<ShadowTechnicalEvent> TechnicalCodes)
+{
+    public string FactorDisplay => Factors.Count == 0 ? Summary : string.Join(Environment.NewLine, Factors);
+}
+
+public sealed record ShadowExecutionReview(
+    decimal? SimulatedFill,
+    decimal? SpreadPercent,
+    decimal? SlippageBps,
+    decimal? Exit,
+    string ExitReason,
+    string LifecycleState,
+    string LastReason,
+    ShadowExecutionQuality Quality)
+{
+    public string SimulatedFillDisplay => SimulatedFill?.ToString("C4") ?? "No fill";
+    public string SpreadDisplay => SpreadPercent is null ? "Unavailable" : $"{SpreadPercent:N2}%";
+    public string SlippageDisplay => SlippageBps is null ? "Unavailable" : $"{SlippageBps:N2} bps";
+    public string ExitDisplay => Exit?.ToString("C4") ?? "Open / unavailable";
+}
+
+public sealed record ShadowOutcomeReview(
+    string Outcome,
+    decimal? IdealPnl,
+    decimal? ExecutablePnl,
+    decimal? RMultiple,
+    decimal? MfeDollars,
+    decimal? MaeDollars,
+    int? DurationSeconds)
+{
+    public string IdealPnlDisplay => IdealPnl?.ToString("C2") ?? "Unavailable";
+    public string ExecutablePnlDisplay => ExecutablePnl?.ToString("C2") ?? "Unavailable";
+    public string RMultipleDisplay => RMultiple is null ? "Unavailable" : $"{RMultiple:N2} R";
+    public string MfeDisplay => MfeDollars?.ToString("C2") ?? "Unavailable";
+    public string MaeDisplay => MaeDollars?.ToString("C2") ?? "Unavailable";
+    public string DurationDisplay => DurationSeconds is null
+        ? "Unavailable"
+        : TimeSpan.FromSeconds(DurationSeconds.Value).ToString(@"hh\:mm\:ss");
+}
+
+public sealed record ShadowEvidenceLock(
+    bool EvidenceFrozen,
+    bool PlanFrozen,
+    DateTimeOffset DecisionTimestamp,
+    bool PostDecisionCorrectionOccurred,
+    string AuditStatus,
+    IReadOnlyList<string> Reasons)
+{
+    public string EvidenceFrozenLabel => EvidenceFrozen ? "Evidence frozen" : "Evidence lock failed";
+    public string PlanFrozenLabel => PlanFrozen ? "Plan frozen" : "Plan lock failed";
+    public string CorrectionLabel => PostDecisionCorrectionOccurred
+        ? "Post-decision correction detected"
+        : "No post-decision correction";
+    public string ReasonDisplay => Reasons.Count == 0 ? "Immutable evidence audit passed." : string.Join(" | ", Reasons);
+}
+
+public sealed record ShadowTradeReviewSnapshot(
+    ShadowTradeIdentity Identity,
+    ShadowPlanReview Plan,
+    ShadowExecutionReview Execution,
+    ShadowOutcomeReview Outcome,
+    ShadowEvidenceLock EvidenceLock,
+    string DataQualityState,
+    bool EvidenceEligible,
+    bool CountsTowardSample)
+{
+    public string ShadowTradeId => Identity.ShadowTradeId;
+    public string Symbol => Identity.Symbol;
+    public string Setup => Identity.Setup;
+    public string Catalyst => Identity.Catalyst;
+    public string MarketRegime => Identity.MarketRegime;
+    public string Session => Identity.Session;
+    public DateTimeOffset DecisionTimestamp => Identity.DecisionTimestamp;
+    public string LifecycleState => Execution.LifecycleState;
+    public string OutcomeLabel => Outcome.Outcome;
+    public string EligibilityLabel => EvidenceEligible ? "ELIGIBLE" : "EXCLUDED";
+    public string DateSessionLabel => $"{DecisionTimestamp:yyyy-MM-dd} / {Session}";
+}
+
+public sealed record ShadowSampleStatus(
+    int MinimumRequired,
+    int EligibleCompleted,
+    int Completed,
+    int Active,
+    int Unfilled,
+    int RiskRejected,
+    int DataQualityInvalidated,
+    int Excluded,
+    bool GateSatisfied,
+    string Status)
+{
+    public string ProgressLabel => $"Prospective Shadow Trades: {EligibleCompleted} / {MinimumRequired}";
+}
+
+public sealed record ShadowAggregateMetrics(
+    string SampleStatus,
+    decimal? WinRatePercent,
+    decimal? AverageWin,
+    decimal? AverageLoss,
+    decimal? Expectancy,
+    decimal? AverageR,
+    decimal? MaximumDrawdown,
+    decimal? ProfitFactor,
+    decimal? IdealPnl,
+    decimal? ExecutablePnl,
+    decimal? IdealVsExecutableGap,
+    string Conclusion)
+{
+    public string WinRateDisplay => Percent(WinRatePercent);
+    public string AverageWinDisplay => Currency(AverageWin);
+    public string AverageLossDisplay => Currency(AverageLoss);
+    public string ExpectancyDisplay => Currency(Expectancy);
+    public string AverageRDisplay => Number(AverageR, "N2", " R");
+    public string MaximumDrawdownDisplay => Currency(MaximumDrawdown);
+    public string ProfitFactorDisplay => Number(ProfitFactor, "N2");
+    public string PerformanceGapDisplay => Currency(IdealVsExecutableGap);
+
+    private static string Currency(decimal? value) => value?.ToString("C2") ?? "Withheld";
+    private static string Percent(decimal? value) => Number(value, "N2", "%");
+    private static string Number(decimal? value, string format, string suffix = "") =>
+        value is null ? "Withheld" : $"{value.Value.ToString(format)}{suffix}";
+}
+
+public sealed record ShadowReviewSnapshot(
+    int SchemaVersion,
+    string Mode,
+    string EngineVersion,
+    bool Transmitting,
+    string Summary,
+    IReadOnlyList<ShadowTradeReviewSnapshot> Trades,
+    ShadowSampleStatus Sample,
+    ShadowAggregateMetrics Metrics);
 
 public sealed record WorkspaceSnapshot(
     WorkspaceKind Workspace,

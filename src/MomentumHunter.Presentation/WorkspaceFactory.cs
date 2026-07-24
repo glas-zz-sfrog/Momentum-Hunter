@@ -32,6 +32,7 @@ public static class WorkspaceFactory
                 registry.Create(PaneKind.Hunter, "Outcome Explorer", LinkGroup.A, DockRegion.Left, symbol, interval);
                 registry.Create(PaneKind.Chart, "Review Chart", LinkGroup.A, DockRegion.Center, symbol, interval);
                 registry.Create(PaneKind.TradePlan, "Audit Detail", LinkGroup.A, DockRegion.Right, symbol, interval);
+                registry.Create(PaneKind.ShadowReview, "Shadow Review", LinkGroup.A, DockRegion.Bottom, symbol, interval);
                 registry.Create(PaneKind.ReviewOutcomes, "Outcomes", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.Diagnostics, "Diagnostics", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 break;

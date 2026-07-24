@@ -13,6 +13,49 @@
         Background="{StaticResource AppBackground}"
         FontFamily="Segoe UI"
         KeyDown="Window_KeyDown">
+    <Window.Resources>
+        <Style x:Key="ShadowFilterComboStyle" TargetType="{x:Type ComboBox}">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            <Setter Property="Background" Value="#1A2731" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+            <Setter Property="Padding" Value="7,4" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBox}">
+                        <Grid MinHeight="27">
+                            <ToggleButton Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="1"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
+                            <Grid IsHitTestVisible="False" Margin="{TemplateBinding Padding}">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="1*" /><ColumnDefinition Width="16" /></Grid.ColumnDefinitions>
+                                <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"
+                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                  VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="▼" Foreground="{StaticResource TextMuted}" FontSize="8" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}">
+                                <Border Background="#1A2731"
+                                        BorderBrush="{StaticResource PanelBorder}"
+                                        BorderThickness="1"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ScrollViewer MaxHeight="240">
+                                        <StackPanel IsItemsHost="True" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
@@ -254,9 +297,24 @@
                                                     </StackPanel>
                                                 </ScrollViewer>
                                             </TabItem>
-                                            <TabItem Header="Why"><TextBlock Text="Research evidence and catalyst context are supplied through the engine boundary." Margin="12" TextWrapping="Wrap" /></TabItem>
+                                            <TabItem Header="Why">
+                                                <StackPanel Margin="12">
+                                                    <TextBlock Text="Frozen decision context" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding SelectedShadowTrade.Setup, StringFormat=Setup: {0}}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding SelectedShadowTrade.Catalyst, StringFormat=Catalyst: {0}}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding SelectedShadowTrade.Identity.MarketRegime, StringFormat=Market regime: {0}}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding SelectedShadowTrade.EvidenceLock.ReasonDisplay}" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </TabItem>
                                             <TabItem Header="Research"><TextBlock Text="Technical details are intentionally a disclosure, not a trade recommendation." Margin="12" TextWrapping="Wrap" /></TabItem>
-                                            <TabItem Header="History"><TextBlock Text="No order or broker history exists in this simulation-only shell." Margin="12" TextWrapping="Wrap" /></TabItem>
+                                            <TabItem Header="History">
+                                                <StackPanel Margin="12">
+                                                    <TextBlock Text="Prospective FakeBroker history" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding SelectedShadowTrade.Execution.LifecycleState, StringFormat=Lifecycle: {0}}" Margin="0,8,0,0" />
+                                                    <TextBlock Text="{Binding SelectedShadowTrade.Execution.LastReason}" Foreground="{StaticResource TextMuted}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding SelectedShadowTrade.Execution.Quality.Summary}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </TabItem>
                                         </TabControl>
                                     </Grid>
                                 </Border>
@@ -264,7 +322,7 @@
                         </avalon:LayoutAnchorablePane>
                     </avalon:LayoutPanel>
 
-                    <avalon:LayoutAnchorablePane DockHeight="180" DockMinHeight="90">
+                    <avalon:LayoutAnchorablePane DockHeight="420" DockMinHeight="90">
                         <avalon:LayoutAnchorable x:Name="ActivityAnchor" ContentId="pane-activity" Title="Activity" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="10">
                                 <Grid>
@@ -355,6 +413,203 @@
                                     <TextBlock Text="Historical decisions are read-only and cannot alter current research." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
                                     <TextBlock Text="{Binding ReplaySummary}" TextWrapping="Wrap" />
                                 </StackPanel>
+                            </Border>
+                        </avalon:LayoutAnchorable>
+                        <avalon:LayoutAnchorable x:Name="ShadowReviewAnchor" ContentId="pane-shadow-review" Title="Shadow Review" CanClose="True" CanFloat="True">
+                            <Border Background="{StaticResource PanelBackground}" Padding="12">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="1*" />
+                                    </Grid.RowDefinitions>
+                                    <DockPanel>
+                                        <Border DockPanel.Dock="Right" Padding="8,4" Background="#203A38" CornerRadius="3">
+                                            <TextBlock Text="FAKEBROKER • NONTRANSMITTING" Foreground="{StaticResource Teal}" FontSize="10" FontWeight="SemiBold" />
+                                        </Border>
+                                        <StackPanel>
+                                            <TextBlock Text="Shadow Review" FontSize="17" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding ShadowReviewStatus}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </DockPanel>
+
+                                    <WrapPanel Grid.Row="1" Margin="0,10,0,8">
+                                        <StackPanel Margin="0,0,8,0">
+                                            <TextBlock Text="Date / session" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <ComboBox Width="160" Style="{StaticResource ShadowFilterComboStyle}" ItemsSource="{Binding ShadowDateSessionOptions}" SelectedItem="{Binding ShadowDateSessionFilter}" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,8,0">
+                                            <TextBlock Text="Setup" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <ComboBox Width="145" Style="{StaticResource ShadowFilterComboStyle}" ItemsSource="{Binding ShadowSetupOptions}" SelectedItem="{Binding ShadowSetupFilter}" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,8,0">
+                                            <TextBlock Text="Catalyst" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <ComboBox Width="165" Style="{StaticResource ShadowFilterComboStyle}" ItemsSource="{Binding ShadowCatalystOptions}" SelectedItem="{Binding ShadowCatalystFilter}" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,8,0">
+                                            <TextBlock Text="Market regime" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <ComboBox Width="140" Style="{StaticResource ShadowFilterComboStyle}" ItemsSource="{Binding ShadowRegimeOptions}" SelectedItem="{Binding ShadowRegimeFilter}" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,8,0">
+                                            <TextBlock Text="Outcome" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <ComboBox Width="125" Style="{StaticResource ShadowFilterComboStyle}" ItemsSource="{Binding ShadowOutcomeOptions}" SelectedItem="{Binding ShadowOutcomeFilter}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="Evidence eligibility" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                            <ComboBox Width="135" Style="{StaticResource ShadowFilterComboStyle}" ItemsSource="{Binding ShadowEligibilityOptions}" SelectedItem="{Binding ShadowEligibilityFilter}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+
+                                    <Grid Grid.Row="2" Background="#121C24" Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.6*" />
+                                            <ColumnDefinition Width="1*" />
+                                            <ColumnDefinition Width="1*" />
+                                            <ColumnDefinition Width="1*" />
+                                            <ColumnDefinition Width="1*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                            <ColumnDefinition Width="1.2*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="8,6">
+                                            <TextBlock Text="{Binding ShadowSample.ProgressLabel}" Foreground="{StaticResource Teal}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding ShadowSample.Status}" Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="8,6"><TextBlock Text="COMPLETED" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowSample.Completed}" FontSize="15" /></StackPanel>
+                                        <StackPanel Grid.Column="2" Margin="8,6"><TextBlock Text="ACTIVE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowSample.Active}" FontSize="15" /></StackPanel>
+                                        <StackPanel Grid.Column="3" Margin="8,6"><TextBlock Text="UNFILLED" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowSample.Unfilled}" FontSize="15" /></StackPanel>
+                                        <StackPanel Grid.Column="4" Margin="8,6"><TextBlock Text="RISK REJECTED" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowSample.RiskRejected}" FontSize="15" /></StackPanel>
+                                        <StackPanel Grid.Column="5" Margin="8,6"><TextBlock Text="DATA INVALID" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowSample.DataQualityInvalidated}" FontSize="15" /></StackPanel>
+                                        <StackPanel Grid.Column="6" Margin="8,6"><TextBlock Text="EXCLUDED" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowSample.Excluded}" FontSize="15" /></StackPanel>
+                                    </Grid>
+
+                                    <UniformGrid Grid.Row="3" Columns="8" Margin="0,0,0,8">
+                                        <StackPanel Margin="5,2"><TextBlock Text="WIN RATE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.WinRateDisplay}" /></StackPanel>
+                                        <StackPanel Margin="5,2"><TextBlock Text="AVG WIN" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.AverageWinDisplay}" /></StackPanel>
+                                        <StackPanel Margin="5,2"><TextBlock Text="AVG LOSS" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.AverageLossDisplay}" /></StackPanel>
+                                        <StackPanel Margin="5,2"><TextBlock Text="EXPECTANCY" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.ExpectancyDisplay}" /></StackPanel>
+                                        <StackPanel Margin="5,2"><TextBlock Text="AVG R" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.AverageRDisplay}" /></StackPanel>
+                                        <StackPanel Margin="5,2"><TextBlock Text="MAX DRAWDOWN" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.MaximumDrawdownDisplay}" /></StackPanel>
+                                        <StackPanel Margin="5,2"><TextBlock Text="PROFIT FACTOR" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.ProfitFactorDisplay}" /></StackPanel>
+                                        <StackPanel Margin="5,2"><TextBlock Text="IDEAL / EXEC GAP" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.PerformanceGapDisplay}" /></StackPanel>
+                                    </UniformGrid>
+
+                                    <Grid Grid.Row="4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="5*" />
+                                            <ColumnDefinition Width="7*" />
+                                        </Grid.ColumnDefinitions>
+                                        <DataGrid x:Name="ShadowTradesGrid"
+                                                  ItemsSource="{Binding ShadowTrades}"
+                                                  SelectedItem="{Binding SelectedShadowTrade, Mode=OneWay}"
+                                                  SelectionChanged="ShadowTradesGrid_SelectionChanged"
+                                                  AutoGenerateColumns="False"
+                                                  IsReadOnly="True"
+                                                  CanUserAddRows="False"
+                                                  SelectionMode="Single"
+                                                  HeadersVisibility="Column"
+                                                  Background="#17212B"
+                                                  BorderBrush="{StaticResource PanelBorder}">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Symbol" Binding="{Binding Symbol}" Width="70" />
+                                                <DataGridTextColumn Header="Setup" Binding="{Binding Setup}" Width="120" />
+                                                <DataGridTextColumn Header="Decision" Binding="{Binding DecisionTimestamp, StringFormat={}{0:MM-dd HH:mm}}" Width="105" />
+                                                <DataGridTextColumn Header="Lifecycle" Binding="{Binding LifecycleState}" Width="110" />
+                                                <DataGridTextColumn Header="Outcome" Binding="{Binding OutcomeLabel}" Width="90" />
+                                                <DataGridTextColumn Header="Evidence" Binding="{Binding EligibilityLabel}" Width="90" />
+                                                <DataGridTextColumn Header="Shadow Trade ID" Binding="{Binding ShadowTradeId}" Width="180" />
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+
+                                        <TabControl Grid.Column="1" Margin="10,0,0,0" Background="#17212B">
+                                            <TabItem Header="Overview">
+                                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                    <Grid Margin="10">
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="1*" /><ColumnDefinition Width="1*" /><ColumnDefinition Width="1*" /><ColumnDefinition Width="1*" /></Grid.ColumnDefinitions>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
+                                                        <StackPanel Grid.Row="0" Grid.ColumnSpan="4" Margin="3,0,3,6">
+                                                            <WrapPanel>
+                                                                <Border Background="#203A38" Padding="7,3" Margin="0,0,5,3" CornerRadius="3"><TextBlock Text="{Binding SelectedShadowTrade.EvidenceLock.EvidenceFrozenLabel}" Foreground="{StaticResource Teal}" FontSize="10" /></Border>
+                                                                <Border Background="#203A38" Padding="7,3" Margin="0,0,5,3" CornerRadius="3"><TextBlock Text="{Binding SelectedShadowTrade.EvidenceLock.PlanFrozenLabel}" Foreground="{StaticResource Teal}" FontSize="10" /></Border>
+                                                                <Border Background="#253440" Padding="7,3" Margin="0,0,5,3" CornerRadius="3"><TextBlock Text="{Binding SelectedShadowTrade.EvidenceLock.CorrectionLabel}" FontSize="10" /></Border>
+                                                            </WrapPanel>
+                                                            <TextBlock Foreground="{StaticResource TextMuted}" FontSize="10">
+                                                                <Run Text="{Binding SelectedShadowTrade.Identity.DecisionTimestamp, StringFormat=Decision {0:yyyy-MM-dd HH:mm:ss zzz}}" />
+                                                                <Run Text="  |  " />
+                                                                <Run Text="{Binding SelectedShadowTrade.Identity.EvidenceSnapshotTimestamp, StringFormat=Evidence {0:yyyy-MM-dd HH:mm:ss zzz}}" />
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="3"><TextBlock Text="SHADOW TRADE ID" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Identity.ShadowTradeId}" TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedShadowTrade.Identity.ShadowTradeId}" /></StackPanel>
+                                                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="3"><TextBlock Text="TRADEPLAN ID" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Identity.TradePlanId}" TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedShadowTrade.Identity.TradePlanId}" /></StackPanel>
+                                                        <StackPanel Grid.Row="1" Grid.Column="2" Margin="3"><TextBlock Text="RISK DECISION" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Plan.RiskDecision}" /></StackPanel>
+                                                        <StackPanel Grid.Row="1" Grid.Column="3" Margin="3"><TextBlock Text="LIFECYCLE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Execution.LifecycleState}" /></StackPanel>
+                                                        <StackPanel Grid.Row="2" Grid.Column="0" Margin="3"><TextBlock Text="PROPOSED ENTRY" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Plan.ProposedEntryDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="2" Grid.Column="1" Margin="3"><TextBlock Text="SIMULATED FILL" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Execution.SimulatedFillDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="2" Grid.Column="2" Margin="3"><TextBlock Text="SPREAD" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Execution.SpreadDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="2" Grid.Column="3" Margin="3"><TextBlock Text="SLIPPAGE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Execution.SlippageDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="3" Grid.Column="0" Margin="3"><TextBlock Text="STOP" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Plan.StopDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="3" Grid.Column="1" Margin="3"><TextBlock Text="TARGETS" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Plan.TargetsDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="3" Grid.Column="2" Margin="3"><TextBlock Text="EXIT" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Execution.ExitDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="3" Grid.Column="3" Margin="3"><TextBlock Text="EXIT REASON" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Execution.ExitReason}" /></StackPanel>
+                                                        <StackPanel Grid.Row="4" Grid.Column="0" Margin="3"><TextBlock Text="IDEAL P&amp;L" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Outcome.IdealPnlDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="4" Grid.Column="1" Margin="3"><TextBlock Text="EXECUTABLE P&amp;L" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Outcome.ExecutablePnlDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="4" Grid.Column="2" Margin="3"><TextBlock Text="R MULTIPLE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Outcome.RMultipleDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="4" Grid.Column="3" Margin="3"><TextBlock Text="DURATION" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Outcome.DurationDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="5" Grid.Column="0" Margin="3"><TextBlock Text="MFE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Outcome.MfeDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="5" Grid.Column="1" Margin="3"><TextBlock Text="MAE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Outcome.MaeDisplay}" /></StackPanel>
+                                                        <StackPanel Grid.Row="5" Grid.Column="2" Grid.ColumnSpan="2" Margin="3">
+                                                            <TextBlock Text="EXECUTION QUALITY" Foreground="{StaticResource TextMuted}" FontSize="9" />
+                                                            <TextBlock Text="{Binding SelectedShadowTrade.Execution.Quality.Summary}" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </ScrollViewer>
+                                            </TabItem>
+                                            <TabItem Header="Evidence Lock">
+                                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                    <StackPanel Margin="10">
+                                                        <WrapPanel>
+                                                            <Border Background="#203A38" Padding="8,4" Margin="0,0,6,6" CornerRadius="3"><TextBlock Text="{Binding SelectedShadowTrade.EvidenceLock.EvidenceFrozenLabel}" Foreground="{StaticResource Teal}" /></Border>
+                                                            <Border Background="#203A38" Padding="8,4" Margin="0,0,6,6" CornerRadius="3"><TextBlock Text="{Binding SelectedShadowTrade.EvidenceLock.PlanFrozenLabel}" Foreground="{StaticResource Teal}" /></Border>
+                                                            <Border Background="#253440" Padding="8,4" Margin="0,0,6,6" CornerRadius="3"><TextBlock Text="{Binding SelectedShadowTrade.EvidenceLock.CorrectionLabel}" /></Border>
+                                                        </WrapPanel>
+                                                        <TextBlock Text="{Binding SelectedShadowTrade.Identity.DecisionTimestamp, StringFormat=Decision: {0:yyyy-MM-dd HH:mm:ss zzz}}" Margin="0,6,0,0" />
+                                                        <TextBlock Text="{Binding SelectedShadowTrade.Identity.EvidenceSnapshotTimestamp, StringFormat=Evidence snapshot: {0:yyyy-MM-dd HH:mm:ss zzz}}" Margin="0,4,0,0" />
+                                                        <TextBlock Text="{Binding SelectedShadowTrade.EvidenceLock.AuditStatus, StringFormat=Audit: {0}}" Margin="0,4,0,0" />
+                                                        <TextBlock Text="{Binding SelectedShadowTrade.DataQualityState, StringFormat=Data quality: {0}}" Margin="0,4,0,0" />
+                                                        <TextBlock Text="{Binding SelectedShadowTrade.EvidenceLock.ReasonDisplay}" Foreground="{StaticResource TextMuted}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </ScrollViewer>
+                                            </TabItem>
+                                            <TabItem Header="Execution Quality">
+                                                <Grid Margin="10">
+                                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="1*" /></Grid.RowDefinitions>
+                                                    <TextBlock Text="{Binding SelectedShadowTrade.Execution.Quality.FactorDisplay}" TextWrapping="Wrap" />
+                                                    <DataGrid Grid.Row="1" Margin="0,10,0,0"
+                                                              ItemsSource="{Binding SelectedShadowTrade.Execution.Quality.TechnicalCodes}"
+                                                              AutoGenerateColumns="False"
+                                                              IsReadOnly="True"
+                                                              CanUserAddRows="False"
+                                                              Background="#17212B">
+                                                        <DataGrid.Columns>
+                                                            <DataGridTextColumn Header="Time" Binding="{Binding Timestamp, StringFormat={}{0:HH:mm:ss}}" Width="80" />
+                                                            <DataGridTextColumn Header="Code" Binding="{Binding EventType}" Width="150" />
+                                                            <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="90" />
+                                                            <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="*" />
+                                                        </DataGrid.Columns>
+                                                    </DataGrid>
+                                                </Grid>
+                                            </TabItem>
+                                        </TabControl>
+                                    </Grid>
+                                </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="ReviewOutcomesAnchor" ContentId="pane-review-outcomes" Title="Outcomes" CanClose="True" CanFloat="True">

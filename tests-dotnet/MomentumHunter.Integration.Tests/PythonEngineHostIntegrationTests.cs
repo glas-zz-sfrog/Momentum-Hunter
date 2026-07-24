@@ -51,6 +51,7 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Contains(PythonEngineHostProtocol.PauseCollection, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetReadOnlyWorkspaceSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetSimulationWorkspaceSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetShadowTradingSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetChartSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.RunSimulation, first.Capabilities);
             Assert.DoesNotContain("submit_order", first.Capabilities);
@@ -72,6 +73,12 @@ public sealed class PythonEngineHostIntegrationTests
             var simulationWorkspacePayload = await firstConnection.GetSimulationWorkspaceSnapshotAsync();
             Assert.Equal("SIMULATION_ONLY_FAKE_BROKER", simulationWorkspacePayload.GetProperty("mode").GetString());
             Assert.True(simulationWorkspacePayload.TryGetProperty("plans", out _));
+            var shadowPayload = await firstConnection.GetShadowTradingSnapshotAsync();
+            Assert.Equal("PAPER SHADOW / NONTRANSMITTING", shadowPayload.GetProperty("mode").GetString());
+            Assert.False(shadowPayload.GetProperty("transmitting").GetBoolean());
+            Assert.True(shadowPayload.TryGetProperty("reviewTrades", out _));
+            Assert.True(shadowPayload.TryGetProperty("sample", out _));
+            Assert.True(shadowPayload.TryGetProperty("reviewMetrics", out _));
             var unavailableSimulationPayload = await firstConnection.RunSimulationAsync("ZZZNOTAREALPERSISTEDPLAN");
             Assert.Equal("Unavailable", unavailableSimulationPayload.GetProperty("state").GetString());
             Assert.Equal([], unavailableSimulationPayload.GetProperty("ledgerEvents").EnumerateArray().ToArray());

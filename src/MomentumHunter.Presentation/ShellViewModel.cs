@@ -18,6 +18,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IReadOnlyWorkspaceClient? _readOnlyWorkspaceClient;
     private readonly ISimulationWorkspaceClient? _simulationWorkspaceClient;
     private readonly IChartWorkspaceClient? _chartWorkspaceClient;
+    private readonly IShadowReviewClient? _shadowReviewClient;
     private readonly IWorkspaceLayoutStore? _layoutStore;
     private readonly LayoutAutosaveCoordinator? _layoutAutosave;
     private LinkGroupCoordinator _linkGroups = null!;
@@ -25,6 +26,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private RectGeometry? _windowBounds;
     private WindowDisplayState _windowState;
     private SimulationWorkspaceSnapshot? _simulationWorkspaceSnapshot;
+    private ShadowReviewSnapshot? _shadowReviewSnapshot;
 
     public ShellViewModel(IEngineClient engineClient)
         : this(engineClient, layoutStore: null, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
@@ -109,13 +111,15 @@ public sealed partial class ShellViewModel : ObservableObject
         IReadOnlyWorkspaceClient? readOnlyWorkspaceClient,
         ISimulationWorkspaceClient? simulationWorkspaceClient,
         IChartWorkspaceClient? chartWorkspaceClient,
-        bool isInternalConstruction)
+        bool isInternalConstruction,
+        IShadowReviewClient? shadowReviewClient = null)
     {
         _engineClient = engineClient;
         _layoutStore = layoutStore;
         _readOnlyWorkspaceClient = readOnlyWorkspaceClient;
         _simulationWorkspaceClient = simulationWorkspaceClient;
         _chartWorkspaceClient = chartWorkspaceClient;
+        _shadowReviewClient = shadowReviewClient;
         SetRegistry(WorkspaceFactory.Create(WorkspaceKind.Live));
         if (_layoutStore is not null)
         {
@@ -125,8 +129,26 @@ public sealed partial class ShellViewModel : ObservableObject
         Candidates = [];
         Activity = [];
         Candles = [];
+        ShadowTrades = [];
         WorkspaceOptions = Enum.GetValues<WorkspaceKind>();
         IntervalOptions = ["1m", "5m", "15m", "Daily"];
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        IShadowReviewClient shadowReviewClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient,
+            chartWorkspaceClient,
+            isInternalConstruction: true,
+            shadowReviewClient)
+    {
     }
 
     public PaneRegistry Registry { get; private set; } = null!;
@@ -136,6 +158,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public ObservableCollection<ActivityEvent> Activity { get; }
 
     public ObservableCollection<CandleSnapshot> Candles { get; }
+
+    public ObservableCollection<ShadowTradeReviewSnapshot> ShadowTrades { get; }
 
     public ObservableCollection<ChartPaneViewModel> SecondaryCharts { get; } = [];
 
@@ -203,6 +227,58 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty]
     private bool _isPythonSimulationWorkspaceMode;
 
+    [ObservableProperty]
+    private ShadowTradeReviewSnapshot? _selectedShadowTrade;
+
+    [ObservableProperty]
+    private ShadowSampleStatus _shadowSample = new(
+        30, 0, 0, 0, 0, 0, 0, 0, false,
+        "Evidence collection in progress. Results are not yet sufficient for strategy conclusions.");
+
+    [ObservableProperty]
+    private ShadowAggregateMetrics _shadowMetrics = new(
+        "INSUFFICIENT_SAMPLE", null, null, null, null, null, null, null, null, null, null,
+        "Evidence collection in progress. Results are not yet sufficient for strategy conclusions.");
+
+    [ObservableProperty]
+    private string _shadowReviewStatus = "Shadow review has not loaded.";
+
+    [ObservableProperty]
+    private IReadOnlyList<string> _shadowDateSessionOptions = ["All"];
+
+    [ObservableProperty]
+    private IReadOnlyList<string> _shadowSetupOptions = ["All"];
+
+    [ObservableProperty]
+    private IReadOnlyList<string> _shadowCatalystOptions = ["All"];
+
+    [ObservableProperty]
+    private IReadOnlyList<string> _shadowRegimeOptions = ["All"];
+
+    [ObservableProperty]
+    private IReadOnlyList<string> _shadowOutcomeOptions = ["All"];
+
+    [ObservableProperty]
+    private IReadOnlyList<string> _shadowEligibilityOptions = ["All", "ELIGIBLE", "EXCLUDED"];
+
+    [ObservableProperty]
+    private string _shadowDateSessionFilter = "All";
+
+    [ObservableProperty]
+    private string _shadowSetupFilter = "All";
+
+    [ObservableProperty]
+    private string _shadowCatalystFilter = "All";
+
+    [ObservableProperty]
+    private string _shadowRegimeFilter = "All";
+
+    [ObservableProperty]
+    private string _shadowOutcomeFilter = "All";
+
+    [ObservableProperty]
+    private string _shadowEligibilityFilter = "All";
+
     public string MonitoringToggleLabel => IsMonitoringPaused ? "Resume Monitoring" : "Pause Monitoring";
 
     public EnvironmentMode Environment => Workspace switch
@@ -230,6 +306,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public PaneState? PrimaryTradePlanPane => Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.TradePlan);
 
+    public PaneState? ShadowReviewPane => Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.ShadowReview);
+
     public string PrimaryChartLinkLabel => PrimaryChartPane?.IsPinned == true
         ? "Pinned"
         : $"Link {PrimaryChartPane?.LinkGroup ?? LinkGroup.Unlinked}";
@@ -240,6 +318,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public string EnvironmentLabel => Environment switch
     {
+        _ when Workspace == WorkspaceKind.Review => "REVIEW \u2022 Read Only",
         _ when IsReadOnlySnapshotMode => "READ-ONLY SNAPSHOT \u2022 Planning Deferred",
         _ when IsPythonSimulationWorkspaceMode => "SIMULATION \u2022 Python FakeBroker Only",
         EnvironmentMode.Simulation => "SIMULATION \u2022 FakeBroker",
@@ -251,7 +330,10 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public bool CanRunSimulation => !IsReadOnlySnapshotMode && TradePlan?.RiskDecision?.Allowed == true && Environment == EnvironmentMode.Simulation;
 
-    public bool CanRunPrimaryAction => !IsReadOnlySnapshotMode && TradePlan is not null;
+    public bool CanRunPrimaryAction =>
+        !IsReadOnlySnapshotMode
+        && TradePlan is not null
+        && Environment == EnvironmentMode.Simulation;
 
     public string TradePlanSymbolLabel => TradePlan?.Symbol ?? SelectedSymbol;
 
@@ -312,6 +394,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         await RefreshWorkspaceDataAsync(cancellationToken);
         await RefreshChartPaneDataAsync(cancellationToken);
+        await RefreshShadowReviewAsync(cancellationToken);
     }
 
     public async Task SelectCandidateAsync(CandidateSnapshot candidate, CancellationToken cancellationToken = default)
@@ -411,6 +494,35 @@ public sealed partial class ShellViewModel : ObservableObject
 
         await RefreshWorkspaceDataAsync(cancellationToken);
         await RefreshChartPaneDataAsync(cancellationToken);
+        await RefreshShadowReviewAsync(cancellationToken);
+    }
+
+    public async Task SelectShadowTradeAsync(
+        ShadowTradeReviewSnapshot trade,
+        CancellationToken cancellationToken = default)
+    {
+        SelectedShadowTrade = trade;
+        SelectedSymbol = trade.Symbol;
+        var sourceGroup = ShadowReviewPane?.LinkGroup ?? LinkGroup.A;
+        _linkGroups.PublishSymbol(sourceGroup, trade.Symbol, SelectedInterval);
+        if (PrimaryTradePlanPane?.IsPinned != true)
+        {
+            ApplyShadowReviewTradePlan(trade);
+        }
+        await RefreshChartPaneDataAsync(cancellationToken);
+        TradePlanTabIndex = 1;
+        Activity.Insert(
+            0,
+            new ActivityEvent(
+                DateTimeOffset.UtcNow,
+                "Shadow Review",
+                $"{trade.ShadowTradeId} selected; linked unpinned review panes now show {trade.Symbol}.",
+                trade.Symbol,
+                trade.EvidenceEligible ? HealthState.Healthy : HealthState.Degraded));
+        OnPropertyChanged(nameof(ActivityLabel));
+        StatusMessage = $"{trade.Symbol} Shadow Trade selected for read-only evidence review.";
+        RaisePresentationProperties();
+        RequestLayoutSave();
     }
 
     public async Task RestoreNamedLayoutAsync(string name, CancellationToken cancellationToken = default)
@@ -689,7 +801,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private WorkspaceLayoutSnapshot CreateAutomaticLayoutSnapshot() => CreateLayoutSnapshot(isNamedLayout: false, name: null);
 
     private WorkspaceLayoutSnapshot CreateLayoutSnapshot(bool isNamedLayout, string? name) => new(
-        SchemaVersion: 4,
+        SchemaVersion: 5,
         Workspace,
         Guid.NewGuid(),
         DateTimeOffset.UtcNow,
@@ -712,6 +824,7 @@ public sealed partial class ShellViewModel : ObservableObject
         SetRegistry(new PaneRegistry());
         Registry.Restore(snapshot.Panes);
         MigrateLegacyContextualPanes(snapshot.SchemaVersion);
+        EnsureShadowReviewPane();
         _dockLayoutXml = snapshot.DockLayoutXml;
         _windowBounds = snapshot.WindowBounds;
         _windowState = snapshot.WindowState;
@@ -742,6 +855,22 @@ public sealed partial class ShellViewModel : ObservableObject
 
             Registry.Create(kind, title, LinkGroup.Unlinked, DockRegion.Bottom, SelectedSymbol, SelectedInterval).IsVisible = false;
         }
+    }
+
+    private void EnsureShadowReviewPane()
+    {
+        if (Workspace != WorkspaceKind.Review || Registry.Panes.Any(pane => pane.Kind == PaneKind.ShadowReview))
+        {
+            return;
+        }
+
+        Registry.Create(
+            PaneKind.ShadowReview,
+            "Shadow Review",
+            LinkGroup.A,
+            DockRegion.Bottom,
+            SelectedSymbol,
+            SelectedInterval);
     }
 
     private async Task RefreshWorkspaceDataAsync(CancellationToken cancellationToken)
@@ -906,6 +1035,7 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(PrimaryChartLinkLabel));
         OnPropertyChanged(nameof(PrimaryTradePlanPane));
         OnPropertyChanged(nameof(PrimaryTradePlanLinkLabel));
+        OnPropertyChanged(nameof(ShadowReviewPane));
         OnPropertyChanged(nameof(CanRunSimulation));
         OnPropertyChanged(nameof(CanRunPrimaryAction));
         OnPropertyChanged(nameof(TradePlanSymbolLabel));
@@ -992,6 +1122,149 @@ public sealed partial class ShellViewModel : ObservableObject
         TradePlan = _simulationWorkspaceSnapshot?.TradePlans
             .FirstOrDefault(plan => string.Equals(plan.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
     }
+
+    private void ApplyShadowReviewTradePlan(ShadowTradeReviewSnapshot trade)
+    {
+        var entry = trade.Plan.ProposedEntry ?? 0m;
+        var stop = trade.Plan.Stop ?? 0m;
+        var target = trade.Plan.Targets.FirstOrDefault();
+        var riskPerShare = entry > stop && stop > 0m ? entry - stop : 0m;
+        var rewardToRisk = riskPerShare > 0m && target > entry
+            ? (target - entry) / riskPerShare
+            : 0m;
+        var checks = new[]
+        {
+            new ReadinessCheck(
+                "Evidence frozen",
+                trade.EvidenceLock.EvidenceFrozen,
+                trade.EvidenceLock.EvidenceFrozenLabel),
+            new ReadinessCheck(
+                "Plan frozen",
+                trade.EvidenceLock.PlanFrozen,
+                trade.EvidenceLock.PlanFrozenLabel),
+            new ReadinessCheck(
+                "Post-decision correction",
+                !trade.EvidenceLock.PostDecisionCorrectionOccurred,
+                trade.EvidenceLock.CorrectionLabel),
+            new ReadinessCheck(
+                "Evidence audit",
+                string.Equals(trade.EvidenceLock.AuditStatus, "PASS", StringComparison.Ordinal),
+                trade.EvidenceLock.ReasonDisplay),
+        };
+        var riskSummary = trade.Plan.RiskReasons.Count == 0
+            ? "Frozen Risk Governor detail was unavailable."
+            : string.Join(" | ", trade.Plan.RiskReasons);
+        TradePlan = new TradePlanSnapshot(
+            trade.Symbol,
+            entry,
+            stop,
+            target,
+            riskPerShare,
+            0,
+            rewardToRisk,
+            trade.EvidenceEligible ? ReadinessState.ReadyForSimulation : ReadinessState.Blocked,
+            checks,
+            "Review only",
+            new DataLineage(
+                $"Frozen Shadow evidence {trade.ShadowTradeId}",
+                trade.Identity.EvidenceSnapshotTimestamp,
+                "This plan is the immutable decision-time Shadow snapshot, not the latest planning workspace."),
+            [
+                new TradeLevel("Entry", entry, "Frozen Shadow Trade proposed entry."),
+                new TradeLevel("Stop", stop, "Frozen Shadow Trade stop."),
+                .. trade.Plan.Targets.Select((value, index) =>
+                    new TradeLevel($"Target {index + 1}", value, "Frozen Shadow Trade target.")),
+            ],
+            new RiskDecision(
+                false,
+                trade.Plan.RiskDecision,
+                $"{riskSummary} Shadow Review is read-only.",
+                trade.Plan.RiskReasons));
+    }
+
+    private async Task RefreshShadowReviewAsync(CancellationToken cancellationToken)
+    {
+        if (_shadowReviewClient is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _shadowReviewSnapshot = await _shadowReviewClient.GetSnapshotAsync(cancellationToken);
+            ShadowSample = _shadowReviewSnapshot.Sample;
+            ShadowMetrics = _shadowReviewSnapshot.Metrics;
+            ShadowReviewStatus = _shadowReviewSnapshot.Summary;
+            UpdateShadowFilterOptions(_shadowReviewSnapshot.Trades);
+            ApplyShadowFilters();
+            if (Workspace == WorkspaceKind.Review
+                && SelectedShadowTrade is null
+                && ShadowTrades.FirstOrDefault() is { } first)
+            {
+                SelectedShadowTrade = first;
+            }
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        {
+            _shadowReviewSnapshot = null;
+            ShadowTrades.Clear();
+            SelectedShadowTrade = null;
+            ShadowSample = new ShadowSampleStatus(
+                30, 0, 0, 0, 0, 0, 0, 0, false,
+                "Evidence collection is unavailable. No sample records were counted.");
+            ShadowMetrics = new ShadowAggregateMetrics(
+                "UNAVAILABLE", null, null, null, null, null, null, null, null, null, null,
+                "Aggregate metrics are unavailable because the Shadow evidence snapshot failed closed.");
+            ShadowReviewStatus = $"Shadow review unavailable: {exception.Message} No fallback evidence was created.";
+        }
+    }
+
+    private void UpdateShadowFilterOptions(IReadOnlyList<ShadowTradeReviewSnapshot> trades)
+    {
+        ShadowDateSessionOptions = Options(trades.Select(trade => trade.DateSessionLabel));
+        ShadowSetupOptions = Options(trades.Select(trade => trade.Setup));
+        ShadowCatalystOptions = Options(trades.Select(trade => trade.Catalyst));
+        ShadowRegimeOptions = Options(trades.Select(trade => trade.MarketRegime));
+        ShadowOutcomeOptions = Options(trades.Select(trade => trade.OutcomeLabel));
+    }
+
+    private static IReadOnlyList<string> Options(IEnumerable<string> values) =>
+        new[] { "All" }
+            .Concat(values.Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+            .ToArray();
+
+    private void ApplyShadowFilters()
+    {
+        if (_shadowReviewSnapshot is null)
+        {
+            ShadowTrades.Clear();
+            return;
+        }
+
+        var filtered = _shadowReviewSnapshot.Trades.Where(trade =>
+            Matches(ShadowDateSessionFilter, trade.DateSessionLabel)
+            && Matches(ShadowSetupFilter, trade.Setup)
+            && Matches(ShadowCatalystFilter, trade.Catalyst)
+            && Matches(ShadowRegimeFilter, trade.MarketRegime)
+            && Matches(ShadowOutcomeFilter, trade.OutcomeLabel)
+            && Matches(ShadowEligibilityFilter, trade.EligibilityLabel));
+        ShadowTrades.Clear();
+        foreach (var trade in filtered)
+        {
+            ShadowTrades.Add(trade);
+        }
+    }
+
+    private static bool Matches(string filter, string value) =>
+        string.Equals(filter, "All", StringComparison.Ordinal)
+        || string.Equals(filter, value, StringComparison.Ordinal);
+
+    partial void OnShadowDateSessionFilterChanged(string value) => ApplyShadowFilters();
+    partial void OnShadowSetupFilterChanged(string value) => ApplyShadowFilters();
+    partial void OnShadowCatalystFilterChanged(string value) => ApplyShadowFilters();
+    partial void OnShadowRegimeFilterChanged(string value) => ApplyShadowFilters();
+    partial void OnShadowOutcomeFilterChanged(string value) => ApplyShadowFilters();
+    partial void OnShadowEligibilityFilterChanged(string value) => ApplyShadowFilters();
 
     private async Task RefreshReadOnlyWorkspaceDataAsync(CancellationToken cancellationToken)
     {

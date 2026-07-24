@@ -20,6 +20,9 @@ public interface IPythonEngineHostConnection
     Task<JsonElement> GetSimulationWorkspaceSnapshotAsync(CancellationToken cancellationToken = default) =>
         Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose simulation workspace snapshots."));
 
+    Task<JsonElement> GetShadowTradingSnapshotAsync(CancellationToken cancellationToken = default) =>
+        Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose read-only Shadow Trading snapshots."));
+
     Task<JsonElement> GetChartSnapshotAsync(
         string symbol,
         string interval,
