@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added prospective Shadow Trading with frozen source/plan/risk evidence, restart-safe command receipts, stable lifecycle IDs, quote-driven conservative FakeBroker fills/exits, durable ledger/audit/outcomes, executable P&L/R/MFE/MAE, sample-gated metrics, and nontransmitting thinkorswim paperMoney tickets.
+- Added credential-free, network-free Schwab preparation: physically read-only contracts, exact single-cash-account isolation, synthetic OAuth/account/order failures, masked secret entry, strict callback-state handling, Windows DPAPI fake-token proof, redaction, and no transmitting methods.
+- Reconciled the Roadmap to Schwab Support's live-only/no-paperMoney/no-sandbox answer: A017 is blocked by vendor capability, Shadow plus manual paperMoney is the current validation bridge, and no live canary testing is authorized.
 - Added deterministic WPF chart price/time axes and latest stored-bar OHLCV details, with focused scale/view-model coverage and offscreen full-workstation proof.
 - Fast-forwarded Steven-approved R011 into local `master` at `268f3f8`, reconciled the authoritative roadmap and branch ledger, and backed the integrated baseline up to `origin/master` under explicit push approval.
 - Added R011's versioned read-only local chart snapshot boundary and WPF candle/wick/volume rendering for stored `1m`, aggregated `5m`/`15m`, and `Daily` evidence.

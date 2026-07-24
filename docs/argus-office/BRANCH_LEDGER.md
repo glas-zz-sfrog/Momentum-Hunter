@@ -4,16 +4,17 @@ Date reconciled: 2026-07-23
 
 ## Current Truth
 
-Local `master` is the canonical merged product baseline for Momentum Hunter. It contains the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, R005 tray/lifecycle work, the independent Python Engine Host, Phase 9 read-only workstation integration, Phase 10 persisted TradePlan/Risk Governor/FakeBroker simulation integration, and R011 read-only WPF chart-candle integration through `268f3f8 Add read-only WPF chart candles`. Steven explicitly approved the R011 fast-forward and master push; local and remote `master` are synchronized after this reconciliation.
+Local `master` is the canonical merged product baseline for Momentum Hunter. It contains the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, R005 tray/lifecycle work, the independent Python Engine Host, Phase 9 read-only workstation integration, Phase 10 persisted TradePlan/Risk Governor/FakeBroker simulation integration, R011 WPF chart candles, and R012 chart readability through `69feedf Add WPF chart readability`. Local and remote `master` are synchronized.
 
 Git evidence at reconciliation time:
 
-- `git status --short --branch` on `master`: clean after the R011 fast-forward and reconciliation commit.
-- Local and remote `master` contain the R011 runtime integration at `268f3f80fe258d803b827823b4a500cd5aaa9a94`; the reconciliation commit records the final merge and push state.
-- Steven approved R011, and the task branch fast-forwarded locally with no merge commit before the approved master push.
-- `codex/ARGUS-A016S-schwab-paper-api-verification` is branch-only through `c979866`; its official support request is sent, but no A017 implementation gate has opened.
+- Current task branch: `codex/ARGUS-SHADOW-001-shadow-trading-wiring-audit`.
+- Local and remote `master` are synchronized at `69feedf46c6e2c94499d4256b63b355f1619bf14`.
+- ARGUS-SHADOW-001 starts from `69feedf`; its audit `54c58a8` and implementation `5d11f02` are pushed only to the feature branch and are not merged.
+- `codex/ARGUS-A016T-schwab-paper-api-response` records Schwab's live-only, no-paperMoney, no-sandbox answer on a separate unmerged branch. A017 is blocked by vendor capability.
+- `codex/ARGUS-R026-wpf-phase12-clean-room-integration` consolidates R013-R025 on a separate unmerged review branch and is not part of ARGUS-SHADOW-001.
 - `codex/ARGUS-R011-wpf-chart-candle-integration` starts from `a17eff8`; its implementation and proof are merged into `master`, and commit `268f3f8` is remotely backed up through `origin/master`.
-- `codex/ARGUS-R012-wpf-chart-readability` starts from synchronized `master` at `82f10e3`; deterministic chart axes, latest-bar details, tests, and offscreen WPF proof are implemented locally and await Steven's merge decision.
+- `codex/ARGUS-R012-wpf-chart-readability` is merged and remotely backed up through `69feedf`.
 - R004 and R005 are integrated through the `d3a98d9` and `e141054` history; their historical feature branches remain preserved but are not active work bases.
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
@@ -46,16 +47,22 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `7efd48d` | Reconcile Phase 10 follow-up state | Yes |
 | `a17eff8` | Record Phase 10 local integration | Yes |
 | `268f3f8` | Add read-only WPF chart candles | Yes |
+| `69feedf` | Add WPF chart readability | Yes |
+| `54c58a8` | Map Shadow Trading lifecycle wiring | No; feature branch only |
+| `5d11f02` | Build prospective Shadow Trading validation | No; feature branch only |
 
 ## Branch Classifications
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | `82f10e3` | Yes; synchronized with `origin/master` after Steven's explicit approval | Yes | `ACTIVE` | Canonical merged Python engine, WPF operator surface, independent host, read-only evidence, FakeBroker-only Phase 10 simulation, and R011 chart-candle baseline. | Review branch-only R012; keep broker work blocked at A017 pending Schwab evidence. |
-| `codex/ARGUS-R012-wpf-chart-readability` | R012 task commit, parent `82f10e3` | No | No | `NEEDS_REVIEW` | Deterministic WPF chart price/time axes and latest stored-bar OHLCV details with no engine or provider change. | Steven reviews proof; Git Steward may fast-forward only after explicit approval. |
+| `master` | `69feedf` | Yes; synchronized with `origin/master` | Yes | `ACTIVE` | Canonical merged Python engine, WPF operator surface, independent host, read-only evidence, FakeBroker-only Phase 10 simulation, R011 chart candles, and R012 readability. | Review ARGUS-SHADOW-001 and R026 separately; keep Paper/Live locked. |
+| `codex/ARGUS-SHADOW-001-shadow-trading-wiring-audit` | `5d11f02` plus governance closeout | Yes; feature branch only | No | `IMPLEMENTED_PENDING_MERGE` | Prospective frozen-evidence Shadow Trading, quote-driven FakeBroker lifecycle/outcomes, durable audit/metrics, manual paperMoney ticket, and network-free Schwab read-only preparation. | Preserve remote branch; Steven reviews evidence before any local fast-forward. |
+| `codex/ARGUS-R026-wpf-phase12-clean-room-integration` | `838ed22` | No | No | `NEEDS_REVIEW` | Consolidated R013-R025 WPF implementation and unattended Qt test hardening. | Complete its separate operator checklist; do not combine its merge decision with Shadow Trading. |
+| `codex/ARGUS-A016T-schwab-paper-api-response` | `1bc90a8` | No | No | `NEEDS_REVIEW` | Preserves Schwab Support's live-only, no-paperMoney, no-sandbox response and broker decision consequences. | Keep A017 blocked; preserve as branch evidence. |
+| `codex/ARGUS-R012-wpf-chart-readability` | `69feedf` | Commit backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Deterministic WPF chart price/time axes and latest stored-bar OHLCV details with no engine or provider change. | Historical integration branch. |
 | `codex/ARGUS-R011-wpf-chart-candle-integration` | `268f3f8` | No branch ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Versioned read-only local chart snapshots and WPF candle/wick/volume rendering with explicit stale/unavailable behavior. | Historical integration branch; begin R012 from `master`. |
-| `codex/ARGUS-A016S-schwab-paper-api-verification` | `c979866` | No | No | `ACTIVE` | Schwab paper API evidence gate and verified support request. | Await and preserve official response; do not begin A017. |
-| `codex/ARGUS-A016-broker-research-matrix` | `90259e4` | No | No | `NEEDS_REVIEW` | Broker matrix plus Steven's Schwab/thinkorswim continuity decision. | Preserve under A016S; review before any local merge. |
+| `codex/ARGUS-A016S-schwab-paper-api-verification` | `c979866` | No | No | `SUPERSEDED` | Schwab paper API evidence gate and verified support request. | Preserve as sent-request history; A016T records the answer. |
+| `codex/ARGUS-A016-broker-research-matrix` | `90259e4` | No | No | `SUPERSEDED` | Broker matrix plus Steven's original Schwab/thinkorswim continuity decision. | Preserve as research history; A016T records the vendor constraint. |
 | `codex/ARGUS-R010-tradeplan-risk-simulation-integration` | `7efd48d` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Persisted TradePlan and Risk Governor evidence, FakeBroker-only simulation, ledger/auditor results, and explicit unavailable-plan handling in WPF. | Historical integration branch; start Phase 11 from local `master`. |
 | `codex/ARGUS-R009-readonly-workstation-integration` | `a886c90` (stacked from `6f853ba`) | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Read-only persisted Python candidates, evidence, health, source lineage, and Replay context in WPF; mock planning/chart/simulation fallback disabled. | Historical integration branch; Phase 10 must branch from local master. |
 | `codex/ARGUS-R008-python-engine-contract-host` | `6f853ba` | Yes | Yes | `MERGED_TO_LOCAL_MASTER` | Independent local Python Engine Host, versioned WPF lifecycle bridge, duplicate guards, and process-level proof. | Historical integration branch; Phase 10 must branch from local master. |
