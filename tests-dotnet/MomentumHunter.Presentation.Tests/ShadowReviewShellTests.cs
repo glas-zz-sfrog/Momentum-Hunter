@@ -66,6 +66,8 @@ public sealed class ShadowReviewShellTests
         var trade = Assert.Single(viewModel.ShadowTrades);
         Assert.Equal("NVDA", trade.Symbol);
         Assert.Equal("Prospective Shadow Trades: 1 / 30", viewModel.ShadowSample.ProgressLabel);
+        Assert.Equal("SAMPLE VERSION \u2022 IN PROGRESS", viewModel.ShadowSample.ReadinessLabel);
+        Assert.Contains("synthetic-official-v1", viewModel.ShadowSample.DefinitionLabel, StringComparison.Ordinal);
         Assert.Equal("Withheld", viewModel.ShadowMetrics.ExpectancyDisplay);
     }
 
@@ -93,7 +95,11 @@ public sealed class ShadowReviewShellTests
             [nvda, eqx],
             new ShadowSampleStatus(
                 30, 1, 1, 1, 1, 0, 1, 1, false,
-                "Evidence collection in progress. Results are not yet sufficient for strategy conclusions."),
+                "Evidence collection in progress. Results are not yet sufficient for strategy conclusions.",
+                SampleDefinition(),
+                "IN_PROGRESS",
+                false,
+                ["Sample version already contains persisted trade records."]),
             new ShadowAggregateMetrics(
                 "INSUFFICIENT_SAMPLE", null, null, null, null, null, null, null, null, null, null,
                 "Evidence collection in progress. Results are not yet sufficient for strategy conclusions."));
@@ -146,10 +152,18 @@ public sealed class ShadowReviewShellTests
                 eligible ? -1.1m : null,
                 eligible ? 1800 : null),
             lockState,
+            SampleDefinition(),
             eligible ? "COMPLETE" : "PARTIAL",
             eligible,
             eligible && lifecycle == "completed");
     }
+
+    private static ShadowSampleDefinition SampleDefinition() => new(
+        "synthetic-official-v1",
+        new string('a', 64),
+        "prospective-fakebroker-v1",
+        1,
+        true);
 
     private static SimulationWorkspaceSnapshot SimulationSnapshot()
     {

@@ -73,6 +73,11 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         self.assertEqual("shadow-command-1", trade.simulation_command_id)
         self.assertTrue(trade.outcome_id.startswith("shadow-outcome-"))
         self.assertEqual(trade.evidence_snapshot_id, trade.evidence.evidence_snapshot_id)
+        self.assertEqual("engineering-preflight-v1", trade.sample_metadata.sample_version)
+        self.assertEqual(64, len(trade.sample_metadata.strategy_configuration_fingerprint))
+        self.assertEqual("prospective-fakebroker-v1", trade.sample_metadata.fill_model_version)
+        self.assertEqual(1, trade.sample_metadata.evidence_schema_version)
+        self.assertFalse(trade.sample_metadata.official_sample_authorized)
         self.assertEqual(91, trade.evidence.candidate_payload()["scoring"]["composite_score"])
         self.assertEqual(before, hashlib.sha256(trade.evidence.source_report_json.encode("utf-8")).hexdigest())
         self.assertTrue(audit_shadow_trade(trade).passed)
@@ -437,6 +442,8 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         markdown = paths["markdown"].read_text(encoding="utf-8")
         self.assertEqual("PAPER SHADOW / NONTRANSMITTING", payload["ticket"]["environment"])
         self.assertEqual(trade.plan_fingerprint, payload["ticket"]["plan_fingerprint"])
+        self.assertEqual(trade.sample_metadata.sample_version, payload["ticket"]["sample_version"])
+        self.assertIn("Fill-model version", markdown)
         self.assertIn("Manual paperMoney", markdown)
         self.assertIn("nontransmitting", markdown)
 
@@ -735,6 +742,8 @@ def completed_auditable_trade(index: int):
                 buying_power=10_000,
                 max_open_positions=100,
             ),
+            sample_version="synthetic-official-v1",
+            official_sample_authorized=True,
         )
         decision = at(f"2026-07-{(index % 20) + 1:02d}T10:00:00-05:00")
         trade = service.start_trade(

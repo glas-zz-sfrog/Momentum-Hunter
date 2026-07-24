@@ -233,7 +233,16 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty]
     private ShadowSampleStatus _shadowSample = new(
         30, 0, 0, 0, 0, 0, 0, 0, false,
-        "Evidence collection in progress. Results are not yet sufficient for strategy conclusions.");
+        "Evidence collection in progress. Results are not yet sufficient for strategy conclusions.",
+        new ShadowSampleDefinition(
+            "engineering-preflight-v1",
+            new string('0', 64),
+            "prospective-fakebroker-v1",
+            1,
+            false),
+        "BLOCKED",
+        false,
+        ["Shadow review has not loaded."]);
 
     [ObservableProperty]
     private ShadowAggregateMetrics _shadowMetrics = new(
@@ -1211,7 +1220,16 @@ public sealed partial class ShellViewModel : ObservableObject
             SelectedShadowTrade = null;
             ShadowSample = new ShadowSampleStatus(
                 30, 0, 0, 0, 0, 0, 0, 0, false,
-                "Evidence collection is unavailable. No sample records were counted.");
+                "Evidence collection is unavailable. No sample records were counted.",
+                new ShadowSampleDefinition(
+                    "engineering-preflight-v1",
+                    new string('0', 64),
+                    "prospective-fakebroker-v1",
+                    1,
+                    false),
+                "BLOCKED",
+                false,
+                ["Shadow evidence snapshot is unavailable."]);
             ShadowMetrics = new ShadowAggregateMetrics(
                 "UNAVAILABLE", null, null, null, null, null, null, null, null, null, null,
                 "Aggregate metrics are unavailable because the Shadow evidence snapshot failed closed.");

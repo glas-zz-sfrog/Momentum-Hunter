@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import uuid
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
@@ -31,12 +32,17 @@ from momentum_hunter.trade_planning import TradePlan, parse_datetime
 SHADOW_SCHEMA_VERSION = 1
 SHADOW_MODE = "PAPER SHADOW / NONTRANSMITTING"
 SHADOW_ENGINE_VERSION = "shadow_trading_v1"
+SHADOW_STRATEGY_CONTRACT_VERSION = "tradeplan-risk-shadow-v1"
+SHADOW_FILL_MODEL_VERSION = "prospective-fakebroker-v1"
+SHADOW_EVIDENCE_SCHEMA_VERSION = 1
+DEFAULT_SHADOW_SAMPLE_VERSION = "engineering-preflight-v1"
 SHADOW_STATE_PATH = DATA_DIR / "shadow-trading" / "shadow-trading-state.json"
 SHADOW_REPORTS_DIR = DATA_DIR / "reports"
 MIN_MEANINGFUL_SAMPLE_SIZE = 30
 TERMINAL_TRADE_STATES = {"completed", "blocked", "entry_rejected", "cancelled", "ambiguous_exit"}
 ACTIVE_TRADE_STATES = {"pending_entry", "partially_filled", "open"}
 TRADABLE_STATES = {"tradable", "open"}
+SAMPLE_VERSION_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 
 @dataclass(frozen=True)
@@ -49,6 +55,28 @@ class ShadowExecutionPolicy:
     buying_power: float = 100_000.0
     max_open_positions: int = 3
     daily_loss_limit: float = 500.0
+
+
+@dataclass(frozen=True)
+class ShadowSampleMetadata:
+    sample_version: str = ""
+    strategy_configuration_fingerprint: str = ""
+    strategy_configuration_json: str = ""
+    fill_model_version: str = ""
+    evidence_schema_version: int = 0
+    official_sample_authorized: bool = False
+
+
+@dataclass(frozen=True)
+class ShadowSampleReadiness:
+    status: str
+    can_start_official_sample: bool
+    sample_version: str
+    strategy_configuration_fingerprint: str
+    fill_model_version: str
+    evidence_schema_version: int
+    official_sample_authorized: bool
+    findings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -154,6 +182,10 @@ class ShadowOrderTicket:
     risk_decision: str
     evidence_snapshot_id: str
     plan_fingerprint: str
+    sample_version: str = ""
+    strategy_configuration_fingerprint: str = ""
+    fill_model_version: str = ""
+    evidence_schema_version: int = 0
     exact_ticket_entered: str = ""
     operator_modifications: str = ""
     paper_money_result: str = ""
@@ -185,6 +217,7 @@ class ShadowTrade:
     evidence: ShadowEvidenceSnapshot
     status: str
     data_quality_state: str
+    sample_metadata: ShadowSampleMetadata = field(default_factory=ShadowSampleMetadata)
     risk_rejection_reasons: tuple[str, ...] = ()
     order: ShadowOrder | None = None
     position: ShadowPosition | None = None
@@ -221,6 +254,130 @@ class ShadowTradingState:
 
 class ShadowStateError(RuntimeError):
     pass
+
+
+def build_shadow_sample_metadata(
+    policy: ShadowExecutionPolicy,
+    *,
+    sample_version: str = DEFAULT_SHADOW_SAMPLE_VERSION,
+    official_sample_authorized: bool = False,
+) -> ShadowSampleMetadata:
+    normalized_version = sample_version.strip().lower()
+    if not SAMPLE_VERSION_PATTERN.fullmatch(normalized_version):
+        raise ValueError(
+            "Shadow sample version must use 1-64 lowercase letters, numbers, dots, underscores, or hyphens."
+        )
+    configuration_json = canonical_json(shadow_strategy_configuration(policy))
+    return ShadowSampleMetadata(
+        sample_version=normalized_version,
+        strategy_configuration_fingerprint=hashlib.sha256(configuration_json.encode("utf-8")).hexdigest(),
+        strategy_configuration_json=configuration_json,
+        fill_model_version=SHADOW_FILL_MODEL_VERSION,
+        evidence_schema_version=SHADOW_EVIDENCE_SCHEMA_VERSION,
+        official_sample_authorized=official_sample_authorized,
+    )
+
+
+def shadow_strategy_configuration(policy: ShadowExecutionPolicy) -> dict[str, Any]:
+    return {
+        "shadow_engine_version": SHADOW_ENGINE_VERSION,
+        "strategy_contract_version": SHADOW_STRATEGY_CONTRACT_VERSION,
+        "fill_model_version": SHADOW_FILL_MODEL_VERSION,
+        "evidence_schema_version": SHADOW_EVIDENCE_SCHEMA_VERSION,
+        "minimum_meaningful_sample_size": MIN_MEANINGFUL_SAMPLE_SIZE,
+        "execution_policy": asdict(policy),
+    }
+
+
+def shadow_sample_metadata_findings(
+    metadata: ShadowSampleMetadata,
+    *,
+    expected_policy: ShadowExecutionPolicy | None = None,
+    require_current_contract: bool = False,
+) -> list[str]:
+    findings: list[str] = []
+    if not SAMPLE_VERSION_PATTERN.fullmatch(metadata.sample_version):
+        findings.append("Sample version is missing or invalid.")
+    if not re.fullmatch(r"[0-9a-f]{64}", metadata.strategy_configuration_fingerprint):
+        findings.append("Strategy/configuration fingerprint is missing or invalid.")
+    if not metadata.fill_model_version.strip():
+        findings.append("Fill-model version is missing.")
+    if metadata.evidence_schema_version <= 0:
+        findings.append("Evidence-schema version is missing or invalid.")
+    try:
+        configuration = json.loads(metadata.strategy_configuration_json)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        configuration = None
+    if not isinstance(configuration, dict):
+        findings.append("Frozen strategy/configuration evidence is not a JSON object.")
+        return findings
+    expected_fingerprint = hashlib.sha256(
+        canonical_json(configuration).encode("utf-8")
+    ).hexdigest()
+    if metadata.strategy_configuration_fingerprint != expected_fingerprint:
+        findings.append("Strategy/configuration fingerprint does not match its frozen configuration.")
+    if configuration.get("fill_model_version") != metadata.fill_model_version:
+        findings.append("Fill-model version does not match the frozen configuration.")
+    if configuration.get("evidence_schema_version") != metadata.evidence_schema_version:
+        findings.append("Evidence-schema version does not match the frozen configuration.")
+    if expected_policy is not None:
+        expected_configuration = shadow_strategy_configuration(expected_policy)
+        if canonical_json(configuration) != canonical_json(expected_configuration):
+            findings.append("Frozen strategy/configuration does not match the active Shadow policy.")
+    if require_current_contract:
+        if metadata.fill_model_version != SHADOW_FILL_MODEL_VERSION:
+            findings.append("Fill-model version is not the current approved Shadow model.")
+        if metadata.evidence_schema_version != SHADOW_EVIDENCE_SCHEMA_VERSION:
+            findings.append("Evidence-schema version is not the current approved schema.")
+    return list(dict.fromkeys(findings))
+
+
+def audit_shadow_sample_readiness(
+    definition: ShadowSampleMetadata,
+    *,
+    policy: ShadowExecutionPolicy | None = None,
+    trades: Iterable[ShadowTrade] = (),
+) -> ShadowSampleReadiness:
+    findings = shadow_sample_metadata_findings(
+        definition,
+        expected_policy=policy,
+        require_current_contract=True,
+    )
+    if not definition.official_sample_authorized:
+        findings.append("Official sample collection has not received its separate authorization checkpoint.")
+    matching_trades = [
+        trade
+        for trade in trades
+        if trade.sample_metadata.sample_version == definition.sample_version
+    ]
+    for trade in matching_trades:
+        if trade.sample_metadata != definition:
+            findings.append(
+                f"Shadow Trade {trade.shadow_trade_id or 'unknown'} conflicts with the active sample definition."
+            )
+    findings = list(dict.fromkeys(findings))
+    if findings:
+        status = "BLOCKED"
+        can_start = False
+    elif matching_trades:
+        status = "IN_PROGRESS"
+        can_start = False
+        findings.append(
+            f"Sample version already contains {len(matching_trades)} persisted trade record(s)."
+        )
+    else:
+        status = "PASS"
+        can_start = True
+    return ShadowSampleReadiness(
+        status=status,
+        can_start_official_sample=can_start,
+        sample_version=definition.sample_version,
+        strategy_configuration_fingerprint=definition.strategy_configuration_fingerprint,
+        fill_model_version=definition.fill_model_version,
+        evidence_schema_version=definition.evidence_schema_version,
+        official_sample_authorized=definition.official_sample_authorized,
+        findings=tuple(findings),
+    )
 
 
 class ShadowStateStore:
@@ -351,9 +508,16 @@ class ShadowTradingService:
         *,
         store: ShadowStateStore | None = None,
         policy: ShadowExecutionPolicy | None = None,
+        sample_version: str = DEFAULT_SHADOW_SAMPLE_VERSION,
+        official_sample_authorized: bool = False,
     ) -> None:
         self.store = store or ShadowStateStore()
         self.policy = policy or ShadowExecutionPolicy()
+        self.sample_definition = build_shadow_sample_metadata(
+            self.policy,
+            sample_version=sample_version,
+            official_sample_authorized=official_sample_authorized,
+        )
         self.fake_broker = ProspectiveFakeBroker(self.policy)
 
     def start_trade(
@@ -418,7 +582,14 @@ class ShadowTradingService:
         )
         risk = replace(evaluated_risk, result_id=risk_seed)
         risk_json = canonical_json(risk_result_to_dict(risk))
-        request_fingerprint = stable_id("shadow-request", source_sha, normalized_symbol, plan_fingerprint)
+        sample_definition_json = canonical_json(asdict(self.sample_definition))
+        request_fingerprint = stable_id(
+            "shadow-request",
+            source_sha,
+            normalized_symbol,
+            plan_fingerprint,
+            sample_definition_json,
+        )
         state = self.store.load()
         existing_receipt = next((item for item in state.command_receipts if item.command_id == simulation_command_id), None)
         if existing_receipt is not None:
@@ -458,6 +629,12 @@ class ShadowTradingService:
                 "candidate_id": candidate_id,
                 "evidence_snapshot_id": evidence_snapshot_id,
                 "simulation_command_id": simulation_command_id,
+                "sample_version": self.sample_definition.sample_version,
+                "strategy_configuration_fingerprint": (
+                    self.sample_definition.strategy_configuration_fingerprint
+                ),
+                "fill_model_version": self.sample_definition.fill_model_version,
+                "evidence_schema_version": self.sample_definition.evidence_schema_version,
             },
         )
         quantity = int(candidate.trade_plan.estimated_shares_for_500 or 0)
@@ -500,6 +677,12 @@ class ShadowTradingService:
                 risk_decision=f"{risk.status} ({risk.result_id})",
                 evidence_snapshot_id=evidence_snapshot_id,
                 plan_fingerprint=plan_fingerprint,
+                sample_version=self.sample_definition.sample_version,
+                strategy_configuration_fingerprint=(
+                    self.sample_definition.strategy_configuration_fingerprint
+                ),
+                fill_model_version=self.sample_definition.fill_model_version,
+                evidence_schema_version=self.sample_definition.evidence_schema_version,
             )
             preview_event = make_ledger_event(
                 shadow_trade_id,
@@ -582,6 +765,7 @@ class ShadowTradingService:
             evidence=evidence,
             status=status,
             data_quality_state=data_quality_state,
+            sample_metadata=self.sample_definition,
             risk_rejection_reasons=rejection_reasons,
             order=order,
             ticket=ticket,
@@ -667,7 +851,17 @@ class ShadowTradingService:
     def snapshot(self) -> dict[str, Any]:
         state = self.store.load()
         audits = {trade.shadow_trade_id: audit_shadow_trade(trade) for trade in state.trades}
-        review = build_shadow_review_snapshot(state.trades, audits)
+        review = build_shadow_review_snapshot(
+            state.trades,
+            audits,
+            sample_definition=self.sample_definition,
+            policy=self.policy,
+        )
+        readiness = audit_shadow_sample_readiness(
+            self.sample_definition,
+            policy=self.policy,
+            trades=state.trades,
+        )
         return {
             "schemaVersion": SHADOW_SCHEMA_VERSION,
             "mode": SHADOW_MODE,
@@ -675,10 +869,11 @@ class ShadowTradingService:
             "transmitting": False,
             "summary": "Prospective Shadow Trading uses supplied evidence and FakeBroker execution only.",
             "trades": [shadow_trade_to_dict(trade) for trade in state.trades],
-            "metrics": shadow_metrics(state.trades),
+            "metrics": review["metrics"],
             "reviewTrades": review["trades"],
             "sample": review["sample"],
             "reviewMetrics": review["metrics"],
+            "sampleReadiness": shadow_sample_readiness_to_dict(readiness),
             "audits": {
                 trade_id: {
                     "status": report.status,
@@ -1021,6 +1216,8 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
     for field_name, value in required.items():
         if not value.strip():
             findings.append(AuditFinding(trade.shadow_trade_id, field_name, f"Missing Shadow Trading identifier: {field_name}"))
+    for message in shadow_sample_metadata_findings(trade.sample_metadata):
+        findings.append(AuditFinding(trade.shadow_trade_id, "sample_metadata", message))
     findings.extend(frozen_evidence_findings(trade))
     findings.extend(frozen_plan_findings(trade))
     expected_shadow_trade_id = stable_id("shadow-trade", trade.simulation_command_id, trade.evidence_snapshot_id)
@@ -1045,6 +1242,27 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
     if trade.order is not None:
         if "simulated_order_previewed" not in actions or "fake_order_submitted" not in actions:
             findings.append(AuditFinding(trade.shadow_trade_id, "order", "Missing preview or submit evidence."))
+    if trade.ticket is not None:
+        ticket_sample = (
+            trade.ticket.sample_version,
+            trade.ticket.strategy_configuration_fingerprint,
+            trade.ticket.fill_model_version,
+            trade.ticket.evidence_schema_version,
+        )
+        trade_sample = (
+            trade.sample_metadata.sample_version,
+            trade.sample_metadata.strategy_configuration_fingerprint,
+            trade.sample_metadata.fill_model_version,
+            trade.sample_metadata.evidence_schema_version,
+        )
+        if ticket_sample != trade_sample:
+            findings.append(
+                AuditFinding(
+                    trade.shadow_trade_id,
+                    "ticket",
+                    "Nontransmitting ticket sample metadata does not match the Shadow Trade.",
+                )
+            )
     if trade.position is not None and "fake_order_filled" not in actions:
         findings.append(AuditFinding(trade.shadow_trade_id, "position", "Position exists without fill evidence."))
     if trade.status == "completed":
@@ -1141,17 +1359,39 @@ def frozen_plan_findings(trade: ShadowTrade) -> list[AuditFinding]:
 def build_shadow_review_snapshot(
     trades: Iterable[ShadowTrade],
     audits: dict[str, AuditReport] | None = None,
+    *,
+    sample_definition: ShadowSampleMetadata | None = None,
+    policy: ShadowExecutionPolicy | None = None,
 ) -> dict[str, Any]:
     items = list(trades)
+    active_definition = sample_definition or (
+        items[0].sample_metadata
+        if items
+        else build_shadow_sample_metadata(ShadowExecutionPolicy())
+    )
     audit_by_id = audits or {trade.shadow_trade_id: audit_shadow_trade(trade) for trade in items}
     review_trades = [
-        shadow_review_trade_to_dict(trade, audit_by_id[trade.shadow_trade_id])
+        shadow_review_trade_to_dict(
+            trade,
+            audit_by_id[trade.shadow_trade_id],
+            sample_definition=active_definition,
+        )
         for trade in items
     ]
     eligible_completed = [
         trade
         for trade, review in zip(items, review_trades)
         if review["countsTowardSample"]
+    ]
+    sample_items = [
+        trade
+        for trade in items
+        if trade.sample_metadata == active_definition
+    ]
+    sample_reviews = [
+        review
+        for trade, review in zip(items, review_trades)
+        if trade.sample_metadata == active_definition
     ]
     metrics = shadow_metrics(eligible_completed)
     gated_fields = (
@@ -1172,27 +1412,54 @@ def build_shadow_review_snapshot(
         metrics["conclusion"] = (
             "Evidence collection in progress. Results are not yet sufficient for strategy conclusions."
         )
-    active_count = sum(1 for trade in items if trade.status in ACTIVE_TRADE_STATES)
+    active_count = sum(1 for trade in sample_items if trade.status in ACTIVE_TRADE_STATES)
+    readiness = audit_shadow_sample_readiness(
+        active_definition,
+        policy=policy,
+        trades=items,
+    )
     sample = {
         "minimumRequired": MIN_MEANINGFUL_SAMPLE_SIZE,
         "eligibleCompleted": len(eligible_completed),
-        "completed": sum(1 for trade in items if trade.status == "completed"),
+        "completed": sum(1 for trade in sample_items if trade.status == "completed"),
         "active": active_count,
-        "unfilled": sum(1 for trade in items if trade.status == "pending_entry"),
-        "riskRejected": sum(1 for trade in items if trade.status == "blocked"),
-        "dataQualityInvalidated": sum(1 for trade in items if trade.data_quality_state != "COMPLETE"),
-        "excluded": sum(1 for review in review_trades if not review["evidenceEligible"]),
+        "unfilled": sum(1 for trade in sample_items if trade.status == "pending_entry"),
+        "riskRejected": sum(1 for trade in sample_items if trade.status == "blocked"),
+        "dataQualityInvalidated": sum(
+            1 for trade in sample_items if trade.data_quality_state != "COMPLETE"
+        ),
+        "excluded": sum(1 for review in sample_reviews if not review["evidenceEligible"]),
         "gateSatisfied": len(eligible_completed) >= MIN_MEANINGFUL_SAMPLE_SIZE,
+        "sampleVersion": active_definition.sample_version,
+        "strategyConfigurationFingerprint": (
+            active_definition.strategy_configuration_fingerprint
+        ),
+        "fillModelVersion": active_definition.fill_model_version,
+        "evidenceSchemaVersion": active_definition.evidence_schema_version,
+        "officialSampleAuthorized": active_definition.official_sample_authorized,
+        "readinessStatus": readiness.status,
+        "canStartOfficialSample": readiness.can_start_official_sample,
+        "readinessFindings": list(readiness.findings),
         "status": (
             "Evidence sample is sufficient for descriptive aggregate metrics."
             if len(eligible_completed) >= MIN_MEANINGFUL_SAMPLE_SIZE
             else "Evidence collection in progress. Results are not yet sufficient for strategy conclusions."
         ),
     }
-    return {"trades": review_trades, "sample": sample, "metrics": metrics}
+    return {
+        "trades": review_trades,
+        "sample": sample,
+        "metrics": metrics,
+        "sampleReadiness": shadow_sample_readiness_to_dict(readiness),
+    }
 
 
-def shadow_review_trade_to_dict(trade: ShadowTrade, audit: AuditReport) -> dict[str, Any]:
+def shadow_review_trade_to_dict(
+    trade: ShadowTrade,
+    audit: AuditReport,
+    *,
+    sample_definition: ShadowSampleMetadata,
+) -> dict[str, Any]:
     plan = trade.trade_plan()
     risk = trade.risk_result_payload()
     plan_frozen = not frozen_plan_findings(trade)
@@ -1218,12 +1485,21 @@ def shadow_review_trade_to_dict(trade: ShadowTrade, audit: AuditReport) -> dict[
         lock_reasons.extend(finding.message for finding in audit.findings)
     if trade.data_quality_state != "COMPLETE":
         lock_reasons.append(f"Data quality is {trade.data_quality_state}; this record is excluded.")
+    metadata_findings = shadow_sample_metadata_findings(trade.sample_metadata)
+    lock_reasons.extend(metadata_findings)
+    if not trade.sample_metadata.official_sample_authorized:
+        lock_reasons.append("Official sample collection was not authorized for this record.")
+    if trade.sample_metadata != sample_definition:
+        lock_reasons.append("Record belongs to a different or obsolete sample definition.")
     evidence_eligible = (
         evidence_frozen
         and plan_frozen
         and not post_decision_correction
         and audit.status == "PASS"
         and trade.data_quality_state == "COMPLETE"
+        and not metadata_findings
+        and trade.sample_metadata.official_sample_authorized
+        and trade.sample_metadata == sample_definition
     )
     counts_toward_sample = (
         evidence_eligible
@@ -1303,6 +1579,7 @@ def shadow_review_trade_to_dict(trade: ShadowTrade, audit: AuditReport) -> dict[
         ),
         "lifecycleState": trade.status,
         "dataQualityState": trade.data_quality_state,
+        "sampleMetadata": shadow_sample_metadata_to_dict(trade.sample_metadata),
         "lastReason": trade.last_reason,
         "evidenceLock": {
             "evidenceFrozen": evidence_frozen,
@@ -1477,6 +1754,10 @@ def render_shadow_ticket_markdown(ticket: ShadowOrderTicket) -> str:
             f"- Risk decision: {ticket.risk_decision}",
             f"- Evidence snapshot ID: `{ticket.evidence_snapshot_id}`",
             f"- Plan fingerprint: `{ticket.plan_fingerprint}`",
+            f"- Sample version: `{ticket.sample_version or 'UNVERSIONED'}`",
+            f"- Strategy/configuration fingerprint: `{ticket.strategy_configuration_fingerprint or 'UNAVAILABLE'}`",
+            f"- Fill-model version: `{ticket.fill_model_version or 'UNVERSIONED'}`",
+            f"- Evidence-schema version: {ticket.evidence_schema_version or 'UNVERSIONED'}",
             "",
             "## Manual paperMoney Reconciliation",
             "",
@@ -1501,6 +1782,29 @@ def shadow_state_to_dict(state: ShadowTradingState) -> dict[str, Any]:
         "updated_at": state.updated_at,
         "trades": [shadow_trade_to_dict(trade) for trade in state.trades],
         "command_receipts": [asdict(receipt) for receipt in state.command_receipts],
+    }
+
+
+def shadow_sample_metadata_to_dict(metadata: ShadowSampleMetadata) -> dict[str, Any]:
+    return {
+        "sampleVersion": metadata.sample_version,
+        "strategyConfigurationFingerprint": metadata.strategy_configuration_fingerprint,
+        "fillModelVersion": metadata.fill_model_version,
+        "evidenceSchemaVersion": metadata.evidence_schema_version,
+        "officialSampleAuthorized": metadata.official_sample_authorized,
+    }
+
+
+def shadow_sample_readiness_to_dict(readiness: ShadowSampleReadiness) -> dict[str, Any]:
+    return {
+        "status": readiness.status,
+        "canStartOfficialSample": readiness.can_start_official_sample,
+        "sampleVersion": readiness.sample_version,
+        "strategyConfigurationFingerprint": readiness.strategy_configuration_fingerprint,
+        "fillModelVersion": readiness.fill_model_version,
+        "evidenceSchemaVersion": readiness.evidence_schema_version,
+        "officialSampleAuthorized": readiness.official_sample_authorized,
+        "findings": list(readiness.findings),
     }
 
 
@@ -1543,6 +1847,29 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
     position_payload = payload.get("position")
     outcome_payload = payload.get("outcome")
     ticket_payload = payload.get("ticket")
+    sample_payload = payload.get("sample_metadata")
+    if sample_payload is None:
+        sample_metadata = ShadowSampleMetadata()
+    elif isinstance(sample_payload, dict):
+        sample_metadata = ShadowSampleMetadata(
+            sample_version=str(sample_payload.get("sample_version", "")),
+            strategy_configuration_fingerprint=str(
+                sample_payload.get("strategy_configuration_fingerprint", "")
+            ),
+            strategy_configuration_json=str(
+                sample_payload.get("strategy_configuration_json", "")
+            ),
+            fill_model_version=str(sample_payload.get("fill_model_version", "")),
+            evidence_schema_version=optional_int(
+                sample_payload.get("evidence_schema_version")
+            )
+            or 0,
+            official_sample_authorized=(
+                sample_payload.get("official_sample_authorized") is True
+            ),
+        )
+    else:
+        raise ShadowStateError("Shadow state field 'sample_metadata' must be an object.")
     return ShadowTrade(
         shadow_trade_id=str(payload.get("shadow_trade_id", "")),
         simulation_command_id=str(payload.get("simulation_command_id", "")),
@@ -1564,6 +1891,7 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
         evidence=ShadowEvidenceSnapshot(**evidence_payload),
         status=str(payload.get("status", "")),
         data_quality_state=str(payload.get("data_quality_state", "")),
+        sample_metadata=sample_metadata,
         risk_rejection_reasons=tuple(str(item) for item in payload.get("risk_rejection_reasons", [])),
         order=ShadowOrder(**order_payload) if isinstance(order_payload, dict) else None,
         position=ShadowPosition(**position_payload) if isinstance(position_payload, dict) else None,

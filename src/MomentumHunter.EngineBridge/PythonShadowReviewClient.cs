@@ -43,6 +43,22 @@ public static class PythonShadowReviewSnapshotMapper
         {
             throw new InvalidDataException("Shadow profitability metrics were exposed before the minimum sample gate.");
         }
+        if (trades.Any(trade => trade.CountsTowardSample && trade.SampleDefinition != sample.Definition))
+        {
+            throw new InvalidDataException("A counted Shadow trade does not match the active sample definition.");
+        }
+        if (sample.CanStartOfficialSample
+            && (!sample.Definition.OfficialSampleAuthorized
+                || !string.Equals(sample.ReadinessStatus, "PASS", StringComparison.Ordinal)
+                || sample.ReadinessFindings.Count != 0))
+        {
+            throw new InvalidDataException("The Shadow sample start gate is internally inconsistent.");
+        }
+        if (!sample.CanStartOfficialSample
+            && string.Equals(sample.ReadinessStatus, "PASS", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("A passing Shadow sample start gate must explicitly allow the separate start checkpoint.");
+        }
 
         return new ShadowReviewSnapshot(
             RequiredInteger(root, "schemaVersion"),
@@ -67,12 +83,14 @@ public static class PythonShadowReviewSnapshotMapper
             StringArray(evidenceLockItem, "reasons"));
         var eligible = Boolean(item, "evidenceEligible");
         var countsTowardSample = Boolean(item, "countsTowardSample");
+        var sampleDefinition = SampleDefinition(Object(item, "sampleMetadata"));
         if (eligible && (!evidenceLock.EvidenceFrozen
                          || !evidenceLock.PlanFrozen
                          || evidenceLock.PostDecisionCorrectionOccurred
-                         || !string.Equals(evidenceLock.AuditStatus, "PASS", StringComparison.Ordinal)))
+                         || !string.Equals(evidenceLock.AuditStatus, "PASS", StringComparison.Ordinal)
+                         || !sampleDefinition.OfficialSampleAuthorized))
         {
-            throw new InvalidDataException("A Shadow trade cannot be evidence-eligible when an evidence lock or audit failed.");
+            throw new InvalidDataException("A Shadow trade cannot be evidence-eligible when an evidence lock, audit, or sample authorization failed.");
         }
 
         var lifecycleState = RequiredString(item, "lifecycleState");
@@ -138,22 +156,74 @@ public static class PythonShadowReviewSnapshotMapper
                 Decimal(item, "maeDollars"),
                 Integer(item, "durationSeconds")),
             evidenceLock,
+            sampleDefinition,
             RequiredString(item, "dataQualityState"),
             eligible,
             countsTowardSample);
     }
 
-    private static ShadowSampleStatus Sample(JsonElement item) => new(
-        RequiredInteger(item, "minimumRequired"),
-        RequiredInteger(item, "eligibleCompleted"),
-        RequiredInteger(item, "completed"),
-        RequiredInteger(item, "active"),
-        RequiredInteger(item, "unfilled"),
-        RequiredInteger(item, "riskRejected"),
-        RequiredInteger(item, "dataQualityInvalidated"),
-        RequiredInteger(item, "excluded"),
-        Boolean(item, "gateSatisfied"),
-        RequiredString(item, "status"));
+    private static ShadowSampleStatus Sample(JsonElement item)
+    {
+        var definition = new ShadowSampleDefinition(
+            RequiredString(item, "sampleVersion"),
+            RequiredString(item, "strategyConfigurationFingerprint"),
+            RequiredString(item, "fillModelVersion"),
+            RequiredInteger(item, "evidenceSchemaVersion"),
+            Boolean(item, "officialSampleAuthorized"));
+        ValidateSampleDefinition(definition);
+        var readinessStatus = RequiredString(item, "readinessStatus");
+        if (readinessStatus is not ("PASS" or "BLOCKED" or "IN_PROGRESS"))
+        {
+            throw new InvalidDataException("Shadow sample readiness status is unsupported.");
+        }
+        return new ShadowSampleStatus(
+            RequiredInteger(item, "minimumRequired"),
+            RequiredInteger(item, "eligibleCompleted"),
+            RequiredInteger(item, "completed"),
+            RequiredInteger(item, "active"),
+            RequiredInteger(item, "unfilled"),
+            RequiredInteger(item, "riskRejected"),
+            RequiredInteger(item, "dataQualityInvalidated"),
+            RequiredInteger(item, "excluded"),
+            Boolean(item, "gateSatisfied"),
+            RequiredString(item, "status"),
+            definition,
+            readinessStatus,
+            Boolean(item, "canStartOfficialSample"),
+            StringArray(item, "readinessFindings"));
+    }
+
+    private static ShadowSampleDefinition SampleDefinition(JsonElement item)
+    {
+        var definition = new ShadowSampleDefinition(
+            RequiredString(item, "sampleVersion"),
+            RequiredString(item, "strategyConfigurationFingerprint"),
+            RequiredString(item, "fillModelVersion"),
+            RequiredInteger(item, "evidenceSchemaVersion"),
+            Boolean(item, "officialSampleAuthorized"));
+        ValidateSampleDefinition(definition);
+        return definition;
+    }
+
+    private static void ValidateSampleDefinition(ShadowSampleDefinition definition)
+    {
+        if (string.IsNullOrWhiteSpace(definition.SampleVersion)
+            || definition.SampleVersion.Length > 64
+            || !(definition.SampleVersion[0] is >= 'a' and <= 'z'
+                 || definition.SampleVersion[0] is >= '0' and <= '9')
+            || definition.SampleVersion.Any(character =>
+                !(character is >= 'a' and <= 'z'
+                  || character is >= '0' and <= '9'
+                  || character is '.' or '_' or '-'))
+            || definition.StrategyConfigurationFingerprint.Length != 64
+            || definition.StrategyConfigurationFingerprint.Any(character =>
+                !Uri.IsHexDigit(character) || char.IsUpper(character))
+            || string.IsNullOrWhiteSpace(definition.FillModelVersion)
+            || definition.EvidenceSchemaVersion <= 0)
+        {
+            throw new InvalidDataException("Shadow sample definition is malformed.");
+        }
+    }
 
     private static ShadowAggregateMetrics Metrics(JsonElement item) => new(
         RequiredString(item, "sampleStatus"),

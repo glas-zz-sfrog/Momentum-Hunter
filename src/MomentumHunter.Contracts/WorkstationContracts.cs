@@ -315,12 +315,25 @@ public sealed record ShadowEvidenceLock(
     public string ReasonDisplay => Reasons.Count == 0 ? "Immutable evidence audit passed." : string.Join(" | ", Reasons);
 }
 
+public sealed record ShadowSampleDefinition(
+    string SampleVersion,
+    string StrategyConfigurationFingerprint,
+    string FillModelVersion,
+    int EvidenceSchemaVersion,
+    bool OfficialSampleAuthorized)
+{
+    public string FingerprintDisplay => StrategyConfigurationFingerprint.Length >= 12
+        ? StrategyConfigurationFingerprint[..12]
+        : StrategyConfigurationFingerprint;
+}
+
 public sealed record ShadowTradeReviewSnapshot(
     ShadowTradeIdentity Identity,
     ShadowPlanReview Plan,
     ShadowExecutionReview Execution,
     ShadowOutcomeReview Outcome,
     ShadowEvidenceLock EvidenceLock,
+    ShadowSampleDefinition SampleDefinition,
     string DataQualityState,
     bool EvidenceEligible,
     bool CountsTowardSample)
@@ -348,9 +361,24 @@ public sealed record ShadowSampleStatus(
     int DataQualityInvalidated,
     int Excluded,
     bool GateSatisfied,
-    string Status)
+    string Status,
+    ShadowSampleDefinition Definition,
+    string ReadinessStatus,
+    bool CanStartOfficialSample,
+    IReadOnlyList<string> ReadinessFindings)
 {
     public string ProgressLabel => $"Prospective Shadow Trades: {EligibleCompleted} / {MinimumRequired}";
+    public string ReadinessLabel => ReadinessStatus switch
+    {
+        "PASS" => "SAMPLE START GATE • PASS - SEPARATE APPROVAL REQUIRED",
+        "IN_PROGRESS" => "SAMPLE VERSION • IN PROGRESS",
+        _ => "SAMPLE START LOCKED",
+    };
+    public string DefinitionLabel =>
+        $"{Definition.SampleVersion}  |  Fill {Definition.FillModelVersion}  |  Evidence v{Definition.EvidenceSchemaVersion}  |  Config {Definition.FingerprintDisplay}";
+    public string ReadinessReasonDisplay => ReadinessFindings.Count == 0
+        ? "All configured engineering checks passed; this does not start a sample."
+        : string.Join(" | ", ReadinessFindings);
 }
 
 public sealed record ShadowAggregateMetrics(

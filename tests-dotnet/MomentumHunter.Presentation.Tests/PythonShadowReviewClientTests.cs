@@ -22,6 +22,10 @@ public sealed class PythonShadowReviewClientTests
         Assert.True(trade.CountsTowardSample);
         Assert.Equal(1, snapshot.Sample.EligibleCompleted);
         Assert.False(snapshot.Sample.GateSatisfied);
+        Assert.Equal("IN_PROGRESS", snapshot.Sample.ReadinessStatus);
+        Assert.False(snapshot.Sample.CanStartOfficialSample);
+        Assert.Equal("synthetic-official-v1", snapshot.Sample.Definition.SampleVersion);
+        Assert.Equal("prospective-fakebroker-v1", trade.SampleDefinition.FillModelVersion);
         Assert.Equal("Withheld", snapshot.Metrics.WinRateDisplay);
         Assert.Contains("entry slippage", trade.Execution.Quality.Summary, StringComparison.OrdinalIgnoreCase);
     }
@@ -56,6 +60,29 @@ public sealed class PythonShadowReviewClientTests
             "\"winRatePercent\": null",
             "\"winRatePercent\": 100.0",
             StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(payload);
+
+        Assert.Throws<InvalidDataException>(() => PythonShadowReviewSnapshotMapper.Map(document.RootElement));
+    }
+
+    [Fact]
+    public void MapperRejectsEligibleTradeWithoutOfficialSampleAuthorization()
+    {
+        var payload = Payload().Replace(
+            "\"officialSampleAuthorized\": true",
+            "\"officialSampleAuthorized\": false",
+            StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(payload);
+
+        Assert.Throws<InvalidDataException>(() => PythonShadowReviewSnapshotMapper.Map(document.RootElement));
+    }
+
+    [Fact]
+    public void MapperRejectsInconsistentPassingStartGate()
+    {
+        var payload = Payload()
+            .Replace("\"readinessStatus\": \"IN_PROGRESS\"", "\"readinessStatus\": \"PASS\"", StringComparison.Ordinal)
+            .Replace("\"canStartOfficialSample\": false", "\"canStartOfficialSample\": true", StringComparison.Ordinal);
         using var document = JsonDocument.Parse(payload);
 
         Assert.Throws<InvalidDataException>(() => PythonShadowReviewSnapshotMapper.Map(document.RootElement));
@@ -108,6 +135,13 @@ public sealed class PythonShadowReviewClientTests
           "outcome": "WIN",
           "lifecycleState": "completed",
           "dataQualityState": "COMPLETE",
+          "sampleMetadata": {
+            "sampleVersion": "synthetic-official-v1",
+            "strategyConfigurationFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "fillModelVersion": "prospective-fakebroker-v1",
+            "evidenceSchemaVersion": 1,
+            "officialSampleAuthorized": true
+          },
           "lastReason": "Shadow position closed by target_1.",
           "evidenceLock": {
             "evidenceFrozen": true,
@@ -147,6 +181,14 @@ public sealed class PythonShadowReviewClientTests
         "dataQualityInvalidated": 0,
         "excluded": 0,
         "gateSatisfied": false,
+        "sampleVersion": "synthetic-official-v1",
+        "strategyConfigurationFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "fillModelVersion": "prospective-fakebroker-v1",
+        "evidenceSchemaVersion": 1,
+        "officialSampleAuthorized": true,
+        "readinessStatus": "IN_PROGRESS",
+        "canStartOfficialSample": false,
+        "readinessFindings": ["Sample version already contains 1 persisted trade record(s)."],
         "status": "Evidence collection in progress. Results are not yet sufficient for strategy conclusions."
       },
       "reviewMetrics": {
