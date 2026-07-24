@@ -16,6 +16,9 @@ public static class WorkspaceFactory
                 registry.Create(PaneKind.Activity, "Activity", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.Research, "Research", LinkGroup.A, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.Watchlist, "Watchlist", LinkGroup.Unlinked, DockRegion.Left, symbol, interval).IsVisible = false;
+                registry.Create(PaneKind.DailyWorkflow, "Daily Workflow", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
+                registry.Create(PaneKind.CandidateStory, "Candidate Story", LinkGroup.A, DockRegion.Bottom, symbol, interval).IsVisible = false;
+                registry.Create(PaneKind.ResearchMaturity, "Research Maturity", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.Automation, "Automation", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.Orders, "Orders", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.Positions, "Positions", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;

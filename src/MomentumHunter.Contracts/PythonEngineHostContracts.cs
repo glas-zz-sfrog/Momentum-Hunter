@@ -14,6 +14,11 @@ public static class PythonEngineHostProtocol
     public const string GetSimulationWorkspaceSnapshot = "get_simulation_workspace_snapshot";
     public const string GetShadowTradingSnapshot = "get_shadow_trading_snapshot";
     public const string GetChartSnapshot = "get_chart_snapshot";
+    public const string GetTechnicalResearchSnapshot = "get_technical_research_snapshot";
+    public const string GetSavedWatchlistSnapshot = "get_saved_watchlist_snapshot";
+    public const string GetDailyWorkflowSnapshot = "get_daily_workflow_snapshot";
+    public const string GetCandidateStorySnapshot = "get_candidate_story_snapshot";
+    public const string GetResearchMaturitySnapshot = "get_research_maturity_snapshot";
     public const string RunSimulation = "run_simulation";
 }
 

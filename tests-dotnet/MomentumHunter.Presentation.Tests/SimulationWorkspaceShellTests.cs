@@ -178,12 +178,22 @@ public sealed class SimulationWorkspaceShellTests
             [new TradeLevel("Entry", 176.42m, "Persisted TradePlan entry.")],
             risk);
         var workspace = new ReadOnlyWorkspaceSnapshot(
-            1,
+            2,
             observedAt,
             "Persisted evidence loaded.",
             [candidate],
             [new ActivityEvent(observedAt, "Research", "Persisted report loaded.", "NVDA", HealthState.Healthy)],
             new SystemHealthSnapshot([new HealthComponentSnapshot("Trade planning report", HealthState.Healthy, "Loaded", observedAt)], observedAt),
+            new AlertEvidenceSnapshot(
+                AlertEvidenceState.Empty,
+                observedAt,
+                "The persisted alert store is readable but empty.",
+                0,
+                0,
+                0,
+                0,
+                [],
+                []),
             new ReplaySnapshot("NOT_SELECTED", observedAt, string.Empty, "source capture", "No replay identity was synthesized."),
             true);
         return new SimulationWorkspaceSnapshot(

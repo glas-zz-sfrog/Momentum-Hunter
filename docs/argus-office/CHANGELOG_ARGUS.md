@@ -1,6 +1,10 @@
 # Argus Changelog
 
 ## Unreleased
+- Completed automated R027 verification: 146 focused and 641 full-discovery Python tests, all 206 .NET tests, zero-warning Release build, protected/source reviews, versioned review package, and fresh offscreen UI proof pass; R027 is implemented pending Steven's manual review and merge decision.
+- Began Steven-authorized R027 integration of R026 with the current Shadow-003 baseline, preserving both parent histories on a dedicated branch while leaving `master` unchanged.
+- Reconciled Shadow review/sample-lock host commands and UI with R013-R025 chart inspection, command palette, candidate evidence, health, replay, monitoring, activity, alert/outcome, technical research, saved watchlist, Daily Workflow, Candidate Story, and Research Maturity surfaces.
+- Preserved R026's unattended Qt fixes, replaced two environment-dependent live-host absence assertions with truthful state/structure checks, and kept rejected icon artwork excluded.
 - Fast-forwarded Steven-approved ARGUS-SHADOW-003 into local `master`; nothing was pushed, and official sample collection remains separately locked and unauthorized.
 - Added ARGUS-SHADOW-003's immutable sample version, strategy/configuration fingerprint, fill-model version, evidence-schema version, and explicit sample-authorization metadata to prospective Shadow records and nontransmitting tickets.
 - Added a deterministic fail-closed sample-readiness audit and strict Python/.NET projection checks that preserve but exclude legacy, unauthorized, obsolete, malformed, tampered, or configuration-mismatched evidence and withhold all profitability metrics until the exact active sample reaches its gate.

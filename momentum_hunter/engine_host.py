@@ -32,6 +32,11 @@ COMMAND_SHUTDOWN = "shutdown_host"
 COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT = "get_readonly_workspace_snapshot"
 COMMAND_SIMULATION_WORKSPACE_SNAPSHOT = "get_simulation_workspace_snapshot"
 COMMAND_CHART_SNAPSHOT = "get_chart_snapshot"
+COMMAND_TECHNICAL_RESEARCH_SNAPSHOT = "get_technical_research_snapshot"
+COMMAND_SAVED_WATCHLIST_SNAPSHOT = "get_saved_watchlist_snapshot"
+COMMAND_DAILY_WORKFLOW_SNAPSHOT = "get_daily_workflow_snapshot"
+COMMAND_CANDIDATE_STORY_SNAPSHOT = "get_candidate_story_snapshot"
+COMMAND_RESEARCH_MATURITY_SNAPSHOT = "get_research_maturity_snapshot"
 COMMAND_RUN_SIMULATION = "run_simulation"
 COMMAND_SHADOW_WORKSPACE_SNAPSHOT = "get_shadow_trading_snapshot"
 COMMAND_START_SHADOW_TRADE = "start_shadow_trade"
@@ -46,6 +51,11 @@ SUPPORTED_COMMANDS = frozenset(
         COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
         COMMAND_SIMULATION_WORKSPACE_SNAPSHOT,
         COMMAND_CHART_SNAPSHOT,
+        COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
+        COMMAND_SAVED_WATCHLIST_SNAPSHOT,
+        COMMAND_DAILY_WORKFLOW_SNAPSHOT,
+        COMMAND_CANDIDATE_STORY_SNAPSHOT,
+        COMMAND_RESEARCH_MATURITY_SNAPSHOT,
         COMMAND_RUN_SIMULATION,
         COMMAND_SHADOW_WORKSPACE_SNAPSHOT,
         COMMAND_START_SHADOW_TRADE,
@@ -221,6 +231,11 @@ class EngineHostRuntime:
         shadow_starter: Callable[[str, str], dict[str, Any]] | None = None,
         shadow_observation_runner: Callable[[], dict[str, Any]] | None = None,
         advance_shadow_after_collection: bool = False,
+        technical_research_snapshot_loader: Callable[[str], dict[str, Any]] | None = None,
+        saved_watchlist_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
+        daily_workflow_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
+        candidate_story_loader: Callable[[str], dict[str, Any]] | None = None,
+        research_maturity_loader: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
@@ -251,6 +266,45 @@ class EngineHostRuntime:
         self._shadow_starter = shadow_starter or self._shadow_workspace_service.start
         self._shadow_observation_runner = shadow_observation_runner or self._shadow_workspace_service.advance_observations
         self._advance_shadow_after_collection = advance_shadow_after_collection
+        if technical_research_snapshot_loader is None:
+            from momentum_hunter.workstation_technical_research import WorkstationTechnicalResearchService
+
+            self._technical_research_service = WorkstationTechnicalResearchService()
+        else:
+            self._technical_research_service = None
+        self._technical_research_snapshot_loader = (
+            technical_research_snapshot_loader or self._technical_research_service.snapshot
+        )
+        if saved_watchlist_snapshot_loader is None:
+            from momentum_hunter.workstation_saved_watchlist import WorkstationSavedWatchlistService
+
+            self._saved_watchlist_service = WorkstationSavedWatchlistService()
+        else:
+            self._saved_watchlist_service = None
+        self._saved_watchlist_snapshot_loader = (
+            saved_watchlist_snapshot_loader or self._saved_watchlist_service.snapshot
+        )
+        self._daily_workflow_snapshot_loader = (
+            daily_workflow_snapshot_loader or self._load_daily_workflow_snapshot
+        )
+        if candidate_story_loader is None:
+            from momentum_hunter.workstation_candidate_story import CandidateStoryWorkspaceService
+
+            self._candidate_story_service = CandidateStoryWorkspaceService()
+        else:
+            self._candidate_story_service = None
+        self._candidate_story_loader = candidate_story_loader or self._candidate_story_service.snapshot
+        if research_maturity_loader is None:
+            from momentum_hunter.workstation_research_maturity import (
+                WorkstationResearchMaturityService,
+            )
+
+            self._research_maturity_service = WorkstationResearchMaturityService()
+        else:
+            self._research_maturity_service = None
+        self._research_maturity_loader = (
+            research_maturity_loader or self._research_maturity_service.snapshot
+        )
         self._state_lock = threading.RLock()
         self._command_condition = threading.Condition(self._state_lock)
         self._cycle_lock = threading.Lock()
@@ -436,6 +490,97 @@ class EngineHostRuntime:
                 self.snapshot(),
                 payload=payload,
             )
+        if command == COMMAND_TECHNICAL_RESEARCH_SNAPSHOT:
+            symbol = arguments.get("symbol")
+            if not isinstance(symbol, str) or not symbol.strip():
+                return EngineHostCommandResult(
+                    False,
+                    "TECHNICAL_RESEARCH_SYMBOL_REQUIRED",
+                    "A non-empty symbol is required for technical research evidence.",
+                    self.snapshot(),
+                )
+            try:
+                payload = self._technical_research_snapshot_loader(symbol.strip().upper())
+            except ValueError as exc:
+                return EngineHostCommandResult(
+                    False,
+                    "INVALID_TECHNICAL_RESEARCH_REQUEST",
+                    str(exc),
+                    self.snapshot(),
+                )
+            return EngineHostCommandResult(
+                True,
+                "TECHNICAL_RESEARCH_SNAPSHOT",
+                "Read-only technical research snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_SAVED_WATCHLIST_SNAPSHOT:
+            payload = self._saved_watchlist_snapshot_loader()
+            return EngineHostCommandResult(
+                True,
+                "SAVED_WATCHLIST_SNAPSHOT",
+                "Read-only saved-watchlist snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_DAILY_WORKFLOW_SNAPSHOT:
+            if arguments:
+                return EngineHostCommandResult(
+                    False,
+                    "INVALID_DAILY_WORKFLOW_REQUEST",
+                    "The read-only Daily Workflow snapshot does not accept arguments.",
+                    self.snapshot(),
+                )
+            payload = self._daily_workflow_snapshot_loader()
+            return EngineHostCommandResult(
+                True,
+                "DAILY_WORKFLOW_SNAPSHOT",
+                "Read-only Daily Workflow snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_CANDIDATE_STORY_SNAPSHOT:
+            symbol = arguments.get("symbol")
+            if not isinstance(symbol, str) or not symbol.strip():
+                return EngineHostCommandResult(
+                    False,
+                    "CANDIDATE_STORY_SYMBOL_REQUIRED",
+                    "A non-empty symbol is required for a Candidate Story snapshot.",
+                    self.snapshot(),
+                )
+            try:
+                payload = self._candidate_story_loader(symbol)
+            except ValueError as exc:
+                return EngineHostCommandResult(
+                    False,
+                    "INVALID_CANDIDATE_STORY_REQUEST",
+                    str(exc),
+                    self.snapshot(),
+                )
+            return EngineHostCommandResult(
+                True,
+                "CANDIDATE_STORY_SNAPSHOT",
+                "Read-only Candidate Story snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_RESEARCH_MATURITY_SNAPSHOT:
+            if arguments:
+                return EngineHostCommandResult(
+                    False,
+                    "INVALID_RESEARCH_MATURITY_REQUEST",
+                    "The read-only research-maturity snapshot does not accept arguments.",
+                    self.snapshot(),
+                )
+            payload = self._research_maturity_loader()
+            return EngineHostCommandResult(
+                True,
+                "RESEARCH_MATURITY_SNAPSHOT",
+                "Read-only persisted research-maturity snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
         if command == COMMAND_RUN_SIMULATION:
             symbol = arguments.get("symbol")
             if not isinstance(symbol, str) or not symbol.strip():
@@ -586,6 +731,12 @@ class EngineHostRuntime:
         from momentum_hunter.workstation_read_models import build_read_only_workspace_snapshot
 
         return build_read_only_workspace_snapshot()
+
+    @staticmethod
+    def _load_daily_workflow_snapshot() -> dict[str, Any]:
+        from momentum_hunter.workstation_daily_workflow import build_daily_workflow_snapshot
+
+        return build_daily_workflow_snapshot()
 
     @staticmethod
     def _is_legacy_monitor_runner_active() -> bool:

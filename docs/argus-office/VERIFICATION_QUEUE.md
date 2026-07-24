@@ -10,6 +10,7 @@ mode.
 ## Status Legend
 
 - `AUTOMATED_PASS`: Codex compile, tests, source review, and available proof passed.
+- `AUTOMATED_IN_PROGRESS`: the branch exists but its complete proof gate is still running.
 - `AUTOMATED_FAIL`: Codex found a defect.
 - `MANUAL_PENDING`: Steven can perform the listed operator check now.
 - `MANUAL_NOT_YET_AVAILABLE`: implementation exists below the current operator UI.
@@ -28,9 +29,10 @@ mode.
 | ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated into local `master`; not pushed | The preserved checklist remains an audit reference; merge approval does not start the official sample |
 | ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated into local `master`; not pushed | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
-| Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 engineering gate is branch-only; sample authorization has not been granted | Do not collect trade 1 until Shadow-003 is accepted and integrated and Steven separately authorizes the exact frozen sample definition |
+| Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
-| R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | `MANUAL_PENDING` | Separate branch; not merged here | Complete the R026 workstation checklist from its isolated review build; it is not part of ARGUS-SHADOW-001 |
+| R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
+| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS` | `MANUAL_PENDING` | `IMPLEMENTED_PENDING_MERGE`; not merged or pushed | Use the versioned R027 launcher and check both Shadow Review and every R013-R025 workstation surface |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
 
@@ -236,8 +238,9 @@ controls.
 
 Branch: `codex/ARGUS-R026-wpf-phase12-clean-room-integration`
 
-This is a separate review branch. It is not included in ARGUS-SHADOW-001 and requires
-its own merge approval.
+This is the isolated source review branch. Steven authorized R027 to reconcile it with
+the current Shadow baseline. Preserve this checklist as historical evidence; review
+R027 rather than merging R026 directly.
 
 Steven status: `MANUAL_PENDING`
 
@@ -278,3 +281,61 @@ Check these one by one:
     workspace/symbol/interval, visible state/count, window size, and attach a screenshot.
 
 Passing this checklist does not authorize a merge or push.
+
+## R027 Shadow + Phase 12 Combined WPF Review
+
+Branch: `codex/ARGUS-R027-integrate-r026-with-shadow-baseline`
+
+Automated result: `AUTOMATED_PASS`
+
+Integration state: `IMPLEMENTED_PENDING_MERGE` on the branch only; local `master`
+remains `164e32e`. Nothing is pushed, and the official Shadow sample remains locked.
+
+Automated evidence: Python compileall, 146 focused Python tests, 641 full-discovery
+Python tests, all 206 .NET tests, zero-warning Release build, protected-path review,
+source-nonmutation checks, and two fresh nonblank R027 proof boards pass.
+
+Check these one by one:
+
+1. Exit any current Momentum Hunter process using `Menu` and the explicit Exit command.
+2. Open `%LOCALAPPDATA%\MomentumHunter\Builds\R027-shadow-phase12-integrated-review\Launch R027 Shadow Phase 12 Integrated Review.lnk`. Do not use the pinned shortcut.
+3. Confirm the title is `Momentum Hunter Workstation` and the top boundary says
+   `SIMULATION` / `Python FakeBroker Only`. No Paper, Live-broker, credential, or real
+   order mode may appear.
+4. Press `Ctrl+K`; confirm the Command Palette filters symbols and commands, opens an
+   exact candidate, shows a no-match state, and closes with `Esc`.
+5. Select `CRWV` and `5m`; confirm stored candles, bodies, wicks, volume, price/time
+   axes, source lineage, stale/available state, and latest UTC/OHLCV are visible.
+6. Hover candles; confirm the crosshair snaps to the nearest candle, inspected UTC and
+   OHLCV change, and leaving the chart restores latest-bar details.
+7. In Trade Plan, confirm simulation-only planning/risk evidence plus persisted
+   Why/Research facts. Candidate changes must update unpinned linked panes.
+8. Open Diagnostics, Replay Events, Automation, Activity, Outcomes, Research,
+   Watchlist, Daily Workflow, Candidate Story, and Research Maturity. Each must show
+   persisted source/state/time/count evidence and honest unavailable/partial/stale
+   states.
+9. In Research Maturity, confirm `STRATEGY OPTIMIZATION LOCKED`, `Collect evidence
+   only`, separate maturity/census denominators, and no strategy-modification action.
+10. Switch to Review and confirm `Shadow Review` appears as a first-class pane with
+    `REVIEW - Read Only` and `FAKEBROKER - NONTRANSMITTING`.
+11. Confirm Shadow Review shows `SAMPLE START LOCKED`, the exact sample/configuration/
+    fill/evidence definition, `0 / 30` or the truthful eligible count, and withheld
+    aggregate metrics below the gate. There must be no start button.
+12. Select a Shadow row. Confirm linked unpinned Chart, Trade Plan, Why, and History
+    display that frozen trade identity without changing the stored plan or evidence.
+13. Exercise Shadow date/session, setup, catalyst, regime, outcome, and eligibility
+    filters. Confirm counts and selected detail remain internally consistent.
+14. Resize to roughly 1440x900 and 1180x820. Confirm panes remain readable or
+    scrollable without overlapping controls or clipped longest words.
+15. Close and reopen optional panes through `Panes`; confirm each returns once at a
+    useful size and no duplicate appears.
+16. Confirm no provider-refresh, score-change, readiness-change, replay-selection,
+    alert-generation, watchlist-generation, broker, Paper, Live, credential, sample-
+    start, or real-order action exists. FakeBroker simulation remains the only
+    automated order-like boundary.
+17. Confirm rejected R012A/R012B icon artwork remains absent.
+18. Report `PASS R027` if checks 1-17 pass. On failure, report the failed step,
+    workspace/symbol/interval, visible state/count, window size, and attach a
+    screenshot.
+
+Passing this checklist will not itself authorize merge or push.

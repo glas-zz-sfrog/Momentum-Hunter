@@ -19,6 +19,9 @@ public sealed class PythonSimulationWorkspaceClientTests
         Assert.True(plan.RiskDecision!.Allowed);
         Assert.Equal("Simulation-only", plan.RiskDecision.State);
         Assert.Contains(plan.Checks, check => check.Name == "Stop defined" && check.Passed);
+        Assert.Equal(
+            ["Breakout held above the stored trigger.", "Volume confirmation remained incomplete."],
+            Assert.Single(snapshot.Workspace.Candidates).OpportunityNotes);
     }
 
     [Fact]
@@ -53,7 +56,8 @@ public sealed class PythonSimulationWorkspaceClientTests
             "score": 97,
             "liquidity": "RVOL 2.40x",
             "catalystSummary": { "headline": "Stored catalyst", "sourceLabel": "Persisted report", "observedAt": "2026-07-17T15:00:00Z" },
-            "dataLineage": { "sourceLabel": "Persisted report", "asOf": "2026-07-17T15:00:00Z", "summary": "No recalculation occurred." }
+            "dataLineage": { "sourceLabel": "Persisted report", "asOf": "2026-07-17T15:00:00Z", "summary": "No recalculation occurred." },
+            "notes": [" Breakout held above the stored trigger. ", "", "Volume confirmation remained incomplete."]
           }
         ],
         "activity": [],

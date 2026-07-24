@@ -19,6 +19,11 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly ISimulationWorkspaceClient? _simulationWorkspaceClient;
     private readonly IChartWorkspaceClient? _chartWorkspaceClient;
     private readonly IShadowReviewClient? _shadowReviewClient;
+    private readonly ITechnicalResearchWorkspaceClient? _technicalResearchWorkspaceClient;
+    private readonly ISavedWatchlistWorkspaceClient? _savedWatchlistWorkspaceClient;
+    private readonly IDailyWorkflowWorkspaceClient? _dailyWorkflowWorkspaceClient;
+    private readonly ICandidateStoryWorkspaceClient? _candidateStoryWorkspaceClient;
+    private readonly IResearchMaturityWorkspaceClient? _researchMaturityWorkspaceClient;
     private readonly IWorkspaceLayoutStore? _layoutStore;
     private readonly LayoutAutosaveCoordinator? _layoutAutosave;
     private LinkGroupCoordinator _linkGroups = null!;
@@ -27,19 +32,20 @@ public sealed partial class ShellViewModel : ObservableObject
     private WindowDisplayState _windowState;
     private SimulationWorkspaceSnapshot? _simulationWorkspaceSnapshot;
     private ShadowReviewSnapshot? _shadowReviewSnapshot;
+    private long _candidateStoryRequestVersion;
 
     public ShellViewModel(IEngineClient engineClient)
-        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, savedWatchlistWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
     public ShellViewModel(IEngineClient engineClient, IWorkspaceLayoutStore layoutStore)
-        : this(engineClient, layoutStore, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, savedWatchlistWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
     public ShellViewModel(IEngineClient engineClient, IReadOnlyWorkspaceClient readOnlyWorkspaceClient)
-        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore: null, readOnlyWorkspaceClient, simulationWorkspaceClient: null, chartWorkspaceClient: null, savedWatchlistWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
@@ -50,6 +56,7 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
             chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true)
     {
     }
@@ -58,7 +65,7 @@ public sealed partial class ShellViewModel : ObservableObject
         IEngineClient engineClient,
         IWorkspaceLayoutStore layoutStore,
         IReadOnlyWorkspaceClient readOnlyWorkspaceClient)
-        : this(engineClient, layoutStore, readOnlyWorkspaceClient, simulationWorkspaceClient: null, chartWorkspaceClient: null, isInternalConstruction: true)
+        : this(engineClient, layoutStore, readOnlyWorkspaceClient, simulationWorkspaceClient: null, chartWorkspaceClient: null, savedWatchlistWorkspaceClient: null, isInternalConstruction: true)
     {
     }
 
@@ -72,6 +79,7 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
             chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true)
     {
     }
@@ -86,6 +94,7 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
             chartWorkspaceClient: chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true)
     {
     }
@@ -101,7 +110,229 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient: simulationWorkspaceClient,
             chartWorkspaceClient: chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IResearchMaturityWorkspaceClient researchMaturityWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
+            researchMaturityWorkspaceClient: researchMaturityWorkspaceClient,
+            isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        IResearchMaturityWorkspaceClient researchMaturityWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: simulationWorkspaceClient,
+            chartWorkspaceClient: chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            researchMaturityWorkspaceClient: researchMaturityWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient,
+            isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient,
+            chartWorkspaceClient,
+            savedWatchlistWorkspaceClient,
+            isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient,
+            chartWorkspaceClient,
+            savedWatchlistWorkspaceClient,
+            isInternalConstruction: true)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            technicalResearchWorkspaceClient: technicalResearchWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient,
+            chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            technicalResearchWorkspaceClient: technicalResearchWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient,
+            chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            technicalResearchWorkspaceClient: technicalResearchWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IDailyWorkflowWorkspaceClient dailyWorkflowWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            dailyWorkflowWorkspaceClient: dailyWorkflowWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        IDailyWorkflowWorkspaceClient dailyWorkflowWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient,
+            chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            dailyWorkflowWorkspaceClient: dailyWorkflowWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        ICandidateStoryWorkspaceClient candidateStoryWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore: null,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            candidateStoryWorkspaceClient: candidateStoryWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ICandidateStoryWorkspaceClient candidateStoryWorkspaceClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient: null,
+            isInternalConstruction: true,
+            candidateStoryWorkspaceClient: candidateStoryWorkspaceClient)
+    {
+    }
+
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        ISimulationWorkspaceClient simulationWorkspaceClient,
+        IChartWorkspaceClient chartWorkspaceClient,
+        ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient,
+        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient,
+        IDailyWorkflowWorkspaceClient dailyWorkflowWorkspaceClient,
+        ICandidateStoryWorkspaceClient candidateStoryWorkspaceClient,
+        IResearchMaturityWorkspaceClient researchMaturityWorkspaceClient,
+        IShadowReviewClient? shadowReviewClient = null)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient: null,
+            simulationWorkspaceClient,
+            chartWorkspaceClient,
+            savedWatchlistWorkspaceClient,
+            isInternalConstruction: true,
+            technicalResearchWorkspaceClient,
+            dailyWorkflowWorkspaceClient,
+            candidateStoryWorkspaceClient,
+            researchMaturityWorkspaceClient,
+            shadowReviewClient)
     {
     }
 
@@ -111,7 +342,12 @@ public sealed partial class ShellViewModel : ObservableObject
         IReadOnlyWorkspaceClient? readOnlyWorkspaceClient,
         ISimulationWorkspaceClient? simulationWorkspaceClient,
         IChartWorkspaceClient? chartWorkspaceClient,
+        ISavedWatchlistWorkspaceClient? savedWatchlistWorkspaceClient,
         bool isInternalConstruction,
+        ITechnicalResearchWorkspaceClient? technicalResearchWorkspaceClient = null,
+        IDailyWorkflowWorkspaceClient? dailyWorkflowWorkspaceClient = null,
+        ICandidateStoryWorkspaceClient? candidateStoryWorkspaceClient = null,
+        IResearchMaturityWorkspaceClient? researchMaturityWorkspaceClient = null,
         IShadowReviewClient? shadowReviewClient = null)
     {
         _engineClient = engineClient;
@@ -120,6 +356,11 @@ public sealed partial class ShellViewModel : ObservableObject
         _simulationWorkspaceClient = simulationWorkspaceClient;
         _chartWorkspaceClient = chartWorkspaceClient;
         _shadowReviewClient = shadowReviewClient;
+        _technicalResearchWorkspaceClient = technicalResearchWorkspaceClient;
+        _savedWatchlistWorkspaceClient = savedWatchlistWorkspaceClient;
+        _dailyWorkflowWorkspaceClient = dailyWorkflowWorkspaceClient;
+        _candidateStoryWorkspaceClient = candidateStoryWorkspaceClient;
+        _researchMaturityWorkspaceClient = researchMaturityWorkspaceClient;
         SetRegistry(WorkspaceFactory.Create(WorkspaceKind.Live));
         if (_layoutStore is not null)
         {
@@ -128,10 +369,20 @@ public sealed partial class ShellViewModel : ObservableObject
 
         Candidates = [];
         Activity = [];
+        Activity.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(ActivityRows));
+            OnPropertyChanged(nameof(ActivityLabel));
+            OnPropertyChanged(nameof(ActivityCountLabel));
+        };
         Candles = [];
         ShadowTrades = [];
+        CommandPaletteResults = [];
+        SavedWatchlistItems = [];
         WorkspaceOptions = Enum.GetValues<WorkspaceKind>();
         IntervalOptions = ["1m", "5m", "15m", "Daily"];
+        Candidates.CollectionChanged += (_, _) => RefreshCommandPaletteResults();
+        RefreshCommandPaletteResults();
     }
 
     public ShellViewModel(
@@ -146,8 +397,9 @@ public sealed partial class ShellViewModel : ObservableObject
             readOnlyWorkspaceClient: null,
             simulationWorkspaceClient,
             chartWorkspaceClient,
+            savedWatchlistWorkspaceClient: null,
             isInternalConstruction: true,
-            shadowReviewClient)
+            shadowReviewClient: shadowReviewClient)
     {
     }
 
@@ -157,11 +409,17 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public ObservableCollection<ActivityEvent> Activity { get; }
 
+    public IReadOnlyList<ActivityEventView> ActivityRows =>
+        Activity.Select(ActivityEventView.From).ToArray();
+
     public ObservableCollection<CandleSnapshot> Candles { get; }
 
     public ObservableCollection<ShadowTradeReviewSnapshot> ShadowTrades { get; }
+    public ObservableCollection<SavedWatchlistItemViewModel> SavedWatchlistItems { get; }
 
     public ObservableCollection<ChartPaneViewModel> SecondaryCharts { get; } = [];
+
+    public ObservableCollection<CommandPaletteItem> CommandPaletteResults { get; }
 
     public IReadOnlyList<WorkspaceKind> WorkspaceOptions { get; }
 
@@ -192,10 +450,25 @@ public sealed partial class ShellViewModel : ObservableObject
     private ReplaySnapshot? _replaySession;
 
     [ObservableProperty]
+    private AlertEvidenceSnapshot? _alertEvidence;
+
+    [ObservableProperty]
+    private TechnicalResearchSnapshot? _technicalResearch;
+
+    [ObservableProperty]
+    private DailyWorkflowSnapshot? _dailyWorkflow;
+
+    [ObservableProperty]
+    private CandidateStorySnapshot? _candidateStory;
+
+    [ObservableProperty]
     private SimulationResult? _lastSimulationResult;
 
     [ObservableProperty]
     private ChartPaneViewModel? _primaryChart;
+
+    [ObservableProperty]
+    private ResearchMaturitySnapshot? _researchMaturity;
 
     [ObservableProperty]
     private bool _isHealthOpen;
@@ -210,6 +483,12 @@ public sealed partial class ShellViewModel : ObservableObject
     private bool _isCommandPaletteOpen;
 
     [ObservableProperty]
+    private string _commandQuery = string.Empty;
+
+    [ObservableProperty]
+    private CommandPaletteItem? _selectedCommandPaletteItem;
+
+    [ObservableProperty]
     private string _statusMessage = "Mock engine | Local deterministic data | No provider calls";
 
     [ObservableProperty]
@@ -217,6 +496,14 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty]
     private string _backgroundStatusDetail = "Waiting for background monitoring to start.";
+
+    [ObservableProperty]
+    private BackgroundCollectionStatus _backgroundCollectionStatus = new(
+        BackgroundCollectionState.Starting,
+        null,
+        0,
+        0,
+        "Waiting for background monitoring to start.");
 
     [ObservableProperty]
     private bool _isMonitoringPaused;
@@ -288,7 +575,12 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty]
     private string _shadowEligibilityFilter = "All";
 
+    [ObservableProperty]
+    private SavedWatchlistSnapshot? _savedWatchlist;
+
     public string MonitoringToggleLabel => IsMonitoringPaused ? "Resume Monitoring" : "Pause Monitoring";
+
+    public MonitoringStatusView MonitoringStatus => MonitoringStatusView.From(BackgroundCollectionStatus);
 
     public EnvironmentMode Environment => Workspace switch
     {
@@ -337,6 +629,14 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public string ActivityLabel => Activity.Count == 0 ? "Activity" : $"Activity {Activity.Count}";
 
+    public bool HasCommandPaletteResults => CommandPaletteResults.Count > 0;
+
+    public string CommandPaletteEmptyText => string.IsNullOrWhiteSpace(CommandQuery)
+        ? "No commands or candidates are available."
+        : $"No candidate or command matches '{CommandQuery.Trim()}'.";
+
+    public string ActivityCountLabel => Activity.Count == 1 ? "1 source event" : $"{Activity.Count} source events";
+
     public bool CanRunSimulation => !IsReadOnlySnapshotMode && TradePlan?.RiskDecision?.Allowed == true && Environment == EnvironmentMode.Simulation;
 
     public bool CanRunPrimaryAction =>
@@ -379,7 +679,222 @@ public sealed partial class ShellViewModel : ObservableObject
         ? "Candidate, evidence, health, and source lineage come from the Python read-only boundary. Scores and readiness labels are not recalculated here."
         : "Evidence context for the linked symbol stays available without becoming a permanent route.";
 
+    public string CandidateEvidenceSymbolLabel => CandidateEvidence?.Symbol ?? TradePlanSymbolLabel;
+
+    public string CandidateCatalystHeadline => TextOrUnavailable(
+        string.IsNullOrWhiteSpace(CandidateEvidence?.CatalystSummary?.Headline)
+            ? CandidateEvidence?.Catalyst
+            : CandidateEvidence.CatalystSummary.Headline,
+        "No stored catalyst summary is available.");
+
+    public string CandidateCatalystSourceLabel => TextOrUnavailable(
+        CandidateEvidence?.CatalystSummary?.SourceLabel,
+        "Catalyst source unavailable");
+
+    public string CandidateCatalystObservedAtLabel => CandidateEvidence?.CatalystSummary is { } catalyst
+        ? $"Observed {catalyst.ObservedAt.ToUniversalTime():yyyy-MM-dd HH:mm} UTC"
+        : "Catalyst timestamp unavailable";
+
+    public string CandidateReadinessLabel => TextOrUnavailable(
+        CandidateEvidence?.OperatorState,
+        "Readiness unavailable");
+
+    public string CandidateQualityLabel => TextOrUnavailable(
+        CandidateEvidence?.QualityLabel,
+        "Source quality unavailable");
+
+    public string CandidateLiquidityLabel => TextOrUnavailable(
+        CandidateEvidence?.FloatOrLiquidity,
+        "Liquidity data unavailable");
+
+    public string CandidateLineageSourceLabel => TextOrUnavailable(
+        CandidateEvidence?.DataLineage?.SourceLabel,
+        "Source lineage unavailable");
+
+    public string CandidateLineageAsOfLabel => CandidateEvidence?.DataLineage is { } lineage
+        ? $"As of {lineage.AsOf.ToUniversalTime():yyyy-MM-dd HH:mm} UTC"
+        : "Lineage timestamp unavailable";
+
+    public string CandidateLineageSummary => TextOrUnavailable(
+        CandidateEvidence?.DataLineage?.Summary,
+        "No source lineage summary was supplied.");
+
+    public IReadOnlyList<string> CandidateOpportunityNotes =>
+        CandidateEvidence?.OpportunityNotes ?? [];
+
+    public string CandidateOpportunityNotesLabel => CandidateOpportunityNotes.Count == 0
+        ? "No stored opportunity notes are available."
+        : $"{CandidateOpportunityNotes.Count} persisted opportunity note{(CandidateOpportunityNotes.Count == 1 ? string.Empty : "s")}";
+
+    public HealthDiagnosticsView Diagnostics => HealthDiagnosticsView.From(Health);
+
+    public TechnicalResearchOverviewView TechnicalResearchOverview =>
+        TechnicalResearchOverviewView.From(TechnicalResearch);
+
+    public IReadOnlyList<TechnicalResearchEventRowView> TechnicalResearchEventRows =>
+        TechnicalResearch?.Events.Select(TechnicalResearchEventRowView.From).ToArray() ?? [];
+
+    public IReadOnlyList<TechnicalResearchStudyRowView> TechnicalResearchStudyRows =>
+        TechnicalResearch?.Studies.Select(TechnicalResearchStudyRowView.From).ToArray() ?? [];
+
+    public bool HasTechnicalResearchEvents => TechnicalResearchEventRows.Count > 0;
+
+    public bool HasTechnicalResearchStudies => TechnicalResearchStudyRows.Count > 0;
+
+    public string TechnicalResearchEventsEmptyLabel => TechnicalResearch?.State switch
+    {
+        TechnicalResearchState.Empty => $"No stored technical research events exist for {SelectedSymbol}.",
+        TechnicalResearchState.Unavailable => "Technical research event evidence is unavailable.",
+        _ => "No technical research event rows were supplied for this symbol.",
+    };
+
+    public string TechnicalResearchStudiesEmptyLabel => TechnicalResearch?.State switch
+    {
+        TechnicalResearchState.Empty => $"No stored technical outcome studies exist for {SelectedSymbol}.",
+        TechnicalResearchState.Unavailable => "Technical research outcome evidence is unavailable.",
+        TechnicalResearchState.Partial => "The stored outcome-study report is partial or unavailable.",
+        _ => "No technical outcome-study rows were supplied for this symbol.",
+    };
+
+    public string ResearchMaturityStateLabel =>
+        ResearchMaturity?.State.ToString().ToUpperInvariant() ?? "UNAVAILABLE";
+
+    public string ResearchMaturityAsOfLabel => ResearchMaturity?.SourceAsOf is { } asOf
+        ? $"Source as of {asOf:yyyy-MM-dd HH:mm} UTC"
+        : "Source timestamp unavailable";
+
+    public string ResearchMaturityProgressLabel => ResearchMaturity is { } snapshot
+        ? $"Maturity sample: {snapshot.MaturityAlerts.Completed:N0} completed / "
+          + $"{snapshot.EvidenceGate.RequiredAlerts:N0} required for current gate"
+        : "Maturity sample unavailable";
+
+    public string ResearchMaturityRateLabel => ResearchMaturity?.MaturityAlerts.CompletionRatePercent is { } rate
+        ? $"Maturity completion: {rate:N1}% of scorable alerts"
+        : "Maturity completion unavailable";
+
+    public string ResearchCensusRateLabel => ResearchMaturity?.Census.Alerts.CompletionRatePercent is { } rate
+        ? $"Census completion: {rate:N1}% of all alerts"
+        : "Census completion unavailable";
+
+    public string ResearchMaturityWarningsLabel => ResearchMaturity is { Warnings.Count: > 0 } snapshot
+        ? string.Join(System.Environment.NewLine, snapshot.Warnings)
+        : "No persisted warnings.";
+
+    public string ResearchMaturitySafetyLabel => ResearchMaturity is { SafetyNotes.Count: > 0 } snapshot
+        ? string.Join(System.Environment.NewLine, snapshot.SafetyNotes)
+        : "Research only. Strategy changes remain locked.";
+
     public string ReplaySummary => ReplaySession?.Summary ?? "Replay context is unavailable.";
+
+    public ReplayContextView ReplayContext => ReplayContextView.From(ReplaySession);
+
+    public AlertEvidenceOverviewView AlertEvidenceOverview => AlertEvidenceOverviewView.From(AlertEvidence);
+
+    public IReadOnlyList<AlertEventRowView> AlertRows =>
+        AlertEvidence?.ActiveAlerts.Select(AlertEventRowView.From).ToArray() ?? [];
+
+    public IReadOnlyList<OutcomeRowView> OutcomeRows =>
+        AlertEvidence?.Outcomes.Select(OutcomeRowView.From).ToArray() ?? [];
+
+    public bool HasAlertRows => AlertRows.Count > 0;
+
+    public bool HasOutcomeRows => OutcomeRows.Count > 0;
+
+    public string AlertRowsEmptyLabel => AlertEvidence?.State switch
+    {
+        AlertEvidenceState.Empty => "No alerts are stored yet.",
+        AlertEvidenceState.Unavailable => "Active and pending alert evidence is unavailable.",
+        _ => "No active or pending alerts are present in the stored evidence.",
+    };
+
+    public string OutcomeRowsEmptyLabel => AlertEvidence?.State switch
+    {
+        AlertEvidenceState.Empty => "No outcomes are stored yet.",
+        AlertEvidenceState.Unavailable => "Recorded outcome evidence is unavailable.",
+        _ => "No completed or unscorable outcomes are present in the stored evidence.",
+    };
+
+    public string SavedWatchlistStateLabel => SavedWatchlist?.State.ToString().ToUpperInvariant() ?? "UNAVAILABLE";
+
+    public string SavedWatchlistSourceLabel => SavedWatchlist?.SourceLabel ?? "Saved watchlist source unavailable";
+
+    public string SavedWatchlistCountLabel => SavedWatchlist is null
+        ? "0 displayed | 0 usable | 0 stored"
+        : $"{SavedWatchlist.DisplayedItemCount} displayed | {SavedWatchlist.UsableItemCount} usable | {SavedWatchlist.TotalItemCount} stored";
+
+    public string SavedWatchlistAsOfLabel => SavedWatchlist?.AsOf is { } asOf
+        ? $"Newest stored save: {asOf.ToUniversalTime():yyyy-MM-dd HH:mm} UTC"
+        : "Newest stored save time unavailable";
+
+    public string SavedWatchlistSummary => SavedWatchlist?.Summary
+        ?? "UNAVAILABLE | The saved-watchlist evidence boundary has not returned a snapshot.";
+
+    public string SavedWatchlistWarnings => SavedWatchlist?.Warnings.Count > 0
+        ? string.Join(" | ", SavedWatchlist.Warnings)
+        : "No source warnings reported.";
+
+    public string SavedWatchlistEmptyState => SavedWatchlistItems.Count == 0
+        ? SavedWatchlist?.State switch
+        {
+            SavedWatchlistState.Empty => "No persisted saved-watchlist candidates are available.",
+            SavedWatchlistState.Unavailable => "Saved-watchlist evidence is unavailable. No current candidate state was inferred.",
+            _ => "No saved-watchlist rows are available for display.",
+        }
+        : string.Empty;
+
+    public string DailyWorkflowStateLabel =>
+        DailyWorkflow?.State.ToString().ToUpperInvariant() ?? "UNAVAILABLE";
+
+    public string DailyWorkflowSourceLabel =>
+        DailyWorkflow?.SourceLabel ?? "Daily Workflow source unavailable";
+
+    public string DailyWorkflowSourceContextLabel =>
+        DailyWorkflow?.SourceContext ?? "Capture identity unavailable";
+
+    public string DailyWorkflowAsOfLabel => DailyWorkflow?.SourceAsOf is { } timestamp
+        ? $"Source as of {timestamp.UtcDateTime:yyyy-MM-dd HH:mm:ss} UTC"
+        : "Source time unavailable";
+
+    public string DailyWorkflowScoreLabel => DailyWorkflow is { } workflow
+        ? $"Workflow discipline {workflow.WorkflowScore}%"
+        : "Workflow discipline unavailable";
+
+    public string DailyWorkflowReviewLabel => DailyWorkflow is { } workflow
+        ? $"Reviews {workflow.Review.Reviewed}/{workflow.Review.Total} | Unreviewed {workflow.Review.Unreviewed} | "
+            + $"Interested {workflow.Review.Interested} | Rejected {workflow.Review.Rejected} | Watchlist {workflow.Review.Watchlist}"
+        : "Review counts unavailable";
+
+    public string DailyWorkflowPlanLabel => DailyWorkflow is { } workflow
+        ? $"Plans {workflow.Plans.Complete}/{workflow.Plans.Watchlist} complete | "
+            + $"Incomplete {workflow.Plans.Incomplete} | Without plan {workflow.Plans.WithoutPlan}"
+        : "Plan counts unavailable";
+
+    public string DailyWorkflowOutcomeLabel => DailyWorkflow is { } workflow
+        ? $"Outcomes: next-day {workflow.Outcomes.CompletedNextDay} | five-day {workflow.Outcomes.CompletedFiveDay} | pending {workflow.Outcomes.Pending}"
+        : "Outcome counts unavailable";
+
+    public string DailyWorkflowReadinessLabel => DailyWorkflow?.Readiness.Count > 0
+        ? string.Join(" | ", DailyWorkflow.Readiness.Select(item => $"{item.Name}: {item.Status}"))
+        : "Readiness evidence unavailable";
+
+    public string DailyWorkflowWarningsLabel => DailyWorkflow?.Warnings.Count > 0
+        ? string.Join(System.Environment.NewLine, DailyWorkflow.Warnings.Select(warning => $"\u2022 {warning}"))
+        : "No workflow warnings were reported by the persisted evidence.";
+
+    public CandidateStoryOverviewView CandidateStoryOverview =>
+        CandidateStoryOverviewView.From(CandidateStory);
+
+    public IReadOnlyList<CandidateStoryPointRowView> CandidateStoryRows =>
+        CandidateStory?.Points.Select(CandidateStoryPointRowView.From).ToArray() ?? [];
+
+    public bool HasCandidateStoryPoints => CandidateStoryRows.Count > 0;
+
+    public string CandidateStoryEmptyLabel => CandidateStory?.State switch
+    {
+        CandidateStoryEvidenceState.Empty => $"No trusted persisted Candidate Story captures exist for {SelectedSymbol}.",
+        CandidateStoryEvidenceState.Unavailable => "Candidate Story evidence is unavailable.",
+        _ => "No Candidate Story points were supplied for the selected symbol.",
+    };
 
     public RectGeometry? RestoredWindowBounds => _windowBounds;
 
@@ -401,7 +916,9 @@ public sealed partial class ShellViewModel : ObservableObject
             }
         }
 
+        await RefreshDailyWorkflowDataAsync(cancellationToken);
         await RefreshWorkspaceDataAsync(cancellationToken);
+        await RefreshResearchMaturityAsync(cancellationToken);
         await RefreshChartPaneDataAsync(cancellationToken);
         await RefreshShadowReviewAsync(cancellationToken);
     }
@@ -411,10 +928,12 @@ public sealed partial class ShellViewModel : ObservableObject
         SelectedCandidate = candidate;
         SelectedSymbol = candidate.Symbol;
         _linkGroups.PublishSymbol(LinkGroup.A, candidate.Symbol, SelectedInterval);
+        var technicalResearchTask = RefreshTechnicalResearchAsync(candidate.Symbol, cancellationToken);
+        var candidateStoryTask = RefreshCandidateStoryAsync(candidate.Symbol, cancellationToken);
         if (IsReadOnlySnapshotMode)
         {
             TradePlan = null;
-            await RefreshChartPaneDataAsync(cancellationToken);
+            await Task.WhenAll(technicalResearchTask, candidateStoryTask, RefreshChartPaneDataAsync(cancellationToken));
             StatusMessage = "Read-only Python candidate selected. Stored chart evidence refreshed; trade planning, risk, and simulation remain unavailable.";
             RaisePresentationProperties();
             RequestLayoutSave();
@@ -424,7 +943,7 @@ public sealed partial class ShellViewModel : ObservableObject
         if (IsPythonSimulationWorkspaceMode)
         {
             ApplySimulationTradePlan(candidate.Symbol);
-            await RefreshChartPaneDataAsync(cancellationToken);
+            await Task.WhenAll(technicalResearchTask, candidateStoryTask, RefreshChartPaneDataAsync(cancellationToken));
             StatusMessage = "Python persisted TradePlan selected. Risk Governor evidence and read-only stored chart context are refreshed.";
             RaisePresentationProperties();
             RequestLayoutSave();
@@ -438,7 +957,7 @@ public sealed partial class ShellViewModel : ObservableObject
             TradePlan = plan;
         }
 
-        await RefreshChartPaneDataAsync(cancellationToken);
+        await Task.WhenAll(technicalResearchTask, candidateStoryTask, RefreshChartPaneDataAsync(cancellationToken));
         RaisePresentationProperties();
         RequestLayoutSave();
     }
@@ -616,7 +1135,95 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ToggleCommandPalette() => IsCommandPaletteOpen = !IsCommandPaletteOpen;
+    private void ToggleCommandPalette()
+    {
+        if (IsCommandPaletteOpen)
+        {
+            CloseCommandPalette();
+        }
+        else
+        {
+            OpenCommandPalette();
+        }
+    }
+
+    public void OpenCommandPalette(string? query = null)
+    {
+        CommandQuery = query?.Trim() ?? string.Empty;
+        RefreshCommandPaletteResults();
+        IsCommandPaletteOpen = true;
+    }
+
+    public void CloseCommandPalette()
+    {
+        IsCommandPaletteOpen = false;
+        CommandQuery = string.Empty;
+    }
+
+    public CommandPaletteItem? FindExactCommandPaletteItem(string? query) =>
+        CommandPaletteCatalog.FindExact(Candidates, query);
+
+    public async Task<CommandPaletteExecution> ExecuteCommandPaletteItemAsync(
+        CommandPaletteItem? item = null,
+        CancellationToken cancellationToken = default)
+    {
+        var selected = item ?? SelectedCommandPaletteItem;
+        if (selected is null)
+        {
+            StatusMessage = string.IsNullOrWhiteSpace(CommandQuery)
+                ? "Choose a candidate or command."
+                : $"No candidate or command matches '{CommandQuery.Trim()}'.";
+            return new CommandPaletteExecution(false);
+        }
+
+        PaneState? addedPane = null;
+        switch (selected.Action)
+        {
+            case CommandPaletteAction.OpenCandidate:
+            {
+                var candidate = Candidates.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Symbol, selected.Symbol, StringComparison.OrdinalIgnoreCase));
+                if (candidate is null)
+                {
+                    StatusMessage = $"Candidate {selected.Symbol ?? "unknown"} is no longer available in the current evidence snapshot.";
+                    RefreshCommandPaletteResults();
+                    return new CommandPaletteExecution(false);
+                }
+
+                await SelectCandidateAsync(candidate, cancellationToken);
+                StatusMessage = $"Opened candidate {candidate.Symbol} from the command palette.";
+                break;
+            }
+            case CommandPaletteAction.AddChart:
+                addedPane = await AddLinkedChartAsync(cancellationToken);
+                StatusMessage = $"Added linked chart for {addedPane.Symbol}.";
+                break;
+            case CommandPaletteAction.ToggleActivity:
+                ToggleActivity();
+                StatusMessage = IsActivityOpen ? "Opened workstation activity." : "Hid workstation activity.";
+                break;
+            case CommandPaletteAction.ViewDiagnostics:
+            {
+                var diagnostics = Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Diagnostics);
+                if (diagnostics is null)
+                {
+                    StatusMessage = "Diagnostics was removed from this workspace.";
+                    return new CommandPaletteExecution(false);
+                }
+
+                IsDiagnosticsOpen = true;
+                diagnostics.IsVisible = true;
+                StatusMessage = "Opened workstation diagnostics.";
+                break;
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(selected), selected.Action, "Unsupported command palette action.");
+        }
+
+        var action = selected.Action;
+        CloseCommandPalette();
+        return new CommandPaletteExecution(true, action, addedPane);
+    }
 
     [RelayCommand]
     private async Task TogglePrimaryChartPinAsync()
@@ -762,6 +1369,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public void UpdateBackgroundStatus(BackgroundCollectionStatus status)
     {
+        BackgroundCollectionStatus = status;
         BackgroundStatusLabel = BackgroundStatusText.Label(status);
         BackgroundStatusDetail = BackgroundStatusText.Detail(status);
         IsMonitoringPaused = status.State == BackgroundCollectionState.Paused;
@@ -781,6 +1389,37 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     partial void OnIsMonitoringPausedChanged(bool value) => OnPropertyChanged(nameof(MonitoringToggleLabel));
+
+    partial void OnCommandQueryChanged(string value) => RefreshCommandPaletteResults();
+
+    partial void OnHealthChanged(SystemHealthSnapshot? value) => OnPropertyChanged(nameof(Diagnostics));
+
+    partial void OnReplaySessionChanged(ReplaySnapshot? value) => OnPropertyChanged(nameof(ReplayContext));
+
+    partial void OnBackgroundCollectionStatusChanged(BackgroundCollectionStatus value) =>
+        OnPropertyChanged(nameof(MonitoringStatus));
+
+    partial void OnDailyWorkflowChanged(DailyWorkflowSnapshot? value)
+    {
+        OnPropertyChanged(nameof(DailyWorkflowStateLabel));
+        OnPropertyChanged(nameof(DailyWorkflowSourceLabel));
+        OnPropertyChanged(nameof(DailyWorkflowSourceContextLabel));
+        OnPropertyChanged(nameof(DailyWorkflowAsOfLabel));
+        OnPropertyChanged(nameof(DailyWorkflowScoreLabel));
+        OnPropertyChanged(nameof(DailyWorkflowReviewLabel));
+        OnPropertyChanged(nameof(DailyWorkflowPlanLabel));
+        OnPropertyChanged(nameof(DailyWorkflowOutcomeLabel));
+        OnPropertyChanged(nameof(DailyWorkflowReadinessLabel));
+        OnPropertyChanged(nameof(DailyWorkflowWarningsLabel));
+    }
+
+    partial void OnCandidateStoryChanged(CandidateStorySnapshot? value)
+    {
+        OnPropertyChanged(nameof(CandidateStoryOverview));
+        OnPropertyChanged(nameof(CandidateStoryRows));
+        OnPropertyChanged(nameof(HasCandidateStoryPoints));
+        OnPropertyChanged(nameof(CandidateStoryEmptyLabel));
+    }
 
     private void SetRegistry(PaneRegistry registry)
     {
@@ -807,10 +1446,25 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void RequestLayoutSave() => _layoutAutosave?.RequestSave();
 
+    private void RefreshCommandPaletteResults()
+    {
+        var results = CommandPaletteCatalog.Filter(Candidates, CommandQuery);
+        SelectedCommandPaletteItem = null;
+        CommandPaletteResults.Clear();
+        foreach (var result in results)
+        {
+            CommandPaletteResults.Add(result);
+        }
+
+        SelectedCommandPaletteItem = CommandPaletteResults.FirstOrDefault();
+        OnPropertyChanged(nameof(HasCommandPaletteResults));
+        OnPropertyChanged(nameof(CommandPaletteEmptyText));
+    }
+
     private WorkspaceLayoutSnapshot CreateAutomaticLayoutSnapshot() => CreateLayoutSnapshot(isNamedLayout: false, name: null);
 
     private WorkspaceLayoutSnapshot CreateLayoutSnapshot(bool isNamedLayout, string? name) => new(
-        SchemaVersion: 5,
+        SchemaVersion: 7,
         Workspace,
         Guid.NewGuid(),
         DateTimeOffset.UtcNow,
@@ -845,24 +1499,40 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void MigrateLegacyContextualPanes(int schemaVersion)
     {
-        if (schemaVersion >= 4 || Workspace != WorkspaceKind.Live)
+        if (schemaVersion >= 7 || Workspace != WorkspaceKind.Live)
         {
             return;
         }
 
-        foreach (var (kind, title) in new[]
+        var missingPanes = new List<(PaneKind Kind, string Title)>();
+        if (schemaVersion < 6)
         {
-            (PaneKind.Automation, "Automation"),
-            (PaneKind.Orders, "Orders"),
-            (PaneKind.Positions, "Positions"),
-        })
+            missingPanes.Add((PaneKind.DailyWorkflow, "Daily Workflow"));
+            missingPanes.Add((PaneKind.CandidateStory, "Candidate Story"));
+        }
+        if (schemaVersion < 7)
+        {
+            missingPanes.Add((PaneKind.ResearchMaturity, "Research Maturity"));
+        }
+        if (schemaVersion < 4)
+        {
+            missingPanes.AddRange(
+            [
+                (PaneKind.Automation, "Automation"),
+                (PaneKind.Orders, "Orders"),
+                (PaneKind.Positions, "Positions"),
+            ]);
+        }
+
+        foreach (var (kind, title) in missingPanes)
         {
             if (Registry.Panes.Any(pane => pane.Kind == kind))
             {
                 continue;
             }
 
-            Registry.Create(kind, title, LinkGroup.Unlinked, DockRegion.Bottom, SelectedSymbol, SelectedInterval).IsVisible = false;
+            var linkGroup = kind == PaneKind.CandidateStory ? LinkGroup.A : LinkGroup.Unlinked;
+            Registry.Create(kind, title, linkGroup, DockRegion.Bottom, SelectedSymbol, SelectedInterval).IsVisible = false;
         }
     }
 
@@ -882,8 +1552,97 @@ public sealed partial class ShellViewModel : ObservableObject
             SelectedInterval);
     }
 
+    private async Task RefreshResearchMaturityAsync(CancellationToken cancellationToken)
+    {
+        if (_researchMaturityWorkspaceClient is null)
+        {
+            ResearchMaturity = null;
+            RaiseResearchMaturityProperties();
+            return;
+        }
+
+        try
+        {
+            ResearchMaturity = await _researchMaturityWorkspaceClient.GetSnapshotAsync(
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or InvalidDataException
+                or InvalidOperationException
+                or JsonException)
+        {
+            var now = DateTimeOffset.UtcNow;
+            ResearchMaturity = new ResearchMaturitySnapshot(
+                1,
+                ResearchMaturityEvidenceState.Unavailable,
+                now,
+                null,
+                null,
+                null,
+                "Unavailable persisted research evidence",
+                $"UNAVAILABLE | Research maturity could not be loaded: {exception.Message} "
+                    + "No evidence or strategy conclusion was inferred.",
+                "UNAVAILABLE",
+                "UNAVAILABLE",
+                "UNAVAILABLE",
+                "UNAVAILABLE",
+                "LOCKED",
+                false,
+                new ResearchMaturityAlertCounts(0, 0, 0, 0, null),
+                0,
+                new ResearchMaturityEvidenceGate(
+                    0,
+                    0,
+                    "UNAVAILABLE",
+                    "No action available",
+                    "LOCKED",
+                    "The persisted research-maturity boundary did not return usable evidence."),
+                [],
+                0,
+                [],
+                0,
+                new ResearchEvidenceCensus(
+                    new ResearchMaturityAlertCounts(0, 0, 0, 0, null),
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    [],
+                    0),
+                [exception.Message],
+                ["Research evidence only; strategy changes remain prohibited."],
+                true,
+                true);
+        }
+
+        RaiseResearchMaturityProperties();
+    }
+
+    private void RaiseResearchMaturityProperties()
+    {
+        OnPropertyChanged(nameof(ResearchMaturityStateLabel));
+        OnPropertyChanged(nameof(ResearchMaturityAsOfLabel));
+        OnPropertyChanged(nameof(ResearchMaturityProgressLabel));
+        OnPropertyChanged(nameof(ResearchMaturityRateLabel));
+        OnPropertyChanged(nameof(ResearchCensusRateLabel));
+        OnPropertyChanged(nameof(ResearchMaturityWarningsLabel));
+        OnPropertyChanged(nameof(ResearchMaturitySafetyLabel));
+    }
+
     private async Task RefreshWorkspaceDataAsync(CancellationToken cancellationToken)
     {
+        await RefreshSavedWatchlistAsync(cancellationToken);
+
         if (_simulationWorkspaceClient is not null)
         {
             await RefreshSimulationWorkspaceDataAsync(cancellationToken);
@@ -898,6 +1657,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         IsReadOnlySnapshotMode = false;
         IsPythonSimulationWorkspaceMode = false;
+        AlertEvidence = null;
         Candidates.Clear();
         foreach (var candidate in await _engineClient.GetCandidatesAsync(cancellationToken))
         {
@@ -918,6 +1678,46 @@ public sealed partial class ShellViewModel : ObservableObject
         if (candidateToSelect is not null)
         {
             await SelectCandidateAsync(candidateToSelect, cancellationToken);
+        }
+    }
+
+    private async Task RefreshDailyWorkflowDataAsync(CancellationToken cancellationToken)
+    {
+        if (_dailyWorkflowWorkspaceClient is null)
+        {
+            return;
+        }
+        try
+        {
+            DailyWorkflow = await _dailyWorkflowWorkspaceClient.GetSnapshotAsync(cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        {
+            var now = DateTimeOffset.UtcNow;
+            DailyWorkflow = new DailyWorkflowSnapshot(
+                1,
+                DailyWorkflowEvidenceState.Unavailable,
+                now,
+                null,
+                "Daily Workflow source unavailable",
+                "Capture identity unavailable",
+                "CAPTURE_MISSING",
+                "Capture Missing",
+                $"UNAVAILABLE | The Daily Workflow boundary failed closed: {exception.Message}",
+                0,
+                "unavailable",
+                new DailyWorkflowReviewCounts(0, 0, 0, 0, 0, 0),
+                new DailyWorkflowPlanCounts(0, 0, 0, 0, 0, 0, 0, 0),
+                new DailyWorkflowOutcomeCounts(0, 0, 0),
+                [],
+                new DailyWorkflowNextAction(
+                    "Next Required Action: restore persisted workflow evidence",
+                    "The read-only host did not return a valid Daily Workflow snapshot.",
+                    DailyWorkflowStepLevel.Blocked),
+                [],
+                ["The Daily Workflow snapshot is unavailable; no fallback or recalculation was created."],
+                true);
         }
     }
 
@@ -1054,8 +1854,99 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(ChartSourceLabel));
         OnPropertyChanged(nameof(ActivitySourceLabel));
         OnPropertyChanged(nameof(ResearchSummary));
+        OnPropertyChanged(nameof(CandidateEvidenceSymbolLabel));
+        OnPropertyChanged(nameof(CandidateCatalystHeadline));
+        OnPropertyChanged(nameof(CandidateCatalystSourceLabel));
+        OnPropertyChanged(nameof(CandidateCatalystObservedAtLabel));
+        OnPropertyChanged(nameof(CandidateReadinessLabel));
+        OnPropertyChanged(nameof(CandidateQualityLabel));
+        OnPropertyChanged(nameof(CandidateLiquidityLabel));
+        OnPropertyChanged(nameof(CandidateLineageSourceLabel));
+        OnPropertyChanged(nameof(CandidateLineageAsOfLabel));
+        OnPropertyChanged(nameof(CandidateLineageSummary));
+        OnPropertyChanged(nameof(CandidateOpportunityNotes));
+        OnPropertyChanged(nameof(CandidateOpportunityNotesLabel));
+        OnPropertyChanged(nameof(TechnicalResearchOverview));
+        OnPropertyChanged(nameof(TechnicalResearchEventRows));
+        OnPropertyChanged(nameof(TechnicalResearchStudyRows));
+        OnPropertyChanged(nameof(HasTechnicalResearchEvents));
+        OnPropertyChanged(nameof(HasTechnicalResearchStudies));
+        OnPropertyChanged(nameof(TechnicalResearchEventsEmptyLabel));
+        OnPropertyChanged(nameof(TechnicalResearchStudiesEmptyLabel));
         OnPropertyChanged(nameof(ReplaySummary));
+        OnPropertyChanged(nameof(ReplayContext));
+        OnPropertyChanged(nameof(AlertEvidenceOverview));
+        OnPropertyChanged(nameof(AlertRows));
+        OnPropertyChanged(nameof(OutcomeRows));
+        OnPropertyChanged(nameof(HasAlertRows));
+        OnPropertyChanged(nameof(HasOutcomeRows));
+        OnPropertyChanged(nameof(AlertRowsEmptyLabel));
+        OnPropertyChanged(nameof(OutcomeRowsEmptyLabel));
+        OnPropertyChanged(nameof(SavedWatchlistStateLabel));
+        OnPropertyChanged(nameof(SavedWatchlistSourceLabel));
+        OnPropertyChanged(nameof(SavedWatchlistCountLabel));
+        OnPropertyChanged(nameof(SavedWatchlistAsOfLabel));
+        OnPropertyChanged(nameof(SavedWatchlistSummary));
+        OnPropertyChanged(nameof(SavedWatchlistWarnings));
+        OnPropertyChanged(nameof(SavedWatchlistEmptyState));
+        OnPropertyChanged(nameof(DailyWorkflow));
+        OnPropertyChanged(nameof(CandidateStoryOverview));
+        OnPropertyChanged(nameof(CandidateStoryRows));
+        OnPropertyChanged(nameof(HasCandidateStoryPoints));
+        OnPropertyChanged(nameof(CandidateStoryEmptyLabel));
     }
+
+    private async Task RefreshSavedWatchlistAsync(CancellationToken cancellationToken)
+    {
+        if (_savedWatchlistWorkspaceClient is null)
+        {
+            return;
+        }
+
+        try
+        {
+            SavedWatchlist = await _savedWatchlistWorkspaceClient.GetSnapshotAsync(cancellationToken);
+            SavedWatchlistItems.Clear();
+            foreach (var item in SavedWatchlist.Items)
+            {
+                SavedWatchlistItems.Add(SavedWatchlistItemViewModel.From(item));
+            }
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        {
+            var now = DateTimeOffset.UtcNow;
+            SavedWatchlist = new SavedWatchlistSnapshot(
+                1,
+                SavedWatchlistState.Unavailable,
+                now,
+                null,
+                null,
+                $"UNAVAILABLE | Saved-watchlist evidence could not be loaded: {exception.Message} No current candidate state was inferred.",
+                "Unavailable saved-watchlist source",
+                0,
+                0,
+                0,
+                ["The Python saved-watchlist boundary did not return usable persisted evidence."],
+                []);
+            SavedWatchlistItems.Clear();
+        }
+
+        OnPropertyChanged(nameof(SavedWatchlistStateLabel));
+        OnPropertyChanged(nameof(SavedWatchlistSourceLabel));
+        OnPropertyChanged(nameof(SavedWatchlistCountLabel));
+        OnPropertyChanged(nameof(SavedWatchlistAsOfLabel));
+        OnPropertyChanged(nameof(SavedWatchlistSummary));
+        OnPropertyChanged(nameof(SavedWatchlistWarnings));
+        OnPropertyChanged(nameof(SavedWatchlistEmptyState));
+    }
+
+    private static string TextOrUnavailable(string? value, string unavailable) =>
+        string.IsNullOrWhiteSpace(value) ? unavailable : value.Trim();
+
+    private CandidateSnapshot? CandidateEvidence => TradePlan is null
+        ? SelectedCandidate
+        : Candidates.FirstOrDefault(candidate =>
+            string.Equals(candidate.Symbol, TradePlan.Symbol, StringComparison.OrdinalIgnoreCase));
 
     private async Task RefreshSimulationWorkspaceDataAsync(CancellationToken cancellationToken)
     {
@@ -1078,6 +1969,7 @@ public sealed partial class ShellViewModel : ObservableObject
             }
 
             Health = snapshot.Workspace.Health;
+            AlertEvidence = snapshot.Workspace.AlertEvidence;
             ReplaySession = snapshot.Workspace.Replay;
             Candles.Clear();
             PrimaryChart = null;
@@ -1089,10 +1981,19 @@ public sealed partial class ShellViewModel : ObservableObject
                 SelectedSymbol = candidateToSelect.Symbol;
                 _linkGroups.PublishSymbol(LinkGroup.A, candidateToSelect.Symbol, SelectedInterval);
                 ApplySimulationTradePlan(candidateToSelect.Symbol);
+                await Task.WhenAll(
+                    RefreshTechnicalResearchAsync(candidateToSelect.Symbol, cancellationToken),
+                    RefreshCandidateStoryAsync(candidateToSelect.Symbol, cancellationToken));
             }
             else
             {
                 TradePlan = null;
+                TechnicalResearch = UnavailableTechnicalResearch(
+                    SelectedSymbol,
+                    "No selected candidate is available for technical research evidence.");
+                CandidateStory = UnavailableCandidateStory(
+                    SelectedSymbol,
+                    "No selected candidate is available for Candidate Story evidence.");
             }
 
             StatusMessage = snapshot.Summary;
@@ -1110,7 +2011,10 @@ public sealed partial class ShellViewModel : ObservableObject
             Health = new SystemHealthSnapshot(
                 [new HealthComponentSnapshot("Python simulation workspace", HealthState.Unavailable, detail, now)],
                 now);
+            AlertEvidence = UnavailableAlertEvidence(now, detail);
             ReplaySession = new ReplaySnapshot("UNAVAILABLE", now, string.Empty, "source capture", "Replay context is unavailable because the Python simulation workspace could not be loaded.");
+            TechnicalResearch = UnavailableTechnicalResearch(SelectedSymbol, detail);
+            CandidateStory = UnavailableCandidateStory(SelectedSymbol, detail);
             TradePlan = null;
             Candles.Clear();
             PrimaryChart = null;
@@ -1304,6 +2208,7 @@ public sealed partial class ShellViewModel : ObservableObject
             }
 
             Health = snapshot.Health;
+            AlertEvidence = snapshot.AlertEvidence;
             ReplaySession = snapshot.Replay;
             StatusMessage = snapshot.Summary;
             OnPropertyChanged(nameof(ActivityLabel));
@@ -1318,6 +2223,12 @@ public sealed partial class ShellViewModel : ObservableObject
                 Candles.Clear();
                 PrimaryChart = null;
                 SecondaryCharts.Clear();
+                TechnicalResearch = UnavailableTechnicalResearch(
+                    SelectedSymbol,
+                    "No selected candidate is available for technical research evidence.");
+                CandidateStory = UnavailableCandidateStory(
+                    SelectedSymbol,
+                    "No selected candidate is available for Candidate Story evidence.");
                 RaisePresentationProperties();
             }
         }
@@ -1331,7 +2242,10 @@ public sealed partial class ShellViewModel : ObservableObject
             Health = new SystemHealthSnapshot(
                 [new HealthComponentSnapshot("Python read-only workspace", HealthState.Unavailable, detail, now)],
                 now);
+            AlertEvidence = UnavailableAlertEvidence(now, detail);
             ReplaySession = new ReplaySnapshot("UNAVAILABLE", now, string.Empty, "source capture", "Replay context is unavailable because the Python snapshot could not be loaded.");
+            TechnicalResearch = UnavailableTechnicalResearch(SelectedSymbol, detail);
+            CandidateStory = UnavailableCandidateStory(SelectedSymbol, detail);
             TradePlan = null;
             Candles.Clear();
             PrimaryChart = null;
@@ -1341,4 +2255,172 @@ public sealed partial class ShellViewModel : ObservableObject
             RaisePresentationProperties();
         }
     }
+
+    partial void OnAlertEvidenceChanged(AlertEvidenceSnapshot? value)
+    {
+        OnPropertyChanged(nameof(AlertEvidenceOverview));
+        OnPropertyChanged(nameof(AlertRows));
+        OnPropertyChanged(nameof(OutcomeRows));
+        OnPropertyChanged(nameof(HasAlertRows));
+        OnPropertyChanged(nameof(HasOutcomeRows));
+        OnPropertyChanged(nameof(AlertRowsEmptyLabel));
+        OnPropertyChanged(nameof(OutcomeRowsEmptyLabel));
+    }
+
+    private static AlertEvidenceSnapshot UnavailableAlertEvidence(DateTimeOffset observedAt, string summary) => new(
+        AlertEvidenceState.Unavailable,
+        observedAt,
+        summary,
+        0,
+        0,
+        0,
+        0,
+        [],
+        []);
+
+    partial void OnTechnicalResearchChanged(TechnicalResearchSnapshot? value)
+    {
+        OnPropertyChanged(nameof(TechnicalResearchOverview));
+        OnPropertyChanged(nameof(TechnicalResearchEventRows));
+        OnPropertyChanged(nameof(TechnicalResearchStudyRows));
+        OnPropertyChanged(nameof(HasTechnicalResearchEvents));
+        OnPropertyChanged(nameof(HasTechnicalResearchStudies));
+        OnPropertyChanged(nameof(TechnicalResearchEventsEmptyLabel));
+        OnPropertyChanged(nameof(TechnicalResearchStudiesEmptyLabel));
+    }
+
+    private async Task RefreshTechnicalResearchAsync(
+        string symbol,
+        CancellationToken cancellationToken)
+    {
+        var requestedSymbol = symbol.Trim().ToUpperInvariant();
+        if (_technicalResearchWorkspaceClient is null)
+        {
+            TechnicalResearch = UnavailableTechnicalResearch(
+                requestedSymbol,
+                "The technical research boundary is not configured in this workspace.");
+            return;
+        }
+
+        try
+        {
+            var snapshot = await _technicalResearchWorkspaceClient.GetSnapshotAsync(
+                requestedSymbol,
+                cancellationToken);
+            if (string.Equals(SelectedSymbol, requestedSymbol, StringComparison.OrdinalIgnoreCase))
+            {
+                TechnicalResearch = snapshot;
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        {
+            if (string.Equals(SelectedSymbol, requestedSymbol, StringComparison.OrdinalIgnoreCase))
+            {
+                TechnicalResearch = UnavailableTechnicalResearch(
+                    requestedSymbol,
+                    $"Stored technical research evidence could not be loaded: {exception.Message}");
+            }
+        }
+    }
+
+    private async Task RefreshCandidateStoryAsync(
+        string symbol,
+        CancellationToken cancellationToken)
+    {
+        var requestedSymbol = symbol.Trim().ToUpperInvariant();
+        var requestVersion = Interlocked.Increment(ref _candidateStoryRequestVersion);
+        if (string.Equals(SelectedSymbol, requestedSymbol, StringComparison.OrdinalIgnoreCase))
+        {
+            CandidateStory = UnavailableCandidateStory(
+                requestedSymbol,
+                "Loading persisted Candidate Story evidence.");
+        }
+        if (_candidateStoryWorkspaceClient is null)
+        {
+            if (requestVersion == Volatile.Read(ref _candidateStoryRequestVersion)
+                && string.Equals(SelectedSymbol, requestedSymbol, StringComparison.OrdinalIgnoreCase))
+            {
+                CandidateStory = UnavailableCandidateStory(
+                    requestedSymbol,
+                    "The Candidate Story boundary is not configured in this workspace.");
+            }
+            return;
+        }
+
+        try
+        {
+            var snapshot = await _candidateStoryWorkspaceClient.GetSnapshotAsync(
+                requestedSymbol,
+                cancellationToken);
+            if (requestVersion == Volatile.Read(ref _candidateStoryRequestVersion)
+                && string.Equals(SelectedSymbol, requestedSymbol, StringComparison.OrdinalIgnoreCase))
+            {
+                CandidateStory = snapshot;
+            }
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or InvalidDataException
+                or InvalidOperationException
+                or JsonException)
+        {
+            if (requestVersion == Volatile.Read(ref _candidateStoryRequestVersion)
+                && string.Equals(SelectedSymbol, requestedSymbol, StringComparison.OrdinalIgnoreCase))
+            {
+                CandidateStory = UnavailableCandidateStory(
+                    requestedSymbol,
+                    $"Persisted Candidate Story evidence could not be loaded: {exception.Message}");
+            }
+        }
+    }
+
+    private static TechnicalResearchSnapshot UnavailableTechnicalResearch(string symbol, string summary) => new(
+        1,
+        string.IsNullOrWhiteSpace(symbol) ? "UNAVAILABLE" : symbol.Trim().ToUpperInvariant(),
+        TechnicalResearchState.Unavailable,
+        DateTimeOffset.UtcNow,
+        null,
+        summary,
+        "Technical research source unavailable",
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        [],
+        [],
+        []);
+
+    private static CandidateStorySnapshot UnavailableCandidateStory(string symbol, string summary) => new(
+        1,
+        string.IsNullOrWhiteSpace(symbol) ? "UNAVAILABLE" : symbol.Trim().ToUpperInvariant(),
+        CandidateStoryEvidenceState.Unavailable,
+        DateTimeOffset.UtcNow,
+        null,
+        "Candidate Story source unavailable",
+        $"UNAVAILABLE | {summary}",
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        "Insufficient data",
+        "Trusted persisted capture evidence is unavailable.",
+        "No trusted captures found",
+        "No trusted captures found",
+        "n/a",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        0,
+        0,
+        [],
+        [summary],
+        true);
 }

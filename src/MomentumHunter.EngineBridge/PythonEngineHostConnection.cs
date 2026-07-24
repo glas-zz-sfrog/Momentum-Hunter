@@ -266,6 +266,102 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         return result.Payload.Value.Clone();
     }
 
+    public async Task<JsonElement> GetTechnicalResearchSnapshotAsync(
+        string symbol,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            throw new ArgumentException("A symbol is required for technical research evidence.", nameof(symbol));
+        }
+
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetTechnicalResearchSnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["symbol"] = symbol.Trim().ToUpperInvariant(),
+            },
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException($"The Python Engine Host did not provide technical research evidence: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
+    public async Task<JsonElement> GetSavedWatchlistSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetSavedWatchlistSnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(),
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException($"The Python Engine Host did not provide a saved-watchlist snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
+    public async Task<JsonElement> GetDailyWorkflowSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandAsync(
+            PythonEngineHostProtocol.GetDailyWorkflowSnapshot,
+            Guid.NewGuid().ToString("N"),
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException(
+                $"The Python Engine Host did not provide a read-only Daily Workflow snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
+    public async Task<JsonElement> GetCandidateStorySnapshotAsync(
+        string symbol,
+        CancellationToken cancellationToken = default)
+    {
+        var requestedSymbol = CandidateStorySnapshotMapper.NormalizeSymbol(symbol);
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetCandidateStorySnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["symbol"] = requestedSymbol },
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException(
+                $"The Python Engine Host did not provide a Candidate Story snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
+    public async Task<JsonElement> GetResearchMaturitySnapshotAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetResearchMaturitySnapshot,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(),
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException(
+                $"The Python Engine Host did not provide a research-maturity snapshot: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
     public async Task<JsonElement> RunSimulationAsync(string symbol, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(symbol))

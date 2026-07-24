@@ -53,6 +53,7 @@ public sealed class PaneRegistryTests
         var source = registry.Create(PaneKind.Hunter, "Hunter", LinkGroup.A, symbol: "NVDA");
         var chart = registry.Create(PaneKind.Chart, "Chart", LinkGroup.A, symbol: "NVDA");
         var plan = registry.Create(PaneKind.TradePlan, "Trade Plan", LinkGroup.A, symbol: "NVDA");
+        var story = registry.Create(PaneKind.CandidateStory, "Candidate Story", LinkGroup.A, symbol: "NVDA");
         var pinned = registry.Create(PaneKind.Chart, "Pinned", LinkGroup.A, symbol: "MSFT");
         pinned.IsPinned = true;
         var unlinked = registry.Create(PaneKind.Chart, "Independent", LinkGroup.Unlinked, symbol: "AMD");
@@ -62,6 +63,8 @@ public sealed class PaneRegistryTests
 
         Assert.Equal("PLTR", chart.Symbol);
         Assert.Equal("15m", plan.Interval);
+        Assert.Equal("PLTR", story.Symbol);
+        Assert.Equal("15m", story.Interval);
         Assert.Equal("MSFT", pinned.Symbol);
         Assert.Equal("AMD", unlinked.Symbol);
     }
@@ -76,7 +79,7 @@ public sealed class PaneRegistryTests
 
         var expectedPaneCount = workspace switch
         {
-            WorkspaceKind.Live => 10,
+            WorkspaceKind.Live => 13,
             WorkspaceKind.Review => 6,
             _ => 5,
         };
@@ -99,6 +102,20 @@ public sealed class PaneRegistryTests
 
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Research).IsVisible);
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Watchlist).IsVisible);
+        Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
+        Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.CandidateStory).IsVisible);
+    }
+
+    [Fact]
+    public void LiveWorkspaceKeepsResearchMaturityHiddenAndUnlinked()
+    {
+        var pane = WorkspaceFactory.Create(WorkspaceKind.Live)
+            .Panes
+            .Single(candidate => candidate.Kind == PaneKind.ResearchMaturity);
+
+        Assert.False(pane.IsVisible);
+        Assert.Equal(LinkGroup.Unlinked, pane.LinkGroup);
+        Assert.Equal(DockRegion.Bottom, pane.DockRegion);
     }
 
     [Fact]
@@ -113,6 +130,7 @@ public sealed class PaneRegistryTests
             Assert.Equal(LinkGroup.Unlinked, pane.LinkGroup);
             Assert.Equal(DockRegion.Bottom, pane.DockRegion);
         }
+        Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
     }
 
     [Fact]
@@ -198,12 +216,15 @@ public sealed class PaneRegistryTests
         {
             Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == kind).IsVisible);
         }
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.CandidateStory).IsVisible);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.ResearchMaturity).IsVisible);
     }
 
     [Fact]
-    public async Task ShellDoesNotRecreateContextualPanesRemovedFromCurrentLayout()
+    public async Task ShellMigratesSchemaFiveLayoutWithoutRecreatingRemovedAutomationPanes()
     {
-        var currentLayoutWithoutContextualPanes = CreateSnapshot("NVDA") with { SchemaVersion = 4 };
+        var currentLayoutWithoutContextualPanes = CreateSnapshot("NVDA") with { SchemaVersion = 5 };
         var viewModel = new ShellViewModel(new MockEngineClient(), new InMemoryLayoutStore(currentLayoutWithoutContextualPanes));
 
         await viewModel.InitializeAsync();
@@ -211,6 +232,27 @@ public sealed class PaneRegistryTests
         Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Automation);
         Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Orders);
         Assert.DoesNotContain(viewModel.Registry.Panes, pane => pane.Kind == PaneKind.Positions);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.DailyWorkflow).IsVisible);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.CandidateStory).IsVisible);
+        Assert.False(viewModel.Registry.Panes.Single(pane => pane.Kind == PaneKind.ResearchMaturity).IsVisible);
+    }
+
+    [Fact]
+    public async Task ShellDoesNotRecreateResearchMaturityRemovedFromSchemaSevenLayout()
+    {
+        var currentLayoutWithoutResearchMaturity = CreateSnapshot("NVDA") with
+        {
+            SchemaVersion = 7,
+        };
+        var viewModel = new ShellViewModel(
+            new MockEngineClient(),
+            new InMemoryLayoutStore(currentLayoutWithoutResearchMaturity));
+
+        await viewModel.InitializeAsync();
+
+        Assert.DoesNotContain(
+            viewModel.Registry.Panes,
+            pane => pane.Kind == PaneKind.ResearchMaturity);
     }
 
     [Fact]

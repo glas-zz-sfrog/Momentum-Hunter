@@ -46,6 +46,11 @@ Specialists produce role-specific artifacts and may include recommendations insi
 
 `BRANCH_LEDGER.md` records branch evidence; `TASK_LOG.md` and `CHANGELOG_ARGUS.md` record history. They do not replace the Roadmap's current state or next-action decision.
 
+## Deferred Operator Verification
+`VERIFICATION_QUEUE.md` is the durable, item-by-item list of Steven's deferred manual checks. Every user-visible change must record the exact screen, action, expected result, forbidden or unchanged behavior, automated evidence, and current manual status.
+
+Automated and manual evidence must remain distinct. `AUTOMATED_PASS` means Codex's build, tests, source review, and available visual proof passed. It does not mean Steven inspected the physical interface. `MANUAL_PENDING` does not block unrelated work from starting on a clean branch, but it does not authorize a merge and must never be relabeled as a manual pass. Steven's result is recorded as `MANUAL_PASS` or `MANUAL_FAIL`; failures create a narrow follow-up task.
+
 ## Autonomous Work
 Autonomous-side work must preserve the mode boundary between planning, simulation, paper, read-only live, preview, and confirmed live execution. Execution Architect, Risk Governor Agent, Broker Integration Agent, Paper Trading Agent, Chart Analyst, Equity Research Analyst, and Execution Auditor are read-only/spec-only by default unless a future Goal Charter explicitly assigns implementation to Builder.
 

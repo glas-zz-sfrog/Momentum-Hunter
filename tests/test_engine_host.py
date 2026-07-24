@@ -13,13 +13,18 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from momentum_hunter.engine_host import (
+    COMMAND_CANDIDATE_STORY_SNAPSHOT,
     COMMAND_CHART_SNAPSHOT,
+    COMMAND_DAILY_WORKFLOW_SNAPSHOT,
     COMMAND_PAUSE,
     COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
+    COMMAND_RESEARCH_MATURITY_SNAPSHOT,
     COMMAND_RESUME,
     COMMAND_RUN_CYCLE,
+    COMMAND_SAVED_WATCHLIST_SNAPSHOT,
     COMMAND_SHUTDOWN,
     COMMAND_SNAPSHOT,
+    COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
     ENDPOINT_FILENAME,
     HOST_LOCK_FILENAME,
     PROTOCOL_VERSION,
@@ -211,6 +216,165 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertFalse(invalid.accepted)
         self.assertEqual("INVALID_CHART_REQUEST", invalid.code)
 
+    def test_technical_research_command_is_read_only_idempotent_and_requires_symbol(self) -> None:
+        calls: list[str] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(AssertionError("collection should not run")),
+            technical_research_snapshot_loader=lambda symbol: calls.append(symbol)
+            or {"schemaVersion": 1, "symbol": symbol, "state": "AVAILABLE", "events": [], "studies": []},
+        )
+
+        missing = runtime.execute(COMMAND_TECHNICAL_RESEARCH_SNAPSHOT, "missing", {})
+        result = runtime.execute(
+            COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
+            "research",
+            {"symbol": "nvda"},
+        )
+        repeated = runtime.execute(
+            COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
+            "research",
+            {"symbol": "nvda"},
+        )
+
+        self.assertFalse(missing.accepted)
+        self.assertEqual("TECHNICAL_RESEARCH_SYMBOL_REQUIRED", missing.code)
+        self.assertTrue(result.accepted)
+        self.assertEqual(result, repeated)
+        self.assertEqual(["NVDA"], calls)
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+
+    def test_saved_watchlist_command_returns_injected_payload_without_starting_collection(self) -> None:
+        calls: list[str] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(AssertionError("collection should not run")),
+            saved_watchlist_snapshot_loader=lambda: calls.append("read")
+            or {
+                "schemaVersion": 1,
+                "state": "STALE",
+                "sourceLabel": "watchlist-2026-06-18.json",
+                "items": [],
+            },
+        )
+
+        result = runtime.execute(COMMAND_SAVED_WATCHLIST_SNAPSHOT, "saved-watchlist")
+        repeated = runtime.execute(COMMAND_SAVED_WATCHLIST_SNAPSHOT, "saved-watchlist")
+
+        self.assertTrue(result.accepted)
+        self.assertEqual("SAVED_WATCHLIST_SNAPSHOT", result.code)
+        self.assertEqual("STALE", result.payload["state"])
+        self.assertEqual(result, repeated)
+        self.assertEqual(["read"], calls)
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+
+    def test_research_maturity_command_returns_injected_read_only_payload_without_collection(self) -> None:
+        payload = {
+            "schemaVersion": 1,
+            "state": "STALE",
+            "researchOnly": True,
+            "readOnly": True,
+            "strategyChangeRecommendationsAllowed": False,
+        }
+        calls: list[str] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(
+                AssertionError("collection should not run")
+            ),
+            research_maturity_loader=lambda: calls.append("read") or payload,
+        )
+
+        result = runtime.execute(
+            COMMAND_RESEARCH_MATURITY_SNAPSHOT,
+            "research-maturity",
+        )
+        repeated = runtime.execute(
+            COMMAND_RESEARCH_MATURITY_SNAPSHOT,
+            "research-maturity",
+        )
+        invalid = runtime.execute(
+            COMMAND_RESEARCH_MATURITY_SNAPSHOT,
+            "research-maturity-invalid",
+            {"refresh": "true"},
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual("RESEARCH_MATURITY_SNAPSHOT", result.code)
+        self.assertEqual(payload, result.payload)
+        self.assertEqual(result, repeated)
+        self.assertEqual(["read"], calls)
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+        self.assertFalse(invalid.accepted)
+        self.assertEqual("INVALID_RESEARCH_MATURITY_REQUEST", invalid.code)
+
+    def test_daily_workflow_snapshot_is_read_only_argument_free_and_idempotent(self) -> None:
+        cycle_runs: list[str] = []
+        loads: list[str] = []
+        payload = {"schemaVersion": 1, "state": "AVAILABLE", "readOnly": True}
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: cycle_runs.append("cycle") or SimpleNamespace(target_count=1),
+            daily_workflow_snapshot_loader=lambda: loads.append("load") or payload,
+        )
+
+        first = runtime.execute(COMMAND_DAILY_WORKFLOW_SNAPSHOT, "daily-workflow")
+        repeated = runtime.execute(COMMAND_DAILY_WORKFLOW_SNAPSHOT, "daily-workflow")
+        invalid = runtime.execute(COMMAND_DAILY_WORKFLOW_SNAPSHOT, "daily-workflow-invalid", {"refresh": "true"})
+
+        self.assertTrue(first.accepted)
+        self.assertEqual("DAILY_WORKFLOW_SNAPSHOT", first.code)
+        self.assertEqual(payload, first.payload)
+        self.assertEqual(first, repeated)
+        self.assertEqual(["load"], loads)
+        self.assertEqual([], cycle_runs)
+        self.assertFalse(invalid.accepted)
+        self.assertEqual("INVALID_DAILY_WORKFLOW_REQUEST", invalid.code)
+
+    def test_candidate_story_command_is_read_only_idempotent_and_argument_scoped(self) -> None:
+        calls: list[str] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(AssertionError("collection should not run")),
+            candidate_story_loader=lambda symbol: calls.append(symbol)
+            or {
+                "schemaVersion": 1,
+                "symbol": symbol,
+                "state": "EMPTY",
+                "points": [],
+                "readOnly": True,
+            },
+        )
+
+        result = runtime.execute(
+            COMMAND_CANDIDATE_STORY_SNAPSHOT,
+            "candidate-story",
+            {"symbol": "COO"},
+        )
+        repeated = runtime.execute(
+            COMMAND_CANDIDATE_STORY_SNAPSHOT,
+            "candidate-story",
+            {"symbol": "COO"},
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual("CANDIDATE_STORY_SNAPSHOT", result.code)
+        self.assertEqual(result, repeated)
+        self.assertEqual(["COO"], calls)
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+        self.assertTrue(result.payload["readOnly"])
+
+    def test_candidate_story_command_rejects_missing_or_invalid_symbol(self) -> None:
+        runtime = EngineHostRuntime(
+            candidate_story_loader=lambda symbol: (_ for _ in ()).throw(ValueError("invalid symbol"))
+        )
+
+        missing = runtime.execute(COMMAND_CANDIDATE_STORY_SNAPSHOT, "missing-story-symbol", {})
+        invalid = runtime.execute(
+            COMMAND_CANDIDATE_STORY_SNAPSHOT,
+            "invalid-story-symbol",
+            {"symbol": "../COO"},
+        )
+
+        self.assertFalse(missing.accepted)
+        self.assertEqual("CANDIDATE_STORY_SYMBOL_REQUIRED", missing.code)
+        self.assertFalse(invalid.accepted)
+        self.assertEqual("INVALID_CANDIDATE_STORY_REQUEST", invalid.code)
 
 class EngineHostProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -243,6 +407,11 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertEqual("loopback-tcp", snapshot["identity"]["transport"])
         self.assertIn(COMMAND_RUN_CYCLE, snapshot["capabilities"])
         self.assertIn(COMMAND_CHART_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(COMMAND_TECHNICAL_RESEARCH_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(COMMAND_SAVED_WATCHLIST_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(COMMAND_DAILY_WORKFLOW_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(COMMAND_CANDIDATE_STORY_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(COMMAND_RESEARCH_MATURITY_SNAPSHOT, snapshot["capabilities"])
         self.assertNotIn("submit_order", snapshot["capabilities"])
         self.assertNotIn("paper_order", snapshot["capabilities"])
         self.assertNotIn("live_order", snapshot["capabilities"])
@@ -276,6 +445,63 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertEqual("CHART_SNAPSHOT", response["result"]["code"])
         self.assertEqual("AAA", response["result"]["payload"]["symbol"])
         self.assertEqual("Daily", response["result"]["payload"]["interval"])
+
+    def test_protocol_returns_technical_research_payload_with_symbol(self) -> None:
+        self.runtime._technical_research_snapshot_loader = lambda symbol: {
+            "schemaVersion": 1,
+            "symbol": symbol,
+            "state": "AVAILABLE",
+            "events": [],
+            "studies": [],
+        }
+
+        response = self.send(
+            command=COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
+            command_id="technical-research",
+            arguments={"symbol": "nvda"},
+        )
+
+        self.assertTrue(response["accepted"])
+        self.assertEqual("TECHNICAL_RESEARCH_SNAPSHOT", response["result"]["code"])
+        self.assertEqual("NVDA", response["result"]["payload"]["symbol"])
+
+    def test_protocol_returns_saved_watchlist_payload_without_arguments(self) -> None:
+        self.runtime._saved_watchlist_snapshot_loader = lambda: {
+            "schemaVersion": 1,
+            "state": "EMPTY",
+            "sourceLabel": "No saved watchlist file",
+            "items": [],
+        }
+
+        response = self.send(
+            command=COMMAND_SAVED_WATCHLIST_SNAPSHOT,
+            command_id="saved-watchlist",
+        )
+
+        self.assertTrue(response["accepted"])
+        self.assertEqual("SAVED_WATCHLIST_SNAPSHOT", response["result"]["code"])
+        self.assertEqual("EMPTY", response["result"]["payload"]["state"])
+        self.assertEqual([], response["result"]["payload"]["items"])
+
+    def test_protocol_returns_candidate_story_payload_with_symbol(self) -> None:
+        self.runtime._candidate_story_loader = lambda symbol: {
+            "schemaVersion": 1,
+            "symbol": symbol,
+            "state": "EMPTY",
+            "points": [],
+            "readOnly": True,
+        }
+
+        response = self.send(
+            command=COMMAND_CANDIDATE_STORY_SNAPSHOT,
+            command_id="candidate-story",
+            arguments={"symbol": "COO"},
+        )
+
+        self.assertTrue(response["accepted"])
+        self.assertEqual("CANDIDATE_STORY_SNAPSHOT", response["result"]["code"])
+        self.assertEqual("COO", response["result"]["payload"]["symbol"])
+        self.assertTrue(response["result"]["payload"]["readOnly"])
 
     def test_shutdown_command_stops_server_after_a_response(self) -> None:
         response = self.send(command=COMMAND_SHUTDOWN, command_id="shutdown")

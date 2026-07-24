@@ -12,6 +12,8 @@ namespace MomentumHunter.Presentation;
 /// </summary>
 public sealed class ChartPaneViewModel : ObservableObject
 {
+    private CandleSnapshot? _inspectedBar;
+
     public ChartPaneViewModel(PaneState pane, IEnumerable<CandleSnapshot> candles)
         : this(
             pane,
@@ -65,13 +67,34 @@ public sealed class ChartPaneViewModel : ObservableObject
 
     public string LatestBarSummary => LatestBar is null
         ? "Latest bar unavailable"
-        : $"{FormatTimestamp(LatestBar.Timestamp)}  |  " +
-          $"O {FormatPrice(LatestBar.Open)}  H {FormatPrice(LatestBar.High)}  " +
-          $"L {FormatPrice(LatestBar.Low)}  C {FormatPrice(LatestBar.Close)}  |  " +
-          $"V {LatestBar.Volume.ToString("N0", CultureInfo.InvariantCulture)}";
+        : FormatBar(LatestBar);
+
+    public CandleSnapshot? InspectedBar
+    {
+        get => _inspectedBar;
+        set
+        {
+            if (!SetProperty(ref _inspectedBar, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(ActiveBarLabel));
+            OnPropertyChanged(nameof(ActiveBarSummary));
+        }
+    }
+
+    public string ActiveBarLabel => InspectedBar is null
+        ? "LATEST BAR"
+        : "INSPECTED BAR";
+
+    public string ActiveBarSummary => InspectedBar is null
+        ? LatestBarSummary
+        : FormatBar(InspectedBar);
 
     public void ReplaceCandles(IEnumerable<CandleSnapshot> candles)
     {
+        InspectedBar = null;
         Candles.Clear();
         foreach (var candle in candles)
         {
@@ -83,6 +106,7 @@ public sealed class ChartPaneViewModel : ObservableObject
             .LastOrDefault();
         OnPropertyChanged(nameof(LatestBar));
         OnPropertyChanged(nameof(LatestBarSummary));
+        OnPropertyChanged(nameof(ActiveBarSummary));
     }
 
     public void ApplySnapshot(ChartSnapshot snapshot)
@@ -108,6 +132,7 @@ public sealed class ChartPaneViewModel : ObservableObject
         if (eventArgs.PropertyName is nameof(PaneState.Interval))
         {
             OnPropertyChanged(nameof(LatestBarSummary));
+            OnPropertyChanged(nameof(ActiveBarSummary));
         }
 
         if (eventArgs.PropertyName is nameof(PaneState.IsPinned) or nameof(PaneState.LinkGroup))
@@ -124,6 +149,12 @@ public sealed class ChartPaneViewModel : ObservableObject
             : "yyyy-MM-dd HH:mm 'UTC'";
         return timestamp.UtcDateTime.ToString(format, CultureInfo.InvariantCulture);
     }
+
+    private string FormatBar(CandleSnapshot candle) =>
+        $"{FormatTimestamp(candle.Timestamp)}  |  " +
+        $"O {FormatPrice(candle.Open)}  H {FormatPrice(candle.High)}  " +
+        $"L {FormatPrice(candle.Low)}  C {FormatPrice(candle.Close)}  |  " +
+        $"V {candle.Volume.ToString("N0", CultureInfo.InvariantCulture)}";
 
     private static string FormatPrice(decimal value)
     {

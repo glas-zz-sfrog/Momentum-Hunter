@@ -83,6 +83,46 @@ public sealed class ChartReadabilityTests
         Assert.Throws<ArgumentOutOfRangeException>(() => ChartAxisScale.Create(candles, "5m", timeTickTarget: 1));
     }
 
+    [Theory]
+    [InlineData(0.00, 0, 0.125)]
+    [InlineData(0.24, 0, 0.125)]
+    [InlineData(0.25, 1, 0.375)]
+    [InlineData(0.74, 2, 0.625)]
+    [InlineData(0.75, 3, 0.875)]
+    [InlineData(1.00, 3, 0.875)]
+    public void InspectionSelectsNearestChronologicalCandle(
+        double normalizedPosition,
+        int expectedIndex,
+        double expectedCenter)
+    {
+        var candles = Candles(
+            ("2026-07-23T14:45:00Z", 10m, 11m, 9m, 10m, 1L),
+            ("2026-07-23T14:30:00Z", 10m, 11m, 9m, 10m, 1L),
+            ("2026-07-23T14:40:00Z", 10m, 11m, 9m, 10m, 1L),
+            ("2026-07-23T14:35:00Z", 10m, 11m, 9m, 10m, 1L));
+
+        var inspection = ChartInspectionScale.SelectNearest(candles, normalizedPosition);
+
+        Assert.NotNull(inspection);
+        Assert.Equal(expectedIndex, inspection.Index);
+        Assert.Equal(expectedCenter, inspection.Position, 6);
+        Assert.Equal(
+            DateTimeOffset.Parse("2026-07-23T14:30:00Z").AddMinutes(expectedIndex * 5),
+            inspection.Candle.Timestamp);
+    }
+
+    [Fact]
+    public void InspectionRejectsMissingOrOutOfPlotPositions()
+    {
+        var candles = Candles(("2026-07-23T14:30:00Z", 10m, 11m, 9m, 10m, 1L));
+
+        Assert.Null(ChartInspectionScale.SelectNearest([], 0.5d));
+        Assert.Null(ChartInspectionScale.SelectNearest(candles, -0.001d));
+        Assert.Null(ChartInspectionScale.SelectNearest(candles, 1.001d));
+        Assert.Null(ChartInspectionScale.SelectNearest(candles, double.NaN));
+        Assert.Null(ChartInspectionScale.SelectNearest(candles, double.PositiveInfinity));
+    }
+
     [Fact]
     public void LatestBarDetailsUseChronologicallyNewestCandle()
     {
@@ -127,6 +167,48 @@ public sealed class ChartReadabilityTests
 
         Assert.StartsWith("2026-07-23 UTC", viewModel.LatestBarSummary, StringComparison.Ordinal);
         Assert.Contains("O 0.8123", viewModel.LatestBarSummary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InspectedBarTemporarilyReplacesLatestBarDetails()
+    {
+        var pane = Pane("5m");
+        var inspected = Candle("2026-07-23T14:30:00Z", 118.90m, 119.20m, 118.70m, 119.10m, 1000L);
+        var latest = Candle("2026-07-23T14:35:00Z", 119.10m, 119.40m, 118.80m, 119.00m, 1500L);
+        var viewModel = new ChartPaneViewModel(
+            pane,
+            Snapshot(pane, ChartDataState.Available, [latest, inspected]));
+
+        viewModel.InspectedBar = inspected;
+
+        Assert.Equal("INSPECTED BAR", viewModel.ActiveBarLabel);
+        Assert.Equal(
+            "2026-07-23 14:30 UTC  |  O 118.90  H 119.20  L 118.70  C 119.10  |  V 1,000",
+            viewModel.ActiveBarSummary);
+        Assert.Equal(latest, viewModel.LatestBar);
+
+        viewModel.InspectedBar = null;
+
+        Assert.Equal("LATEST BAR", viewModel.ActiveBarLabel);
+        Assert.Equal(viewModel.LatestBarSummary, viewModel.ActiveBarSummary);
+    }
+
+    [Fact]
+    public void SnapshotReplacementClearsInspectionFromPreviousContext()
+    {
+        var pane = Pane("5m");
+        var first = Candle("2026-07-23T14:30:00Z", 10m, 11m, 9m, 10.5m, 100L);
+        var replacement = Candle("2026-07-23T15:00:00Z", 20m, 21m, 19m, 20.5m, 200L);
+        var viewModel = new ChartPaneViewModel(
+            pane,
+            Snapshot(pane, ChartDataState.Available, [first]));
+        viewModel.InspectedBar = first;
+
+        viewModel.ApplySnapshot(Snapshot(pane, ChartDataState.Available, [replacement]));
+
+        Assert.Null(viewModel.InspectedBar);
+        Assert.Equal("LATEST BAR", viewModel.ActiveBarLabel);
+        Assert.Contains("2026-07-23 15:00 UTC", viewModel.ActiveBarSummary, StringComparison.Ordinal);
     }
 
     private static PaneState Pane(string interval) => new(

@@ -53,11 +53,16 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Contains(PythonEngineHostProtocol.GetSimulationWorkspaceSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetShadowTradingSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetChartSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetTechnicalResearchSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetSavedWatchlistSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetDailyWorkflowSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetCandidateStorySnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetResearchMaturitySnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.RunSimulation, first.Capabilities);
             Assert.DoesNotContain("submit_order", first.Capabilities);
 
             var readOnlyWorkspacePayload = await firstConnection.GetReadOnlyWorkspaceSnapshotAsync();
-            Assert.Equal(1, readOnlyWorkspacePayload.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(2, readOnlyWorkspacePayload.GetProperty("schemaVersion").GetInt32());
             Assert.False(readOnlyWorkspacePayload.GetProperty("planningAvailable").GetBoolean());
             Assert.True(readOnlyWorkspacePayload.TryGetProperty("candidates", out _));
             Assert.True(readOnlyWorkspacePayload.TryGetProperty("health", out _));
@@ -69,6 +74,59 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Equal("Daily", chartPayload.GetProperty("interval").GetString());
             Assert.Equal("UNAVAILABLE", chartPayload.GetProperty("state").GetString());
             Assert.Empty(chartPayload.GetProperty("candles").EnumerateArray());
+
+            var researchPayload = await firstConnection.GetTechnicalResearchSnapshotAsync("ZZZNOTREAL");
+            Assert.Equal(1, researchPayload.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal("ZZZNOTREAL", researchPayload.GetProperty("symbol").GetString());
+            Assert.Contains(
+                researchPayload.GetProperty("state").GetString(),
+                new[] { "UNAVAILABLE", "EMPTY" });
+            Assert.Empty(researchPayload.GetProperty("events").EnumerateArray());
+            Assert.Empty(researchPayload.GetProperty("studies").EnumerateArray());
+
+            var savedWatchlistPayload = await firstConnection.GetSavedWatchlistSnapshotAsync();
+            Assert.Equal(1, savedWatchlistPayload.GetProperty("schemaVersion").GetInt32());
+            Assert.Contains(
+                savedWatchlistPayload.GetProperty("state").GetString(),
+                new[] { "AVAILABLE", "PARTIAL", "STALE", "EMPTY", "UNAVAILABLE" });
+            var savedWatchlistItems = savedWatchlistPayload.GetProperty("items").EnumerateArray().ToArray();
+            var displayedItemCount = savedWatchlistPayload.GetProperty("displayedItemCount").GetInt32();
+            var totalItemCount = savedWatchlistPayload.GetProperty("totalItemCount").GetInt32();
+            Assert.Equal(savedWatchlistItems.Length, displayedItemCount);
+            Assert.True(totalItemCount >= displayedItemCount);
+
+            var dailyWorkflowPayload = await firstConnection.GetDailyWorkflowSnapshotAsync();
+            Assert.Equal(1, dailyWorkflowPayload.GetProperty("schemaVersion").GetInt32());
+            Assert.True(dailyWorkflowPayload.GetProperty("readOnly").GetBoolean());
+            Assert.True(dailyWorkflowPayload.TryGetProperty("state", out _));
+            Assert.True(dailyWorkflowPayload.TryGetProperty("nextAction", out _));
+            Assert.True(dailyWorkflowPayload.TryGetProperty("steps", out _));
+
+            var candidateStoryPayload = await firstConnection.GetCandidateStorySnapshotAsync("ZZZNOTREAL");
+            Assert.Equal(1, candidateStoryPayload.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal("ZZZNOTREAL", candidateStoryPayload.GetProperty("symbol").GetString());
+            Assert.Equal("EMPTY", candidateStoryPayload.GetProperty("state").GetString());
+            Assert.True(candidateStoryPayload.GetProperty("readOnly").GetBoolean());
+            Assert.Empty(candidateStoryPayload.GetProperty("points").EnumerateArray());
+
+            var researchMaturityPayload =
+                await firstConnection.GetResearchMaturitySnapshotAsync();
+            Assert.Equal(
+                1,
+                researchMaturityPayload.GetProperty("schemaVersion").GetInt32());
+            Assert.True(
+                researchMaturityPayload.GetProperty("researchOnly").GetBoolean());
+            Assert.True(
+                researchMaturityPayload.GetProperty("readOnly").GetBoolean());
+            Assert.False(
+                researchMaturityPayload
+                    .GetProperty("strategyChangeRecommendationsAllowed")
+                    .GetBoolean());
+            Assert.Equal(
+                "LOCKED",
+                researchMaturityPayload
+                    .GetProperty("strategyOptimizationStatus")
+                    .GetString());
 
             var simulationWorkspacePayload = await firstConnection.GetSimulationWorkspaceSnapshotAsync();
             Assert.Equal("SIMULATION_ONLY_FAKE_BROKER", simulationWorkspacePayload.GetProperty("mode").GetString());

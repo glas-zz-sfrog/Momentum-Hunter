@@ -4,7 +4,7 @@ Date reconciled: 2026-07-24
 
 ## Current Truth
 
-Local `master` is the canonical merged product baseline for Momentum Hunter. It contains the Python automation and simulation foundation, Technical Breakout Research Engine v1, daily OHLC source support, the R004 WPF workstation shell, R005 tray/lifecycle work, the independent Python Engine Host, Phase 9 read-only workstation integration, Phase 10 persisted TradePlan/Risk Governor/FakeBroker simulation integration, R011/R012 chart work, ARGUS-SHADOW-001 prospective Shadow Trading, ARGUS-SHADOW-002 read-only WPF Shadow Review, and ARGUS-SHADOW-003 sample-readiness gate. Local `master` is ten commits ahead of `origin/master`; nothing from Shadow-001/002/003 was pushed to `master`.
+Local `master` at `164e32e` remains the canonical merged product baseline. It contains the Python automation/simulation foundation, R004-R012 workstation foundation, and ARGUS-SHADOW-001/002/003. Local `master` is ten commits ahead of `origin/master` at `69feedf`; R027 has not changed master and nothing was pushed.
 
 Git evidence at reconciliation time:
 
@@ -15,6 +15,10 @@ Git evidence at reconciliation time:
 - ARGUS-SHADOW-001's matching feature branch is remotely backed up at `bb962be`; ARGUS-SHADOW-002 is not pushed.
 - `codex/ARGUS-A016T-schwab-paper-api-response` records Schwab's live-only, no-paperMoney, no-sandbox answer on a separate unmerged branch. A017 is blocked by vendor capability.
 - `codex/ARGUS-R026-wpf-phase12-clean-room-integration` consolidates R013-R025 on a separate unmerged review branch and is not part of ARGUS-SHADOW-001.
+- Steven authorized `codex/ARGUS-R027-integrate-r026-with-shadow-baseline` to reconcile current master `164e32e` with R026 `838ed22` without rewriting either parent; combined automated verification now passes and the branch awaits Steven's manual check.
+- `safety/ARGUS-R027-before-r026-integration` preserves pre-integration master `164e32e`.
+- `codex/ARGUS-TEST-001-unattended-qt-discovery` remains preserved at `03ab813`; its two test files are identical to R026 `838ed22` and are included in R027 through the R026 parent.
+- R013-R025 remain individually preserved and are source/audit branches for R026/R027, not separate merge candidates.
 - `codex/ARGUS-R011-wpf-chart-candle-integration` starts from `a17eff8`; its implementation and proof are merged into `master`, and commit `268f3f8` is remotely backed up through `origin/master`.
 - `codex/ARGUS-R012-wpf-chart-readability` is merged and remotely backed up through `69feedf`.
 - R004 and R005 are integrated through the `d3a98d9` and `e141054` history; their historical feature branches remain preserved but are not active work bases.
@@ -54,16 +58,34 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `5d11f02` | Build prospective Shadow Trading validation | Yes |
 | `7fee390` | Add WPF Shadow Trading review surface | Yes |
 | `9002df0` | Add Shadow sample readiness gate | Yes |
+| `a263311` | R026 integrated Phase 12 implementation through Research Maturity | No; R026/R027 branch history only |
+| `838ed22` | Harden unattended Qt test discovery on R026 | No; R026/R027 branch history only |
 
 ## Branch Classifications
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | Shadow-003 merge-state closeout containing `9002df0` and `bb7aec6` | No; `origin/master` remains at `69feedf` | Yes | `ACTIVE` | Canonical Python engine, WPF operator surface, Shadow lifecycle/review, and versioned sample-readiness gate. | Keep sample locked until Steven separately authorizes the exact official definition; R026 remains a separate review. |
+| `master` | `164e32e` | No; `origin/master` remains at `69feedf` | Yes | `ACTIVE` | Canonical Python engine, WPF operator surface, Shadow lifecycle/review, and versioned sample-readiness gate. | Remain unchanged until R027 completes and Steven separately approves integration. |
+| `codex/ARGUS-R027-integrate-r026-with-shadow-baseline` | Two-parent integration of `164e32e` plus `838ed22` | No | No | `ACTIVE`; `IMPLEMENTED_PENDING_MERGE` product state | Preserves current Shadow lifecycle/review/sample lock while adding the R013-R025 read-only WPF stack and exact R026 test hardening. | Steven runs the R027 checklist, then separately approves or rejects local master integration. |
+| `safety/ARGUS-R027-before-r026-integration` | `164e32e` | No | Points to current master | `DO_NOT_USE` | Safety pointer for the pre-R027 canonical baseline. | Preserve until R027 is resolved and reviewed. |
+| `codex/ARGUS-TEST-001-unattended-qt-discovery` | `03ab813` | No | No | `SUPERSEDED` | Independent copy of the same two Qt test fixes carried by R026 `838ed22`; R027 full discovery passes 641/641. | Preserve as audit evidence; do not merge separately. |
 | `codex/ARGUS-SHADOW-003-sample-readiness-gate` | `9002df0`, `bb7aec6`, plus this merge-state closeout | No | Yes | `MERGED_TO_LOCAL_MASTER` | Immutable sample/config/fill/evidence metadata, fail-closed eligibility and readiness audit, gated metrics, and read-only locked WPF proof. | Preserve locally as audit history. Merge approval did not authorize official trade 1 or a push. |
 | `codex/ARGUS-SHADOW-001-shadow-trading-wiring-audit` | `bb962be` | Yes; feature branch only | Yes | `MERGED_TO_LOCAL_MASTER` | Prospective frozen-evidence Shadow Trading, quote-driven FakeBroker lifecycle/outcomes, durable audit/metrics, manual paperMoney ticket, and network-free Schwab read-only preparation. | Preserve as remotely backed-up audit history. |
 | `codex/ARGUS-SHADOW-002-wpf-shadow-review` | `fe3326d` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Read-only WPF Shadow review, strict identity-chain audit, filters, linked review panes, and minimum-sample metric gating. | Preserve locally; next work starts from local `master`, not this branch. |
-| `codex/ARGUS-R026-wpf-phase12-clean-room-integration` | `838ed22` | No | No | `NEEDS_REVIEW` | Consolidated R013-R025 WPF implementation and unattended Qt test hardening. | Complete its separate operator checklist; do not combine its merge decision with Shadow Trading. |
+| `codex/ARGUS-R026-wpf-phase12-clean-room-integration` | `838ed22` | No | No | `SUPERSEDED` | Consolidated R013-R025 WPF implementation and unattended Qt test hardening; source parent for the verified R027 integration. | Preserve as immutable audit history; review R027 instead of merging R026 directly. |
+| `codex/ARGUS-R025-wpf-research-maturity-evidence` | `5f0d36c` | No | No | `SUPERSEDED` | Read-only research-maturity/evidence-census projection with fail-closed strategy locks. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R024-wpf-candidate-story-evidence` | `37a0778` | No | No | `SUPERSEDED` | Linked read-only Candidate Story projection over canonical persisted evidence. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R023-wpf-daily-workflow-evidence` | `22eac54` | No | No | `SUPERSEDED` | Read-only Daily Workflow guidance and evidence pane. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R022-wpf-saved-watchlist-evidence` | `8fd9b72` | No | No | `SUPERSEDED` | Read-only persisted saved-watchlist projection. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R021-wpf-technical-research-evidence` | `756fbd2` | No | No | `SUPERSEDED` | Read-only technical-breakout event and study projection. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R020-wpf-alert-outcome-evidence` | `1475c41` | No | No | `SUPERSEDED` | Read-only persisted alert/outcome evidence. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R019-wpf-activity-events` | `9cb3f8b` | No | No | `SUPERSEDED` | Full read-only activity event disclosure. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R018-wpf-monitoring-status` | `1137a02` | No | No | `SUPERSEDED` | Read-only monitoring lifecycle disclosure. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R017-wpf-replay-context` | `b642aa9` | No | No | `SUPERSEDED` | Exact read-only replay identity disclosure. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R016-wpf-health-diagnostics` | `89952aa` | No | No | `SUPERSEDED` | Read-only component health diagnostics. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R015-wpf-candidate-evidence` | `a9f27c7` | No | No | `SUPERSEDED` | Persisted candidate Why/Research evidence disclosure. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R014-wpf-command-palette` | `86c54c4` | No | No | `SUPERSEDED` | Symbol quick-open and real pane actions with visible failure states. | Preserve as an R026/R027 source branch. |
+| `codex/ARGUS-R013-wpf-chart-inspection` | `29dd27d` | No | No | `SUPERSEDED` | Nearest-candle hover inspection with UTC/OHLCV detail. | Preserve as an R026/R027 source branch. |
 | `codex/ARGUS-A016T-schwab-paper-api-response` | `1bc90a8` | No | No | `NEEDS_REVIEW` | Preserves Schwab Support's live-only, no-paperMoney, no-sandbox response and broker decision consequences. | Keep A017 blocked; preserve as branch evidence. |
 | `codex/ARGUS-R012-wpf-chart-readability` | `69feedf` | Commit backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Deterministic WPF chart price/time axes and latest stored-bar OHLCV details with no engine or provider change. | Historical integration branch. |
 | `codex/ARGUS-R011-wpf-chart-candle-integration` | `268f3f8` | No branch ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Versioned read-only local chart snapshots and WPF candle/wick/volume rendering with explicit stale/unavailable behavior. | Historical integration branch; begin R012 from `master`. |

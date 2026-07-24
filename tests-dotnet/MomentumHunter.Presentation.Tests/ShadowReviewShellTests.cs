@@ -177,6 +177,16 @@ public sealed class ShadowReviewShellTests
             candidates,
             [],
             new SystemHealthSnapshot([], at),
+            new AlertEvidenceSnapshot(
+                AlertEvidenceState.Empty,
+                at,
+                "No persisted alert evidence in this synthetic Shadow fixture.",
+                0,
+                0,
+                0,
+                0,
+                [],
+                []),
             new ReplaySnapshot("NOT_SELECTED", at, string.Empty, "source capture", "No replay."),
             true);
         return new SimulationWorkspaceSnapshot(

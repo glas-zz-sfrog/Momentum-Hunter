@@ -22,6 +22,9 @@ public partial class MainWindow : Window, IWorkstationPresentation
     private const string DiagnosticsContentId = "pane-diagnostics";
     private const string ResearchContentId = "pane-research";
     private const string WatchlistContentId = "pane-watchlist";
+    private const string DailyWorkflowContentId = "pane-daily-workflow";
+    private const string CandidateStoryContentId = "pane-candidate-story";
+    private const string ResearchMaturityContentId = "pane-research-maturity";
     private const string AutomationContentId = "pane-automation";
     private const string OrdersContentId = "pane-orders";
     private const string PositionsContentId = "pane-positions";
@@ -141,10 +144,102 @@ public partial class MainWindow : Window, IWorkstationPresentation
 
     private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && _viewModel.IsCommandPaletteOpen)
+        {
+            _viewModel.CloseCommandPalette();
+            e.Handled = true;
+            return;
+        }
+
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.K)
         {
-            _viewModel.ToggleCommandPaletteCommand.Execute(null);
+            if (_viewModel.IsCommandPaletteOpen)
+            {
+                _viewModel.CloseCommandPalette();
+            }
+            else
+            {
+                OpenCommandPalette();
+            }
+
             e.Handled = true;
+        }
+    }
+
+    private async void GlobalSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        var exact = _viewModel.FindExactCommandPaletteItem(GlobalSearchBox.Text);
+        if (exact is null)
+        {
+            OpenCommandPalette(GlobalSearchBox.Text);
+        }
+        else
+        {
+            await ExecuteCommandPaletteItemAsync(exact);
+        }
+
+        e.Handled = true;
+    }
+
+    private async void CommandPaletteSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Down:
+                MoveCommandPaletteSelection(1);
+                e.Handled = true;
+                break;
+            case Key.Up:
+                MoveCommandPaletteSelection(-1);
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                await ExecuteCommandPaletteItemAsync();
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                _viewModel.CloseCommandPalette();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private async void CommandPaletteResultsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        await ExecuteCommandPaletteItemAsync();
+        e.Handled = true;
+    }
+
+    private async void CommandPaletteResultsList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            await ExecuteCommandPaletteItemAsync();
+            e.Handled = true;
+        }
+    }
+
+    private void CommandPalettePopup_Opened(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            () =>
+            {
+                CommandPaletteSearchBox.Focus();
+                CommandPaletteSearchBox.SelectAll();
+            });
+    }
+
+    private void CommandPalettePopup_Closed(object? sender, EventArgs e)
+    {
+        if (_viewModel.IsCommandPaletteOpen)
+        {
+            _viewModel.CloseCommandPalette();
         }
     }
 
@@ -158,12 +253,58 @@ public partial class MainWindow : Window, IWorkstationPresentation
     {
         _viewModel.ToggleDiagnosticsCommand.Execute(null);
         SetContentVisibility(DiagnosticsContentId, _viewModel.IsDiagnosticsOpen);
+        if (_viewModel.IsDiagnosticsOpen)
+        {
+            EnsureAnchorablePaneHeight(DiagnosticsContentId, 300);
+        }
     }
 
     private async void NewChartButton_Click(object sender, RoutedEventArgs e)
     {
         var pane = await _viewModel.AddLinkedChartAsync();
         CreateAdditionalChartDocument(pane, activate: true);
+    }
+
+    private void OpenCommandPalette(string? query = null)
+    {
+        _viewModel.OpenCommandPalette(query);
+    }
+
+    private void MoveCommandPaletteSelection(int delta)
+    {
+        if (CommandPaletteResultsList.Items.Count == 0)
+        {
+            return;
+        }
+
+        var current = CommandPaletteResultsList.SelectedIndex;
+        var next = current < 0
+            ? 0
+            : Math.Clamp(current + delta, 0, CommandPaletteResultsList.Items.Count - 1);
+        CommandPaletteResultsList.SelectedIndex = next;
+        CommandPaletteResultsList.ScrollIntoView(CommandPaletteResultsList.SelectedItem);
+    }
+
+    private async Task ExecuteCommandPaletteItemAsync(CommandPaletteItem? item = null)
+    {
+        var result = await _viewModel.ExecuteCommandPaletteItemAsync(item);
+        if (!result.Executed)
+        {
+            return;
+        }
+
+        switch (result.Action)
+        {
+            case CommandPaletteAction.AddChart when result.AddedPane is not null:
+                CreateAdditionalChartDocument(result.AddedPane, activate: true);
+                break;
+            case CommandPaletteAction.ToggleActivity:
+                SetContentVisibility(ActivityContentId, _viewModel.IsActivityOpen);
+                break;
+            case CommandPaletteAction.ViewDiagnostics:
+                SetContentVisibility(DiagnosticsContentId, true);
+                break;
+        }
     }
 
     private async void TradePlanActionButton_Click(object sender, RoutedEventArgs e)
@@ -253,6 +394,16 @@ public partial class MainWindow : Window, IWorkstationPresentation
                 SetContentVisibility(ContentIdForPane(pane), true);
             }
 
+            if (pane.Kind == PaneKind.ReviewOutcomes)
+            {
+                EnsureAnchorablePaneHeight(ReviewOutcomesContentId, 340);
+            }
+            else if (pane.Kind == PaneKind.Research)
+            {
+                EnsureAnchorablePaneHeight(ResearchContentId, 390);
+            }
+
+            EnsureEvidencePaneHeight(ContentIdForPane(pane));
             PanesPopup.IsOpen = false;
         }
     }
@@ -383,6 +534,9 @@ public partial class MainWindow : Window, IWorkstationPresentation
         _contentById[DiagnosticsContentId] = DiagnosticsAnchor.Content;
         _contentById[ResearchContentId] = ResearchAnchor.Content;
         _contentById[WatchlistContentId] = WatchlistAnchor.Content;
+        _contentById[DailyWorkflowContentId] = DailyWorkflowAnchor.Content;
+        _contentById[CandidateStoryContentId] = CandidateStoryAnchor.Content;
+        _contentById[ResearchMaturityContentId] = ResearchMaturityAnchor.Content;
         _contentById[AutomationContentId] = AutomationAnchor.Content;
         _contentById[OrdersContentId] = OrdersAnchor.Content;
         _contentById[PositionsContentId] = PositionsAnchor.Content;
@@ -459,6 +613,9 @@ public partial class MainWindow : Window, IWorkstationPresentation
             return;
         }
 
+        EnsureDailyWorkflowAnchorable();
+        EnsureCandidateStoryAnchorable();
+        EnsureResearchMaturityAnchorable();
         foreach (var (contentId, title) in new[]
         {
             (AutomationContentId, "Automation"),
@@ -480,6 +637,79 @@ public partial class MainWindow : Window, IWorkstationPresentation
         }
     }
 
+    private void EnsureDailyWorkflowAnchorable()
+    {
+        if (FindLayoutContent(DailyWorkflowContentId) is not null
+            || !_contentById.TryGetValue(DailyWorkflowContentId, out var content))
+        {
+            return;
+        }
+
+        var rootPanel = DockManager.Layout.RootPanel;
+        var dailyWorkflowPane = new LayoutAnchorablePane
+        {
+            DockHeight = new GridLength(520),
+            DockMinHeight = 260,
+        };
+        dailyWorkflowPane.Children.Add(new LayoutAnchorable
+        {
+            Title = "Daily Workflow",
+            ContentId = DailyWorkflowContentId,
+            Content = content,
+            CanClose = true,
+            CanFloat = true,
+        });
+        rootPanel.Children.Add(dailyWorkflowPane);
+    }
+
+    private void EnsureCandidateStoryAnchorable()
+    {
+        if (FindLayoutContent(CandidateStoryContentId) is not null
+            || !_contentById.TryGetValue(CandidateStoryContentId, out var content))
+        {
+            return;
+        }
+
+        var candidateStoryPane = new LayoutAnchorablePane
+        {
+            DockHeight = new GridLength(520),
+            DockMinHeight = 300,
+        };
+        candidateStoryPane.Children.Add(new LayoutAnchorable
+        {
+            Title = "Candidate Story",
+            ContentId = CandidateStoryContentId,
+            Content = content,
+            CanClose = true,
+            CanFloat = true,
+        });
+        DockManager.Layout.RootPanel.Children.Add(candidateStoryPane);
+    }
+
+    private void EnsureResearchMaturityAnchorable()
+    {
+        if (FindLayoutContent(ResearchMaturityContentId) is not null
+            || !_contentById.TryGetValue(ResearchMaturityContentId, out var content))
+        {
+            return;
+        }
+
+        var pane = new LayoutAnchorablePane
+        {
+            DockHeight = new GridLength(560),
+            DockMinHeight = 320,
+        };
+        pane.Children.Add(new LayoutAnchorable
+        {
+            Title = "Research Maturity",
+            ContentId = ResearchMaturityContentId,
+            Content = content,
+            CanClose = true,
+            CanFloat = true,
+        });
+        DockManager.Layout.RootPanel.Children.Add(pane);
+    }
+
     private void CreateAdditionalChartDocument(PaneState pane, bool activate)
     {
         var contentId = pane.InstanceId.ToString("N");
@@ -498,6 +728,10 @@ public partial class MainWindow : Window, IWorkstationPresentation
         var chart = new CandleChart { Margin = new Thickness(12), DataContext = chartViewModel };
         chart.SetBinding(CandleChart.CandlesProperty, new Binding(nameof(ChartPaneViewModel.Candles)));
         chart.SetBinding(CandleChart.EmptyStateTextProperty, new Binding(nameof(ChartPaneViewModel.EmptyStateText)));
+        chart.SetBinding(CandleChart.IntervalProperty, new Binding($"{nameof(ChartPaneViewModel.Pane)}.{nameof(PaneState.Interval)}"));
+        chart.SetBinding(
+            CandleChart.InspectedCandleProperty,
+            new Binding(nameof(ChartPaneViewModel.InspectedBar)) { Mode = BindingMode.TwoWay });
         var symbol = new TextBlock
         {
             FontFamily = new FontFamily("Segoe UI"),
@@ -517,16 +751,49 @@ public partial class MainWindow : Window, IWorkstationPresentation
             DataContext = chartViewModel,
         };
         note.SetBinding(TextBlock.TextProperty, new Binding(nameof(ChartPaneViewModel.DetailLabel)));
+        var inspectionLabel = new TextBlock
+        {
+            FontFamily = new FontFamily("Segoe UI"),
+            Foreground = new SolidColorBrush(Color.FromRgb(74, 199, 182)),
+            FontSize = 10,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 12, 0),
+            DataContext = chartViewModel,
+        };
+        inspectionLabel.SetBinding(TextBlock.TextProperty, new Binding(nameof(ChartPaneViewModel.ActiveBarLabel)));
+        DockPanel.SetDock(inspectionLabel, Dock.Left);
+        var inspectionSummary = new TextBlock
+        {
+            FontFamily = new FontFamily("Segoe UI"),
+            Foreground = new SolidColorBrush(Color.FromRgb(231, 237, 242)),
+            FontSize = 11,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            DataContext = chartViewModel,
+        };
+        inspectionSummary.SetBinding(TextBlock.TextProperty, new Binding(nameof(ChartPaneViewModel.ActiveBarSummary)));
+        var inspectionContent = new DockPanel { LastChildFill = true };
+        inspectionContent.Children.Add(inspectionLabel);
+        inspectionContent.Children.Add(inspectionSummary);
+        var inspectionBar = new Border
+        {
+            BorderBrush = new SolidColorBrush(Color.FromRgb(53, 70, 82)),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(12, 7, 12, 7),
+            Child = inspectionContent,
+        };
         var content = new Grid { Background = new SolidColorBrush(Color.FromRgb(23, 33, 43)) };
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(symbol, 0);
         Grid.SetRow(note, 1);
         Grid.SetRow(chart, 2);
+        Grid.SetRow(inspectionBar, 3);
         content.Children.Add(symbol);
         content.Children.Add(note);
         content.Children.Add(chart);
+        content.Children.Add(inspectionBar);
         _contentById[contentId] = content;
 
         var document = new LayoutDocument
@@ -555,6 +822,9 @@ public partial class MainWindow : Window, IWorkstationPresentation
             DiagnosticsContentId,
             ResearchContentId,
             WatchlistContentId,
+            DailyWorkflowContentId,
+            CandidateStoryContentId,
+            ResearchMaturityContentId,
             AutomationContentId,
             OrdersContentId,
             PositionsContentId,
@@ -572,7 +842,23 @@ public partial class MainWindow : Window, IWorkstationPresentation
         foreach (var pane in _viewModel.Registry.Panes)
         {
             SetContentVisibility(ContentIdForPane(pane), pane.IsVisible);
+            if (pane.IsVisible)
+            {
+                EnsureEvidencePaneHeight(ContentIdForPane(pane));
+            }
         }
+    }
+
+    private void EnsureEvidencePaneHeight(string contentId)
+    {
+        if (!string.Equals(contentId, WatchlistContentId, StringComparison.Ordinal)
+            || FindLayoutContent(contentId)?.Parent is not LayoutAnchorablePane pane
+            || pane.DockHeight.Value >= 390)
+        {
+            return;
+        }
+
+        pane.DockHeight = new GridLength(390);
     }
 
     private void SetContentVisibility(string contentId, bool visible)
@@ -606,6 +892,21 @@ public partial class MainWindow : Window, IWorkstationPresentation
         DockManager.Layout.Descendents().OfType<LayoutContent>()
             .FirstOrDefault(content => string.Equals(content.ContentId, contentId, StringComparison.Ordinal));
 
+    private void EnsureAnchorablePaneHeight(string contentId, double minimumHeight)
+    {
+        var current = FindLayoutContent(contentId)?.Parent;
+        while (current is not null && current is not LayoutAnchorablePane)
+        {
+            current = (current as LayoutElement)?.Parent;
+        }
+
+        if (current is LayoutAnchorablePane pane &&
+            (!pane.DockHeight.IsAbsolute || pane.DockHeight.Value < minimumHeight))
+        {
+            pane.DockHeight = new GridLength(minimumHeight);
+        }
+    }
+
     private string ContentIdForPane(PaneState pane)
     {
         if (pane == _viewModel.PrimaryChartPane)
@@ -621,6 +922,9 @@ public partial class MainWindow : Window, IWorkstationPresentation
             PaneKind.Diagnostics => DiagnosticsContentId,
             PaneKind.Research => ResearchContentId,
             PaneKind.Watchlist => WatchlistContentId,
+            PaneKind.DailyWorkflow => DailyWorkflowContentId,
+            PaneKind.CandidateStory => CandidateStoryContentId,
+            PaneKind.ResearchMaturity => ResearchMaturityContentId,
             PaneKind.Automation => AutomationContentId,
             PaneKind.Orders => OrdersContentId,
             PaneKind.Positions => PositionsContentId,
@@ -647,6 +951,9 @@ public partial class MainWindow : Window, IWorkstationPresentation
             DiagnosticsContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Diagnostics),
             ResearchContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Research),
             WatchlistContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Watchlist),
+            DailyWorkflowContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.DailyWorkflow),
+            CandidateStoryContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.CandidateStory),
+            ResearchMaturityContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.ResearchMaturity),
             AutomationContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Automation),
             OrdersContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Orders),
             PositionsContentId => _viewModel.Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Positions),
