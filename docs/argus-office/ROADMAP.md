@@ -13,18 +13,20 @@ Supporting records have narrower roles:
 
 ## Now
 
-Last reconciled: 2026-07-23 on `codex/ARGUS-SHADOW-002-wpf-shadow-review` after ARGUS-SHADOW-001 passed clean-room verification and fast-forwarded into local `master` at `bb962be`. Local `master` is three commits ahead of `origin/master` at `69feedf`; no master push occurred. ARGUS-SHADOW-002 is `IMPLEMENTED_PENDING_MERGE`: the read-only WPF Shadow Review surface, strict host mapper, immutable identity-chain audit, sample gating, linked review navigation, focused tests, and offscreen UI proof are complete on this branch. Python compileall, 84 bounded Shadow/host/simulation/planning/risk tests, all 98 .NET tests, and a zero-warning Release build pass. Full Python discovery remains a documented legacy Qt caution: 89 of 91 modules complete while six cases outside the Shadow diff include four hangs and two failures. The official 30-trade sample has not started and may not start until Steven accepts and integrates Shadow-002.
+Last reconciled: 2026-07-23 on `codex/ARGUS-SHADOW-002-wpf-shadow-review` after fetching `origin` and verifying all named Shadow/R012/R026 refs and merge bases. ARGUS-SHADOW-001 passed clean-room verification and fast-forwarded into local `master` at `bb962be`; its local and remote feature tips match. Local `master` is three commits ahead of `origin/master` at `69feedf`; no master push occurred. ARGUS-SHADOW-002 implementation is committed at `7fee390`, with this Roadmap reconciliation carried on the same branch; it remains `IMPLEMENTED_PENDING_MERGE`. R012 equals `origin/master`; R026 is a clean, unpushed parallel line whose merge base with both local `master` and Shadow-002 is `69feedf`. The official Shadow sample has not started and may not start until Shadow-002 is accepted and integrated and every sample-start lock below is proven.
 
 | Item | Current truth |
 | --- | --- |
 | Canonical product baseline | Local `master` at `bb962be` contains the Phase 10 foundation, R011/R012 chart work, and the integrated ARGUS-SHADOW-001 prospective Shadow Trading foundation. Remote `master` remains at `69feedf`. |
-| Active product decision | The Windows-first WPF workstation is the accepted operator surface and Python remains the canonical trading and evidence engine. Schwab/thinkorswim may remain the eventual read-only/live direction, but Schwab Support confirmed Trader API cannot access paperMoney and has no current sandbox. Automated paper-broker direction is unresolved; no interim alternate adapter is approved. |
+| Active product decision | The Windows-first WPF workstation is the accepted operator surface and Python remains the canonical trading and evidence engine. Schwab Trader API is the eventual read-only and separately supervised-live target. Schwab Support confirmed there is no automated Trader API paperMoney path or retail sandbox; thinkorswim paperMoney is manual Shadow reconciliation only. |
 | Integrated implementation | Phases 8, 9, and 10 plus R011/R012 are `COMPLETE` on local and remote `master`. ARGUS-SHADOW-001 and its wiring foundation are `COMPLETE` on local `master`. ARGUS-SHADOW-002 is `IMPLEMENTED_PENDING_MERGE` on its bounded feature branch. The R013-R025 WPF stack remains consolidated on unmerged R026. Phase 11's A017 paper API path remains `BLOCKED_VENDOR_CAPABILITY`. |
+| Git sequencing | R012 local tip and `origin/master` are `69feedf`; there is no separate remote R012 branch. Shadow-001 local/remote tips and local `master` are `bb962be`, proving Shadow-001 contains the current canonical R012 baseline. Shadow-002 implementation is `7fee390`, followed only by its Roadmap reconciliation. R026 is clean at `838ed22`, has no remote branch, and diverges from local `master` by 15 R026 commits versus 3 Shadow product commits. Shadow-002 needs no integration branch to fast-forward into local `master`; any future R026 integration requires a dedicated branch and explicit Steven sequencing approval. Do not rebase or rewrite either validated line for cosmetic linearity. |
+| Merge-base evidence | `master`/`origin/master`, Shadow-001/`origin/master`, R012/`master`, R026/`master`, and R026/Shadow-002 all resolve to `69feedf`. Shadow-002/`master` resolves to `bb962be`. |
 | R004 status | `COMPLETE`: workstation-shell feasibility is integrated into `origin/master`. |
 | R005 status | `COMPLETE`: close-to-tray, lifecycle controls, single-instance activation, and physical Windows tray QA are integrated into `origin/master`. |
-| Immediate next action | Steven reviews the Shadow-002 UI proof and branch evidence, then explicitly approves or rejects local fast-forward. Only after acceptance and integration may the first official 30-trade sample begin under the frozen rules recorded in the Shadow-002 release report. R026 remains a separate manual-review decision and must not be folded into Shadow-002. |
+| Immediate next action | Steven reviews the Shadow-002 UI proof and branch evidence, then explicitly approves or rejects its local fast-forward. After integration, run the sample-start gate as a separate proof checkpoint; do not start the official sample merely because Shadow-002 merged. R026 remains a separate numbered workstation review and dedicated integration decision. Because Shadow-002 and R026 are both awaiting integration decisions, do not open another implementation branch yet. |
 | Remote backup action | Remote `master` remains at `69feedf`; local `master` is three commits ahead at `bb962be`. The Shadow-001 feature branch is remotely backed up. Do not push `master` without Steven's separate explicit approval. |
-| Broker and execution state | FakeBroker remains the only automated execution boundary. No Schwab credential, token, account hash, endpoint URL, HTTP client, paper/live broker path, or transmitting method exists. Paper and Live remain locked. |
+| Broker and execution state | FakeBroker remains the only automated execution boundary. Schwab developer access is requested/pending. No Client ID, Client Secret, OAuth token, account hash, authenticated request, production endpoint client, paper/live broker path, or transmitting method exists. Paper and Live remain locked. |
 
 ### Status Legend
 
@@ -107,9 +109,10 @@ Status: `COMPLETE`
 
 - R004 and R005 are integrated into `origin/master` at `e14105493061ec133ecd273aaac21d8e33ead5cf`.
 - R004 supplied the workstation shell: docked, tabbed, floating, resizable panes; linked chart contexts; saved layouts; SQLite recovery; and simulation-only safety language.
-- R005 supplied close-to-tray behavior, explicit exit, session-ending behavior, single-instance signaling, restricted tray commands, and the in-process background-collection lifecycle. Physical Windows QA passed.
-- Collection continues while the WPF application process is alive and the visible workstation is hidden.
-- The Python engine is not independently hosted yet. A WPF process crash or explicit process exit still stops the current R005-hosted lifecycle.
+- R005 originally supplied close-to-tray behavior, explicit exit, session-ending behavior, single-instance signaling, restricted tray commands, and an in-process background-collection lifecycle. Physical Windows QA passed.
+- Under the original R005 boundary, collection continued only while the hidden WPF process remained alive.
+- Phase 8 superseded that hosting limitation. The independent Python Engine Host is now canonical, and a WPF close or crash does not inherently stop it.
+- Explicit Exit remains the deliberate joint-shutdown path for the workstation and its managed Python host.
 
 ### Phase 8 - Headless Python Engine Through Versioned Contracts
 
@@ -141,29 +144,42 @@ Status: `COMPLETE` on local and remote `master` through `a17eff8`
 - Follow-up commits `14fe317` and `893a6da` remove the Top-5-only plan mapping mismatch and the empty Risk Governor badge: all valid persisted candidate plans are exposed, and a missing plan explicitly shows `Plan unavailable` with simulation unavailable rather than a blank colored state.
 - Steven accepted the manual visual proof and approved the local merge with real chart candles still explicitly deferred. Release compilation passed; focused Python simulation/autonomy tests passed 29 tests, and the full .NET workstation solution passed 71 tests immediately before merge. Full Python discovery was previously bounded at 120 seconds and did not complete; retain that test-harness timeout as a follow-up risk.
 
-### Phase 11 - Broker Research And Hardening Before Paper Execution
+### Phase 11 - Shadow Evidence, Schwab Capability, And Pre-Execution Hardening
 
 Status: `ACTIVE`; ARGUS-SHADOW-001 is `COMPLETE` on local `master`; ARGUS-SHADOW-002 is `IMPLEMENTED_PENDING_MERGE`; Schwab A017 is `BLOCKED_VENDOR_CAPABILITY`
 
-- A016 produced a current broker matrix and Steven selected Schwab/thinkorswim continuity for both paper and eventual live trading; an interim Alpaca implementation is not approved.
-- Schwab Trader API Support subsequently confirmed the API is compatible only with live brokerage accounts, cannot access paperMoney balances/positions/orders, and has no current sandbox. The A016S waiting state is superseded by the branch-only A016T response record.
-- A017 is `BLOCKED_VENDOR_CAPABILITY`: do not treat the $100 live canary account as paper, do not automate thinkorswim, and do not add a Schwab paper adapter.
+#### 11A - Shadow Trading Evidence Program
+
 - ARGUS-SHADOW-001 is integrated into local `master` at `bb962be`. It connects frozen current evidence to canonical TradePlan and Risk Governor decisions, conservative quote-driven FakeBroker orders/positions/exits, durable ledger/audit/outcomes, executable P&L/R/MFE/MAE, sample-gated metrics, and a nontransmitting manual paperMoney ticket.
 - ARGUS-SHADOW-002 is implemented and verified on `codex/ARGUS-SHADOW-002-wpf-shadow-review`. It adds a read-only WPF review surface over canonical Shadow/FakeBroker evidence; it creates no execution authority and cannot edit completed trades, plans, or risk decisions. It remains branch-only pending Steven's review and local-merge approval.
-- The Shadow path is prospective and credential-free. It uses supplied persisted observations only, survives restart through atomic versioned JSON state, and fails closed on stale/missing/out-of-order quotes, invalid IDs, risk blocks, buying-power/concurrency/daily-loss limits, and ambiguous exits.
-- The Schwab preparation modules are physically read-only and network-free: no production URL, HTTP client, credential, account value, OAuth token, or write method exists. Synthetic contracts prove account isolation, OAuth state/timeout behavior, DPAPI fake-token protection, redaction, and failure handling without contacting Schwab.
-- Future Schwab progression is gated in this order:
-  1. Credential-free specification and secure setup skeleton.
-  2. Prospective Shadow Trading proof.
-  3. Manual thinkorswim paperMoney reconciliation.
-  4. Synthetic Schwab contract-emulator proof.
-  5. Authenticated official-document review after developer approval.
-  6. Separate approval for read-only OAuth setup.
-  7. Exact one-account canary isolation proof.
-  8. Read-only balances, positions, and orders.
-  9. Stop before every transmitting endpoint or method.
-- The minimum meaningful Shadow sample is 30 completed trades. Below that gate, metrics are descriptive evidence only and no best/worst strategy conclusion is allowed.
-- The first official 30-trade evidence run begins only after ARGUS-SHADOW-002 is accepted and the full sample-readiness checklist is proven. No prospective record may be added retroactively, deleted selectively, or counted when its frozen evidence/plan audit or deterministic data-quality gate fails.
+- Python owns the prospective sample lifecycle and durable evidence. WPF is a bounded review surface only. FakeBroker remains the only automated execution boundary, and every Shadow decision must be prospective.
+- Shadow-002 acceptance must visibly prove: `X / 30` eligible completed trades; active, unfilled, rejected, excluded, and invalid states; evidence and plan locks; decision and evidence timestamps; ideal versus estimated executable results; spread/slippage/fill explanation; P&L, R, MFE, MAE, duration, and exit reason; linked Chart, frozen Trade Plan, Why, and History/Activity drill-down; and minimum-sample gating.
+- The official sample may start only after Shadow-001 is in the active baseline, Shadow-002 is accepted and integrated, evidence snapshots/TradePlans/Risk decisions are immutable, stable IDs connect candidate/evidence/plan/risk/command/ledger/outcome, duplicate commands and restart duplicates fail closed, P&L/MFE/MAE are reproducible, fill/spread/slippage assumptions are documented and locked, market-session/time-zone behavior is verified, and data-quality eligibility is deterministic.
+- Every counted Shadow Trade must record a `SampleVersion`, strategy/configuration fingerprint, fill-model version, and evidence-schema version. These are pre-sample requirements; existing schema or plan fingerprints do not by themselves satisfy the full gate.
+- Once a sample version starts, it permits no historical backfill, deletion of losers, selective exclusions, scoring/readiness/risk changes, entry/stop/target changes, spread/slippage/fill-model changes, or silent recomputation.
+- If a material defect invalidates evidence, preserve the affected sample, close its version, document and fix the defect, and begin a new version. Never rewrite the affected sample into a cleaner result.
+- FakeBroker evidence must model and record bid/ask spread, slippage, unfilled and delayed limit fills, supported partial fills, gaps through stops, halted/unavailable states, stale/missing quote rejection, session eligibility, buying power, position concurrency, daily-loss limits, restart recovery, and ambiguous states. Track both ideal setup and estimated executable results; estimated executable result is the primary evidence metric.
+- Report evidence checkpoints at 5, 10, 20, and 30 completed eligible trades. Interim reports evaluate mechanics and evidence quality and must not tune the strategy to the developing sample.
+- Thirty completed eligible trades is an initial engineering gate, not proof of a durable edge, a profitability claim, or permission to transmit any broker order.
+
+#### 11B - Schwab Read-Only And Canary Preparation
+
+- A016 produced the broker matrix, and Steven selected Schwab/thinkorswim continuity for the eventual read-only and supervised-live direction. An interim Alpaca implementation is not approved.
+- Schwab Trader API Support confirmed there is no automated Trader API paperMoney path and no retail sandbox. A017 is therefore `BLOCKED_VENDOR_CAPABILITY`, not awaiting an answer.
+- FakeBroker remains the only automated boundary. thinkorswim paperMoney is limited to manual Shadow ticket entry and reconciliation; do not automate thinkorswim or represent the $100 live canary account as paper.
+- Schwab Trader API is the eventual read-only and separately supervised-live target. Developer access is requested/pending.
+- No Client ID, Client Secret, OAuth token, account hash, authenticated request, production network client, or transmitting method exists. The canary account is not connected.
+- Credential-free preparation may use official documentation, secure-local-setup design, synthetic Schwab fixtures, a contract emulator, manual paperMoney Shadow tickets, a physically read-only adapter design, and exact account-isolation policy.
+- Existing Schwab preparation code remains network-free and nontransmitting. No real account connection may occur until a separate Steven checkpoint, and no order transmission is authorized.
+- No task may ask for a Schwab username, password, or MFA; store a Client ID/Secret in Git or chat; perform OAuth; access an account; add submit/replace/cancel; automate thinkorswim; or transmit Paper or Live orders.
+- Schwab developer approval permits a separate review checkpoint only. It does not automatically authorize OAuth, account connection, read-only requests, preview, or trading.
+
+#### Standing Authorization And Branch Discipline
+
+- After the current Shadow directive and Roadmap reconciliation, bounded Shadow pipeline implementation/repair, Shadow review improvements, gated evidence collection, 5/10/20/30 checkpoint reports, manual paperMoney reconciliation, credential-free Schwab contracts/fixtures, tests, reports, Roadmap updates, and sample-safe WPF migration are standing-authorized.
+- Master merge/push, consequential Git integration, real OAuth/account access, Client credentials/tokens, authenticated Schwab requests, transmitting broker methods, protected-domain semantic changes, database migrations, and paid dependencies/data still require separate Steven approval.
+- Keep one active implementation branch and at most one stacked successor. Stop when two completed branches await integration. Shadow-002 and R026 currently occupy that queue, so no additional implementation branch should begin until Steven resolves at least one.
+- R012 remains the separately integrated chart-readability slice. R026 remains a separate numbered workstation review and must not be absorbed into Shadow-002. If Steven accepts R026, reconcile its 15-commit parallel line with the three-commit Shadow line on a dedicated integration branch; do not rebase or rewrite either history merely for linearity.
 
 ### Phase 12 - Incremental Capability Migration And Qt Retirement
 
@@ -181,19 +197,20 @@ Status: `ACTIVE`; R011 and R012 are `COMPLETE` on local and remote `master`; R01
 - Migrate individual proven workflows to the WPF shell only after their Python contracts and operator proof are complete.
 - Retire corresponding Qt screens incrementally, with acceptance evidence and rollback paths. Do not perform a broad rewrite.
 
-### Phase 13 - Paper Execution Gate
+### Phase 13 - Broker Execution Validation Gate
 
 Status: `BLOCKED_VENDOR_CAPABILITY`
 
-- Schwab Trader API cannot access paperMoney and has no current sandbox. Manual thinkorswim paperMoney reconciliation is evidence collection, not an API execution path.
-- An automated paper gate now requires either a future Schwab sandbox or a separately approved alternate-paper-broker decision and Goal Charter. Neither is currently approved.
-- Shadow Trading must first accumulate a meaningful prospective sample with reconciliation evidence; it does not authorize Paper or Live controls.
+- The future evidence ladder is: (1) FakeBroker prospective Shadow Trading; (2) manual thinkorswim paperMoney ticket/reconciliation; (3) Schwab contract emulator; (4) Schwab authenticated read-only integration; (5) exact single-canary-account isolation proof; (6) broker preview only if official documentation proves a nontransmitting endpoint; (7) a separately approved supervised live canary; (8) reconciliation, audit review, and token-revocation drill; and (9) repeated supervised canary cycles.
+- Schwab Trader API cannot access paperMoney and has no retail sandbox. Manual thinkorswim paperMoney reconciliation is evidence collection, not an automated API execution path.
+- No automatic transition into authenticated access, broker preview, or supervised live testing is authorized. Each applicable ladder step requires its own evidence and Steven checkpoint.
 
-### Phase 14 - Live Execution Gate
+### Phase 14 - Unattended Live Execution
 
 Status: `BLOCKED`
 
-- Requires successful paper-operation evidence, a separate CEO decision, explicit credential and approval controls, independent audit review, and a dedicated live-execution Goal Charter.
+- Requires separate explicit Steven approval after repeated supervised-canary evidence, credential and account-isolation controls, reconciliation and independent audit review, token-revocation proof, and a dedicated unattended-live Goal Charter.
+- No standing directive may auto-advance into Phase 14.
 
 ## Roadmap Update Protocol
 
