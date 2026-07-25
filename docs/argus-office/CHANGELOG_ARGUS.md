@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Backed the integrated SCHWAB-002A/SCHWAB-003 baseline up to `origin/master` by ordinary non-force push after exact live-secret comparison and remote-divergence checks passed; no feature ref, local DPAPI state, credential, token, account hash, or generated data was pushed.
 - Fast-forwarded the complete SCHWAB-002A/SCHWAB-003 stack into local `master` through `6f308d7` after the immutable CASH binding, 123 bounded tests, 756 full tests, exact tracked-secret comparison, protected-path review, and remote-divergence preflight passed; no merge commit or order capability was created.
 - Completed the standing-authorized immutable Schwab binding checkpoint: the guarded unbound refresh returned `ACTIVE`; the same sole account ending `2573` revalidated as official `CASH` with no positions; only the current-user-DPAPI `INDIVIDUAL_CASH` binding was persisted; market data, previews, orders, and transmission remain unavailable.
 - Replaced routine nonvisual approval gates with standing delegation: Codex now proves, cleanly fast-forwards, and non-force-backs-up expected work without asking Steven to rubber-stamp it, while visual acceptance, brokerage/account anomalies, real orders, destructive or credential/provider consequences, paid services, protected-semantic expansion, and unsafe Git remain explicit interruption gates.
