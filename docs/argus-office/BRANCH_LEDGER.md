@@ -4,14 +4,14 @@ Date reconciled: 2026-07-25
 
 ## Current Truth
 
-Local `master` is the canonical integrated product baseline. It contains the Python automation/simulation foundation, R004-R029 workstation work, ARGUS-SHADOW-001/002/003, SCHWAB-001, and SCHWAB-002. `origin/master` trails local `master` by three commits; the SCHWAB-002A restoration and SCHWAB-003 discovery/CASH-validation work remain stacked, unmerged, local-only branch work. Steven's earlier approved remote backup remains valid through its recorded baseline.
+Local `master` is the canonical integrated product baseline. It contains the Python automation/simulation foundation, R004-R029 workstation work, ARGUS-SHADOW-001/002/003, SCHWAB-001, and SCHWAB-002. `origin/master` trails local `master` by three commits; the SCHWAB-002A restoration and SCHWAB-003 discovery/CASH-validation/binding-safety work remain stacked, unmerged, local-only branch work. Steven's earlier approved remote backup remains valid through its recorded baseline.
 
 Git evidence at reconciliation time:
 
 - R027 and SCHWAB-001 are integrated into local `master` through `5f156eb`.
 - SCHWAB-002 is integrated into local `master`; local `master` is three commits ahead of `origin/master`.
 - `codex/ARGUS-SCHWAB-002A-credential-rotation` restores the existing approved Schwab app and OAuth state and is the source parent for the active SCHWAB-003 branch.
-- `codex/ARGUS-SCHWAB-003-readonly-account-discovery` is active local-only work. Its one live discovery GET returned exactly one account ending `2573` without persistence or binding; the next CASH-account validator is implemented and tested but has made no live account-detail request.
+- `codex/ARGUS-SCHWAB-003-readonly-account-discovery` is active local-only work. Live discovery and account-detail validation proved one `CASH` account ending `2573` without persistence; immutable binding and bound-refresh paths are implemented and offline-proven but unexecuted.
 - R028 integrated workstation chrome and R029 canonical WPF launcher/icon passed automated and Steven manual verification.
 - Steven approved the integration, and Git Steward fast-forwarded local `master` from `5f156eb` through R029 closeout `1d3d8e5` without a merge commit.
 - Steven later approved the remote backup; Git Steward pushed the complete reconciled baseline to `origin/master` and verified the exact advertised HEAD.
@@ -66,7 +66,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `codex/ARGUS-SCHWAB-003-readonly-account-discovery` | Current task commit | No | No | `ACTIVE` | Adds exact GET-only, confirmation-gated, redacted, non-persisting Schwab account discovery plus offline-proven CASH-account validation; live discovery returned only ending `2573`, while live account-detail validation remains pending. | Obtain exact approval for the tested two-GET validation; bind nothing until a later separate approval. |
+| `codex/ARGUS-SCHWAB-003-readonly-account-discovery` | Current task commit | No | No | `ACTIVE` | Adds exact GET-only discovery, live CASH validation, redacted immutable-binder preparation, and bound-refresh revalidation; ending `2573` is validated but remains unbound. | Obtain exact approval for immutable DPAPI binding; do not add broader reads or orders. |
 | `codex/ARGUS-SCHWAB-002A-credential-rotation` | `cd73411` | No | No | `NEEDS_REVIEW` | Preserves the credential containment history and restoration of the existing approved Schwab app, local DPAPI credentials, and fresh OAuth. | Source parent for SCHWAB-003; do not discard or merge independently while the stack is under review. |
 | `master` | `99409ab` | Yes; `origin/master` trails by three commits | Yes | `ACTIVE` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample lock, SCHWAB-001, and SCHWAB-002 OAuth onboarding. | Preserve clean; integrate the reviewed SCHWAB-002A/SCHWAB-003 stack only after Steven's explicit merge approval. |
 | `codex/ARGUS-R029-canonical-wpf-launcher` | `1d3d8e5` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Makes the tracked normal launcher path WPF-only, restores the canonical icon, retains explicit Qt rollback, and refuses arbitrary review builds. | Preserve as audit history; do not merge again. |

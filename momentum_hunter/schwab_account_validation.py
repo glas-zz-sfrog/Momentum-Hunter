@@ -159,14 +159,14 @@ class SchwabCashAccountValidation:
             raise SchwabAccountValidationError(
                 "Live Schwab account validation requires the exact confirmation phrase."
             )
-        expected_ending = _normalize_account_ending(expected_account_ending)
+        expected_ending = normalize_expected_account_ending(expected_account_ending)
         tokens = self.secrets.load_tokens()
         if tokens.expired:
             raise SchwabAccountValidationError(
                 "The Schwab OAuth access token expired; complete or refresh authorization before validation."
             )
         accounts = self.discovery_transport.discover(tokens.access_token)
-        discovered = _require_single_expected_account(accounts, expected_ending)
+        discovered = require_single_expected_account(accounts, expected_ending)
         payload = self.details_transport.fetch(
             tokens.access_token,
             discovered.account_hash,
@@ -193,7 +193,7 @@ class SchwabCashAccountValidation:
         }
 
 
-def _normalize_account_ending(value: str) -> str:
+def normalize_expected_account_ending(value: str) -> str:
     normalized = value.strip()
     if len(normalized) != 4 or not normalized.isdigit():
         raise SchwabAccountValidationError(
@@ -202,7 +202,7 @@ def _normalize_account_ending(value: str) -> str:
     return normalized
 
 
-def _require_single_expected_account(
+def require_single_expected_account(
     accounts: list[DiscoveredSchwabAccount],
     expected_ending: str,
 ) -> DiscoveredSchwabAccount:
