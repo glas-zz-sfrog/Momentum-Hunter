@@ -589,9 +589,8 @@ orders. The exact-root removal command remains available for rollback.
 
 ## R028 Integrated Workstation Chrome
 
-Status: `MANUAL_PASS`; implemented on the
-`codex/ARGUS-R029-canonical-wpf-launcher` stack; automated and manual proof passed,
-unmerged, and unpushed
+Status: `COMPLETE`; automated and manual proof passed; fast-forwarded into local
+`master` through `1d3d8e5`; unpushed
 
 Automated evidence:
 
@@ -654,9 +653,8 @@ credentials, paper/live execution, or changes to trading behavior.
 
 ## R029 Canonical WPF Launcher
 
-Status: `IMPLEMENTED_PENDING_MERGE`; branch
-`codex/ARGUS-R029-canonical-wpf-launcher`; automated and physical CLI launch proof
-plus Steven's manual icon/taskbar proof passed, unmerged, and unpushed
+Status: `COMPLETE`; automated, physical CLI, and Steven manual icon/taskbar proof
+passed; fast-forwarded into local `master` through `1d3d8e5`; unpushed
 
 Automated evidence:
 
