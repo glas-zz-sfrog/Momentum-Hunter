@@ -589,7 +589,7 @@ orders. The exact-root removal command remains available for rollback.
 
 ## SCHWAB-002 Credential And OAuth Onboarding
 
-Status: `MANUAL_PASS_IMPLEMENTED_PENDING_MERGE`
+Status: `MANUAL_PASS_COMPLETE_LOCAL_MASTER`
 
 Completed evidence:
 
@@ -619,8 +619,8 @@ Completed evidence:
    alerts, TradePlan, Risk Governor, database, or schema paths.
 9. Compileall passes, focused Schwab security/certificate/listener tests pass 60/60,
    and full Python discovery passes 702/702.
-10. SCHWAB-002 remains on
-    `codex/ARGUS-SCHWAB-002-credential-oauth-onboarding`; nothing is merged or pushed.
+10. Steven explicitly approved local fast-forward integration. SCHWAB-002 is complete
+    on local `master`; nothing is pushed.
 
 What Steven is considered to have passed:
 
@@ -635,7 +635,7 @@ What is not yet proven or authorized:
    that Schwab exposes only the intended $100 account.
 3. No account hash or account binding has been stored.
 4. No balance, position, market-data, preview, or order request has occurred.
-5. Merging or pushing SCHWAB-002 requires separate explicit Steven approval.
+5. Pushing SCHWAB-002 requires separate explicit Steven approval.
 6. The next broker slice requires separate explicit approval for read-only account
    discovery and exact single-canary binding. It must stop if more than the intended
    account is exposed or if identity cannot be proven without full account-number
