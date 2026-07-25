@@ -29,11 +29,11 @@ mode.
 | ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated into local `master`; not pushed | The preserved checklist remains an audit reference; merge approval does not start the official sample |
 | ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated into local `master`; not pushed | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
-| SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Committed at `3996a6f` on `codex/ARGUS-SCHWAB-001-loopback-oauth-listener`; not merged or pushed | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
+| SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Integrated into local `master`; not pushed | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
-| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; current stacked recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_IN_PROGRESS`; checks 5-11 and 14-17 pass, check 4 wording/focus persistence is `CODEX_UI_PASS` pending Steven acceptance, and checks 12-13 are unavailable with zero test trades | `IMPLEMENTED_PENDING_MERGE`; repair commit `f84106a` and the in-window palette repair are preserved beneath verified implementation commit `3996a6f`; nothing is merged or pushed | Steven accepts or rejects only the repaired Command Palette wording and focus round-trip; acceptance may then be paired with separate explicit approval for an `--ff-only` local merge |
+| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` on local `master`; repair commits `f84106a` and `cd09f1b` are integrated; nothing is pushed | Begin R028 from local `master`; do not start credential/OAuth/broker work or the official sample implicitly |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | `MANUAL_NOT_YET_AVAILABLE` | Future separately approved market-data cutover task | Confirm the old hash and rows are absent, only actual-provider lineage/fresh timestamps render, and no legacy/live candle mixture survives |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
@@ -290,19 +290,19 @@ Branch: `codex/ARGUS-R027-integrate-r026-with-shadow-baseline`
 
 Automated result: `AUTOMATED_PASS`
 
-Integration state: `IMPLEMENTED_PENDING_MERGE` on the branch only; local `master`
-remains `164e32e`. Nothing is pushed, and the official Shadow sample remains locked.
+Integration state: `COMPLETE` on local `master` after Steven's explicit fast-forward
+approval. Nothing is pushed, and the official Shadow sample remains locked.
 
 Automated evidence: fresh Python compileall, 672 full-discovery Python tests, 163
 presentation tests, all 210 .NET tests, zero-warning Release build,
 protected-path review, source-nonmutation checks, and fresh nonblank R027 proof
 artifacts pass.
 
-Current stacked-successor merge-readiness evidence at `3996a6f`: local `master`
-`164e32e` is the exact merge base and an ancestor of the clean branch; `git diff
---check master..HEAD` passes; full Python discovery passes 672/672; all .NET tests
-pass 210/210; and the Release build passes with warnings treated as errors and zero
-warnings. No current remote branch contains `3996a6f`.
+Final integration evidence: pre-merge local `master` `164e32e` was an ancestor of
+the clean accepted branch; `git diff --check master..HEAD` passed; full Python
+discovery passed 672/672; all .NET tests passed 210/210; and the Release build passed
+with warnings treated as errors and zero warnings. The integration used
+`git merge --ff-only`; nothing was pushed.
 
 Manual evidence recorded 2026-07-24:
 
@@ -319,18 +319,17 @@ Manual evidence recorded 2026-07-24:
   acceptable for the evidence currently available. A deeper content-quality review is
   deferred until broader market data exists; this pass does not claim that `CRWV`
   proves broader evidence quality.
-- Check 4: `CODEX_UI_PASS`, `STEVEN_ACCEPTANCE_PENDING`. Live Windows automation
-  confirms the palette states `14 current Hunter symbols | Commands: chart, activity,
+- Check 4: `MANUAL_PASS`. Steven accepted the final behavior after live Windows
+  automation confirmed the palette states `14 current Hunter symbols | Commands: chart, activity,
   diagnostics`; initially shows `Add chart` and `CRWV`; reports that `nvda` is not in
   the current Hunter list and suggests available symbols; and closes on `Esc`.
   The initial WPF popup incorrectly dismissed itself when focus moved to Codex. The
   repaired palette is hosted inside the one main workstation window. With `nvda`
   still entered, Codex switched away and back: the palette and query remained visible,
   search focus returned, and exactly one WPF workstation window/process existed.
-- Operator-language finding: `Link A` / `Link B` has no useful meaning to Steven.
-  Replace the internal group designator with an explicit state such as `Follows Hunter
-  selection`, `Pinned to CRWV`, or `Independent`, while preserving the existing link
-  behavior.
+- Resolved operator-language finding: the meaningless `Link A` / `Link B` display was
+  replaced by `Follows Hunter`, `Pinned to CRWV`, or `Independent` while preserving
+  the existing link behavior.
 - Checks 8-9: `MANUAL_PASS`. Steven accepted the compact pane menu and Research
   Maturity presentation. The live Current pane
   menu lists every expected standard pane with `Visible` / `Focus` or `Hidden` /
@@ -416,8 +415,7 @@ Manual-QA repair implemented in the working tree:
   was created.
 - Review build:
   `%LOCALAPPDATA%\MomentumHunter\Builds\R027-command-palette-focus-review\MomentumHunter.Desktop.Wpf.exe`
-- These repairs remain `MANUAL_RECHECK_REQUIRED`; they are not accepted merely
-  because automated checks pass.
+- Steven manually accepted these repairs after the final focus-persistence check.
 
 Check these one by one:
 
