@@ -33,7 +33,7 @@ mode.
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
-| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; current stacked recheck passes 209 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_IN_PROGRESS`; checks 5-11 and 14-17 pass, check 4 is `CODEX_UI_PASS` pending Steven acceptance, and checks 12-13 are unavailable with zero test trades | `IMPLEMENTED_PENDING_MERGE`; repair commit `f84106a` is preserved beneath verified implementation commit `3996a6f`; neither is merged or pushed | Steven accepts or rejects only the repaired Command Palette scope/miss wording; acceptance may then be paired with separate explicit approval for an `--ff-only` local merge |
+| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; current stacked recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_IN_PROGRESS`; checks 5-11 and 14-17 pass, check 4 wording/focus persistence is `CODEX_UI_PASS` pending Steven acceptance, and checks 12-13 are unavailable with zero test trades | `IMPLEMENTED_PENDING_MERGE`; repair commit `f84106a` and the in-window palette repair are preserved beneath verified implementation commit `3996a6f`; nothing is merged or pushed | Steven accepts or rejects only the repaired Command Palette wording and focus round-trip; acceptance may then be paired with separate explicit approval for an `--ff-only` local merge |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | `MANUAL_NOT_YET_AVAILABLE` | Future separately approved market-data cutover task | Confirm the old hash and rows are absent, only actual-provider lineage/fresh timestamps render, and no legacy/live candle mixture survives |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
@@ -293,15 +293,15 @@ Automated result: `AUTOMATED_PASS`
 Integration state: `IMPLEMENTED_PENDING_MERGE` on the branch only; local `master`
 remains `164e32e`. Nothing is pushed, and the official Shadow sample remains locked.
 
-Automated evidence: fresh Python compileall, 641 full-discovery Python tests, 162
-focused presentation tests, all 209 .NET tests, zero-warning Release build,
+Automated evidence: fresh Python compileall, 672 full-discovery Python tests, 163
+presentation tests, all 210 .NET tests, zero-warning Release build,
 protected-path review, source-nonmutation checks, and fresh nonblank R027 proof
 artifacts pass.
 
 Current stacked-successor merge-readiness evidence at `3996a6f`: local `master`
 `164e32e` is the exact merge base and an ancestor of the clean branch; `git diff
 --check master..HEAD` passes; full Python discovery passes 672/672; all .NET tests
-pass 209/209; and the Release build passes with warnings treated as errors and zero
+pass 210/210; and the Release build passes with warnings treated as errors and zero
 warnings. No current remote branch contains `3996a6f`.
 
 Manual evidence recorded 2026-07-24:
@@ -323,6 +323,10 @@ Manual evidence recorded 2026-07-24:
   confirms the palette states `14 current Hunter symbols | Commands: chart, activity,
   diagnostics`; initially shows `Add chart` and `CRWV`; reports that `nvda` is not in
   the current Hunter list and suggests available symbols; and closes on `Esc`.
+  The initial WPF popup incorrectly dismissed itself when focus moved to Codex. The
+  repaired palette is hosted inside the one main workstation window. With `nvda`
+  still entered, Codex switched away and back: the palette and query remained visible,
+  search focus returned, and exactly one WPF workstation window/process existed.
 - Operator-language finding: `Link A` / `Link B` has no useful meaning to Steven.
   Replace the internal group designator with an explicit state such as `Follows Hunter
   selection`, `Pinned to CRWV`, or `Independent`, while preserving the existing link
@@ -383,12 +387,17 @@ Manual-QA repair implemented in the working tree:
 - The Command Palette now states that it searches current Hunter symbols plus named
   workstation commands, and a miss names available examples instead of implying a
   broken global ticker lookup.
+- The Command Palette is now an in-window overlay instead of an auto-closing WPF
+  popup. Losing application focus no longer dismisses it; reactivating the workstation
+  refocuses and selects the query. Intentional close paths remain `Esc`, `Ctrl+K`,
+  command execution, and clicking the dimmed backdrop. The overlay cannot create a
+  second taskbar or Alt+Tab entry.
 - Pane-menu actions are compact right-aligned buttons rather than filling the row.
 - Search, save-layout, and restore-layout icons use a dedicated `34 x 30` toolbar
   style with centered glyphs, zero inherited padding, fast tooltips, and explicit
   accessibility help text.
-- Fresh verification passes 162/162 presentation tests, 209/209 complete .NET
-  solution tests, 641/641 Python tests, Python compileall, and a zero-warning Release
+- Fresh verification passes 163/163 presentation tests, 210/210 complete .NET
+  solution tests, 672/672 Python tests, Python compileall, and a zero-warning Release
   build.
 - UI proof:
   `reports/releases/ARGUS-R027-manual-qa-repair-1180x820.png`,
@@ -396,20 +405,24 @@ Manual-QA repair implemented in the working tree:
   `reports/releases/ARGUS-R027-manual-qa-repair-panes.png`.
 - Review-state proof:
   `reports/releases/ARGUS-R027-manual-qa-repair-test-trade-review-empty.png`.
+- Focus-persistence proof:
+  `reports/releases/ARGUS-R027-command-palette-focus-persistence-proof.jpg`
+  (`1166 x 813`, nonblank), captured after returning from Codex with the `nvda`
+  query still visible.
 - During physical review, a Python Engine Host left running since 2026-07-23
   returned `UNSUPPORTED_COMMAND` for the newer review contract. It was shut down
   through its authenticated local protocol; the current packaged host replaced it
   and the UI then rendered the canonical locked snapshot. No state or sample data
   was created.
 - Review build:
-  `%LOCALAPPDATA%\MomentumHunter\Builds\R027-manual-qa-repair-review\Launch R027 Manual QA Repair Review.lnk`
+  `%LOCALAPPDATA%\MomentumHunter\Builds\R027-command-palette-focus-review\MomentumHunter.Desktop.Wpf.exe`
 - These repairs remain `MANUAL_RECHECK_REQUIRED`; they are not accepted merely
   because automated checks pass.
 
 Check these one by one:
 
 1. Exit any current Momentum Hunter process using `Menu` and the explicit Exit command.
-2. Open `%LOCALAPPDATA%\MomentumHunter\Builds\R027-manual-qa-repair-review\Launch R027 Manual QA Repair Review.lnk`. Do not use the pinned shortcut.
+2. Open `%LOCALAPPDATA%\MomentumHunter\Builds\R027-command-palette-focus-review\MomentumHunter.Desktop.Wpf.exe`. Do not use the pinned shortcut.
 3. Confirm the title is `Momentum Hunter Workstation` and the single top mode badge
    says `SIMULATION`. Hover that badge and confirm the tooltip says there is no
    brokerage connection. No Paper, Live-money, credential, or real-order mode may
@@ -417,8 +430,12 @@ Check these one by one:
 4. Press `Ctrl+K`. Confirm the scope line names the current Hunter symbol count and
    the commands `chart`, `activity`, and `diagnostics`. Search `CRWV` and confirm it
    appears. Search `nvda`; because it is not in the current Hunter list, confirm the
-   message says that directly and suggests available symbols. Search `chart` and
-   confirm `Add chart` appears. Press `Esc` and confirm the palette closes.
+   message says that directly and suggests available symbols. Leave `nvda` entered,
+   switch to another application, and return to Momentum Hunter. Confirm the palette
+   and query are still visible, typing can immediately replace the selected query,
+   and there is only one Momentum Hunter workstation choice on the taskbar or
+   `Alt+Tab`. Search `chart` and confirm `Add chart` appears. Press `Esc` and confirm
+   the palette closes.
 5. Stay in `Current`. In the left `Hunter` pane, select `CRWV`, then click `5m` in the
    top interval bar. In the center `Chart`, confirm the title is `CRWV`; candle bodies,
    wicks, volume bars, price labels, and time labels are visible; the source line sits

@@ -13,6 +13,7 @@
         MinWidth="1050"
         Background="{StaticResource AppBackground}"
         FontFamily="Segoe UI"
+        Activated="Window_Activated"
         KeyDown="Window_KeyDown">
     <Window.Resources>
         <Style x:Key="ShadowFilterComboStyle" TargetType="{x:Type ComboBox}">
@@ -2062,16 +2063,31 @@
             </Border>
         </Popup>
 
-        <Popup x:Name="CommandPalettePopup"
-               IsOpen="{Binding IsCommandPaletteOpen, Mode=TwoWay}"
-               Placement="Center"
-               PlacementTarget="{Binding ElementName=Root}"
-               StaysOpen="False"
-               AllowsTransparency="True"
-               Opened="CommandPalettePopup_Opened"
-               Closed="CommandPalettePopup_Closed"
-               DataContext="{Binding DataContext, ElementName=Root}">
-            <Border Width="520" Padding="16" Background="#1B2731" BorderBrush="{StaticResource Teal}" BorderThickness="1" CornerRadius="4">
+        <Grid x:Name="CommandPaletteOverlay"
+              Grid.RowSpan="3"
+              Panel.ZIndex="100"
+              Background="#66000000"
+              FocusManager.IsFocusScope="True"
+              IsVisibleChanged="CommandPaletteOverlay_IsVisibleChanged"
+              MouseLeftButtonDown="CommandPaletteOverlay_MouseLeftButtonDown">
+            <Grid.Style>
+                <Style TargetType="{x:Type Grid}">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsCommandPaletteOpen}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+            <Border Width="520"
+                    Padding="16"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="#1B2731"
+                    BorderBrush="{StaticResource Teal}"
+                    BorderThickness="1"
+                    CornerRadius="4">
                 <StackPanel>
                     <TextBlock Text="Command Palette" FontSize="16" FontWeight="SemiBold" />
                     <Grid Margin="0,10,0,8">
@@ -2148,6 +2164,6 @@
                     </TextBlock>
                 </StackPanel>
             </Border>
-        </Popup>
+        </Grid>
     </Grid>
 </Window>

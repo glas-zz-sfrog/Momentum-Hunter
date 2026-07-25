@@ -205,7 +205,36 @@ public partial class MainWindow : Window, IWorkstationPresentation
         }
     }
 
-    private void CommandPalettePopup_Opened(object? sender, EventArgs e)
+    private void Window_Activated(object? sender, EventArgs e)
+    {
+        if (_viewModel.IsCommandPaletteOpen)
+        {
+            FocusCommandPaletteSearch();
+        }
+    }
+
+    private void CommandPaletteOverlay_IsVisibleChanged(
+        object sender,
+        DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is true)
+        {
+            FocusCommandPaletteSearch();
+        }
+    }
+
+    private void CommandPaletteOverlay_MouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, CommandPaletteOverlay))
+        {
+            _viewModel.CloseCommandPalette();
+            e.Handled = true;
+        }
+    }
+
+    private void FocusCommandPaletteSearch()
     {
         Dispatcher.BeginInvoke(
             DispatcherPriority.Input,
@@ -214,14 +243,6 @@ public partial class MainWindow : Window, IWorkstationPresentation
                 CommandPaletteSearchBox.Focus();
                 CommandPaletteSearchBox.SelectAll();
             });
-    }
-
-    private void CommandPalettePopup_Closed(object? sender, EventArgs e)
-    {
-        if (_viewModel.IsCommandPaletteOpen)
-        {
-            _viewModel.CloseCommandPalette();
-        }
     }
 
     private void ActivityButton_Click(object sender, RoutedEventArgs e)

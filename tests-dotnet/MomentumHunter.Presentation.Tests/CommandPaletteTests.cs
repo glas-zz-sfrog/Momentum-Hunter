@@ -130,10 +130,44 @@ public sealed class CommandPaletteTests
         Assert.Throws<ArgumentOutOfRangeException>(() => CommandPaletteCatalog.Filter([], string.Empty, 0));
     }
 
+    [Fact]
+    public void WorkstationHostsPaletteInsideMainWindowAcrossActivationChanges()
+    {
+        var root = FindRepositoryRoot();
+        var xaml = File.ReadAllText(
+            Path.Combine(root, "src", "MomentumHunter.Desktop.Wpf", "MainWindow.xaml"));
+        var codeBehind = File.ReadAllText(
+            Path.Combine(root, "src", "MomentumHunter.Desktop.Wpf", "MainWindow.xaml.cs"));
+
+        Assert.Contains("x:Name=\"CommandPaletteOverlay\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.RowSpan=\"3\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding IsCommandPaletteOpen", xaml, StringComparison.Ordinal);
+        Assert.Contains("Activated=\"Window_Activated\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"CommandPalettePopup\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("private void Window_Activated", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("FocusCommandPaletteSearch();", codeBehind, StringComparison.Ordinal);
+    }
+
     private static async Task<ShellViewModel> InitializedViewModel()
     {
         var viewModel = new ShellViewModel(new MockEngineClient());
         await viewModel.InitializeAsync();
         return viewModel;
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "MomentumHunter.Workstation.sln")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the Momentum Hunter repository root.");
     }
 }
