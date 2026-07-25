@@ -1,6 +1,10 @@
 # Argus Changelog
 
 ## Unreleased
+- Connected successful scheduled captures to write-once prospective TradePlan CSV/JSON/Markdown reports, with duplicate-run recovery and strict source path, offset-aware timing, session, candidate-count, and raw-capture nonmutation checks.
+- Replaced Finviz scan-time per-symbol quote-page enrichment with one custom screener response containing RVOL, ATR, and float; kept quote/news requests separately bounded and read-only.
+- Passed compileall, 16 focused tests, 109 adjacent regressions, all 781 Python tests, a live nonpersisting Finviz shape check, and a temporary end-to-end capture-to-report proof for ARGUS-SHADOW-005.
+- Recorded Steven's approved next sample rule: first existing-Risk-Governor-approved candidate in report order, maximum one new FakeBroker Shadow trade per fresh report; implementation remains the next isolated slice.
 - Activated the write-once `official-shadow-v1` FakeBroker evidence sample at `0 / 30` after every frozen prerequisite passed; no Shadow trade state, broker call, order, or transmitting capability was created.
 - Added persisted official-sample activation, automatic process reload, direct authorization-bypass rejection, immutable definition validation, and prospective report/capture timing that prevents historical backfill.
 - Rejected the stale June 17 CRWV report in the real local runtime because it predates activation, leaving no command receipt, trade, ticket, FakeBroker order, or state file.

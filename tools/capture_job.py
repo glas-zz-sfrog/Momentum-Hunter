@@ -9,15 +9,24 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from momentum_hunter.config import load_config
+from momentum_hunter.config import DATA_DIR, load_config
 from momentum_hunter.market import detect_market_regime
 from momentum_hunter.models import CaptureSession, SCANNER_PRESETS
 from momentum_hunter.providers import ProviderUnavailableError, provider_from_name
-from momentum_hunter.scheduling import evaluate_automatic_capture
+from momentum_hunter.scheduling import SkipReason, evaluate_automatic_capture
 from momentum_hunter.scoring import score_candidates
 from momentum_hunter.score_breakdowns import upsert_score_breakdowns_for_capture_payload
-from momentum_hunter.storage import CAPTURES_DIR, save_capture_failure, save_daily_capture
+from momentum_hunter.storage import CAPTURES_DIR, file_sha256, save_capture_failure, save_daily_capture
 from momentum_hunter.time_utils import now_central
+from momentum_hunter.trade_planning import (
+    build_trade_planning_report,
+    capture_date_label,
+    export_trade_planning_report,
+    parse_datetime,
+)
+
+
+REPORTS_DIR = DATA_DIR / "reports"
 
 
 def main() -> int:
@@ -62,6 +71,14 @@ def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
         print(f"Calendar status: {decision.classification.capture_calendar_status}")
         print(f"Next market session: {decision.classification.next_market_session_date}")
         print(f"Scheduling policy: {decision.classification.scheduling_policy_version}")
+        if decision.skip_reason == SkipReason.SKIP_DUPLICATE_CAPTURE.value:
+            capture_path = (
+                CAPTURES_DIR
+                / decision.run_at.date().isoformat()
+                / f"{decision.capture_session.value}.json"
+            )
+            report_paths = ensure_trade_planning_report(capture_path)
+            print_report_paths(report_paths, prefix="Existing capture report")
         return 0
 
     provider = provider_from_name(args.provider or config.provider)
@@ -94,7 +111,114 @@ def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
         print("Score breakdowns updated")
     except Exception as exc:
         print(f"Score breakdown update failed: {exc}", file=sys.stderr)
+    report_paths = ensure_trade_planning_report(json_path)
+    print_report_paths(report_paths, prefix="Trade planning")
     return 0
+
+
+def ensure_trade_planning_report(
+    capture_path: Path,
+    *,
+    reports_dir: Path = REPORTS_DIR,
+) -> dict[str, Path]:
+    if not capture_path.exists():
+        raise FileNotFoundError(f"Raw capture JSON is missing: {capture_path}")
+    expected = trade_planning_report_paths(capture_path, reports_dir=reports_dir)
+    existing = {name: path.exists() for name, path in expected.items()}
+    if all(existing.values()):
+        validate_trade_planning_report(expected["json"], capture_path)
+        return expected
+    if any(existing.values()):
+        incomplete = ", ".join(name for name, exists in existing.items() if exists)
+        raise RuntimeError(
+            "A partial derived TradePlan report already exists; refusing to overwrite it. "
+            f"Existing outputs: {incomplete}"
+        )
+
+    capture_payload = json.loads(capture_path.read_text(encoding="utf-8"))
+    capture_timestamp = parse_datetime(str(capture_payload.get("capture_time", "")))
+    generated_at = now_central()
+    if capture_timestamp is None or generated_at < capture_timestamp:
+        raise ValueError("TradePlan report time cannot precede the source capture.")
+    capture_hash = file_sha256(capture_path)
+    report = build_trade_planning_report(
+        capture_path,
+        fetch_bars=True,
+        fetch_market_data=True,
+        as_of=generated_at,
+    )
+    actual = export_trade_planning_report(report, reports_dir)
+    if actual != expected:
+        raise RuntimeError("TradePlan report export returned unexpected output paths.")
+    if file_sha256(capture_path) != capture_hash:
+        raise RuntimeError("TradePlan report generation mutated the immutable raw capture.")
+    validate_trade_planning_report(actual["json"], capture_path)
+    return actual
+
+
+def trade_planning_report_paths(
+    capture_path: Path,
+    *,
+    reports_dir: Path = REPORTS_DIR,
+) -> dict[str, Path]:
+    payload = json.loads(capture_path.read_text(encoding="utf-8"))
+    capture_time = str(payload.get("capture_time", ""))
+    session = str(payload.get("session", "")).strip()
+    parsed_capture_time = parse_datetime(capture_time)
+    if (
+        parsed_capture_time is None
+        or parsed_capture_time.tzinfo is None
+        or parsed_capture_time.utcoffset() is None
+    ):
+        raise ValueError("Raw capture is missing a valid offset-aware capture_time.")
+    valid_sessions = {item.value for item in CaptureSession}
+    if session not in valid_sessions:
+        raise ValueError("Raw capture is missing a valid session.")
+    base = f"trade-plan-briefing-{capture_date_label(capture_time)}-{session}"
+    return {
+        "csv": reports_dir / f"{base}.csv",
+        "json": reports_dir / f"{base}.json",
+        "report": reports_dir / f"{base}.md",
+    }
+
+
+def validate_trade_planning_report(report_path: Path, capture_path: Path) -> None:
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    metadata = payload.get("metadata")
+    capture_payload = json.loads(capture_path.read_text(encoding="utf-8"))
+    if not isinstance(metadata, dict):
+        raise ValueError("Derived TradePlan report is missing metadata.")
+    expected_capture_time = str(capture_payload.get("capture_time", ""))
+    expected_session = str(capture_payload.get("session", "")).strip()
+    if str(metadata.get("source_capture_time", "")) != expected_capture_time:
+        raise ValueError("Derived TradePlan report does not match the source capture time.")
+    if str(metadata.get("source_session", "")) != expected_session:
+        raise ValueError("Derived TradePlan report does not match the source capture session.")
+    source_path = Path(str(metadata.get("source_capture_path", "")))
+    if source_path.resolve() != capture_path.resolve():
+        raise ValueError("Derived TradePlan report does not match the source capture path.")
+    generated_at = parse_datetime(str(metadata.get("generated_at", "")))
+    capture_time = parse_datetime(expected_capture_time)
+    if (
+        generated_at is None
+        or generated_at.tzinfo is None
+        or generated_at.utcoffset() is None
+        or capture_time is None
+        or generated_at < capture_time
+    ):
+        raise ValueError("Derived TradePlan report has invalid prospective timing.")
+    candidates = payload.get("candidates")
+    source_candidates = capture_payload.get("candidates")
+    if not isinstance(candidates, list) or not isinstance(source_candidates, list):
+        raise ValueError("Derived TradePlan report or source capture has invalid candidates.")
+    if len(candidates) != len(source_candidates):
+        raise ValueError("Derived TradePlan report candidate count does not match the source capture.")
+
+
+def print_report_paths(paths: dict[str, Path], *, prefix: str) -> None:
+    print(f"{prefix} CSV: {paths['csv']}")
+    print(f"{prefix} JSON: {paths['json']}")
+    print(f"{prefix} report: {paths['report']}")
 
 
 def friendly_error_message(exc: Exception) -> str:

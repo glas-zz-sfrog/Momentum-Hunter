@@ -14,6 +14,8 @@ from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 
 
 FINVIZ_BACKOFF_SECONDS = (10, 30, 60)
+FINVIZ_QUOTE_BACKOFF_SECONDS: tuple[int, ...] = ()
+FINVIZ_CUSTOM_COLUMN_IDS = (0, 1, 2, 3, 4, 6, 25, 49, 64, 67, 65, 66)
 
 
 class ProviderUnavailableError(RuntimeError):
@@ -137,9 +139,16 @@ class FinvizProvider(MarketDataProvider):
     name = "finviz"
     base_url = "https://finviz.com"
 
-    def __init__(self, *, sleeper=time.sleep, backoff_seconds: tuple[int, ...] = FINVIZ_BACKOFF_SECONDS) -> None:
+    def __init__(
+        self,
+        *,
+        sleeper=time.sleep,
+        backoff_seconds: tuple[int, ...] = FINVIZ_BACKOFF_SECONDS,
+        quote_backoff_seconds: tuple[int, ...] = FINVIZ_QUOTE_BACKOFF_SECONDS,
+    ) -> None:
         self.sleeper = sleeper
         self.backoff_seconds = backoff_seconds
+        self.quote_backoff_seconds = quote_backoff_seconds
         self._quote_html_cache: dict[str, str] = {}
         self.session = requests.Session()
         self.session.headers.update(
@@ -162,30 +171,29 @@ class FinvizProvider(MarketDataProvider):
             raise RuntimeError("Finviz screener table was not found. Try Sample provider or update parser.")
 
         rows = table.find_all("tr")
+        if not rows:
+            return []
+        headers = finviz_screener_headers(rows[0])
         candidates: list[Candidate] = []
         for row in rows[1:]:
-            cells = [cell.get_text(" ", strip=True) for cell in row.find_all("td")]
-            if len(cells) < 11:
+            values = finviz_screener_row(row, headers)
+            if not values.get("Ticker"):
                 continue
             candidates.append(
                 Candidate(
-                    ticker=cells[1],
-                    company=cells[2],
-                    sector=cells[3],
-                    industry=cells[4],
-                    market_cap=parse_market_cap(cells[6]),
-                    price=parse_float(cells[8]),
-                    percent_change=parse_percent(cells[9]),
-                    volume=parse_int(cells[10]),
-                    relative_volume=0.0,
+                    ticker=values.get("Ticker", ""),
+                    company=values.get("Company", ""),
+                    sector=values.get("Sector", ""),
+                    industry=values.get("Industry", ""),
+                    market_cap=parse_market_cap(values.get("Market Cap", "")),
+                    price=parse_float(values.get("Price", "")),
+                    percent_change=parse_percent(values.get("Change", "")),
+                    volume=parse_int(values.get("Volume", "")),
+                    relative_volume=parse_float(values.get("Rel Volume", "")),
+                    float_shares=parse_market_cap(values.get("Shs Float", "")) or None,
+                    atr=parse_float(values.get("ATR", "")) or None,
                 )
             )
-
-        for candidate in candidates:
-            try:
-                self._apply_quote_snapshot_fields(candidate)
-            except Exception:
-                continue
 
         return filter_candidates(candidates, criteria)
 
@@ -235,7 +243,11 @@ class FinvizProvider(MarketDataProvider):
         normalized = ticker.upper().strip()
         if normalized not in self._quote_html_cache:
             url = f"{self.base_url}/quote.ashx?t={normalized}"
-            response = self._get_with_retries(url, action=f"quote snapshot for {normalized}")
+            response = self._get_with_retries(
+                url,
+                action=f"quote snapshot for {normalized}",
+                backoff_seconds=self.quote_backoff_seconds,
+            )
             self._quote_html_cache[normalized] = response.text
         return self._quote_html_cache[normalized]
 
@@ -245,11 +257,19 @@ class FinvizProvider(MarketDataProvider):
         volume_filter = "sh_avgvol_o3000" if criteria.min_volume >= 3_000_000 else "sh_avgvol_o1000"
         change_filter = "ta_change_u3" if criteria.min_percent_change <= 3 else "ta_change_u5"
         filters = ",".join([cap_filter, price_filter, volume_filter, change_filter])
-        return f"{self.base_url}/screener.ashx?v=111&f={filters}&o=-volume"
+        columns = ",".join(str(item) for item in FINVIZ_CUSTOM_COLUMN_IDS)
+        return f"{self.base_url}/screener.ashx?v=151&f={filters}&o=-volume&c={columns}"
 
-    def _get_with_retries(self, url: str, *, action: str) -> requests.Response:
+    def _get_with_retries(
+        self,
+        url: str,
+        *,
+        action: str,
+        backoff_seconds: tuple[int, ...] | None = None,
+    ) -> requests.Response:
         last_error: Exception | None = None
-        attempts = len(self.backoff_seconds) + 1
+        retry_delays = self.backoff_seconds if backoff_seconds is None else backoff_seconds
+        attempts = len(retry_delays) + 1
         for attempt in range(attempts):
             try:
                 response = self.session.get(url, timeout=20)
@@ -257,11 +277,30 @@ class FinvizProvider(MarketDataProvider):
                 return response
             except requests.RequestException as exc:
                 last_error = exc
-                if attempt < len(self.backoff_seconds):
-                    self.sleeper(self.backoff_seconds[attempt])
+                if attempt < len(retry_delays):
+                    self.sleeper(retry_delays[attempt])
                     continue
                 raise provider_error_from_exception(self.name, action, exc) from exc
         raise provider_error_from_exception(self.name, action, last_error or RuntimeError("unknown provider failure"))
+
+
+def finviz_screener_headers(row: object) -> list[str]:
+    cells = row.find_all(["th", "td"])
+    return [cell.get_text(" ", strip=True) for cell in cells]
+
+
+def finviz_screener_row(row: object, headers: list[str]) -> dict[str, str]:
+    cells = row.find_all("td")
+    if len(cells) != len(headers):
+        return {}
+    values: dict[str, str] = {}
+    for header, cell in zip(headers, cells):
+        value = cell.get_text(" ", strip=True)
+        if header == "Ticker":
+            ticker_attribute = cell.get("data-boxover-ticker")
+            value = str(ticker_attribute or (value.split()[0] if value else ""))
+        values[header] = value
+    return values
 
 
 def provider_from_name(name: str) -> MarketDataProvider:

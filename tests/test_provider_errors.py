@@ -5,7 +5,13 @@ import unittest
 import requests
 
 from momentum_hunter.models import BASE_MOMENTUM
-from momentum_hunter.providers import FinvizProvider, ProviderUnavailableError, is_dns_failure, parse_finviz_snapshot_values
+from momentum_hunter.providers import (
+    FINVIZ_CUSTOM_COLUMN_IDS,
+    FinvizProvider,
+    ProviderUnavailableError,
+    is_dns_failure,
+    parse_finviz_snapshot_values,
+)
 
 
 class ProviderErrorTests(unittest.TestCase):
@@ -35,22 +41,15 @@ class ProviderErrorTests(unittest.TestCase):
 
         self.assertEqual("2.14", values["rel volume"])
 
-    def test_finviz_scan_enriches_relative_volume_from_quote_snapshot(self) -> None:
+    def test_finviz_scan_reads_required_fields_from_one_custom_screener_response(self) -> None:
         provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
-        responses = {
-            "screener": """
-                <table class="screener_table">
-                    <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Country</td><td>Market Cap</td><td>P/E</td><td>Price</td><td>Change</td><td>Volume</td></tr>
-                    <tr><td>1</td><td>CRWV</td><td>CoreWeave</td><td>Technology</td><td>Software</td><td>USA</td><td>10B</td><td>-</td><td>100.00</td><td>5.5%</td><td>50,000,000</td></tr>
-                </table>
-            """,
-            "quote": """
-                <table class="snapshot-table2">
-                    <tr><td>Index</td><td>S&P 500</td><td>Rel Volume</td><td>2.37</td></tr>
-                </table>
-                <table id="news-table"></table>
-            """,
-        }
+        screener = """
+            <table class="screener_table">
+                <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Market Cap</td><td>Shs Float</td><td>ATR</td><td>Rel Volume</td><td>Volume</td><td>Price</td><td>Change</td></tr>
+                <tr><td>1</td><td data-boxover-ticker="CRWV">CRWV CRWV</td><td>CoreWeave</td><td>Technology</td><td>Software</td><td>10B</td><td>450M</td><td>8.64</td><td>2.37</td><td>50,000,000</td><td>100.00</td><td>5.5%</td></tr>
+            </table>
+        """
+        requests_seen: list[str] = []
 
         class FakeResponse:
             def __init__(self, text: str) -> None:
@@ -60,10 +59,9 @@ class ProviderErrorTests(unittest.TestCase):
                 return None
 
         def fake_get(url: str, **_kwargs):
+            requests_seen.append(url)
             if "screener.ashx" in url:
-                return FakeResponse(responses["screener"])
-            if "quote.ashx" in url:
-                return FakeResponse(responses["quote"])
+                return FakeResponse(screener)
             raise AssertionError(url)
 
         provider.session.get = fake_get
@@ -73,15 +71,23 @@ class ProviderErrorTests(unittest.TestCase):
         self.assertEqual(1, len(candidates))
         self.assertEqual("CRWV", candidates[0].ticker)
         self.assertEqual(2.37, candidates[0].relative_volume)
+        self.assertEqual(450_000_000, candidates[0].float_shares)
+        self.assertEqual(8.64, candidates[0].atr)
+        self.assertEqual(1, len(requests_seen))
+        self.assertIn("v=151", requests_seen[0])
+        self.assertIn(
+            "c=" + ",".join(str(item) for item in FINVIZ_CUSTOM_COLUMN_IDS),
+            requests_seen[0],
+        )
 
-    def test_finviz_scan_keeps_candidate_when_relative_volume_enrichment_fails(self) -> None:
+    def test_finviz_scan_keeps_candidate_when_optional_custom_fields_are_absent(self) -> None:
         provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
 
         class FakeResponse:
             text = """
                 <table class="screener_table">
-                    <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Country</td><td>Market Cap</td><td>P/E</td><td>Price</td><td>Change</td><td>Volume</td></tr>
-                    <tr><td>1</td><td>CRWV</td><td>CoreWeave</td><td>Technology</td><td>Software</td><td>USA</td><td>10B</td><td>-</td><td>100.00</td><td>5.5%</td><td>50,000,000</td></tr>
+                    <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Market Cap</td><td>Volume</td><td>Price</td><td>Change</td></tr>
+                    <tr><td>1</td><td>CRWV</td><td>CoreWeave</td><td>Technology</td><td>Software</td><td>10B</td><td>50,000,000</td><td>100.00</td><td>5.5%</td></tr>
                 </table>
             """
 
@@ -100,6 +106,29 @@ class ProviderErrorTests(unittest.TestCase):
         self.assertEqual(1, len(candidates))
         self.assertEqual("CRWV", candidates[0].ticker)
         self.assertEqual(0.0, candidates[0].relative_volume)
+        self.assertIsNone(candidates[0].float_shares)
+        self.assertIsNone(candidates[0].atr)
+
+    def test_finviz_quote_page_failure_does_not_repeat_screener_backoff(self) -> None:
+        sleeps: list[int] = []
+        provider = FinvizProvider(
+            sleeper=lambda seconds: sleeps.append(seconds),
+            backoff_seconds=(10, 30, 60),
+        )
+        request_count = 0
+
+        def fail_get(*_args, **_kwargs):
+            nonlocal request_count
+            request_count += 1
+            raise requests.ConnectionError("quote page failed")
+
+        provider.session.get = fail_get
+
+        with self.assertRaises(ProviderUnavailableError):
+            provider.fetch_news("CRWV")
+
+        self.assertEqual(1, request_count)
+        self.assertEqual([], sleeps)
 
 
 if __name__ == "__main__":
