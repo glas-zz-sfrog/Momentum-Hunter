@@ -21,6 +21,7 @@ from momentum_hunter.schwab_account_validation import (
     SchwabAccountValidationNetworkError,
     SchwabAccountValidationResponseError,
     SchwabCashAccountValidation,
+    build_unpersisted_binding_candidate,
     build_validation_report,
     main,
     parse_account_identity,
@@ -247,6 +248,23 @@ class SchwabAccountIdentityParsingTests(unittest.TestCase):
         )
         self.assertEqual("MARGIN", identity.account_type)
 
+    def test_cash_identity_maps_to_internal_binding_type_without_persistence(self) -> None:
+        identity = parse_account_identity(_account_payload(), self.discovered)
+        candidate = build_unpersisted_binding_candidate(identity)
+
+        self.assertEqual("INDIVIDUAL_CASH", candidate.account_type)
+        self.assertEqual(ACCOUNT_ENDING, candidate.account_number_last_four)
+        self.assertEqual(ACCOUNT_HASH, candidate.account_hash)
+        self.assertNotIn(ACCOUNT_HASH, repr(candidate))
+
+    def test_margin_identity_cannot_become_binding_candidate(self) -> None:
+        identity = parse_account_identity(
+            _account_payload(account_type="MARGIN"),
+            self.discovered,
+        )
+        with self.assertRaisesRegex(SchwabAccountValidationError, "official Schwab CASH"):
+            build_unpersisted_binding_candidate(identity)
+
     def test_invalid_shape_type_number_suffix_and_balance_fail(self) -> None:
         payloads = [
             [],
@@ -387,6 +405,8 @@ class SchwabCashAccountValidationBoundaryTests(unittest.TestCase):
         self.assertEqual([ACCESS_TOKEN], discovery.tokens)
         self.assertEqual([(ACCESS_TOKEN, ACCOUNT_HASH)], details.calls)
         self.assertEqual("CASH", report["accountType"])
+        self.assertEqual("INDIVIDUAL_CASH", report["bindingCandidateType"])
+        self.assertEqual("VALIDATED_NOT_PERSISTED", report["bindingEligibility"])
         self.assertEqual(ACCOUNT_ENDING, report["accountEnding"])
         self.assertNotIn(ACCOUNT_HASH, rendered)
         self.assertNotIn(ACCOUNT_NUMBER, rendered)

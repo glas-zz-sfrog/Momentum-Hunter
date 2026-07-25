@@ -39,6 +39,19 @@ class SchwabAccountIsolationTests(unittest.TestCase):
         self.assertEqual("UNAVAILABLE", status["orderTransmission"])
         self.assertNotIn(SYNTHETIC_ACCOUNT_HASH, str(status))
 
+    def test_authorized_account_and_binding_reprs_redact_hashes(self) -> None:
+        source = synthetic_source()
+        account = source.list_authorized_accounts()[0]
+        binding = AccountIsolationPolicy().create_binding(
+            [account],
+            manually_confirmed_last_four=SYNTHETIC_ACCOUNT_LAST_FOUR,
+        )
+
+        self.assertNotIn(SYNTHETIC_ACCOUNT_HASH, repr(account))
+        self.assertNotIn(SYNTHETIC_ACCOUNT_HASH, repr(binding))
+        self.assertIn(SYNTHETIC_ACCOUNT_HASH[-4:], repr(account))
+        self.assertIn(SYNTHETIC_ACCOUNT_HASH[-4:], repr(binding))
+
     def test_zero_or_multiple_accounts_fail_closed(self) -> None:
         for count in (0, 2):
             with self.subTest(count=count), self.assertRaisesRegex(AccountIsolationError, "Exactly one"):

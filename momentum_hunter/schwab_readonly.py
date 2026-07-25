@@ -36,19 +36,36 @@ class ReadOnlyOperationError(SchwabReadOnlyError):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class SchwabAuthorizedAccount:
     account_hash: str
     account_number_last_four: str
     account_type: str
     cash_only: bool
 
+    def __repr__(self) -> str:
+        return (
+            "SchwabAuthorizedAccount("
+            f"account_hash={redact_value(self.account_hash)!r}, "
+            f"account_number_last_four={self.account_number_last_four!r}, "
+            f"account_type={self.account_type!r}, "
+            f"cash_only={self.cash_only!r})"
+        )
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, repr=False)
 class SchwabAccountBinding:
     account_hash: str
     account_number_last_four: str
     account_type: str
+
+    def __repr__(self) -> str:
+        return (
+            "SchwabAccountBinding("
+            f"account_hash={redact_value(self.account_hash)!r}, "
+            f"account_number_last_four={self.account_number_last_four!r}, "
+            f"account_type={self.account_type!r})"
+        )
 
 
 @dataclass(frozen=True)

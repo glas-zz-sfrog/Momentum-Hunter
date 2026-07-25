@@ -21,7 +21,13 @@ from momentum_hunter.schwab_onboarding import (
     SchwabOAuthError,
     SchwabOAuthSecretRepository,
 )
-from momentum_hunter.schwab_readonly import redact_value
+from momentum_hunter.schwab_readonly import (
+    EXPECTED_ACCOUNT_TYPE,
+    AccountIsolationPolicy,
+    SchwabAccountBinding,
+    SchwabAuthorizedAccount,
+    redact_value,
+)
 
 
 SCHWAB_ACCOUNT_DETAILS_BASE_URL = "https://api.schwabapi.com/trader/v1/accounts"
@@ -271,7 +277,27 @@ def parse_account_identity(
     )
 
 
+def build_unpersisted_binding_candidate(
+    identity: SchwabAccountIdentity,
+) -> SchwabAccountBinding:
+    if identity.account_type != "CASH":
+        raise SchwabAccountValidationError(
+            "Only an official Schwab CASH account can become a binding candidate."
+        )
+    authorized_account = SchwabAuthorizedAccount(
+        account_hash=identity.account_hash,
+        account_number_last_four=identity.account_number_last_four,
+        account_type=EXPECTED_ACCOUNT_TYPE,
+        cash_only=True,
+    )
+    return AccountIsolationPolicy().create_binding(
+        [authorized_account],
+        manually_confirmed_last_four=identity.account_number_last_four,
+    )
+
+
 def build_validation_report(identity: SchwabAccountIdentity) -> dict[str, object]:
+    candidate = build_unpersisted_binding_candidate(identity)
     return {
         "mode": "SCHWAB_CASH_ACCOUNT_VALIDATION_READ_ONLY",
         "requestSequence": [
@@ -284,6 +310,8 @@ def build_validation_report(identity: SchwabAccountIdentity) -> dict[str, object
         "accountType": identity.account_type,
         "cashOnlyState": "VERIFIED_CASH",
         "identityMatch": True,
+        "bindingCandidateType": candidate.account_type,
+        "bindingEligibility": "VALIDATED_NOT_PERSISTED",
         "balancesReturnedByContract": identity.balances_present,
         "balanceValuesSuppressed": True,
         "positionsRequested": False,

@@ -30,7 +30,7 @@ mode.
 | ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated and backed up through `origin/master` | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
 | SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Integrated and backed up through `origin/master` | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
-| SCHWAB-003 read-only account discovery and CASH validation | `AUTOMATED_PASS`; compileall, 17 validation tests, 99 bounded Schwab tests, and 732 full repository tests pass; one live discovery GET returned only ending `2573` | Discovery is `LIVE_PASS`; account-detail validation is `MANUAL_AUTHORIZATION_PENDING` | `IMPLEMENTED_PENDING_MERGE` on stacked branch; nothing pushed | Validation must return one matching `CASH` account while suppressing balances, requesting no positions, and creating no binding |
+| SCHWAB-003 read-only account discovery and CASH validation | `AUTOMATED_PASS`; compileall, 19 validation tests, 102 bounded Schwab tests, and 735 full repository tests pass; one live discovery GET returned only ending `2573` | Discovery is `LIVE_PASS`; account-detail validation is `MANUAL_AUTHORIZATION_PENDING` | `IMPLEMENTED_PENDING_MERGE` on stacked branch; nothing pushed | Validation must return one matching `CASH` account, map only to `INDIVIDUAL_CASH`, suppress balances, request no positions, and create no binding |
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
@@ -775,7 +775,9 @@ Next checkpoint:
    only when `fields=positions`, and identifies account `type` as `CASH` or `MARGIN`.
 2. `AUTOMATED_PASS`: the exact read-only identity validator is implemented and tested.
    It omits `fields`, rejects nonempty position data, suppresses all balance values,
-   accepts only one matching `CASH` account, and persists nothing.
+   accepts only one matching `CASH` account, maps it explicitly to the internal
+   `INDIVIDUAL_CASH` binding type, redacts the in-memory candidate, and persists
+   nothing.
 3. `MANUAL_AUTHORIZATION_PENDING`: Steven must explicitly approve the live two-GET
    validation sequence. The expected operator result is ending `2573`, type `CASH`,
    `cashOnlyState: VERIFIED_CASH`, and `accountBinding: NOT_BOUND`; no balance value,
@@ -802,15 +804,18 @@ Official contract evidence:
 Automated evidence:
 
 1. Compileall passes for `momentum_hunter` and `tests`.
-2. All 17 focused account-validation tests pass.
-3. The complete bounded Schwab suite passes 99/99.
-4. Full repository discovery passes 732/732 after a first five-minute bounded run
-   completed beyond its wrapper and was rerun successfully with a longer bound.
+2. All 19 focused account-validation tests pass.
+3. The complete bounded Schwab suite passes 102/102.
+4. Full repository discovery passes 735/735 within the extended bounded timeout.
 5. Tests prove exact encoded-hash GET routing, no `fields` parameter, redirect refusal,
    response size limits, malformed response refusal, secret-safe errors, exact
    confirmation, active-token requirement, exactly-one-account requirement, suffix
    match, official `CASH` type, margin refusal, unexpected-position refusal, balance
    suppression, redacted output, no persistence, and no write/order methods.
+6. The binding-candidate tests prove official `CASH` maps only to internal
+   `INDIVIDUAL_CASH`, official `MARGIN` is refused, the existing isolation policy
+   revalidates the candidate, no encrypted store is called, and both authorized-account
+   and binding representations redact the opaque hash.
 
 Steven's exact live check:
 
@@ -819,7 +824,9 @@ Steven's exact live check:
 2. Expected visible result: account ending `2573`, `accountType: CASH`,
    `cashOnlyState: VERIFIED_CASH`, `positionsRequested: false`,
    `positionsReceived: false`, `balanceValuesSuppressed: true`,
-   `accountBinding: NOT_BOUND`, and `orderTransmission: UNAVAILABLE`.
+   `bindingCandidateType: INDIVIDUAL_CASH`,
+   `bindingEligibility: VALIDATED_NOT_PERSISTED`, `accountBinding: NOT_BOUND`, and
+   `orderTransmission: UNAVAILABLE`.
 3. Failure means any different account count or ending, `MARGIN` or unknown type,
    position data, unredacted account/hash/balance data, binding persistence, or any
    market-data/preview/order request. The validator must stop closed in every case.
