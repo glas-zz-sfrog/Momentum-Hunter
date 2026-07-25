@@ -589,14 +589,15 @@ orders. The exact-root removal command remains available for rollback.
 
 ## R028 Integrated Workstation Chrome
 
-Status: `IMPLEMENTED_PENDING_MANUAL_QA`; branch
-`codex/ARGUS-R028-integrated-workstation-chrome`; branch-only, unmerged, and unpushed
+Status: `MANUAL_PASS`; implemented on the
+`codex/ARGUS-R029-canonical-wpf-launcher` stack; automated and manual proof passed,
+unmerged, and unpushed
 
 Automated evidence:
 
 - Focused chrome tests pass 4/4, including the supported `PerMonitorV2` project
   declaration and non-elevated application manifest.
-- The complete .NET solution passes 214/214.
+- The complete current .NET solution passes 215/215.
 - Release compilation with warnings treated as errors passes with zero warnings and
   zero errors.
 - The diff is limited to WPF shell chrome, its focused tests, and this required
@@ -610,10 +611,12 @@ Current physical evidence:
   state; and the compact row fits without clipping or overlap.
 - One R028 WPF process exposes one `Momentum Hunter Workstation` window. The
   Command Palette remains an in-window overlay rather than a taskbar window.
-- Checks 3-8 are `MANUAL_PENDING`. Steven deliberately deferred drag, double-click,
-  Snap, resize, caption-control, `Alt+Space`, and cross-monitor interaction proof so
-  CLI-only roadmap work can continue without interrupting his computer use. Do not
-  infer those passes from XAML or compilation.
+- Checks 1-9 and 11 are `MANUAL_PASS`. Steven confirmed the separate light Windows
+  title bar is absent; empty dark-top-bar space supports drag and double-click
+  maximize/restore; left/right edge Snap works; all four edges and at least two
+  corners resize; minimize and maximize/restore controls work; `Alt+Space` opens the
+  Windows system menu; cross-monitor movement works; and restored/maximized layouts
+  show no clipped or overlapping top controls.
 - Check 10 is `STRUCTURAL_PASS`, `MANUAL_NOT_APPLICABLE`: the one
   `EnvironmentBadge` contains a dormant red `LIVE MONEY` style trigger, but no live
   mode, broker path, or order authority exists to activate it.
@@ -653,7 +656,7 @@ credentials, paper/live execution, or changes to trading behavior.
 
 Status: `IMPLEMENTED_PENDING_MERGE`; branch
 `codex/ARGUS-R029-canonical-wpf-launcher`; automated and physical CLI launch proof
-passed, unmerged, and unpushed
+plus Steven's manual icon/taskbar proof passed, unmerged, and unpushed
 
 Automated evidence:
 
@@ -666,7 +669,7 @@ Automated evidence:
 - Legacy Qt remains an explicit rollback path through
   `python -m momentum_hunter.app`; normal tracked launchers do not use it.
 - Focused launcher/startup tests pass 9/9, full Python discovery passes 679/679,
-  all .NET tests pass 214/214, and Release compilation passes with zero warnings
+  all .NET tests pass 215/215, and Release compilation passes with zero warnings
   and zero errors.
 - Subsequent physical verification stopped the known legacy Qt and isolated-review
   processes, launched the checkout Release WPF executable through the ordinary
@@ -693,9 +696,10 @@ Physical results:
    and one top-level workstation window.
 4. `CODEX_VERIFIED`: the obsolete review-build root contains zero build directories
    and zero WPF executables.
-5. `MANUAL_PENDING`: confirm the taskbar shows only the current workstation and its
-   icon is the navy rounded square with the white `M` and teal rising arrow. Hovering
-   it must say `Momentum Hunter Workstation`, never `stale repo-build`.
+5. `MANUAL_PASS`: Steven confirmed the new taskbar checks pass along with the R028
+   set. The current workstation is the only Momentum Hunter taskbar/window identity,
+   uses the navy rounded-square white-`M`/teal-arrow icon, and no stale repo-build
+   identity remains.
 
 This launcher change grants no credential, OAuth, account, broker, Paper, Live,
 order, provider-fetch, sample-start, merge, or push authority.

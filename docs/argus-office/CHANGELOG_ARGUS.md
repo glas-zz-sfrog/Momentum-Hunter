@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Recorded Steven's complete manual pass for R028 integrated chrome and R029 launcher/icon behavior: dark title surface, drag, maximize/restore, Snap, edge/corner resize, caption controls, `Alt+Space`, cross-monitor movement, restored/maximized fit, current icon, current tooltip, and single-window identity all pass.
 - Restored the white-`M`/teal-arrow Momentum Hunter icon after Steven clarified that both prior designs were liked; embedded it in the WPF executable/window, loaded it in the tray, assigned it to canonical shortcuts, and added nine-frame icon regression coverage.
 - Completed automated R027 verification: 146 focused and 641 full-discovery Python tests, all 206 .NET tests, zero-warning Release build, protected/source reviews, versioned review package, and fresh offscreen UI proof pass; R027 is implemented pending Steven's manual review and merge decision.
 - Began Steven-authorized R027 integration of R026 with the current Shadow-003 baseline, preserving both parent histories on a dedicated branch while leaving `master` unchanged.
