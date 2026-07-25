@@ -29,11 +29,11 @@ mode.
 | ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated into local `master`; not pushed | The preserved checklist remains an audit reference; merge approval does not start the official sample |
 | ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated into local `master`; not pushed | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
-| SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and 672 total Python tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Implemented on `codex/ARGUS-SCHWAB-001-loopback-oauth-listener`; not merged or pushed | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
+| SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Committed at `3996a6f` on `codex/ARGUS-SCHWAB-001-loopback-oauth-listener`; not merged or pushed | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
-| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; fresh repair verification passes 162 focused and 209 total .NET tests, 641 Python tests, Python compileall, and a zero-warning Release build | `MANUAL_IN_PROGRESS`; checks 5-7 and 15-17 pass, check 11 is independently verified, checks 4, 8-10, and 14 are `CODEX_UI_PASS` pending Steven acceptance, and checks 12-13 are unavailable with zero test trades | `IMPLEMENTED_PENDING_MERGE`; repair commit `f84106a` is not merged or pushed | Steven accepts or rejects the four repaired visual surfaces in the `R027-manual-qa-repair-review` build; Git mechanics do not require a separate operator review |
+| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; current stacked recheck passes 209 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_IN_PROGRESS`; checks 5-7 and 15-17 pass, check 11 is independently verified, checks 4, 8-10, and 14 are `CODEX_UI_PASS` pending Steven acceptance, and checks 12-13 are unavailable with zero test trades | `IMPLEMENTED_PENDING_MERGE`; repair commit `f84106a` is preserved beneath verified implementation commit `3996a6f`; neither is merged or pushed | Steven accepts or rejects the four repaired visual surfaces in the `R027-manual-qa-repair-review` build; an accepted result may then be paired with separate explicit approval for an `--ff-only` local merge |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
 
@@ -297,6 +297,12 @@ focused presentation tests, all 209 .NET tests, zero-warning Release build,
 protected-path review, source-nonmutation checks, and fresh nonblank R027 proof
 artifacts pass.
 
+Current stacked-successor merge-readiness evidence at `3996a6f`: local `master`
+`164e32e` is the exact merge base and an ancestor of the clean branch; `git diff
+--check master..HEAD` passes; full Python discovery passes 672/672; all .NET tests
+pass 209/209; and the Release build passes with warnings treated as errors and zero
+warnings. No current remote branch contains `3996a6f`.
+
 Manual evidence recorded 2026-07-24:
 
 - Manual review display convention: strikethrough means Steven addressed the item,
@@ -551,6 +557,9 @@ Completed production-local trust evidence:
     connected all remained false.
 13. Compileall passes, focused Schwab tests pass 47/47, and full Python discovery
     passes 672/672. No protected product or execution behavior changed.
+14. The completed trust correction and evidence are committed at `3996a6f`. The
+    stacked branch is clean, technically fast-forwardable from local `master`, and
+    remains unmerged and unpushed.
 
 Passing this check authorizes only local HTTPS trust. It does not authorize Schwab
 credentials, real OAuth, account access, market-data requests, broker preview, or
