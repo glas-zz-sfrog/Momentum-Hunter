@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Backed up the complete Steven-approved local baseline through R029 and SCHWAB-001 to `origin/master` after a clean 43-commit reachability, prohibited-path, large-file, and secret-risk preflight; OAuth, credentials, account access, official sample collection, and execution authority remain unchanged.
 - Fast-forwarded Steven-approved R028/R029 into local `master` through `1d3d8e5` after complete automated and manual verification; no merge commit was created and nothing was pushed.
 - Recorded Steven's complete manual pass for R028 integrated chrome and R029 launcher/icon behavior: dark title surface, drag, maximize/restore, Snap, edge/corner resize, caption controls, `Alt+Space`, cross-monitor movement, restored/maximized fit, current icon, current tooltip, and single-window identity all pass.
 - Restored the white-`M`/teal-arrow Momentum Hunter icon after Steven clarified that both prior designs were liked; embedded it in the WPF executable/window, loaded it in the tray, assigned it to canonical shortcuts, and added nine-frame icon regression coverage.

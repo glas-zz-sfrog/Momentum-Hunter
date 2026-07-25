@@ -26,14 +26,14 @@ mode.
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
 | ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `MANUAL_PENDING` through Shadow-002 | Integrated into local `master` at `bb962be`; remotely backed up on its feature branch | Confirm the frozen Python lifecycle is represented read-only and without order authority in Shadow-002 |
-| ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated into local `master`; not pushed | The preserved checklist remains an audit reference; merge approval does not start the official sample |
-| ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated into local `master`; not pushed | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
+| ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated and backed up through `origin/master` | The preserved checklist remains an audit reference; merge approval does not start the official sample |
+| ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated and backed up through `origin/master` | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
-| SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Integrated into local `master`; not pushed | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
+| SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Integrated and backed up through `origin/master` | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
-| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` on local `master`; repair commits `f84106a` and `cd09f1b` are integrated; nothing is pushed | Begin R028 from local `master`; do not start credential/OAuth/broker work or the official sample implicitly |
+| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted baseline; do not start credential/OAuth/broker work or the official sample implicitly |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | `MANUAL_NOT_YET_AVAILABLE` | Future separately approved market-data cutover task | Confirm the old hash and rows are absent, only actual-provider lineage/fresh timestamps render, and no legacy/live candle mixture survives |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
@@ -43,7 +43,7 @@ Branch: `codex/ARGUS-SHADOW-001-shadow-trading-wiring-audit`
 Automated result: `AUTOMATED_PASS`
 
 Integration state: `COMPLETE` on local `master` at `bb962be`; the matching feature
-branch is remotely backed up. Remote `master` remains at `69feedf`.
+branch and the integrated baseline are remotely backed up through `origin/master`.
 
 - The decision freezes the exact source-report text, source hash, candidate row,
   decision timestamp, canonical TradePlan, plan fingerprint, and Risk Governor result.
@@ -590,7 +590,7 @@ orders. The exact-root removal command remains available for rollback.
 ## R028 Integrated Workstation Chrome
 
 Status: `COMPLETE`; automated and manual proof passed; fast-forwarded into local
-`master` through `1d3d8e5`; unpushed
+`master` through `1d3d8e5` and backed up through `origin/master`
 
 Automated evidence:
 
@@ -654,7 +654,8 @@ credentials, paper/live execution, or changes to trading behavior.
 ## R029 Canonical WPF Launcher
 
 Status: `COMPLETE`; automated, physical CLI, and Steven manual icon/taskbar proof
-passed; fast-forwarded into local `master` through `1d3d8e5`; unpushed
+passed; fast-forwarded into local `master` through `1d3d8e5` and backed up through
+`origin/master`
 
 Automated evidence:
 

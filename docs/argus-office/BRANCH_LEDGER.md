@@ -4,14 +4,14 @@ Date reconciled: 2026-07-25
 
 ## Current Truth
 
-Local `master` through verified R028/R029 merge target `1d3d8e5` plus this reconciliation is the canonical merged product baseline. It contains the Python automation/simulation foundation, R004-R029 workstation work, ARGUS-SHADOW-001/002/003, and the credential-free SCHWAB-001 loopback/certificate foundation. Local `master` is 43 commits ahead of `origin/master` at `69feedf` after this reconciliation; nothing after R012 has been pushed.
+Local and remote `master` through this reconciliation are the canonical product baseline. They contain the Python automation/simulation foundation, R004-R029 workstation work, ARGUS-SHADOW-001/002/003, and the credential-free SCHWAB-001 loopback/certificate foundation. Steven separately approved the remote backup after the 43-commit range passed reachability, prohibited-path, large-file, and secret-risk preflight.
 
 Git evidence at reconciliation time:
 
 - R027 and SCHWAB-001 are integrated into local `master` through `5f156eb`.
 - R028 integrated workstation chrome and R029 canonical WPF launcher/icon passed automated and Steven manual verification.
-- Steven approved the integration, and Git Steward fast-forwarded local `master` from `5f156eb` through R029 closeout `1d3d8e5` without a merge commit. Nothing was pushed.
-- Remote `master` remains at `69feedf46c6e2c94499d4256b63b355f1619bf14`.
+- Steven approved the integration, and Git Steward fast-forwarded local `master` from `5f156eb` through R029 closeout `1d3d8e5` without a merge commit.
+- Steven later approved the remote backup; Git Steward pushed the complete reconciled baseline to `origin/master` and verified the exact advertised HEAD.
 - ARGUS-SHADOW-001's matching feature branch is remotely backed up at `bb962be`; ARGUS-SHADOW-002 is not pushed.
 - `codex/ARGUS-A016T-schwab-paper-api-response` records Schwab's live-only, no-paperMoney, no-sandbox answer on a separate unmerged branch. A017 is blocked by vendor capability.
 - `codex/ARGUS-R026-wpf-phase12-clean-room-integration` and R013-R025 are preserved source/audit branches superseded by the merged R027 path.
@@ -63,9 +63,9 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | `1d3d8e5` plus this reconciliation | No; `origin/master` remains at `69feedf` | Yes | `ACTIVE` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample lock, and credential-free SCHWAB-001 foundation. | Preserve clean; remote backup, OAuth, and official sample start remain separate approval gates. |
-| `codex/ARGUS-R029-canonical-wpf-launcher` | `1d3d8e5` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Makes the tracked normal launcher path WPF-only, restores the canonical icon, retains explicit Qt rollback, and refuses arbitrary review builds. | Preserve as audit history; do not merge again. |
-| `codex/ARGUS-R028-integrated-workstation-chrome` | `0e7a6ce` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Replaces the separate native title strip with integrated dark WPF chrome while preserving native window interactions and one global mode treatment. | Preserve as audit history; do not merge again. |
+| `master` | This reconciliation | Yes; synchronized with `origin/master` | Yes | `ACTIVE` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample lock, and credential-free SCHWAB-001 foundation. | Preserve clean; OAuth and official sample start remain separate approval gates. |
+| `codex/ARGUS-R029-canonical-wpf-launcher` | `1d3d8e5` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Makes the tracked normal launcher path WPF-only, restores the canonical icon, retains explicit Qt rollback, and refuses arbitrary review builds. | Preserve as audit history; do not merge again. |
+| `codex/ARGUS-R028-integrated-workstation-chrome` | `0e7a6ce` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Replaces the separate native title strip with integrated dark WPF chrome while preserving native window interactions and one global mode treatment. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R027-integrate-r026-with-shadow-baseline` | `6fe3f97` plus accepted repair/closeout history through local `master` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves Shadow lifecycle/review/sample lock while adding the R013-R025 read-only WPF stack and R026 test hardening. | Preserve as audit history; do not merge again. |
 | `safety/ARGUS-R027-before-r026-integration` | `164e32e` | No | Points to current master | `DO_NOT_USE` | Safety pointer for the pre-R027 canonical baseline. | Preserve until R027 is resolved and reviewed. |
 | `codex/ARGUS-TEST-001-unattended-qt-discovery` | `03ab813` | No | No | `SUPERSEDED` | Independent copy of the same two Qt test fixes carried by R026 `838ed22`; R027 full discovery passes 641/641. | Preserve as audit evidence; do not merge separately. |
