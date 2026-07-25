@@ -29,6 +29,7 @@ mode.
 | ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated into local `master`; not pushed | The preserved checklist remains an audit reference; merge approval does not start the official sample |
 | ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated into local `master`; not pushed | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
+| SCHWAB-001B production-local certificate trust | Staging and proof tooling `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is verified untrusted | `MANUAL_PENDING_SECURITY_STATE_CHANGE` | Implemented on `codex/ARGUS-SCHWAB-001-loopback-oauth-listener`; not merged or pushed | After Codex installs the exact staged root and opens the synthetic local proof, confirm the page has no certificate warning and displays no sensitive value |
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
@@ -518,32 +519,53 @@ This is not a Git check. Codex will run the commands and report the exact genera
 version and thumbprint. Steven's physical check is limited to the browser trust
 result.
 
-Before installation, Codex must prove:
+Completed production-local staging evidence:
+
+1. Preflight found zero matching certificates in `CurrentUser\Root`, no existing
+   default production material, and no listener on exact address `127.0.0.1:8182`.
+2. Exactly one production-local version was staged outside Git:
+   `20260725T004100Z-feaa7bc59097`.
+3. Root subject: `CN=Momentum Hunter Local OAuth Root`.
+4. Root SHA-1: `E35BB94F68A98BFCADB6E69ACD63961BBE3AA76F`.
+5. Root SHA-256:
+   `C926D9F89B5E5D11BF3179B04D4D7928A0325AD8514064E9658D05BB8045BEA1`.
+6. Leaf SHA-256:
+   `74B38DE72175834B325EDDF17C9BA1A934543A525D7831A609C2876BC618DA3E`.
+7. Leaf validity: `2026-07-25T00:36:00Z` through
+   `2027-07-25T00:41:00Z`.
+8. Result: `STAGED_VERIFIED_UNTRUSTED`; encrypted PKCS8, DPAPI secret,
+   current-user-only ACL, exact chain, hostname, and local TLS checks pass.
+9. Windows trust remains false, exact port `8182` remains closed, and no Schwab
+   credential, OAuth request, account access, broker connection, or order action
+   occurred.
+10. Browser-proof success, untrusted-material refusal, browser-launch failure
+    cleanup, and sanitized output tests pass. Focused Schwab tests pass 36/36 and
+    full Python discovery passes 670/670.
+
+Immediately before trust installation, Codex must recheck:
 
 1. No certificate with subject `CN=Momentum Hunter Local OAuth Root` exists in
    `Cert:\CurrentUser\Root`.
-2. No production material exists under
-   `%LOCALAPPDATA%\MomentumHunter\Schwab\oauth-loopback`.
+2. The only recognized production-local version remains
+   `20260725T004100Z-feaa7bc59097` and still passes
+   `STAGED_VERIFIED_UNTRUSTED`.
 3. Nothing is listening on exact address `127.0.0.1:8182`.
 
-During installation, Codex must:
+Remaining trust installation steps for Codex:
 
-1. Stage exactly one version through the committed certificate manager.
-2. Report only version ID, certificate subject, SHA thumbprints, validity, ACL
-   status, and `STAGED_VERIFIED_UNTRUSTED`; never display the leaf-key password.
-3. Confirm the encrypted key, DPAPI record, certificate chain, and metadata are
-   outside Git and readable only by Steven's Windows user.
-4. Install only the staged root's exact thumbprint into `CurrentUser\Root`; do not
+1. Reconfirm the staged version, zero current matching trusted roots, and free exact
+   callback port.
+2. Install only the staged root's exact thumbprint into `CurrentUser\Root`; do not
    use `LocalMachine`, an administrator store, or a wildcard subject removal.
-5. Re-run chain, hostname, TLS, trust, and ACL verification and require
+3. Re-run chain, hostname, TLS, trust, and ACL verification and require
    `TRUSTED_VERIFIED`.
+4. Never display the leaf-key password or expose any credential.
 
 Steven's browser check:
 
-1. Codex starts the one-use listener on
-   `https://127.0.0.1:8182/oauth/callback` with a synthetic state and no Schwab
-   credentials.
-2. Open the exact local URL Codex provides. The page must open without a certificate
+1. Codex first asks whether browser control is okay, then runs the one-use
+   credential-free proof on `https://127.0.0.1:8182/oauth/callback`.
+2. The local page opens automatically. It must open without a certificate
    privacy warning, red address bar, advanced-warning bypass, or hostname error.
 3. The page must say the local authorization response was received and may be
    closed. It must not display a code, state value, credential, token, account, or

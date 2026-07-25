@@ -4,6 +4,7 @@ import ast
 import io
 import json
 import os
+import socket
 import ssl
 import tempfile
 import unittest
@@ -11,15 +12,18 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 from urllib.request import HTTPSHandler, ProxyHandler, build_opener
 
 import momentum_hunter.schwab_loopback_certificate as certificate_module
 from momentum_hunter.schwab_loopback_certificate import (
     INSTALL_TRUST_CONFIRMATION,
     REMOVE_TRUST_CONFIRMATION,
+    BrowserCertificateProof,
     LoopbackCertificateError,
     WindowsLoopbackCertificateManager,
     main,
+    run_browser_certificate_proof,
 )
 from momentum_hunter.schwab_oauth_listener import OneShotOAuthCallbackListener
 from momentum_hunter.schwab_setup import WindowsDpapiProtector, generate_oauth_state
@@ -114,6 +118,81 @@ class WindowsLoopbackCertificateTests(unittest.TestCase):
         with self.assertRaisesRegex(LoopbackCertificateError, "not trusted"):
             self.manager.listener_config(self.material.metadata.version_id)
 
+    def test_browser_certificate_proof_runs_synthetic_callback_and_closes(self) -> None:
+        opened_urls: list[str] = []
+        response_bodies: list[str] = []
+        client_context = ssl.create_default_context(
+            cafile=str(self.material.root_certificate_file)
+        )
+        opener = build_opener(
+            ProxyHandler({}),
+            HTTPSHandler(context=client_context),
+        )
+
+        def open_local_proof(url: str) -> bool:
+            opened_urls.append(url)
+            with opener.open(url, timeout=2.0) as response:
+                self.assertEqual(200, response.status)
+                response_bodies.append(response.read().decode("utf-8"))
+            return True
+
+        proof = run_browser_certificate_proof(
+            self.manager,
+            self.material.metadata.version_id,
+            browser_opener=open_local_proof,
+            timeout_seconds=2.0,
+            require_windows_trust=False,
+            test_only_allow_ephemeral_port=True,
+        )
+        self.assertEqual("BROWSER_TRUST_PROOF_PASSED", proof.status)
+        self.assertTrue(proof.listener_closed)
+        self.assertFalse(proof.credentials_loaded)
+        self.assertFalse(proof.oauth_attempted)
+        self.assertFalse(proof.broker_connected)
+        self.assertEqual(1, len(opened_urls))
+        query = parse_qs(urlsplit(opened_urls[0]).query)
+        self.assertEqual(["LOCAL-CERTIFICATE-PROOF"], query["code"])
+        self.assertEqual(1, len(query["state"]))
+        self.assertNotIn(query["state"][0], response_bodies[0])
+        self.assertNotIn("LOCAL-CERTIFICATE-PROOF", response_bodies[0])
+        self.assertFalse(self.manager.is_trusted(self.material.metadata.version_id))
+        with self.assertRaises(OSError):
+            socket.create_connection((proof.host, proof.port), timeout=0.2)
+
+    def test_browser_certificate_proof_requires_windows_trust_by_default(self) -> None:
+        browser_opener = mock.Mock(return_value=True)
+        with self.assertRaisesRegex(LoopbackCertificateError, "not trusted"):
+            run_browser_certificate_proof(
+                self.manager,
+                self.material.metadata.version_id,
+                browser_opener=browser_opener,
+                timeout_seconds=1.0,
+                test_only_allow_ephemeral_port=True,
+            )
+        browser_opener.assert_not_called()
+
+    def test_browser_certificate_proof_closes_if_browser_cannot_open(self) -> None:
+        opened_urls: list[str] = []
+
+        def refuse_browser(url: str) -> bool:
+            opened_urls.append(url)
+            return False
+
+        with self.assertRaisesRegex(LoopbackCertificateError, "could not open"):
+            run_browser_certificate_proof(
+                self.manager,
+                self.material.metadata.version_id,
+                browser_opener=refuse_browser,
+                timeout_seconds=1.0,
+                require_windows_trust=False,
+                test_only_allow_ephemeral_port=True,
+            )
+        self.assertEqual(1, len(opened_urls))
+        parsed = urlsplit(opened_urls[0])
+        self.assertIsNotNone(parsed.port)
+        with self.assertRaises(OSError):
+            socket.create_connection((str(parsed.hostname), int(parsed.port)), timeout=0.2)
+
     def test_trust_mutation_requires_exact_confirmation(self) -> None:
         version_id = self.material.metadata.version_id
         with self.assertRaisesRegex(LoopbackCertificateError, "confirmation"):
@@ -133,6 +212,38 @@ class WindowsLoopbackCertificateTests(unittest.TestCase):
         self.assertFalse(payload["broker_connected"])
         self.assertEqual(1, len(payload["versions"]))
         self.assertEqual("STAGED_UNTRUSTED", payload["versions"][0]["trust_status"])
+
+    def test_cli_browser_proof_output_is_sanitized(self) -> None:
+        proof = BrowserCertificateProof(
+            status="BROWSER_TRUST_PROOF_PASSED",
+            version_id=self.material.metadata.version_id,
+            host="127.0.0.1",
+            port=8182,
+            listener_closed=True,
+        )
+        output = io.StringIO()
+        with mock.patch.object(
+            certificate_module,
+            "run_browser_certificate_proof",
+            return_value=proof,
+        ):
+            with redirect_stdout(output):
+                result = main(
+                    [
+                        "--browser-proof",
+                        self.material.metadata.version_id,
+                        "--root",
+                        str(self.root_directory),
+                    ]
+                )
+        payload = json.loads(output.getvalue())
+        self.assertEqual(0, result)
+        self.assertTrue(payload["listener_closed"])
+        self.assertFalse(payload["credentials_loaded"])
+        self.assertFalse(payload["oauth_attempted"])
+        self.assertFalse(payload["broker_connected"])
+        self.assertNotIn("code", payload)
+        self.assertNotIn("state", payload)
 
     def test_version_identity_rejects_path_traversal(self) -> None:
         for version_id in ("../outside", "..", "bad/name", "bad\\name"):

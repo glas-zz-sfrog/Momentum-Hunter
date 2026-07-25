@@ -15,16 +15,19 @@ import ssl
 import subprocess
 import threading
 import uuid
+import webbrowser
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlencode
 
 from momentum_hunter.schwab_oauth_listener import (
     REGISTERED_CALLBACK_HOST,
     REGISTERED_CALLBACK_PATH,
     REGISTERED_CALLBACK_PORT,
     LoopbackListenerConfig,
+    OneShotOAuthCallbackListener,
 )
 from momentum_hunter.schwab_setup import (
     DEFAULT_SECRET_PATH,
@@ -40,6 +43,7 @@ INSTALL_TRUST_CONFIRMATION = "INSTALL_MOMENTUM_HUNTER_LOOPBACK_ROOT"
 REMOVE_TRUST_CONFIRMATION = "REMOVE_MOMENTUM_HUNTER_LOOPBACK_ROOT"
 ROOT_SUBJECT = "CN=Momentum Hunter Local OAuth Root"
 LEAF_SUBJECT = "CN=127.0.0.1"
+_BROWSER_PROOF_CODE = "LOCAL-CERTIFICATE-PROOF"
 _VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,95}$")
 
 
@@ -117,6 +121,18 @@ class LoopbackCertificateVerification:
     private_key_encrypted: bool
     tls_handshake_passed: bool
     acl_hardened: bool
+
+
+@dataclass(frozen=True)
+class BrowserCertificateProof:
+    status: str
+    version_id: str
+    host: str
+    port: int
+    listener_closed: bool
+    credentials_loaded: bool = False
+    oauth_attempted: bool = False
+    broker_connected: bool = False
 
 
 _GENERATE_CERTIFICATE_SCRIPT = r"""
@@ -967,6 +983,54 @@ def _status_payload(manager: WindowsLoopbackCertificateManager) -> dict[str, obj
     }
 
 
+def run_browser_certificate_proof(
+    manager: WindowsLoopbackCertificateManager,
+    version_id: str,
+    *,
+    browser_opener: Callable[[str], bool] | None = None,
+    timeout_seconds: float = 120.0,
+    require_windows_trust: bool = True,
+    test_only_allow_ephemeral_port: bool = False,
+) -> BrowserCertificateProof:
+    """Open a synthetic localhost callback to prove browser trust without Schwab access."""
+    config = manager.listener_config(
+        version_id,
+        require_windows_trust=require_windows_trust,
+        timeout_seconds=timeout_seconds,
+        test_only_allow_ephemeral_port=test_only_allow_ephemeral_port,
+    )
+    listener = OneShotOAuthCallbackListener(config)
+    state = secrets.token_urlsafe(32)
+    callback_url = listener.start(expected_state=state)
+    proof_url = f"{callback_url}?{urlencode({'code': _BROWSER_PROOF_CODE, 'state': state})}"
+    open_browser = browser_opener or (lambda url: webbrowser.open(url, new=2))
+    try:
+        if not open_browser(proof_url):
+            raise LoopbackCertificateError("The local browser certificate proof could not open a browser.")
+        callback = listener.wait(timeout_seconds=timeout_seconds + 1.0)
+        if callback.authorization_code != _BROWSER_PROOF_CODE:
+            raise LoopbackCertificateError("The local browser certificate proof returned an invalid result.")
+    finally:
+        listener.close()
+    if listener.is_running or not _tcp_listener_is_closed(config.host, listener.bound_port):
+        raise LoopbackCertificateError("The local browser certificate proof listener did not close safely.")
+    return BrowserCertificateProof(
+        status="BROWSER_TRUST_PROOF_PASSED",
+        version_id=version_id,
+        host=config.host,
+        port=listener.bound_port,
+        listener_closed=True,
+    )
+
+
+def _tcp_listener_is_closed(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=0.2):
+            return False
+    except OSError:
+        return True
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Manage the local Schwab OAuth loopback certificate.")
     action = parser.add_mutually_exclusive_group()
@@ -974,8 +1038,10 @@ def main(argv: list[str] | None = None) -> int:
     action.add_argument("--status", action="store_true")
     action.add_argument("--install-trust", metavar="VERSION")
     action.add_argument("--remove-trust", metavar="VERSION")
+    action.add_argument("--browser-proof", metavar="VERSION")
     parser.add_argument("--root", type=Path, default=DEFAULT_CERTIFICATE_ROOT)
     parser.add_argument("--confirm-trust-change", default="")
+    parser.add_argument("--proof-timeout", type=float, default=120.0)
     args = parser.parse_args(argv)
     manager = WindowsLoopbackCertificateManager(root_directory=args.root)
     if args.stage:
@@ -1005,6 +1071,14 @@ def main(argv: list[str] | None = None) -> int:
             confirmation=args.confirm_trust_change,
         )
         print(json.dumps({"removed": removed, "version_id": args.remove_trust}, indent=2))
+        return 0
+    if args.browser_proof:
+        proof = run_browser_certificate_proof(
+            manager,
+            args.browser_proof,
+            timeout_seconds=args.proof_timeout,
+        )
+        print(json.dumps(asdict(proof), indent=2))
         return 0
     print(json.dumps(_status_payload(manager), indent=2))
     return 0
