@@ -648,8 +648,8 @@ credentials, paper/live execution, or changes to trading behavior.
 ## R029 Canonical WPF Launcher
 
 Status: `IMPLEMENTED_PENDING_MERGE`; branch
-`codex/ARGUS-R029-canonical-wpf-launcher`; automated proof passed, manual launch
-confirmation deferred, unmerged, and unpushed
+`codex/ARGUS-R029-canonical-wpf-launcher`; automated and physical CLI launch proof
+passed, unmerged, and unpushed
 
 Automated evidence:
 
@@ -664,19 +664,31 @@ Automated evidence:
 - Focused launcher/startup tests pass 9/9, full Python discovery passes 679/679,
   all .NET tests pass 214/214, and Release compilation passes with zero warnings
   and zero errors.
-- No app was stopped, opened, focused, or otherwise controlled during this task.
+- Subsequent physical verification stopped the known legacy Qt and isolated-review
+  processes, launched the checkout Release WPF executable through the ordinary
+  launcher, and confirmed one responsive top-level `Momentum Hunter Workstation`.
+- A second ordinary launch retained the same WPF PID and one top-level window.
+- The stale Start Menu shortcut no longer targets the R027 review package. Desktop,
+  Startup, and Start Menu launch points now converge on the repository `run.py`
+  launcher.
+- All 20 obsolete `%LOCALAPPDATA%\MomentumHunter\Builds` review directories were
+  removed after confirming no process ran from that root. No old WPF executable
+  remains under Momentum Hunter local app data.
+- Both R012A and R012B artwork remain rejected. The generic Windows application icon
+  is expected until a separate R012C visual-identity task supplies approved artwork.
 
-When Steven is available, verify these one by one:
+Physical results:
 
-1. Exit the currently running legacy Qt window and WPF workstation at a convenient
-   time; do not interrupt an active monitoring session.
-2. Use the ordinary Momentum Hunter shortcut or tracked launcher.
-3. Confirm the WPF `Momentum Hunter Workstation` opens and the legacy PySide window
-   does not.
-4. Launch Momentum Hunter again and confirm the existing WPF instance restores or
-   activates instead of creating a second workstation.
-5. Confirm only one Momentum Hunter workstation choice appears in the taskbar and
-   Alt+Tab after the old Qt process is gone.
+1. `CODEX_VERIFIED`: known legacy Qt and isolated review processes were stopped.
+2. `CODEX_VERIFIED`: the ordinary launcher opened the checkout Release WPF
+   `Momentum Hunter Workstation`; legacy PySide did not open.
+3. `CODEX_VERIFIED`: a second ordinary launch retained the same responsive WPF PID
+   and one top-level workstation window.
+4. `CODEX_VERIFIED`: the obsolete review-build root contains zero build directories
+   and zero WPF executables.
+5. `MANUAL_PENDING`: Steven may visually confirm the taskbar shows only the current
+   workstation while it is open. A generic Windows icon is not a regression; R012C
+   remains unimplemented because both earlier custom artworks were rejected.
 
 This launcher change grants no credential, OAuth, account, broker, Paper, Live,
 order, provider-fetch, sample-start, merge, or push authority.
