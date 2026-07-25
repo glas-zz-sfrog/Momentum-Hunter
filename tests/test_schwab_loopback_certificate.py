@@ -79,6 +79,36 @@ class WindowsLoopbackCertificateTests(unittest.TestCase):
         self.assertTrue(verification.acl_hardened)
         self.assertGreaterEqual(verification.days_remaining, 360)
 
+    def test_certutil_installer_targets_only_current_user_root(self) -> None:
+        completed = SimpleNamespace(returncode=0, stdout="", stderr="")
+        with mock.patch.object(certificate_module.subprocess, "run", return_value=completed) as run:
+            self.manager._install_current_user_root(self.material)
+        args, kwargs = run.call_args
+        self.assertEqual(
+            [
+                str(Path(os.environ["SystemRoot"]) / "System32" / "certutil.exe"),
+                "-user",
+                "-f",
+                "-addstore",
+                "Root",
+                str(self.material.root_certificate_file),
+            ],
+            args[0],
+        )
+        self.assertEqual(300, kwargs["timeout"])
+        self.assertTrue(kwargs["capture_output"])
+        self.assertNotIn("creationflags", kwargs)
+        self.assertNotIn(
+            self.manager._load_secret(self.material)["private_key_password"],
+            json.dumps(args[0]),
+        )
+
+    def test_certutil_confirmation_timeout_fails_safely(self) -> None:
+        timeout = certificate_module.subprocess.TimeoutExpired(["certutil"], 300)
+        with mock.patch.object(certificate_module.subprocess, "run", side_effect=timeout):
+            with self.assertRaisesRegex(LoopbackCertificateError, "confirmation"):
+                self.manager._install_current_user_root(self.material)
+
     def test_encrypted_material_runs_one_use_listener_without_trust_install(self) -> None:
         config = self.manager.listener_config(
             self.material.metadata.version_id,
@@ -337,23 +367,27 @@ class WindowsLoopbackCertificateTests(unittest.TestCase):
 
     def test_explicit_trust_lifecycle_contract_is_reversible_with_fake_store(self) -> None:
         calls: list[str] = []
+        state = {"trusted": False}
+
+        def fake_installer(_material: object) -> None:
+            calls.append("install")
+            state["trusted"] = True
 
         def fake_runner(script: str, payload: dict[str, object]) -> dict[str, object]:
             if "AreAccessRulesProtected" in script or "SetAccessControl" in script:
                 return self.manager._run_powershell(script, payload)
-            if "store.Add" in script:
-                calls.append("install")
-                return {"installed": True}
             if "store.Remove" in script:
                 calls.append("remove")
+                state["trusted"] = False
                 return {"removed": 1}
             calls.append("status")
-            return {"trusted": "install" in calls and "remove" not in calls, "match_count": 1}
+            return {"trusted": state["trusted"], "match_count": 1}
 
         manager = WindowsLoopbackCertificateManager(
             root_directory=self.root_directory,
             protector=WindowsDpapiProtector(),
             powershell_runner=fake_runner,
+            trust_installer=fake_installer,
         )
         version_id = self.material.metadata.version_id
         verification = manager.install_trust(
@@ -376,22 +410,27 @@ class WindowsLoopbackCertificateTests(unittest.TestCase):
 
     def test_failed_trust_install_attempts_exact_rollback(self) -> None:
         calls: list[str] = []
+        state = {"trusted": False}
+
+        def failing_installer(_material: object) -> None:
+            calls.append("install-failed-after-add")
+            state["trusted"] = True
+            raise LoopbackCertificateError("synthetic post-add failure")
 
         def failing_runner(script: str, payload: dict[str, object]) -> dict[str, object]:
             if "AreAccessRulesProtected" in script or "SetAccessControl" in script:
                 return self.manager._run_powershell(script, payload)
-            if "store.Add" in script:
-                calls.append("install-failed-after-add")
-                raise LoopbackCertificateError("synthetic post-add failure")
             if "store.Remove" in script:
                 calls.append("rollback-remove")
+                state["trusted"] = False
                 return {"removed": 1}
-            return {"trusted": False, "match_count": 0}
+            return {"trusted": state["trusted"], "match_count": 1}
 
         manager = WindowsLoopbackCertificateManager(
             root_directory=self.root_directory,
             protector=WindowsDpapiProtector(),
             powershell_runner=failing_runner,
+            trust_installer=failing_installer,
         )
         version_id = self.material.metadata.version_id
         with self.assertRaisesRegex(LoopbackCertificateError, "post-add"):

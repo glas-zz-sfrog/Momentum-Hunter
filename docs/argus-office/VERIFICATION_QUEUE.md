@@ -29,7 +29,7 @@ mode.
 | ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated into local `master`; not pushed | The preserved checklist remains an audit reference; merge approval does not start the official sample |
 | ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated into local `master`; not pushed | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
-| SCHWAB-001B production-local certificate trust | Staging and proof tooling `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is verified untrusted | `MANUAL_PENDING_SECURITY_STATE_CHANGE` | Implemented on `codex/ARGUS-SCHWAB-001-loopback-oauth-listener`; not merged or pushed | After Codex installs the exact staged root and opens the synthetic local proof, confirm the page has no certificate warning and displays no sensitive value |
+| SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and 672 total Python tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Implemented on `codex/ARGUS-SCHWAB-001-loopback-oauth-listener`; not merged or pushed | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
@@ -513,13 +513,12 @@ Deferred to later separately gated work:
 
 ## SCHWAB-001B Production Certificate Trust
 
-Status: `MANUAL_PENDING_SECURITY_STATE_CHANGE`
+Status: `PASS`
 
-This is not a Git check. Codex will run the commands and report the exact generated
-version and thumbprint. Steven's physical check is limited to the browser trust
-result.
+This was not a Git check. Steven physically confirmed the exact Windows root warning,
+and Codex independently verified the resulting Chrome page and listener shutdown.
 
-Completed production-local staging evidence:
+Completed production-local trust evidence:
 
 1. Preflight found zero matching certificates in `CurrentUser\Root`, no existing
    default production material, and no listener on exact address `127.0.0.1:8182`.
@@ -533,46 +532,25 @@ Completed production-local staging evidence:
    `74B38DE72175834B325EDDF17C9BA1A934543A525D7831A609C2876BC618DA3E`.
 7. Leaf validity: `2026-07-25T00:36:00Z` through
    `2027-07-25T00:41:00Z`.
-8. Result: `STAGED_VERIFIED_UNTRUSTED`; encrypted PKCS8, DPAPI secret,
-   current-user-only ACL, exact chain, hostname, and local TLS checks pass.
-9. Windows trust remains false, exact port `8182` remains closed, and no Schwab
-   credential, OAuth request, account access, broker connection, or order action
-   occurred.
-10. Browser-proof success, untrusted-material refusal, browser-launch failure
-    cleanup, and sanitized output tests pass. Focused Schwab tests pass 36/36 and
-    full Python discovery passes 670/670.
-
-Immediately before trust installation, Codex must recheck:
-
-1. No certificate with subject `CN=Momentum Hunter Local OAuth Root` exists in
-   `Cert:\CurrentUser\Root`.
-2. The only recognized production-local version remains
-   `20260725T004100Z-feaa7bc59097` and still passes
-   `STAGED_VERIFIED_UNTRUSTED`.
-3. Nothing is listening on exact address `127.0.0.1:8182`.
-
-Remaining trust installation steps for Codex:
-
-1. Reconfirm the staged version, zero current matching trusted roots, and free exact
-   callback port.
-2. Install only the staged root's exact thumbprint into `CurrentUser\Root`; do not
-   use `LocalMachine`, an administrator store, or a wildcard subject removal.
-3. Re-run chain, hostname, TLS, trust, and ACL verification and require
-   `TRUSTED_VERIFIED`.
-4. Never display the leaf-key password or expose any credential.
-
-Steven's browser check:
-
-1. Codex first asks whether browser control is okay, then runs the one-use
-   credential-free proof on `https://127.0.0.1:8182/oauth/callback`.
-2. The local page opens automatically. It must open without a certificate
-   privacy warning, red address bar, advanced-warning bypass, or hostname error.
-3. The page must say the local authorization response was received and may be
-   closed. It must not display a code, state value, credential, token, account, or
-   broker status.
-4. After the page loads, Codex confirms port `8182` is closed and no second callback
-   is accepted.
-5. Report `PASS SCHWAB CERTIFICATE` or attach a screenshot of the browser warning.
+8. Steven confirmed the Windows warning displayed exactly
+   `Momentum Hunter Local OAuth Root` and SHA-1
+   `E35BB94F68A98BFCADB6E69ACD63961BBE3AA76F` before selecting Yes.
+9. Exactly one matching certificate now exists in `CurrentUser\Root`; it has no
+   private key. The manager reports `TRUSTED_VERIFIED`, and the exact active-version
+   marker exists outside Git.
+10. The initial `.NET` store write and an externally timed `certutil` attempt exposed
+    Windows' mandatory root-confirmation behavior without leaving partial trust.
+    The production manager now invokes current-user `certutil` directly, allows five
+    minutes for the visible confirmation, verifies exact trust afterward, skips an
+    already trusted version, and retains exact rollback behavior.
+11. Chrome opened `https://127.0.0.1:8182/oauth/callback` without a privacy
+    interstitial or hostname error and displayed only:
+    `Momentum Hunter received the local authorization response. You may close this browser tab.`
+12. The browser proof returned `BROWSER_TRUST_PROOF_PASSED`; exact port `8182`
+    closed after one callback. Credentials loaded, OAuth attempted, and broker
+    connected all remained false.
+13. Compileall passes, focused Schwab tests pass 47/47, and full Python discovery
+    passes 672/672. No protected product or execution behavior changed.
 
 Passing this check authorizes only local HTTPS trust. It does not authorize Schwab
 credentials, real OAuth, account access, market-data requests, broker preview, or

@@ -324,38 +324,6 @@ try {
 }
 """
 
-_INSTALL_TRUST_SCRIPT = r"""
-$ErrorActionPreference = "Stop"
-$payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
-$certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromPemFile(
-    [string]$payload.root_certificate_file
-)
-$expectedThumbprint = ([string]$payload.root_thumbprint).Replace(" ", "").ToUpperInvariant()
-if ($certificate.Thumbprint.Replace(" ", "").ToUpperInvariant() -ne $expectedThumbprint) {
-    throw "Root certificate thumbprint does not match staged metadata."
-}
-$store = [Security.Cryptography.X509Certificates.X509Store]::new(
-    [Security.Cryptography.X509Certificates.StoreName]::Root,
-    [Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
-)
-try {
-    $store.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-    $matches = @(
-        $store.Certificates | Where-Object {
-            $_.Thumbprint.Replace(" ", "").ToUpperInvariant() -eq $expectedThumbprint
-        }
-    )
-    if ($matches.Count -eq 0) {
-        $store.Add($certificate)
-    }
-    @{ installed = $true; thumbprint = $expectedThumbprint } |
-        ConvertTo-Json -Compress
-} finally {
-    $store.Close()
-    $certificate.Dispose()
-}
-"""
-
 _REMOVE_TRUST_SCRIPT = r"""
 $ErrorActionPreference = "Stop"
 $payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
@@ -491,11 +459,13 @@ class WindowsLoopbackCertificateManager:
         protector: WindowsDpapiProtector | None = None,
         powershell_executable: str | None = None,
         powershell_runner: Callable[[str, dict[str, object]], dict[str, object]] | None = None,
+        trust_installer: Callable[[LoopbackCertificateMaterial], None] | None = None,
     ) -> None:
         self.root_directory = Path(root_directory)
         self.protector = protector or WindowsDpapiProtector()
         self._powershell_executable = powershell_executable
         self._powershell_runner = powershell_runner
+        self._trust_installer = trust_installer
 
     @property
     def versions_directory(self) -> Path:
@@ -621,15 +591,10 @@ class WindowsLoopbackCertificateManager:
         if confirmation != INSTALL_TRUST_CONFIRMATION:
             raise LoopbackCertificateError("Installing loopback trust requires the exact confirmation phrase.")
         material = self.load(version_id)
-        self.verify(version_id, require_windows_trust=False)
+        preflight = self.verify(version_id, require_windows_trust=False)
         try:
-            self._run_powershell(
-                _INSTALL_TRUST_SCRIPT,
-                {
-                    "root_certificate_file": str(material.root_certificate_file),
-                    "root_thumbprint": material.metadata.root_store_thumbprint_sha1,
-                },
-            )
+            if not preflight.windows_trusted:
+                self._install_current_user_root(material)
             verification = self.verify(version_id, require_windows_trust=True)
             trusted_metadata = replace(
                 material.metadata,
@@ -648,16 +613,17 @@ class WindowsLoopbackCertificateManager:
                 },
             )
         except Exception:
-            try:
-                self._run_powershell(
-                    _REMOVE_TRUST_SCRIPT,
-                    {
-                        "root_thumbprint": material.metadata.root_store_thumbprint_sha1,
-                        "root_subject": material.metadata.root_subject,
-                    },
-                )
-            except LoopbackCertificateError:
-                pass
+            if not preflight.windows_trusted:
+                try:
+                    self._run_powershell(
+                        _REMOVE_TRUST_SCRIPT,
+                        {
+                            "root_thumbprint": material.metadata.root_store_thumbprint_sha1,
+                            "root_subject": material.metadata.root_subject,
+                        },
+                    )
+                except LoopbackCertificateError:
+                    pass
             try:
                 self._write_metadata(material.metadata_file, material.metadata)
                 self._harden_version_acl(material)
@@ -665,6 +631,41 @@ class WindowsLoopbackCertificateManager:
                 pass
             raise
         return verification
+
+    def _install_current_user_root(self, material: LoopbackCertificateMaterial) -> None:
+        if self._trust_installer is not None:
+            self._trust_installer(material)
+            return
+        self._require_windows()
+        system_root = os.environ.get("SystemRoot", "")
+        certutil = Path(system_root) / "System32" / "certutil.exe"
+        if not system_root or not certutil.is_file():
+            raise LoopbackCertificateError("Windows certutil is required for local trust installation.")
+        try:
+            completed = subprocess.run(
+                [
+                    str(certutil),
+                    "-user",
+                    "-f",
+                    "-addstore",
+                    "Root",
+                    str(material.root_certificate_file),
+                ],
+                text=True,
+                capture_output=True,
+                timeout=300,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise LoopbackCertificateError(
+                "Windows root certificate confirmation was not completed before timeout."
+            ) from exc
+        except OSError as exc:
+            raise LoopbackCertificateError(
+                "Windows root certificate installation could not start."
+            ) from exc
+        if completed.returncode != 0:
+            raise LoopbackCertificateError("Windows root certificate installation failed safely.")
 
     def remove_trust(self, version_id: str, *, confirmation: str) -> bool:
         if confirmation != REMOVE_TRUST_CONFIRMATION:
