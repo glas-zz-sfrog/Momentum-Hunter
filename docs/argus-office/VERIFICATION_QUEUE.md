@@ -585,7 +585,36 @@ orders. The exact-root removal command remains available for rollback.
 
 ## R028 Integrated Workstation Chrome
 
-Status: `APPROVED_DIRECTION_NOT_STARTED`
+Status: `IMPLEMENTED_PENDING_MANUAL_QA`; branch
+`codex/ARGUS-R028-integrated-workstation-chrome`; branch-only, unmerged, and unpushed
+
+Automated evidence:
+
+- Focused chrome tests pass 4/4, including the supported `PerMonitorV2` project
+  declaration and non-elevated application manifest.
+- The complete .NET solution passes 214/214.
+- Release compilation with warnings treated as errors passes with zero warnings and
+  zero errors.
+- The diff is limited to WPF shell chrome, its focused tests, and this required
+  Roadmap/verification evidence. No protected product or execution path changed.
+
+Current physical evidence:
+
+- Checks 1, 2, 9, and 11 are `CODEX_UI_PASS` in the first `1180 x 820` render: the
+  light Windows strip is absent; identity, navigation, mode, utilities, and caption
+  controls share one dark surface; `REVIEW ONLY` remains the single concise global
+  state; and the compact row fits without clipping or overlap.
+- One R028 WPF process exposes one `Momentum Hunter Workstation` window. The
+  Command Palette remains an in-window overlay rather than a taskbar window.
+- Checks 3-8 are `MANUAL_PENDING`. Steven deliberately deferred drag, double-click,
+  Snap, resize, caption-control, `Alt+Space`, and cross-monitor interaction proof so
+  CLI-only roadmap work can continue without interrupting his computer use. Do not
+  infer those passes from XAML or compilation.
+- Check 10 is `STRUCTURAL_PASS`, `MANUAL_NOT_APPLICABLE`: the one
+  `EnvironmentBadge` contains a dormant red `LIVE MONEY` style trigger, but no live
+  mode, broker path, or order authority exists to activate it.
+- Review build:
+  `%LOCALAPPDATA%\MomentumHunter\Builds\R028-integrated-chrome-review\MomentumHunter.Desktop.Wpf.exe`
 
 Steven approved replacing the separate light Windows title strip with an integrated
 dark workstation surface after R027 closes. The thinkorswim screenshot supplied as

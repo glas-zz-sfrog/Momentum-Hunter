@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -62,6 +63,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
         DockManager.DocumentClosing += (_, eventArgs) => HandlePaneClosing(eventArgs.Document, eventArgs);
         LocationChanged += (_, _) => ScheduleShellStateCapture();
         SizeChanged += (_, _) => ScheduleShellStateCapture();
+        UpdateWindowChromeState();
     }
 
     public async Task InitializeAsync()
@@ -143,6 +145,14 @@ public partial class MainWindow : Window, IWorkstationPresentation
 
     private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (e.Key == Key.System && e.SystemKey == Key.Space)
+        {
+            var menuPosition = PointToScreen(new Point(0, 48));
+            SystemCommands.ShowSystemMenu(this, menuPosition);
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Escape && _viewModel.IsCommandPaletteOpen)
         {
             _viewModel.CloseCommandPalette();
@@ -166,6 +176,41 @@ public partial class MainWindow : Window, IWorkstationPresentation
     }
 
     private void OpenCommandPaletteButton_Click(object sender, RoutedEventArgs e) => OpenCommandPalette();
+
+    private void Window_StateChanged(object? sender, EventArgs e) => UpdateWindowChromeState();
+
+    private void MinimizeWindowButton_Click(object sender, RoutedEventArgs e) =>
+        SystemCommands.MinimizeWindow(this);
+
+    private void MaximizeRestoreWindowButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+        {
+            SystemCommands.RestoreWindow(this);
+        }
+        else
+        {
+            SystemCommands.MaximizeWindow(this);
+        }
+    }
+
+    private void CloseWindowButton_Click(object sender, RoutedEventArgs e) =>
+        SystemCommands.CloseWindow(this);
+
+    private void UpdateWindowChromeState()
+    {
+        if (MaximizeRestoreGlyph is null || MaximizeRestoreWindowButton is null)
+        {
+            return;
+        }
+
+        var isMaximized = WindowState == WindowState.Maximized;
+        MaximizeRestoreGlyph.Text = isMaximized ? "\uE923" : "\uE922";
+        MaximizeRestoreWindowButton.ToolTip = isMaximized ? "Restore down" : "Maximize";
+        AutomationProperties.SetName(
+            MaximizeRestoreWindowButton,
+            isMaximized ? "Restore window" : "Maximize window");
+    }
 
     private async void CommandPaletteSearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
