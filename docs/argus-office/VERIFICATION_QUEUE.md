@@ -33,7 +33,7 @@ mode.
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
-| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; current stacked recheck passes 209 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_IN_PROGRESS`; checks 5-7 and 15-17 pass, check 11 is independently verified, checks 4, 8-10, and 14 are `CODEX_UI_PASS` pending Steven acceptance, and checks 12-13 are unavailable with zero test trades | `IMPLEMENTED_PENDING_MERGE`; repair commit `f84106a` is preserved beneath verified implementation commit `3996a6f`; neither is merged or pushed | Steven accepts or rejects the four repaired visual surfaces in the `R027-manual-qa-repair-review` build; an accepted result may then be paired with separate explicit approval for an `--ff-only` local merge |
+| R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; current stacked recheck passes 209 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_IN_PROGRESS`; checks 5-11 and 14-17 pass, check 4 is `CODEX_UI_PASS` pending Steven acceptance, and checks 12-13 are unavailable with zero test trades | `IMPLEMENTED_PENDING_MERGE`; repair commit `f84106a` is preserved beneath verified implementation commit `3996a6f`; neither is merged or pushed | Steven accepts or rejects only the repaired Command Palette scope/miss wording; acceptance may then be paired with separate explicit approval for an `--ff-only` local merge |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
 
@@ -308,10 +308,11 @@ Manual evidence recorded 2026-07-24:
 - Manual review display convention: strikethrough means Steven addressed the item,
   orange means a newly added finding that still requires repair or physical
   reverification, and plain text means Steven has not addressed the item.
-- Check 5: `MANUAL_PASS` for the required `CRWV` / `5m` proof case. The persisted
-  minute-bar source contains only `CRWV`; other symbols must show an honest no-candles
-  state rather than fallback or fabricated candles. Daily OHLC coverage is broader
-  and is a separate source.
+- Check 5: `MANUAL_PASS` for the required `CRWV` / `5m` proof case. Steven
+  reconfirmed that only `CRWV` shows candles. The persisted minute-bar source contains
+  only `CRWV`; other symbols correctly show an honest no-candles state rather than a
+  fallback or fabricated chart. Daily OHLC coverage is broader and is a separate
+  source.
 - Check 6: `MANUAL_PASS`; hover inspection changes the inspected candle evidence.
 - Check 7: `MANUAL_PASS_PROVISIONAL`; `Plan`, `Why`, `Research`, and `History` look
   acceptable for the evidence currently available. A deeper content-quality review is
@@ -325,16 +326,17 @@ Manual evidence recorded 2026-07-24:
   Replace the internal group designator with an explicit state such as `Follows Hunter
   selection`, `Pinned to CRWV`, or `Independent`, while preserving the existing link
   behavior.
-- Checks 8-9: `CODEX_UI_PASS`, `STEVEN_ACCEPTANCE_PENDING`. The live Current pane
+- Checks 8-9: `MANUAL_PASS`. Steven accepted the compact pane menu and Research
+  Maturity presentation. The live Current pane
   menu lists every expected standard pane with `Visible` / `Focus` or `Hidden` /
   `Open`; opening `Research Maturity` produces the correctly titled pane with
   `STRATEGY OPTIMIZATION LOCKED`, `Allowed now: Collect evidence only`, the separate
   maturity/census denominators, and the three evidence tabs.
-- Check 10: `CODEX_UI_PASS`, `STEVEN_ACCEPTANCE_PENDING`. The live Review workspace
+- Check 10: `MANUAL_PASS`. Steven accepted the Review presentation. The live workspace
   shows one global `REVIEW ONLY` state and the first-class `Test Trade Review` pane
   with the sentence `Review simulated test trades and their evidence. No brokerage
   connection.` No repeated technical warning badge appears on ordinary controls.
-- Check 14: `CODEX_UI_PASS`, `STEVEN_ACCEPTANCE_PENDING`. The canonical final
+- Check 14: `MANUAL_PASS`. Steven accepted the compact top row. The canonical final
   `1180 x 820` proof and the `1440 x 900` proof show `Daily`, search, save, restore,
   `Panes`, mode, Activity, Health, and Menu without overlap. The prior canonical
   compact capture was replaced after screenshot review found it predated the final
