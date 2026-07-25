@@ -587,6 +587,60 @@ Passing this check authorizes only local HTTPS trust. It does not authorize Schw
 credentials, real OAuth, account access, market-data requests, broker preview, or
 orders. The exact-root removal command remains available for rollback.
 
+## SCHWAB-002 Credential And OAuth Onboarding
+
+Status: `MANUAL_PASS_IMPLEMENTED_PENDING_MERGE`
+
+Completed evidence:
+
+1. Steven explicitly authorized credential/OAuth onboarding. The Client ID and Client
+   Secret were entered only through hidden terminal prompts; they were not sent
+   through chat, command arguments, logs, screenshots, reports, or Git.
+2. Redacted status confirms `credentialsStored: true`. The current-user DPAPI file is
+   outside Git, contains no readable credential/token labels, has protected
+   inheritance, and grants one non-inherited Full Control entry only to
+   `BEASTCOMPUTER\steve`.
+3. The first real authorization attempt reached Schwab consent and produced a callback
+   containing `code`, `session`, and matching `state`, but the original three-minute
+   listener window expired first. No OAuth token was stored, no account request ran,
+   and order transmission remained unavailable.
+4. The narrow correction changes the default manual authorization window to ten
+   minutes and adds a focused regression test proving the production listener receives
+   `600` seconds and waits `601` seconds before cleanup.
+5. Steven repeated Schwab consent and selected only the intended $100 account. The
+   local callback and token exchange completed successfully.
+6. Redacted status now reports `oauthAuthorized: true` and `tokenState: ACTIVE`.
+   Token values remain encrypted and redacted.
+7. Redacted status also reports `accountBinding: NOT_BOUND`,
+   `authenticatedAccountRequests: LOCKED_PENDING_SEPARATE_APPROVAL`, and
+   `orderTransmission: UNAVAILABLE`.
+8. The code contains no account/trader endpoint and no place, submit, replace, cancel,
+   transfer, or withdrawal method. It does not import scoring, readiness, replay,
+   alerts, TradePlan, Risk Governor, database, or schema paths.
+9. Compileall passes, focused Schwab security/certificate/listener tests pass 60/60,
+   and full Python discovery passes 702/702.
+10. SCHWAB-002 remains on
+    `codex/ARGUS-SCHWAB-002-credential-oauth-onboarding`; nothing is merged or pushed.
+
+What Steven is considered to have passed:
+
+1. The real Schwab consent flow completed.
+2. Only the intended $100 account was selected in Schwab's consent UI.
+3. No Schwab username, password, MFA code, or account number was provided to Codex.
+
+What is not yet proven or authorized:
+
+1. Momentum Hunter has not called an authenticated Schwab account endpoint.
+2. The software has not independently enumerated the authorized accounts or verified
+   that Schwab exposes only the intended $100 account.
+3. No account hash or account binding has been stored.
+4. No balance, position, market-data, preview, or order request has occurred.
+5. Merging or pushing SCHWAB-002 requires separate explicit Steven approval.
+6. The next broker slice requires separate explicit approval for read-only account
+   discovery and exact single-canary binding. It must stop if more than the intended
+   account is exposed or if identity cannot be proven without full account-number
+   disclosure.
+
 ## R028 Integrated Workstation Chrome
 
 Status: `COMPLETE`; automated and manual proof passed; fast-forwarded into local

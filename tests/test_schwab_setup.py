@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 from momentum_hunter.schwab_setup import (
     CallbackTimeoutError,
@@ -46,6 +47,20 @@ class SchwabSetupSecurityTests(unittest.TestCase):
         self.assertNotIn("SYNTHETIC-APP-ID", repr(credentials))
         self.assertNotIn("SYNTHETIC-APP-SECRET", repr(credentials))
         self.assertIn("secret", prompts[1].lower())
+
+    def test_both_application_credential_fields_default_to_hidden_input(self) -> None:
+        values = iter(["SYNTHETIC-APP-ID", "SYNTHETIC-APP-SECRET"])
+        prompts: list[str] = []
+
+        def masked_reader(prompt: str) -> str:
+            prompts.append(prompt)
+            return next(values)
+
+        with patch("momentum_hunter.schwab_setup.getpass.getpass", side_effect=masked_reader):
+            credentials = read_application_credentials()
+        self.assertEqual("SYNTHETIC-APP-ID", credentials.application_id)
+        self.assertEqual(2, len(prompts))
+        self.assertTrue(all("hidden" in prompt.lower() for prompt in prompts))
 
     def test_oauth_state_is_random_and_mismatch_fails(self) -> None:
         first = generate_oauth_state()

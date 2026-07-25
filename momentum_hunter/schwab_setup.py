@@ -15,6 +15,8 @@ import hmac
 import json
 import os
 import secrets
+import subprocess
+import sys
 import time
 import uuid
 from ctypes import wintypes
@@ -135,17 +137,39 @@ class WindowsDpapiProtector:
 
 
 class LocalSecretStore:
-    def __init__(self, *, path: Path = DEFAULT_SECRET_PATH, protector: WindowsDpapiProtector | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        path: Path = DEFAULT_SECRET_PATH,
+        protector: WindowsDpapiProtector | None = None,
+        permission_hardener: Callable[[Path], None] | None = None,
+    ) -> None:
         self.path = path
         self.protector = protector or WindowsDpapiProtector()
+        self.permission_hardener = permission_hardener or harden_current_user_secret_file
 
     def save(self, payload: dict[str, str]) -> Path:
+        if not isinstance(payload, dict) or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in payload.items()
+        ):
+            raise SchwabSetupError("The local Schwab secret payload has an invalid shape.")
         encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
         protected = self.protector.protect(encoded)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_name(f"{self.path.name}.{uuid.uuid4().hex}.tmp")
-        temporary.write_bytes(base64.b64encode(protected))
-        temporary.replace(self.path)
+        replaced = False
+        try:
+            temporary.write_bytes(base64.b64encode(protected))
+            self.permission_hardener(temporary)
+            temporary.replace(self.path)
+            replaced = True
+            self.permission_hardener(self.path)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            if replaced:
+                self.path.unlink(missing_ok=True)
+            raise
         return self.path
 
     def save_fake_or_future_values(self, payload: dict[str, str]) -> Path:
@@ -157,7 +181,10 @@ class LocalSecretStore:
             payload = json.loads(self.protector.unprotect(protected))
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             raise SchwabSetupError("The local Schwab secret store cannot be loaded.") from exc
-        if not isinstance(payload, dict) or not all(isinstance(key, str) and isinstance(value, str) for key, value in payload.items()):
+        if not isinstance(payload, dict) or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in payload.items()
+        ):
             raise SchwabSetupError("The local Schwab secret store has an invalid shape.")
         return payload
 
@@ -169,13 +196,79 @@ class LocalSecretStore:
             return False
 
 
+def harden_current_user_secret_file(path: Path) -> None:
+    """Restrict a DPAPI ciphertext file to the current Windows user."""
+
+    if os.name != "nt":
+        return
+    system32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+    whoami = system32 / "whoami.exe"
+    icacls = system32 / "icacls.exe"
+    if not whoami.is_file() or not icacls.is_file():
+        raise SchwabSetupError("Windows account-permission tools are required to protect the local Schwab secret file.")
+    try:
+        identity_result = subprocess.run(
+            [str(whoami)],
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        identity = identity_result.stdout.strip()
+        if identity_result.returncode != 0 or not identity:
+            raise SchwabSetupError("The current Windows identity could not be verified.")
+        resolved = str(Path(path).resolve())
+        commands = (
+            [str(icacls), resolved, "/inheritance:r", "/grant:r", f"{identity}:(F)"],
+            [str(icacls), resolved, "/setowner", identity],
+        )
+        for command in commands:
+            completed = subprocess.run(
+                command,
+                text=True,
+                capture_output=True,
+                timeout=10,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if completed.returncode != 0:
+                raise SchwabSetupError("The local Schwab secret file permissions could not be protected.")
+        verification = subprocess.run(
+            [str(icacls), resolved],
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SchwabSetupError("The local Schwab secret file permissions could not be protected.") from exc
+    if verification.returncode != 0:
+        raise SchwabSetupError("The local Schwab secret file permissions could not be verified.")
+    acl_text = verification.stdout.replace(resolved, "", 1)
+    entries = [
+        line.strip()
+        for line in acl_text.splitlines()
+        if ":(" in line
+    ]
+    if (
+        len(entries) != 1
+        or not entries[0].lower().startswith(identity.lower() + ":")
+        or not entries[0].endswith("(F)")
+    ):
+        raise SchwabSetupError("The local Schwab secret file permissions could not be verified.")
+
+
 def read_application_credentials(
     *,
-    application_id_reader: Callable[[str], str] = input,
-    application_secret_reader: Callable[[str], str] = getpass.getpass,
+    application_id_reader: Callable[[str], str] | None = None,
+    application_secret_reader: Callable[[str], str] | None = None,
 ) -> SchwabApplicationCredentials:
-    application_id = application_id_reader("Schwab application ID: ").strip()
-    application_secret = application_secret_reader("Schwab application secret: ").strip()
+    masked_id_reader = application_id_reader or getpass.getpass
+    masked_secret_reader = application_secret_reader or getpass.getpass
+    application_id = masked_id_reader("Schwab application ID / App Key (hidden): ").strip()
+    application_secret = masked_secret_reader("Schwab application secret (hidden): ").strip()
     if not application_id or not application_secret:
         raise SchwabSetupError("Both Schwab application credential fields are required.")
     return SchwabApplicationCredentials(application_id, application_secret)
@@ -257,21 +350,32 @@ def callback_recommendation() -> dict[str, str]:
         "host": "127.0.0.1",
         "path": "/oauth/callback",
         "httpsRequirement": "Required by the registered callback",
-        "certificateRequirement": "Explicit local certificate and private key; browser trust must be established separately",
+        "certificateRequirement": (
+            "Explicit local certificate and private key; "
+            "browser trust must be established separately"
+        ),
         "portBehavior": "Fixed registered port 8182",
-        "listenerLifecycle": "Bind loopback only immediately before authorization; accept one callback; validate state; close on success, error, or timeout",
+        "listenerLifecycle": (
+            "Bind loopback only immediately before authorization; accept one callback; "
+            "validate state; close on success, error, or timeout"
+        ),
         "status": "SYNTHETIC_LISTENER_IMPLEMENTED_REAL_ONBOARDING_LOCKED",
     }
 
 
 def main(argv: list[str] | None = None) -> int:
+    effective_argv = list(sys.argv[1:] if argv is None else argv)
+    if effective_argv and effective_argv[0] in {"status", "credentials", "authorize", "delete-local-auth"}:
+        from momentum_hunter.schwab_onboarding import main as onboarding_main
+
+        return onboarding_main(effective_argv)
     parser = argparse.ArgumentParser(description="Credential-free Schwab setup skeleton.")
     parser.add_argument(
         "--show-callback-recommendation",
         action="store_true",
         help="Print the registered loopback callback status without contacting Schwab.",
     )
-    args = parser.parse_args(argv)
+    args = parser.parse_args(effective_argv)
     print(SETUP_NOTICE)
     print("Authenticated setup is locked pending separate credential onboarding and OAuth approval.")
     if args.show_callback_recommendation:
