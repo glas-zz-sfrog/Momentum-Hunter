@@ -660,18 +660,25 @@ Incident evidence:
    remains unpushed, and no remote repository contains SCHWAB-002.
 6. The current local credential/token store remains DPAPI encrypted, but it is
    quarantined and must not be used or refreshed.
+7. Schwab's public OAuth guide confirms that Consent and Grant lets the user select
+   which accounts are shared. Its public refresh guide says token access can be
+   revoked at any time, revocation should terminate third-party access unless granted
+   again, a compromised refresh token requires a full OAuth restart, and a changed
+   authorized-account selection requires a new access token.
 
 Recovery actions requiring Steven confirmation:
 
-1. Rotate or regenerate the Client Secret for `Market Intelligence Workstation` in
+1. Revoke the current `Market Intelligence Workstation` OAuth access through Schwab's
+   user-controlled connected-app/security surface when available.
+2. Rotate or regenerate the Client Secret for `Market Intelligence Workstation` in
    Schwab's developer portal. Do not copy the replacement into chat.
-2. Delete the quarantined local Schwab credentials, tokens, and any account-binding
+3. Delete the quarantined local Schwab credentials, tokens, and any account-binding
    material using the exact guarded local-auth deletion flow.
-3. Enter the replacement Client ID/Secret only through hidden local prompts.
-4. Complete fresh OAuth consent and select only the intended $100 account.
-5. Re-run redacted status, DPAPI/ACL proof, exact tracked-file secret scan, focused
+4. Enter the replacement Client ID/Secret only through hidden local prompts.
+5. Complete fresh OAuth consent and select only the intended $100 account.
+6. Re-run redacted status, DPAPI/ACL proof, exact tracked-file secret scan, focused
    Schwab tests, and protected-path review.
-6. Do not begin account discovery until recovery is complete and Steven separately
+7. Do not begin account discovery until recovery is complete and Steven separately
    authorizes the authenticated read-only request.
 
 ## R028 Integrated Workstation Chrome
