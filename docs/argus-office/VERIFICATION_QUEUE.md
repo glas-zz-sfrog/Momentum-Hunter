@@ -643,7 +643,7 @@ What is not yet proven or authorized:
 
 ## SCHWAB-002A Credential Rotation Recovery
 
-Status: `SECURITY_STOP_AWAITING_STEVEN_CONFIRMATION`
+Status: `SECURITY_RECOVERY_BLOCKED_ON_SCHWAB_SUPPORT`
 
 Incident evidence:
 
@@ -658,27 +658,53 @@ Incident evidence:
    every Git-tracked file returned zero hits for both values.
 5. The worktree was clean before the incident-response branch began. Local `master`
    remains unpushed, and no remote repository contains SCHWAB-002.
-6. The current local credential/token store remains DPAPI encrypted, but it is
-   quarantined and must not be used or refreshed.
+6. The quarantined local credential/token store was deleted through the exact guarded
+   local-auth flow. Redacted status now reports no stored credentials, no OAuth
+   authorization, missing token state, no account binding, authenticated account
+   requests locked, and order transmission unavailable.
 7. Schwab's public OAuth guide confirms that Consent and Grant lets the user select
    which accounts are shared. Its public refresh guide says token access can be
    revoked at any time, revocation should terminate third-party access unless granted
    again, a compromised refresh token requires a full OAuth restart, and a changed
    authorized-account selection requires a new access token.
+8. Schwab Security Settings showed `Market Intelligence Workstation` linked only to
+   the intended Individual account. The Rollover IRA and Joint Tenant accounts were
+   unchecked. Confirming `Stop Linking` removed the workstation entry while leaving
+   unrelated linked apps unchanged.
+9. The developer portal reports the compromised app as `Deactivated`. It cannot be
+   used unless explicitly reactivated.
+10. Schwab exposes no Client Secret rotation control. The official Modify App guide
+    limits self-service changes to app metadata/callbacks and documents activation or
+    deactivation as a pause/resume operation.
+11. A fully prepared replacement app with Accounts and Trading Production plus Market
+    Data Production, order limit 5, the registered loopback callback, and the existing
+    read-only-first/order-disabled description was rejected. The portal permits one
+    Individual app per production product and counts the deactivated app against both
+    limits.
+12. A no-save modification check proved the old app can remove one product but cannot
+    remove its final product. The check was cancelled, and both original product
+    subscriptions remain unchanged. Self-service replacement is therefore exhausted.
 
-Recovery actions requiring Steven confirmation:
+Completed recovery actions:
 
-1. Revoke the current `Market Intelligence Workstation` OAuth access through Schwab's
-   user-controlled connected-app/security surface when available.
-2. Rotate or regenerate the Client Secret for `Market Intelligence Workstation` in
-   Schwab's developer portal. Do not copy the replacement into chat.
-3. Delete the quarantined local Schwab credentials, tokens, and any account-binding
-   material using the exact guarded local-auth deletion flow.
-4. Enter the replacement Client ID/Secret only through hidden local prompts.
-5. Complete fresh OAuth consent and select only the intended $100 account.
-6. Re-run redacted status, DPAPI/ACL proof, exact tracked-file secret scan, focused
+1. Steven explicitly approved remote revocation, secret replacement, guarded local
+   deletion, hidden replacement entry, and fresh OAuth for only the $100 account.
+2. Revoked the old OAuth/account link.
+3. Deleted the quarantined local credentials, tokens, and account binding.
+4. Deactivated the compromised developer app.
+5. Confirmed no account, market-data, preview, or order endpoint was called.
+
+Remaining recovery actions:
+
+1. Ask Schwab Trader API Support to reset/regenerate the inactive app's Client ID and
+   Client Secret, or delete the inactive app so a replacement can be created with both
+   approved production products.
+2. Do not reactivate the compromised app or reveal/copy its old credentials.
+3. Enter replacement credentials only through hidden local prompts.
+4. Complete fresh OAuth consent and select only the intended $100 account.
+5. Re-run redacted status, DPAPI/ACL proof, exact tracked-file secret scan, focused
    Schwab tests, and protected-path review.
-7. Do not begin account discovery until recovery is complete and Steven separately
+6. Do not begin account discovery until recovery is complete and Steven separately
    authorizes the authenticated read-only request.
 
 ## R028 Integrated Workstation Chrome
