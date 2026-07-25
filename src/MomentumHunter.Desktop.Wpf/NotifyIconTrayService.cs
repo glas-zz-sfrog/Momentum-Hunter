@@ -9,6 +9,7 @@ public sealed class NotifyIconTrayService : ITrayService
 {
     private readonly Dispatcher _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
     private Forms.NotifyIcon? _notifyIcon;
+    private Icon? _applicationIcon;
     private Forms.ToolStripMenuItem? _statusItem;
     private Forms.ToolStripMenuItem? _pauseOrResumeItem;
     private Forms.ToolStripMenuItem? _runScanNowItem;
@@ -62,10 +63,11 @@ public sealed class NotifyIconTrayService : ITrayService
             exitItem,
         ]);
 
+        _applicationIcon = LoadApplicationIcon();
         _notifyIcon = new Forms.NotifyIcon
         {
             ContextMenuStrip = menu,
-            Icon = SystemIcons.Application,
+            Icon = _applicationIcon ?? SystemIcons.Application,
             Text = "Momentum Hunter - Starting",
             Visible = true,
         };
@@ -128,6 +130,8 @@ public sealed class NotifyIconTrayService : ITrayService
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
         _notifyIcon = null;
+        _applicationIcon?.Dispose();
+        _applicationIcon = null;
         _statusItem = null;
         _pauseOrResumeItem = null;
         _runScanNowItem = null;
@@ -153,5 +157,13 @@ public sealed class NotifyIconTrayService : ITrayService
         var lastScan = status.LastCompletedCycleAt is { } completed ? completed.ToLocalTime().ToString("HH:mm") : "pending";
         var text = $"Momentum Hunter | {status.State} | {status.MonitoredSymbolCount} symbols | {lastScan}";
         return text.Length <= 63 ? text : text[..63];
+    }
+
+    private static Icon? LoadApplicationIcon()
+    {
+        var processPath = Environment.ProcessPath;
+        return string.IsNullOrWhiteSpace(processPath)
+            ? null
+            : Icon.ExtractAssociatedIcon(processPath);
     }
 }

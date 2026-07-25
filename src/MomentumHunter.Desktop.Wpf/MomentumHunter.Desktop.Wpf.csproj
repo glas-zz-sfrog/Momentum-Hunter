@@ -9,7 +9,12 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>Assets\MomentumHunter.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\MomentumHunter.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Keep the WinForms tray adapter explicit so existing WPF source keeps its native type names. -->

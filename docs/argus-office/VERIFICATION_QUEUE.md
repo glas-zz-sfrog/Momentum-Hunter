@@ -350,7 +350,9 @@ Manual evidence recorded 2026-07-24:
 - Check 16: `MANUAL_PASS`; no prohibited provider, scoring, readiness, replay,
   alert, watchlist, broker, Paper, Live-money, credential, sample-start, or
   real-order action was found.
-- Check 17: `MANUAL_PASS`; rejected icon artwork remains absent.
+- Check 17: `MANUAL_PASS` for the reviewed R027 build's icon state. Correction
+  recorded 2026-07-25: Steven clarified that he liked both previous icon designs;
+  the earlier "rejected artwork" interpretation was wrong.
 - Check 11: `CODEX_VERIFIED`. The canonical snapshot and rendered UI agree:
   `SAMPLE START LOCKED`, official authorization false, gate false, `0 / 30`,
   completed/active/unfilled/risk-rejected/data-invalid/excluded all zero, sample
@@ -498,7 +500,9 @@ Check these one by one:
     alert-generation, watchlist-generation, broker, Paper, Live, credential, sample-
     start, or real-order action exists. FakeBroker simulation remains the only
     automated order-like boundary.
-17. Confirm rejected R012A/R012B icon artwork remains absent.
+17. Historical R027 check: confirm the branch-only R012A/R012B artwork is absent
+    from that specific review build. This is not a rejection of either design;
+    Steven corrected that interpretation on 2026-07-25.
 18. Report `PASS R027` if checks 1-17 pass. On failure, report the failed step,
     workspace/symbol/interval, visible state/count, window size, and attach a
     screenshot.
@@ -674,8 +678,11 @@ Automated evidence:
 - All 20 obsolete `%LOCALAPPDATA%\MomentumHunter\Builds` review directories were
   removed after confirming no process ran from that root. No old WPF executable
   remains under Momentum Hunter local app data.
-- Both R012A and R012B artwork remain rejected. The generic Windows application icon
-  is expected until a separate R012C visual-identity task supplies approved artwork.
+- Steven clarified on 2026-07-25 that he liked both previous icon designs; the
+  earlier rejection interpretation was wrong. The simpler white-`M`/teal-arrow mark
+  is now embedded in the executable and WPF window, loaded by the tray, and assigned
+  to the canonical Desktop and Start Menu shortcuts. The original design remains
+  preserved in Git as an alternate.
 
 Physical results:
 
@@ -686,9 +693,9 @@ Physical results:
    and one top-level workstation window.
 4. `CODEX_VERIFIED`: the obsolete review-build root contains zero build directories
    and zero WPF executables.
-5. `MANUAL_PENDING`: Steven may visually confirm the taskbar shows only the current
-   workstation while it is open. A generic Windows icon is not a regression; R012C
-   remains unimplemented because both earlier custom artworks were rejected.
+5. `MANUAL_PENDING`: confirm the taskbar shows only the current workstation and its
+   icon is the navy rounded square with the white `M` and teal rising arrow. Hovering
+   it must say `Momentum Hunter Workstation`, never `stale repo-build`.
 
 This launcher change grants no credential, OAuth, account, broker, Paper, Live,
 order, provider-fetch, sample-start, merge, or push authority.

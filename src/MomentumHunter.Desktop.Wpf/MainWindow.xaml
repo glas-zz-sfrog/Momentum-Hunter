@@ -8,6 +8,7 @@
         xmlns:contracts="clr-namespace:MomentumHunter.Contracts;assembly=MomentumHunter.Contracts"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Momentum Hunter Workstation"
+        Icon="Assets/MomentumHunter.ico"
         Height="920"
         Width="1440"
         MinHeight="650"
