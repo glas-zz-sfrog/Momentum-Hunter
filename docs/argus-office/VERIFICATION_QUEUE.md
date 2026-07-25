@@ -33,7 +33,7 @@ not create a rubber-stamp Steven item.
 | ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated and backed up through `origin/master` | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `NO_STEVEN_ACTION` | Integrated locally as part of ARGUS-SHADOW-001 | Automated proof is sufficient because this is nonvisual and contacts no broker |
 | SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Integrated and backed up through `origin/master` | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
-| SCHWAB-003 discovery, CASH validation, and binding safety | `LIVE_BINDING_PASS`; same sole `2573` CASH identity revalidated, immutable DPAPI persistence succeeded, compileall and 123 bounded tests pass, and exact tracked-value scan passes | `NO_STEVEN_ACTION`; no anomaly occurred | `IMPLEMENTED_PENDING_MERGE` on stacked branch; nothing pushed | No manual check pending; retain the pinned account and interrupt only on future identity, account-count, position, permission, or security anomaly |
+| SCHWAB-003 discovery, CASH validation, and binding safety | `LIVE_BINDING_PASS`; same sole `2573` CASH identity revalidated, immutable DPAPI persistence succeeded, compileall, 123 bounded tests, 756 full tests, and exact tracked-value scan pass | `NO_STEVEN_ACTION`; no anomaly occurred | `IMPLEMENTED_PENDING_MERGE`; clean fast-forward and non-force-push preflight pass | No manual check pending; retain the pinned account and interrupt only on future identity, account-count, position, permission, or security anomaly |
 | Official Shadow sample | `NOT_STARTED` | `STANDING_AUTHORIZED` after automated frozen-prerequisite pass | Shadow-003 is integrated locally; runtime sample lock remains until precheck passes | Start automatically when every canonical prerequisite passes; interrupt on failure or ambiguity |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
@@ -855,9 +855,10 @@ Live binding evidence and future interruption conditions:
 5. Any unexpected account count, ending, hash, type, position, permission, existing
    binding, malformed response, secret exposure, or store failure must stop before
    persistence and ask Steven one concrete question describing the practical exposure.
-6. Post-binding compileall and all 123 bounded Schwab tests pass. Exact comparison of
-   the live application ID, application secret, access token, refresh token, and
-   account hash against 573 Git-tracked files found zero occurrences.
+6. Post-binding compileall, all 123 bounded Schwab tests, and all 756 repository tests
+   pass. Exact comparison of the live application ID, application secret, access
+   token, refresh token, and account hash against 573 Git-tracked files found zero
+   occurrences.
 
 ## R028 Integrated Workstation Chrome
 
