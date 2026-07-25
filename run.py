@@ -1,5 +1,5 @@
-from momentum_hunter.app import main
+from momentum_hunter.workstation_launcher import main
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

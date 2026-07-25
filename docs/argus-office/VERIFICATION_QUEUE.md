@@ -644,3 +644,39 @@ When implemented, verify these one by one:
 
 This item is visual shell work only. It does not authorize broker integration,
 credentials, paper/live execution, or changes to trading behavior.
+
+## R029 Canonical WPF Launcher
+
+Status: `IMPLEMENTED_PENDING_MERGE`; branch
+`codex/ARGUS-R029-canonical-wpf-launcher`; automated proof passed, manual launch
+confirmation deferred, unmerged, and unpushed
+
+Automated evidence:
+
+- `run.py` routes to `momentum_hunter.workstation_launcher`, not the legacy Qt app.
+- The resolver chooses the checkout's Release WPF executable first and a deliberately
+  installed local workstation second.
+- Arbitrary `%LOCALAPPDATA%\MomentumHunter\Builds\*` review builds are never selected
+  implicitly.
+- A missing approved WPF executable fails visibly instead of silently reopening Qt.
+- Legacy Qt remains an explicit rollback path through
+  `python -m momentum_hunter.app`; normal tracked launchers do not use it.
+- Focused launcher/startup tests pass 9/9, full Python discovery passes 679/679,
+  all .NET tests pass 214/214, and Release compilation passes with zero warnings
+  and zero errors.
+- No app was stopped, opened, focused, or otherwise controlled during this task.
+
+When Steven is available, verify these one by one:
+
+1. Exit the currently running legacy Qt window and WPF workstation at a convenient
+   time; do not interrupt an active monitoring session.
+2. Use the ordinary Momentum Hunter shortcut or tracked launcher.
+3. Confirm the WPF `Momentum Hunter Workstation` opens and the legacy PySide window
+   does not.
+4. Launch Momentum Hunter again and confirm the existing WPF instance restores or
+   activates instead of creating a second workstation.
+5. Confirm only one Momentum Hunter workstation choice appears in the taskbar and
+   Alt+Tab after the old Qt process is gone.
+
+This launcher change grants no credential, OAuth, account, broker, Paper, Live,
+order, provider-fetch, sample-start, merge, or push authority.
