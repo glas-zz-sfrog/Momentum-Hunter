@@ -2,10 +2,10 @@
 
 ## Purpose
 
-This is the durable list of exact checks Steven still needs to perform. The Roadmap
-remains the authority for current status and next work. A manual pass does not by
-itself authorize a merge, push, credential, broker connection, Paper mode, or Live
-mode.
+This is the durable list of exact visual/manual checks and anomaly decisions Steven
+still needs to perform. The Roadmap remains the authority for current status and next
+work. Routine nonvisual work uses automated evidence and standing delegation; it does
+not create a rubber-stamp Steven item.
 
 ## Status Legend
 
@@ -16,6 +16,9 @@ mode.
 - `MANUAL_NOT_YET_AVAILABLE`: implementation exists below the current operator UI.
 - `MANUAL_PASS`: Steven completed and accepted every numbered check.
 - `MANUAL_FAIL`: Steven found a defect; record the failed step.
+- `NO_STEVEN_ACTION`: automated evidence is sufficient for this nonvisual item.
+- `STANDING_AUTHORIZED`: Codex should execute when documented invariants pass.
+- `ANOMALY_DECISION_PENDING`: unexpected state requires a concrete Steven decision.
 - `MERGE_APPROVED`: Steven explicitly authorized local integration; this does not imply every manual check was separately reported.
 - `CEO_DECISION_PENDING`: Steven must choose the recorded direction.
 - `BLOCKED_VENDOR_CAPABILITY`: the required vendor capability does not exist.
@@ -25,17 +28,17 @@ mode.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
-| ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `MANUAL_PENDING` through Shadow-002 | Integrated into local `master` at `bb962be`; remotely backed up on its feature branch | Confirm the frozen Python lifecycle is represented read-only and without order authority in Shadow-002 |
+| ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `NO_STEVEN_ACTION`; later WPF representation was visually accepted through R027 | Integrated into local `master` at `bb962be`; remotely backed up on its feature branch | Historical evidence only; no approval remains pending |
 | ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated and backed up through `origin/master` | The preserved checklist remains an audit reference; merge approval does not start the official sample |
 | ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated and backed up through `origin/master` | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
-| Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
+| Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `NO_STEVEN_ACTION` | Integrated locally as part of ARGUS-SHADOW-001 | Automated proof is sufficient because this is nonvisual and contacts no broker |
 | SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Integrated and backed up through `origin/master` | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
-| SCHWAB-003 discovery, CASH validation, and binding safety | `AUTOMATED_PASS`; compileall, 123 bounded Schwab tests, and 756 full repository tests pass | Discovery and CASH validation are `LIVE_PASS`; immutable binding is `MANUAL_AUTHORIZATION_PENDING` | `IMPLEMENTED_PENDING_MERGE` on stacked branch; nothing pushed | Binding must repeat exact identity proof, persist only encrypted immutable identity, and leave every order capability unavailable |
-| Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
+| SCHWAB-003 discovery, CASH validation, and binding safety | `AUTOMATED_PASS`; compileall, 123 bounded Schwab tests, and 756 full repository tests pass | `STANDING_AUTHORIZED`; interrupt only on account/security anomaly | `IMPLEMENTED_PENDING_MERGE` on stacked branch; nothing pushed | Execute immutable binding automatically only if the same one `2573` CASH account revalidates and every order capability remains unavailable |
+| Official Shadow sample | `NOT_STARTED` | `STANDING_AUTHORIZED` after automated frozen-prerequisite pass | Shadow-003 is integrated locally; runtime sample lock remains until precheck passes | Start automatically when every canonical prerequisite passes; interrupt on failure or ambiguity |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted baseline; do not start credential/OAuth/broker work or the official sample implicitly |
-| Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | `MANUAL_NOT_YET_AVAILABLE` | Future separately approved market-data cutover task | Confirm the old hash and rows are absent, only actual-provider lineage/fresh timestamps render, and no legacy/live candle mixture survives |
+| Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | Destructive decision not yet due | Future market-data cutover task | Interrupt Steven immediately before deleting the exact legacy paths/rows; visual cutover proof remains manual |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
 
@@ -147,8 +150,9 @@ Check these one by one:
 
 1. Open
    `docs/argus-office/reports/releases/ARGUS-SHADOW-003-sample-readiness-gate-overview-proof.png`.
-2. Confirm the pane says `SAMPLE START LOCKED` and explains that official sample
-   collection has not received its separate authorization checkpoint.
+2. Confirm the pane says `SAMPLE START LOCKED`. Its historical authorization wording
+   records the original proof state; current policy permits an automated start only
+   after every frozen engineering prerequisite passes.
 3. Confirm the definition line identifies `engineering-preflight-v1`, fill model
    `prospective-fakebroker-v1`, evidence schema `v1`, and a configuration fingerprint.
 4. Confirm the pane says `Prospective Shadow Trades: 0 / 30`, all aggregate metrics are
@@ -160,17 +164,18 @@ Check these one by one:
 7. Report `PASS SHADOW-003 UI PROOF` if checks 1-6 pass. On failure, report the failed
    step and attach the marked screenshot.
 
-Steven separately approved the local fast-forward. Passing this checklist still does
-not authorize official sample trade 1. Exact sample-start authorization remains a
-separate Steven decision.
+Steven separately approved the historical local fast-forward. Current policy does not
+turn this old visual checklist into a new approval gate: Codex may start the official
+FakeBroker-only sample after every frozen prerequisite passes, and must interrupt
+Steven only if a prerequisite fails or the observed state is ambiguous.
 
 ## Credential-Free Schwab Setup CLI
 
 Automated result: `AUTOMATED_PASS`
 
-Steven status: `MANUAL_PENDING`
+Steven status: `NO_STEVEN_ACTION`
 
-Check these one by one:
+Archived automated audit steps:
 
 1. Open PowerShell in the repository root.
 2. Run `.\.venv\Scripts\python.exe -B -m momentum_hunter.schwab_setup --show-callback-recommendation`.
@@ -181,16 +186,18 @@ Check these one by one:
 5. Confirm it says authenticated setup is locked.
 6. Confirm the callback recommendation says the path, HTTPS rule, and certificate rule
    remain unconfirmed until authenticated official-document review.
-7. Report `PASS SCHWAB SETUP SKELETON` if all checks pass. On failure, report the step
-   number and the exact visible text. Do not provide any credential or account number.
+7. Record `AUTOMATED_PASS` if all checks pass. On failure, report the step number and
+   the exact non-secret text. Do not provide any credential or account number.
 
-Passing this check proves only the locked credential-free CLI. It does not authorize
-OAuth, an account connection, a callback registration, or broker requests.
+This check proves only the locked credential-free CLI. Current standing delegation
+separately permits bounded OAuth refresh and authenticated read-only account work;
+real order transmission and account-scope anomalies remain interruption gates.
 
 ## Official Shadow Sample Start Gate
 
-Status: `NOT_STARTED`; the engineering gate is implemented on an unmerged branch, and
-official sample authorization has not been granted.
+Status: `NOT_STARTED`; sample start is `STANDING_AUTHORIZED` after every frozen
+engineering prerequisite passes. No separate Steven authorization is required unless
+the precheck fails or the observed state is ambiguous.
 
 The first accepted operational run must:
 
@@ -229,13 +236,15 @@ Schwab Support states Trader API works with live brokerage accounts only, cannot
 paperMoney balances, positions, or orders, and has no current sandbox.
 
 Current direction: continue credential-free FakeBroker Shadow evidence plus manual
-thinkorswim paperMoney ticket/reconciliation. Schwab Trader API remains the eventual
-read-only and separately supervised-live target after developer access and separate
-Steven checkpoints. No interim alternate broker is approved.
+thinkorswim paperMoney ticket/reconciliation. Schwab Trader API is the authenticated
+read-only and separately supervised-live target. Routine OAuth refresh, expected
+single-account reads, exact immutable binding, and documented nontransmitting preview
+research may proceed under standing delegation. An alternate broker would be a product
+direction change and therefore requires a concrete Steven decision.
 
-This status does not authorize use of the $100 live account, credentials, OAuth,
-account access, broker reads, preview, order transmission, Paper controls, or Live
-controls.
+This vendor limitation does not block those standing-authorized nonvisual steps. It
+does block automated paperMoney. Real order transmission, replacement, cancellation,
+or unattended-live enablement still requires Steven's explicit decision.
 
 ## R026 Phase 12 Combined WPF Review
 
@@ -584,9 +593,11 @@ Completed production-local trust evidence:
     stacked branch is clean, technically fast-forwardable from local `master`, and
     remains unmerged and unpushed.
 
-Passing this check authorizes only local HTTPS trust. It does not authorize Schwab
-credentials, real OAuth, account access, market-data requests, broker preview, or
-orders. The exact-root removal command remains available for rollback.
+This historical check proved only local HTTPS trust. Current standing delegation
+separately permits bounded OAuth refresh, expected account reads, and exact immutable
+binding. Market-data activation follows its Roadmap slice; real orders remain an
+interruption gate. The exact-root removal command remains available for rollback, but
+certificate removal itself requires a concrete Steven decision.
 
 ## SCHWAB-002 Credential And OAuth Onboarding
 
@@ -629,18 +640,19 @@ What Steven is considered to have passed:
 2. Only the intended $100 account was selected in Schwab's consent UI.
 3. No Schwab username, password, MFA code, or account number was provided to Codex.
 
-What is not yet proven or authorized:
+What was not yet proven at the SCHWAB-002 checkpoint:
 
 1. Momentum Hunter has not called an authenticated Schwab account endpoint.
 2. The software has not independently enumerated the authorized accounts or verified
    that Schwab exposes only the intended $100 account.
 3. No account hash or account binding has been stored.
 4. No balance, position, market-data, preview, or order request has occurred.
-5. Pushing SCHWAB-002 requires separate explicit Steven approval.
-6. The next broker slice requires separate explicit approval for read-only account
-   discovery and exact single-canary binding. It must stop if more than the intended
-   account is exposed or if identity cannot be proven without full account-number
-   disclosure.
+5. At this historical checkpoint SCHWAB-002 had not been pushed. Current verified
+   nonvisual integration and non-force backup follow standing delegation.
+6. At this historical checkpoint discovery and binding had not begun. Current policy
+   authorizes expected read-only discovery and exact single-canary binding, but still
+   requires an immediate Steven interruption if more than one account is exposed or
+   identity cannot be proven without full account-number disclosure.
 
 ## SCHWAB-002A Credential Rotation Recovery
 
@@ -710,18 +722,18 @@ Completed recovery actions:
 10. Confirmed no account, balance, position, market-data, preview, or order endpoint was
     called. No support request was sent and no replacement app was created.
 
-Remaining recovery actions:
+Recovery follow-through under current policy:
 
 1. No Client Secret rotation occurred; the existing application and original credentials
    were restored under Steven's explicit direction. Vendor-side rotation remains an
    optional future hardening action, not the current blocker.
-2. Do not begin account discovery until Steven separately authorizes the authenticated
-   read-only request.
-3. The discovery slice must return only redacted identity, stop if more than the intended
+2. Read-only discovery was subsequently completed under a bounded confirmation gate;
+   future expected read-only calls follow standing delegation.
+3. Every discovery slice must return only redacted identity, stop if more than the intended
    Individual account is exposed, and make no balance, position, market-data, preview,
    or order request.
-4. Exact single-canary binding remains a following explicit checkpoint after discovery
-   proves isolation.
+4. Exact single-canary binding is standing-authorized after discovery proves isolation;
+   any identity, type, permission, position, or persistence anomaly interrupts Steven.
 
 ## SCHWAB-003 Read-Only Account Discovery
 
@@ -783,15 +795,16 @@ Next checkpoint:
    the repeated sequence returned one account ending `2573`, type `CASH`,
    `cashOnlyState: VERIFIED_CASH`, no positions, suppressed balances, and
    `accountBinding: NOT_BOUND`.
-4. `MANUAL_AUTHORIZATION_PENDING`: persist the immutable binding only under a new exact
-   approval. The binder repeats count, suffix, hash, type, and no-position validation,
-   refuses replacement, and stores only encrypted immutable identity.
+4. `STANDING_AUTHORIZED`: persist the immutable binding without another routine
+   approval only if the binder repeats and passes count, suffix, hash, type, and
+   no-position validation. It refuses replacement and stores only encrypted immutable
+   identity. Any mismatch becomes `ANOMALY_DECISION_PENDING`.
 
 ## SCHWAB-003 Account-Detail Validation
 
 Branch: `codex/ARGUS-SCHWAB-003-readonly-account-discovery`
 
-Status: `LIVE_VALIDATION_PASS`; `IMMUTABLE_BINDING_PENDING`
+Status: `LIVE_VALIDATION_PASS`; `IMMUTABLE_BINDING_STANDING_AUTHORIZED`
 
 Official contract evidence:
 
@@ -829,18 +842,20 @@ Automated evidence:
    revalidates the candidate, no encrypted store is called, and both authorized-account
    and binding representations redact the opaque hash.
 
-Steven's exact binding check:
+Automated binding action and interruption conditions:
 
-1. Approve only immutable persistence of the already validated account ending `2573`.
-2. The binder will refresh the unbound token if needed, repeat the two identity GETs,
-   and require the same hash, ending, official `CASH` type, and no positions.
-3. Expected visible result: `accountBinding: PINNED`,
+1. Codex may persist only the already validated account ending `2573` under standing
+   delegation.
+2. The binder refreshes the unbound token if needed, repeats the two identity GETs,
+   and requires the same hash, ending, official `CASH` type, and no positions.
+3. Expected automated result: `accountBinding: PINNED`,
    `persistence: ENCRYPTED_DPAPI_IMMUTABLE`, account ending `2573`, internal type
    `INDIVIDUAL_CASH`, and `orderTransmission: UNAVAILABLE`.
 4. The full number, full hash, and balance values must remain absent. No position,
    market-data, preview, order, or transmission request is authorized.
-5. Any existing binding, account mismatch, margin type, position data, expired token,
-   malformed response, or store failure must stop without reporting success.
+5. Any unexpected account count, ending, hash, type, position, permission, existing
+   binding, malformed response, secret exposure, or store failure must stop before
+   persistence and ask Steven one concrete question describing the practical exposure.
 
 ## R028 Integrated Workstation Chrome
 

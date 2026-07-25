@@ -10,7 +10,7 @@ Codex Orchestrator reviews the request, confirms scope, identifies protected-are
 Goal Steward confirms the user-visible goal, operator pain, scope, non-goals, protected areas, acceptance criteria, and required evidence before Builder implementation starts. If a task lacks an explicit Goal Charter or equivalent framing, Goal Steward must stop and request one or create it as part of governance/docs work.
 
 ## Implementation
-Builder implements only approved scoped changes after goal framing and branch preflight are clear. Builder must report files changed, tests run, risks, manual QA, and evidence mapped to the Goal Charter.
+Builder implements scoped changes authorized by the current task, Roadmap, or standing delegation after goal framing and branch preflight are clear. Builder must report files changed, tests run, risks, manual QA when visual, and evidence mapped to the Goal Charter.
 
 ## Shared Subagent Rule: Artifact-First Work
 Every helper subagent must make the useful thing its role owns. Do not merely describe what could be done.
@@ -47,17 +47,27 @@ Specialists produce role-specific artifacts and may include recommendations insi
 `BRANCH_LEDGER.md` records branch evidence; `TASK_LOG.md` and `CHANGELOG_ARGUS.md` record history. They do not replace the Roadmap's current state or next-action decision.
 
 ## Deferred Operator Verification
-`VERIFICATION_QUEUE.md` is the durable, item-by-item list of Steven's deferred manual checks. Every user-visible change must record the exact screen, action, expected result, forbidden or unchanged behavior, automated evidence, and current manual status.
+`VERIFICATION_QUEUE.md` is the durable, item-by-item list of Steven's deferred visual/manual checks and anomaly decisions. Every visual change must record the exact screen, action, expected result, forbidden or unchanged behavior, automated evidence, and current manual status. Routine nonvisual work records automated evidence and does not create a Steven approval item.
 
-Automated and manual evidence must remain distinct. `AUTOMATED_PASS` means Codex's build, tests, source review, and available visual proof passed. It does not mean Steven inspected the physical interface. `MANUAL_PENDING` does not block unrelated work from starting on a clean branch, but it does not authorize a merge and must never be relabeled as a manual pass. Steven's result is recorded as `MANUAL_PASS` or `MANUAL_FAIL`; failures create a narrow follow-up task.
+Automated and manual evidence must remain distinct. `AUTOMATED_PASS` means Codex's build, tests, source review, and available visual proof passed. It does not mean Steven inspected the physical interface. `MANUAL_PENDING` applies to visual or genuinely physical checks and never becomes a pass without Steven's result. Nonvisual work may integrate under standing delegation after Hard Chew proof.
 
 ## Autonomous Work
 Autonomous-side work must preserve the mode boundary between planning, simulation, paper, read-only live, preview, and confirmed live execution. Execution Architect, Risk Governor Agent, Broker Integration Agent, Paper Trading Agent, Chart Analyst, Equity Research Analyst, and Execution Auditor are read-only/spec-only by default unless a future Goal Charter explicitly assigns implementation to Builder.
 
-Broker Integration Agent must not implement live broker order placement without explicit Steven approval. Risk Governor Agent owns gate definitions and safety review but does not place trades. Execution Auditor must verify every future simulated, paper, preview, or live order-like action has a TradePlan, risk gate result, approval state, mode, adapter, and ledger evidence.
+Routine read-only brokerage work, OAuth refresh, expected single-account validation/binding, and nontransmitting preview research are standing-authorized when their invariants pass. Broker Integration Agent must interrupt Steven before transmitting, replacing, or cancelling a real order or enabling unattended live execution. Risk Governor Agent owns gate definitions and safety review but does not place trades. Execution Auditor must verify every future simulated, paper, preview, or live order-like action has a TradePlan, risk gate result, approval state, mode, adapter, and ledger evidence.
+
+## Anomaly Interruption
+Do not ask Steven to approve expected nonvisual results. Stop and ask a concrete question when observed external state changes the risk or scope.
+
+Examples include:
+- More or fewer brokerage accounts than expected, an account ending other than `2573`, a type other than `CASH`, a changed hash, unexpected positions, or broader trading authority. Explain that every unexpectedly authorized account may be exposed to permitted reads and future trade capability.
+- Any real order transmission/cancel/replace, unattended-live enablement, money transfer, destructive data operation, database migration, credential revocation/rotation/deletion, provider-app deactivation/deletion, paid service, or ambiguous protected-domain semantic change.
+- Secret exposure, failed security proof, remote Git divergence, unexpected changed files, or a test failure that cannot be repaired narrowly without altering the authorized outcome.
+
+Exact CLI confirmation phrases are internal safety interlocks, not recurring CEO approval requests. Codex may satisfy them under standing delegation after proving the documented preconditions.
 
 ## Git Stewardship
-Git Steward confirms branch, branch base, worktree state, ahead/behind status, and allowed changed paths. Git Steward creates task branches from current local `master`, creates safety branches before risky repair operations, refuses unsafe merges, and performs local fast-forward merges only after Steven explicitly approves. Nothing pushes unless Steven explicitly approves.
+Git Steward confirms branch, branch base, worktree state, ahead/behind status, and allowed changed paths. Git Steward creates task branches from current local `master`, creates safety branches before risky repair operations, and refuses unsafe merges. Verified nonvisual work may fast-forward into local `master` and receive a non-force backup push under standing delegation. Visual/UI work waits for Steven's manual acceptance. Reset, rebase, branch deletion, force-push, non-fast-forward merge, or remote-divergence resolution always interrupts Steven.
 
 ## Output
 Codex Orchestrator produces one consolidated CEO report. Steven decides whether the work is accepted.
@@ -68,14 +78,14 @@ Codex Orchestrator produces one consolidated CEO report. Steven decides whether 
 3. Goal Steward verifies the Goal Charter for Builder work.
 4. Git Steward prepares or verifies the branch.
 5. Orchestrator delegates to specialists.
-6. Builder implements only approved scoped app-code tasks.
+6. Builder implements only scoped app-code tasks authorized by the current task, Roadmap, or standing delegation.
 7. QA verifies.
 8. Release Scribe reconciles the Roadmap and records historical evidence.
-9. Git Steward performs merge only after Steven approval.
-10. Nothing pushes unless Steven explicitly approves.
+9. Git Steward integrates proven nonvisual work by clean fast-forward; visual work waits for Steven's manual acceptance.
+10. Git Steward performs a non-force backup push when the integrated source, tests, protected-path review, and secret scan are clean.
 
 ## Stop Conditions
-Stop when requirements are ambiguous, when protected areas are touched without explicit approval, when unrelated files change, when branch state is ambiguous, or when a push or merge would be required without explicit Steven approval.
+Stop when requirements are ambiguous, the task exceeds standing authority, an anomaly interruption condition is reached, unrelated files change, branch state is ambiguous, or Git integration would require anything other than a clean fast-forward and non-force push.
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
+Protected areas require explicit task scope and Hard Chew proof: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior. Do not request a second approval when the exact bounded change is already authorized. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, or real execution.

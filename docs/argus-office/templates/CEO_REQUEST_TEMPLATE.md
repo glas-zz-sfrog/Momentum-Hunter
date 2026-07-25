@@ -10,12 +10,12 @@ Why does this matter now?
 -
 
 ## Constraints
-- No push or merge without explicit approval.
-- Steven remains final merge approver.
+- Routine proven nonvisual work may cleanly fast-forward and receive a non-force backup push under standing delegation.
+- Visual/manual acceptance, anomalies, real orders, destructive changes, secret/provider actions, paid services, and unsafe Git interrupt Steven.
 - Codex Orchestrator is the Codex-side front door.
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
+Name every protected area touched and its exact authorized outcome. Define which semantic expansion or consequential state must interrupt Steven.
 
 ## Requested Agent Path
 Suggested agents or reviews:

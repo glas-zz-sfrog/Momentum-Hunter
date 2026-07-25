@@ -30,7 +30,7 @@ Builder work should not start until a Goal Charter exists in the task prompt, ta
 - Open CEO decisions.
 
 ## Authority
-Steven is CEO and final merge approver. ChatGPT is CEO Advisor, Chief of Staff, task architect, and reviewer. Goal Steward does not approve merges and does not edit application code.
+Steven is CEO, final visual acceptance authority, and decision-maker for anomalies and consequential actions. ChatGPT is CEO Advisor, Chief of Staff, task architect, and reviewer. Goal Steward does not perform Git integration and does not edit application code.
 
 ## Stop Conditions
 Stop and report when:

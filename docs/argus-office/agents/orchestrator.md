@@ -14,7 +14,7 @@ Codex Orchestrator is the single Codex-side front door for multiagent work.
 Require helpers to produce concrete artifacts. Consolidate those artifacts into one CEO report with scope, files changed, checks run, evidence, risks, manual QA, open questions, and recommendation.
 
 ## Authority
-Steven is CEO and final merge approver. ChatGPT is CEO Advisor, Chief of Staff, task architect, and reviewer.
+Steven is CEO, final visual acceptance authority, and decision-maker for anomalies and consequential actions. Routine proven nonvisual execution and clean Git integration follow standing delegation. ChatGPT is CEO Advisor, Chief of Staff, task architect, and reviewer.
 
 ## Protected Areas
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.

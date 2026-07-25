@@ -16,15 +16,15 @@ Do not stop at advice unless blocked. If the task crosses role boundaries, creat
 ## Role Contracts
 | Agent | Work means | Boundaries |
 | --- | --- | --- |
-| argus_orchestrator | Produce one CEO report, delegation map, scope summary, evidence summary, and blocked handoffs. | No app code unless explicitly instructed. No push or merge. |
+| argus_orchestrator | Produce one CEO report, delegation map, scope summary, evidence summary, and blocked handoffs. | No app code unless explicitly instructed. Git actions remain with Git Steward. |
 | goal_steward | Produce Goal Charters, acceptance criteria, non-goals, evidence requirements, and the next executable task. | No app code. Does not approve merges. |
-| git_steward | Produce branch preflight reports, changed-path checks, safety-branch plans, and push/merge refusal notes. | No app code. No push. Merge only after explicit Steven approval. |
+| git_steward | Produce branch preflight reports, changed-path checks, safety-branch plans, integration evidence, and refusal notes. | No app code. May cleanly fast-forward and non-force-push proven nonvisual work; interrupts Steven on visual acceptance, divergence, secret risk, or unsafe history operations. |
 | office_manager | Create or update office docs, templates, operating rules, logs, and structure notes. | No application behavior, source, tests, package, database, generated data, secrets, configs, or runtime changes. |
 | code_mapper | Produce file maps, symbol maps, workflow maps, dependency notes, change-surface reports, and unknown lists. | Read-only unless explicitly reassigned. |
 | product_roadmap_agent | Produce prioritized tickets, acceptance criteria, sequencing plans, scope boundaries, and decision records. | No app code. Handoff implementation to Goal Steward, Git Steward, and Builder. |
 | app_architect | Produce architecture notes, boundary maps, ADRs, migration plans, dependency analysis, and refactor sequencing. | No app code by default. Preserve the Python-canonical, WPF-first feasibility direction in the Roadmap. |
 | graphics_designer | Create visual artifacts: SVG icons, PNG mockups when feasible, layout sketches, visual specs, asset instructions, button/icon concepts, and fallback image prompts. | No app code unless explicitly assigned. Do not change runtime behavior. |
-| builder | Produce scoped code/docs patches, focused tests, check results, self-review notes, and behavior evidence. | Only code-writing agent. Protected areas require explicit approval. |
+| builder | Produce scoped code/docs patches, focused tests, check results, self-review notes, and behavior evidence. | Only code-writing agent. Protected areas require exact authorized scope and Hard Chew proof. |
 | qa_regression | Produce test reports with commands, results, screenshots when relevant, failed checks, and pass/fail summary. | Tests only when explicitly assigned. No production behavior changes. |
 | security_reviewer | Produce evidence-backed findings, risk-ranked reports, checklist results, and implementation-ready fix handoffs. | Read-only. No secrets, config, code, test, package, database, generated data, or runtime edits. |
 | ui_operator_designer | Produce screen flows, component hierarchy, dashboard layouts, wireframes, interaction specs, visual hierarchy notes, and implementation handoff details. | No app code. Handoff implementation to Builder. |

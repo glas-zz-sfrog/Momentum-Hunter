@@ -1,7 +1,7 @@
 # CEO Console
 
 ## Steven's Role
-Steven is CEO, product owner, priority setter, and final merge approver. Steven decides what matters, what ships, and when work is accepted into `master` or `main`.
+Steven is CEO, product owner, priority setter, final visual acceptance authority, and decision-maker for anomalies and consequential actions. Routine proven nonvisual execution, clean fast-forward integration, and non-force backup are delegated through the Roadmap.
 
 ## ChatGPT's Role
 ChatGPT acts as CEO Advisor, Chief of Staff, task architect, and reviewer. ChatGPT helps shape requests, clarify acceptance criteria, review outputs, and reduce Steven's project-management load.
@@ -10,10 +10,10 @@ ChatGPT acts as CEO Advisor, Chief of Staff, task architect, and reviewer. ChatG
 Read `ROADMAP.md`, especially its `Now` section, for the single authoritative current phase, active branch, merge state, safety gates, and next action. This file must not duplicate moving task state.
 
 ## Operating Model
-Steven talks to ChatGPT, ChatGPT writes the task prompt, Goal Steward verifies the Goal Charter, Git Steward prepares or verifies the branch, Codex Orchestrator coordinates specialists, Builder implements only approved scoped tasks, QA verifies, Release Scribe documents, and Git Steward performs local fast-forward merges only after Steven approval. Nothing pushes unless Steven explicitly approves.
+Steven sets direction. ChatGPT shapes the task, Goal Steward verifies the Goal Charter, Git Steward prepares the branch, Codex Orchestrator coordinates specialists, Builder implements the scoped work, QA verifies, and Release Scribe records evidence. Git Steward fast-forwards and non-force-pushes proven nonvisual work under standing delegation. Visual work waits for Steven's manual acceptance. Anomalies, real orders, destructive changes, secret/provider actions, paid services, and unsafe Git interrupt Steven with one concrete question.
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
+Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before scope or semantics expand, destructive migration, secret exposure/revocation, real execution, or unexpected external state.
 
 ## Next Recommended Action
-Use the Roadmap's `Now` section. At this revision, the immediate CEO decision is whether to merge the verified R004 WPF workstation-shell spike into local `master`.
+Use the Roadmap's `Now` section. This file intentionally carries no separate moving next-action gate.

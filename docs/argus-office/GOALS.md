@@ -19,7 +19,7 @@ Acceptance Direction:
 - Trust blockers dominate normal workflow actions.
 - Capture missing, stale data, no candidates, unreviewed candidates, no watchlist, incomplete plans, and readiness gates use distinct language.
 - The UI shows one next required action and explains why it is next.
-- Existing scoring, readiness, replay, alert, storage, and runtime semantics stay protected unless Steven explicitly approves a separate change.
+- Existing scoring, readiness, replay, alert, storage, and runtime semantics stay protected unless the current task or Roadmap defines an exact bounded change with Hard Chew proof; semantic expansion interrupts Steven.
 
 ## Governance: Goal Charter Before Builder
 

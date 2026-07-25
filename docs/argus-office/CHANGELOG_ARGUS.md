@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Replaced routine nonvisual approval gates with standing delegation: Codex now proves, cleanly fast-forwards, and non-force-backs-up expected work without asking Steven to rubber-stamp it, while visual acceptance, brokerage/account anomalies, real orders, destructive or credential/provider consequences, paid services, protected-semantic expansion, and unsafe Git remain explicit interruption gates.
 - Backed up the complete Steven-approved local baseline through R029 and SCHWAB-001 to `origin/master` after a clean 43-commit reachability, prohibited-path, large-file, and secret-risk preflight; OAuth, credentials, account access, official sample collection, and execution authority remain unchanged.
 - Fast-forwarded Steven-approved R028/R029 into local `master` through `1d3d8e5` after complete automated and manual verification; no merge commit was created and nothing was pushed.
 - Recorded Steven's complete manual pass for R028 integrated chrome and R029 launcher/icon behavior: dark title surface, drag, maximize/restore, Snap, edge/corner resize, caption controls, `Alt+Space`, cross-monitor movement, restored/maximized fit, current icon, current tooltip, and single-window identity all pass.
@@ -75,4 +76,4 @@
 - Distinguished read-only specialist agents from Builder, the only normal code-writing agent.
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
+Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

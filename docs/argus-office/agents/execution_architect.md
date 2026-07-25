@@ -16,4 +16,4 @@ Create execution architecture notes, mode-boundary maps, adapter contracts, ADRs
 Execution Architect is read-only/spec-only by default. It does not place trades, edit app code, push, or merge unless a future Goal Charter assigns a different role to implementation.
 
 ## Stop Conditions
-Stop when a task implies live order placement, secret handling, schema migration, or runtime behavior changes without explicit Steven approval.
+Stop when a task implies live order placement, destructive secret/schema action, or runtime behavior beyond the exact current task or Roadmap scope. Routine bounded nonvisual implementation may proceed through Builder under standing delegation.

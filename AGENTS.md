@@ -1,11 +1,12 @@
 # Argus Agent Rules
 
 ## Prime Directive
-Protect Momentum Hunter / Argus behavior. Make small, scoped, reversible changes only when the task is clear and approved.
+Protect Momentum Hunter / Argus behavior. Make small, scoped, reversible changes only when the task is clear and is authorized by the current task, Roadmap, or standing delegation.
 Rule: done means proven, not merely changed.
 
 ## Authority Model
-- Steven is CEO, product owner, and final merge approver.
+- Steven is CEO, product owner, final visual acceptance authority, and decision-maker for anomaly and consequence gates.
+- Routine nonvisual implementation, verification, Git integration, and backup are delegated under the standing policy below; do not ask Steven to rubber-stamp expected results.
 - ChatGPT is CEO Advisor, Chief of Staff, task architect, and reviewer.
 - Codex Orchestrator is the single Codex-side front door for multiagent work.
 - Goal Steward owns goal framing, Goal Charters, and acceptance alignment before Builder work.
@@ -20,7 +21,15 @@ Rule: done means proven, not merely changed.
 - Release Scribe updates docs, reports, logs, and checklists.
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
+Protected areas require explicit task scope and Hard Chew proof: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior. Do not ask again when the exact bounded change is already authorized by the current task or Roadmap. Interrupt Steven when the work would exceed that scope, change protected semantics, transmit a real order, destroy data, expose or revoke a secret, or encounter an anomaly.
+
+## Standing Delegation And Interruption
+- Standing-authorized nonvisual work includes bounded implementation, tests, documentation, read-only API calls, OAuth refresh, expected single-account validation/binding, deterministic evidence collection, reports, task branches, commits, clean fast-forward merges, and non-force backup pushes after all proof gates pass.
+- Exact confirmation phrases remain software safety interlocks. Codex may satisfy them under standing authorization only after independently proving every documented precondition.
+- Steven approval and physical verification are required for GUI/visual changes before they are accepted as complete. Ask before taking over the desktop unless the current conversation already grants computer control.
+- Interrupt Steven with a concrete question when external state differs from the expected invariant. For brokerage work this includes any account count other than one, an ending other than `2573`, a type other than `CASH`, changed account hash, unexpected positions or trading permissions, broader authorization scope, or any state that could expose another account to reads or trades.
+- Also interrupt before transmitting, replacing, or cancelling a real order; enabling unattended live execution; transferring money; destructive user-data deletion; database migration; credential revocation/rotation/deletion; provider-app deactivation/deletion; paid service commitment; force-push, reset, rebase, branch deletion, or non-fast-forward integration.
+- A failed test, security check, secret scan, protected-path review, or expected-state check is an interruption condition when the agent cannot repair it narrowly without changing the authorized outcome.
 
 ## General Rules
 - Prefer small scoped changes.
@@ -36,10 +45,10 @@ Do not change these areas without explicit approval: core scoring logic, trade r
 
 ## Roadmap Authority And Reporting
 - `docs/argus-office/ROADMAP.md` is the sole authoritative current-status and next-work document. `CURRENT_STATE.md` is retired.
-- `docs/argus-office/VERIFICATION_QUEUE.md` is the authoritative list of deferred Steven checks. It records verification work but does not replace the Roadmap or grant merge approval.
+- `docs/argus-office/VERIFICATION_QUEUE.md` is the authoritative list of deferred Steven visual/manual checks and anomaly decisions. Routine nonvisual proof belongs in automated evidence and does not create a Steven approval item.
 - Before starting substantive work, read the Roadmap `Now` section and reconcile any mismatch with Git before relying on it.
 - Before reporting a substantive task complete, update the Roadmap from actual branch, commit, test, merge, push, and next-action evidence. Branch-only work must be `IMPLEMENTED_PENDING_MERGE`, not `COMPLETE`.
-- For every user-visible change, add exact numbered operator checks to the Verification Queue and keep automated evidence separate from Steven's manual result. `MANUAL_PENDING` may coexist with continued unrelated Builder work, but it is never equivalent to manual acceptance or merge approval.
+- For every visual or physically user-verifiable change, add exact numbered operator checks to the Verification Queue and keep automated evidence separate from Steven's manual result. Nonvisual changes require automated evidence, not a rubber-stamp manual item.
 - Never ask Steven to broadly "check the app." State what to open, what action to take, what should appear, what must remain absent or locked, and how to report a failure.
 - Give Steven detailed progress updates for substantive work: what is being checked or changed, why it matters, evidence found, verification planned, and unresolved risk.
 
@@ -59,8 +68,8 @@ Do not stop at advice unless blocked. If the task crosses role boundaries, creat
 ## Stop Conditions
 Stop and report when:
 - Requirements are ambiguous or conflict.
-- Requested changes touch protected areas without explicit approval.
-- Work would require pushing, merging, or changing branch history.
+- Requested changes exceed the current task, Roadmap, or standing delegation.
+- An interruption condition in the standing policy is reached.
 - Unrelated files change unexpectedly.
 - The current branch is not the requested task branch.
 
@@ -79,7 +88,7 @@ Every agent report must include:
 - Recommendation
 
 ## Branch Policy
-Use task branches. Git Steward may perform local fast-forward merges to `master` only when Steven explicitly approves. Steven remains the final merge approver.
+Use task branches. Git Steward may fast-forward verified nonvisual work into local `master` and perform a non-force backup push under standing delegation when the worktree is clean, the branch is an ancestor-compatible fast-forward, protected-path review passes, and secret scanning is clean. Visual/UI work waits for Steven's manual acceptance.
 
-## No Push / No Merge
-No agent may push or merge without explicit approval from Steven. Git Steward must refuse push, reset, rebase, branch deletion, force-push, or non-fast-forward merge unless Steven gives explicit written approval and the required safety branch exists.
+## Git Integration Safety
+Routine clean fast-forward merge and non-force push are standing-authorized for proven nonvisual work. Git Steward must interrupt Steven before reset, rebase, branch deletion, force-push, non-fast-forward merge, remote divergence resolution, or any integration whose exact content or secret safety is unclear.

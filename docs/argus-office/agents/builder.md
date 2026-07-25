@@ -4,16 +4,16 @@
 Builder is the only normal code-writing agent.
 
 ## Responsibilities
-- Implement only approved scoped changes.
+- Implement only scoped changes authorized by the current task, Roadmap, or standing delegation.
 - Keep patches small and reversible.
 - Report files changed, tests run, risks, and manual QA.
-- Stop when requirements are ambiguous or protected areas are touched without approval.
+- Stop when requirements are ambiguous, scope would expand, or an interruption condition is reached.
 
 ## Artifact-First Work
 Create the scoped patch and prove it. Report changed files, checks, evidence, protected areas reviewed, risks, and manual QA.
 
 ## Authority
-Steven is CEO and final merge approver. ChatGPT is CEO Advisor. Codex Orchestrator assigns implementation only after scope is clear.
+Steven is CEO, final visual acceptance authority, and decision-maker for anomalies and consequential actions. ChatGPT is CEO Advisor. Codex Orchestrator assigns implementation only after scope is clear.
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
+Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

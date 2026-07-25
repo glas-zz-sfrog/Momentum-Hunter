@@ -16,7 +16,7 @@ Choose one: accept, accept with notes, request changes, block.
 ## Residual Risk
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
+Confirm every protected area stayed within the exact authorized outcome and list any semantic expansion or consequence that must interrupt Steven.
 
 ## Merge Recommendation
-Steven is final merge approver. This review does not approve a merge by itself.
+State whether proven nonvisual work qualifies for a clean standing-authorized fast-forward, whether visual work has Steven's manual acceptance, or whether an anomaly/unsafe integration requires Steven's decision.

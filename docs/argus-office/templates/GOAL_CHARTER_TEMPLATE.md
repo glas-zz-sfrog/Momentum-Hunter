@@ -11,7 +11,7 @@
 -
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
+Name every protected area touched and the exact authorized outcome. Routine nonvisual work may proceed under standing delegation when the documented invariants pass. Define the anomaly, visual, destructive, real-execution, secret, provider, paid-service, or Git conditions that must interrupt Steven.
 
 ## Acceptance Criteria
 -
@@ -37,7 +37,7 @@ Do not accept completion merely because files were created, labels exist, or tes
 ## Smallest Safe Implementation Slice
 
 ## Open CEO Decisions
--
+- Include only genuine product choices, visual acceptance, anomalies, or consequential actions. Do not list routine nonvisual execution as a CEO decision.
 
 ## Goal Steward Review
 - [ ] Goal statement is concrete.

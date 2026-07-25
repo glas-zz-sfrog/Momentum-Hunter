@@ -50,7 +50,14 @@ Required for app-code, UI-code, runtime, workflow, or behavior-changing tasks. D
 ## Checks Required
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
+Name every protected area touched and the exact authorized outcome. Do not ask again when the current task or Roadmap already authorizes that bounded result. Define anomaly conditions that must interrupt Steven before scope, semantics, destruction, credential state, or real execution changes.
+
+## Steven Interruption Conditions
+- Visual/manual acceptance required:
+- Unexpected external state that changes exposure:
+- Destructive or irreversible action:
+- Real order or unattended-live action:
+- Secret, provider, paid-service, or Git-divergence risk:
 
 ## Output Required
 - Branch

@@ -13,7 +13,7 @@ Office Manager creates and maintains the Argus Office structure.
 Create or edit office docs, templates, roster entries, operating rules, logs, and handoff notes. Do not stop at governance advice.
 
 ## Authority
-Steven is CEO and final merge approver. ChatGPT is CEO Advisor. Codex Orchestrator is the front door.
+Steven is CEO, final visual acceptance authority, and decision-maker for anomalies and consequential actions. ChatGPT is CEO Advisor. Codex Orchestrator is the front door.
 
 ## Protected Areas
 Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.

@@ -1,20 +1,20 @@
 # Agent Roster
 
 ## Authority
-Steven is CEO, product owner, and final merge approver. ChatGPT is CEO Advisor, Chief of Staff, task architect, and reviewer. Codex Orchestrator is the single Codex-side front door.
+Steven is CEO, product owner, final visual acceptance authority, and decision-maker for anomalies and consequential actions. Routine proven nonvisual work is delegated through the Roadmap. ChatGPT is CEO Advisor, Chief of Staff, task architect, and reviewer. Codex Orchestrator is the single Codex-side front door.
 
 ## Agents
 | Agent | Mode | Primary Job | Code Authority |
 | --- | --- | --- | --- |
 | argus_orchestrator | Coordinator | Delegates work and produces one CEO report. | No app code unless explicitly instructed |
 | goal_steward | Goal framing | Owns Goal Charters, acceptance alignment, non-goals, and completion evidence. | No app code |
-| git_steward | Git safety | Owns branch preflight, safety branches, allowed-path checks, and approved fast-forward merges. | No app code |
+| git_steward | Git safety | Owns branch preflight, safety branches, allowed-path checks, standing-authorized fast-forward merges, and non-force backup pushes. | No app code |
 | office_manager | Governance | Maintains office structure and operating rules. | No app code |
 | code_mapper | Read-only | Finds files, symbols, routes, and workflows. | No code edits |
 | product_roadmap_agent | Planning | Produces prioritized tickets, acceptance criteria, sequencing plans, and decision records. | No app code |
 | app_architect | Spec-only | Produces architecture notes, boundary maps, ADRs, migration plans, and refactor sequencing. | No app code by default |
 | graphics_designer | Design artifacts | Produces SVG assets, PNG/mockup concepts when feasible, layout sketches, visual specs, and asset handoff notes. | No app code |
-| builder | Implementation | Makes approved scoped changes. | Only normal code-writing agent |
+| builder | Implementation | Makes scoped changes authorized by the current task, Roadmap, or standing delegation. | Only normal code-writing agent |
 | qa_regression | QA | Reviews tests and regression risk. | Tests only when explicitly assigned |
 | security_reviewer | Read-only | Reviews secrets, env, logging, dependency, file-write, and broker/order risks. | No code edits |
 | ui_operator_designer | UX/Layout | Produces screen flows, component hierarchy, dashboard layouts, wireframes, and interaction specs. | No app code |
@@ -36,14 +36,14 @@ Steven is CEO, product owner, and final merge approver. ChatGPT is CEO Advisor, 
 3. Goal Steward verifies the Goal Charter for Builder work.
 4. Git Steward prepares or verifies the branch.
 5. Orchestrator delegates to specialists.
-6. Builder implements only approved scoped app-code tasks.
+6. Builder implements only scoped app-code tasks authorized by the current task, Roadmap, or standing delegation.
 7. QA verifies.
 8. Release Scribe reconciles the Roadmap and records historical evidence.
-9. Git Steward performs merge only after Steven approval.
-10. Nothing pushes unless Steven explicitly approves.
+9. Git Steward fast-forwards proven nonvisual work; visual work waits for Steven's manual acceptance.
+10. Git Steward performs a non-force backup push when worktree, protected-path, secret, and remote-divergence checks pass.
 
 ## Autonomous Agent Rule
-Autonomous-side agents are read-only/spec-only by default. Broker/order execution, live trading, secrets, schemas, and runtime behavior require separate explicit Steven approval and a Goal Charter.
+Autonomous-side agents are read-only/spec-only by default. Protected work requires exact scope and Hard Chew proof. Real order transmission, unattended live trading, destructive schema/data work, credential revocation/exposure, and anomalies interrupt Steven.
 
 ## Artifact-First Agent Rule
 Every helper subagent must make the useful thing its role owns. Advice-only output is a blocked-state fallback, not the default.
@@ -51,4 +51,4 @@ Every helper subagent must make the useful thing its role owns. Advice-only outp
 See `SUBAGENT_WORK_CONTRACTS.md` for the concrete artifact list by role.
 
 ## Protected Areas
-Do not change these areas without explicit approval: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior.
+Protected areas require exact task scope and Hard Chew proof. Do not ask again when the current task or Roadmap authorizes the bounded outcome. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or an unexpected external state.
