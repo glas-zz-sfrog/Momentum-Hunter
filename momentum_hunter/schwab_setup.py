@@ -139,7 +139,7 @@ class LocalSecretStore:
         self.path = path
         self.protector = protector or WindowsDpapiProtector()
 
-    def save_fake_or_future_values(self, payload: dict[str, str]) -> Path:
+    def save(self, payload: dict[str, str]) -> Path:
         encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
         protected = self.protector.protect(encoded)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -147,6 +147,9 @@ class LocalSecretStore:
         temporary.write_bytes(base64.b64encode(protected))
         temporary.replace(self.path)
         return self.path
+
+    def save_fake_or_future_values(self, payload: dict[str, str]) -> Path:
+        return self.save(payload)
 
     def load(self) -> dict[str, str]:
         try:

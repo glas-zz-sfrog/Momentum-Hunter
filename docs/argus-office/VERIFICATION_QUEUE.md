@@ -503,12 +503,58 @@ Automated proof completed:
 
 Deferred to later separately gated work:
 
-1. Provision and verify a trusted production-local certificate/private-key
-   lifecycle.
+1. Stage and install the production-local certificate using the verification
+   sequence below.
 2. Onboard the Schwab Client ID/Secret directly into DPAPI-protected local storage.
 3. Perform a real browser authorization and token exchange.
 4. Discover accounts read-only and prove exact binding to the intended $100 canary
    account.
+
+## SCHWAB-001B Production Certificate Trust
+
+Status: `MANUAL_PENDING_SECURITY_STATE_CHANGE`
+
+This is not a Git check. Codex will run the commands and report the exact generated
+version and thumbprint. Steven's physical check is limited to the browser trust
+result.
+
+Before installation, Codex must prove:
+
+1. No certificate with subject `CN=Momentum Hunter Local OAuth Root` exists in
+   `Cert:\CurrentUser\Root`.
+2. No production material exists under
+   `%LOCALAPPDATA%\MomentumHunter\Schwab\oauth-loopback`.
+3. Nothing is listening on exact address `127.0.0.1:8182`.
+
+During installation, Codex must:
+
+1. Stage exactly one version through the committed certificate manager.
+2. Report only version ID, certificate subject, SHA thumbprints, validity, ACL
+   status, and `STAGED_VERIFIED_UNTRUSTED`; never display the leaf-key password.
+3. Confirm the encrypted key, DPAPI record, certificate chain, and metadata are
+   outside Git and readable only by Steven's Windows user.
+4. Install only the staged root's exact thumbprint into `CurrentUser\Root`; do not
+   use `LocalMachine`, an administrator store, or a wildcard subject removal.
+5. Re-run chain, hostname, TLS, trust, and ACL verification and require
+   `TRUSTED_VERIFIED`.
+
+Steven's browser check:
+
+1. Codex starts the one-use listener on
+   `https://127.0.0.1:8182/oauth/callback` with a synthetic state and no Schwab
+   credentials.
+2. Open the exact local URL Codex provides. The page must open without a certificate
+   privacy warning, red address bar, advanced-warning bypass, or hostname error.
+3. The page must say the local authorization response was received and may be
+   closed. It must not display a code, state value, credential, token, account, or
+   broker status.
+4. After the page loads, Codex confirms port `8182` is closed and no second callback
+   is accepted.
+5. Report `PASS SCHWAB CERTIFICATE` or attach a screenshot of the browser warning.
+
+Passing this check authorizes only local HTTPS trust. It does not authorize Schwab
+credentials, real OAuth, account access, market-data requests, broker preview, or
+orders. The exact-root removal command remains available for rollback.
 
 ## R028 Integrated Workstation Chrome
 

@@ -305,10 +305,12 @@ class SchwabOAuthLoopbackListenerTests(unittest.TestCase):
         config = LoopbackListenerConfig(
             certificate_file=self.certificate_file,
             private_key_file=self.private_key_file,
+            private_key_password="SYNTHETIC-KEY-PASSWORD",
         )
         self.assertEqual(REGISTERED_CALLBACK_HOST, config.host)
         self.assertEqual(REGISTERED_CALLBACK_PORT, config.port)
         self.assertEqual(REGISTERED_CALLBACK_PATH, config.path)
+        self.assertNotIn("SYNTHETIC-KEY-PASSWORD", repr(config))
         with self.assertRaisesRegex(SchwabSetupError, "127.0.0.1"):
             LoopbackListenerConfig(
                 certificate_file=self.certificate_file,

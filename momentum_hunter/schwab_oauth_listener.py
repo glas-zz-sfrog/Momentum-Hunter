@@ -42,7 +42,7 @@ class OAuthCallbackRejectedError(SchwabSetupError):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class LoopbackListenerConfig:
     certificate_file: Path
     private_key_file: Path
@@ -51,6 +51,7 @@ class LoopbackListenerConfig:
     path: str = REGISTERED_CALLBACK_PATH
     timeout_seconds: float = 120.0
     test_only_allow_ephemeral_port: bool = False
+    private_key_password: str | Callable[[], str] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "certificate_file", Path(self.certificate_file))
@@ -64,6 +65,17 @@ class LoopbackListenerConfig:
                 raise SchwabSetupError("The OAuth listener port must match the registered callback exactly.")
         if self.timeout_seconds <= 0:
             raise CallbackTimeoutError("OAuth callback timeout must be positive.")
+
+    def __repr__(self) -> str:
+        return (
+            "LoopbackListenerConfig("
+            f"certificate_file={self.certificate_file!r}, "
+            f"private_key_file={self.private_key_file!r}, "
+            f"host={self.host!r}, port={self.port!r}, path={self.path!r}, "
+            f"timeout_seconds={self.timeout_seconds!r}, "
+            f"test_only_allow_ephemeral_port={self.test_only_allow_ephemeral_port!r}, "
+            "private_key_password='[redacted]')"
+        )
 
 
 class _LoopbackHttpServer(HTTPServer):
@@ -217,6 +229,7 @@ class OneShotOAuthCallbackListener:
             context.load_cert_chain(
                 certfile=str(self.config.certificate_file),
                 keyfile=str(self.config.private_key_file),
+                password=self.config.private_key_password,
             )
         except (OSError, ssl.SSLError) as exc:
             raise SchwabSetupError(

@@ -101,7 +101,7 @@ class SchwabSetupSecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "secrets.bin"
             store = LocalSecretStore(path=path, protector=protector)
-            store.save_fake_or_future_values(
+            store.save(
                 {"access_token": "SYNTHETIC-ACCESS", "refresh_token": "SYNTHETIC-REFRESH"}
             )
             raw = path.read_bytes()
