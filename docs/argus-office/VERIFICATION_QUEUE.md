@@ -862,8 +862,8 @@ Live binding evidence and future interruption conditions:
 
 ## ARGUS-SHADOW-004 Official Sample Activation
 
-Status: `AUTOMATED_PASS`; `MANUAL_PENDING` for one visual check; branch pending
-commit and integration
+Status: `AUTOMATED_PASS`; `MANUAL_PENDING` for one visual check; implementation
+committed at `9a214b7` and pending integration
 
 Automated evidence:
 
