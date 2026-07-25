@@ -480,6 +480,36 @@ Check these one by one:
 
 Passing this checklist will not itself authorize merge or push.
 
+## SCHWAB-001 Synthetic Loopback Listener
+
+Status: `CODEX_VERIFIED_NO_MANUAL_ACTION`
+
+Steven does not need to inspect Git, enter credentials, open Schwab, or exercise the
+listener for this slice. The implementation is intentionally not wired into the UI
+or a real OAuth flow.
+
+Automated proof completed:
+
+1. The production configuration accepts only
+   `https://127.0.0.1:8182/oauth/callback`.
+2. A synthetic TLS client that trusts the synthetic test certificate completes one
+   valid callback, after which the exact registered port is closed.
+3. Missing, duplicate, mismatched, provider-error, wrong-method, malformed-handler,
+   stalled-handshake, keep-alive, timeout, and second-use cases fail closed.
+4. Authorization code and state values are absent from response bodies, object
+   representations, and stderr proof.
+5. The listener has no provider, broker, account, or order client imports.
+6. Focused tests pass 19/19; final full Python discovery passes 653/653.
+
+Deferred to later separately gated work:
+
+1. Provision and verify a trusted production-local certificate/private-key
+   lifecycle.
+2. Onboard the Schwab Client ID/Secret directly into DPAPI-protected local storage.
+3. Perform a real browser authorization and token exchange.
+4. Discover accounts read-only and prove exact binding to the intended $100 canary
+   account.
+
 ## R028 Integrated Workstation Chrome
 
 Status: `APPROVED_DIRECTION_NOT_STARTED`

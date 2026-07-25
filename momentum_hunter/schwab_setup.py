@@ -2,8 +2,8 @@ from __future__ import annotations
 
 """Credential-free secure setup primitives for future Schwab OAuth onboarding.
 
-No production callback URL or Schwab endpoint is selected here. The CLI cannot contact
-Schwab and intentionally refuses real onboarding while developer approval is pending.
+The registered callback is known, but the CLI cannot contact Schwab and intentionally
+refuses credential onboarding, token exchange, account access, or order activity.
 """
 
 import argparse
@@ -58,11 +58,17 @@ class SchwabApplicationCredentials:
         return "SchwabApplicationCredentials(application_id='[redacted]', application_secret='[redacted]')"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class OAuthCallback:
     authorization_code: str
     state: str
     error: str = ""
+
+    def __repr__(self) -> str:
+        return (
+            "OAuthCallback(authorization_code='[redacted]', "
+            "state='[redacted]', error='[redacted]')"
+        )
 
 
 class _DataBlob(ctypes.Structure):
@@ -244,13 +250,14 @@ def unique_query_value(query: dict[str, list[str]], key: str) -> str:
 
 def callback_recommendation() -> dict[str, str]:
     return {
-        "proposedHost": "127.0.0.1",
-        "proposedPath": "To be selected from authenticated Schwab requirements",
-        "httpsRequirement": "Unconfirmed until authenticated Trader API documentation review",
-        "certificateRequirement": "Unconfirmed until authenticated Trader API documentation review",
-        "portBehavior": "Prefer a fixed registered loopback port if Schwab requires an exact callback match",
+        "registeredCallbackUrl": "https://127.0.0.1:8182/oauth/callback",
+        "host": "127.0.0.1",
+        "path": "/oauth/callback",
+        "httpsRequirement": "Required by the registered callback",
+        "certificateRequirement": "Explicit local certificate and private key; browser trust must be established separately",
+        "portBehavior": "Fixed registered port 8182",
         "listenerLifecycle": "Bind loopback only immediately before authorization; accept one callback; validate state; close on success, error, or timeout",
-        "status": "DESIGN_ONLY_NOT_REGISTERED",
+        "status": "SYNTHETIC_LISTENER_IMPLEMENTED_REAL_ONBOARDING_LOCKED",
     }
 
 
@@ -259,11 +266,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--show-callback-recommendation",
         action="store_true",
-        help="Print the unresolved loopback callback design without contacting Schwab.",
+        help="Print the registered loopback callback status without contacting Schwab.",
     )
     args = parser.parse_args(argv)
     print(SETUP_NOTICE)
-    print("Authenticated setup is locked until Schwab Developer approval and official callback review.")
+    print("Authenticated setup is locked pending separate credential onboarding and OAuth approval.")
     if args.show_callback_recommendation:
         print(json.dumps(callback_recommendation(), indent=2))
     return 0

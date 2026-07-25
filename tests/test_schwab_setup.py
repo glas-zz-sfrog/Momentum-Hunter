@@ -57,6 +57,8 @@ class SchwabSetupSecurityTests(unittest.TestCase):
             expected_state=first,
         )
         self.assertEqual("SYNTHETIC-CODE", callback.authorization_code)
+        self.assertNotIn("SYNTHETIC-CODE", repr(callback))
+        self.assertNotIn(first, repr(callback))
         with self.assertRaises(OAuthStateError):
             parse_oauth_callback(
                 "http://127.0.0.1/callback?code=SYNTHETIC-CODE&state=wrong",
@@ -121,7 +123,7 @@ class SchwabSetupSecurityTests(unittest.TestCase):
         self.assertNotIn("SYNTHETIC-REFRESH", rendered)
         self.assertIn("LOCKED", rendered)
 
-    def test_cli_is_credential_free_and_callback_remains_unconfirmed(self) -> None:
+    def test_cli_is_credential_free_and_reports_registered_callback(self) -> None:
         output = io.StringIO()
         with redirect_stdout(output):
             result = main(["--show-callback-recommendation"])
@@ -130,6 +132,12 @@ class SchwabSetupSecurityTests(unittest.TestCase):
         self.assertIn(SETUP_NOTICE, rendered)
         self.assertIn("locked", rendered)
         recommendation = callback_recommendation()
-        self.assertEqual("127.0.0.1", recommendation["proposedHost"])
-        self.assertIn("Unconfirmed", recommendation["httpsRequirement"])
-        self.assertEqual("DESIGN_ONLY_NOT_REGISTERED", recommendation["status"])
+        self.assertEqual("127.0.0.1", recommendation["host"])
+        self.assertEqual(
+            "https://127.0.0.1:8182/oauth/callback",
+            recommendation["registeredCallbackUrl"],
+        )
+        self.assertEqual(
+            "SYNTHETIC_LISTENER_IMPLEMENTED_REAL_ONBOARDING_LOCKED",
+            recommendation["status"],
+        )
