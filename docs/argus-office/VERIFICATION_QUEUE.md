@@ -641,6 +641,39 @@ What is not yet proven or authorized:
    account is exposed or if identity cannot be proven without full account-number
    disclosure.
 
+## SCHWAB-002A Credential Rotation Recovery
+
+Status: `SECURITY_STOP_AWAITING_STEVEN_CONFIRMATION`
+
+Incident evidence:
+
+1. During read-only research in Schwab's official developer portal, an expired-session
+   page retained the live Client ID and Client Secret in its DOM.
+2. Browser inspection surfaced those values to the automation channel. The values must
+   be treated as compromised and must not be repeated in chat, reports, logs, commands,
+   screenshots, tests, or Git.
+3. Browser work stopped immediately. No account, balance, position, market-data,
+   preview, or order endpoint was called.
+4. Exact in-memory comparison of the locally stored Client ID and Client Secret against
+   every Git-tracked file returned zero hits for both values.
+5. The worktree was clean before the incident-response branch began. Local `master`
+   remains unpushed, and no remote repository contains SCHWAB-002.
+6. The current local credential/token store remains DPAPI encrypted, but it is
+   quarantined and must not be used or refreshed.
+
+Recovery actions requiring Steven confirmation:
+
+1. Rotate or regenerate the Client Secret for `Market Intelligence Workstation` in
+   Schwab's developer portal. Do not copy the replacement into chat.
+2. Delete the quarantined local Schwab credentials, tokens, and any account-binding
+   material using the exact guarded local-auth deletion flow.
+3. Enter the replacement Client ID/Secret only through hidden local prompts.
+4. Complete fresh OAuth consent and select only the intended $100 account.
+5. Re-run redacted status, DPAPI/ACL proof, exact tracked-file secret scan, focused
+   Schwab tests, and protected-path review.
+6. Do not begin account discovery until recovery is complete and Steven separately
+   authorizes the authenticated read-only request.
+
 ## R028 Integrated Workstation Chrome
 
 Status: `COMPLETE`; automated and manual proof passed; fast-forwarded into local
