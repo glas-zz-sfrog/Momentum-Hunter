@@ -1,6 +1,11 @@
 # Argus Changelog
 
 ## Unreleased
+- Activated the write-once `official-shadow-v1` FakeBroker evidence sample at `0 / 30` after every frozen prerequisite passed; no Shadow trade state, broker call, order, or transmitting capability was created.
+- Added persisted official-sample activation, automatic process reload, direct authorization-bypass rejection, immutable definition validation, and prospective report/capture timing that prevents historical backfill.
+- Rejected the stale June 17 CRWV report in the real local runtime because it predates activation, leaving no command receipt, trade, ticket, FakeBroker order, or state file.
+- Replaced the obsolete separate-approval WPF message with `OFFICIAL SAMPLE • ACTIVE - AWAITING TRADE 1`; automated and 1920x1080 screenshot proof pass, with one Steven visual acceptance item pending before integration.
+- Passed Python compileall, 50 focused Shadow tests, 125 bounded Python tests, all 770 Python tests by bounded module discovery plus the final affected-module pass, all 216 .NET tests, and a zero-warning Release build for ARGUS-SHADOW-004.
 - Backed the integrated SCHWAB-002A/SCHWAB-003 baseline up to `origin/master` by ordinary non-force push after exact live-secret comparison and remote-divergence checks passed; no feature ref, local DPAPI state, credential, token, account hash, or generated data was pushed.
 - Fast-forwarded the complete SCHWAB-002A/SCHWAB-003 stack into local `master` through `6f308d7` after the immutable CASH binding, 123 bounded tests, 756 full tests, exact tracked-secret comparison, protected-path review, and remote-divergence preflight passed; no merge commit or order capability was created.
 - Completed the standing-authorized immutable Schwab binding checkpoint: the guarded unbound refresh returned `ACTIVE`; the same sole account ending `2573` revalidated as official `CASH` with no positions; only the current-user-DPAPI `INDIVIDUAL_CASH` binding was persisted; market data, previews, orders, and transmission remain unavailable.

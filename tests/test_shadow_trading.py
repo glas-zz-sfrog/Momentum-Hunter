@@ -7,6 +7,7 @@ import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from momentum_hunter.engine_host import (
     COMMAND_ADVANCE_SHADOW_TRADES,
@@ -16,6 +17,7 @@ from momentum_hunter.engine_host import (
 )
 from momentum_hunter.shadow_trading import (
     MIN_MEANINGFUL_SAMPLE_SIZE,
+    SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
     ShadowExecutionPolicy,
     ShadowOutcome,
     ShadowOrder,
@@ -733,7 +735,15 @@ def completed_auditable_trade(index: int):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         report = root / "report.json"
-        report.write_text(json.dumps(report_payload()), encoding="utf-8")
+        decision = at(f"2026-07-{(index % 20) + 1:02d}T10:00:00-05:00")
+        payload = report_payload()
+        payload["metadata"]["source_capture_time"] = (
+            decision - timedelta(minutes=2)
+        ).isoformat()
+        payload["metadata"]["generated_at"] = (
+            decision - timedelta(minutes=1)
+        ).isoformat()
+        report.write_text(json.dumps(payload), encoding="utf-8")
         service = ShadowTradingService(
             store=ShadowStateStore(root / "state.json"),
             policy=ShadowExecutionPolicy(
@@ -743,9 +753,15 @@ def completed_auditable_trade(index: int):
                 max_open_positions=100,
             ),
             sample_version="synthetic-official-v1",
-            official_sample_authorized=True,
         )
-        decision = at(f"2026-07-{(index % 20) + 1:02d}T10:00:00-05:00")
+        with patch(
+            "momentum_hunter.shadow_trading.now_central",
+            return_value=decision - timedelta(minutes=3),
+        ):
+            service.activate_official_sample(
+                confirmation=SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
+                sample_version="synthetic-official-v1",
+            )
         trade = service.start_trade(
             report,
             symbol="TEST",

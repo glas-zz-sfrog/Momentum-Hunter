@@ -744,14 +744,14 @@ public sealed record ShadowSampleStatus(
     public string ProgressLabel => $"Prospective Shadow Trades: {EligibleCompleted} / {MinimumRequired}";
     public string ReadinessLabel => ReadinessStatus switch
     {
-        "PASS" => "SAMPLE START GATE • PASS - SEPARATE APPROVAL REQUIRED",
-        "IN_PROGRESS" => "SAMPLE VERSION • IN PROGRESS",
+        "PASS" => "OFFICIAL SAMPLE • ACTIVE - AWAITING TRADE 1",
+        "IN_PROGRESS" => "OFFICIAL SAMPLE • IN PROGRESS",
         _ => "SAMPLE START LOCKED",
     };
     public string DefinitionLabel =>
         $"{Definition.SampleVersion}  |  Fill {Definition.FillModelVersion}  |  Evidence v{Definition.EvidenceSchemaVersion}  |  Config {Definition.FingerprintDisplay}";
     public string ReadinessReasonDisplay => ReadinessFindings.Count == 0
-        ? "All configured engineering checks passed; this does not start a sample."
+        ? "The immutable official-sample definition is active; only matching prospective records can count."
         : string.Join(" | ", ReadinessFindings);
 }
 

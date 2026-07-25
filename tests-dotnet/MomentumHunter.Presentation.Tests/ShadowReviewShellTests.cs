@@ -67,9 +67,24 @@ public sealed class ShadowReviewShellTests
         var trade = Assert.Single(viewModel.ShadowTrades);
         Assert.Equal("NVDA", trade.Symbol);
         Assert.Equal("Prospective Shadow Trades: 1 / 30", viewModel.ShadowSample.ProgressLabel);
-        Assert.Equal("SAMPLE VERSION \u2022 IN PROGRESS", viewModel.ShadowSample.ReadinessLabel);
+        Assert.Equal("OFFICIAL SAMPLE \u2022 IN PROGRESS", viewModel.ShadowSample.ReadinessLabel);
         Assert.Contains("synthetic-official-v1", viewModel.ShadowSample.DefinitionLabel, StringComparison.Ordinal);
         Assert.Equal("Withheld", viewModel.ShadowMetrics.ExpectancyDisplay);
+    }
+
+    [Fact]
+    public void EmptyActivatedSampleUsesTruthfulActiveAwaitingTradeLabel()
+    {
+        var status = new ShadowSampleStatus(
+            30, 0, 0, 0, 0, 0, 0, 0, false,
+            "Evidence collection has not started.",
+            SampleDefinition(),
+            "PASS",
+            true,
+            []);
+
+        Assert.Equal("OFFICIAL SAMPLE \u2022 ACTIVE - AWAITING TRADE 1", status.ReadinessLabel);
+        Assert.Contains("immutable official-sample definition is active", status.ReadinessReasonDisplay, StringComparison.Ordinal);
     }
 
     private static ShellViewModel CreateViewModel(

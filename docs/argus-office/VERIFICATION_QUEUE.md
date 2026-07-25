@@ -34,7 +34,7 @@ not create a rubber-stamp Steven item.
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `NO_STEVEN_ACTION` | Integrated locally as part of ARGUS-SHADOW-001 | Automated proof is sufficient because this is nonvisual and contacts no broker |
 | SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Integrated and backed up through `origin/master` | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
 | SCHWAB-003 discovery, CASH validation, and binding safety | `LIVE_BINDING_PASS`; same sole `2573` CASH identity revalidated, immutable DPAPI persistence succeeded, compileall, 123 bounded tests, 756 full tests, and exact tracked-value scan pass | `NO_STEVEN_ACTION`; no anomaly occurred | `COMPLETE` on local `master`; integrated baseline backed up through `origin/master` | No manual check pending; retain the pinned account and interrupt only on future identity, account-count, position, permission, or security anomaly |
-| Official Shadow sample | `NOT_STARTED` | `STANDING_AUTHORIZED` after automated frozen-prerequisite pass | Shadow-003 is integrated locally; runtime sample lock remains until precheck passes | Start automatically when every canonical prerequisite passes; interrupt on failure or ambiguity |
+| Official Shadow sample | `AUTOMATED_PASS`; immutable activation is active at `0 / 30`, stale June evidence was rejected, and no trade state exists | `MANUAL_PENDING` for one WPF wording/layout check only; nonvisual activation used standing authorization | ARGUS-SHADOW-004 is implemented on its task branch and pending visual acceptance before merge | Confirm the Test Trade Review pane truthfully shows the active empty sample without clipping; no approval of evidence, trades, or broker behavior is requested |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted visual baseline; subsequent nonvisual roadmap work follows standing delegation |
@@ -859,6 +859,47 @@ Live binding evidence and future interruption conditions:
    pass. Exact comparison of the live application ID, application secret, access
    token, refresh token, and account hash against 573 Git-tracked files found zero
    occurrences.
+
+## ARGUS-SHADOW-004 Official Sample Activation
+
+Status: `AUTOMATED_PASS`; `MANUAL_PENDING` for one visual check; branch pending
+commit and integration
+
+Automated evidence:
+
+- The write-once activation record exists only under ignored local generated data.
+  Its SHA-256 is
+  `6980D5734F3F2010D892CD1F3E29354D5DF37B193B082B18A01D8B5D485AD20C`.
+- `official-shadow-v1` is active at `0 / 30`; no Shadow trade/state file exists,
+  no command receipt exists, and order transmission is `UNAVAILABLE`.
+- A real CLI attempt to start CRWV from the June 17 report failed because both
+  capture and report generation predate activation. It created no trade or state.
+- Python compileall, 50 focused Shadow tests, 125 bounded Python tests, all 770
+  Python tests by bounded module discovery plus the final affected-module pass, all 216 .NET tests, and the
+  zero-warning Release build pass.
+- The first workstation capture correctly exposed the still-running old Python
+  singleton. Restarting that engine host loaded the current implementation and
+  the persisted activation. This was an in-memory process refresh, not a data or
+  broker change.
+- Screenshot proof:
+  `docs/argus-office/reports/releases/ARGUS-SHADOW-004-official-sample-active-proof.jpg`
+  (`1920 x 1080`, 211,279 bytes, nonblank).
+
+Steven checks exactly one visual item:
+
+1. In the open **Review** workspace, look at the bottom **Test Trade Review** pane.
+2. Confirm the heading says
+   `OFFICIAL SAMPLE • ACTIVE - AWAITING TRADE 1`.
+3. Confirm the next line identifies `official-shadow-v1`, the prospective
+   FakeBroker fill model, Evidence v1, and a short configuration fingerprint.
+4. Confirm progress is `Prospective Shadow Trades: 0 / 30`, every lifecycle count
+   is zero, and every performance metric says `Withheld`.
+5. Confirm these lines are readable, not clipped, and not overlapping nearby
+   filters, counts, or tabs.
+
+This visual decision approves only the wording and layout above. It does not approve
+a real order, broker transmission, new account access, score/readiness changes, or
+historical backfill.
 
 ## R028 Integrated Workstation Chrome
 

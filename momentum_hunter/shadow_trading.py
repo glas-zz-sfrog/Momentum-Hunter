@@ -36,7 +36,13 @@ SHADOW_STRATEGY_CONTRACT_VERSION = "tradeplan-risk-shadow-v1"
 SHADOW_FILL_MODEL_VERSION = "prospective-fakebroker-v1"
 SHADOW_EVIDENCE_SCHEMA_VERSION = 1
 DEFAULT_SHADOW_SAMPLE_VERSION = "engineering-preflight-v1"
+OFFICIAL_SHADOW_SAMPLE_VERSION = "official-shadow-v1"
+SHADOW_SAMPLE_ACTIVATION_SCHEMA_VERSION = 1
+SHADOW_SAMPLE_ACTIVATION_CONFIRMATION = "START OFFICIAL SHADOW SAMPLE"
 SHADOW_STATE_PATH = DATA_DIR / "shadow-trading" / "shadow-trading-state.json"
+SHADOW_SAMPLE_ACTIVATION_PATH = (
+    DATA_DIR / "shadow-trading" / "shadow-sample-activation.json"
+)
 SHADOW_REPORTS_DIR = DATA_DIR / "reports"
 MIN_MEANINGFUL_SAMPLE_SIZE = 30
 TERMINAL_TRADE_STATES = {"completed", "blocked", "entry_rejected", "cancelled", "ambiguous_exit"}
@@ -77,6 +83,13 @@ class ShadowSampleReadiness:
     evidence_schema_version: int
     official_sample_authorized: bool
     findings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ShadowSampleActivation:
+    schema_version: int
+    activated_at: str
+    sample_metadata: ShadowSampleMetadata
 
 
 @dataclass(frozen=True)
@@ -256,6 +269,169 @@ class ShadowStateError(RuntimeError):
     pass
 
 
+class ShadowSampleActivationStore:
+    """Write-once activation evidence for the prospective official sample."""
+
+    def __init__(self, path: Path = SHADOW_SAMPLE_ACTIVATION_PATH) -> None:
+        self.path = path
+
+    @classmethod
+    def for_state_store(cls, state_store: ShadowStateStore) -> ShadowSampleActivationStore:
+        if state_store.path == SHADOW_STATE_PATH:
+            return cls()
+        return cls(
+            state_store.path.with_name(
+                f"{state_store.path.stem}-sample-activation.json"
+            )
+        )
+
+    def load(self) -> ShadowSampleActivation | None:
+        if not self.path.exists():
+            return None
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ShadowStateError(
+                f"Shadow sample activation cannot be loaded: {type(exc).__name__}"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ShadowStateError("Shadow sample activation must contain an object.")
+        if set(payload) != {"schema_version", "activated_at", "sample_metadata"}:
+            raise ShadowStateError(
+                "Shadow sample activation contains missing or unsupported fields."
+            )
+        if (
+            payload.get("schema_version")
+            != SHADOW_SAMPLE_ACTIVATION_SCHEMA_VERSION
+        ):
+            raise ShadowStateError(
+                "Shadow sample activation has an unsupported or missing schema version."
+            )
+        activated_at = str(payload.get("activated_at", ""))
+        activated = parse_datetime(activated_at)
+        if (
+            activated is None
+            or activated.tzinfo is None
+            or activated.utcoffset() is None
+        ):
+            raise ShadowStateError(
+                "Shadow sample activation timestamp is missing, invalid, or lacks a UTC offset."
+            )
+        metadata_payload = payload.get("sample_metadata")
+        if not isinstance(metadata_payload, dict):
+            raise ShadowStateError(
+                "Shadow sample activation field 'sample_metadata' must be an object."
+            )
+        expected_metadata_fields = {
+            "sample_version",
+            "strategy_configuration_fingerprint",
+            "strategy_configuration_json",
+            "fill_model_version",
+            "evidence_schema_version",
+            "official_sample_authorized",
+        }
+        if set(metadata_payload) != expected_metadata_fields:
+            raise ShadowStateError(
+                "Shadow sample activation metadata contains missing or unsupported fields."
+            )
+        evidence_schema_version = metadata_payload.get("evidence_schema_version")
+        if (
+            not isinstance(evidence_schema_version, int)
+            or isinstance(evidence_schema_version, bool)
+        ):
+            raise ShadowStateError(
+                "Shadow sample activation evidence-schema version must be an integer."
+            )
+        metadata = ShadowSampleMetadata(
+            sample_version=str(metadata_payload.get("sample_version", "")),
+            strategy_configuration_fingerprint=str(
+                metadata_payload.get("strategy_configuration_fingerprint", "")
+            ),
+            strategy_configuration_json=str(
+                metadata_payload.get("strategy_configuration_json", "")
+            ),
+            fill_model_version=str(metadata_payload.get("fill_model_version", "")),
+            evidence_schema_version=evidence_schema_version,
+            official_sample_authorized=(
+                metadata_payload.get("official_sample_authorized") is True
+            ),
+        )
+        findings = shadow_sample_metadata_findings(
+            metadata,
+            require_current_contract=True,
+        )
+        if not metadata.official_sample_authorized:
+            findings.append("Official sample authorization is false.")
+        if findings:
+            raise ShadowStateError(
+                "Shadow sample activation is invalid: " + " | ".join(findings)
+            )
+        return ShadowSampleActivation(
+            schema_version=SHADOW_SAMPLE_ACTIVATION_SCHEMA_VERSION,
+            activated_at=activated_at,
+            sample_metadata=metadata,
+        )
+
+    def save_once(
+        self,
+        activation: ShadowSampleActivation,
+    ) -> ShadowSampleActivation:
+        if (
+            activation.schema_version
+            != SHADOW_SAMPLE_ACTIVATION_SCHEMA_VERSION
+        ):
+            raise ShadowStateError(
+                "Shadow sample activation has an unsupported schema version."
+            )
+        activated_at = parse_datetime(activation.activated_at)
+        if (
+            activated_at is None
+            or activated_at.tzinfo is None
+            or activated_at.utcoffset() is None
+        ):
+            raise ShadowStateError(
+                "Shadow sample activation timestamp is missing, invalid, or lacks a UTC offset."
+            )
+        findings = shadow_sample_metadata_findings(
+            activation.sample_metadata,
+            require_current_contract=True,
+        )
+        if not activation.sample_metadata.official_sample_authorized:
+            findings.append("Official sample authorization is false.")
+        if findings:
+            raise ShadowStateError(
+                "Shadow sample activation is invalid: " + " | ".join(findings)
+            )
+        existing = self.load()
+        if existing is not None:
+            if existing.sample_metadata == activation.sample_metadata:
+                return existing
+            raise ShadowStateError(
+                "Shadow sample activation is immutable and already exists."
+            )
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": activation.schema_version,
+            "activated_at": activation.activated_at,
+            "sample_metadata": asdict(activation.sample_metadata),
+        }
+        try:
+            with self.path.open("x", encoding="utf-8", newline="\n") as stream:
+                stream.write(json.dumps(payload, indent=2, sort_keys=True))
+                stream.write("\n")
+        except FileExistsError as exc:
+            existing = self.load()
+            if (
+                existing is not None
+                and existing.sample_metadata == activation.sample_metadata
+            ):
+                return existing
+            raise ShadowStateError(
+                "Shadow sample activation is immutable and already exists."
+            ) from exc
+        return activation
+
+
 def build_shadow_sample_metadata(
     policy: ShadowExecutionPolicy,
     *,
@@ -344,7 +520,7 @@ def audit_shadow_sample_readiness(
         require_current_contract=True,
     )
     if not definition.official_sample_authorized:
-        findings.append("Official sample collection has not received its separate authorization checkpoint.")
+        findings.append("Official sample collection does not have a persisted activation record.")
     matching_trades = [
         trade
         for trade in trades
@@ -510,15 +686,131 @@ class ShadowTradingService:
         policy: ShadowExecutionPolicy | None = None,
         sample_version: str = DEFAULT_SHADOW_SAMPLE_VERSION,
         official_sample_authorized: bool = False,
+        activation_store: ShadowSampleActivationStore | None = None,
     ) -> None:
         self.store = store or ShadowStateStore()
         self.policy = policy or ShadowExecutionPolicy()
-        self.sample_definition = build_shadow_sample_metadata(
+        self.activation_store = (
+            activation_store
+            or ShadowSampleActivationStore.for_state_store(self.store)
+        )
+        requested_definition = build_shadow_sample_metadata(
             self.policy,
             sample_version=sample_version,
             official_sample_authorized=official_sample_authorized,
         )
+        self.sample_activation = self.activation_store.load()
+        if official_sample_authorized and self.sample_activation is None:
+            raise ShadowStateError(
+                "Official sample authorization requires a persisted activation record."
+            )
+        if self.sample_activation is not None:
+            self._validate_activation_for_policy(self.sample_activation)
+            if sample_version != DEFAULT_SHADOW_SAMPLE_VERSION:
+                expected_active_definition = build_shadow_sample_metadata(
+                    self.policy,
+                    sample_version=sample_version,
+                    official_sample_authorized=True,
+                )
+                if expected_active_definition != self.sample_activation.sample_metadata:
+                    raise ShadowStateError(
+                        "Requested Shadow sample definition conflicts with the persisted activation."
+                    )
+            self.sample_definition = self.sample_activation.sample_metadata
+        else:
+            self.sample_definition = requested_definition
         self.fake_broker = ProspectiveFakeBroker(self.policy)
+
+    def activate_official_sample(
+        self,
+        *,
+        confirmation: str,
+        sample_version: str = OFFICIAL_SHADOW_SAMPLE_VERSION,
+    ) -> ShadowSampleActivation:
+        if confirmation != SHADOW_SAMPLE_ACTIVATION_CONFIRMATION:
+            raise ValueError(
+                "Exact internal Shadow sample activation confirmation was not supplied."
+            )
+        definition = build_shadow_sample_metadata(
+            self.policy,
+            sample_version=sample_version,
+            official_sample_authorized=True,
+        )
+        existing = self.activation_store.load()
+        state = self.store.load()
+        if existing is not None:
+            self._validate_activation_for_policy(existing)
+            if existing.sample_metadata != definition:
+                raise ShadowStateError(
+                    "The persisted Shadow sample activation uses a different immutable definition."
+                )
+            self._validate_state_for_activation(definition, state, allow_existing=True)
+            self.sample_activation = existing
+            self.sample_definition = existing.sample_metadata
+            return existing
+
+        self._validate_state_for_activation(definition, state, allow_existing=False)
+        readiness = audit_shadow_sample_readiness(
+            definition,
+            policy=self.policy,
+            trades=state.trades,
+        )
+        if readiness.status != "PASS" or not readiness.can_start_official_sample:
+            raise ShadowStateError(
+                "Official Shadow sample prerequisites did not pass: "
+                + " | ".join(readiness.findings)
+            )
+        activation_time = now_central()
+        if (
+            activation_time.tzinfo is None
+            or activation_time.utcoffset() is None
+        ):
+            raise ValueError(
+                "Official Shadow sample activation time must include a UTC offset."
+            )
+        activation = ShadowSampleActivation(
+            schema_version=SHADOW_SAMPLE_ACTIVATION_SCHEMA_VERSION,
+            activated_at=activation_time.isoformat(),
+            sample_metadata=definition,
+        )
+        persisted_activation = self.activation_store.save_once(activation)
+        self.sample_activation = persisted_activation
+        self.sample_definition = persisted_activation.sample_metadata
+        return persisted_activation
+
+    def sample_activation_status(self) -> dict[str, Any]:
+        self._refresh_sample_activation()
+        state = self.store.load()
+        readiness = audit_shadow_sample_readiness(
+            self.sample_definition,
+            policy=self.policy,
+            trades=state.trades,
+        )
+        review = build_shadow_review_snapshot(
+            state.trades,
+            sample_definition=self.sample_definition,
+            policy=self.policy,
+        )
+        return {
+            "mode": SHADOW_MODE,
+            "transmitting": False,
+            "activationState": (
+                "ACTIVE" if self.sample_activation is not None else "NOT_ACTIVE"
+            ),
+            "activatedAt": (
+                self.sample_activation.activated_at
+                if self.sample_activation is not None
+                else None
+            ),
+            "sampleDefinition": shadow_sample_metadata_to_dict(
+                self.sample_definition
+            ),
+            "readiness": shadow_sample_readiness_to_dict(readiness),
+            "persistedTradeCount": len(state.trades),
+            "eligibleCompleted": review["sample"]["eligibleCompleted"],
+            "minimumRequired": MIN_MEANINGFUL_SAMPLE_SIZE,
+            "orderTransmission": "UNAVAILABLE",
+        }
 
     def start_trade(
         self,
@@ -528,6 +820,7 @@ class ShadowTradingService:
         simulation_command_id: str,
         decision_at: datetime | None = None,
     ) -> ShadowTrade:
+        self._refresh_sample_activation()
         normalized_symbol = symbol.strip().upper()
         if not normalized_symbol:
             raise ValueError("A non-empty symbol is required.")
@@ -548,6 +841,13 @@ class ShadowTradingService:
             raise ValueError(f"Expected exactly one persisted candidate row for {normalized_symbol}; found {len(matches)}.")
         rank, row = matches[0]
         metadata = report.get("metadata", {}) if isinstance(report.get("metadata"), dict) else {}
+        decision_at = decision_at or now_central()
+        if self.sample_activation is not None:
+            self._validate_prospective_official_evidence(
+                metadata,
+                decision_at=decision_at,
+                activation=self.sample_activation,
+            )
         candidate = candidate_plan_from_report_row(
             row,
             rank=rank,
@@ -557,7 +857,6 @@ class ShadowTradingService:
         )
         if candidate is None:
             raise ValueError(f"{normalized_symbol} does not contain a valid persisted TradePlan.")
-        decision_at = decision_at or now_central()
         canonical_candidate = canonical_json(row)
         source_capture_key = "|".join(
             [
@@ -591,6 +890,12 @@ class ShadowTradingService:
             sample_definition_json,
         )
         state = self.store.load()
+        if self.sample_activation is not None:
+            self._validate_state_for_activation(
+                self.sample_definition,
+                state,
+                allow_existing=True,
+            )
         existing_receipt = next((item for item in state.command_receipts if item.command_id == simulation_command_id), None)
         if existing_receipt is not None:
             if existing_receipt.request_fingerprint != request_fingerprint:
@@ -849,6 +1154,7 @@ class ShadowTradingService:
         return [trade for trade in trades if trade.symbol == normalized_symbol]
 
     def snapshot(self) -> dict[str, Any]:
+        self._refresh_sample_activation()
         state = self.store.load()
         audits = {trade.shadow_trade_id: audit_shadow_trade(trade) for trade in state.trades}
         review = build_shadow_review_snapshot(
@@ -882,6 +1188,125 @@ class ShadowTradingService:
                 for trade_id, report in audits.items()
             },
         }
+
+    def _refresh_sample_activation(self) -> None:
+        activation = self.activation_store.load()
+        if activation is None:
+            if self.sample_activation is not None:
+                raise ShadowStateError(
+                    "Persisted Shadow sample activation disappeared during runtime."
+                )
+            return
+        self._validate_activation_for_policy(activation)
+        if (
+            self.sample_activation is not None
+            and activation != self.sample_activation
+        ):
+            raise ShadowStateError(
+                "Persisted Shadow sample activation changed during runtime."
+            )
+        self.sample_activation = activation
+        self.sample_definition = activation.sample_metadata
+
+    def _validate_activation_for_policy(
+        self,
+        activation: ShadowSampleActivation,
+    ) -> None:
+        findings = shadow_sample_metadata_findings(
+            activation.sample_metadata,
+            expected_policy=self.policy,
+            require_current_contract=True,
+        )
+        if not activation.sample_metadata.official_sample_authorized:
+            findings.append("Official sample authorization is false.")
+        if findings:
+            raise ShadowStateError(
+                "Persisted Shadow sample activation does not match the active policy: "
+                + " | ".join(findings)
+            )
+
+    @staticmethod
+    def _validate_state_for_activation(
+        definition: ShadowSampleMetadata,
+        state: ShadowTradingState,
+        *,
+        allow_existing: bool,
+    ) -> None:
+        active_legacy = [
+            trade.shadow_trade_id or "unknown"
+            for trade in state.trades
+            if trade.status in ACTIVE_TRADE_STATES
+            and trade.sample_metadata != definition
+        ]
+        if active_legacy:
+            raise ShadowStateError(
+                "Official Shadow sample activation is blocked by active legacy or "
+                f"preflight trade(s): {', '.join(active_legacy)}"
+            )
+        matching = [
+            trade
+            for trade in state.trades
+            if trade.sample_metadata.sample_version == definition.sample_version
+        ]
+        conflicting = [
+            trade.shadow_trade_id or "unknown"
+            for trade in matching
+            if trade.sample_metadata != definition
+        ]
+        if conflicting:
+            raise ShadowStateError(
+                "Official Shadow sample activation conflicts with persisted record(s): "
+                + ", ".join(conflicting)
+            )
+        if matching and not allow_existing:
+            raise ShadowStateError(
+                "Official Shadow sample records exist without the required activation evidence."
+            )
+
+    @staticmethod
+    def _validate_prospective_official_evidence(
+        metadata: dict[str, Any],
+        *,
+        decision_at: datetime,
+        activation: ShadowSampleActivation,
+    ) -> None:
+        if decision_at.tzinfo is None or decision_at.utcoffset() is None:
+            raise ValueError(
+                "Official Shadow sample decision time must include a UTC offset."
+            )
+        activated_at = require_datetime(
+            activation.activated_at,
+            "Shadow sample activation timestamp",
+        )
+        generated_at = require_datetime(
+            str(metadata.get("generated_at", "")),
+            "trade-planning report generated_at",
+        )
+        capture_at = require_datetime(
+            str(metadata.get("source_capture_time", "")),
+            "trade-planning source_capture_time",
+        )
+        if (
+            generated_at.tzinfo is None
+            or generated_at.utcoffset() is None
+            or capture_at.tzinfo is None
+            or capture_at.utcoffset() is None
+        ):
+            raise ValueError(
+                "Official Shadow sample report timestamps must include UTC offsets."
+            )
+        if capture_at < activated_at or generated_at < activated_at:
+            raise ValueError(
+                "Official Shadow sample evidence predates sample activation."
+            )
+        if capture_at > generated_at:
+            raise ValueError(
+                "Official Shadow sample source capture is later than report generation."
+            )
+        if generated_at > decision_at or capture_at > decision_at:
+            raise ValueError(
+                "Official Shadow sample evidence is later than the decision timestamp."
+            )
 
     def write_ticket(
         self,
@@ -2153,6 +2578,18 @@ def main(argv: list[str] | None = None) -> int:
     quote_parser.add_argument("--input", type=Path, required=True)
 
     subparsers.add_parser("snapshot", help="Print persisted Shadow Trading state and sample-gated metrics.")
+    subparsers.add_parser(
+        "sample-status",
+        help="Print the immutable official-sample activation and readiness state.",
+    )
+    sample_start_parser = subparsers.add_parser(
+        "sample-start",
+        help="Create the write-once official-sample activation record without creating a trade.",
+    )
+    sample_start_parser.add_argument(
+        "--sample-version",
+        default=OFFICIAL_SHADOW_SAMPLE_VERSION,
+    )
 
     ticket_parser = subparsers.add_parser("ticket", help="Write a nontransmitting paperMoney ticket.")
     ticket_parser.add_argument("--trade-id", required=True)
@@ -2171,6 +2608,27 @@ def main(argv: list[str] | None = None) -> int:
         result = [shadow_trade_to_dict(trade) for trade in service.process_quote(quote_from_dict(payload))]
     elif args.command == "ticket":
         result = {key: str(value) for key, value in service.write_ticket(args.trade_id, output_dir=args.output_dir).items()}
+    elif args.command == "sample-status":
+        result = service.sample_activation_status()
+    elif args.command == "sample-start":
+        confirmation = input(
+            f"Type {SHADOW_SAMPLE_ACTIVATION_CONFIRMATION!r} to activate the "
+            "prospective FakeBroker-only sample: "
+        )
+        activation = service.activate_official_sample(
+            confirmation=confirmation,
+            sample_version=args.sample_version,
+        )
+        result = {
+            "activationState": "ACTIVE",
+            "activatedAt": activation.activated_at,
+            "sampleDefinition": shadow_sample_metadata_to_dict(
+                activation.sample_metadata
+            ),
+            "transmitting": False,
+            "orderTransmission": "UNAVAILABLE",
+            "persistedTradeCount": len(service.store.load().trades),
+        }
     else:
         result = service.snapshot()
     print(json.dumps(result, indent=2))

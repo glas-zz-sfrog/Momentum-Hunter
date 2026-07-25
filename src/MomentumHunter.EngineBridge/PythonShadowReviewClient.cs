@@ -57,7 +57,7 @@ public static class PythonShadowReviewSnapshotMapper
         if (!sample.CanStartOfficialSample
             && string.Equals(sample.ReadinessStatus, "PASS", StringComparison.Ordinal))
         {
-            throw new InvalidDataException("A passing Shadow sample start gate must explicitly allow the separate start checkpoint.");
+            throw new InvalidDataException("An active empty Shadow sample must expose its prospective start state consistently.");
         }
 
         return new ShadowReviewSnapshot(

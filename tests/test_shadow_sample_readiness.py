@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import json
+import io
+import inspect
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from momentum_hunter.shadow_trading import (
     DEFAULT_SHADOW_SAMPLE_VERSION,
+    OFFICIAL_SHADOW_SAMPLE_VERSION,
     SHADOW_EVIDENCE_SCHEMA_VERSION,
     SHADOW_FILL_MODEL_VERSION,
+    SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
     ShadowExecutionPolicy,
+    ShadowSampleActivationStore,
     ShadowStateError,
     ShadowStateStore,
     ShadowTradingState,
@@ -19,6 +26,7 @@ from momentum_hunter.shadow_trading import (
     audit_shadow_trade,
     build_shadow_review_snapshot,
     build_shadow_sample_metadata,
+    main,
 )
 from tests.test_shadow_trading import (
     at,
@@ -36,6 +44,11 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         self.state_path = self.root / "shadow-state.json"
         self.report_path.write_text(json.dumps(report_payload()), encoding="utf-8")
         self.policy = ShadowExecutionPolicy(slippage_bps=7.5, buying_power=25_000)
+        self.activation_path = (
+            ShadowSampleActivationStore.for_state_store(
+                ShadowStateStore(self.state_path)
+            ).path
+        )
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -47,12 +60,33 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         authorized: bool = False,
         policy: ShadowExecutionPolicy | None = None,
     ) -> ShadowTradingService:
-        return ShadowTradingService(
+        service = ShadowTradingService(
             store=ShadowStateStore(self.state_path),
             policy=policy or self.policy,
             sample_version=sample_version,
-            official_sample_authorized=authorized,
         )
+        if authorized and service.sample_activation is None:
+            self.activate(
+                service,
+                sample_version=sample_version,
+            )
+        return service
+
+    def activate(
+        self,
+        service: ShadowTradingService,
+        *,
+        sample_version: str = OFFICIAL_SHADOW_SAMPLE_VERSION,
+        timestamp: str = "2026-07-23T09:57:00-05:00",
+    ):
+        with patch(
+            "momentum_hunter.shadow_trading.now_central",
+            return_value=at(timestamp),
+        ):
+            return service.activate_official_sample(
+                confirmation=SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
+                sample_version=sample_version,
+            )
 
     def start(self, service: ShadowTradingService, command_id: str = "sample-command"):
         return service.start_trade(
@@ -111,12 +145,13 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         snapshot = service.snapshot()
 
         self.assertFalse(self.state_path.exists())
+        self.assertFalse(self.activation_path.exists())
         self.assertEqual("BLOCKED", snapshot["sampleReadiness"]["status"])
         self.assertFalse(snapshot["sampleReadiness"]["canStartOfficialSample"])
         self.assertFalse(snapshot["sample"]["officialSampleAuthorized"])
         self.assertTrue(
             any(
-                "separate authorization" in finding
+                "persisted activation" in finding
                 for finding in snapshot["sampleReadiness"]["findings"]
             )
         )
@@ -127,6 +162,7 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         snapshot = service.snapshot()
 
         self.assertFalse(self.state_path.exists())
+        self.assertTrue(self.activation_path.exists())
         self.assertEqual("PASS", snapshot["sampleReadiness"]["status"])
         self.assertTrue(snapshot["sampleReadiness"]["canStartOfficialSample"])
         self.assertEqual([], snapshot["trades"])
@@ -189,22 +225,13 @@ class ShadowSampleReadinessTests(unittest.TestCase):
     def test_reusing_sample_version_with_changed_policy_blocks_readiness(self) -> None:
         first = self.service(sample_version="official-shadow-v1", authorized=True)
         self.start(first)
-        changed = self.service(
-            sample_version="official-shadow-v1",
-            authorized=True,
-            policy=replace(self.policy, slippage_bps=12.0),
-        )
 
-        snapshot = changed.snapshot()
-
-        self.assertEqual("BLOCKED", snapshot["sampleReadiness"]["status"])
-        self.assertFalse(snapshot["sampleReadiness"]["canStartOfficialSample"])
-        self.assertTrue(
-            any(
-                "conflicts with the active sample definition" in finding
-                for finding in snapshot["sampleReadiness"]["findings"]
+        with self.assertRaisesRegex(ShadowStateError, "active policy"):
+            self.service(
+                sample_version="official-shadow-v1",
+                authorized=True,
+                policy=replace(self.policy, slippage_bps=12.0),
             )
-        )
 
     def test_review_counts_only_the_active_authorized_sample_version(self) -> None:
         current = completed_auditable_trade(1)
@@ -266,6 +293,267 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         self.assertTrue(readiness.can_start_official_sample)
         self.assertFalse(self.state_path.exists())
         self.assertFalse(hasattr(readiness, "start"))
+
+    def test_sample_status_is_pure_and_does_not_create_files(self) -> None:
+        status = self.service().sample_activation_status()
+
+        self.assertEqual("NOT_ACTIVE", status["activationState"])
+        self.assertEqual("UNAVAILABLE", status["orderTransmission"])
+        self.assertFalse(status["transmitting"])
+        self.assertFalse(self.state_path.exists())
+        self.assertFalse(self.activation_path.exists())
+
+    def test_exact_confirmation_is_checked_before_any_state_or_activation_read(self) -> None:
+        service = self.service()
+
+        with (
+            patch.object(
+                service.activation_store,
+                "load",
+                side_effect=AssertionError("activation store was read"),
+            ),
+            patch.object(
+                service.store,
+                "load",
+                side_effect=AssertionError("state store was read"),
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "Exact internal"):
+                service.activate_official_sample(confirmation="yes")
+
+    def test_activation_writes_only_write_once_activation_evidence(self) -> None:
+        service = self.service()
+        report_before = self.report_path.read_bytes()
+
+        activation = self.activate(
+            service,
+            timestamp="2026-07-24T09:57:00-05:00",
+        )
+
+        self.assertEqual(OFFICIAL_SHADOW_SAMPLE_VERSION, activation.sample_metadata.sample_version)
+        self.assertTrue(self.activation_path.exists())
+        self.assertFalse(self.state_path.exists())
+        self.assertEqual(report_before, self.report_path.read_bytes())
+        self.assertEqual(
+            {"trade-plan.json", self.activation_path.name},
+            {path.name for path in self.root.iterdir()},
+        )
+
+    def test_persisted_activation_loads_automatically_across_restart(self) -> None:
+        service = self.service()
+        expected = self.activate(
+            service,
+            timestamp="2026-07-24T09:57:00-05:00",
+        )
+
+        restarted = ShadowTradingService(
+            store=ShadowStateStore(self.state_path),
+            policy=self.policy,
+        )
+
+        self.assertEqual(expected, restarted.sample_activation)
+        self.assertEqual(expected.sample_metadata, restarted.sample_definition)
+        self.assertEqual("ACTIVE", restarted.sample_activation_status()["activationState"])
+
+    def test_direct_authorized_constructor_cannot_bypass_persisted_activation(self) -> None:
+        with self.assertRaisesRegex(ShadowStateError, "persisted activation"):
+            ShadowTradingService(
+                store=ShadowStateStore(self.state_path),
+                policy=self.policy,
+                sample_version=OFFICIAL_SHADOW_SAMPLE_VERSION,
+                official_sample_authorized=True,
+            )
+
+        self.assertFalse(self.activation_path.exists())
+        self.assertFalse(self.state_path.exists())
+
+    def test_activation_api_does_not_accept_a_caller_supplied_timestamp(self) -> None:
+        parameters = inspect.signature(
+            ShadowTradingService.activate_official_sample
+        ).parameters
+
+        self.assertNotIn("activated_at", parameters)
+
+    def test_activation_is_idempotent_only_for_the_identical_definition(self) -> None:
+        service = self.service()
+        first = self.activate(
+            service,
+            timestamp="2026-07-24T09:57:00-05:00",
+        )
+        before = self.activation_path.read_bytes()
+
+        repeated = self.activate(
+            service,
+            timestamp="2026-07-24T10:15:00-05:00",
+        )
+
+        self.assertEqual(first, repeated)
+        self.assertEqual(before, self.activation_path.read_bytes())
+        with self.assertRaisesRegex(ShadowStateError, "different immutable definition"):
+            service.activate_official_sample(
+                confirmation=SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
+                sample_version="official-shadow-v2",
+            )
+        self.assertEqual(before, self.activation_path.read_bytes())
+
+    def test_malformed_or_tampered_activation_fails_closed(self) -> None:
+        service = self.service()
+        self.activate(
+            service,
+            timestamp="2026-07-24T09:57:00-05:00",
+        )
+        payload = json.loads(self.activation_path.read_text(encoding="utf-8"))
+        payload["sample_metadata"]["strategy_configuration_fingerprint"] = "0" * 64
+        self.activation_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with self.assertRaisesRegex(ShadowStateError, "activation is invalid"):
+            ShadowTradingService(
+                store=ShadowStateStore(self.state_path),
+                policy=self.policy,
+            )
+
+    def test_active_preflight_trade_blocks_official_activation(self) -> None:
+        service = self.service()
+        self.start(service, command_id="preflight-active")
+
+        with self.assertRaisesRegex(ShadowStateError, "active legacy or preflight"):
+            self.activate(
+                service,
+                timestamp="2026-07-24T10:01:00-05:00",
+            )
+
+        self.assertFalse(self.activation_path.exists())
+
+    def test_preactivation_report_cannot_create_official_trade(self) -> None:
+        service = self.service()
+        self.activate(
+            service,
+            timestamp="2026-07-24T09:57:00-05:00",
+        )
+
+        with self.assertRaisesRegex(ValueError, "predates sample activation"):
+            self.start(service, command_id="stale-report")
+
+        self.assertFalse(self.state_path.exists())
+
+    def test_fresh_postactivation_report_can_freeze_first_official_record(self) -> None:
+        payload = report_payload()
+        payload["metadata"]["source_capture_time"] = "2026-07-24T09:58:00-05:00"
+        payload["metadata"]["generated_at"] = "2026-07-24T09:59:00-05:00"
+        self.report_path.write_text(json.dumps(payload), encoding="utf-8")
+        service = self.service()
+        self.activate(
+            service,
+            timestamp="2026-07-24T09:57:00-05:00",
+        )
+
+        trade = self.start(service, command_id="official-first")
+
+        self.assertEqual(OFFICIAL_SHADOW_SAMPLE_VERSION, trade.sample_metadata.sample_version)
+        self.assertTrue(trade.sample_metadata.official_sample_authorized)
+        self.assertEqual(1, len(service.store.load().trades))
+        self.assertEqual(
+            "2026-07-24T09:58:00-05:00",
+            trade.evidence.source_capture_time,
+        )
+
+    def test_official_sample_rejects_future_inverted_or_offsetless_evidence_times(self) -> None:
+        service = self.service()
+        self.activate(
+            service,
+            timestamp="2026-07-24T09:57:00-05:00",
+        )
+        cases = (
+            (
+                "capture-after-generation",
+                "2026-07-24T09:59:30-05:00",
+                "2026-07-24T09:59:00-05:00",
+                "capture is later",
+            ),
+            (
+                "future-report",
+                "2026-07-24T09:59:00-05:00",
+                "2026-07-24T10:01:00-05:00",
+                "later than the decision",
+            ),
+            (
+                "offsetless-report",
+                "2026-07-24T09:58:00-05:00",
+                "2026-07-24T09:59:00",
+                "must include UTC offsets",
+            ),
+        )
+        for command_id, capture_time, generated_at, expected in cases:
+            with self.subTest(command_id=command_id):
+                payload = report_payload()
+                payload["metadata"]["source_capture_time"] = capture_time
+                payload["metadata"]["generated_at"] = generated_at
+                self.report_path.write_text(json.dumps(payload), encoding="utf-8")
+                source_before = self.report_path.read_bytes()
+
+                with self.assertRaisesRegex(ValueError, expected):
+                    self.start(service, command_id=command_id)
+
+                self.assertEqual(source_before, self.report_path.read_bytes())
+                self.assertFalse(self.state_path.exists())
+
+    def test_service_exposes_no_provider_network_or_transmitting_method(self) -> None:
+        method_names = {
+            name.lower()
+            for name in dir(ShadowTradingService)
+            if callable(getattr(ShadowTradingService, name, None))
+        }
+
+        for forbidden in (
+            "submit_order",
+            "transmit_order",
+            "place_order",
+            "cancel_order",
+            "replace_order",
+            "fetch_quote",
+            "request_market_data",
+        ):
+            self.assertNotIn(forbidden, method_names)
+
+    def test_cli_sample_start_prompts_internally_and_sample_status_is_read_only(self) -> None:
+        output = io.StringIO()
+        with patch(
+            "builtins.input",
+            return_value=SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
+        ), redirect_stdout(output):
+            self.assertEqual(
+                0,
+                main(
+                    [
+                        "--state-path",
+                        str(self.state_path),
+                        "sample-start",
+                    ]
+                ),
+            )
+        activated = json.loads(output.getvalue())
+        self.assertEqual("ACTIVE", activated["activationState"])
+        self.assertEqual(0, activated["persistedTradeCount"])
+        self.assertEqual("UNAVAILABLE", activated["orderTransmission"])
+        self.assertFalse(self.state_path.exists())
+
+        status_output = io.StringIO()
+        before = self.activation_path.read_bytes()
+        with redirect_stdout(status_output):
+            self.assertEqual(
+                0,
+                main(
+                    [
+                        "--state-path",
+                        str(self.state_path),
+                        "sample-status",
+                    ]
+                ),
+            )
+        status = json.loads(status_output.getvalue())
+        self.assertEqual("ACTIVE", status["activationState"])
+        self.assertEqual(before, self.activation_path.read_bytes())
+        self.assertFalse(self.state_path.exists())
 
 
 if __name__ == "__main__":
