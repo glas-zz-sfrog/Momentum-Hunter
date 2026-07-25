@@ -34,6 +34,7 @@ mode.
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; current stacked recheck passes 209 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_IN_PROGRESS`; checks 5-11 and 14-17 pass, check 4 is `CODEX_UI_PASS` pending Steven acceptance, and checks 12-13 are unavailable with zero test trades | `IMPLEMENTED_PENDING_MERGE`; repair commit `f84106a` is preserved beneath verified implementation commit `3996a6f`; neither is merged or pushed | Steven accepts or rejects only the repaired Command Palette scope/miss wording; acceptance may then be paired with separate explicit approval for an `--ff-only` local merge |
+| Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | `MANUAL_NOT_YET_AVAILABLE` | Future separately approved market-data cutover task | Confirm the old hash and rows are absent, only actual-provider lineage/fresh timestamps render, and no legacy/live candle mixture survives |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
 
