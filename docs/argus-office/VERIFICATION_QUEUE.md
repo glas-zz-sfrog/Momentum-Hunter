@@ -30,6 +30,7 @@ mode.
 | ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated and backed up through `origin/master` | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `MANUAL_PENDING` | Integrated locally as part of ARGUS-SHADOW-001 | The command is visibly locked, asks for no credential, opens no browser, and contacts no broker |
 | SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Integrated and backed up through `origin/master` | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
+| SCHWAB-003 read-only account discovery | `AUTOMATED_PASS`; compileall, 13 focused tests, and 82 bounded Schwab tests pass; one live GET returned only ending `2573` | `LIVE_DISCOVERY_PASS` under Steven's continue-roadmap authorization | `IMPLEMENTED_PENDING_MERGE` on stacked branch; nothing pushed | Account identity only; no binding, balances, positions, market data, previews, orders, or persistence |
 | Official Shadow sample | `NOT_STARTED` | `MANUAL_NOT_YET_AVAILABLE` | Shadow-003 is integrated locally; sample authorization has not been granted | Do not collect trade 1 until Steven separately authorizes the exact frozen sample definition |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
@@ -721,6 +722,59 @@ Remaining recovery actions:
    or order request.
 4. Exact single-canary binding remains a following explicit checkpoint after discovery
    proves isolation.
+
+## SCHWAB-003 Read-Only Account Discovery
+
+Branch: `codex/ARGUS-SCHWAB-003-readonly-account-discovery`
+
+Status: `AUTOMATED_PASS`; `IMPLEMENTED_PENDING_MERGE`
+
+Implemented behavior:
+
+1. The production transport knows exactly one provider URL:
+   `GET https://api.schwabapi.com/trader/v1/accounts/accountNumbers`.
+2. It accepts no access-token, endpoint, account-number, or account-hash CLI argument.
+3. It requires the exact non-secret phrase `DISCOVER SCHWAB ACCOUNTS READ ONLY`
+   before loading tokens or contacting Schwab.
+4. Redirects, non-200 responses, oversized or malformed JSON, missing fields, invalid
+   account suffixes, and duplicate numbers/hashes fail closed without response-body or
+   token disclosure.
+5. Full account numbers are reduced immediately to their final four digits. Account
+   hashes are redacted in reports and representations.
+6. Discovery results are not persisted. No account binding, balance, position,
+   market-data, preview, order, or order-transmission method exists in the module.
+
+Automated evidence:
+
+- Python compileall passes.
+- All 13 focused account-discovery tests pass.
+- The complete bounded Schwab suite passes 82/82.
+- Exact working-tree scanning reports zero Client ID and zero Client Secret hits.
+- Protected scoring, readiness, replay, alert, database/schema, market-data,
+  TradePlan, Risk Governor, broker/order, WPF, generated-data, and Shadow sample paths
+  are unchanged.
+
+Live evidence:
+
+1. Steven directed the roadmap to continue after the exact one-request boundary was
+   stated.
+2. One confirmation-gated live GET completed successfully.
+3. Schwab returned exactly one authorized account ending `2573`, matching the intended
+   $100 Individual account suffix.
+4. The redacted result reports `singleCanaryCandidate: true`, `persistence: NONE`,
+   and `accountBinding: NOT_BOUND`.
+5. Balances, positions, market data, previews, orders, and order transmission were not
+   requested.
+6. Post-request onboarding status still reports no account binding and order
+   transmission unavailable.
+
+Next checkpoint:
+
+1. Prove how Schwab's official account-detail contract exposes account type and
+   cash-only state for the discovered hash without requesting positions.
+2. Add and test that exact read-only identity-validation boundary before any live call.
+3. Persist an immutable binding only under a following exact approval after type,
+   cash-only state, count, suffix, and hash all pass.
 
 ## R028 Integrated Workstation Chrome
 

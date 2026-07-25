@@ -4,11 +4,14 @@ Date reconciled: 2026-07-25
 
 ## Current Truth
 
-Local and remote `master` through this reconciliation are the canonical product baseline. They contain the Python automation/simulation foundation, R004-R029 workstation work, ARGUS-SHADOW-001/002/003, and the credential-free SCHWAB-001 loopback/certificate foundation. Steven separately approved the remote backup after the 43-commit range passed reachability, prohibited-path, large-file, and secret-risk preflight.
+Local `master` is the canonical integrated product baseline. It contains the Python automation/simulation foundation, R004-R029 workstation work, ARGUS-SHADOW-001/002/003, SCHWAB-001, and SCHWAB-002. `origin/master` trails local `master` by three commits; the SCHWAB-002A restoration and SCHWAB-003 discovery remain stacked, unmerged, local-only branch work. Steven's earlier approved remote backup remains valid through its recorded baseline.
 
 Git evidence at reconciliation time:
 
 - R027 and SCHWAB-001 are integrated into local `master` through `5f156eb`.
+- SCHWAB-002 is integrated into local `master`; local `master` is three commits ahead of `origin/master`.
+- `codex/ARGUS-SCHWAB-002A-credential-rotation` restores the existing approved Schwab app and OAuth state and is the source parent for the active SCHWAB-003 branch.
+- `codex/ARGUS-SCHWAB-003-readonly-account-discovery` is active local-only work. Its one live GET returned exactly one account ending `2573` without persistence or binding.
 - R028 integrated workstation chrome and R029 canonical WPF launcher/icon passed automated and Steven manual verification.
 - Steven approved the integration, and Git Steward fast-forwarded local `master` from `5f156eb` through R029 closeout `1d3d8e5` without a merge commit.
 - Steven later approved the remote backup; Git Steward pushed the complete reconciled baseline to `origin/master` and verified the exact advertised HEAD.
@@ -63,7 +66,9 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | This reconciliation | Yes; synchronized with `origin/master` | Yes | `ACTIVE` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample lock, and credential-free SCHWAB-001 foundation. | Preserve clean; OAuth and official sample start remain separate approval gates. |
+| `codex/ARGUS-SCHWAB-003-readonly-account-discovery` | Current task commit | No | No | `ACTIVE` | Adds one exact GET-only, confirmation-gated, redacted, non-persisting Schwab authorized-account discovery; live proof returned only ending `2573`. | Finish branch proof and preserve for Steven's later merge decision; next implementation is exact type/cash-only validation before binding. |
+| `codex/ARGUS-SCHWAB-002A-credential-rotation` | `cd73411` | No | No | `NEEDS_REVIEW` | Preserves the credential containment history and restoration of the existing approved Schwab app, local DPAPI credentials, and fresh OAuth. | Source parent for SCHWAB-003; do not discard or merge independently while the stack is under review. |
+| `master` | `99409ab` | Yes; `origin/master` trails by three commits | Yes | `ACTIVE` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample lock, SCHWAB-001, and SCHWAB-002 OAuth onboarding. | Preserve clean; integrate the reviewed SCHWAB-002A/SCHWAB-003 stack only after Steven's explicit merge approval. |
 | `codex/ARGUS-R029-canonical-wpf-launcher` | `1d3d8e5` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Makes the tracked normal launcher path WPF-only, restores the canonical icon, retains explicit Qt rollback, and refuses arbitrary review builds. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R028-integrated-workstation-chrome` | `0e7a6ce` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Replaces the separate native title strip with integrated dark WPF chrome while preserving native window interactions and one global mode treatment. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R027-integrate-r026-with-shadow-baseline` | `6fe3f97` plus accepted repair/closeout history through local `master` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves Shadow lifecycle/review/sample lock while adding the R013-R025 read-only WPF stack and R026 test hardening. | Preserve as audit history; do not merge again. |
