@@ -643,7 +643,7 @@ What is not yet proven or authorized:
 
 ## SCHWAB-002A Credential Rotation Recovery
 
-Status: `SECURITY_RECOVERY_BLOCKED_ON_SCHWAB_SUPPORT`
+Status: `RECOVERY_COMPLETE_ORIGINAL_APP_RESTORED`
 
 Incident evidence:
 
@@ -671,8 +671,8 @@ Incident evidence:
    the intended Individual account. The Rollover IRA and Joint Tenant accounts were
    unchecked. Confirming `Stop Linking` removed the workstation entry while leaving
    unrelated linked apps unchanged.
-9. The developer portal reports the compromised app as `Deactivated`. It cannot be
-   used unless explicitly reactivated.
+9. The developer app was temporarily `Deactivated`, then explicitly restored after
+   Steven directed recovery of the existing approved application.
 10. Schwab exposes no Client Secret rotation control. The official Modify App guide
     limits self-service changes to app metadata/callbacks and documents activation or
     deactivation as a pause/resume operation.
@@ -692,20 +692,35 @@ Completed recovery actions:
 2. Revoked the old OAuth/account link.
 3. Deleted the quarantined local credentials, tokens, and account binding.
 4. Deactivated the compromised developer app.
-5. Confirmed no account, market-data, preview, or order endpoint was called.
+5. Confirmed that Schwab provides no self-service secret rotation and that a replacement
+   app is blocked by the one-app-per-production-product limit.
+6. Steven directed restoration of the existing approved app rather than waiting for
+   vendor-side replacement. The app was reactivated and reports `Ready For Use` with
+   both production products, callback, order limit, description, and identity unchanged.
+7. Recovered the original Client ID and Client Secret directly from the portal into a
+   temporary current-user DPAPI stage, restored Momentum Hunter's normal DPAPI vault,
+   verified it, removed the temporary encrypted duplicate, and cleared the clipboard.
+8. Completed a fresh OAuth flow after Steven selected only the intended $100 Individual
+   account. Redacted status reports stored credentials, active OAuth, no account binding,
+   authenticated account requests locked, and order transmission unavailable.
+9. Repeated exact tracked-file scanning returned zero Client ID and zero Client Secret
+   hits. Neither plaintext value appears in the DPAPI ciphertext, whose only explicit
+   ACL entry grants Full Control to `BEASTCOMPUTER\steve`.
+10. Confirmed no account, balance, position, market-data, preview, or order endpoint was
+    called. No support request was sent and no replacement app was created.
 
 Remaining recovery actions:
 
-1. Ask Schwab Trader API Support to reset/regenerate the inactive app's Client ID and
-   Client Secret, or delete the inactive app so a replacement can be created with both
-   approved production products.
-2. Do not reactivate the compromised app or reveal/copy its old credentials.
-3. Enter replacement credentials only through hidden local prompts.
-4. Complete fresh OAuth consent and select only the intended $100 account.
-5. Re-run redacted status, DPAPI/ACL proof, exact tracked-file secret scan, focused
-   Schwab tests, and protected-path review.
-6. Do not begin account discovery until recovery is complete and Steven separately
-   authorizes the authenticated read-only request.
+1. No Client Secret rotation occurred; the existing application and original credentials
+   were restored under Steven's explicit direction. Vendor-side rotation remains an
+   optional future hardening action, not the current blocker.
+2. Do not begin account discovery until Steven separately authorizes the authenticated
+   read-only request.
+3. The discovery slice must return only redacted identity, stop if more than the intended
+   Individual account is exposed, and make no balance, position, market-data, preview,
+   or order request.
+4. Exact single-canary binding remains a following explicit checkpoint after discovery
+   proves isolation.
 
 ## R028 Integrated Workstation Chrome
 
