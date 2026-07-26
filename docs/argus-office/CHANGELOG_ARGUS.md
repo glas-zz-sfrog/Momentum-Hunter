@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Backed the verified SHADOW-005 evidence-validity checkpoint up to its feature branch without moving or merging `master`.
 - Added a draft Shadow Sample Constitution covering state transitions, automatic selection, multi-clock freshness, decision-cycle denominators, duplicate/cooldown/concurrency controls, diversity, versioning, and the separate plumbing/strategy canary gates.
 - Hard-disabled the official automatic selector behind a compile-time methodology gate with no environment, config, or CLI bypass; policy creation, automatic selection, and direct official starts all fail closed while exploratory nonofficial simulation remains available.
 - Added frozen automatic-selection policy evidence and audit checks across Shadow trades, ledger events, and nontransmitting tickets, while preserving deterministic report-derived identities.

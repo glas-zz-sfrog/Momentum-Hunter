@@ -16,8 +16,8 @@ truth-label acceptance item remains before integration. The production-local sam
 
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff` is the one allowed stacked
 successor at committed handoff `27f9411`. Its capture-to-report and bounded Finviz work
-is verified. Its worktree now contains a verified hard-disabled automatic-selector
-foundation, tests, and the evidence-validity governance correction. Compileall,
+is verified. Its remotely backed `df1c78a` checkpoint contains a verified hard-disabled
+automatic-selector foundation, tests, and the evidence-validity governance correction. Compileall,
 93 focused tests, 797 full Python tests, and production-local nonmutation proof pass.
 The checkpoint is safe to preserve, but the selector must not be described as armed
 or create Trade 1 until the Shadow Sample Constitution gates pass.
@@ -27,6 +27,7 @@ Git evidence at reconciliation time:
 - R027 and SCHWAB-001 are integrated into local `master` through `5f156eb`.
 - ARGUS-SHADOW-004 started from synchronized `master` at `badee5c` and is committed through `375da59`. It has not been merged or pushed. Its local activation evidence is ignored generated state and is not a Git artifact.
 - ARGUS-SHADOW-005 is stacked on the SHADOW-004 closeout at `375da59`. It adds no broker or account capability; compileall, 16 focused tests, 109 adjacent tests, all 781 Python tests, a live read-only Finviz shape check, and a temporary end-to-end capture-to-report proof pass.
+- ARGUS-SHADOW-005 is remotely backed through hardening checkpoint `df1c78a`; the feature-branch push did not move local or remote `master`.
 - Local `master` and `origin/master` are synchronized at `badee5c`.
 - `codex/ARGUS-SCHWAB-002A-credential-rotation` restores the existing approved Schwab app and OAuth state and is the source parent for the active SCHWAB-003 branch.
 - `codex/ARGUS-SCHWAB-003-readonly-account-discovery` is merged into local `master` through `6f308d7`. Live discovery, account-detail validation, and immutable binding proved and pinned one `CASH` account ending `2573`; bound-refresh safety is implemented and tested, while every transmitting capability remains unavailable.
@@ -84,7 +85,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `codex/ARGUS-SHADOW-005-prospective-evidence-handoff` | `27f9411` plus verified hard-disabled selector/governance checkpoint | No | No | `ACTIVE` | Contains the verified capture-to-report handoff and a hard-disabled automatic-selector foundation. The selector is not armed and no trade/policy state exists. | Preserve the safe checkpoint, then implement the Shadow Sample Constitution gates under the same allowed successor. Do not create Trade 1. Integration still waits for the SHADOW-004 visual parent. |
+| `codex/ARGUS-SHADOW-005-prospective-evidence-handoff` | `df1c78a` plus backup-status closeout | Yes | No | `PUSHED_FEATURE_BRANCH / ACTIVE` | Contains the verified capture-to-report handoff and a hard-disabled automatic-selector foundation. The selector is not armed and no trade/policy state exists. | Continue the Shadow Sample Constitution gates under the same allowed successor. Do not create Trade 1. Integration still waits for the SHADOW-004 visual parent. |
 | `codex/ARGUS-SHADOW-004-official-sample-activation` | `375da59` | No | No | `ACTIVE` | Adds the write-once official-sample activation boundary and truthful activated-empty WPF status. The ignored local sample is `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`; no transmitting method exists. | Complete the one exact WPF truth-label check, then integrate only with the fully hardened SHADOW-005 successor. |
 | `codex/ARGUS-SCHWAB-003-readonly-account-discovery` | `6f308d7` | No feature ref; commits are backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Adds exact GET-only discovery, live CASH validation, immutable DPAPI binding to the sole `2573` `INDIVIDUAL_CASH` account, bound-refresh revalidation, and the standing-delegation governance; every transmitting capability remains unavailable. | Preserve as audit history; current work continues from `master`. |
 | `codex/ARGUS-SCHWAB-002A-credential-rotation` | `cd73411` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves the credential containment history and restoration of the existing approved Schwab app, local DPAPI credentials, and fresh OAuth. | Preserve as audit history; its work is included through SCHWAB-003. |
