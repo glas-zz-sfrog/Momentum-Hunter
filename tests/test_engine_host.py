@@ -64,12 +64,22 @@ class EngineHostRuntimeTests(unittest.TestCase):
 
     def test_production_collection_advances_shadow_observations_once_after_capture(self) -> None:
         calls: list[str] = []
+        outcomes: list[tuple[str, dict[str, object]]] = []
         runtime = EngineHostRuntime(
             cycle_runner=lambda: calls.append("capture") or SimpleNamespace(target_count=3),
             shadow_workspace_loader=lambda: {},
             shadow_starter=lambda _symbol, _command_id: {},
             shadow_auto_selector=lambda: calls.append("select") or {"status": "TRADE_STARTED"},
             shadow_observation_runner=lambda: calls.append("shadow") or {},
+            shadow_cycle_attempt_recorder=(
+                lambda: {"recorded": True, "cycleId": "attempt-1"}
+            ),
+            shadow_cycle_outcome_recorder=(
+                lambda attempt_id, selection: outcomes.append(
+                    (attempt_id, selection)
+                )
+                or {"recorded": True}
+            ),
             advance_shadow_after_collection=True,
         )
 
@@ -77,6 +87,8 @@ class EngineHostRuntimeTests(unittest.TestCase):
 
         self.assertTrue(result.accepted)
         self.assertEqual(["capture", "select", "shadow"], calls)
+        self.assertEqual("attempt-1", outcomes[0][0])
+        self.assertEqual("TRADE_STARTED", outcomes[0][1]["status"])
         self.assertEqual(
             "TRADE_STARTED",
             result.payload["shadowAutomaticSelection"]["status"],
@@ -86,6 +98,7 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self,
     ) -> None:
         calls: list[str] = []
+        recorded_failures: list[str] = []
 
         def fail_selection() -> dict[str, object]:
             calls.append("select")
@@ -102,6 +115,13 @@ class EngineHostRuntimeTests(unittest.TestCase):
             shadow_observation_runner=(
                 lambda: calls.append("shadow") or {"activeTradeCount": 1}
             ),
+            shadow_cycle_failure_recorder=(
+                lambda reason: recorded_failures.append(reason)
+                or {"recorded": True}
+            ),
+            shadow_cycle_attempt_recorder=(
+                lambda: {"recorded": True, "cycleId": "attempt-failure"}
+            ),
             advance_shadow_after_collection=True,
         )
 
@@ -114,6 +134,38 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertEqual("COLLECTION_FAILED", result.code)
         self.assertIn("Automatic Shadow selection failed", result.summary)
         self.assertEqual(["capture", "select", "shadow"], calls)
+        self.assertEqual([], recorded_failures)
+
+    def test_observation_failure_closes_attempt_as_post_collection_failure(
+        self,
+    ) -> None:
+        outcomes: list[tuple[str, dict[str, object]]] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: SimpleNamespace(target_count=1),
+            shadow_workspace_loader=lambda: {},
+            shadow_starter=lambda _symbol, _command_id: {},
+            shadow_auto_selector=lambda: {"status": "NO_ELIGIBLE_CANDIDATE"},
+            shadow_observation_runner=lambda: (_ for _ in ()).throw(
+                RuntimeError("observation store unavailable")
+            ),
+            shadow_cycle_attempt_recorder=(
+                lambda: {"recorded": True, "cycleId": "attempt-observation"}
+            ),
+            shadow_cycle_outcome_recorder=(
+                lambda attempt_id, outcome: outcomes.append(
+                    (attempt_id, outcome)
+                )
+                or {"recorded": True}
+            ),
+            advance_shadow_after_collection=True,
+        )
+
+        result = runtime.execute(COMMAND_RUN_CYCLE, "observation-failure")
+
+        self.assertFalse(result.accepted)
+        self.assertEqual("COLLECTION_FAILED", result.code)
+        self.assertEqual("attempt-observation", outcomes[0][0])
+        self.assertEqual("POST_COLLECTION_FAILED", outcomes[0][1]["status"])
 
     def test_pause_blocks_collection_until_resume(self) -> None:
         runs: list[str] = []
@@ -171,7 +223,17 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertEqual(1, len(first_result))
 
     def test_collection_failure_is_visible_without_stopping_the_host(self) -> None:
-        runtime = EngineHostRuntime(cycle_runner=lambda: (_ for _ in ()).throw(RuntimeError("provider unavailable")))
+        recorded_failures: list[str] = []
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(
+                RuntimeError("provider unavailable")
+            ),
+            shadow_cycle_failure_recorder=(
+                lambda reason: recorded_failures.append(reason)
+                or {"recorded": True}
+            ),
+            advance_shadow_after_collection=True,
+        )
 
         failed = runtime.execute(COMMAND_RUN_CYCLE, "failing-cycle")
         snapshot = runtime.execute(COMMAND_SNAPSHOT, "snapshot")
@@ -181,6 +243,8 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertEqual("Blocked", failed.snapshot["health"]["state"])
         self.assertTrue(snapshot.accepted)
         self.assertEqual("Blocked", snapshot.snapshot["collection"]["state"])
+        self.assertEqual(1, len(recorded_failures))
+        self.assertIn("provider unavailable", recorded_failures[0])
 
     def test_unexpected_command_failure_stays_structured(self) -> None:
         runtime = EngineHostRuntime(external_monitor_running=lambda: (_ for _ in ()).throw(RuntimeError("unexpected")))

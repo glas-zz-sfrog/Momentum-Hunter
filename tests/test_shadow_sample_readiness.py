@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import io
 import inspect
@@ -8,9 +7,18 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from momentum_hunter.shadow_market_validity import (
+    SHADOW_SELECTOR_ARM_CONFIRMATION,
+    synthetic_pass_proofs,
+)
+from momentum_hunter.shadow_selection import (
+    SELECTION_STARTED,
+    AutomaticShadowSelector,
+)
 from momentum_hunter.shadow_trading import (
     DEFAULT_SHADOW_SAMPLE_VERSION,
     OFFICIAL_SHADOW_SAMPLE_VERSION,
@@ -27,10 +35,9 @@ from momentum_hunter.shadow_trading import (
     audit_shadow_trade,
     build_shadow_review_snapshot,
     build_shadow_sample_metadata,
-    expected_shadow_selection_policy_evidence,
     main,
-    stable_id,
 )
+from momentum_hunter.trade_planning import parse_datetime
 from tests.test_shadow_trading import (
     at,
     completed_auditable_trade,
@@ -41,12 +48,6 @@ from tests.test_shadow_trading import (
 
 class ShadowSampleReadinessTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.selector_arm_patch = patch(
-            "momentum_hunter.shadow_trading.SHADOW_AUTOMATIC_SELECTOR_ARMED",
-            True,
-        )
-        self.selector_arm_patch.start()
-        self.addCleanup(self.selector_arm_patch.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         self.report_path = (
@@ -99,24 +100,69 @@ class ShadowSampleReadinessTests(unittest.TestCase):
                 sample_version=sample_version,
             )
 
-    def start(self, service: ShadowTradingService, command_id: str = "sample-command"):
-        decision_at = at("2026-07-24T10:00:00-05:00")
-        selection_evidence = None
-        if service.sample_activation is not None:
-            service.freeze_automatic_selection_policy(
-                recorded_at=decision_at,
+    def start(
+        self,
+        service: ShadowTradingService,
+        command_id: str = "sample-command",
+        *,
+        decision_at=None,
+    ):
+        payload = json.loads(self.report_path.read_text(encoding="utf-8"))
+        generated_at = parse_datetime(
+            str(payload.get("metadata", {}).get("generated_at", ""))
+        )
+        decision_at = decision_at or (
+            generated_at + timedelta(seconds=30)
+            if generated_at is not None
+            else at("2026-07-24T10:00:00-05:00")
+        )
+        if service.sample_activation is None:
+            return service.start_trade(
+                self.report_path,
+                symbol="TEST",
+                simulation_command_id=command_id,
+                decision_at=decision_at,
             )
-            source_sha = hashlib.sha256(
-                self.report_path.read_bytes()
-            ).hexdigest()
-            command_id = stable_id("shadow-auto-report", source_sha)
-            selection_evidence = expected_shadow_selection_policy_evidence()
-        return service.start_trade(
+        if not service.selector_is_armed():
+            service.arm_automatic_selector(
+                confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+                prerequisite_proofs=synthetic_pass_proofs(self.id()),
+                armed_at=decision_at - timedelta(seconds=20),
+            )
+        quote = {
+            "symbol": "TEST",
+            "timestamp": (decision_at - timedelta(seconds=5)).isoformat(),
+            "bid": 9.94,
+            "ask": 9.96,
+            "last": 9.94,
+            "session": "regular",
+            "trading_state": "tradable",
+            "source": "synthetic-read-only-quote",
+        }
+        selector = AutomaticShadowSelector(
+            service,
+            quote_source=lambda symbol, *, decision_at: (
+                quote
+                if symbol == "TEST"
+                else {
+                    **quote,
+                    "symbol": symbol,
+                    "bid": 100.0,
+                    "ask": 100.01,
+                    "last": 100.0,
+                }
+            ),
+        )
+        result = selector.select(
             self.report_path,
-            symbol="TEST",
-            simulation_command_id=command_id,
             decision_at=decision_at,
-            selection_policy_evidence=selection_evidence,
+        )
+        if result.status != SELECTION_STARTED:
+            raise ValueError(result.reason)
+        return next(
+            trade
+            for trade in service.store.load().trades
+            if trade.shadow_trade_id == result.shadow_trade_id
         )
 
     def test_definition_fingerprint_is_deterministic_and_policy_sensitive(self) -> None:
@@ -454,8 +500,12 @@ class ShadowSampleReadinessTests(unittest.TestCase):
             timestamp="2026-07-24T09:57:00-05:00",
         )
 
-        with self.assertRaisesRegex(ValueError, "predates sample activation"):
-            self.start(service, command_id="stale-report")
+        with self.assertRaisesRegex(ValueError, "predates official sample activation"):
+            self.start(
+                service,
+                command_id="stale-report",
+                decision_at=at("2026-07-24T10:00:00-05:00"),
+            )
 
         self.assertFalse(self.state_path.exists())
 
@@ -515,7 +565,11 @@ class ShadowSampleReadinessTests(unittest.TestCase):
                 source_before = self.report_path.read_bytes()
 
                 with self.assertRaisesRegex(ValueError, expected):
-                    self.start(service, command_id=command_id)
+                    self.start(
+                        service,
+                        command_id=command_id,
+                        decision_at=at("2026-07-24T10:00:00-05:00"),
+                    )
 
                 self.assertEqual(source_before, self.report_path.read_bytes())
                 self.assertFalse(self.state_path.exists())

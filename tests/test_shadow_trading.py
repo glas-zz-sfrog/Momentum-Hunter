@@ -5,7 +5,7 @@ import json
 import tempfile
 import unittest
 from dataclasses import asdict, replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +15,12 @@ from momentum_hunter.engine_host import (
     COMMAND_START_SHADOW_TRADE,
     EngineHostRuntime,
 )
+from momentum_hunter.shadow_market_validity import (
+    SHADOW_SELECTOR_ARM_CONFIRMATION,
+    synthetic_pass_proofs,
+)
+from momentum_hunter.shadow_selection import AutomaticShadowSelector
+from momentum_hunter.scheduling import is_market_open_day
 from momentum_hunter.shadow_trading import (
     MIN_MEANINGFUL_SAMPLE_SIZE,
     SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
@@ -28,7 +34,6 @@ from momentum_hunter.shadow_trading import (
     audit_shadow_trade,
     build_shadow_review_snapshot,
     canonical_json,
-    expected_shadow_selection_policy_evidence,
     shadow_metrics,
     stable_id,
 )
@@ -553,9 +558,36 @@ class ShadowMetricsTests(unittest.TestCase):
 
         self.assertTrue(review["sample"]["gateSatisfied"])
         self.assertEqual(MIN_MEANINGFUL_SAMPLE_SIZE, review["sample"]["eligibleCompleted"])
+        self.assertGreaterEqual(
+            review["sample"]["distinctTradingSessions"],
+            10,
+        )
+        self.assertTrue(review["sample"]["strategyConclusionEligible"])
         self.assertEqual("MEANINGFUL", review["metrics"]["sampleStatus"])
         self.assertIsNotNone(review["metrics"]["winRatePercent"])
         self.assertIsNotNone(review["metrics"]["expectancy"])
+
+    def test_thirty_trades_do_not_authorize_strategy_conclusions_without_ten_sessions(
+        self,
+    ) -> None:
+        trades = [
+            completed_auditable_trade(
+                index,
+                trading_day_override=date(2026, 7, 6),
+            )
+            for index in range(MIN_MEANINGFUL_SAMPLE_SIZE)
+        ]
+
+        review = build_shadow_review_snapshot(trades)
+
+        self.assertTrue(review["sample"]["gateSatisfied"])
+        self.assertEqual(1, review["sample"]["distinctTradingSessions"])
+        self.assertFalse(review["sample"]["strategyConclusionEligible"])
+        self.assertIn("distinct trading sessions", review["metrics"]["conclusion"])
+        self.assertEqual(
+            MIN_MEANINGFUL_SAMPLE_SIZE,
+            review["sample"]["concentration"]["symbols"][0]["count"],
+        )
 
 
 class ShadowWorkspaceIntegrationTests(unittest.TestCase):
@@ -641,6 +673,7 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
 
 def report_payload() -> dict:
     row = {
+        "rank": 1,
         "symbol": "TEST",
         "company": "Synthetic Test Corporation",
         "market_data": {
@@ -678,6 +711,7 @@ def report_payload() -> dict:
             "generated_at": "2026-07-23T09:59:00-05:00",
             "source_capture_path": "synthetic/capture.json",
             "source_capture_time": "2026-07-23T09:58:00-05:00",
+            "source_provider": "synthetic-test-provider",
             "market_regime": "risk_on",
         },
         "top_5_for_capital": [row],
@@ -745,14 +779,22 @@ def completed_trade(index: int, *, executable_pnl: float):
     return replace(trade, status="completed", outcome=outcome, setup_type="setup", catalyst="catalyst")
 
 
-def completed_auditable_trade(index: int):
+def completed_auditable_trade(
+    index: int,
+    *,
+    trading_day_override: date | None = None,
+):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
+        trading_day = (
+            trading_day_override
+            or nth_open_day(date(2026, 7, 6), index)
+        )
         report = root / (
-            f"trade-plan-briefing-2026-07-{(index % 20) + 1:02d}-"
+            f"trade-plan-briefing-{trading_day.isoformat()}-"
             f"{index:03d}.json"
         )
-        decision = at(f"2026-07-{(index % 20) + 1:02d}T10:00:00-05:00")
+        decision = at(f"{trading_day.isoformat()}T10:00:00-05:00")
         payload = report_payload()
         payload["metadata"]["source_capture_time"] = (
             decision - timedelta(minutes=2)
@@ -779,26 +821,40 @@ def completed_auditable_trade(index: int):
                 confirmation=SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
                 sample_version="synthetic-official-v1",
             )
-        with patch(
-            "momentum_hunter.shadow_trading.SHADOW_AUTOMATIC_SELECTOR_ARMED",
-            True,
-        ):
-            service.freeze_automatic_selection_policy(
-                recorded_at=decision,
-            )
-            source_sha = sha256(report)
-            trade = service.start_trade(
-                report,
-                symbol="TEST",
-                simulation_command_id=stable_id(
-                    "shadow-auto-report",
-                    source_sha,
-                ),
-                decision_at=decision,
-                selection_policy_evidence=(
-                    expected_shadow_selection_policy_evidence()
-                ),
-            )
+        service.arm_automatic_selector(
+            confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+            prerequisite_proofs=synthetic_pass_proofs(f"completed-{index}"),
+            armed_at=decision - timedelta(minutes=2),
+        )
+        selection_quote = {
+            "symbol": "TEST",
+            "timestamp": (decision - timedelta(seconds=5)).isoformat(),
+            "bid": 9.94,
+            "ask": 9.95,
+            "last": 9.94,
+            "session": "regular",
+            "trading_state": "tradable",
+            "source": "synthetic-selection-quote",
+        }
+        result = AutomaticShadowSelector(
+            service,
+            quote_source=lambda symbol, *, decision_at: (
+                selection_quote
+                if symbol == "TEST"
+                else {
+                    **selection_quote,
+                    "symbol": symbol,
+                    "bid": 100.0,
+                    "ask": 100.01,
+                    "last": 100.0,
+                }
+            ),
+        ).select(report, decision_at=decision)
+        trade = next(
+            item
+            for item in service.store.load().trades
+            if item.shadow_trade_id == result.shadow_trade_id
+        )
         service.process_quote(
             quote(
                 (decision + timedelta(seconds=5)).isoformat(),
@@ -829,3 +885,13 @@ def at(value: str) -> datetime:
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def nth_open_day(start: date, index: int) -> date:
+    current = start
+    remaining = max(0, index - 1)
+    while remaining:
+        current += timedelta(days=1)
+        if is_market_open_day(current):
+            remaining -= 1
+    return current

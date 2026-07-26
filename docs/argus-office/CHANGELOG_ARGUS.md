@@ -1,9 +1,15 @@
 # Argus Changelog
 
 ## Unreleased
+- Implemented SHADOW-006 deterministic Official Shadow V1 selection: canonical rank/score/identity ordering, fatal/informational warning policy, four-clock freshness, fresh quote/provider identity, Opportunity ID, same-day duplicate suppression, one global position, and frozen session/forced-flat rules.
+- Replaced the temporary compile-time construction switch with a write-once arm record bound to named prerequisite proof hashes, constitution hash, and Shadow runtime build hash; failed or partial arming creates no policy or arm state.
+- Added expected in-window five-minute cycle accounting with restart-downtime inference, complete rejection reasons, collection/selection/order outcome counts, and closure of collection, selection, and observation failure paths.
+- Added all-eligible and deterministic-random counterfactual observations plus SPY/IWM benchmarks, finalized to the selected trade exit without creating portfolio trades.
+- Added a 10-distinct-session strategy-review gate and visible symbol/setup/catalyst/regime/time concentration while preserving the 30-trade descriptive-metrics gate.
+- Passed compileall, focused Shadow/Engine Host suites, all 811 Python tests, diff review, and production-local nonmutation proof; the activation hash is unchanged and production remains unarmed at `0 / 30`.
 - Backed the verified SHADOW-005 evidence-validity checkpoint up to its feature branch without moving or merging `master`.
-- Added a draft Shadow Sample Constitution covering state transitions, automatic selection, multi-clock freshness, decision-cycle denominators, duplicate/cooldown/concurrency controls, diversity, versioning, and the separate plumbing/strategy canary gates.
-- Hard-disabled the official automatic selector behind a compile-time methodology gate with no environment, config, or CLI bypass; policy creation, automatic selection, and direct official starts all fail closed while exploratory nonofficial simulation remains available.
+- Added the initial draft Shadow Sample Constitution covering state transitions, automatic selection, multi-clock freshness, decision-cycle denominators, duplicate/cooldown/concurrency controls, diversity, versioning, and the separate plumbing/strategy canary gates; SHADOW-006 now implements the frozen v1 rules.
+- Established the temporary SHADOW-005 compile-time methodology gate; SHADOW-006 supersedes it with immutable proof-addressed arming while exploratory nonofficial simulation remains available.
 - Added frozen automatic-selection policy evidence and audit checks across Shadow trades, ledger events, and nontransmitting tickets, while preserving deterministic report-derived identities.
 - Reconciled current decisions, goals, risks, canonical paths, branch state, verification, and the Schwab credential incident record; the official sample remains `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`.
 - Passed compileall, 93 focused tests, all 797 Python tests, diff/protected-path review, and production-local nonmutation proof returning `CONSTITUTION_NOT_ARMED` without creating policy or Shadow state.

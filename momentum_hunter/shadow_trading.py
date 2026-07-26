@@ -25,6 +25,25 @@ from momentum_hunter.autonomy.ledger import ExecutionLedger, ExecutionLedgerEven
 from momentum_hunter.autonomy.risk_governor import RiskGovernorResult, evaluate_trade_plan
 from momentum_hunter.autonomy.view_models import candidate_plan_from_report_row, stable_trade_plan_id
 from momentum_hunter.config import DATA_DIR
+from momentum_hunter.shadow_market_validity import (
+    EASTERN_TZ,
+    SHADOW_CONSTITUTION_VERSION,
+    SHADOW_SELECTOR_ARM_CONFIRMATION,
+    SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+    DecisionCycleStore,
+    SelectorArmRecord,
+    SelectorArmStore,
+    ShadowMarketValidityPolicy,
+    classify_warnings,
+    decision_cycle_summary,
+    entry_window_findings,
+    forced_exit_deadline,
+    runtime_build_hash,
+    selector_arm_id,
+    shadow_constitution_hash,
+    shadow_market_policy_definition,
+    validate_arm_record,
+)
 from momentum_hunter.time_utils import now_central
 from momentum_hunter.trade_planning import TradePlan, parse_datetime
 
@@ -40,14 +59,19 @@ OFFICIAL_SHADOW_SAMPLE_VERSION = "official-shadow-v1"
 SHADOW_SAMPLE_ACTIVATION_SCHEMA_VERSION = 1
 SHADOW_SAMPLE_ACTIVATION_CONFIRMATION = "START OFFICIAL SHADOW SAMPLE"
 SHADOW_SELECTION_POLICY_SCHEMA_VERSION = 1
-SHADOW_SELECTION_POLICY_VERSION = "first-clean-risk-approved-per-scheduled-report-v1"
-SHADOW_AUTOMATIC_SELECTOR_ARMED = False
+SHADOW_SELECTION_POLICY_VERSION = "official-shadow-deterministic-market-validity-v1"
 SHADOW_STATE_PATH = DATA_DIR / "shadow-trading" / "shadow-trading-state.json"
 SHADOW_SAMPLE_ACTIVATION_PATH = (
     DATA_DIR / "shadow-trading" / "shadow-sample-activation.json"
 )
 SHADOW_SELECTION_POLICY_PATH = (
     DATA_DIR / "shadow-trading" / "shadow-selection-policy.json"
+)
+SHADOW_SELECTOR_ARM_PATH = (
+    DATA_DIR / "shadow-trading" / "shadow-selector-arm.json"
+)
+SHADOW_DECISION_CYCLES_PATH = (
+    DATA_DIR / "shadow-trading" / "shadow-decision-cycles.json"
 )
 SHADOW_REPORTS_DIR = DATA_DIR / "reports"
 MIN_MEANINGFUL_SAMPLE_SIZE = 30
@@ -107,13 +131,6 @@ class ShadowSelectionPolicy:
     selection_policy_version: str
     selection_policy_fingerprint: str
     selection_policy_json: str
-
-
-@dataclass(frozen=True)
-class AutomaticShadowCandidateChoice:
-    symbol: str
-    rank: int
-    candidates_evaluated: int
 
 
 @dataclass(frozen=True)
@@ -226,6 +243,11 @@ class ShadowOrderTicket:
     selection_policy_recorded_at: str = ""
     selection_policy_version: str = ""
     selection_policy_fingerprint: str = ""
+    selector_arm_id: str = ""
+    constitution_hash: str = ""
+    decision_cycle_id: str = ""
+    opportunity_id: str = ""
+    selection_quote_json: str = ""
     exact_ticket_entered: str = ""
     operator_modifications: str = ""
     paper_money_result: str = ""
@@ -246,7 +268,7 @@ class ShadowTrade:
     outcome_id: str
     symbol: str
     candidate_rank: int
-    candidate_score: int
+    candidate_score: float
     setup_type: str
     catalyst: str
     market_regime: str
@@ -261,6 +283,11 @@ class ShadowTrade:
     selection_policy_recorded_at: str = ""
     selection_policy_version: str = ""
     selection_policy_fingerprint: str = ""
+    selector_arm_id: str = ""
+    constitution_hash: str = ""
+    decision_cycle_id: str = ""
+    opportunity_id: str = ""
+    selection_quote_json: str = ""
     risk_rejection_reasons: tuple[str, ...] = ()
     order: ShadowOrder | None = None
     position: ShadowPosition | None = None
@@ -562,17 +589,26 @@ def shadow_selection_policy_definition() -> dict[str, Any]:
     return {
         "selection_policy_version": SHADOW_SELECTION_POLICY_VERSION,
         "report_scope": "canonical_scheduled_trade_plan_reports_only",
-        "candidate_order": "persisted_candidates_order",
-        "candidate_rule": "first_eligible_candidate",
+        "candidate_order": [
+            "canonical_rank_ascending",
+            "composite_score_descending",
+            "candidate_id_or_symbol_ascending",
+        ],
+        "candidate_rule": "highest_ranked_market_valid_eligible_candidate",
         "required_risk_status": "Simulation-only",
-        "required_data_quality": "complete_warning_free",
+        "required_data_quality": "no_fatal_warnings",
         "required_plan_values": [
             "bullish_entry",
             "bullish_stop",
             "bullish_target_1",
             "positive_estimated_shares_for_500",
         ],
+        "market_validity": shadow_market_policy_definition(),
+        "constitution_version": SHADOW_CONSTITUTION_VERSION,
+        "constitution_hash": shadow_constitution_hash(),
         "maximum_new_trades_per_source_report": 1,
+        "maximum_active_positions": 1,
+        "maximum_symbol_trades_per_trading_day": 1,
         "event_monitor_reports_eligible": False,
         "execution_boundary": "ProspectiveFakeBroker",
         "order_transmission": "UNAVAILABLE",
@@ -589,10 +625,13 @@ def expected_shadow_selection_policy_evidence() -> dict[str, str]:
     }
 
 
-def automatic_shadow_selector_is_armed() -> bool:
-    """Return the compile-time methodology gate for official automatic selection."""
+def automatic_shadow_selector_is_armed(
+    arm_store: SelectorArmStore | None = None,
+) -> bool:
+    """Return persisted write-once arming state; source edits cannot arm the selector."""
 
-    return SHADOW_AUTOMATIC_SELECTOR_ARMED
+    store = arm_store or SelectorArmStore(SHADOW_SELECTOR_ARM_PATH)
+    return store.load() is not None
 
 
 def build_shadow_selection_policy(
@@ -661,63 +700,6 @@ def same_shadow_selection_policy(
         == right.selection_policy_fingerprint
         and left.selection_policy_json == right.selection_policy_json
     )
-
-
-def first_automatic_shadow_candidate(
-    rows: list[Any],
-    *,
-    metadata: dict[str, Any],
-    report_path: Path,
-    decision_at: datetime,
-) -> tuple[AutomaticShadowCandidateChoice | None, int]:
-    evaluated = 0
-    for rank, row in enumerate(rows, 1):
-        if not isinstance(row, dict):
-            continue
-        candidate = candidate_plan_from_report_row(
-            row,
-            rank=rank,
-            source_name=report_path.name,
-            source_path=str(report_path),
-            source_generated_at=str(metadata.get("generated_at", "")),
-        )
-        if candidate is None:
-            continue
-        evaluated += 1
-        risk = evaluate_trade_plan(
-            candidate.trade_plan,
-            ticker=candidate.ticker,
-            trade_plan_id=stable_trade_plan_id(
-                candidate.ticker,
-                candidate.trade_plan,
-            ),
-            checked_at=decision_at,
-        )
-        plan = candidate.trade_plan
-        warnings = list(plan.warnings) + list(plan.blocking_reasons)
-        try:
-            quantity = int(plan.estimated_shares_for_500 or 0)
-        except (TypeError, ValueError, OverflowError):
-            continue
-        if (
-            candidate.ticker.strip()
-            and risk.status == "Simulation-only"
-            and risk.allows_simulation
-            and not warnings
-            and quantity > 0
-            and plan.bullish_entry is not None
-            and plan.bullish_stop is not None
-            and plan.bullish_target_1 is not None
-        ):
-            return (
-                AutomaticShadowCandidateChoice(
-                    symbol=candidate.ticker,
-                    rank=rank,
-                    candidates_evaluated=evaluated,
-                ),
-                evaluated,
-            )
-    return None, evaluated
 
 
 def build_shadow_sample_metadata(
@@ -985,6 +967,22 @@ class ShadowTradingService:
         self.selection_policy_store = ShadowSelectionPolicyStore.for_state_store(
             self.store
         )
+        if self.store.path == SHADOW_STATE_PATH:
+            self.selector_arm_store = SelectorArmStore(SHADOW_SELECTOR_ARM_PATH)
+            self.decision_cycle_store = DecisionCycleStore(
+                SHADOW_DECISION_CYCLES_PATH
+            )
+        else:
+            self.selector_arm_store = SelectorArmStore(
+                self.store.path.with_name(
+                    f"{self.store.path.stem}-selector-arm.json"
+                )
+            )
+            self.decision_cycle_store = DecisionCycleStore(
+                self.store.path.with_name(
+                    f"{self.store.path.stem}-decision-cycles.json"
+                )
+            )
         requested_definition = build_shadow_sample_metadata(
             self.policy,
             sample_version=sample_version,
@@ -1108,11 +1106,6 @@ class ShadowTradingService:
         *,
         recorded_at: datetime | None = None,
     ) -> ShadowSelectionPolicy:
-        if not automatic_shadow_selector_is_armed():
-            raise ShadowStateError(
-                "Official automatic selection is not armed; the Shadow Sample "
-                "Constitution gates are incomplete."
-            )
         self._refresh_sample_activation()
         if self.sample_activation is None:
             raise ShadowStateError(
@@ -1125,6 +1118,112 @@ class ShadowTradingService:
         persisted = self.selection_policy_store.save_once(policy)
         self._validate_selection_policy_for_active_sample(persisted)
         return persisted
+
+    def arm_automatic_selector(
+        self,
+        *,
+        confirmation: str,
+        prerequisite_proofs: dict[str, str],
+        armed_at: datetime | None = None,
+    ) -> SelectorArmRecord:
+        if confirmation != SHADOW_SELECTOR_ARM_CONFIRMATION:
+            raise ValueError(
+                "Exact internal selector-arm confirmation was not supplied."
+            )
+        self._refresh_sample_activation()
+        if self.sample_activation is None:
+            raise ShadowStateError(
+                "Selector arming requires an active official Shadow sample."
+            )
+        if self.store.load().trades:
+            raise ShadowStateError(
+                "Selector arming requires an empty official Shadow sample."
+            )
+        armed_at = armed_at or now_central()
+        if (
+            armed_at.tzinfo is None
+            or armed_at.utcoffset() is None
+        ):
+            raise ValueError("Selector-arm timestamp must include a UTC offset.")
+        constitution_hash = shadow_constitution_hash()
+        build_hash = runtime_build_hash()
+        expected_policy = expected_shadow_selection_policy_evidence()
+        arm_id = selector_arm_id(
+            sample_version=self.sample_definition.sample_version,
+            strategy_configuration_fingerprint=(
+                self.sample_definition.strategy_configuration_fingerprint
+            ),
+            selection_policy_fingerprint=expected_policy[
+                "selection_policy_fingerprint"
+            ],
+            constitution_hash=constitution_hash,
+            build_hash=build_hash,
+            prerequisite_proofs=prerequisite_proofs,
+        )
+        record = SelectorArmRecord(
+            schema_version=SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+            arm_id=arm_id,
+            armed_at=armed_at.isoformat(),
+            sample_version=self.sample_definition.sample_version,
+            strategy_configuration_fingerprint=(
+                self.sample_definition.strategy_configuration_fingerprint
+            ),
+            selection_policy_fingerprint=expected_policy[
+                "selection_policy_fingerprint"
+            ],
+            constitution_version=SHADOW_CONSTITUTION_VERSION,
+            constitution_hash=constitution_hash,
+            build_hash=build_hash,
+            prerequisite_proofs=dict(prerequisite_proofs),
+        )
+        try:
+            validate_arm_record(record)
+        except ValueError as exc:
+            raise ShadowStateError(str(exc)) from exc
+        policy = self.freeze_automatic_selection_policy(recorded_at=armed_at)
+        if (
+            policy.selection_policy_fingerprint
+            != record.selection_policy_fingerprint
+        ):
+            raise ShadowStateError(
+                "Frozen selection policy does not match selector-arm evidence."
+            )
+        try:
+            return self.selector_arm_store.save_once(record)
+        except ValueError as exc:
+            raise ShadowStateError(str(exc)) from exc
+
+    def selector_arm_record(self) -> SelectorArmRecord | None:
+        try:
+            record = self.selector_arm_store.load()
+        except ValueError as exc:
+            raise ShadowStateError(str(exc)) from exc
+        if record is None:
+            return None
+        validate_arm_record(record)
+        if (
+            record.sample_version != self.sample_definition.sample_version
+            or record.strategy_configuration_fingerprint
+            != self.sample_definition.strategy_configuration_fingerprint
+            or record.constitution_hash != shadow_constitution_hash()
+            or record.build_hash != runtime_build_hash()
+        ):
+            raise ShadowStateError(
+                "Selector arm record does not match the active sample, "
+                "constitution, or runtime build."
+            )
+        policy = self.load_automatic_selection_policy()
+        if (
+            record.selection_policy_fingerprint
+            != policy.selection_policy_fingerprint
+        ):
+            raise ShadowStateError(
+                "Selector arm record does not match the frozen selection policy."
+            )
+        return record
+
+    def selector_is_armed(self) -> bool:
+        return self.selector_arm_record() is not None
 
     def load_automatic_selection_policy(self) -> ShadowSelectionPolicy:
         self._refresh_sample_activation()
@@ -1167,14 +1266,21 @@ class ShadowTradingService:
         decision_at: datetime | None = None,
         expected_source_sha256: str | None = None,
         selection_policy_evidence: dict[str, str] | None = None,
+        decision_cycle_id: str = "",
+        opportunity_id: str = "",
+        selector_arm_id: str = "",
+        constitution_hash: str = "",
+        selection_quote_json: str = "",
     ) -> ShadowTrade:
         self._refresh_sample_activation()
         active_selection_policy: ShadowSelectionPolicy | None = None
+        active_selector_arm: SelectorArmRecord | None = None
         if self.sample_activation is not None:
-            if not automatic_shadow_selector_is_armed():
+            active_selector_arm = self.selector_arm_record()
+            if active_selector_arm is None:
                 raise ShadowStateError(
-                    "Official automatic selection is not armed; the Shadow Sample "
-                    "Constitution gates are incomplete."
+                    "Official automatic selection is not armed by an immutable "
+                    "selector-arm record."
                 )
             active_selection_policy = self.load_automatic_selection_policy()
             if selection_policy_evidence != (
@@ -1183,6 +1289,17 @@ class ShadowTradingService:
                 raise ValueError(
                     "Official Shadow sample trades require the exact frozen "
                     "automatic selection policy evidence."
+                )
+            if (
+                selector_arm_id != active_selector_arm.arm_id
+                or constitution_hash != active_selector_arm.constitution_hash
+                or not decision_cycle_id
+                or not opportunity_id
+                or not selection_quote_json
+            ):
+                raise ValueError(
+                    "Official Shadow sample requires exact selector-arm, "
+                    "decision-cycle, opportunity, constitution, and quote evidence."
                 )
         normalized_symbol = symbol.strip().upper()
         if not normalized_symbol:
@@ -1231,7 +1348,34 @@ class ShadowTradingService:
         matches = [(index, row) for index, row in enumerate(rows, 1) if isinstance(row, dict) and str(row.get("symbol", "")).upper() == normalized_symbol]
         if len(matches) != 1:
             raise ValueError(f"Expected exactly one persisted candidate row for {normalized_symbol}; found {len(matches)}.")
-        rank, row = matches[0]
+        persisted_rank, row = matches[0]
+        rank = (
+            int(row.get("rank") or 0)
+            if self.sample_activation is not None
+            else persisted_rank
+        )
+        if rank <= 0:
+            raise ValueError(
+                "Official Shadow candidate lacks a positive canonical rank."
+            )
+        if self.sample_activation is not None:
+            cycle = self.decision_cycle_store.get(decision_cycle_id)
+            if (
+                cycle is None
+                or cycle.get("report_sha256") != source_sha
+                or cycle.get("selected_symbol") != normalized_symbol
+                or int(cycle.get("selected_rank") or 0) != rank
+                or cycle.get("opportunity_id") != opportunity_id
+                or canonical_json(cycle.get("selection_quote"))
+                != selection_quote_json
+                or cycle.get("selector_arm_id") != selector_arm_id
+                or cycle.get("constitution_hash") != constitution_hash
+                or cycle.get("status") != "SELECTION_PENDING"
+            ):
+                raise ValueError(
+                    "Official Shadow decision-cycle evidence does not match the "
+                    "selected candidate and immutable report."
+                )
         metadata = report.get("metadata", {}) if isinstance(report.get("metadata"), dict) else {}
         decision_at = decision_at or now_central()
         if self.sample_activation is not None:
@@ -1250,21 +1394,6 @@ class ShadowTradingService:
                 decision_at=decision_at,
                 activation=self.sample_activation,
             )
-            automatic_choice, _ = first_automatic_shadow_candidate(
-                rows,
-                metadata=metadata,
-                report_path=report_path,
-                decision_at=decision_at,
-            )
-            if (
-                automatic_choice is None
-                or automatic_choice.symbol != normalized_symbol
-                or automatic_choice.rank != rank
-            ):
-                raise ValueError(
-                    "Official Shadow sample selection must use the first clean "
-                    "Risk-Governor-approved candidate in report order."
-                )
         candidate = candidate_plan_from_report_row(
             row,
             rank=rank,
@@ -1309,6 +1438,17 @@ class ShadowTradingService:
         if active_selection_policy is not None:
             request_fingerprint_parts.append(
                 active_selection_policy.selection_policy_fingerprint
+            )
+            request_fingerprint_parts.extend(
+                [
+                    decision_cycle_id,
+                    opportunity_id,
+                    selector_arm_id,
+                    constitution_hash,
+                    hashlib.sha256(
+                        selection_quote_json.encode("utf-8")
+                    ).hexdigest(),
+                ]
             )
         request_fingerprint = stable_id(*request_fingerprint_parts)
         state = self.store.load()
@@ -1383,15 +1523,32 @@ class ShadowTradingService:
                     if active_selection_policy is not None
                     else ""
                 ),
+                "selector_arm_id": selector_arm_id,
+                "constitution_hash": constitution_hash,
+                "decision_cycle_id": decision_cycle_id,
+                "opportunity_id": opportunity_id,
+                "selection_quote_sha256": (
+                    hashlib.sha256(selection_quote_json.encode("utf-8")).hexdigest()
+                    if selection_quote_json
+                    else ""
+                ),
             },
         )
         quantity = int(candidate.trade_plan.estimated_shares_for_500 or 0)
+        warning_assessment = classify_warnings(
+            candidate.trade_plan.warnings,
+            candidate.trade_plan.blocking_reasons,
+        )
         can_start = (
             risk.allows_simulation
             and quantity > 0
             and candidate.trade_plan.bullish_entry is not None
             and candidate.trade_plan.bullish_stop is not None
             and candidate.trade_plan.bullish_target_1 is not None
+            and (
+                self.sample_activation is None
+                or not warning_assessment.fatal
+            )
         )
         if can_start:
             entry = float(candidate.trade_plan.bullish_entry)
@@ -1446,6 +1603,11 @@ class ShadowTradingService:
                     if active_selection_policy is not None
                     else ""
                 ),
+                selector_arm_id=selector_arm_id,
+                constitution_hash=constitution_hash,
+                decision_cycle_id=decision_cycle_id,
+                opportunity_id=opportunity_id,
+                selection_quote_json=selection_quote_json,
             )
             preview_event = make_ledger_event(
                 shadow_trade_id,
@@ -1505,8 +1667,16 @@ class ShadowTradingService:
         scoring = row.get("scoring", {}) if isinstance(row.get("scoring"), dict) else {}
         setup_type = str(scoring.get("catalyst_cluster") or candidate.setup_label or "unknown")
         catalyst = str(scoring.get("catalyst_summary") or "unknown")
-        warnings = list(candidate.trade_plan.warnings) + list(candidate.trade_plan.blocking_reasons)
-        data_quality_state = "PARTIAL" if warnings else "COMPLETE"
+        if self.sample_activation is not None:
+            data_quality_state = (
+                "BLOCKED" if warning_assessment.fatal else "COMPLETE"
+            )
+        else:
+            warnings = (
+                list(candidate.trade_plan.warnings)
+                + list(candidate.trade_plan.blocking_reasons)
+            )
+            data_quality_state = "PARTIAL" if warnings else "COMPLETE"
         trade = ShadowTrade(
             shadow_trade_id=shadow_trade_id,
             simulation_command_id=simulation_command_id,
@@ -1517,7 +1687,7 @@ class ShadowTradingService:
             outcome_id=outcome_id,
             symbol=normalized_symbol,
             candidate_rank=rank,
-            candidate_score=int(scoring.get("composite_score") or 0),
+            candidate_score=float(scoring.get("composite_score") or 0),
             setup_type=setup_type,
             catalyst=catalyst,
             market_regime=str(metadata.get("market_regime") or "unknown"),
@@ -1544,6 +1714,11 @@ class ShadowTradingService:
                 if active_selection_policy is not None
                 else ""
             ),
+            selector_arm_id=selector_arm_id,
+            constitution_hash=constitution_hash,
+            decision_cycle_id=decision_cycle_id,
+            opportunity_id=opportunity_id,
+            selection_quote_json=selection_quote_json,
             risk_rejection_reasons=rejection_reasons,
             order=order,
             ticket=ticket,
@@ -1629,6 +1804,12 @@ class ShadowTradingService:
     def snapshot(self) -> dict[str, Any]:
         self._refresh_sample_activation()
         state = self.store.load()
+        selector_arm = (
+            self.selector_arm_record()
+            if self.sample_activation is not None
+            else None
+        )
+        decision_cycles = self.decision_cycle_store.load()
         audits = {trade.shadow_trade_id: audit_shadow_trade(trade) for trade in state.trades}
         review = build_shadow_review_snapshot(
             state.trades,
@@ -1653,6 +1834,20 @@ class ShadowTradingService:
             "sample": review["sample"],
             "reviewMetrics": review["metrics"],
             "sampleReadiness": shadow_sample_readiness_to_dict(readiness),
+            "selectorArm": {
+                "state": "ARMED" if selector_arm is not None else "NOT_ARMED",
+                "armId": selector_arm.arm_id if selector_arm is not None else None,
+                "constitutionHash": (
+                    selector_arm.constitution_hash
+                    if selector_arm is not None
+                    else shadow_constitution_hash()
+                ),
+                "orderTransmission": "UNAVAILABLE",
+            },
+            "decisionCycles": decision_cycle_summary(
+                decision_cycles.cycles,
+                state.trades,
+            ),
             "audits": {
                 trade_id: {
                     "status": report.status,
@@ -1878,6 +2073,90 @@ class ShadowTradingService:
             processed_observation_ids=(*trade.processed_observation_ids, observation_id),
             last_observation_timestamp=quote.timestamp,
         )
+        if trade.sample_metadata.official_sample_authorized:
+            quote_age = (received_at - quote_time).total_seconds()
+            if quote_age < 0 or quote_age > ShadowMarketValidityPolicy().quote_max_age_seconds:
+                reason = (
+                    "Official Shadow observation is future-dated or older than "
+                    "the frozen 30-second quote boundary."
+                )
+                return append_trade_event(
+                    replace(processed_trade, last_reason=reason),
+                    timestamp=received_at.isoformat(),
+                    event_type="quote_rejected",
+                    requested_action="shadow_quote_rejected",
+                    result="blocked",
+                    reason=reason,
+                )
+            quote_eastern = quote_time.astimezone(EASTERN_TZ)
+            decision_eastern = decision_time.astimezone(EASTERN_TZ)
+            forced_exit = (
+                quote_eastern.date() > decision_eastern.date()
+                or quote_eastern >= forced_exit_deadline(quote_time)
+            )
+            if trade.position is not None and forced_exit:
+                validation_reason = self.fake_broker.validate_quote(
+                    quote,
+                    received_at=received_at,
+                )
+                if validation_reason:
+                    return append_trade_event(
+                        replace(processed_trade, last_reason=validation_reason),
+                        timestamp=quote.timestamp,
+                        event_type="quote_rejected",
+                        requested_action="shadow_quote_rejected",
+                        result="blocked",
+                        reason=validation_reason,
+                    )
+                forced_trade = processed_trade
+                if trade.order is not None and trade.order.remaining_quantity > 0:
+                    cancelled_order = replace(
+                        trade.order,
+                        status="cancelled",
+                        last_update_at=quote.timestamp,
+                        reason="Unfilled entry remainder cancelled at the session exit boundary.",
+                    )
+                    forced_trade = append_trade_event(
+                        replace(forced_trade, order=cancelled_order),
+                        timestamp=quote.timestamp,
+                        event_type="fake_order_cancelled",
+                        requested_action="fake_entry_remainder_cancelled",
+                        result="cancelled",
+                        reason=cancelled_order.reason,
+                    )
+                position = update_position_excursions(trade.position, quote)
+                return self._close_position(
+                    forced_trade,
+                    quote,
+                    position,
+                    stop_executable=False,
+                    target_executable=False,
+                    exit_reason_override="forced_session_exit",
+                )
+            if (
+                trade.position is None
+                and trade.order is not None
+                and entry_window_findings(quote_time)
+            ):
+                cancelled_order = replace(
+                    trade.order,
+                    status="cancelled",
+                    last_update_at=quote.timestamp,
+                    reason="Unfilled official entry cancelled outside the frozen entry window.",
+                )
+                return append_trade_event(
+                    replace(
+                        processed_trade,
+                        status="cancelled",
+                        order=cancelled_order,
+                        last_reason=cancelled_order.reason,
+                    ),
+                    timestamp=quote.timestamp,
+                    event_type="fake_order_cancelled",
+                    requested_action="fake_entry_cancelled",
+                    result="cancelled",
+                    reason=cancelled_order.reason,
+                )
         if trade.status == "partially_filled" and trade.order is not None and trade.position is not None:
             validation_reason = self.fake_broker.validate_quote(quote, received_at=received_at)
             if validation_reason:
@@ -2032,6 +2311,7 @@ class ShadowTradingService:
         *,
         stop_executable: bool,
         target_executable: bool,
+        exit_reason_override: str = "",
     ) -> ShadowTrade:
         if stop_executable and target_executable:
             reason = "The same observation makes both stop and target executable; exit order is ambiguous."
@@ -2049,7 +2329,10 @@ class ShadowTradingService:
                 result="unknown",
                 reason=reason,
             )
-        exit_reason = "stop" if stop_executable else "target_1"
+        exit_reason = (
+            exit_reason_override
+            or ("stop" if stop_executable else "target_1")
+        )
         exit_price = self.fake_broker.executable_exit_price(quote, reason=exit_reason)
         outcome = build_shadow_outcome(trade, position, quote.timestamp, exit_reason, exit_price)
         completed = replace(
@@ -2208,11 +2491,21 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
             trade.ticket.selection_policy_recorded_at,
             trade.ticket.selection_policy_version,
             trade.ticket.selection_policy_fingerprint,
+            trade.ticket.selector_arm_id,
+            trade.ticket.constitution_hash,
+            trade.ticket.decision_cycle_id,
+            trade.ticket.opportunity_id,
+            trade.ticket.selection_quote_json,
         )
         trade_selection = (
             trade.selection_policy_recorded_at,
             trade.selection_policy_version,
             trade.selection_policy_fingerprint,
+            trade.selector_arm_id,
+            trade.constitution_hash,
+            trade.decision_cycle_id,
+            trade.opportunity_id,
+            trade.selection_quote_json,
         )
         if ticket_selection != trade_selection:
             findings.append(
@@ -2239,6 +2532,46 @@ def automatic_selection_findings(trade: ShadowTrade) -> list[AuditFinding]:
         return []
 
     findings: list[AuditFinding] = []
+    if (
+        not trade.selector_arm_id
+        or trade.constitution_hash != shadow_constitution_hash()
+        or not trade.decision_cycle_id
+        or not trade.opportunity_id
+        or not trade.selection_quote_json
+    ):
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "market_validity",
+                "Official Shadow Trade lacks selector-arm, constitution, "
+                "decision-cycle, opportunity, or selection-quote evidence.",
+            )
+        )
+    cycle_payload = next(
+        (
+            event.payload
+            for event in trade.ledger_events
+            if event.requested_action == "risk_gate_evaluated"
+        ),
+        {},
+    )
+    if any(
+        str(cycle_payload.get(field_name, ""))
+        != expected_value
+        for field_name, expected_value in (
+            ("selector_arm_id", trade.selector_arm_id),
+            ("constitution_hash", trade.constitution_hash),
+            ("decision_cycle_id", trade.decision_cycle_id),
+            ("opportunity_id", trade.opportunity_id),
+        )
+    ):
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "market_validity",
+                "Risk evidence does not match the frozen market-validity context.",
+            )
+        )
     expected = expected_shadow_selection_policy_evidence()
     if (
         trade.selection_policy_version != expected["selection_policy_version"]
@@ -2319,43 +2652,25 @@ def automatic_selection_findings(trade: ShadowTrade) -> list[AuditFinding]:
             )
         )
     try:
-        source_report = json.loads(trade.evidence.source_report_json)
-        if not isinstance(source_report, dict):
-            raise ValueError("Frozen source report shape is invalid.")
-        choice_decision_at = require_datetime(
-            trade.decision_timestamp,
-            "Shadow Trade decision timestamp",
-        )
-        rows = (
-            source_report.get("candidates")
-            or source_report.get("top_5_for_capital")
-            or []
-        )
-        metadata = (
-            source_report.get("metadata", {})
-            if isinstance(source_report.get("metadata"), dict)
-            else {}
-        )
-        if not isinstance(rows, list):
-            raise ValueError("Frozen source report shape is invalid.")
-        choice, _ = first_automatic_shadow_candidate(
-            rows,
-            metadata=metadata,
-            report_path=Path(trade.evidence.source_path),
-            decision_at=choice_decision_at,
-        )
+        selection_quote = json.loads(trade.selection_quote_json)
     except (json.JSONDecodeError, TypeError, ValueError):
-        choice = None
-    if (
-        choice is None
-        or choice.symbol != trade.symbol
-        or choice.rank != trade.candidate_rank
-    ):
+        selection_quote = None
+    if not isinstance(selection_quote, dict):
         findings.append(
             AuditFinding(
                 trade.shadow_trade_id,
-                "selection_policy",
-                "Official Shadow Trade is not the first eligible candidate in frozen report order.",
+                "market_validity",
+                "Official Shadow selection quote is not valid frozen JSON evidence.",
+            )
+        )
+    elif str(
+        risk_events[0].payload.get("selection_quote_sha256", "")
+    ) != hashlib.sha256(trade.selection_quote_json.encode("utf-8")).hexdigest():
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "market_validity",
+                "Risk evidence does not match the frozen selection quote.",
             )
         )
     return findings
@@ -2480,6 +2795,23 @@ def build_shadow_review_snapshot(
         if trade.sample_metadata == active_definition
     ]
     metrics = shadow_metrics(eligible_completed)
+    required_sessions = (
+        ShadowMarketValidityPolicy().required_distinct_sessions_for_strategy_review
+    )
+    distinct_sessions = {
+        require_datetime(
+            trade.decision_timestamp,
+            "Shadow decision timestamp",
+        )
+        .astimezone(EASTERN_TZ)
+        .date()
+        .isoformat()
+        for trade in eligible_completed
+    }
+    strategy_conclusion_eligible = (
+        len(eligible_completed) >= MIN_MEANINGFUL_SAMPLE_SIZE
+        and len(distinct_sessions) >= required_sessions
+    )
     gated_fields = (
         "winRatePercent",
         "averageWin",
@@ -2497,6 +2829,12 @@ def build_shadow_review_snapshot(
             metrics[field_name] = None
         metrics["conclusion"] = (
             "Evidence collection in progress. Results are not yet sufficient for strategy conclusions."
+        )
+    elif not strategy_conclusion_eligible:
+        metrics["conclusion"] = (
+            "Descriptive metrics are available, but strategy conclusions remain "
+            f"blocked until at least {required_sessions} distinct trading sessions "
+            "are represented."
         )
     active_count = sum(1 for trade in sample_items if trade.status in ACTIVE_TRADE_STATES)
     readiness = audit_shadow_sample_readiness(
@@ -2516,6 +2854,32 @@ def build_shadow_review_snapshot(
         ),
         "excluded": sum(1 for review in sample_reviews if not review["evidenceEligible"]),
         "gateSatisfied": len(eligible_completed) >= MIN_MEANINGFUL_SAMPLE_SIZE,
+        "distinctTradingSessions": len(distinct_sessions),
+        "minimumDistinctSessionsForStrategyReview": required_sessions,
+        "strategyConclusionEligible": strategy_conclusion_eligible,
+        "concentration": {
+            "symbols": concentration_counts(
+                eligible_completed,
+                lambda trade: trade.symbol,
+            ),
+            "setups": concentration_counts(
+                eligible_completed,
+                lambda trade: trade.setup_type,
+            ),
+            "catalysts": concentration_counts(
+                eligible_completed,
+                lambda trade: trade.catalyst,
+            ),
+            "marketRegimes": concentration_counts(
+                eligible_completed,
+                lambda trade: trade.market_regime,
+            ),
+            "timeOfDay": concentration_counts(
+                eligible_completed,
+                trade_time_bucket,
+            ),
+            "sectorStatus": "UNAVAILABLE_WITHOUT_FROZEN_SECTOR_IDENTITY",
+        },
         "sampleVersion": active_definition.sample_version,
         "strategyConfigurationFingerprint": (
             active_definition.strategy_configuration_fingerprint
@@ -2527,9 +2891,15 @@ def build_shadow_review_snapshot(
         "canStartOfficialSample": readiness.can_start_official_sample,
         "readinessFindings": list(readiness.findings),
         "status": (
-            "Evidence sample is sufficient for descriptive aggregate metrics."
-            if len(eligible_completed) >= MIN_MEANINGFUL_SAMPLE_SIZE
-            else "Evidence collection in progress. Results are not yet sufficient for strategy conclusions."
+            "Evidence sample is sufficient for descriptive aggregate metrics; "
+            "the distinct-session gate also permits a strategy review."
+            if strategy_conclusion_eligible
+            else (
+                "Evidence sample is sufficient for descriptive aggregate metrics, "
+                "but the distinct-session strategy-review gate is not satisfied."
+                if len(eligible_completed) >= MIN_MEANINGFUL_SAMPLE_SIZE
+                else "Evidence collection in progress. Results are not yet sufficient for strategy conclusions."
+            )
         ),
     }
     return {
@@ -2821,6 +3191,28 @@ def grouped_shadow_results(
     ]
 
 
+def concentration_counts(
+    trades: Iterable[ShadowTrade],
+    key_fn,
+) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for trade in trades:
+        key = str(key_fn(trade) or "unknown")
+        counts[key] = counts.get(key, 0) + 1
+    total = sum(counts.values())
+    return [
+        {
+            "group": key,
+            "count": count,
+            "percent": rounded_ratio(count, total),
+        }
+        for key, count in sorted(
+            counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+    ]
+
+
 def render_shadow_ticket_markdown(ticket: ShadowOrderTicket) -> str:
     return "\n".join(
         [
@@ -2847,6 +3239,10 @@ def render_shadow_ticket_markdown(ticket: ShadowOrderTicket) -> str:
             f"- Selection-policy recorded: {ticket.selection_policy_recorded_at or 'UNAVAILABLE'}",
             f"- Selection-policy version: `{ticket.selection_policy_version or 'UNVERSIONED'}`",
             f"- Selection-policy fingerprint: `{ticket.selection_policy_fingerprint or 'UNAVAILABLE'}`",
+            f"- Selector-arm ID: `{ticket.selector_arm_id or 'UNAVAILABLE'}`",
+            f"- Constitution hash: `{ticket.constitution_hash or 'UNAVAILABLE'}`",
+            f"- Decision-cycle ID: `{ticket.decision_cycle_id or 'UNAVAILABLE'}`",
+            f"- Opportunity ID: `{ticket.opportunity_id or 'UNAVAILABLE'}`",
             "",
             "## Manual paperMoney Reconciliation",
             "",
@@ -2969,7 +3365,7 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
         outcome_id=str(payload.get("outcome_id", "")),
         symbol=str(payload.get("symbol", "")),
         candidate_rank=int(payload.get("candidate_rank", 0)),
-        candidate_score=int(payload.get("candidate_score", 0)),
+        candidate_score=float(payload.get("candidate_score", 0)),
         setup_type=str(payload.get("setup_type", "")),
         catalyst=str(payload.get("catalyst", "")),
         market_regime=str(payload.get("market_regime", "")),
@@ -2990,6 +3386,11 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
         selection_policy_fingerprint=str(
             payload.get("selection_policy_fingerprint", "")
         ),
+        selector_arm_id=str(payload.get("selector_arm_id", "")),
+        constitution_hash=str(payload.get("constitution_hash", "")),
+        decision_cycle_id=str(payload.get("decision_cycle_id", "")),
+        opportunity_id=str(payload.get("opportunity_id", "")),
+        selection_quote_json=str(payload.get("selection_quote_json", "")),
         risk_rejection_reasons=tuple(str(item) for item in payload.get("risk_rejection_reasons", [])),
         order=ShadowOrder(**order_payload) if isinstance(order_payload, dict) else None,
         position=ShadowPosition(**position_payload) if isinstance(position_payload, dict) else None,

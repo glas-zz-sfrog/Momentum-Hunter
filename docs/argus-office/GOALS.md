@@ -63,7 +63,7 @@ Acceptance Direction:
 - Every expected decision cycle is accounted for, including skipped, blocked, unfilled, unavailable, and failed cycles.
 - Results disclose market-session, regime, sector, catalyst, symbol, and time-of-day concentration.
 - Counterfactual observations compare the selected candidate with other eligible candidates, a deterministic random eligible candidate, and relevant benchmarks without creating extra portfolio trades.
-- The first 30 completed trades prove pipeline and evidence integrity only. Strategy conclusions require a larger, diverse prospective sample.
+- The first 30 completed trades release descriptive metrics and prove pipeline/evidence integrity only. At least 10 distinct sessions are required before broader strategy review, and durable edge claims still require a larger, diverse prospective sample.
 - Data-source or methodological changes create a new sample version; prior evidence is never silently recomputed.
 
 ## Execution: Constrain Every New Authority

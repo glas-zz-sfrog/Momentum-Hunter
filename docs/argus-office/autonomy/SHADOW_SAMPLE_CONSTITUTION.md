@@ -1,10 +1,10 @@
 # Shadow Sample Constitution
 
-Status: `DRAFT_NOT_AUTHORIZING`
+Status: `IMPLEMENTED_PENDING_INTEGRATION_NOT_AUTHORIZING`
 
-This document is the proposed frozen methodology for the first official prospective
+This document describes the implemented methodology for the first official prospective
 Momentum Hunter Shadow sample. It does not authorize Trade 1. The selector may become
-`SELECTOR_ARMED` only after every unresolved item is implemented, tested, integrated
+`SELECTOR_ARMED` only after every prerequisite is tested, integrated
 into canonical `master`, remotely backed up, and represented by one immutable
 constitution hash attached to every counted trade and decision-cycle record.
 
@@ -34,25 +34,20 @@ Current state: `ACTIVATED`; `SELECTOR_NOT_ARMED`; `0` completed trades.
 
 1. Selection is automatic. Operator choice cannot enter the official sample.
 2. The selector evaluates only immutable canonical scheduled TradePlan reports.
-3. "First" means the highest-ranked eligible candidate under a frozen canonical
-   report-ranking version, explicit sort fields and directions, and stable tie-breakers.
+3. "First" means the highest-ranked eligible candidate ordered by canonical rank
+   ascending, composite score descending, and stable candidate ID or symbol ascending.
 4. Candidate order is not inferred from filesystem order, mutable monitor reports, or
    dictionary insertion order.
 5. The complete ordered candidate list is preserved with one rejection or selection
    reason for every row.
-6. Warning-free data quality and Risk Governor approval are independent eligibility
-   gates. Both must pass.
-7. Rank and Risk Governor approval do not constitute a trade recommendation or proof
+6. Fatal data-quality warnings and informational warnings are separate. Blocking
+   reasons, known structural warnings, and unknown warning codes are fatal. Known
+   quote/chart provider notices may be informational, but the current executable quote
+   must still pass every market-validity check.
+7. Risk Governor approval is an eligibility gate and never changes ranking.
+8. Rank and Risk Governor approval do not constitute a trade recommendation or proof
    of expected value.
-8. A report with no eligible candidate creates no trade and still creates a decision-cycle record.
-
-Unresolved before freeze:
-
-- The current report builder sorts by descending composite score and relies on stable
-  source order for equal scores. A versioned stable tie-break must be added without
-  changing score values.
-- The current selector consumes persisted list order rather than validating a canonical
-  rank sequence.
+9. A report with no eligible candidate creates no trade and still creates a decision-cycle record.
 
 ## Freshness And Clock Policy
 
@@ -72,33 +67,42 @@ non-executable when the quote is missing, stale, future-dated, halted, outside t
 eligible session, crossed/invalid, beyond the permitted spread, through the stop,
 already at or beyond the primary target, or otherwise contradictory.
 
-Current gap: the scheduled report does not carry a trustworthy per-candidate
-market-data as-of timestamp, and the automatic selector has no fresh quote input.
-Therefore the selector must remain unarmed.
+The implemented selector reads the latest persisted bid/ask observation without
+mutating its source, validates quote symbol/source/as-of identity, and records
+capture-to-report, report-to-selection, capture-to-selection, and quote-age seconds.
+Missing provider identity, unsupported report schema, missing source identity, or any
+failed clock rejects the cycle. Production arming still requires an operational proof
+that the real monitor is producing timely bid/ask observations; synthetic proof alone
+does not satisfy that deployment gate.
 
 ## Duplicate, Cooldown, And Portfolio Rules
 
-- Maximum one new official Shadow trade per immutable source report.
-- Maximum one active Shadow order or position per symbol.
-- Maximum one official trade per deterministic opportunity/setup identity.
+- Maximum one new official Shadow trade per immutable source report or source capture.
+- Maximum one pending order, partial fill, or open position globally.
+- Maximum one official trade per symbol per NYSE trading day; same-day re-entry is prohibited.
+- Maximum one official trade per deterministic opportunity identity derived from
+  symbol, long direction, setup family, catalyst identity, session date, and frozen
+  plan fingerprint.
 - Regenerated or recovered reports for the same underlying opportunity do not create
   another trade.
-- A deterministic symbol cooldown after terminal exit must be frozen before Trade 1.
 - Portfolio concurrency applies to pending entries, partial fills, and open positions,
   not only fully open positions.
-- The existing per-trade Risk Governor remains necessary but does not replace a global
-  portfolio-risk budget.
-
-Unresolved before freeze:
-
-- Exact opportunity-identity fields.
-- Exact symbol cooldown duration and market-session treatment.
-- Portfolio risk budget beyond the current FakeBroker position-count and daily-loss limits.
+- Existing frozen FakeBroker buying power, fixed reference unit, and daily-loss ceiling
+  remain in force. R multiple is the primary performance measure; dollars are secondary.
+- One global position makes simultaneous sector and symbol concentration impossible in
+  v1. Sector identity remains unavailable for retrospective concentration reporting and
+  is labeled honestly.
 
 ## Entry, Exit, Session, And Fill Rules
 
 - FakeBroker is the only automated execution boundary.
-- Entry uses a nontransmitting DAY limit order during the regular session.
+- New entries are regular-session only from 9:35 AM through 3:30 PM ET.
+- Early-close entry ends at 12:30 PM ET. The reviewed NYSE early-close calendar covers
+  2026-2028 and fails closed outside that range.
+- Overnight holding and extended-hours execution are prohibited.
+- Open positions are forced flat by 3:55 PM ET, or 12:55 PM ET on a reviewed early close.
+- Unfilled entry orders are cancelled when the entry window closes.
+- Entry uses a nontransmitting DAY limit order.
 - An executable ask must be at or below the limit after configured slippage and after
   the prospective minimum fill delay.
 - Touched-but-not-executable limits remain unfilled.
@@ -107,13 +111,13 @@ Unresolved before freeze:
 - A gap through the stop exits from the later executable observation, not the stop price.
 - Halted, unavailable, stale, invalid, or ambiguous observations fail closed and remain
   visible in evidence.
-- Overnight permission and the exact end-of-session cancellation/exit rule must be
-  frozen before Trade 1.
 - Every fill-model change creates a new version; prior samples are not recomputed.
 
 ## Decision-Cycle Denominator
 
-The official report must disclose:
+Every expected armed in-window five-minute Engine Host cycle is persisted. Restart-gap
+inference creates explicit `SYSTEM_DOWNTIME` records. Each attempt links to its
+decision-cycle result and discloses:
 
 - Expected scheduled reports.
 - Completed reports.
@@ -133,22 +137,25 @@ Only reporting completed trades is prohibited.
 
 ## Diversity And Counterfactual Evidence
 
-The sample records distinct trading sessions, regimes, sectors, catalysts, symbols,
-and time-of-day buckets. Thirty completed trades is an engineering/evidence gate only.
-A strategy-confidence review requires a larger prospective sample with meaningful
-calendar and regime diversity.
+The sample records distinct trading sessions, regimes, catalysts, symbols, and
+time-of-day buckets; sector concentration is explicitly unavailable until a frozen
+sector identity exists. Thirty completed trades releases descriptive aggregate metrics
+only. At least 10 distinct trading sessions are required before a strategy review may
+draw broader conclusions.
 
 For every eligible cycle, preserve nontransmitting observations for:
 
 - The official selected candidate.
 - Other eligible candidates.
 - One deterministic random eligible candidate.
-- A broad-market benchmark.
-- A growth benchmark where relevant.
+- SPY as the broad-market benchmark.
+- IWM as the second market benchmark.
 - A sector benchmark when reliable mapping exists.
 
 Counterfactuals do not create FakeBroker portfolio trades or count toward the official
-portfolio sample.
+portfolio sample. Open/no-trade cycles are labeled mark-to-latest observations. When
+the selected trade closes, all eligible-candidate and benchmark returns are finalized
+to the selected trade's immutable exit timestamp.
 
 ## Data And Versioning
 
@@ -178,17 +185,30 @@ Trade 1 remains blocked until all of the following pass:
 1. SHADOW-004 visual truth-label acceptance is recorded.
 2. SHADOW-004/005 and the hardened selector are committed, fast-forwarded into
    canonical local `master`, and non-force backed up to `origin/master`.
-3. This constitution has no unresolved items, is versioned, hashed, and its hash is
-   enforced by runtime and audit code.
+3. The implemented constitution version/hash and runtime build hash are recorded in a
+   write-once selector-arm record and enforced by runtime and audit code.
 4. Canonical ranking and stable tie-break tests pass.
 5. Fresh quote recheck and every freshness boundary test pass.
 6. Cross-report opportunity deduplication, one-active-symbol, cooldown, and
    portfolio-concurrency tests pass.
-7. Every expected decision cycle and skip/block reason is durably recorded.
-8. Provider identity, schema validation, system availability, and latency-chain
-   evidence are present.
+7. Every expected in-window decision cycle, inferred downtime slot, and skip/block
+   reason is durably recorded.
+8. A production-local cycle proves the real monitor supplies a current executable
+   bid/ask boundary with provider/schema/latency identity.
 9. The production-local sample remains at zero trades until all gates pass.
 10. Order transmission remains `UNAVAILABLE`.
+
+Arming requires the exact internal phrase plus a complete set of SHA-256-addressed
+prerequisite proofs. A failed or partial arm creates neither policy nor arm state.
+Changing selector source after arming changes the runtime build hash and fails closed.
+
+## Fill-Model Calibration
+
+The deterministic model remains an estimate. Early official tickets must be compared
+manually with thinkorswim paperMoney. Record expected versus observed fill price,
+timing, partial-fill state, rejection, and slippage error. Later supervised canary
+fills may extend calibration. Any resulting assumption change creates a new fill-model
+version and never rewrites the active or completed sample.
 
 ## Later Broker Gates
 

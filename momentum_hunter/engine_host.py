@@ -231,6 +231,11 @@ class EngineHostRuntime:
         shadow_starter: Callable[[str, str], dict[str, Any]] | None = None,
         shadow_observation_runner: Callable[[], dict[str, Any]] | None = None,
         shadow_auto_selector: Callable[[], dict[str, Any]] | None = None,
+        shadow_cycle_attempt_recorder: Callable[[], dict[str, Any]] | None = None,
+        shadow_cycle_outcome_recorder: (
+            Callable[[str, dict[str, Any]], dict[str, Any]] | None
+        ) = None,
+        shadow_cycle_failure_recorder: Callable[[str], dict[str, Any]] | None = None,
         advance_shadow_after_collection: bool = False,
         technical_research_snapshot_loader: Callable[[str], dict[str, Any]] | None = None,
         saved_watchlist_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
@@ -275,6 +280,39 @@ class EngineHostRuntime:
                 "status": "NOT_CONFIGURED",
                 "orderTransmission": "UNAVAILABLE",
             }
+        )
+        self._shadow_cycle_failure_recorder = (
+            shadow_cycle_failure_recorder
+            or (
+                self._shadow_workspace_service.record_collection_failure
+                if self._shadow_workspace_service is not None
+                else lambda _reason: {
+                    "recorded": False,
+                    "status": "NOT_CONFIGURED",
+                }
+            )
+        )
+        self._shadow_cycle_attempt_recorder = (
+            shadow_cycle_attempt_recorder
+            or (
+                self._shadow_workspace_service.record_collection_attempt
+                if self._shadow_workspace_service is not None
+                else lambda: {
+                    "recorded": False,
+                    "status": "NOT_CONFIGURED",
+                }
+            )
+        )
+        self._shadow_cycle_outcome_recorder = (
+            shadow_cycle_outcome_recorder
+            or (
+                self._shadow_workspace_service.record_collection_outcome
+                if self._shadow_workspace_service is not None
+                else lambda _attempt_id, _selection: {
+                    "recorded": False,
+                    "status": "NOT_CONFIGURED",
+                }
+            )
         )
         self._advance_shadow_after_collection = advance_shadow_after_collection
         if technical_research_snapshot_loader is None:
@@ -693,11 +731,17 @@ class EngineHostRuntime:
         if not self._cycle_lock.acquire(blocking=False):
             return EngineHostCommandResult(False, "COLLECTION_IN_PROGRESS", "A collection cycle is already running.", self.snapshot())
 
+        report = None
+        shadow_attempt_id = ""
+        shadow_attempt_closed = False
         try:
             with self._state_lock:
                 self._cycle_in_progress = True
                 self._state = "Healthy"
                 self._detail = "Background collection cycle is running."
+            if self._advance_shadow_after_collection:
+                attempt = self._shadow_cycle_attempt_recorder()
+                shadow_attempt_id = str(attempt.get("cycleId") or "")
             report = self._cycle_runner()
             shadow_selection = None
             shadow_advance = None
@@ -709,10 +753,28 @@ class EngineHostRuntime:
                     selection_error = exc
                 shadow_advance = self._shadow_observation_runner()
                 if selection_error is not None:
+                    if shadow_attempt_id:
+                        self._shadow_cycle_outcome_recorder(
+                            shadow_attempt_id,
+                            {
+                                "status": "SELECTION_FAILED",
+                                "reason": (
+                                    f"{type(selection_error).__name__}: "
+                                    f"{selection_error}"
+                                ),
+                            },
+                        )
+                        shadow_attempt_closed = True
                     raise RuntimeError(
                         "Automatic Shadow selection failed after collection: "
                         f"{type(selection_error).__name__}: {selection_error}"
                     ) from selection_error
+                if shadow_attempt_id:
+                    self._shadow_cycle_outcome_recorder(
+                        shadow_attempt_id,
+                        shadow_selection or {},
+                    )
+                    shadow_attempt_closed = True
             monitored_count = int(getattr(report, "target_count", 0))
             with self._state_lock:
                 self._cycle_in_progress = False
@@ -738,6 +800,25 @@ class EngineHostRuntime:
                 ),
             )
         except Exception as exc:
+            if (
+                self._advance_shadow_after_collection
+                and not shadow_attempt_closed
+            ):
+                try:
+                    if report is None:
+                        self._shadow_cycle_failure_recorder(
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                    elif shadow_attempt_id:
+                        self._shadow_cycle_outcome_recorder(
+                            shadow_attempt_id,
+                            {
+                                "status": "POST_COLLECTION_FAILED",
+                                "reason": f"{type(exc).__name__}: {exc}",
+                            },
+                        )
+                except Exception:
+                    pass
             with self._state_lock:
                 self._cycle_in_progress = False
                 self._state = "Blocked"
