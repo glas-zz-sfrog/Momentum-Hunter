@@ -27,6 +27,7 @@ from momentum_hunter.shadow_market_validity import (
     PersistedObservationQuoteSource,
     ShadowMarketValidityPolicy,
     entry_window_findings,
+    is_offset_aware,
     stable_hash,
 )
 from momentum_hunter.time_utils import now_central
@@ -259,27 +260,59 @@ class ShadowWorkspaceService:
             load_price_observations(self.paths.observations_path),
             key=lambda item: (item.timestamp, item.symbol, item.source_report),
         )
+        trusted_observations: list[PriceObservation] = []
+        for item in observations:
+            quote_timestamp = trusted_quote_timestamp(item)
+            if quote_timestamp is not None and quote_timestamp <= received_at:
+                trusted_observations.append(item)
         self.service.decision_cycle_store.append_observations(
             {
                 "symbol": item.symbol,
-                "timestamp": item.timestamp,
+                "timestamp": item.quote_timestamp,
                 "bid": item.bid,
                 "ask": item.ask,
                 "last": item.price,
                 "volume": item.volume,
-                "source": item.source_report,
+                "source": item.quote_source,
             }
-            for item in observations
+            for item in trusted_observations
         )
         active_symbols = {
             trade["symbol"]
             for trade in self.service.snapshot()["trades"]
             if trade["status"] in {"pending_entry", "partially_filled", "open"}
         }
-        relevant = [item for item in observations if item.symbol in active_symbols]
-        for observation in relevant:
+        relevant_by_symbol: dict[str, PriceObservation] = {}
+        for observation in trusted_observations:
+            symbol = observation.symbol.upper()
+            if symbol not in active_symbols:
+                continue
+            current = relevant_by_symbol.get(symbol)
+            observation_timestamp = trusted_quote_timestamp(observation)
+            current_timestamp = (
+                trusted_quote_timestamp(current)
+                if current is not None
+                else None
+            )
+            if (
+                current is None
+                or (
+                    observation_timestamp is not None
+                    and current_timestamp is not None
+                    and observation_timestamp > current_timestamp
+                )
+            ):
+                relevant_by_symbol[symbol] = observation
+        missing_quote_symbols: list[str] = []
+        for symbol in sorted(active_symbols):
+            observation = relevant_by_symbol.get(symbol)
+            if observation is None:
+                missing_quote_symbols.append(symbol)
+                self.service.process_missing_quote(symbol, observed_at=received_at)
+                continue
             if observation.bid is None or observation.ask is None:
-                self.service.process_missing_quote(observation.symbol, observed_at=received_at)
+                missing_quote_symbols.append(symbol)
+                self.service.process_missing_quote(symbol, observed_at=received_at)
                 continue
             self.service.process_quote(
                 quote_from_price_observation(observation),
@@ -300,7 +333,9 @@ class ShadowWorkspaceService:
         return {
             "mode": SHADOW_MODE,
             "observationsSeen": len(observations),
-            "observationsRelevant": len(relevant),
+            "trustedObservationsSeen": len(trusted_observations),
+            "observationsRelevant": len(relevant_by_symbol),
+            "missingQuoteSymbols": missing_quote_symbols,
             "activeTradeCount": sum(
                 1
                 for trade in snapshot["trades"]
@@ -312,17 +347,29 @@ class ShadowWorkspaceService:
 
 
 def quote_from_price_observation(observation: PriceObservation) -> ShadowQuote:
+    observed_at = trusted_quote_timestamp(observation)
+    if observed_at is None:
+        raise ValueError(
+            "A provider quote timestamp and provider source are required for Shadow Trading."
+        )
     return ShadowQuote(
         symbol=observation.symbol,
-        timestamp=observation.timestamp,
+        timestamp=observation.quote_timestamp,
         bid=observation.bid,
         ask=observation.ask,
         last=observation.price,
         volume=observation.volume,
-        session=session_for_timestamp(observation.timestamp),
+        session=session_for_timestamp(observation.quote_timestamp),
         trading_state="tradable",
-        source=observation.source_report or "opportunity_price_observation",
+        source=observation.quote_source,
     )
+
+
+def trusted_quote_timestamp(observation: PriceObservation) -> datetime | None:
+    if not observation.quote_source.strip():
+        return None
+    observed_at = parse_datetime(observation.quote_timestamp)
+    return observed_at if is_offset_aware(observed_at) else None
 
 
 def collection_attempt_cycle(

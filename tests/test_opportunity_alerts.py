@@ -101,6 +101,29 @@ class OpportunityAlertTests(unittest.TestCase):
 
         self.assertEqual(before, file_sha256(self.raw_capture))
 
+    def test_provider_quote_timestamp_is_distinct_from_monitor_cycle_timestamp(self) -> None:
+        trade_report = self.write_trade_report(
+            "quote-provenance.json",
+            generated_at="2026-06-17T13:05:00-05:00",
+            candidate=trade_candidate(
+                state="EXECUTION_READY_TRADE",
+                price=10.4,
+                rvol=0.8,
+                quote_timestamp="2026-06-17T13:04:42-05:00",
+                quote_source="provider-fixture",
+            ),
+        )
+
+        self.build_report(trade_report)
+
+        observation = load_price_observations(self.observations_path)[0]
+        self.assertEqual("2026-06-17T13:05:00-05:00", observation.timestamp)
+        self.assertEqual(
+            "2026-06-17T13:04:42-05:00",
+            observation.quote_timestamp,
+        )
+        self.assertEqual("provider-fixture", observation.quote_source)
+
     def test_detects_breaking_news_when_new_catalyst_appears(self) -> None:
         self.build_report(
             self.write_trade_report(
@@ -385,6 +408,8 @@ def trade_candidate(
     entry: float = 10.5,
     previous_day_high: float = 10.5,
     catalyst: str = "AAA alert catalyst",
+    quote_timestamp: str = "",
+    quote_source: str = "",
 ) -> dict:
     return {
         "symbol": "AAA",
@@ -398,6 +423,8 @@ def trade_candidate(
             "premarket_percent": 2.5,
             "relative_volume": rvol,
             "rvol_type": "INTRADAY_RVOL",
+            "quote_timestamp": quote_timestamp,
+            "quote_source": quote_source,
         },
         "technical_levels": {
             "previous_day_high": previous_day_high,

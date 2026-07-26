@@ -904,7 +904,9 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
             "observations": [
                 {
                     "symbol": "TEST",
-                    "timestamp": "2026-07-23T09:59:30-05:00",
+                    "timestamp": "2026-07-23T10:00:00-05:00",
+                    "quote_timestamp": "2026-07-23T09:59:30-05:00",
+                    "quote_source": "provider-a",
                     "price": 9.94,
                     "bid": 9.93,
                     "ask": 9.95,
@@ -912,11 +914,21 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
                 },
                 {
                     "symbol": "TEST",
-                    "timestamp": "2026-07-23T10:00:01-05:00",
+                    "timestamp": "2026-07-23T10:00:02-05:00",
+                    "quote_timestamp": "2026-07-23T10:00:01-05:00",
+                    "quote_source": "provider-a",
                     "price": 10.00,
                     "bid": 9.99,
                     "ask": 10.01,
                     "source_report": "future",
+                },
+                {
+                    "symbol": "TEST",
+                    "timestamp": "2026-07-23T10:00:03-05:00",
+                    "price": 10.20,
+                    "bid": 10.19,
+                    "ask": 10.21,
+                    "source_report": "fresh-wrapper-without-provider-time",
                 },
             ]
         }
@@ -927,8 +939,35 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         quote = source.quote("TEST", decision_at=self.decision_at)
 
         self.assertEqual("2026-07-23T09:59:30-05:00", quote["timestamp"])
-        self.assertEqual("monitor-a", quote["source"])
+        self.assertEqual("provider-a", quote["source"])
         self.assertEqual(before, observations_path.read_bytes())
+
+    def test_persisted_quote_source_rejects_fresh_wrapper_without_provider_time(self) -> None:
+        observations_path = self.root / "observations.json"
+        observations_path.write_text(
+            json.dumps(
+                {
+                    "observations": [
+                        {
+                            "symbol": "TEST",
+                            "timestamp": "2026-07-23T09:59:59-05:00",
+                            "price": 10.00,
+                            "bid": 9.99,
+                            "ask": 10.01,
+                            "source_report": "monitor-wrapper",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        quote = PersistedObservationQuoteSource(observations_path).quote(
+            "TEST",
+            decision_at=self.decision_at,
+        )
+
+        self.assertIsNone(quote)
 
     def test_workspace_records_counterfactual_observations_without_source_mutation(self) -> None:
         self.activate()
@@ -943,6 +982,8 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
                 {
                     "symbol": "SPY",
                     "timestamp": "2026-07-23T10:01:00-05:00",
+                    "quote_timestamp": "2026-07-23T10:01:00-05:00",
+                    "quote_source": "benchmark-provider",
                     "price": 626.0,
                     "bid": 625.99,
                     "ask": 626.01,
@@ -951,6 +992,8 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
                 {
                     "symbol": "TEST",
                     "timestamp": "2026-07-23T10:01:00-05:00",
+                    "quote_timestamp": "2026-07-23T10:01:00-05:00",
+                    "quote_source": "candidate-provider",
                     "price": 10.10,
                     "bid": 10.09,
                     "ask": 10.11,

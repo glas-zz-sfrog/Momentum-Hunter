@@ -67,6 +67,12 @@ non-executable when the quote is missing, stale, future-dated, halted, outside t
 eligible session, crossed/invalid, beyond the permitted spread, through the stop,
 already at or beyond the primary target, or otherwise contradictory.
 
+Report generation, monitor-cycle, retrieval, or persistence time never substitutes
+for provider quote time. The executable quote must carry a separately persisted,
+timezone-aware provider quote timestamp and provider source. Missing either field
+makes the quote unavailable; a newly written wrapper around old bid/ask values does
+not refresh their age.
+
 The implemented selector reads the latest persisted bid/ask observation without
 mutating its source, validates quote symbol/source/as-of identity, and records
 capture-to-report, report-to-selection, capture-to-selection, and quote-age seconds.

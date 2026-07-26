@@ -607,6 +607,8 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
                             {
                                 "symbol": "TEST",
                                 "timestamp": "2026-07-23T10:01:00-05:00",
+                                "quote_timestamp": "2026-07-23T10:01:00-05:00",
+                                "quote_source": "provider-fixture",
                                 "price": 9.95,
                                 "bid": 9.94,
                                 "ask": 9.95,
@@ -639,6 +641,130 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
             self.assertEqual(1, result["observationsRelevant"])
             self.assertEqual("open", result["snapshot"]["trades"][0]["status"])
             self.assertFalse(result["snapshot"]["transmitting"])
+
+    def test_fresh_monitor_wrapper_without_provider_time_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "reports"
+            reports.mkdir()
+            report = reports / "trade-plan-briefing-test.json"
+            report.write_text(json.dumps(report_payload()), encoding="utf-8")
+            observations = root / "opportunity-price-observations.json"
+            observations.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "observations": [
+                            {
+                                "symbol": "TEST",
+                                "timestamp": "2026-07-23T10:00:59-05:00",
+                                "price": 9.95,
+                                "bid": 9.94,
+                                "ask": 9.95,
+                                "source_report": "fresh-monitor-wrapper",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            core = ShadowTradingService(
+                store=ShadowStateStore(root / "shadow-state.json")
+            )
+            core.start_trade(
+                report,
+                symbol="TEST",
+                simulation_command_id="missing-provider-time",
+                decision_at=at("2026-07-23T10:00:00-05:00"),
+            )
+            workspace = ShadowWorkspaceService(
+                paths=ShadowWorkspacePaths(
+                    reports,
+                    observations,
+                    root / "shadow-state.json",
+                ),
+                service=core,
+            )
+
+            result = workspace.advance_observations(
+                received_at=at("2026-07-23T10:01:00-05:00")
+            )
+
+            self.assertEqual(0, result["trustedObservationsSeen"])
+            self.assertEqual(0, result["observationsRelevant"])
+            self.assertEqual(["TEST"], result["missingQuoteSymbols"])
+            self.assertEqual(
+                "pending_entry",
+                result["snapshot"]["trades"][0]["status"],
+            )
+            self.assertIn(
+                "No quote was available",
+                result["snapshot"]["trades"][0]["last_reason"],
+            )
+
+    def test_workspace_processes_only_latest_trusted_quote_per_symbol(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "reports"
+            reports.mkdir()
+            report = reports / "trade-plan-briefing-test.json"
+            report.write_text(json.dumps(report_payload()), encoding="utf-8")
+            observations = root / "opportunity-price-observations.json"
+            observations.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "observations": [
+                            {
+                                "symbol": "TEST",
+                                "timestamp": "2026-07-23T10:00:45-05:00",
+                                "quote_timestamp": "2026-07-23T10:00:40-05:00",
+                                "quote_source": "provider-fixture",
+                                "price": 9.95,
+                                "bid": 9.94,
+                                "ask": 9.95,
+                            },
+                            {
+                                "symbol": "TEST",
+                                "timestamp": "2026-07-23T10:00:55-05:00",
+                                "quote_timestamp": "2026-07-23T10:00:50-05:00",
+                                "quote_source": "provider-fixture",
+                                "price": 10.50,
+                                "bid": 10.49,
+                                "ask": 10.50,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            core = ShadowTradingService(
+                store=ShadowStateStore(root / "shadow-state.json")
+            )
+            core.start_trade(
+                report,
+                symbol="TEST",
+                simulation_command_id="latest-provider-quote",
+                decision_at=at("2026-07-23T10:00:00-05:00"),
+            )
+            workspace = ShadowWorkspaceService(
+                paths=ShadowWorkspacePaths(
+                    reports,
+                    observations,
+                    root / "shadow-state.json",
+                ),
+                service=core,
+            )
+
+            result = workspace.advance_observations(
+                received_at=at("2026-07-23T10:01:00-05:00")
+            )
+
+            trade = result["snapshot"]["trades"][0]
+            self.assertEqual(2, result["trustedObservationsSeen"])
+            self.assertEqual(1, result["observationsRelevant"])
+            self.assertEqual(1, len(trade["processed_observation_ids"]))
+            self.assertEqual("pending_entry", trade["status"])
 
     def test_engine_host_exposes_idempotent_shadow_commands_without_broker_capability(self) -> None:
         starts: list[tuple[str, str]] = []

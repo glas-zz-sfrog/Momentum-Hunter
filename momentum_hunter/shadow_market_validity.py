@@ -544,11 +544,12 @@ class PersistedObservationQuoteSource:
         normalized = symbol.strip().upper()
         candidates: list[tuple[datetime, PriceObservation]] = []
         for observation in load_price_observations(self.observations_path):
-            observed_at = parse_datetime(observation.timestamp)
+            observed_at = parse_datetime(observation.quote_timestamp)
             if (
                 observation.symbol.upper() != normalized
                 or not is_offset_aware(observed_at)
                 or observed_at > decision_at
+                or not observation.quote_source.strip()
             ):
                 continue
             assert observed_at is not None
@@ -556,13 +557,13 @@ class PersistedObservationQuoteSource:
         if not candidates:
             return None
         _, latest = max(candidates, key=lambda item: item[0])
-        observed_at = parse_datetime(latest.timestamp)
+        observed_at = parse_datetime(latest.quote_timestamp)
         assert observed_at is not None
         eastern = observed_at.astimezone(EASTERN_TZ)
         raw_state = latest.state.strip().lower()
         return {
             "symbol": normalized,
-            "timestamp": latest.timestamp,
+            "timestamp": latest.quote_timestamp,
             "bid": latest.bid,
             "ask": latest.ask,
             "last": latest.price,
@@ -577,7 +578,7 @@ class PersistedObservationQuoteSource:
                 if raw_state in {"halted", "open", "tradable"}
                 else "tradable"
             ),
-            "source": latest.source_report or self.observations_path.name,
+            "source": latest.quote_source,
         }
 
 

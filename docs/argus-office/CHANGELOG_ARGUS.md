@@ -99,5 +99,7 @@
 - Established Steven as final merge approver, ChatGPT as CEO Advisor, and Codex Orchestrator as the single Codex-side front door.
 - Distinguished read-only specialist agents from Builder, the only normal code-writing agent.
 
+- Hardened SHADOW-006 quote provenance after production-local audit showed that monitor report regeneration could wrap unchanged bid/ask values in a fresh report timestamp. Monitor-cycle time is now separate from provider quote timestamp/source, and Shadow selection, fills, and counterfactuals fail closed when independent provider quote provenance is absent.
+
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

@@ -56,6 +56,8 @@ class MonitorSnapshot:
     market_regime: str
     event_mode: bool
     source_report: str
+    quote_timestamp: str = ""
+    quote_source: str = ""
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,8 @@ class PriceObservation:
     rvol_type: str = ""
     state: str = ""
     source_report: str = ""
+    quote_timestamp: str = ""
+    quote_source: str = ""
 
 
 @dataclass(frozen=True)
@@ -234,10 +238,22 @@ def should_monitor_candidate(item: dict, target_symbols: set[str] | None) -> boo
 
 def snapshot_from_trade_candidate(item: dict, *, metadata: dict, source_report: str, timestamp: str) -> MonitorSnapshot:
     market = item.get("market_data") or {}
+    market_tape = item.get("market_tape") or {}
     tech = item.get("technical_levels") or {}
     trade_plan = item.get("trade_plan") or {}
     scoring = item.get("scoring") or {}
     price = first_float(market, "last_price", "premarket_price")
+    quote_timestamp = str(
+        market.get("quote_timestamp")
+        or market_tape.get("quote_timestamp")
+        or ""
+    )
+    quote_source = str(
+        market.get("quote_source")
+        or market_tape.get("quote_source")
+        or (market_tape.get("source") if quote_timestamp else "")
+        or ""
+    )
     return MonitorSnapshot(
         symbol=str(item.get("symbol", "")).upper(),
         timestamp=timestamp,
@@ -261,6 +277,8 @@ def snapshot_from_trade_candidate(item: dict, *, metadata: dict, source_report: 
         market_regime=str(metadata.get("market_regime", "unknown") or "unknown"),
         event_mode=bool(metadata.get("event_mode", False)),
         source_report=source_report,
+        quote_timestamp=quote_timestamp,
+        quote_source=quote_source,
     )
 
 
@@ -467,6 +485,8 @@ def observation_from_snapshot(snapshot: MonitorSnapshot) -> PriceObservation:
         rvol_type=snapshot.rvol_type,
         state=snapshot.state,
         source_report=snapshot.source_report,
+        quote_timestamp=snapshot.quote_timestamp,
+        quote_source=snapshot.quote_source,
     )
 
 
@@ -1022,6 +1042,8 @@ def snapshot_from_dict(payload: dict) -> MonitorSnapshot:
         market_regime=str(payload.get("market_regime", "")),
         event_mode=bool(payload.get("event_mode", False)),
         source_report=str(payload.get("source_report", "")),
+        quote_timestamp=str(payload.get("quote_timestamp", "")),
+        quote_source=str(payload.get("quote_source", "")),
     )
 
 
@@ -1038,6 +1060,8 @@ def observation_from_dict(payload: dict) -> PriceObservation:
         rvol_type=str(payload.get("rvol_type", "")),
         state=str(payload.get("state", "")),
         source_report=str(payload.get("source_report", "")),
+        quote_timestamp=str(payload.get("quote_timestamp", "")),
+        quote_source=str(payload.get("quote_source", "")),
     )
 
 
