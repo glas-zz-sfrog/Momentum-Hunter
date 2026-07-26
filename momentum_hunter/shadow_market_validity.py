@@ -195,6 +195,7 @@ def runtime_build_hash(paths: Iterable[Path] | None = None) -> str:
     if paths is None:
         root = Path(__file__).resolve().parent
         paths = (
+            root / "schwab_market_data.py",
             root / "shadow_market_validity.py",
             root / "shadow_selection.py",
             root / "shadow_trading.py",

@@ -100,6 +100,7 @@
 - Distinguished read-only specialist agents from Builder, the only normal code-writing agent.
 
 - Hardened SHADOW-006 quote provenance after production-local audit showed that monitor report regeneration could wrap unchanged bid/ask values in a fresh report timestamp. Monitor-cycle time is now separate from provider quote timestamp/source, and Shadow selection, fills, and counterfactuals fail closed when independent provider quote provenance is absent.
+- Added the read-only Schwab Market Data quote boundary for SHADOW-006: one exact-host batched quote GET, guarded sole-account OAuth refresh, conservative provider-clock selection, finite/requested/symbol-matched evidence checks, no account or order capability, and arm-hash coverage for the provider module.
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

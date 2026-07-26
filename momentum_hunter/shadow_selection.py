@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Protocol, Sequence
 
 from momentum_hunter.autonomy.risk_governor import evaluate_trade_plan
 from momentum_hunter.autonomy.view_models import (
@@ -60,6 +60,15 @@ class QuoteSource(Protocol):
         *,
         decision_at: datetime,
     ) -> dict[str, Any] | None: ...
+
+
+class BatchQuoteSource(Protocol):
+    def quotes(
+        self,
+        symbols: Sequence[str],
+        *,
+        decision_at: datetime,
+    ) -> dict[str, dict[str, Any]]: ...
 
 
 @dataclass(frozen=True)
@@ -240,8 +249,19 @@ class AutomaticShadowSelector:
 
         selection_policy = self.service.load_automatic_selection_policy()
         state = self.service.store.load()
+        canonical_rows = canonical_candidate_rows(rows)
+        quote_symbols = [
+            str(row.get("symbol", "")).strip().upper()
+            for _, row in canonical_rows
+        ]
+        quote_symbols.extend(self.market_policy.benchmark_symbols)
+        cycle_quotes = self._quotes(
+            quote_symbols,
+            decision_at=decision_at,
+        )
         assessments: list[dict[str, Any]] = []
-        for persisted_index, row in canonical_candidate_rows(rows):
+        for persisted_index, row in canonical_rows:
+            symbol = str(row.get("symbol", "")).strip().upper()
             assessments.append(
                 self._assess_candidate(
                     row,
@@ -250,6 +270,7 @@ class AutomaticShadowSelector:
                     metadata=metadata,
                     decision_at=decision_at,
                     existing_trades=state.trades,
+                    quote=cycle_quotes.get(symbol),
                 )
             )
 
@@ -261,7 +282,7 @@ class AutomaticShadowSelector:
             eligible[int(source_sha256, 16) % len(eligible)] if eligible else None
         )
         benchmarks = {
-            symbol: self._quote(symbol, decision_at=decision_at)
+            symbol: cycle_quotes.get(symbol)
             for symbol in self.market_policy.benchmark_symbols
         }
         cycle_id = stable_hash("shadow-decision-cycle-v1", source_sha256)
@@ -417,6 +438,7 @@ class AutomaticShadowSelector:
         metadata: dict[str, Any],
         decision_at: datetime,
         existing_trades: tuple[ShadowTrade, ...],
+        quote: dict[str, Any] | None,
     ) -> dict[str, Any]:
         canonical_rank = int(row["rank"])
         scoring = row.get("scoring") if isinstance(row.get("scoring"), dict) else {}
@@ -435,7 +457,6 @@ class AutomaticShadowSelector:
         risk_payload: dict[str, Any] = {}
         opportunity_id = ""
         plan_fingerprint = ""
-        quote = self._quote(symbol, decision_at=decision_at)
         if candidate is None:
             reasons.append("Candidate does not contain a valid persisted TradePlan.")
         else:
@@ -543,6 +564,44 @@ class AutomaticShadowSelector:
         loader = getattr(self.quote_source, "quote", self.quote_source)
         quote = loader(symbol, decision_at=decision_at)
         return dict(quote) if isinstance(quote, dict) else None
+
+    def _quotes(
+        self,
+        symbols: Sequence[str],
+        *,
+        decision_at: datetime,
+    ) -> dict[str, dict[str, Any]]:
+        normalized = tuple(
+            dict.fromkeys(
+                str(symbol).strip().upper()
+                for symbol in symbols
+                if str(symbol).strip()
+            )
+        )
+        batch_loader = getattr(self.quote_source, "quotes", None)
+        if callable(batch_loader):
+            payload = batch_loader(
+                normalized,
+                decision_at=decision_at,
+            )
+            if not isinstance(payload, dict):
+                raise ValueError("Batch quote source returned an invalid shape.")
+            return {
+                str(symbol).strip().upper(): dict(quote)
+                for symbol, quote in payload.items()
+                if isinstance(quote, dict)
+            }
+        return {
+            symbol: quote
+            for symbol in normalized
+            if (
+                quote := self._quote(
+                    symbol,
+                    decision_at=decision_at,
+                )
+            )
+            is not None
+        }
 
     def _existing_source_capture_cycle(
         self,

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import momentum_hunter.shadow_market_validity as shadow_market_validity_module
 from momentum_hunter.shadow_market_validity import (
     SHADOW_SELECTOR_ARM_CONFIRMATION,
     DecisionCycleStore,
@@ -21,6 +22,7 @@ from momentum_hunter.shadow_market_validity import (
     forced_exit_deadline,
     is_nyse_early_close,
     portfolio_findings,
+    runtime_build_hash,
     shadow_constitution_hash,
     synthetic_pass_proofs,
 )
@@ -57,6 +59,25 @@ class DictQuoteSource:
         self.calls.append(symbol)
         value = self.quotes.get(symbol)
         return copy.deepcopy(value) if value is not None else None
+
+
+class BatchQuoteSource:
+    def __init__(self, quotes: dict[str, dict]) -> None:
+        self.values = quotes
+        self.calls: list[tuple[tuple[str, ...], datetime]] = []
+
+    def quotes(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        decision_at: datetime,
+    ) -> dict[str, dict]:
+        self.calls.append((tuple(symbols), decision_at))
+        return {
+            symbol: copy.deepcopy(self.values[symbol])
+            for symbol in symbols
+            if symbol in self.values
+        }
 
 
 class ShadowMarketValiditySelectionTests(unittest.TestCase):
@@ -143,6 +164,21 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
                 armed_at=at("2026-07-23T09:57:31-05:00"),
             )
 
+    def test_runtime_build_hash_includes_schwab_quote_boundary(self) -> None:
+        root = Path(shadow_market_validity_module.__file__).resolve().parent
+        expected_paths = (
+            root / "schwab_market_data.py",
+            root / "shadow_market_validity.py",
+            root / "shadow_selection.py",
+            root / "shadow_trading.py",
+            root / "workstation_shadow.py",
+        )
+
+        self.assertEqual(
+            runtime_build_hash(expected_paths),
+            runtime_build_hash(),
+        )
+
     def test_incomplete_proofs_cannot_arm(self) -> None:
         self.activate(arm=False)
         with self.assertRaisesRegex((ValueError, ShadowStateError), "proof"):
@@ -203,6 +239,37 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         self.assertEqual(
             ["FIRST", "SECOND"],
             [item["symbol"] for item in cycle["candidate_assessments"]],
+        )
+
+    def test_batch_quote_source_is_called_once_for_candidates_and_benchmarks(self) -> None:
+        self.activate()
+        payload = report_payload()
+        second = copy.deepcopy(payload["candidates"][0])
+        second["rank"] = 2
+        second["symbol"] = "SECOND"
+        payload["candidates"].append(second)
+        self.write_report(payload)
+        source = BatchQuoteSource(
+            {
+                "TEST": quote_payload("TEST"),
+                "SECOND": quote_payload("SECOND"),
+                "SPY": quote_payload("SPY", bid=625.00, ask=625.02),
+                "IWM": quote_payload("IWM", bid=225.00, ask=225.02),
+            }
+        )
+
+        result = AutomaticShadowSelector(
+            self.service,
+            quote_source=source,
+        ).select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_STARTED, result.status)
+        self.assertEqual(
+            [(("TEST", "SECOND", "SPY", "IWM"), self.decision_at)],
+            source.calls,
         )
 
     def test_score_and_symbol_are_stable_tie_breakers(self) -> None:

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 """Engine-host bridge for prospective, nontransmitting Shadow Trading."""
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, Sequence
 
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.monitor_targets import latest_trade_report_path
@@ -49,18 +50,47 @@ class ShadowWorkspacePaths:
         )
 
 
+class ShadowQuoteSource(Protocol):
+    def quote(
+        self,
+        symbol: str,
+        *,
+        decision_at: datetime,
+    ) -> dict[str, Any] | None: ...
+
+
+class ShadowBatchQuoteSource(Protocol):
+    def quotes(
+        self,
+        symbols: Sequence[str],
+        *,
+        decision_at: datetime,
+    ) -> dict[str, dict[str, Any]]: ...
+
+
 class ShadowWorkspaceService:
     def __init__(
         self,
         *,
         paths: ShadowWorkspacePaths | None = None,
         service: ShadowTradingService | None = None,
+        quote_source: ShadowQuoteSource | ShadowBatchQuoteSource | None = None,
     ) -> None:
+        production_defaults = paths is None and service is None
         self.paths = paths or ShadowWorkspacePaths.from_data_dir()
         self.service = service or ShadowTradingService(store=ShadowStateStore(self.paths.state_path))
-        self.quote_source = PersistedObservationQuoteSource(
-            self.paths.observations_path
-        )
+        if quote_source is not None:
+            self.quote_source = quote_source
+        elif production_defaults:
+            from momentum_hunter.schwab_market_data import (
+                SchwabMarketDataQuoteSource,
+            )
+
+            self.quote_source = SchwabMarketDataQuoteSource()
+        else:
+            self.quote_source = PersistedObservationQuoteSource(
+                self.paths.observations_path
+            )
 
     def snapshot(self) -> dict[str, Any]:
         return self.service.snapshot()
@@ -256,6 +286,32 @@ class ShadowWorkspaceService:
 
     def advance_observations(self, *, received_at: datetime | None = None) -> dict[str, Any]:
         received_at = received_at or now_central()
+        active_symbols = {
+            trade["symbol"]
+            for trade in self.service.snapshot()["trades"]
+            if trade["status"] in {"pending_entry", "partially_filled", "open"}
+        }
+        batch_loader = getattr(self.quote_source, "quotes", None)
+        if callable(batch_loader):
+            tracked_symbols = tracked_shadow_symbols(
+                self.service,
+                received_at=received_at,
+                active_symbols=active_symbols,
+            )
+            quotes = (
+                batch_loader(
+                    tracked_symbols,
+                    decision_at=received_at,
+                )
+                if tracked_symbols
+                else {}
+            )
+            return self._advance_provider_quotes(
+                quotes,
+                received_at=received_at,
+                active_symbols=active_symbols,
+                requested_symbols=set(tracked_symbols),
+            )
         observations = sorted(
             load_price_observations(self.paths.observations_path),
             key=lambda item: (item.timestamp, item.symbol, item.source_report),
@@ -277,11 +333,6 @@ class ShadowWorkspaceService:
             }
             for item in trusted_observations
         )
-        active_symbols = {
-            trade["symbol"]
-            for trade in self.service.snapshot()["trades"]
-            if trade["status"] in {"pending_entry", "partially_filled", "open"}
-        }
         relevant_by_symbol: dict[str, PriceObservation] = {}
         for observation in trusted_observations:
             symbol = observation.symbol.upper()
@@ -345,6 +396,92 @@ class ShadowWorkspaceService:
             "snapshot": snapshot,
         }
 
+    def _advance_provider_quotes(
+        self,
+        quotes: dict[str, dict[str, Any]],
+        *,
+        received_at: datetime,
+        active_symbols: set[str],
+        requested_symbols: set[str],
+    ) -> dict[str, Any]:
+        normalized: dict[str, dict[str, Any]] = {}
+        invalid_quote_symbols: list[str] = []
+        for symbol, quote in quotes.items():
+            normalized_symbol = str(symbol).strip().upper()
+            if (
+                not normalized_symbol
+                or normalized_symbol not in requested_symbols
+                or not isinstance(quote, dict)
+                or str(quote.get("symbol", "")).strip().upper()
+                != normalized_symbol
+                or not str(quote.get("source", "")).strip()
+                or not is_offset_aware(
+                    parse_datetime(str(quote.get("timestamp", "")))
+                )
+                or any(
+                    not is_finite_optional_number(quote.get(field_name))
+                    for field_name in ("bid", "ask", "last", "volume")
+                )
+            ):
+                if normalized_symbol:
+                    invalid_quote_symbols.append(normalized_symbol)
+                continue
+            normalized[normalized_symbol] = dict(quote)
+        self.service.decision_cycle_store.append_observations(
+            provider_observation(quote)
+            for quote in normalized.values()
+        )
+        missing_quote_symbols: list[str] = []
+        relevant_count = 0
+        for symbol in sorted(active_symbols):
+            quote = normalized.get(symbol)
+            if quote is None:
+                missing_quote_symbols.append(symbol)
+                self.service.process_missing_quote(
+                    symbol,
+                    observed_at=received_at,
+                )
+                continue
+            relevant_count += 1
+            if quote.get("bid") is None or quote.get("ask") is None:
+                missing_quote_symbols.append(symbol)
+                self.service.process_missing_quote(
+                    symbol,
+                    observed_at=received_at,
+                )
+                continue
+            self.service.process_quote(
+                shadow_quote_from_mapping(quote),
+                received_at=received_at,
+            )
+        state = self.service.store.load()
+        for trade in state.trades:
+            if (
+                trade.status == "completed"
+                and trade.outcome is not None
+                and trade.decision_cycle_id
+            ):
+                self.service.decision_cycle_store.finalize_counterfactuals(
+                    trade.decision_cycle_id,
+                    horizon_at=trade.outcome.exit_timestamp,
+                )
+        snapshot = self.service.snapshot()
+        return {
+            "mode": SHADOW_MODE,
+            "observationsSeen": len(normalized),
+            "trustedObservationsSeen": len(normalized),
+            "observationsRelevant": relevant_count,
+            "missingQuoteSymbols": missing_quote_symbols,
+            "invalidQuoteSymbols": sorted(set(invalid_quote_symbols)),
+            "activeTradeCount": sum(
+                1
+                for trade in snapshot["trades"]
+                if trade["status"] in {"pending_entry", "partially_filled", "open"}
+            ),
+            "completedTradeCount": snapshot["metrics"]["completedTradeCount"],
+            "snapshot": snapshot,
+        }
+
 
 def quote_from_price_observation(observation: PriceObservation) -> ShadowQuote:
     observed_at = trusted_quote_timestamp(observation)
@@ -370,6 +507,72 @@ def trusted_quote_timestamp(observation: PriceObservation) -> datetime | None:
         return None
     observed_at = parse_datetime(observation.quote_timestamp)
     return observed_at if is_offset_aware(observed_at) else None
+
+
+def tracked_shadow_symbols(
+    service: ShadowTradingService,
+    *,
+    received_at: datetime,
+    active_symbols: set[str],
+) -> tuple[str, ...]:
+    symbols = set(active_symbols)
+    received_date = received_at.astimezone(EASTERN_TZ).date()
+    for cycle in service.decision_cycle_store.load().cycles:
+        if cycle.get("cycle_kind") != "DECISION":
+            continue
+        decision_at = parse_datetime(str(cycle.get("decision_at", "")))
+        if (
+            not is_offset_aware(decision_at)
+            or decision_at.astimezone(EASTERN_TZ).date() != received_date
+        ):
+            continue
+        symbols.update(
+            str(item.get("symbol", "")).strip().upper()
+            for item in cycle.get("candidate_assessments", [])
+            if isinstance(item, dict) and item.get("eligible") is True
+        )
+        symbols.update(
+            str(item).strip().upper()
+            for item in cycle.get("benchmark_symbols", [])
+        )
+    return tuple(sorted(symbol for symbol in symbols if symbol))
+
+
+def provider_observation(quote: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "symbol": str(quote.get("symbol", "")).strip().upper(),
+        "timestamp": str(quote.get("timestamp", "")),
+        "bid": quote.get("bid"),
+        "ask": quote.get("ask"),
+        "last": quote.get("last"),
+        "volume": quote.get("volume"),
+        "source": str(quote.get("source", "")),
+    }
+
+
+def shadow_quote_from_mapping(quote: dict[str, Any]) -> ShadowQuote:
+    return ShadowQuote(
+        symbol=str(quote.get("symbol", "")).strip().upper(),
+        timestamp=str(quote.get("timestamp", "")),
+        bid=quote.get("bid"),
+        ask=quote.get("ask"),
+        last=quote.get("last"),
+        volume=quote.get("volume"),
+        session=str(quote.get("session", "")),
+        trading_state=str(quote.get("trading_state", "")),
+        source=str(quote.get("source", "")),
+    )
+
+
+def is_finite_optional_number(value: object) -> bool:
+    return (
+        value is None
+        or (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+        )
+    )
 
 
 def collection_attempt_cycle(

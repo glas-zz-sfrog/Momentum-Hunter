@@ -73,13 +73,23 @@ timezone-aware provider quote timestamp and provider source. Missing either fiel
 makes the quote unavailable; a newly written wrapper around old bid/ask values does
 not refresh their age.
 
-The implemented selector reads the latest persisted bid/ask observation without
-mutating its source, validates quote symbol/source/as-of identity, and records
-capture-to-report, report-to-selection, capture-to-selection, and quote-age seconds.
-Missing provider identity, unsupported report schema, missing source identity, or any
-failed clock rejects the cycle. Production arming still requires an operational proof
-that the real monitor is producing timely bid/ask observations; synthetic proof alone
-does not satisfy that deployment gate.
+The initial production quote transport reads Schwab Market Data v1 quotes through one
+exact-host GET and has no account or order endpoint. Candidate symbols and the SPY/IWM
+benchmarks are requested once per decision cycle. Executable quote time is the oldest
+of the provider's `bidTime`, `askTime`, and `quoteTime`, so both sides of the market
+must satisfy the 30-second rule. Expired OAuth may refresh only through the existing
+read-only sole-account revalidation that requires exactly one `2573`
+`INDIVIDUAL_CASH` binding; that guarded refresh is the only indirect account read.
+
+The selector validates requested symbol, embedded symbol, source, as-of identity,
+finite bid/ask values, session, trading state, and all relevant clocks. It records
+capture-to-report, report-to-selection, capture-to-selection, and quote-age seconds
+without mutating capture or provider evidence. Missing, delayed, stale, closed,
+extended-hours, mismatched, non-finite, or unrequested evidence is unavailable.
+The source module is part of the immutable Shadow runtime build hash. Live weekend
+proof confirms the provider response is parsed and old closed-session evidence is
+rejected; production arming still requires a regular-market operational proof inside
+the 30-second boundary.
 
 ## Duplicate, Cooldown, And Portfolio Rules
 
@@ -199,8 +209,9 @@ Trade 1 remains blocked until all of the following pass:
    portfolio-concurrency tests pass.
 7. Every expected in-window decision cycle, inferred downtime slot, and skip/block
    reason is durably recorded.
-8. A production-local cycle proves the real monitor supplies a current executable
-   bid/ask boundary with provider/schema/latency identity.
+8. A canonical production-local regular-market cycle proves Schwab supplies a current
+   executable bid/ask boundary with provider/schema/latency identity. Closed-session
+   fail-closed proof does not satisfy this gate.
 9. The production-local sample remains at zero trades until all gates pass.
 10. Order transmission remains `UNAVAILABLE`.
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import tempfile
 import unittest
 from dataclasses import asdict, replace
@@ -38,6 +39,36 @@ from momentum_hunter.shadow_trading import (
     stable_id,
 )
 from momentum_hunter.workstation_shadow import ShadowWorkspacePaths, ShadowWorkspaceService
+
+
+class _BatchMarketQuoteSource:
+    def __init__(
+        self,
+        quotes: dict[str, dict],
+        *,
+        return_unrequested: bool = False,
+    ) -> None:
+        self.values = quotes
+        self.return_unrequested = return_unrequested
+        self.calls: list[tuple[tuple[str, ...], datetime]] = []
+
+    def quotes(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        decision_at: datetime,
+    ) -> dict[str, dict]:
+        self.calls.append((tuple(symbols), decision_at))
+        if self.return_unrequested:
+            return {
+                symbol: dict(quote)
+                for symbol, quote in self.values.items()
+            }
+        return {
+            symbol: dict(self.values[symbol])
+            for symbol in symbols
+            if symbol in self.values
+        }
 
 
 class ShadowTradingLifecycleTests(unittest.TestCase):
@@ -591,6 +622,18 @@ class ShadowMetricsTests(unittest.TestCase):
 
 
 class ShadowWorkspaceIntegrationTests(unittest.TestCase):
+    def test_production_defaults_use_schwab_quote_source_without_network_call(self) -> None:
+        source = _BatchMarketQuoteSource({})
+        with patch(
+            "momentum_hunter.schwab_market_data.SchwabMarketDataQuoteSource",
+            return_value=source,
+        ) as constructor:
+            workspace = ShadowWorkspaceService()
+
+        constructor.assert_called_once_with()
+        self.assertIs(source, workspace.quote_source)
+        self.assertEqual([], source.calls)
+
     def test_persisted_monitor_observation_advances_active_trade(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -765,6 +808,250 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
             self.assertEqual(1, result["observationsRelevant"])
             self.assertEqual(1, len(trade["processed_observation_ids"]))
             self.assertEqual("pending_entry", trade["status"])
+
+    def test_provider_quote_source_advances_active_trade_without_persisted_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "reports"
+            reports.mkdir()
+            report = reports / "trade-plan-briefing-test.json"
+            report.write_text(json.dumps(report_payload()), encoding="utf-8")
+            received_at = at("2026-07-23T10:01:00-05:00")
+            source = _BatchMarketQuoteSource(
+                {
+                    "TEST": {
+                        "symbol": "TEST",
+                        "timestamp": "2026-07-23T10:00:50-05:00",
+                        "bid": 9.94,
+                        "ask": 9.95,
+                        "last": 9.95,
+                        "volume": 1_000,
+                        "session": "regular",
+                        "trading_state": "tradable",
+                        "source": "provider-fixture",
+                    }
+                }
+            )
+            core = ShadowTradingService(
+                store=ShadowStateStore(root / "shadow-state.json")
+            )
+            core.start_trade(
+                report,
+                symbol="TEST",
+                simulation_command_id="provider-workspace",
+                decision_at=at("2026-07-23T10:00:00-05:00"),
+            )
+            observations = root / "missing-observations.json"
+            workspace = ShadowWorkspaceService(
+                paths=ShadowWorkspacePaths(
+                    reports,
+                    observations,
+                    root / "shadow-state.json",
+                ),
+                service=core,
+                quote_source=source,
+            )
+
+            result = workspace.advance_observations(
+                received_at=received_at,
+            )
+
+            self.assertEqual([(("TEST",), received_at)], source.calls)
+            self.assertFalse(observations.exists())
+            self.assertEqual(1, result["trustedObservationsSeen"])
+            self.assertEqual(1, result["observationsRelevant"])
+            self.assertEqual([], result["missingQuoteSymbols"])
+            self.assertEqual("open", result["snapshot"]["trades"][0]["status"])
+            self.assertFalse(result["snapshot"]["transmitting"])
+
+    def test_provider_quote_source_is_not_called_without_tracked_symbols(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "reports"
+            reports.mkdir()
+            source = _BatchMarketQuoteSource({})
+            core = ShadowTradingService(
+                store=ShadowStateStore(root / "shadow-state.json")
+            )
+            workspace = ShadowWorkspaceService(
+                paths=ShadowWorkspacePaths(
+                    reports,
+                    root / "observations.json",
+                    root / "shadow-state.json",
+                ),
+                service=core,
+                quote_source=source,
+            )
+
+            result = workspace.advance_observations(
+                received_at=at("2026-07-23T10:01:00-05:00"),
+            )
+
+            self.assertEqual([], source.calls)
+            self.assertEqual(0, result["observationsSeen"])
+            self.assertEqual(0, result["activeTradeCount"])
+
+    def test_provider_quote_symbol_mismatch_fails_as_missing_quote(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "reports"
+            reports.mkdir()
+            report = reports / "trade-plan-briefing-test.json"
+            report.write_text(json.dumps(report_payload()), encoding="utf-8")
+            source = _BatchMarketQuoteSource(
+                {
+                    "TEST": {
+                        "symbol": "OTHER",
+                        "timestamp": "2026-07-23T10:00:50-05:00",
+                        "bid": 9.94,
+                        "ask": 9.95,
+                        "last": 9.95,
+                        "session": "regular",
+                        "trading_state": "tradable",
+                        "source": "provider-fixture",
+                    }
+                }
+            )
+            core = ShadowTradingService(
+                store=ShadowStateStore(root / "shadow-state.json")
+            )
+            core.start_trade(
+                report,
+                symbol="TEST",
+                simulation_command_id="provider-mismatch",
+                decision_at=at("2026-07-23T10:00:00-05:00"),
+            )
+            workspace = ShadowWorkspaceService(
+                paths=ShadowWorkspacePaths(
+                    reports,
+                    root / "observations.json",
+                    root / "shadow-state.json",
+                ),
+                service=core,
+                quote_source=source,
+            )
+
+            result = workspace.advance_observations(
+                received_at=at("2026-07-23T10:01:00-05:00"),
+            )
+
+            self.assertEqual(["TEST"], result["invalidQuoteSymbols"])
+            self.assertEqual(["TEST"], result["missingQuoteSymbols"])
+            self.assertEqual(
+                "pending_entry",
+                result["snapshot"]["trades"][0]["status"],
+            )
+
+    def test_provider_quote_source_cannot_record_unrequested_symbols(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "reports"
+            reports.mkdir()
+            source = _BatchMarketQuoteSource(
+                {
+                    "UNEXPECTED": {
+                        "symbol": "UNEXPECTED",
+                        "timestamp": "2026-07-23T10:00:50-05:00",
+                        "bid": 9.94,
+                        "ask": 9.95,
+                        "last": 9.95,
+                        "session": "regular",
+                        "trading_state": "tradable",
+                        "source": "provider-fixture",
+                    }
+                },
+                return_unrequested=True,
+            )
+            core = ShadowTradingService(
+                store=ShadowStateStore(root / "shadow-state.json")
+            )
+            workspace = ShadowWorkspaceService(
+                paths=ShadowWorkspacePaths(
+                    reports,
+                    root / "observations.json",
+                    root / "shadow-state.json",
+                ),
+                service=core,
+                quote_source=source,
+            )
+            workspace.service.decision_cycle_store.save_cycle(
+                {
+                    "cycle_id": "test-unexpected-provider-symbol",
+                    "cycle_kind": "DECISION",
+                    "decision_at": "2026-07-23T10:00:00-05:00",
+                    "updated_at": "2026-07-23T10:00:00-05:00",
+                    "candidate_assessments": [
+                        {"symbol": "TEST", "eligible": True}
+                    ],
+                    "benchmark_symbols": [],
+                }
+            )
+
+            result = workspace.advance_observations(
+                received_at=at("2026-07-23T10:01:00-05:00"),
+            )
+
+            self.assertEqual(["UNEXPECTED"], result["invalidQuoteSymbols"])
+            self.assertEqual(0, result["observationsSeen"])
+            self.assertEqual(
+                [],
+                workspace.service.decision_cycle_store.load().cycles[0].get(
+                    "market_observations",
+                    [],
+                ),
+            )
+
+    def test_provider_nonfinite_quote_fails_before_fill_or_recording(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "reports"
+            reports.mkdir()
+            report = reports / "trade-plan-briefing-test.json"
+            report.write_text(json.dumps(report_payload()), encoding="utf-8")
+            source = _BatchMarketQuoteSource(
+                {
+                    "TEST": {
+                        "symbol": "TEST",
+                        "timestamp": "2026-07-23T10:00:50-05:00",
+                        "bid": math.nan,
+                        "ask": 9.95,
+                        "last": 9.95,
+                        "session": "regular",
+                        "trading_state": "tradable",
+                        "source": "provider-fixture",
+                    }
+                }
+            )
+            core = ShadowTradingService(
+                store=ShadowStateStore(root / "shadow-state.json")
+            )
+            core.start_trade(
+                report,
+                symbol="TEST",
+                simulation_command_id="provider-nonfinite",
+                decision_at=at("2026-07-23T10:00:00-05:00"),
+            )
+            workspace = ShadowWorkspaceService(
+                paths=ShadowWorkspacePaths(
+                    reports,
+                    root / "observations.json",
+                    root / "shadow-state.json",
+                ),
+                service=core,
+                quote_source=source,
+            )
+
+            result = workspace.advance_observations(
+                received_at=at("2026-07-23T10:01:00-05:00"),
+            )
+
+            self.assertEqual(["TEST"], result["invalidQuoteSymbols"])
+            self.assertEqual(["TEST"], result["missingQuoteSymbols"])
+            self.assertEqual(0, result["observationsSeen"])
+            self.assertEqual(
+                "pending_entry",
+                result["snapshot"]["trades"][0]["status"],
+            )
 
     def test_engine_host_exposes_idempotent_shadow_commands_without_broker_capability(self) -> None:
         starts: list[tuple[str, str]] = []
