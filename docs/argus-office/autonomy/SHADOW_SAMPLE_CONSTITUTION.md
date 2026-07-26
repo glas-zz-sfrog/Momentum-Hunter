@@ -226,6 +226,14 @@ empty, oversized, malformed, duplicated, relocated, altered, or context-mismatch
 material fails closed. A failed or partial arm creates neither policy nor arm state.
 Changing selector source after arming changes the runtime build hash and fails closed.
 
+The pre-arm market-data gate is exercised with
+`python -B -m momentum_hunter.schwab_market_data proof --symbols <candidate> SPY IWM`.
+The derived output may be persisted under ignored local reports. It qualifies only
+when every requested symbol is realtime, regular-session, tradable, has valid
+noncrossed bid/ask evidence, carries the exact provider identity, and all independent
+provider clocks are offset-aware, nonfuture, and no older than 30 seconds. Synthetic,
+closed-session, delayed, stale, partial, or failed output never satisfies Gate 8.
+
 The supported operational dry run is `selector-arm-check --proof-bundle <directory>`.
 It performs the complete service-layer verification and must not persist policy, arm,
 decision-cycle, state, or trade data. The separate `selector-arm` command reads the

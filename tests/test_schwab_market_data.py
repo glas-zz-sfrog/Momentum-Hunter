@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import io
 import inspect
 import json
 import math
+import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import requests
 
@@ -21,6 +25,8 @@ from momentum_hunter.schwab_market_data import (
     SchwabMarketDataResponseError,
     SchwabMarketDataTransport,
     StoredSchwabAccessTokenProvider,
+    build_regular_market_quote_proof,
+    main,
     normalize_symbols,
     parse_quote_response,
 )
@@ -140,6 +146,25 @@ class _FakeTransport:
             quote_payload(),
             expected_symbols=normalized,
         )
+
+
+class _ProofQuoteSource:
+    def __init__(self, quotes: dict[str, dict[str, object]]) -> None:
+        self.values = quotes
+        self.calls: list[tuple[tuple[str, ...], datetime | None]] = []
+
+    def quotes(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        decision_at: datetime | None = None,
+    ) -> dict[str, dict[str, object]]:
+        self.calls.append((tuple(symbols), decision_at))
+        return {
+            symbol: dict(self.values[symbol])
+            for symbol in symbols
+            if symbol in self.values
+        }
 
 
 class SchwabMarketDataTransportTests(unittest.TestCase):
@@ -402,6 +427,115 @@ class SchwabMarketDataQuoteSourceTests(unittest.TestCase):
         self.assertNotIn("replace_order", source)
 
 
+class SchwabRegularMarketQuoteProofTests(unittest.TestCase):
+    def test_fresh_regular_realtime_quotes_pass_and_cli_writes_redacted_proof(
+        self,
+    ) -> None:
+        checked_at = datetime(2026, 7, 27, 14, 0, tzinfo=timezone.utc)
+        source = _ProofQuoteSource(
+            {
+                symbol: proof_quote(symbol, checked_at - timedelta(seconds=5))
+                for symbol in ("CRWV", "SPY", "IWM")
+            }
+        )
+
+        proof = build_regular_market_quote_proof(
+            source,
+            ["crwv", "SPY", "IWM"],
+            checked_at=checked_at,
+        )
+
+        self.assertEqual("PASS", proof["proofStatus"])
+        self.assertEqual(30, proof["maximumQuoteAgeSeconds"])
+        self.assertEqual(
+            [(("CRWV", "SPY", "IWM"), checked_at)],
+            source.calls,
+        )
+        self.assertTrue(
+            all(row["status"] == "PASS" for row in proof["quotes"])
+        )
+        self.assertFalse(proof["transmitting"])
+        self.assertEqual("UNAVAILABLE", proof["orderTransmission"])
+        self.assertFalse(proof["accountDataIncluded"])
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output_path = Path(temporary) / "quote-proof.json"
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = main(
+                    [
+                        "proof",
+                        "--symbols",
+                        "CRWV",
+                        "SPY",
+                        "IWM",
+                        "--output",
+                        str(output_path),
+                    ],
+                    source=source,
+                    checked_at=checked_at,
+                )
+            persisted = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(0, result)
+            self.assertEqual(persisted, json.loads(stdout.getvalue()))
+            serialized = json.dumps(persisted).lower()
+            self.assertNotIn(ACCESS_TOKEN.lower(), serialized)
+            self.assertNotIn("refresh_token", serialized)
+            self.assertNotIn("account_hash", serialized)
+
+    def test_missing_stale_closed_delayed_and_invalid_quotes_fail_honestly(
+        self,
+    ) -> None:
+        checked_at = datetime(2026, 7, 27, 14, 0, tzinfo=timezone.utc)
+        stale = proof_quote("CRWV", checked_at - timedelta(seconds=31))
+        stale["session"] = "extended"
+        stale["trading_state"] = "closed"
+        stale["realtime"] = False
+        stale["bid"] = None
+
+        proof = build_regular_market_quote_proof(
+            _ProofQuoteSource({"CRWV": stale}),
+            ["CRWV", "SPY"],
+            checked_at=checked_at,
+        )
+
+        self.assertEqual("FAIL", proof["proofStatus"])
+        rows = {row["symbol"]: row for row in proof["quotes"]}
+        self.assertEqual(
+            {
+                "NOT_REALTIME",
+                "SESSION_NOT_REGULAR",
+                "STATE_NOT_TRADABLE",
+                "BID_ASK_MISSING",
+                "QUOTE_STALE",
+            },
+            set(rows["CRWV"]["findings"]),
+        )
+        self.assertIn("QUOTE_MISSING", rows["SPY"]["findings"])
+        self.assertEqual("FAIL", rows["SPY"]["status"])
+
+    def test_future_provider_clock_fails_even_when_executable_clock_is_current(
+        self,
+    ) -> None:
+        checked_at = datetime(2026, 7, 27, 14, 0, tzinfo=timezone.utc)
+        quote = proof_quote("CRWV", checked_at - timedelta(seconds=5))
+        quote["provider_ask_timestamp"] = (
+            checked_at + timedelta(seconds=1)
+        ).isoformat()
+
+        proof = build_regular_market_quote_proof(
+            _ProofQuoteSource({"CRWV": quote}),
+            ["CRWV"],
+            checked_at=checked_at,
+        )
+
+        self.assertEqual("FAIL", proof["proofStatus"])
+        self.assertIn(
+            "PROVIDER_ASK_TIMESTAMP_IN_FUTURE",
+            proof["quotes"][0]["findings"],
+        )
+
+
 def quote_payload() -> dict[str, object]:
     return {
         "CRWV": {
@@ -423,4 +557,24 @@ def quote_payload() -> dict[str, object]:
                 "tradeTime": 1784937596447,
             },
         }
+    }
+
+
+def proof_quote(symbol: str, observed_at: datetime) -> dict[str, object]:
+    timestamp = observed_at.isoformat()
+    return {
+        "symbol": symbol,
+        "timestamp": timestamp,
+        "provider_quote_timestamp": timestamp,
+        "provider_bid_timestamp": timestamp,
+        "provider_ask_timestamp": timestamp,
+        "bid": 100.0,
+        "ask": 100.05,
+        "last": 100.02,
+        "volume": 10_000,
+        "session": "regular",
+        "trading_state": "tradable",
+        "realtime": True,
+        "security_status": "Normal",
+        "source": SCHWAB_QUOTE_SOURCE,
     }
