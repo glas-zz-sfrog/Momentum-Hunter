@@ -27,14 +27,16 @@ from momentum_hunter.autonomy.view_models import candidate_plan_from_report_row,
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.shadow_market_validity import (
     EASTERN_TZ,
+    MAX_SELECTOR_PROOF_ARTIFACT_BYTES,
     SHADOW_CONSTITUTION_VERSION,
     SHADOW_SELECTOR_ARM_CONFIRMATION,
+    SHADOW_SELECTOR_ARM_REQUIRED_PROOFS,
     SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
-    MAX_SELECTOR_PROOF_ARTIFACT_BYTES,
     DecisionCycleStore,
     SelectorArmRecord,
     SelectorArmStore,
     ShadowMarketValidityPolicy,
+    VerifiedSelectorProofArtifacts,
     classify_warnings,
     decision_cycle_summary,
     entry_window_findings,
@@ -1133,41 +1135,13 @@ class ShadowTradingService:
             raise ValueError(
                 "Exact internal selector-arm confirmation was not supplied."
             )
-        self._refresh_sample_activation()
-        if self.sample_activation is None:
-            raise ShadowStateError(
-                "Selector arming requires an active official Shadow sample."
-            )
-        if self.store.load().trades:
-            raise ShadowStateError(
-                "Selector arming requires an empty official Shadow sample."
-            )
-        armed_at = armed_at or now_central()
-        if (
-            armed_at.tzinfo is None
-            or armed_at.utcoffset() is None
-        ):
-            raise ValueError("Selector-arm timestamp must include a UTC offset.")
+        verified_proofs, armed_at = self.verify_automatic_selector_prerequisites(
+            prerequisite_proof_paths,
+            verified_at=armed_at,
+        )
+        prerequisite_proofs = verified_proofs.hashes
         constitution_hash = shadow_constitution_hash()
         build_hash = runtime_build_hash()
-        activated_at = require_datetime(
-            self.sample_activation.activated_at,
-            "sample activation timestamp",
-        )
-        activation_hash = self._activation_record_hash()
-        try:
-            verified_proofs = hash_prerequisite_proof_artifacts(
-                prerequisite_proof_paths,
-                sample_version=self.sample_definition.sample_version,
-                activation_hash=activation_hash,
-                activated_at=activated_at,
-                constitution_hash=constitution_hash,
-                build_hash=build_hash,
-                armed_at=armed_at,
-            )
-        except ValueError as exc:
-            raise ShadowStateError(str(exc)) from exc
-        prerequisite_proofs = verified_proofs.hashes
         expected_policy = expected_shadow_selection_policy_evidence()
         arm_id = selector_arm_id(
             sample_version=self.sample_definition.sample_version,
@@ -1214,6 +1188,52 @@ class ShadowTradingService:
             return self.selector_arm_store.save_once(record)
         except ValueError as exc:
             raise ShadowStateError(str(exc)) from exc
+
+    def verify_automatic_selector_prerequisites(
+        self,
+        prerequisite_proof_paths: Mapping[str, str | Path],
+        *,
+        verified_at: datetime | None = None,
+    ) -> tuple[VerifiedSelectorProofArtifacts, datetime]:
+        """Verify selector-arm evidence without persisting policy or arm state."""
+
+        self._refresh_sample_activation()
+        if self.sample_activation is None:
+            raise ShadowStateError(
+                "Selector-arm verification requires an active official Shadow sample."
+            )
+        if self.store.load().trades:
+            raise ShadowStateError(
+                "Selector-arm verification requires an empty official Shadow sample."
+            )
+        verified_at = verified_at or now_central()
+        if (
+            verified_at.tzinfo is None
+            or verified_at.utcoffset() is None
+        ):
+            raise ValueError(
+                "Selector-arm verification timestamp must include a UTC offset."
+            )
+        constitution_hash = shadow_constitution_hash()
+        build_hash = runtime_build_hash()
+        activated_at = require_datetime(
+            self.sample_activation.activated_at,
+            "sample activation timestamp",
+        )
+        activation_hash = self._activation_record_hash()
+        try:
+            verified_proofs = hash_prerequisite_proof_artifacts(
+                prerequisite_proof_paths,
+                sample_version=self.sample_definition.sample_version,
+                activation_hash=activation_hash,
+                activated_at=activated_at,
+                constitution_hash=constitution_hash,
+                build_hash=build_hash,
+                armed_at=verified_at,
+            )
+        except ValueError as exc:
+            raise ShadowStateError(str(exc)) from exc
+        return verified_proofs, verified_at
 
     def selector_arm_record(self) -> SelectorArmRecord | None:
         try:
@@ -3716,6 +3736,13 @@ def apply_basis_points(value: float, basis_points: float) -> float:
     return float(adjusted.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP))
 
 
+def selector_proof_bundle_paths(bundle: Path) -> dict[str, Path]:
+    return {
+        name: bundle / f"{name}.json"
+        for name in SHADOW_SELECTOR_ARM_REQUIRED_PROOFS
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run nontransmitting Momentum Hunter Shadow Trading.")
     parser.add_argument("--state-path", type=Path, default=SHADOW_STATE_PATH)
@@ -3742,6 +3769,16 @@ def main(argv: list[str] | None = None) -> int:
         "--sample-version",
         default=OFFICIAL_SHADOW_SAMPLE_VERSION,
     )
+    arm_check_parser = subparsers.add_parser(
+        "selector-arm-check",
+        help="Verify the complete selector proof bundle without persisting state.",
+    )
+    arm_check_parser.add_argument("--proof-bundle", type=Path, required=True)
+    arm_parser = subparsers.add_parser(
+        "selector-arm",
+        help="Create the write-once selector arm after every proof passes.",
+    )
+    arm_parser.add_argument("--proof-bundle", type=Path, required=True)
 
     ticket_parser = subparsers.add_parser("ticket", help="Write a nontransmitting paperMoney ticket.")
     ticket_parser.add_argument("--trade-id", required=True)
@@ -3780,6 +3817,43 @@ def main(argv: list[str] | None = None) -> int:
             "transmitting": False,
             "orderTransmission": "UNAVAILABLE",
             "persistedTradeCount": len(service.store.load().trades),
+        }
+    elif args.command == "selector-arm-check":
+        proofs, verified_at = service.verify_automatic_selector_prerequisites(
+            selector_proof_bundle_paths(args.proof_bundle)
+        )
+        result = {
+            "armState": "READY_TO_ARM",
+            "verifiedAt": verified_at.isoformat(),
+            "sampleVersion": service.sample_definition.sample_version,
+            "proofArtifactCount": len(proofs.hashes),
+            "proofs": proofs.hashes,
+            "proofPaths": proofs.paths,
+            "persistedTradeCount": len(service.store.load().trades),
+            "stateMutated": False,
+            "transmitting": False,
+            "orderTransmission": "UNAVAILABLE",
+        }
+    elif args.command == "selector-arm":
+        confirmation = input(
+            f"Type {SHADOW_SELECTOR_ARM_CONFIRMATION!r} to create the "
+            "FakeBroker-only selector arm: "
+        )
+        arm = service.arm_automatic_selector(
+            confirmation=confirmation,
+            prerequisite_proof_paths=selector_proof_bundle_paths(
+                args.proof_bundle
+            ),
+        )
+        result = {
+            "armState": "ARMED",
+            "armId": arm.arm_id,
+            "armedAt": arm.armed_at,
+            "sampleVersion": arm.sample_version,
+            "proofArtifactCount": len(arm.prerequisite_proofs),
+            "persistedTradeCount": len(service.store.load().trades),
+            "transmitting": False,
+            "orderTransmission": "UNAVAILABLE",
         }
     else:
         result = service.snapshot()

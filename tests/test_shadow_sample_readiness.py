@@ -638,6 +638,103 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         self.assertEqual(before, self.activation_path.read_bytes())
         self.assertFalse(self.state_path.exists())
 
+    def test_cli_selector_arm_check_is_nonmutating_and_arm_is_guarded(self) -> None:
+        service = ShadowTradingService(store=ShadowStateStore(self.state_path))
+        self.activate(service)
+        proof_paths = write_synthetic_proof_artifacts(
+            self.root,
+            "cli-selector-arm",
+            sample_version=service.sample_definition.sample_version,
+            activation_path=service.activation_store.path,
+            verified_at=at("2026-07-23T09:57:20-05:00"),
+        )
+        proof_bundle = next(iter(proof_paths.values())).parent
+        policy_path = service.selection_policy_store.path
+        arm_path = service.selector_arm_store.path
+        cycles_path = service.decision_cycle_store.path
+
+        with self.assertRaisesRegex(ShadowStateError, "unavailable"):
+            main(
+                [
+                    "--state-path",
+                    str(self.state_path),
+                    "selector-arm-check",
+                    "--proof-bundle",
+                    str(self.root / "missing-proof-bundle"),
+                ]
+            )
+        self.assertFalse(self.state_path.exists())
+        self.assertFalse(policy_path.exists())
+        self.assertFalse(arm_path.exists())
+        self.assertFalse(cycles_path.exists())
+
+        check_output = io.StringIO()
+        with redirect_stdout(check_output):
+            self.assertEqual(
+                0,
+                main(
+                    [
+                        "--state-path",
+                        str(self.state_path),
+                        "selector-arm-check",
+                        "--proof-bundle",
+                        str(proof_bundle),
+                    ]
+                ),
+            )
+        check = json.loads(check_output.getvalue())
+        self.assertEqual("READY_TO_ARM", check["armState"])
+        self.assertEqual(len(proof_paths), check["proofArtifactCount"])
+        self.assertFalse(check["stateMutated"])
+        self.assertFalse(check["transmitting"])
+        self.assertEqual("UNAVAILABLE", check["orderTransmission"])
+        self.assertFalse(self.state_path.exists())
+        self.assertFalse(policy_path.exists())
+        self.assertFalse(arm_path.exists())
+        self.assertFalse(cycles_path.exists())
+
+        with patch("builtins.input", return_value="wrong phrase"):
+            with self.assertRaisesRegex(ValueError, "confirmation"):
+                main(
+                    [
+                        "--state-path",
+                        str(self.state_path),
+                        "selector-arm",
+                        "--proof-bundle",
+                        str(proof_bundle),
+                    ]
+                )
+        self.assertFalse(policy_path.exists())
+        self.assertFalse(arm_path.exists())
+
+        arm_output = io.StringIO()
+        with patch(
+            "builtins.input",
+            return_value=SHADOW_SELECTOR_ARM_CONFIRMATION,
+        ), redirect_stdout(arm_output):
+            self.assertEqual(
+                0,
+                main(
+                    [
+                        "--state-path",
+                        str(self.state_path),
+                        "selector-arm",
+                        "--proof-bundle",
+                        str(proof_bundle),
+                    ]
+                ),
+            )
+        armed = json.loads(arm_output.getvalue())
+        self.assertEqual("ARMED", armed["armState"])
+        self.assertEqual(len(proof_paths), armed["proofArtifactCount"])
+        self.assertEqual(0, armed["persistedTradeCount"])
+        self.assertFalse(armed["transmitting"])
+        self.assertEqual("UNAVAILABLE", armed["orderTransmission"])
+        self.assertFalse(self.state_path.exists())
+        self.assertTrue(policy_path.exists())
+        self.assertTrue(arm_path.exists())
+        self.assertFalse(cycles_path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

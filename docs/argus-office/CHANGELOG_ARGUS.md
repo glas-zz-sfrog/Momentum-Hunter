@@ -102,6 +102,7 @@
 - Hardened SHADOW-006 quote provenance after production-local audit showed that monitor report regeneration could wrap unchanged bid/ask values in a fresh report timestamp. Monitor-cycle time is now separate from provider quote timestamp/source, and Shadow selection, fills, and counterfactuals fail closed when independent provider quote provenance is absent.
 - Added the read-only Schwab Market Data quote boundary for SHADOW-006: one exact-host batched quote GET, guarded sole-account OAuth refresh, conservative provider-clock selection, finite/requested/symbol-matched evidence checks, no account or order capability, and arm-hash coverage for the provider module.
 - Hardened the SHADOW-006 selector arm from format-only proof strings to v2 structured proof artifacts: exact activation/sample/constitution/build binding, hash-verified evidence references, canonical persisted paths, and runtime revalidation that fails closed after deletion, alteration, relocation, or context drift.
+- Added the supported SHADOW-006 proof-bundle ceremony: a nonmutating `selector-arm-check` command and a separate exact-phrase guarded `selector-arm` command that use the same 12 structured artifacts and expose no broker or order authority.
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

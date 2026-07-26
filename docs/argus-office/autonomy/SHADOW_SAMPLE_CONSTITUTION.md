@@ -226,6 +226,13 @@ empty, oversized, malformed, duplicated, relocated, altered, or context-mismatch
 material fails closed. A failed or partial arm creates neither policy nor arm state.
 Changing selector source after arming changes the runtime build hash and fails closed.
 
+The supported operational dry run is `selector-arm-check --proof-bundle <directory>`.
+It performs the complete service-layer verification and must not persist policy, arm,
+decision-cycle, state, or trade data. The separate `selector-arm` command reads the
+same fixed `<proof-name>.json` bundle and requires the exact internal confirmation
+phrase before the write-once arm is attempted. Neither command has broker or order
+authority.
+
 ## Fill-Model Calibration
 
 The deterministic model remains an estimate. Early official tickets must be compared
