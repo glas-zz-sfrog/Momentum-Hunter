@@ -18,7 +18,6 @@ from momentum_hunter.engine_host import (
 )
 from momentum_hunter.shadow_market_validity import (
     SHADOW_SELECTOR_ARM_CONFIRMATION,
-    synthetic_pass_proofs,
 )
 from momentum_hunter.shadow_selection import AutomaticShadowSelector
 from momentum_hunter.scheduling import is_market_open_day
@@ -39,6 +38,7 @@ from momentum_hunter.shadow_trading import (
     stable_id,
 )
 from momentum_hunter.workstation_shadow import ShadowWorkspacePaths, ShadowWorkspaceService
+from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
 
 
 class _BatchMarketQuoteSource:
@@ -1236,7 +1236,13 @@ def completed_auditable_trade(
             )
         service.arm_automatic_selector(
             confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
-            prerequisite_proofs=synthetic_pass_proofs(f"completed-{index}"),
+            prerequisite_proof_paths=write_synthetic_proof_artifacts(
+                root,
+                f"completed-{index}",
+                sample_version=service.sample_definition.sample_version,
+                activation_path=service.activation_store.path,
+                verified_at=decision - timedelta(minutes=2, seconds=30),
+            ),
             armed_at=decision - timedelta(minutes=2),
         )
         selection_quote = {

@@ -18,7 +18,7 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from statistics import mean
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from momentum_hunter.autonomy.auditor import AuditFinding, AuditReport, audit_execution_ledger
 from momentum_hunter.autonomy.ledger import ExecutionLedger, ExecutionLedgerEvent
@@ -30,6 +30,7 @@ from momentum_hunter.shadow_market_validity import (
     SHADOW_CONSTITUTION_VERSION,
     SHADOW_SELECTOR_ARM_CONFIRMATION,
     SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+    MAX_SELECTOR_PROOF_ARTIFACT_BYTES,
     DecisionCycleStore,
     SelectorArmRecord,
     SelectorArmStore,
@@ -38,6 +39,8 @@ from momentum_hunter.shadow_market_validity import (
     decision_cycle_summary,
     entry_window_findings,
     forced_exit_deadline,
+    hash_prerequisite_proof_artifacts,
+    read_stable_selector_artifact,
     runtime_build_hash,
     selector_arm_id,
     shadow_constitution_hash,
@@ -1123,7 +1126,7 @@ class ShadowTradingService:
         self,
         *,
         confirmation: str,
-        prerequisite_proofs: dict[str, str],
+        prerequisite_proof_paths: Mapping[str, str | Path],
         armed_at: datetime | None = None,
     ) -> SelectorArmRecord:
         if confirmation != SHADOW_SELECTOR_ARM_CONFIRMATION:
@@ -1147,6 +1150,24 @@ class ShadowTradingService:
             raise ValueError("Selector-arm timestamp must include a UTC offset.")
         constitution_hash = shadow_constitution_hash()
         build_hash = runtime_build_hash()
+        activated_at = require_datetime(
+            self.sample_activation.activated_at,
+            "sample activation timestamp",
+        )
+        activation_hash = self._activation_record_hash()
+        try:
+            verified_proofs = hash_prerequisite_proof_artifacts(
+                prerequisite_proof_paths,
+                sample_version=self.sample_definition.sample_version,
+                activation_hash=activation_hash,
+                activated_at=activated_at,
+                constitution_hash=constitution_hash,
+                build_hash=build_hash,
+                armed_at=armed_at,
+            )
+        except ValueError as exc:
+            raise ShadowStateError(str(exc)) from exc
+        prerequisite_proofs = verified_proofs.hashes
         expected_policy = expected_shadow_selection_policy_evidence()
         arm_id = selector_arm_id(
             sample_version=self.sample_definition.sample_version,
@@ -1175,6 +1196,7 @@ class ShadowTradingService:
             constitution_hash=constitution_hash,
             build_hash=build_hash,
             prerequisite_proofs=dict(prerequisite_proofs),
+            prerequisite_proof_paths=dict(verified_proofs.paths),
         )
         try:
             validate_arm_record(record)
@@ -1212,6 +1234,40 @@ class ShadowTradingService:
                 "Selector arm record does not match the active sample, "
                 "constitution, or runtime build."
             )
+        self._refresh_sample_activation()
+        if self.sample_activation is None:
+            raise ShadowStateError(
+                "Selector arm record requires the immutable sample activation."
+            )
+        armed_at = require_datetime(record.armed_at, "selector-arm timestamp")
+        activated_at = require_datetime(
+            self.sample_activation.activated_at,
+            "sample activation timestamp",
+        )
+        try:
+            activation_hash = self._activation_record_hash()
+            verified_proofs = hash_prerequisite_proof_artifacts(
+                record.prerequisite_proof_paths,
+                sample_version=record.sample_version,
+                activation_hash=activation_hash,
+                activated_at=activated_at,
+                constitution_hash=record.constitution_hash,
+                build_hash=record.build_hash,
+                armed_at=armed_at,
+            )
+        except (ShadowStateError, ValueError) as exc:
+            raise ShadowStateError(
+                "Selector arm prerequisite artifacts failed revalidation: "
+                f"{exc}"
+            ) from exc
+        if (
+            verified_proofs.hashes != record.prerequisite_proofs
+            or verified_proofs.paths != record.prerequisite_proof_paths
+        ):
+            raise ShadowStateError(
+                "Selector arm prerequisite artifacts no longer match the "
+                "immutable arm record."
+            )
         policy = self.load_automatic_selection_policy()
         if (
             record.selection_policy_fingerprint
@@ -1221,6 +1277,20 @@ class ShadowTradingService:
                 "Selector arm record does not match the frozen selection policy."
             )
         return record
+
+    def _activation_record_hash(self) -> str:
+        try:
+            _, payload = read_stable_selector_artifact(
+                self.activation_store.path,
+                proof_name="sample_activation",
+                artifact_role="activation",
+                maximum_bytes=MAX_SELECTOR_PROOF_ARTIFACT_BYTES,
+            )
+        except ValueError as exc:
+            raise ShadowStateError(
+                "Selector arming could not hash the immutable activation record."
+            ) from exc
+        return hashlib.sha256(payload).hexdigest()
 
     def selector_is_armed(self) -> bool:
         return self.selector_arm_record() is not None

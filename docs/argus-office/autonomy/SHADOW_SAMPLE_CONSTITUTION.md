@@ -215,8 +215,15 @@ Trade 1 remains blocked until all of the following pass:
 9. The production-local sample remains at zero trades until all gates pass.
 10. Order transmission remains `UNAVAILABLE`.
 
-Arming requires the exact internal phrase plus a complete set of SHA-256-addressed
-prerequisite proofs. A failed or partial arm creates neither policy nor arm state.
+Arming requires the exact internal phrase plus a complete set of distinct structured
+`PASS` proof artifacts. Each artifact must bind its named gate to the exact sample
+version, activation-file SHA-256, constitution hash, runtime build hash, and an
+offset-aware verification time between activation and arming. It must reference at
+least one relative, hash-verified evidence file inside its proof bundle. The arm
+record persists the canonical proof paths and SHA-256 values. Runtime re-reads every
+proof and referenced evidence file before treating the selector as armed; missing,
+empty, oversized, malformed, duplicated, relocated, altered, or context-mismatched
+material fails closed. A failed or partial arm creates neither policy nor arm state.
 Changing selector source after arming changes the runtime build hash and fails closed.
 
 ## Fill-Model Calibration

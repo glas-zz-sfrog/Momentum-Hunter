@@ -13,7 +13,6 @@ from unittest.mock import patch
 
 from momentum_hunter.shadow_market_validity import (
     SHADOW_SELECTOR_ARM_CONFIRMATION,
-    synthetic_pass_proofs,
 )
 from momentum_hunter.shadow_selection import (
     SELECTION_STARTED,
@@ -44,6 +43,7 @@ from tests.test_shadow_trading import (
     completed_trade,
     report_payload,
 )
+from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
 
 
 class ShadowSampleReadinessTests(unittest.TestCase):
@@ -126,7 +126,13 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         if not service.selector_is_armed():
             service.arm_automatic_selector(
                 confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
-                prerequisite_proofs=synthetic_pass_proofs(self.id()),
+                prerequisite_proof_paths=write_synthetic_proof_artifacts(
+                    self.root,
+                    self.id(),
+                    sample_version=service.sample_definition.sample_version,
+                    activation_path=service.activation_store.path,
+                    verified_at=decision_at - timedelta(seconds=30),
+                ),
                 armed_at=decision_at - timedelta(seconds=20),
             )
         quote = {

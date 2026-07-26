@@ -20,11 +20,12 @@ from momentum_hunter.shadow_market_validity import (
     decision_cycle_summary,
     entry_window_findings,
     forced_exit_deadline,
+    hash_prerequisite_proof_artifacts,
     is_nyse_early_close,
     portfolio_findings,
     runtime_build_hash,
     shadow_constitution_hash,
-    synthetic_pass_proofs,
+    validate_arm_record,
 )
 from momentum_hunter.shadow_selection import (
     SELECTION_ALREADY_PROCESSED,
@@ -48,6 +49,7 @@ from momentum_hunter.workstation_shadow import (
     ShadowWorkspaceService,
 )
 from tests.test_shadow_trading import report_payload
+from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
 
 
 class DictQuoteSource:
@@ -116,9 +118,24 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         if arm:
             self.service.arm_automatic_selector(
                 confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
-                prerequisite_proofs=synthetic_pass_proofs(self.id()),
+                prerequisite_proof_paths=self.proof_artifacts(self.id()),
                 armed_at=at("2026-07-23T09:57:30-05:00"),
             )
+
+    def proof_artifacts(
+        self,
+        seed: str,
+        *,
+        verified_at: datetime | None = None,
+    ) -> dict[str, Path]:
+        return write_synthetic_proof_artifacts(
+            self.root,
+            seed,
+            sample_version=self.service.sample_definition.sample_version,
+            activation_path=self.service.activation_store.path,
+            verified_at=verified_at
+            or at("2026-07-23T09:57:20-05:00"),
+        )
 
     def write_report(
         self,
@@ -141,15 +158,15 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
 
     def test_write_once_arm_record_replaces_source_code_switch(self) -> None:
         self.activate(arm=False)
-        proofs = synthetic_pass_proofs("arm")
+        proof_paths = self.proof_artifacts("arm")
         arm = self.service.arm_automatic_selector(
             confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
-            prerequisite_proofs=proofs,
+            prerequisite_proof_paths=proof_paths,
             armed_at=at("2026-07-23T09:57:30-05:00"),
         )
         repeated = self.service.arm_automatic_selector(
             confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
-            prerequisite_proofs=proofs,
+            prerequisite_proof_paths=proof_paths,
             armed_at=at("2026-07-23T09:57:30-05:00"),
         )
 
@@ -160,9 +177,180 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         with self.assertRaisesRegex((ValueError, ShadowStateError), "immutable"):
             self.service.arm_automatic_selector(
                 confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
-                prerequisite_proofs=synthetic_pass_proofs("different"),
+                prerequisite_proof_paths=self.proof_artifacts("different"),
                 armed_at=at("2026-07-23T09:57:31-05:00"),
             )
+
+    def test_arm_hashes_actual_artifacts_and_tamper_changes_identity(self) -> None:
+        self.activate(arm=False)
+        proof_paths = self.proof_artifacts("artifact-hashes")
+        armed_at = at("2026-07-23T09:57:30-05:00")
+        expected = hash_prerequisite_proof_artifacts(
+            proof_paths,
+            sample_version=self.service.sample_definition.sample_version,
+            activation_hash=hashlib.sha256(
+                self.service.activation_store.path.read_bytes()
+            ).hexdigest(),
+            activated_at=at("2026-07-23T09:57:00-05:00"),
+            constitution_hash=shadow_constitution_hash(),
+            build_hash=runtime_build_hash(),
+            armed_at=armed_at,
+        )
+
+        arm = self.service.arm_automatic_selector(
+            confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+            prerequisite_proof_paths=proof_paths,
+            armed_at=armed_at,
+        )
+
+        self.assertEqual(expected.hashes, arm.prerequisite_proofs)
+        self.assertEqual(expected.paths, arm.prerequisite_proof_paths)
+        changed_path = proof_paths["ranking_and_tie_breaks"]
+        changed_payload = json.loads(changed_path.read_text(encoding="utf-8"))
+        changed_payload["summary"] = "Changed after the immutable arm."
+        changed_path.write_text(
+            json.dumps(changed_payload, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ShadowStateError, "immutable"):
+            self.service.arm_automatic_selector(
+                confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+                prerequisite_proof_paths=proof_paths,
+                armed_at=at("2026-07-23T09:57:30-05:00"),
+            )
+        with self.assertRaisesRegex(
+            ShadowStateError,
+            "no longer match",
+        ):
+            self.service.selector_arm_record()
+        self.assertEqual(arm, self.service.selector_arm_store.load())
+
+    def test_invalid_artifacts_fail_before_policy_or_arm_state(self) -> None:
+        self.activate(arm=False)
+        valid_paths = self.proof_artifacts("invalid-artifacts")
+        missing_paths = dict(valid_paths)
+        missing_paths["visual_acceptance"] = self.root / "missing-proof.json"
+        with self.assertRaisesRegex(ShadowStateError, "unavailable"):
+            self.service.arm_automatic_selector(
+                confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+                prerequisite_proof_paths=missing_paths,
+                armed_at=at("2026-07-23T09:57:30-05:00"),
+            )
+
+        empty_path = self.root / "empty-proof.json"
+        empty_path.write_bytes(b"")
+        empty_paths = dict(valid_paths)
+        empty_paths["visual_acceptance"] = empty_path
+        with self.assertRaisesRegex(ShadowStateError, "empty"):
+            self.service.arm_automatic_selector(
+                confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+                prerequisite_proof_paths=empty_paths,
+                armed_at=at("2026-07-23T09:57:30-05:00"),
+            )
+
+        duplicate_paths = dict(valid_paths)
+        duplicate_paths["visual_acceptance"] = duplicate_paths[
+            "ranking_and_tie_breaks"
+        ]
+        with self.assertRaisesRegex(ShadowStateError, "distinct"):
+            self.service.arm_automatic_selector(
+                confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+                prerequisite_proof_paths=duplicate_paths,
+                armed_at=at("2026-07-23T09:57:30-05:00"),
+            )
+
+        oversized_path = self.root / "oversized-proof.bin"
+        oversized_path.write_bytes(b"x" * (4 * 1024 * 1024 + 1))
+        oversized_paths = dict(valid_paths)
+        oversized_paths["visual_acceptance"] = oversized_path
+        with self.assertRaisesRegex(ShadowStateError, "too large"):
+            self.service.arm_automatic_selector(
+                confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+                prerequisite_proof_paths=oversized_paths,
+                armed_at=at("2026-07-23T09:57:30-05:00"),
+            )
+
+        failed_status_paths = self.proof_artifacts("failed-status")
+        failed_status_path = failed_status_paths["visual_acceptance"]
+        failed_status = json.loads(
+            failed_status_path.read_text(encoding="utf-8")
+        )
+        failed_status["status"] = "FAIL"
+        failed_status_path.write_text(
+            json.dumps(failed_status, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ShadowStateError, "context"):
+            self.service.arm_automatic_selector(
+                confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+                prerequisite_proof_paths=failed_status_paths,
+                armed_at=at("2026-07-23T09:57:30-05:00"),
+            )
+
+        mismatched_evidence_paths = self.proof_artifacts(
+            "mismatched-evidence"
+        )
+        evidence_proof = json.loads(
+            mismatched_evidence_paths["visual_acceptance"].read_text(
+                encoding="utf-8"
+            )
+        )
+        evidence_path = (
+            mismatched_evidence_paths["visual_acceptance"].parent
+            / evidence_proof["evidence"][0]["path"]
+        )
+        evidence_path.write_text("tampered evidence\n", encoding="utf-8")
+        with self.assertRaisesRegex(ShadowStateError, "hash does not match"):
+            self.service.arm_automatic_selector(
+                confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+                prerequisite_proof_paths=mismatched_evidence_paths,
+                armed_at=at("2026-07-23T09:57:30-05:00"),
+            )
+
+        self.assertFalse(self.service.selector_arm_store.path.exists())
+        self.assertFalse(self.service.selection_policy_store.path.exists())
+        self.assertFalse(self.state_path.exists())
+
+    def test_arm_record_rejects_nonhex_artifact_digest(self) -> None:
+        self.activate(arm=False)
+        arm = self.service.arm_automatic_selector(
+            confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+            prerequisite_proof_paths=self.proof_artifacts("nonhex-proof"),
+            armed_at=at("2026-07-23T09:57:30-05:00"),
+        )
+        malformed = replace(
+            arm,
+            prerequisite_proofs={
+                **arm.prerequisite_proofs,
+                "visual_acceptance": "PASS:" + "z" * 64,
+            },
+        )
+
+        with self.assertRaisesRegex(ValueError, "visual_acceptance"):
+            validate_arm_record(malformed)
+
+    def test_armed_selector_fails_closed_when_evidence_is_deleted(self) -> None:
+        self.activate(arm=False)
+        proof_paths = self.proof_artifacts("deleted-evidence")
+        self.service.arm_automatic_selector(
+            confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+            prerequisite_proof_paths=proof_paths,
+            armed_at=at("2026-07-23T09:57:30-05:00"),
+        )
+        visual_proof = json.loads(
+            proof_paths["visual_acceptance"].read_text(encoding="utf-8")
+        )
+        evidence_path = (
+            proof_paths["visual_acceptance"].parent
+            / visual_proof["evidence"][0]["path"]
+        )
+        evidence_path.unlink()
+
+        with self.assertRaisesRegex(
+            ShadowStateError,
+            "failed revalidation",
+        ):
+            self.service.selector_is_armed()
 
     def test_runtime_build_hash_includes_schwab_quote_boundary(self) -> None:
         root = Path(shadow_market_validity_module.__file__).resolve().parent
@@ -181,10 +369,15 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
 
     def test_incomplete_proofs_cannot_arm(self) -> None:
         self.activate(arm=False)
+        artifacts = self.proof_artifacts("incomplete")
         with self.assertRaisesRegex((ValueError, ShadowStateError), "proof"):
             self.service.arm_automatic_selector(
                 confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
-                prerequisite_proofs={"ranking_and_tie_breaks": "PASS:" + "0" * 64},
+                prerequisite_proof_paths={
+                    "ranking_and_tie_breaks": artifacts[
+                        "ranking_and_tie_breaks"
+                    ]
+                },
                 armed_at=at("2026-07-23T09:57:30-05:00"),
             )
         self.assertFalse(self.service.selector_arm_store.path.exists())
@@ -455,7 +648,13 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
                     )
                 service.arm_automatic_selector(
                     confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
-                    prerequisite_proofs=synthetic_pass_proofs(name),
+                    prerequisite_proof_paths=write_synthetic_proof_artifacts(
+                        temporary,
+                        name,
+                        sample_version=service.sample_definition.sample_version,
+                        activation_path=service.activation_store.path,
+                        verified_at=at("2026-07-23T09:47:20-05:00"),
+                    ),
                     armed_at=at("2026-07-23T09:47:30-05:00"),
                 )
                 payload = report_payload()
@@ -1211,7 +1410,13 @@ def activated_armed_service(root: Path, *, seed: str) -> ShadowTradingService:
         )
     service.arm_automatic_selector(
         confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
-        prerequisite_proofs=synthetic_pass_proofs(seed),
+        prerequisite_proof_paths=write_synthetic_proof_artifacts(
+            root,
+            seed,
+            sample_version=service.sample_definition.sample_version,
+            activation_path=service.activation_store.path,
+            verified_at=at("2026-07-23T09:57:20-05:00"),
+        ),
         armed_at=at("2026-07-23T09:57:30-05:00"),
     )
     return service

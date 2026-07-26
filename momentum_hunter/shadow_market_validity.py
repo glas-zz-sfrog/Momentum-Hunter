@@ -9,7 +9,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 from momentum_hunter.opportunity_alerts import (
@@ -23,9 +23,13 @@ from momentum_hunter.trade_planning import parse_datetime
 EASTERN_TZ = ZoneInfo("America/New_York")
 SHADOW_MARKET_POLICY_VERSION = "official-shadow-market-validity-v1"
 SHADOW_CONSTITUTION_VERSION = "official-shadow-constitution-v1"
-SHADOW_SELECTOR_ARM_SCHEMA_VERSION = 1
+SHADOW_SELECTOR_ARM_SCHEMA_VERSION = 2
 SHADOW_DECISION_CYCLE_SCHEMA_VERSION = 1
 SHADOW_SELECTOR_ARM_CONFIRMATION = "ARM OFFICIAL SHADOW SELECTOR"
+SELECTOR_PROOF_ARTIFACT_SCHEMA_VERSION = 1
+MAX_SELECTOR_PROOF_ARTIFACT_BYTES = 4 * 1024 * 1024
+MAX_SELECTOR_EVIDENCE_ARTIFACT_BYTES = 32 * 1024 * 1024
+MAX_SELECTOR_EVIDENCE_FILES_PER_PROOF = 16
 SHADOW_SELECTOR_ARM_REQUIRED_PROOFS = (
     "canonical_merge_backup",
     "counterfactuals",
@@ -111,6 +115,13 @@ class SelectorArmRecord:
     constitution_hash: str
     build_hash: str
     prerequisite_proofs: dict[str, str]
+    prerequisite_proof_paths: dict[str, str]
+
+
+@dataclass(frozen=True)
+class VerifiedSelectorProofArtifacts:
+    hashes: dict[str, str]
+    paths: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -616,6 +627,12 @@ class SelectorArmStore:
                 str(key): str(value)
                 for key, value in dict(payload.get("prerequisite_proofs", {})).items()
             },
+            prerequisite_proof_paths={
+                str(key): str(value)
+                for key, value in dict(
+                    payload.get("prerequisite_proof_paths", {})
+                ).items()
+            },
         )
         validate_arm_record(record)
         return record
@@ -827,9 +844,225 @@ def validate_arm_record(record: SelectorArmRecord) -> None:
         raise ValueError("Selector arm record constitution version is unsupported.")
     if set(record.prerequisite_proofs) != set(SHADOW_SELECTOR_ARM_REQUIRED_PROOFS):
         raise ValueError("Selector arm record prerequisite proof set is incomplete.")
+    if set(record.prerequisite_proof_paths) != set(
+        SHADOW_SELECTOR_ARM_REQUIRED_PROOFS
+    ):
+        raise ValueError(
+            "Selector arm record prerequisite proof path set is incomplete."
+        )
     for name, proof in record.prerequisite_proofs.items():
-        if not proof.startswith("PASS:") or len(proof) != 69:
+        digest = proof.removeprefix("PASS:")
+        if (
+            not proof.startswith("PASS:")
+            or len(digest) != 64
+            or any(char not in "0123456789abcdef" for char in digest)
+        ):
             raise ValueError(f"Selector arm prerequisite proof is invalid: {name}.")
+    for name, raw_path in record.prerequisite_proof_paths.items():
+        if not raw_path or not Path(raw_path).is_absolute():
+            raise ValueError(
+                f"Selector arm prerequisite proof path is invalid: {name}."
+            )
+
+
+def hash_prerequisite_proof_artifacts(
+    artifact_paths: Mapping[str, str | Path],
+    *,
+    sample_version: str,
+    activation_hash: str,
+    activated_at: datetime,
+    constitution_hash: str,
+    build_hash: str,
+    armed_at: datetime,
+) -> VerifiedSelectorProofArtifacts:
+    frozen_paths = dict(artifact_paths)
+    if set(frozen_paths) != set(SHADOW_SELECTOR_ARM_REQUIRED_PROOFS):
+        raise ValueError(
+            "Selector arm prerequisite proof artifact set is incomplete."
+        )
+    if not is_offset_aware(armed_at) or not is_offset_aware(activated_at):
+        raise ValueError(
+            "Selector arm prerequisite verification time requires a UTC offset."
+        )
+    if (
+        len(activation_hash) != 64
+        or any(char not in "0123456789abcdef" for char in activation_hash)
+    ):
+        raise ValueError("Selector arm activation hash is invalid.")
+    resolved_paths: set[Path] = set()
+    proofs: dict[str, str] = {}
+    canonical_paths: dict[str, str] = {}
+    for name in SHADOW_SELECTOR_ARM_REQUIRED_PROOFS:
+        raw_path = frozen_paths[name]
+        if not isinstance(raw_path, (str, Path)):
+            raise ValueError(
+                f"Selector arm prerequisite artifact path is invalid: {name}."
+            )
+        path, payload = read_stable_selector_artifact(
+            Path(raw_path),
+            proof_name=name,
+            artifact_role="proof",
+            maximum_bytes=MAX_SELECTOR_PROOF_ARTIFACT_BYTES,
+        )
+        if path in resolved_paths:
+            raise ValueError(
+                f"Selector arm prerequisite artifacts must be distinct: {name}."
+            )
+        resolved_paths.add(path)
+        validate_selector_proof_artifact(
+            name,
+            path,
+            payload,
+            sample_version=sample_version,
+            activation_hash=activation_hash,
+            activated_at=activated_at,
+            constitution_hash=constitution_hash,
+            build_hash=build_hash,
+            armed_at=armed_at,
+        )
+        proofs[name] = f"PASS:{hashlib.sha256(payload).hexdigest()}"
+        canonical_paths[name] = str(path)
+    return VerifiedSelectorProofArtifacts(
+        hashes=proofs,
+        paths=canonical_paths,
+    )
+
+
+def read_stable_selector_artifact(
+    supplied_path: Path,
+    *,
+    proof_name: str,
+    artifact_role: str,
+    maximum_bytes: int,
+) -> tuple[Path, bytes]:
+    if supplied_path.is_symlink():
+        raise ValueError(
+            f"Selector arm {artifact_role} artifact cannot be a symlink: {proof_name}."
+        )
+    try:
+        path = supplied_path.resolve(strict=True)
+        if not path.is_file():
+            raise ValueError(
+                f"Selector arm {artifact_role} artifact is not a file: {proof_name}."
+            )
+        before = path.stat()
+        if before.st_size <= 0:
+            raise ValueError(
+                f"Selector arm {artifact_role} artifact is empty: {proof_name}."
+            )
+        if before.st_size > maximum_bytes:
+            raise ValueError(
+                f"Selector arm {artifact_role} artifact is too large: {proof_name}."
+            )
+        payload = path.read_bytes()
+        after = path.stat()
+    except OSError as exc:
+        raise ValueError(
+            f"Selector arm {artifact_role} artifact is unavailable: {proof_name}."
+        ) from exc
+    if (
+        len(payload) != before.st_size
+        or before.st_size != after.st_size
+        or before.st_mtime_ns != after.st_mtime_ns
+    ):
+        raise ValueError(
+            f"Selector arm {artifact_role} artifact changed while reading: {proof_name}."
+        )
+    return path, payload
+
+
+def validate_selector_proof_artifact(
+    proof_name: str,
+    path: Path,
+    payload: bytes,
+    *,
+    sample_version: str,
+    activation_hash: str,
+    activated_at: datetime,
+    constitution_hash: str,
+    build_hash: str,
+    armed_at: datetime,
+) -> None:
+    try:
+        artifact = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError(
+            f"Selector arm proof artifact is not valid UTF-8 JSON: {proof_name}."
+        ) from None
+    if not isinstance(artifact, dict):
+        raise ValueError(
+            f"Selector arm proof artifact has an invalid shape: {proof_name}."
+        )
+    verified_at = parse_datetime(str(artifact.get("verified_at", "")))
+    if (
+        artifact.get("schema_version")
+        != SELECTOR_PROOF_ARTIFACT_SCHEMA_VERSION
+        or artifact.get("proof_name") != proof_name
+        or artifact.get("status") != "PASS"
+        or artifact.get("sample_version") != sample_version
+        or artifact.get("activation_hash") != activation_hash
+        or artifact.get("constitution_hash") != constitution_hash
+        or artifact.get("build_hash") != build_hash
+        or not is_offset_aware(verified_at)
+        or (verified_at is not None and verified_at < activated_at)
+        or (verified_at is not None and verified_at > armed_at)
+        or not str(artifact.get("summary", "")).strip()
+    ):
+        raise ValueError(
+            f"Selector arm proof artifact context is invalid: {proof_name}."
+        )
+    evidence = artifact.get("evidence")
+    if (
+        not isinstance(evidence, list)
+        or not evidence
+        or len(evidence) > MAX_SELECTOR_EVIDENCE_FILES_PER_PROOF
+    ):
+        raise ValueError(
+            f"Selector arm proof artifact lacks evidence: {proof_name}."
+        )
+    bundle_root = path.parent.resolve()
+    seen_evidence: set[Path] = set()
+    for item in evidence:
+        if not isinstance(item, dict):
+            raise ValueError(
+                f"Selector arm proof evidence has an invalid shape: {proof_name}."
+            )
+        relative_value = str(item.get("path", "")).strip()
+        expected_digest = str(item.get("sha256", "")).strip()
+        relative_path = Path(relative_value)
+        if (
+            not relative_value
+            or relative_path.is_absolute()
+            or relative_path.drive
+            or ".." in relative_path.parts
+            or len(expected_digest) != 64
+            or any(
+                char not in "0123456789abcdef"
+                for char in expected_digest
+            )
+        ):
+            raise ValueError(
+                f"Selector arm proof evidence reference is invalid: {proof_name}."
+            )
+        evidence_path, evidence_payload = read_stable_selector_artifact(
+            path.parent / relative_path,
+            proof_name=proof_name,
+            artifact_role="evidence",
+            maximum_bytes=MAX_SELECTOR_EVIDENCE_ARTIFACT_BYTES,
+        )
+        if (
+            not evidence_path.is_relative_to(bundle_root)
+            or evidence_path == path
+            or evidence_path in seen_evidence
+        ):
+            raise ValueError(
+                f"Selector arm proof evidence path is invalid: {proof_name}."
+            )
+        seen_evidence.add(evidence_path)
+        if hashlib.sha256(evidence_payload).hexdigest() != expected_digest:
+            raise ValueError(
+                f"Selector arm proof evidence hash does not match: {proof_name}."
+            )
 
 
 def selector_arm_id(
@@ -842,7 +1075,7 @@ def selector_arm_id(
     prerequisite_proofs: dict[str, str],
 ) -> str:
     return stable_hash(
-        "shadow-selector-arm-v1",
+        "shadow-selector-arm-v2",
         sample_version,
         strategy_configuration_fingerprint,
         selection_policy_fingerprint,
@@ -850,16 +1083,6 @@ def selector_arm_id(
         build_hash,
         canonical_json(prerequisite_proofs),
     )
-
-
-def synthetic_pass_proofs(seed: str = "test") -> dict[str, str]:
-    """Build deterministic test-only proof values without touching production state."""
-
-    return {
-        name: f"PASS:{stable_hash(seed, name)}"
-        for name in SHADOW_SELECTOR_ARM_REQUIRED_PROOFS
-    }
-
 
 def build_counterfactual_marks(cycle: dict[str, Any]) -> list[dict[str, Any]]:
     baselines: dict[str, dict[str, Any]] = {}
