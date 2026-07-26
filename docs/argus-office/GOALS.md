@@ -32,19 +32,55 @@ Acceptance Direction:
 - Goal Steward verifies the charter before Builder implementation begins.
 - Completion reports map verification back to the charter instead of redefining success around what was easiest to implement.
 
-## Automation And Simulation: Build The Machine Room Safely
+## Automation And Simulation: Keep Complexity Behind Progressive Disclosure
 
 Status: Active
 
-Goal: Momentum Hunter should grow a Machine Room experience for automation, simulation, paper-trading preparation, broker awareness, and future execution supervision under strict gates.
+Goal: Momentum Hunter should expose automation, simulation, evidence, risk, and future broker supervision through the accepted WPF workstation without forcing the operator to manage internal machinery.
 
-Operator Pain: Steven needs to see how the autonomous side will evolve before broker integration begins, without mixing planning language with approved live-trade language.
+Operator Pain: Steven needs a quiet, truthful workstation that reveals detail when needed without turning every action into a warning label or presenting candidates as approved trades.
 
 Acceptance Direction:
 - The operator experience uses neutral product terms: Automation, Simulation, Machine Room, Risk Governor, Execution Ledger, and Trade Plan.
-- Machine Room surfaces Machine Status, Top 5 Trade Plan Candidates, Selected Candidate Workbench, Trade Plan Ladder, Risk Governor, Order Console, Machine Log, and Execution Ledger concepts.
+- The WPF workstation is the canonical operator shell; Python remains the canonical trading and evidence engine.
+- Primary workflows stay concise. TradePlan, Risk Governor, execution evidence, and diagnostics appear through progressive disclosure rather than a permanently dense cockpit.
+- Global mode treatment communicates Simulation, supervised Live, or locked state without repeating safety labels on ordinary controls.
 - TradePlan, Risk Governor, Broker Adapter, and Execution Ledger boundaries exist before any broker work.
-- Live execution remains locked until Steven explicitly approves a future live-execution Goal Charter.
+- FakeBroker remains the only automated execution boundary until a later gate explicitly authorizes a transmitting adapter.
+- Live execution remains locked until Steven explicitly approves the applicable supervised-canary or unattended-live Goal Charter.
+
+## Evidence: Prove Edge Before Authority
+
+Status: Active
+
+Goal: Momentum Hunter must demonstrate prospective, reproducible, execution-adjusted evidence before strategy-driven real-money use.
+
+Operator Pain: A technically reliable system can still create a flattering sample through stale inputs, correlated trades, optimistic fills, selective denominators, or market beta.
+
+Acceptance Direction:
+- Official Shadow selection is automatic, deterministic, versioned, and independent of operator discretion.
+- The frozen sample constitution defines ordering, eligibility, freshness, deduplication, concurrency, cooldown, fill assumptions, session rules, data sources, benchmarks, and invalidation rules.
+- Every expected decision cycle is accounted for, including skipped, blocked, unfilled, unavailable, and failed cycles.
+- Results disclose market-session, regime, sector, catalyst, symbol, and time-of-day concentration.
+- Counterfactual observations compare the selected candidate with other eligible candidates, a deterministic random eligible candidate, and relevant benchmarks without creating extra portfolio trades.
+- The first 30 completed trades prove pipeline and evidence integrity only. Strategy conclusions require a larger, diverse prospective sample.
+- Data-source or methodological changes create a new sample version; prior evidence is never silently recomputed.
+
+## Execution: Constrain Every New Authority
+
+Status: Active
+
+Goal: Every progression from FakeBroker to read-only broker access, broker plumbing, supervised strategy execution, and unattended execution must reduce ambiguity rather than merely add capability.
+
+Operator Pain: A low-dollar account limits financial loss but does not prevent wrong-account routing, ambiguous retries, stale state, credential misuse, or a malformed automation path.
+
+Acceptance Direction:
+- Read-only Schwab work remains bound to the sole approved `2573` `CASH` account and fails closed on any identity, account-count, position, permission, or credential anomaly.
+- Broker plumbing is proven with a boring, liquid, preapproved instrument before any Momentum Hunter strategy can drive a real order.
+- Pre-canary, canary-active, and post-canary position expectations are explicit and reconciled to the immutable ledger.
+- Settled cash, order identity, submission ambiguity, partial fills, cancel races, restart reconciliation, and an out-of-process kill path are proven before strategy-driven execution.
+- No transmitting code is enabled under the previously surfaced Schwab Client Secret until vendor remediation is documented.
+- A supervised live canary and unattended live execution are separate gates; neither advances automatically.
 
 ## Architecture: Modernize Without A Premature Rewrite
 

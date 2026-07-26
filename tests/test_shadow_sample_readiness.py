@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import io
 import inspect
@@ -26,7 +27,9 @@ from momentum_hunter.shadow_trading import (
     audit_shadow_trade,
     build_shadow_review_snapshot,
     build_shadow_sample_metadata,
+    expected_shadow_selection_policy_evidence,
     main,
+    stable_id,
 )
 from tests.test_shadow_trading import (
     at,
@@ -38,9 +41,17 @@ from tests.test_shadow_trading import (
 
 class ShadowSampleReadinessTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.selector_arm_patch = patch(
+            "momentum_hunter.shadow_trading.SHADOW_AUTOMATIC_SELECTOR_ARMED",
+            True,
+        )
+        self.selector_arm_patch.start()
+        self.addCleanup(self.selector_arm_patch.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        self.report_path = self.root / "trade-plan.json"
+        self.report_path = (
+            self.root / "trade-plan-briefing-2026-07-24-morning.json"
+        )
         self.state_path = self.root / "shadow-state.json"
         self.report_path.write_text(json.dumps(report_payload()), encoding="utf-8")
         self.policy = ShadowExecutionPolicy(slippage_bps=7.5, buying_power=25_000)
@@ -89,11 +100,23 @@ class ShadowSampleReadinessTests(unittest.TestCase):
             )
 
     def start(self, service: ShadowTradingService, command_id: str = "sample-command"):
+        decision_at = at("2026-07-24T10:00:00-05:00")
+        selection_evidence = None
+        if service.sample_activation is not None:
+            service.freeze_automatic_selection_policy(
+                recorded_at=decision_at,
+            )
+            source_sha = hashlib.sha256(
+                self.report_path.read_bytes()
+            ).hexdigest()
+            command_id = stable_id("shadow-auto-report", source_sha)
+            selection_evidence = expected_shadow_selection_policy_evidence()
         return service.start_trade(
             self.report_path,
             symbol="TEST",
             simulation_command_id=command_id,
-            decision_at=at("2026-07-24T10:00:00-05:00"),
+            decision_at=decision_at,
+            selection_policy_evidence=selection_evidence,
         )
 
     def test_definition_fingerprint_is_deterministic_and_policy_sensitive(self) -> None:
@@ -335,7 +358,7 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         self.assertFalse(self.state_path.exists())
         self.assertEqual(report_before, self.report_path.read_bytes())
         self.assertEqual(
-            {"trade-plan.json", self.activation_path.name},
+            {self.report_path.name, self.activation_path.name},
             {path.name for path in self.root.iterdir()},
         )
 

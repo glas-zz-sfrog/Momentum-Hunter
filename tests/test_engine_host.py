@@ -68,6 +68,7 @@ class EngineHostRuntimeTests(unittest.TestCase):
             cycle_runner=lambda: calls.append("capture") or SimpleNamespace(target_count=3),
             shadow_workspace_loader=lambda: {},
             shadow_starter=lambda _symbol, _command_id: {},
+            shadow_auto_selector=lambda: calls.append("select") or {"status": "TRADE_STARTED"},
             shadow_observation_runner=lambda: calls.append("shadow") or {},
             advance_shadow_after_collection=True,
         )
@@ -75,7 +76,44 @@ class EngineHostRuntimeTests(unittest.TestCase):
         result = runtime.execute(COMMAND_RUN_CYCLE, "capture-and-shadow")
 
         self.assertTrue(result.accepted)
-        self.assertEqual(["capture", "shadow"], calls)
+        self.assertEqual(["capture", "select", "shadow"], calls)
+        self.assertEqual(
+            "TRADE_STARTED",
+            result.payload["shadowAutomaticSelection"]["status"],
+        )
+
+    def test_selection_failure_still_advances_existing_shadow_observations(
+        self,
+    ) -> None:
+        calls: list[str] = []
+
+        def fail_selection() -> dict[str, object]:
+            calls.append("select")
+            raise ValueError("bad report")
+
+        runtime = EngineHostRuntime(
+            cycle_runner=(
+                lambda: calls.append("capture")
+                or SimpleNamespace(target_count=3)
+            ),
+            shadow_workspace_loader=lambda: {},
+            shadow_starter=lambda _symbol, _command_id: {},
+            shadow_auto_selector=fail_selection,
+            shadow_observation_runner=(
+                lambda: calls.append("shadow") or {"activeTradeCount": 1}
+            ),
+            advance_shadow_after_collection=True,
+        )
+
+        result = runtime.execute(
+            COMMAND_RUN_CYCLE,
+            "capture-selection-failure",
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual("COLLECTION_FAILED", result.code)
+        self.assertIn("Automatic Shadow selection failed", result.summary)
+        self.assertEqual(["capture", "select", "shadow"], calls)
 
     def test_pause_blocks_collection_until_resume(self) -> None:
         runs: list[str] = []

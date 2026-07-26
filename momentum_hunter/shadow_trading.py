@@ -39,9 +39,15 @@ DEFAULT_SHADOW_SAMPLE_VERSION = "engineering-preflight-v1"
 OFFICIAL_SHADOW_SAMPLE_VERSION = "official-shadow-v1"
 SHADOW_SAMPLE_ACTIVATION_SCHEMA_VERSION = 1
 SHADOW_SAMPLE_ACTIVATION_CONFIRMATION = "START OFFICIAL SHADOW SAMPLE"
+SHADOW_SELECTION_POLICY_SCHEMA_VERSION = 1
+SHADOW_SELECTION_POLICY_VERSION = "first-clean-risk-approved-per-scheduled-report-v1"
+SHADOW_AUTOMATIC_SELECTOR_ARMED = False
 SHADOW_STATE_PATH = DATA_DIR / "shadow-trading" / "shadow-trading-state.json"
 SHADOW_SAMPLE_ACTIVATION_PATH = (
     DATA_DIR / "shadow-trading" / "shadow-sample-activation.json"
+)
+SHADOW_SELECTION_POLICY_PATH = (
+    DATA_DIR / "shadow-trading" / "shadow-selection-policy.json"
 )
 SHADOW_REPORTS_DIR = DATA_DIR / "reports"
 MIN_MEANINGFUL_SAMPLE_SIZE = 30
@@ -90,6 +96,24 @@ class ShadowSampleActivation:
     schema_version: int
     activated_at: str
     sample_metadata: ShadowSampleMetadata
+
+
+@dataclass(frozen=True)
+class ShadowSelectionPolicy:
+    schema_version: int
+    recorded_at: str
+    sample_version: str
+    strategy_configuration_fingerprint: str
+    selection_policy_version: str
+    selection_policy_fingerprint: str
+    selection_policy_json: str
+
+
+@dataclass(frozen=True)
+class AutomaticShadowCandidateChoice:
+    symbol: str
+    rank: int
+    candidates_evaluated: int
 
 
 @dataclass(frozen=True)
@@ -199,6 +223,9 @@ class ShadowOrderTicket:
     strategy_configuration_fingerprint: str = ""
     fill_model_version: str = ""
     evidence_schema_version: int = 0
+    selection_policy_recorded_at: str = ""
+    selection_policy_version: str = ""
+    selection_policy_fingerprint: str = ""
     exact_ticket_entered: str = ""
     operator_modifications: str = ""
     paper_money_result: str = ""
@@ -231,6 +258,9 @@ class ShadowTrade:
     status: str
     data_quality_state: str
     sample_metadata: ShadowSampleMetadata = field(default_factory=ShadowSampleMetadata)
+    selection_policy_recorded_at: str = ""
+    selection_policy_version: str = ""
+    selection_policy_fingerprint: str = ""
     risk_rejection_reasons: tuple[str, ...] = ()
     order: ShadowOrder | None = None
     position: ShadowPosition | None = None
@@ -430,6 +460,264 @@ class ShadowSampleActivationStore:
                 "Shadow sample activation is immutable and already exists."
             ) from exc
         return activation
+
+
+class ShadowSelectionPolicyStore:
+    """Write-once supplement linking automatic selection to an active sample."""
+
+    def __init__(self, path: Path = SHADOW_SELECTION_POLICY_PATH) -> None:
+        self.path = path
+
+    @classmethod
+    def for_state_store(
+        cls,
+        state_store: ShadowStateStore,
+    ) -> ShadowSelectionPolicyStore:
+        if state_store.path == SHADOW_STATE_PATH:
+            return cls()
+        return cls(
+            state_store.path.with_name(
+                f"{state_store.path.stem}-selection-policy.json"
+            )
+        )
+
+    def load(self) -> ShadowSelectionPolicy | None:
+        if not self.path.exists():
+            return None
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ShadowStateError(
+                f"Shadow selection policy cannot be loaded: {type(exc).__name__}"
+            ) from exc
+        expected_fields = {
+            "schema_version",
+            "recorded_at",
+            "sample_version",
+            "strategy_configuration_fingerprint",
+            "selection_policy_version",
+            "selection_policy_fingerprint",
+            "selection_policy_json",
+        }
+        if not isinstance(payload, dict) or set(payload) != expected_fields:
+            raise ShadowStateError(
+                "Shadow selection policy contains missing or unsupported fields."
+            )
+        try:
+            policy = ShadowSelectionPolicy(
+                schema_version=int(payload.get("schema_version", 0)),
+                recorded_at=str(payload.get("recorded_at", "")),
+                sample_version=str(payload.get("sample_version", "")),
+                strategy_configuration_fingerprint=str(
+                    payload.get("strategy_configuration_fingerprint", "")
+                ),
+                selection_policy_version=str(
+                    payload.get("selection_policy_version", "")
+                ),
+                selection_policy_fingerprint=str(
+                    payload.get("selection_policy_fingerprint", "")
+                ),
+                selection_policy_json=str(
+                    payload.get("selection_policy_json", "")
+                ),
+            )
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ShadowStateError(
+                "Shadow selection policy contains invalid field values."
+            ) from exc
+        validate_shadow_selection_policy(policy)
+        return policy
+
+    def save_once(
+        self,
+        policy: ShadowSelectionPolicy,
+    ) -> ShadowSelectionPolicy:
+        validate_shadow_selection_policy(policy)
+        existing = self.load()
+        if existing is not None:
+            if same_shadow_selection_policy(existing, policy):
+                return existing
+            raise ShadowStateError(
+                "Shadow selection policy is immutable and already exists."
+            )
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with self.path.open("x", encoding="utf-8", newline="\n") as stream:
+                stream.write(json.dumps(asdict(policy), indent=2, sort_keys=True))
+                stream.write("\n")
+        except FileExistsError as exc:
+            existing = self.load()
+            if existing is not None and same_shadow_selection_policy(
+                existing,
+                policy,
+            ):
+                return existing
+            raise ShadowStateError(
+                "Shadow selection policy is immutable and already exists."
+            ) from exc
+        return policy
+
+
+def shadow_selection_policy_definition() -> dict[str, Any]:
+    return {
+        "selection_policy_version": SHADOW_SELECTION_POLICY_VERSION,
+        "report_scope": "canonical_scheduled_trade_plan_reports_only",
+        "candidate_order": "persisted_candidates_order",
+        "candidate_rule": "first_eligible_candidate",
+        "required_risk_status": "Simulation-only",
+        "required_data_quality": "complete_warning_free",
+        "required_plan_values": [
+            "bullish_entry",
+            "bullish_stop",
+            "bullish_target_1",
+            "positive_estimated_shares_for_500",
+        ],
+        "maximum_new_trades_per_source_report": 1,
+        "event_monitor_reports_eligible": False,
+        "execution_boundary": "ProspectiveFakeBroker",
+        "order_transmission": "UNAVAILABLE",
+    }
+
+
+def expected_shadow_selection_policy_evidence() -> dict[str, str]:
+    policy_json = canonical_json(shadow_selection_policy_definition())
+    return {
+        "selection_policy_version": SHADOW_SELECTION_POLICY_VERSION,
+        "selection_policy_fingerprint": hashlib.sha256(
+            policy_json.encode("utf-8")
+        ).hexdigest(),
+    }
+
+
+def automatic_shadow_selector_is_armed() -> bool:
+    """Return the compile-time methodology gate for official automatic selection."""
+
+    return SHADOW_AUTOMATIC_SELECTOR_ARMED
+
+
+def build_shadow_selection_policy(
+    sample_metadata: ShadowSampleMetadata,
+    *,
+    recorded_at: datetime,
+) -> ShadowSelectionPolicy:
+    policy_json = canonical_json(shadow_selection_policy_definition())
+    evidence = expected_shadow_selection_policy_evidence()
+    return ShadowSelectionPolicy(
+        schema_version=SHADOW_SELECTION_POLICY_SCHEMA_VERSION,
+        recorded_at=recorded_at.isoformat(),
+        sample_version=sample_metadata.sample_version,
+        strategy_configuration_fingerprint=(
+            sample_metadata.strategy_configuration_fingerprint
+        ),
+        selection_policy_version=evidence["selection_policy_version"],
+        selection_policy_fingerprint=evidence["selection_policy_fingerprint"],
+        selection_policy_json=policy_json,
+    )
+
+
+def validate_shadow_selection_policy(policy: ShadowSelectionPolicy) -> None:
+    recorded_at = parse_datetime(policy.recorded_at)
+    if (
+        policy.schema_version != SHADOW_SELECTION_POLICY_SCHEMA_VERSION
+        or recorded_at is None
+        or recorded_at.tzinfo is None
+        or recorded_at.utcoffset() is None
+    ):
+        raise ShadowStateError(
+            "Shadow selection policy has an invalid schema or timestamp."
+        )
+    if not SAMPLE_VERSION_PATTERN.fullmatch(policy.sample_version):
+        raise ShadowStateError("Shadow selection policy sample version is invalid.")
+    if not re.fullmatch(
+        r"[0-9a-f]{64}",
+        policy.strategy_configuration_fingerprint,
+    ):
+        raise ShadowStateError(
+            "Shadow selection policy strategy fingerprint is invalid."
+        )
+    evidence = expected_shadow_selection_policy_evidence()
+    if (
+        policy.selection_policy_version != evidence["selection_policy_version"]
+        or policy.selection_policy_fingerprint
+        != evidence["selection_policy_fingerprint"]
+        or policy.selection_policy_json
+        != canonical_json(shadow_selection_policy_definition())
+    ):
+        raise ShadowStateError(
+            "Shadow selection policy does not match the frozen automatic rule."
+        )
+
+
+def same_shadow_selection_policy(
+    left: ShadowSelectionPolicy,
+    right: ShadowSelectionPolicy,
+) -> bool:
+    return (
+        left.sample_version == right.sample_version
+        and left.strategy_configuration_fingerprint
+        == right.strategy_configuration_fingerprint
+        and left.selection_policy_version == right.selection_policy_version
+        and left.selection_policy_fingerprint
+        == right.selection_policy_fingerprint
+        and left.selection_policy_json == right.selection_policy_json
+    )
+
+
+def first_automatic_shadow_candidate(
+    rows: list[Any],
+    *,
+    metadata: dict[str, Any],
+    report_path: Path,
+    decision_at: datetime,
+) -> tuple[AutomaticShadowCandidateChoice | None, int]:
+    evaluated = 0
+    for rank, row in enumerate(rows, 1):
+        if not isinstance(row, dict):
+            continue
+        candidate = candidate_plan_from_report_row(
+            row,
+            rank=rank,
+            source_name=report_path.name,
+            source_path=str(report_path),
+            source_generated_at=str(metadata.get("generated_at", "")),
+        )
+        if candidate is None:
+            continue
+        evaluated += 1
+        risk = evaluate_trade_plan(
+            candidate.trade_plan,
+            ticker=candidate.ticker,
+            trade_plan_id=stable_trade_plan_id(
+                candidate.ticker,
+                candidate.trade_plan,
+            ),
+            checked_at=decision_at,
+        )
+        plan = candidate.trade_plan
+        warnings = list(plan.warnings) + list(plan.blocking_reasons)
+        try:
+            quantity = int(plan.estimated_shares_for_500 or 0)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if (
+            candidate.ticker.strip()
+            and risk.status == "Simulation-only"
+            and risk.allows_simulation
+            and not warnings
+            and quantity > 0
+            and plan.bullish_entry is not None
+            and plan.bullish_stop is not None
+            and plan.bullish_target_1 is not None
+        ):
+            return (
+                AutomaticShadowCandidateChoice(
+                    symbol=candidate.ticker,
+                    rank=rank,
+                    candidates_evaluated=evaluated,
+                ),
+                evaluated,
+            )
+    return None, evaluated
 
 
 def build_shadow_sample_metadata(
@@ -694,6 +982,9 @@ class ShadowTradingService:
             activation_store
             or ShadowSampleActivationStore.for_state_store(self.store)
         )
+        self.selection_policy_store = ShadowSelectionPolicyStore.for_state_store(
+            self.store
+        )
         requested_definition = build_shadow_sample_metadata(
             self.policy,
             sample_version=sample_version,
@@ -812,6 +1103,61 @@ class ShadowTradingService:
             "orderTransmission": "UNAVAILABLE",
         }
 
+    def freeze_automatic_selection_policy(
+        self,
+        *,
+        recorded_at: datetime | None = None,
+    ) -> ShadowSelectionPolicy:
+        if not automatic_shadow_selector_is_armed():
+            raise ShadowStateError(
+                "Official automatic selection is not armed; the Shadow Sample "
+                "Constitution gates are incomplete."
+            )
+        self._refresh_sample_activation()
+        if self.sample_activation is None:
+            raise ShadowStateError(
+                "Automatic selection policy requires an active official sample."
+            )
+        policy = build_shadow_selection_policy(
+            self.sample_definition,
+            recorded_at=recorded_at or now_central(),
+        )
+        persisted = self.selection_policy_store.save_once(policy)
+        self._validate_selection_policy_for_active_sample(persisted)
+        return persisted
+
+    def load_automatic_selection_policy(self) -> ShadowSelectionPolicy:
+        self._refresh_sample_activation()
+        if self.sample_activation is None:
+            raise ShadowStateError(
+                "Automatic selection policy requires an active official sample."
+            )
+        policy = self.selection_policy_store.load()
+        if policy is None:
+            raise ShadowStateError(
+                "Official Shadow sample trades require a persisted automatic "
+                "selection policy."
+            )
+        self._validate_selection_policy_for_active_sample(policy)
+        return policy
+
+    def is_prospective_official_evidence(
+        self,
+        metadata: dict[str, Any],
+        *,
+        decision_at: datetime,
+    ) -> bool:
+        self._refresh_sample_activation()
+        if self.sample_activation is None:
+            raise ShadowStateError(
+                "Prospective official evidence requires an active sample."
+            )
+        return self._official_evidence_is_post_activation(
+            metadata,
+            decision_at=decision_at,
+            activation=self.sample_activation,
+        )
+
     def start_trade(
         self,
         report_path: Path,
@@ -819,8 +1165,25 @@ class ShadowTradingService:
         symbol: str,
         simulation_command_id: str,
         decision_at: datetime | None = None,
+        expected_source_sha256: str | None = None,
+        selection_policy_evidence: dict[str, str] | None = None,
     ) -> ShadowTrade:
         self._refresh_sample_activation()
+        active_selection_policy: ShadowSelectionPolicy | None = None
+        if self.sample_activation is not None:
+            if not automatic_shadow_selector_is_armed():
+                raise ShadowStateError(
+                    "Official automatic selection is not armed; the Shadow Sample "
+                    "Constitution gates are incomplete."
+                )
+            active_selection_policy = self.load_automatic_selection_policy()
+            if selection_policy_evidence != (
+                expected_shadow_selection_policy_evidence()
+            ):
+                raise ValueError(
+                    "Official Shadow sample trades require the exact frozen "
+                    "automatic selection policy evidence."
+                )
         normalized_symbol = symbol.strip().upper()
         if not normalized_symbol:
             raise ValueError("A non-empty symbol is required.")
@@ -828,6 +1191,31 @@ class ShadowTradingService:
             raise ValueError("A stable simulation command ID is required.")
         source_bytes = report_path.read_bytes()
         source_sha = hashlib.sha256(source_bytes).hexdigest()
+        if (
+            self.sample_activation is not None
+            and not is_canonical_scheduled_trade_report_path(report_path)
+        ):
+            raise ValueError(
+                "Official Shadow sample selection requires a canonical scheduled "
+                "trade-planning report."
+            )
+        if expected_source_sha256 is not None:
+            normalized_expected_sha = expected_source_sha256.strip().lower()
+            if not re.fullmatch(r"[0-9a-f]{64}", normalized_expected_sha):
+                raise ValueError("Expected source-report SHA-256 is invalid.")
+            if source_sha != normalized_expected_sha:
+                raise ValueError(
+                    "The source report changed after automatic candidate selection."
+                )
+        if (
+            self.sample_activation is not None
+            and simulation_command_id
+            != stable_id("shadow-auto-report", source_sha)
+        ):
+            raise ValueError(
+                "Official Shadow sample command ID must be derived from the "
+                "immutable source report."
+            )
         try:
             source_report_json = source_bytes.decode("utf-8")
             report = json.loads(source_report_json)
@@ -836,6 +1224,10 @@ class ShadowTradingService:
         if not isinstance(report, dict):
             raise ValueError("The trade-planning report must contain an object.")
         rows = report.get("candidates") or report.get("top_5_for_capital") or []
+        if not isinstance(rows, list):
+            raise ValueError(
+                "The trade-planning report candidate collection is invalid."
+            )
         matches = [(index, row) for index, row in enumerate(rows, 1) if isinstance(row, dict) and str(row.get("symbol", "")).upper() == normalized_symbol]
         if len(matches) != 1:
             raise ValueError(f"Expected exactly one persisted candidate row for {normalized_symbol}; found {len(matches)}.")
@@ -843,11 +1235,36 @@ class ShadowTradingService:
         metadata = report.get("metadata", {}) if isinstance(report.get("metadata"), dict) else {}
         decision_at = decision_at or now_central()
         if self.sample_activation is not None:
+            assert active_selection_policy is not None
+            policy_recorded_at = require_datetime(
+                active_selection_policy.recorded_at,
+                "Shadow selection policy recorded_at",
+            )
+            if policy_recorded_at > decision_at:
+                raise ValueError(
+                    "Official Shadow selection policy was recorded after the "
+                    "trade decision."
+                )
             self._validate_prospective_official_evidence(
                 metadata,
                 decision_at=decision_at,
                 activation=self.sample_activation,
             )
+            automatic_choice, _ = first_automatic_shadow_candidate(
+                rows,
+                metadata=metadata,
+                report_path=report_path,
+                decision_at=decision_at,
+            )
+            if (
+                automatic_choice is None
+                or automatic_choice.symbol != normalized_symbol
+                or automatic_choice.rank != rank
+            ):
+                raise ValueError(
+                    "Official Shadow sample selection must use the first clean "
+                    "Risk-Governor-approved candidate in report order."
+                )
         candidate = candidate_plan_from_report_row(
             row,
             rank=rank,
@@ -882,13 +1299,18 @@ class ShadowTradingService:
         risk = replace(evaluated_risk, result_id=risk_seed)
         risk_json = canonical_json(risk_result_to_dict(risk))
         sample_definition_json = canonical_json(asdict(self.sample_definition))
-        request_fingerprint = stable_id(
+        request_fingerprint_parts = [
             "shadow-request",
             source_sha,
             normalized_symbol,
             plan_fingerprint,
             sample_definition_json,
-        )
+        ]
+        if active_selection_policy is not None:
+            request_fingerprint_parts.append(
+                active_selection_policy.selection_policy_fingerprint
+            )
+        request_fingerprint = stable_id(*request_fingerprint_parts)
         state = self.store.load()
         if self.sample_activation is not None:
             self._validate_state_for_activation(
@@ -904,6 +1326,12 @@ class ShadowTradingService:
             if existing is None:
                 raise ShadowStateError("A command receipt references a missing Shadow Trade.")
             return existing
+        if self.sample_activation is not None and any(
+            item.evidence.source_sha256 == source_sha for item in state.trades
+        ):
+            raise ValueError(
+                "The official Shadow sample permits at most one trade per source report."
+            )
 
         shadow_trade_id = stable_id("shadow-trade", simulation_command_id, evidence_snapshot_id)
         outcome_id = stable_id("shadow-outcome", shadow_trade_id)
@@ -940,6 +1368,21 @@ class ShadowTradingService:
                 ),
                 "fill_model_version": self.sample_definition.fill_model_version,
                 "evidence_schema_version": self.sample_definition.evidence_schema_version,
+                "selection_policy_recorded_at": (
+                    active_selection_policy.recorded_at
+                    if active_selection_policy is not None
+                    else ""
+                ),
+                "selection_policy_version": (
+                    active_selection_policy.selection_policy_version
+                    if active_selection_policy is not None
+                    else ""
+                ),
+                "selection_policy_fingerprint": (
+                    active_selection_policy.selection_policy_fingerprint
+                    if active_selection_policy is not None
+                    else ""
+                ),
             },
         )
         quantity = int(candidate.trade_plan.estimated_shares_for_500 or 0)
@@ -988,6 +1431,21 @@ class ShadowTradingService:
                 ),
                 fill_model_version=self.sample_definition.fill_model_version,
                 evidence_schema_version=self.sample_definition.evidence_schema_version,
+                selection_policy_recorded_at=(
+                    active_selection_policy.recorded_at
+                    if active_selection_policy is not None
+                    else ""
+                ),
+                selection_policy_version=(
+                    active_selection_policy.selection_policy_version
+                    if active_selection_policy is not None
+                    else ""
+                ),
+                selection_policy_fingerprint=(
+                    active_selection_policy.selection_policy_fingerprint
+                    if active_selection_policy is not None
+                    else ""
+                ),
             )
             preview_event = make_ledger_event(
                 shadow_trade_id,
@@ -1071,6 +1529,21 @@ class ShadowTradingService:
             status=status,
             data_quality_state=data_quality_state,
             sample_metadata=self.sample_definition,
+            selection_policy_recorded_at=(
+                active_selection_policy.recorded_at
+                if active_selection_policy is not None
+                else ""
+            ),
+            selection_policy_version=(
+                active_selection_policy.selection_policy_version
+                if active_selection_policy is not None
+                else ""
+            ),
+            selection_policy_fingerprint=(
+                active_selection_policy.selection_policy_fingerprint
+                if active_selection_policy is not None
+                else ""
+            ),
             risk_rejection_reasons=rejection_reasons,
             order=order,
             ticket=ticket,
@@ -1225,6 +1698,33 @@ class ShadowTradingService:
                 + " | ".join(findings)
             )
 
+    def _validate_selection_policy_for_active_sample(
+        self,
+        policy: ShadowSelectionPolicy,
+    ) -> None:
+        validate_shadow_selection_policy(policy)
+        if (
+            policy.sample_version != self.sample_definition.sample_version
+            or policy.strategy_configuration_fingerprint
+            != self.sample_definition.strategy_configuration_fingerprint
+        ):
+            raise ShadowStateError(
+                "Persisted Shadow selection policy does not match the active sample."
+            )
+        assert self.sample_activation is not None
+        recorded_at = require_datetime(
+            policy.recorded_at,
+            "Shadow selection policy recorded_at",
+        )
+        activated_at = require_datetime(
+            self.sample_activation.activated_at,
+            "Shadow sample activation timestamp",
+        )
+        if recorded_at < activated_at:
+            raise ShadowStateError(
+                "Persisted Shadow selection policy predates sample activation."
+            )
+
     @staticmethod
     def _validate_state_for_activation(
         definition: ShadowSampleMetadata,
@@ -1270,6 +1770,22 @@ class ShadowTradingService:
         decision_at: datetime,
         activation: ShadowSampleActivation,
     ) -> None:
+        if not ShadowTradingService._official_evidence_is_post_activation(
+            metadata,
+            decision_at=decision_at,
+            activation=activation,
+        ):
+            raise ValueError(
+                "Official Shadow sample evidence predates sample activation."
+            )
+
+    @staticmethod
+    def _official_evidence_is_post_activation(
+        metadata: dict[str, Any],
+        *,
+        decision_at: datetime,
+        activation: ShadowSampleActivation,
+    ) -> bool:
         if decision_at.tzinfo is None or decision_at.utcoffset() is None:
             raise ValueError(
                 "Official Shadow sample decision time must include a UTC offset."
@@ -1296,9 +1812,7 @@ class ShadowTradingService:
                 "Official Shadow sample report timestamps must include UTC offsets."
             )
         if capture_at < activated_at or generated_at < activated_at:
-            raise ValueError(
-                "Official Shadow sample evidence predates sample activation."
-            )
+            return False
         if capture_at > generated_at:
             raise ValueError(
                 "Official Shadow sample source capture is later than report generation."
@@ -1307,6 +1821,7 @@ class ShadowTradingService:
             raise ValueError(
                 "Official Shadow sample evidence is later than the decision timestamp."
             )
+        return True
 
     def write_ticket(
         self,
@@ -1643,6 +2158,7 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
             findings.append(AuditFinding(trade.shadow_trade_id, field_name, f"Missing Shadow Trading identifier: {field_name}"))
     for message in shadow_sample_metadata_findings(trade.sample_metadata):
         findings.append(AuditFinding(trade.shadow_trade_id, "sample_metadata", message))
+    findings.extend(automatic_selection_findings(trade))
     findings.extend(frozen_evidence_findings(trade))
     findings.extend(frozen_plan_findings(trade))
     expected_shadow_trade_id = stable_id("shadow-trade", trade.simulation_command_id, trade.evidence_snapshot_id)
@@ -1688,6 +2204,24 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
                     "Nontransmitting ticket sample metadata does not match the Shadow Trade.",
                 )
             )
+        ticket_selection = (
+            trade.ticket.selection_policy_recorded_at,
+            trade.ticket.selection_policy_version,
+            trade.ticket.selection_policy_fingerprint,
+        )
+        trade_selection = (
+            trade.selection_policy_recorded_at,
+            trade.selection_policy_version,
+            trade.selection_policy_fingerprint,
+        )
+        if ticket_selection != trade_selection:
+            findings.append(
+                AuditFinding(
+                    trade.shadow_trade_id,
+                    "ticket",
+                    "Nontransmitting ticket selection policy does not match the Shadow Trade.",
+                )
+            )
     if trade.position is not None and "fake_order_filled" not in actions:
         findings.append(AuditFinding(trade.shadow_trade_id, "position", "Position exists without fill evidence."))
     if trade.status == "completed":
@@ -1698,6 +2232,133 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
     if len({event.event_id for event in trade.ledger_events}) != len(trade.ledger_events):
         findings.append(AuditFinding(trade.shadow_trade_id, "event_id", "Duplicate ledger event identifier."))
     return AuditReport("PASS" if not findings else "FAIL", findings)
+
+
+def automatic_selection_findings(trade: ShadowTrade) -> list[AuditFinding]:
+    if not trade.sample_metadata.official_sample_authorized:
+        return []
+
+    findings: list[AuditFinding] = []
+    expected = expected_shadow_selection_policy_evidence()
+    if (
+        trade.selection_policy_version != expected["selection_policy_version"]
+        or trade.selection_policy_fingerprint
+        != expected["selection_policy_fingerprint"]
+    ):
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "selection_policy",
+                "Official Shadow Trade does not carry the frozen automatic selection policy.",
+            )
+        )
+    try:
+        policy_recorded_at = require_datetime(
+            trade.selection_policy_recorded_at,
+            "Shadow selection policy recorded_at",
+        )
+        decision_at = require_datetime(
+            trade.decision_timestamp,
+            "Shadow Trade decision timestamp",
+        )
+    except ValueError:
+        policy_recorded_at = None
+        decision_at = None
+    if (
+        policy_recorded_at is None
+        or decision_at is None
+        or policy_recorded_at > decision_at
+    ):
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "selection_policy",
+                "Official Shadow selection policy was not frozen before its trade decision.",
+            )
+        )
+    expected_command_id = stable_id(
+        "shadow-auto-report",
+        trade.evidence.source_sha256,
+    )
+    if trade.simulation_command_id != expected_command_id:
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "simulation_command_id",
+                "Official Shadow command identity is not derived from its source report.",
+            )
+        )
+    risk_events = [
+        event
+        for event in trade.ledger_events
+        if event.requested_action == "risk_gate_evaluated"
+    ]
+    if (
+        len(risk_events) != 1
+        or str(
+            risk_events[0].payload.get(
+                "selection_policy_recorded_at",
+                "",
+            )
+        )
+        != trade.selection_policy_recorded_at
+        or any(
+            str(risk_events[0].payload.get(field_name, ""))
+            != expected[field_name]
+            for field_name in (
+                "selection_policy_version",
+                "selection_policy_fingerprint",
+            )
+        )
+    ):
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "selection_policy",
+                "Risk evidence does not contain the frozen automatic selection policy.",
+            )
+        )
+    try:
+        source_report = json.loads(trade.evidence.source_report_json)
+        if not isinstance(source_report, dict):
+            raise ValueError("Frozen source report shape is invalid.")
+        choice_decision_at = require_datetime(
+            trade.decision_timestamp,
+            "Shadow Trade decision timestamp",
+        )
+        rows = (
+            source_report.get("candidates")
+            or source_report.get("top_5_for_capital")
+            or []
+        )
+        metadata = (
+            source_report.get("metadata", {})
+            if isinstance(source_report.get("metadata"), dict)
+            else {}
+        )
+        if not isinstance(rows, list):
+            raise ValueError("Frozen source report shape is invalid.")
+        choice, _ = first_automatic_shadow_candidate(
+            rows,
+            metadata=metadata,
+            report_path=Path(trade.evidence.source_path),
+            decision_at=choice_decision_at,
+        )
+    except (json.JSONDecodeError, TypeError, ValueError):
+        choice = None
+    if (
+        choice is None
+        or choice.symbol != trade.symbol
+        or choice.rank != trade.candidate_rank
+    ):
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "selection_policy",
+                "Official Shadow Trade is not the first eligible candidate in frozen report order.",
+            )
+        )
+    return findings
 
 
 def frozen_evidence_findings(trade: ShadowTrade) -> list[AuditFinding]:
@@ -2183,6 +2844,9 @@ def render_shadow_ticket_markdown(ticket: ShadowOrderTicket) -> str:
             f"- Strategy/configuration fingerprint: `{ticket.strategy_configuration_fingerprint or 'UNAVAILABLE'}`",
             f"- Fill-model version: `{ticket.fill_model_version or 'UNVERSIONED'}`",
             f"- Evidence-schema version: {ticket.evidence_schema_version or 'UNVERSIONED'}",
+            f"- Selection-policy recorded: {ticket.selection_policy_recorded_at or 'UNAVAILABLE'}",
+            f"- Selection-policy version: `{ticket.selection_policy_version or 'UNVERSIONED'}`",
+            f"- Selection-policy fingerprint: `{ticket.selection_policy_fingerprint or 'UNAVAILABLE'}`",
             "",
             "## Manual paperMoney Reconciliation",
             "",
@@ -2317,6 +2981,15 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
         status=str(payload.get("status", "")),
         data_quality_state=str(payload.get("data_quality_state", "")),
         sample_metadata=sample_metadata,
+        selection_policy_recorded_at=str(
+            payload.get("selection_policy_recorded_at", "")
+        ),
+        selection_policy_version=str(
+            payload.get("selection_policy_version", "")
+        ),
+        selection_policy_fingerprint=str(
+            payload.get("selection_policy_fingerprint", "")
+        ),
         risk_rejection_reasons=tuple(str(item) for item in payload.get("risk_rejection_reasons", [])),
         order=ShadowOrder(**order_payload) if isinstance(order_payload, dict) else None,
         position=ShadowPosition(**position_payload) if isinstance(position_payload, dict) else None,
@@ -2330,6 +3003,14 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
         processed_observation_ids=tuple(str(item) for item in payload.get("processed_observation_ids", [])),
         last_observation_timestamp=str(payload.get("last_observation_timestamp", "")),
         last_reason=str(payload.get("last_reason", "")),
+    )
+
+
+def is_canonical_scheduled_trade_report_path(path: Path) -> bool:
+    return (
+        path.suffix.lower() == ".json"
+        and path.name.startswith("trade-plan-briefing-")
+        and not path.name.startswith("event-")
     )
 
 

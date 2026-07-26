@@ -18,6 +18,10 @@ from momentum_hunter.shadow_trading import (
     ShadowTradingService,
     shadow_trade_to_dict,
 )
+from momentum_hunter.shadow_selection import (
+    AutomaticShadowSelector,
+    no_report_result,
+)
 from momentum_hunter.time_utils import now_central
 from momentum_hunter.trade_planning import parse_datetime
 
@@ -65,6 +69,12 @@ class ShadowWorkspaceService:
             "summary": trade.last_reason,
             "trade": shadow_trade_to_dict(trade),
         }
+
+    def select_automatic(self) -> dict[str, Any]:
+        report_path = latest_scheduled_trade_report_path(self.paths.reports_dir)
+        if report_path is None:
+            return no_report_result().to_dict()
+        return AutomaticShadowSelector(self.service).select(report_path).to_dict()
 
     def advance_observations(self, *, received_at: datetime | None = None) -> dict[str, Any]:
         received_at = received_at or now_central()
@@ -121,3 +131,12 @@ def session_for_timestamp(timestamp: str) -> str:
         return "unknown"
     current = observed_at.timetz().replace(tzinfo=None)
     return "regular" if time(8, 30) <= current < time(15, 0) else "extended"
+
+
+def latest_scheduled_trade_report_path(reports_dir: Path) -> Path | None:
+    if not reports_dir.exists():
+        return None
+    reports = list(reports_dir.glob("trade-plan-briefing-*.json"))
+    if not reports:
+        return None
+    return max(reports, key=lambda path: path.stat().st_mtime)

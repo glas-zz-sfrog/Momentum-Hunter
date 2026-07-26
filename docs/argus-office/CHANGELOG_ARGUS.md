@@ -1,6 +1,11 @@
 # Argus Changelog
 
 ## Unreleased
+- Added a draft Shadow Sample Constitution covering state transitions, automatic selection, multi-clock freshness, decision-cycle denominators, duplicate/cooldown/concurrency controls, diversity, versioning, and the separate plumbing/strategy canary gates.
+- Hard-disabled the official automatic selector behind a compile-time methodology gate with no environment, config, or CLI bypass; policy creation, automatic selection, and direct official starts all fail closed while exploratory nonofficial simulation remains available.
+- Added frozen automatic-selection policy evidence and audit checks across Shadow trades, ledger events, and nontransmitting tickets, while preserving deterministic report-derived identities.
+- Reconciled current decisions, goals, risks, canonical paths, branch state, verification, and the Schwab credential incident record; the official sample remains `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`.
+- Passed compileall, 93 focused tests, all 797 Python tests, diff/protected-path review, and production-local nonmutation proof returning `CONSTITUTION_NOT_ARMED` without creating policy or Shadow state.
 - Connected successful scheduled captures to write-once prospective TradePlan CSV/JSON/Markdown reports, with duplicate-run recovery and strict source path, offset-aware timing, session, candidate-count, and raw-capture nonmutation checks.
 - Replaced Finviz scan-time per-symbol quote-page enrichment with one custom screener response containing RVOL, ATR, and float; kept quote/news requests separately bounded and read-only.
 - Passed compileall, 16 focused tests, 109 adjacent regressions, all 781 Python tests, a live nonpersisting Finviz shape check, and a temporary end-to-end capture-to-report proof for ARGUS-SHADOW-005.

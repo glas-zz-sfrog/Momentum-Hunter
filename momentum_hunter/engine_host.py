@@ -230,6 +230,7 @@ class EngineHostRuntime:
         shadow_workspace_loader: Callable[[], dict[str, Any]] | None = None,
         shadow_starter: Callable[[str, str], dict[str, Any]] | None = None,
         shadow_observation_runner: Callable[[], dict[str, Any]] | None = None,
+        shadow_auto_selector: Callable[[], dict[str, Any]] | None = None,
         advance_shadow_after_collection: bool = False,
         technical_research_snapshot_loader: Callable[[str], dict[str, Any]] | None = None,
         saved_watchlist_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
@@ -265,6 +266,16 @@ class EngineHostRuntime:
         self._shadow_workspace_loader = shadow_workspace_loader or self._shadow_workspace_service.snapshot
         self._shadow_starter = shadow_starter or self._shadow_workspace_service.start
         self._shadow_observation_runner = shadow_observation_runner or self._shadow_workspace_service.advance_observations
+        self._shadow_auto_selector = shadow_auto_selector or (
+            self._shadow_workspace_service.select_automatic
+            if self._shadow_workspace_service is not None
+            else lambda: {
+                "mode": "PAPER SHADOW / NONTRANSMITTING",
+                "transmitting": False,
+                "status": "NOT_CONFIGURED",
+                "orderTransmission": "UNAVAILABLE",
+            }
+        )
         self._advance_shadow_after_collection = advance_shadow_after_collection
         if technical_research_snapshot_loader is None:
             from momentum_hunter.workstation_technical_research import WorkstationTechnicalResearchService
@@ -688,8 +699,20 @@ class EngineHostRuntime:
                 self._state = "Healthy"
                 self._detail = "Background collection cycle is running."
             report = self._cycle_runner()
+            shadow_selection = None
+            shadow_advance = None
             if self._advance_shadow_after_collection:
-                self._shadow_observation_runner()
+                selection_error: Exception | None = None
+                try:
+                    shadow_selection = self._shadow_auto_selector()
+                except Exception as exc:
+                    selection_error = exc
+                shadow_advance = self._shadow_observation_runner()
+                if selection_error is not None:
+                    raise RuntimeError(
+                        "Automatic Shadow selection failed after collection: "
+                        f"{type(selection_error).__name__}: {selection_error}"
+                    ) from selection_error
             monitored_count = int(getattr(report, "target_count", 0))
             with self._state_lock:
                 self._cycle_in_progress = False
@@ -700,7 +723,20 @@ class EngineHostRuntime:
                 self._detail = "Background collection cycle completed."
                 self._set_next_scheduled_locked()
                 self._schedule_changed.set()
-            return EngineHostCommandResult(True, "COLLECTION_COMPLETED", "Background collection cycle completed.", self.snapshot())
+            return EngineHostCommandResult(
+                True,
+                "COLLECTION_COMPLETED",
+                "Background collection cycle completed.",
+                self.snapshot(),
+                payload=(
+                    {
+                        "shadowAutomaticSelection": shadow_selection,
+                        "shadowAdvance": shadow_advance,
+                    }
+                    if self._advance_shadow_after_collection
+                    else None
+                ),
+            )
         except Exception as exc:
             with self._state_lock:
                 self._cycle_in_progress = False

@@ -4,7 +4,7 @@ import hashlib
 import json
 import tempfile
 import unittest
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -27,7 +27,10 @@ from momentum_hunter.shadow_trading import (
     ProspectiveFakeBroker,
     audit_shadow_trade,
     build_shadow_review_snapshot,
+    canonical_json,
+    expected_shadow_selection_policy_evidence,
     shadow_metrics,
+    stable_id,
 )
 from momentum_hunter.workstation_shadow import ShadowWorkspacePaths, ShadowWorkspaceService
 
@@ -82,6 +85,17 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         self.assertFalse(trade.sample_metadata.official_sample_authorized)
         self.assertEqual(91, trade.evidence.candidate_payload()["scoring"]["composite_score"])
         self.assertEqual(before, hashlib.sha256(trade.evidence.source_report_json.encode("utf-8")).hexdigest())
+        receipt = self.service().store.load().command_receipts[0]
+        self.assertEqual(
+            stable_id(
+                "shadow-request",
+                trade.evidence.source_sha256,
+                trade.symbol,
+                trade.plan_fingerprint,
+                canonical_json(asdict(trade.sample_metadata)),
+            ),
+            receipt.request_fingerprint,
+        )
         self.assertTrue(audit_shadow_trade(trade).passed)
 
         updated = report_payload()
@@ -734,7 +748,10 @@ def completed_trade(index: int, *, executable_pnl: float):
 def completed_auditable_trade(index: int):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        report = root / "report.json"
+        report = root / (
+            f"trade-plan-briefing-2026-07-{(index % 20) + 1:02d}-"
+            f"{index:03d}.json"
+        )
         decision = at(f"2026-07-{(index % 20) + 1:02d}T10:00:00-05:00")
         payload = report_payload()
         payload["metadata"]["source_capture_time"] = (
@@ -762,12 +779,26 @@ def completed_auditable_trade(index: int):
                 confirmation=SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
                 sample_version="synthetic-official-v1",
             )
-        trade = service.start_trade(
-            report,
-            symbol="TEST",
-            simulation_command_id=f"review-{index}",
-            decision_at=decision,
-        )
+        with patch(
+            "momentum_hunter.shadow_trading.SHADOW_AUTOMATIC_SELECTOR_ARMED",
+            True,
+        ):
+            service.freeze_automatic_selection_policy(
+                recorded_at=decision,
+            )
+            source_sha = sha256(report)
+            trade = service.start_trade(
+                report,
+                symbol="TEST",
+                simulation_command_id=stable_id(
+                    "shadow-auto-report",
+                    source_sha,
+                ),
+                decision_at=decision,
+                selection_policy_evidence=(
+                    expected_shadow_selection_policy_evidence()
+                ),
+            )
         service.process_quote(
             quote(
                 (decision + timedelta(seconds=5)).isoformat(),
