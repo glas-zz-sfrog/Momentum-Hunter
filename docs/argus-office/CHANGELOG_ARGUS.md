@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Prepared SHADOW-014 for a one-time unarmed opening proof: preserved the first disabled-task heartbeat as a safe `FAILED` audit, revalidated the sole `2573` cash binding through the guarded read-only refresh path, proved live SPY/IWM quote and HTTPS clock behavior, and queued final-head bundle/task regeneration before the 2026-07-28 rehearsal.
 - Fast-forwarded SHADOW-013 implementation commit `58552da` into local `master` after final compile, focused regression, full Python/.NET regression, PowerShell, diff, secret, task-state, and production-nonmutation gates passed; the ordinary non-force backup includes the governance closeout.
 - Hardened the Official Shadow opening ceremony so receipt completeness requires an allowlisted semantic terminal result and verified Engine Host, command, capture, report, decision-cycle, and trade identity where applicable.
 - Added independently recomputed pre-arm and per-decision clock-skew proof from the existing read-only Schwab HTTPS Date response, with a five-second uncertainty-inclusive limit and five-minute maximum age.

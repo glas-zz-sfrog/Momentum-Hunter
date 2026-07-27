@@ -97,3 +97,11 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Preserved the disabled installed task and byte-identical production activation record; no arm, policy, cycle, state, trade, or handoff artifact exists.
 - Classified the implementation `COMPLETE` while retaining `OPENING_CEREMONY_UNPROVEN`, `SELECTOR_NOT_ARMED`, and `0 / 30`.
 - Next gate: final-HEAD static bundle and disabled proof-only task definition, followed by one real-session unarmed opening proof and three physical failure/in-progress checks.
+
+## 2026-07-27 - ARGUS-SHADOW-014 One-Time Opening Proof Preparation
+
+- The 8:50 observer classified the intentionally disabled, never-run task `FAILED` without launching, retrying, repairing, arming, selecting, or changing runtime evidence.
+- Preserved a sanitized 20-file external audit bundle with an exact 12-category hash-addressed manifest; the official sample remained unarmed at `0 / 30`.
+- Revalidated exactly one unchanged Schwab account ending `2573` as `INDIVIDUAL_CASH`; no positions, balances, orders, or transmission capability were requested.
+- Live read-only SPY/IWM proof passed with quote age below two seconds and uncertainty-inclusive HTTPS clock skew of `1.596` seconds. A separate NTP diagnostic showed approximately `0.939` seconds offset; Windows Time service remains stopped because elevation is required.
+- This governance checkpoint precedes final bundle/task generation. After integration and backup, regenerate artifacts at the resulting canonical head and schedule one proof-only run for 2026-07-28 at 8:35 AM Central plus a finite 8:50 read-only audit.
