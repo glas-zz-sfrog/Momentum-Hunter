@@ -43,13 +43,19 @@ function Register-CaptureTask {
     }
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $argument -WorkingDirectory $ProjectRoot
     $trigger = New-ScheduledTaskTrigger -Daily -At $Time
-    $settings = New-ScheduledTaskSettingsSet `
-        -StartWhenAvailable `
-        -AllowStartIfOnBatteries `
-        -DontStopIfGoingOnBatteries `
-        -MultipleInstances IgnoreNew `
-        -WakeToRun `
-        -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+    $settingsArguments = @{
+        StartWhenAvailable = $true
+        AllowStartIfOnBatteries = $true
+        DontStopIfGoingOnBatteries = $true
+        MultipleInstances = "IgnoreNew"
+        WakeToRun = $true
+        ExecutionTimeLimit = (New-TimeSpan -Minutes 30)
+    }
+    if ($Session -eq "shadow") {
+        $settingsArguments["RestartCount"] = 3
+        $settingsArguments["RestartInterval"] = (New-TimeSpan -Minutes 1)
+    }
+    $settings = New-ScheduledTaskSettingsSet @settingsArguments
 
     if ($RunWhetherLoggedOn) {
         $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name

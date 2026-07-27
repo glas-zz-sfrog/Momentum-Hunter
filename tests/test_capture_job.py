@@ -649,6 +649,12 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         self.assertIn('-Session "shadow"', installer)
         self.assertIn("rev-parse --short=7 HEAD", installer)
         self.assertIn("-SelectorProofBundle", installer)
+        self.assertIn('$settingsArguments["RestartCount"] = 3', installer)
+        self.assertIn(
+            '$settingsArguments["RestartInterval"] = '
+            "(New-TimeSpan -Minutes 1)",
+            installer,
+        )
         self.assertIn('"shadow"', runner)
         self.assertIn("--trigger-shadow-selector", runner)
         self.assertIn("--selector-proof-bundle", runner)
