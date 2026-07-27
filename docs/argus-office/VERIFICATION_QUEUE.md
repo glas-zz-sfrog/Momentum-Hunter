@@ -35,7 +35,7 @@ create a rubber-stamp Steven item.
 | Credential-free Schwab setup CLI | `AUTOMATED_PASS` | `NO_STEVEN_ACTION` | Integrated locally as part of ARGUS-SHADOW-001 | Automated proof is sufficient because this is nonvisual and contacts no broker |
 | SCHWAB-001B production-local certificate trust | `AUTOMATED_PASS`; version `20260725T004100Z-feaa7bc59097` is `TRUSTED_VERIFIED`, browser proof passed, and current-stack tests pass | Steven confirmed the exact Windows root warning; visible Chrome proof is `CODEX_UI_PASS` | Integrated and backed up through `origin/master` | No further certificate check is pending; credential onboarding and real OAuth remain separately gated |
 | SCHWAB-003 discovery, CASH validation, and binding safety | `LIVE_BINDING_PASS`; same sole `2573` CASH identity revalidated, immutable DPAPI persistence succeeded, compileall, 123 bounded tests, 756 full tests, and exact tracked-value scan pass | `NO_STEVEN_ACTION`; no anomaly occurred | `COMPLETE` on local `master`; integrated baseline backed up through `origin/master` | No manual check pending; retain the pinned account and interrupt only on future identity, account-count, position, permission, or security anomaly |
-| Official Shadow sample | `AUTOMATED_PASS`; immutable activation exists, stale June evidence was rejected, and no trade or selection-policy state exists | `MANUAL_PENDING` for one WPF wording/layout check only; nonvisual activation used standing authorization | `ACTIVATED`; `SELECTOR_NOT_ARMED`; `0 / 30`; ARGUS-SHADOW-004 is pending visual acceptance before merge | Confirm the Test Trade Review pane truthfully shows the activated empty sample without implying that collection has begun; no approval of evidence, trades, or broker behavior is requested |
+| Official Shadow sample | `AUTOMATED_PASS`; immutable activation exists, stale June evidence was rejected, and no trade or selection-policy state exists | `MANUAL_PASS`; Steven accepted all six live WPF wording/layout checks on 2026-07-26 | `ACTIVATED`; `SELECTOR_NOT_ARMED`; `0 / 30`; ARGUS-SHADOW-004 is visually accepted and ready for integration with the verified SHADOW-005/006 stack | No visual action remains; the accepted pane truthfully shows the activated empty sample without implying that collection has begun |
 | ARGUS-SHADOW-005 prospective evidence handoff | `AUTOMATED_PASS`; compileall, 16 focused, 109 adjacent, and 781 full Python tests plus live nonpersisting shape and temporary end-to-end proofs pass | `NO_STEVEN_ACTION`; this is nonvisual and adds no trade-selection or broker authority | Verified on the one allowed stacked successor; integration waits for the SHADOW-004 visual parent | Nothing to approve; the next genuine product decision was the selector policy, which Steven resolved in favor of the frozen automatic rule |
 | ARGUS-SHADOW-006 automatic sample selector | `AUTOMATED_PASS`; deterministic selection, proof-artifact-backed immutable arming with runtime revalidation, nonmutating bundle-check CLI, exact-phrase guarded arm CLI, dedicated read-only regular-market proof CLI, multi-clock/current-quote gates, provider-time separation, guarded OAuth refresh, decision-cycle accounting, counterfactuals, portfolio/session rules, compileall, 110 focused tests, 844 full Python tests, all 216 .NET tests, production nonmutation proof, and live weekend stale/closed/extended rejection pass | `NO_STEVEN_ACTION`; implementation, commit, and feature-branch backup use standing delegation | Verified and remotely backed on the task branch; `SELECTOR_NOT_ARMED`; `0 / 30`; no policy, cycle, trade, or state file exists; quote transport has one exact-host GET, no account endpoint, guarded refresh-only account reads, and no order/transmitting method | Integrate after the SHADOW-004 visual truth check, refresh the canonical host, run the proof CLI during a regular market for the current candidate plus SPY/IWM, and assemble the actual immutable proof bundle before arming |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
@@ -865,8 +865,8 @@ Live binding evidence and future interruption conditions:
 
 ## ARGUS-SHADOW-004 Official Sample Activation
 
-Status: `AUTOMATED_PASS`; `MANUAL_PENDING` for one visual check; implementation
-committed at `9a214b7` and pending integration
+Status: `AUTOMATED_PASS`; `MANUAL_PASS`; implementation committed at `9a214b7`
+and ready for integration with the verified SHADOW-005/006 stack
 
 Automated evidence:
 
@@ -888,7 +888,7 @@ Automated evidence:
   `docs/argus-office/reports/releases/ARGUS-SHADOW-004-official-sample-active-proof.jpg`
   (`1920 x 1080`, 211,279 bytes, nonblank).
 
-Steven checks exactly one visual item:
+Steven completed and accepted these checks on 2026-07-26:
 
 1. In the open **Review** workspace, look at the bottom **Test Trade Review** pane.
 2. Confirm the heading says
