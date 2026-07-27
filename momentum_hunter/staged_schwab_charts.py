@@ -74,6 +74,8 @@ class StagedSchwabArtifact:
     generated_at: str
     manifest_generated_at: str
     selected_symbols: tuple[str, ...]
+    source_target_count: int
+    selection_truncated: bool
     target_report_path: Path
     target_report_sha256: str
     staged_sha256: str
@@ -307,6 +309,8 @@ def load_staged_schwab_artifact(
             )
         ),
         selected_symbols=symbols,
+        source_target_count=source_count,
+        selection_truncated=bool(selection["truncated"]),
         target_report_path=target_report_path,
         target_report_sha256=target_report_hash,
         staged_sha256=actual_stage_hash,
