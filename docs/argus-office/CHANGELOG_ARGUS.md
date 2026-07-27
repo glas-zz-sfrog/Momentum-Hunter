@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Clarified the official Shadow `sample-status` contract so activation readiness cannot be mistaken for selector arming: it now exposes readiness scope, arm state, collection enablement, official-trade eligibility, collection state, and the exact next gate without mutating production state.
 - Steven accepted the live SHADOW-004 active-empty WPF proof: the official sample identity, `0 / 30` progress, zero lifecycle counts, withheld metrics, and unclipped Test Trade Review layout all passed; this visual acceptance does not arm the selector or authorize broker transmission.
 - Fast-forwarded the complete SHADOW-004/005/006 stack into canonical `master` through `307a2e1` with no merge commit; the regular-market quote proof and immutable non-synthetic arm bundle remain pending, and the official sample remains unarmed at `0 / 30`.
 - Backed the reconciled canonical stack up to `origin/master` through `ee78b33` after 844 Python tests, 216 .NET tests, compilation, protected-path review, and secret-risk review passed.

@@ -32,9 +32,11 @@ Last reconciled: 2026-07-26 on `master`. The complete SHADOW-004/005/006 stack i
 
 Backup state: local and remote `master` contain the integrated stack and reconciliation through `ee78b33`; this closeout records that completed non-force backup.
 
+SHADOW-007 status truthfulness is integrated and backed up from `79e75b2` through this closeout. The read-only `sample-status` command now scopes its legacy `PASS` to sample activation only and separately reports `NOT_ARMED`, `automaticCollectionEnabled: false`, `canCollectOfficialTrade: false`, `ACTIVATED_SELECTOR_NOT_ARMED`, and the regular-market quote-proof/bundle gate. The change creates no state and leaves the activation hash and `0 / 30` sample unchanged. Twenty-seven focused tests, 123 adjacent Shadow/Engine Host tests, all 844 Python tests, and all 216 .NET tests pass.
+
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | `master` contains the WPF workstation through R029, Python engine contracts, Shadow-001 through Shadow-006, and SCHWAB-001/002/002A/003 read-only safeguards. Integration anchor `307a2e1` includes the accepted visual proof. |
+| Canonical baseline | `master` contains the WPF workstation through R029, Python engine contracts, Shadow-001 through Shadow-007, and SCHWAB-001/002/002A/003 read-only safeguards. Integration anchor `307a2e1` includes the accepted visual proof; `79e75b2` makes the pre-arm CLI state unambiguous. |
 | Active branch | No implementation branch is active. `codex/ARGUS-SHADOW-006-deterministic-market-validity` is preserved as merged source history. |
 | Shadow sample | `ACTIVATED`; `SELECTOR_NOT_ARMED`; `0 / 30` completed; no selection-policy file, Shadow state, or trade exists; order transmission is `UNAVAILABLE`. |
 | Active decision | Use deterministic automatic selection, not operator-selected official trades. Freeze the complete selection methodology in the Shadow Sample Constitution. Thirty trades is an engineering gate, not proof of edge or live authorization. |
