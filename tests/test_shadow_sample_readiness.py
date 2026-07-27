@@ -373,6 +373,13 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         status = self.service().sample_activation_status()
 
         self.assertEqual("NOT_ACTIVE", status["activationState"])
+        self.assertEqual("SAMPLE_ACTIVATION_ONLY", status["readinessScope"])
+        self.assertEqual("NOT_ARMED", status["selectorArmState"])
+        self.assertIsNone(status["selectorArmId"])
+        self.assertFalse(status["automaticCollectionEnabled"])
+        self.assertFalse(status["canCollectOfficialTrade"])
+        self.assertEqual("NOT_ACTIVATED", status["collectionState"])
+        self.assertEqual("SAMPLE_ACTIVATION", status["nextRequiredGate"])
         self.assertEqual("UNAVAILABLE", status["orderTransmission"])
         self.assertFalse(status["transmitting"])
         self.assertFalse(self.state_path.exists())
@@ -635,6 +642,20 @@ class ShadowSampleReadinessTests(unittest.TestCase):
             )
         status = json.loads(status_output.getvalue())
         self.assertEqual("ACTIVE", status["activationState"])
+        self.assertEqual("SAMPLE_ACTIVATION_ONLY", status["readinessScope"])
+        self.assertTrue(status["readiness"]["canStartOfficialSample"])
+        self.assertEqual("NOT_ARMED", status["selectorArmState"])
+        self.assertIsNone(status["selectorArmId"])
+        self.assertFalse(status["automaticCollectionEnabled"])
+        self.assertFalse(status["canCollectOfficialTrade"])
+        self.assertEqual(
+            "ACTIVATED_SELECTOR_NOT_ARMED",
+            status["collectionState"],
+        )
+        self.assertEqual(
+            "REGULAR_MARKET_QUOTE_PROOF_AND_SELECTOR_BUNDLE",
+            status["nextRequiredGate"],
+        )
         self.assertEqual(before, self.activation_path.read_bytes())
         self.assertFalse(self.state_path.exists())
 
@@ -734,6 +755,45 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         self.assertTrue(policy_path.exists())
         self.assertTrue(arm_path.exists())
         self.assertFalse(cycles_path.exists())
+
+        persisted_before = {
+            path: path.read_bytes()
+            for path in (
+                self.activation_path,
+                policy_path,
+                arm_path,
+            )
+        }
+        armed_status_output = io.StringIO()
+        with redirect_stdout(armed_status_output):
+            self.assertEqual(
+                0,
+                main(
+                    [
+                        "--state-path",
+                        str(self.state_path),
+                        "sample-status",
+                    ]
+                ),
+            )
+        armed_status = json.loads(armed_status_output.getvalue())
+        self.assertEqual("ARMED", armed_status["selectorArmState"])
+        self.assertEqual(armed["armId"], armed_status["selectorArmId"])
+        self.assertTrue(armed_status["automaticCollectionEnabled"])
+        self.assertTrue(armed_status["canCollectOfficialTrade"])
+        self.assertEqual(
+            "ARMED_AWAITING_ELIGIBLE_CYCLE",
+            armed_status["collectionState"],
+        )
+        self.assertEqual(
+            "AWAIT_ELIGIBLE_DECISION_CYCLE",
+            armed_status["nextRequiredGate"],
+        )
+        self.assertFalse(self.state_path.exists())
+        self.assertEqual(
+            persisted_before,
+            {path: path.read_bytes() for path in persisted_before},
+        )
 
 
 if __name__ == "__main__":

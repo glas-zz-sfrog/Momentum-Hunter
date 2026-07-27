@@ -1085,21 +1085,52 @@ class ShadowTradingService:
             sample_definition=self.sample_definition,
             policy=self.policy,
         )
+        activation_active = self.sample_activation is not None
+        selector_arm = self.selector_arm_record()
+        selector_armed = selector_arm is not None
+        automatic_collection_enabled = (
+            activation_active
+            and selector_armed
+            and readiness.can_start_official_sample
+        )
+        if not activation_active:
+            collection_state = "NOT_ACTIVATED"
+            next_required_gate = "SAMPLE_ACTIVATION"
+        elif not selector_armed:
+            collection_state = "ACTIVATED_SELECTOR_NOT_ARMED"
+            next_required_gate = (
+                "REGULAR_MARKET_QUOTE_PROOF_AND_SELECTOR_BUNDLE"
+            )
+        elif not readiness.can_start_official_sample:
+            collection_state = "ARMED_BLOCKED"
+            next_required_gate = "RESOLVE_SAMPLE_READINESS_FINDINGS"
+        else:
+            collection_state = "ARMED_AWAITING_ELIGIBLE_CYCLE"
+            next_required_gate = "AWAIT_ELIGIBLE_DECISION_CYCLE"
         return {
             "mode": SHADOW_MODE,
             "transmitting": False,
             "activationState": (
-                "ACTIVE" if self.sample_activation is not None else "NOT_ACTIVE"
+                "ACTIVE" if activation_active else "NOT_ACTIVE"
             ),
             "activatedAt": (
                 self.sample_activation.activated_at
-                if self.sample_activation is not None
+                if activation_active
                 else None
             ),
             "sampleDefinition": shadow_sample_metadata_to_dict(
                 self.sample_definition
             ),
+            "readinessScope": "SAMPLE_ACTIVATION_ONLY",
             "readiness": shadow_sample_readiness_to_dict(readiness),
+            "selectorArmState": "ARMED" if selector_armed else "NOT_ARMED",
+            "selectorArmId": (
+                selector_arm.arm_id if selector_arm is not None else None
+            ),
+            "automaticCollectionEnabled": automatic_collection_enabled,
+            "canCollectOfficialTrade": automatic_collection_enabled,
+            "collectionState": collection_state,
+            "nextRequiredGate": next_required_gate,
             "persistedTradeCount": len(state.trades),
             "eligibleCompleted": review["sample"]["eligibleCompleted"],
             "minimumRequired": MIN_MEANINGFUL_SAMPLE_SIZE,
