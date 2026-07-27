@@ -1,12 +1,12 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-26
+Date reconciled: 2026-07-27
 
 ## Current Truth
 
-Local and remote `master` are synchronized through SHADOW-008 implementation
-`fdcf898`. The canonical product baseline contains the complete SHADOW-004 through
-SHADOW-008 stack, including visual-acceptance commit `307a2e1`, alongside the Python
+Local and remote `master` are synchronized through SHADOW-009 implementation
+`3cb7854` plus this governance closeout. The canonical product baseline contains the complete SHADOW-004 through
+SHADOW-009 stack, including visual-acceptance commit `307a2e1`, alongside the Python
 automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
 
@@ -14,7 +14,8 @@ ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`, and
 `codex/ARGUS-SHADOW-006-deterministic-market-validity`,
 `codex/ARGUS-SHADOW-007-status-truthfulness`, and
-`codex/ARGUS-SHADOW-008-proof-bundle-assembly` are preserved source-history
+`codex/ARGUS-SHADOW-008-proof-bundle-assembly`, and
+`codex/ARGUS-SHADOW-009-live-proof-report-binding` are preserved source-history
 branches. Their complete stack is merged into local `master`; the relevant feature
 tips are backed up remotely. The production-local sample is `ACTIVATED`,
 `SELECTOR_NOT_ARMED`, and `0 / 30`.
@@ -26,6 +27,7 @@ Git evidence at reconciliation time:
 - ARGUS-SHADOW-005 and SHADOW-006 are descendants of that accepted visual parent. The integrated stack adds no broker order or transmitting capability; compileall, 110 focused tests, all 844 Python tests, all 216 .NET tests, zero-warning Release build, live read-only weekend rejection proof, and production nonmutation proof pass.
 - Local `master` fast-forwarded through acceptance commit `307a2e1` without a merge commit. The SHADOW-006 feature tip is synchronized with its remote feature ref.
 - SHADOW-008 `fdcf898` adds the nontransmitting production proof assembler and schema-v2 quote provenance. It passed compileall, 26 focused tests, all 28 named proof-gate tests, 123 adjacent tests, all 854 Python tests, and all 216 .NET tests before clean fast-forward integration and non-force backup.
+- SHADOW-009 `0038f17` removes caller-picked quote-proof identity and binds Gate 8 to the newest fresh canonical report plus immutable source capture. `3cb7854` adds the distinct 9:35 AM ET market-day capture, immediate authenticated Engine Host handoff, deterministic report-hash command identity, write-once receipt, and missing-receipt retry. It passed compileall, 193 affected tests, all 37 named proof gates, all 871 Python tests, all 216 .NET tests, PowerShell parsing, real loopback snapshot/auto-launch proof, and production nonmutation proof before clean fast-forward integration and non-force backup.
 - `codex/ARGUS-SCHWAB-002A-credential-rotation` restores the existing approved Schwab app and OAuth state and is the source parent for the active SCHWAB-003 branch.
 - `codex/ARGUS-SCHWAB-003-readonly-account-discovery` is merged into local `master` through `6f308d7`. Live discovery, account-detail validation, and immutable binding proved and pinned one `CASH` account ending `2573`; bound-refresh safety is implemented and tested, while every transmitting capability remains unavailable.
 - R028 integrated workstation chrome and R029 canonical WPF launcher/icon passed automated and Steven manual verification.
@@ -72,6 +74,8 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `268f3f8` | Add read-only WPF chart candles | Yes |
 | `69feedf` | Add WPF chart readability | Yes |
 | `fdcf898` | Build Shadow selector proof bundle | Yes |
+| `0038f17` | Bind live quote proof to canonical report | Yes |
+| `3cb7854` | Schedule official Shadow opening capture | Yes |
 | `54c58a8` | Map Shadow Trading lifecycle wiring | Yes |
 | `5d11f02` | Build prospective Shadow Trading validation | Yes |
 | `7fee390` | Add WPF Shadow Trading review surface | Yes |
@@ -83,6 +87,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-SHADOW-009-live-proof-report-binding` | `3cb7854` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Binds live proof to the latest canonical report/capture and supplies the official 9:35 AM ET capture-to-selector handoff with retry/idempotency evidence. | Preserve as source history; use canonical `master` and the uniquely named SHADOW-009 static bundle. |
 | `codex/ARGUS-SHADOW-008-proof-bundle-assembly` | `fdcf898` | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Adds schema-v2 quote provenance plus atomic 11-static/one-live proof-bundle preparation and finalization without arming or transmitting. | Preserve as source history; use canonical `master` for the ignored production proof bundle. |
 | `codex/ARGUS-SHADOW-007-status-truthfulness` | `79e75b2` | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Separates sample-activation readiness from selector-arm and collection readiness in the read-only status command. | Preserve as source history; continue from canonical `master`. |
 | `codex/ARGUS-SHADOW-006-deterministic-market-validity` | `307a2e1` | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Implements deterministic Official Shadow V1 selection, market validity, deduplication, portfolio/session/cycle/counterfactual evidence, proof-backed arming, and the pre-arm quote-proof CLI. Production remains unarmed and `0 / 30`. | Preserve as source history; continue only from canonical `master`. |
@@ -90,7 +95,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `codex/ARGUS-SHADOW-004-official-sample-activation` | `375da59` | No feature ref; commits are included through integrated `master` | Yes through SHADOW-006 | `MERGED_TO_LOCAL_MASTER` | Adds the write-once official-sample activation boundary and Steven-accepted activated-empty WPF status. The ignored local sample is `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`; no transmitting method exists. | Preserve as visual-parent history; do not merge again. |
 | `codex/ARGUS-SCHWAB-003-readonly-account-discovery` | `6f308d7` | No feature ref; commits are backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Adds exact GET-only discovery, live CASH validation, immutable DPAPI binding to the sole `2573` `INDIVIDUAL_CASH` account, bound-refresh revalidation, and the standing-delegation governance; every transmitting capability remains unavailable. | Preserve as audit history; current work continues from `master`. |
 | `codex/ARGUS-SCHWAB-002A-credential-rotation` | `cd73411` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves the credential containment history and restoration of the existing approved Schwab app, local DPAPI credentials, and fresh OAuth. | Preserve as audit history; its work is included through SCHWAB-003. |
-| `master` | Contains integration anchor `307a2e1`, SHADOW-007 `79e75b2`, SHADOW-008 `fdcf898`, and this closeout | Yes; ordinary non-force backup push | Yes | `MERGED_TO_LOCAL_MASTER` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample activation/evidence handoff/deterministic selector/truthful pre-arm status/production proof assembly, and SCHWAB-001/002/002A/003 with immutable `2573` CASH binding. | Finalize the static bundle with one live regular-market candidate-plus-SPY/IWM proof, verify it, and arm only after every proof passes. |
+| `master` | Contains integration anchor `307a2e1`, SHADOW-007 `79e75b2`, SHADOW-008 `fdcf898`, SHADOW-009 `3cb7854`, and this closeout | Yes; ordinary non-force backup push | Yes | `MERGED_TO_LOCAL_MASTER` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample activation/evidence handoff/deterministic selector/truthful pre-arm status/report-bound proof assembly/opening cadence, and SCHWAB-001/002/002A/003 with immutable `2573` CASH binding. | Prepare the SHADOW-009 static bundle, collect one fresh report-derived candidate-plus-SPY/IWM regular-market proof, verify it, and arm only after every proof passes. |
 | `codex/ARGUS-R029-canonical-wpf-launcher` | `1d3d8e5` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Makes the tracked normal launcher path WPF-only, restores the canonical icon, retains explicit Qt rollback, and refuses arbitrary review builds. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R028-integrated-workstation-chrome` | `0e7a6ce` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Replaces the separate native title strip with integrated dark WPF chrome while preserving native window interactions and one global mode treatment. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R027-integrate-r026-with-shadow-baseline` | `6fe3f97` plus accepted repair/closeout history through local `master` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves Shadow lifecycle/review/sample lock while adding the R013-R025 read-only WPF stack and R026 test hardening. | Preserve as audit history; do not merge again. |

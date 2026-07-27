@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added SHADOW-009 canonical report/capture binding: the live Schwab proof candidate is derived from the newest fresh scheduled report, and byte-exact report, capture, quote, and binding evidence are preserved before the nonmutating arm check.
+- Added one distinct immutable Official Shadow opening capture at 9:35 AM ET per XNYS market-open day, followed immediately by the authenticated loopback Engine Host cycle. Deterministic report-hash command IDs, write-once receipts, missing-receipt retry, duplicate-report no-rescan behavior, and existing selector idempotency prevent a failed handoff from silently losing the day or creating a duplicate official trade.
+- Expanded the arm runtime hash and `cycle_accounting` proof to cover the capture session, scheduling policy, Windows task wiring, capture job, host client, and retry receipt. Passed compileall, 193 affected tests, all 37 named proof gates, all 871 Python tests, and all 216 .NET tests; production remains `SELECTOR_NOT_ARMED` at `0 / 30` with transmission unavailable.
 - Added the production SHADOW-008 proof-bundle ceremony: atomic static preparation verifies canonical Git, accepted visual evidence, and 28 named safety tests before writing 11 artifacts; live finalization accepts only the exact current candidate plus SPY/IWM and runs the complete nonmutating arm verifier.
 - Versioned regular-market quote proof provenance so injected/test sources cannot be mistaken for the normal live Schwab CLI transport. Stale, mismatched, tampered, duplicate, partial, dirty-build, and changed-context evidence fails closed without arm, policy, cycle, state, trade, account, or order mutation.
 - Passed compileall, 26 focused proof-builder tests, all 28 named proof gates, 123 adjacent Shadow/Engine Host tests, all 854 Python tests, and all 216 .NET tests; production activation remains byte-identical at `0 / 30` and `SELECTOR_NOT_ARMED`.

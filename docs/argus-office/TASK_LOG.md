@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Owner | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
+| 2026-07-27 | ARGUS-SHADOW-009 - Canonical live-proof binding and opening cadence. | codex/ARGUS-SHADOW-009-live-proof-report-binding -> master | Builder / QA Regression / Git Steward | Complete | Removed caller-selected Gate 8 identity, bound live proof to the newest fresh report and immutable capture, added one 9:35 AM ET market-day Shadow capture plus immediate authenticated Engine Host handoff, and hardened retries with deterministic command IDs and write-once receipts. Compileall, 193 affected tests, 37 named proof gates, 871 Python tests, and 216 .NET tests passed; no arm, policy, cycle, state, trade, order, or transmission was created. |
 | 2026-06-27 | ARGUS-0000 - Create Argus Office v0.1 scaffold. | codex/ARGUS-0000-office-scaffold | Office Manager | Complete | Governance/configuration/documentation-only migration. |
 | 2026-06-27 | ARGUS-0001 - Read-only Momentum Hunter discovery swarm. | codex/ARGUS-0000-office-scaffold | Argus Orchestrator | Complete | Produced consolidated CEO discovery report; no application files changed. |
 | 2026-06-27 | ARGUS-0002 - Restore visible Daily Checklist path. | codex/ARGUS-0002-daily-checklist-visibility | Argus Orchestrator / Builder | Complete, pending Steven review | Restored the existing Daily Checklist button to the Dashboard Session area and guarded checklist quick actions; focused Daily Workflow tests passed. |

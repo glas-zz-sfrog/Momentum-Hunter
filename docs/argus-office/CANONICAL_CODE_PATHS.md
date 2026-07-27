@@ -1,10 +1,9 @@
 # Canonical Code Paths
 
-Date reconciled: 2026-07-26
+Date reconciled: 2026-07-27
 
-This document names the merged implementation paths on `master` after fast-forward
-integration of the complete SHADOW-004/005/006 stack through `307a2e1`. The Roadmap,
-not this file, decides priority and next work.
+This document names the merged implementation paths on `master` through
+SHADOW-009. The Roadmap, not this file, decides priority and next work.
 
 ## Canonical Paths
 
@@ -40,9 +39,10 @@ not this file, decides priority and next work.
 | Python engine lifecycle contracts | `momentum_hunter/engine_host.py`, `src/MomentumHunter.Contracts/PythonEngineHostContracts.cs`, `src/MomentumHunter.Application/PythonEngineHostContracts.cs` | Merged implementation covers host identity, health, collection state, pause, resume, one cycle, shutdown, persisted workspace, chart snapshots, FakeBroker-only simulation, prospective Shadow state, and the five read-only R027 evidence commands. |
 | Shadow Trading lifecycle | `momentum_hunter/shadow_trading.py`, `momentum_hunter/workstation_shadow.py`, `momentum_hunter/engine_host.py` | Canonical merged Shadow lifecycle, persistent evidence, FakeBroker quote processing, audit, metrics, WPF read model, and host boundary. |
 | Official Shadow activation | `momentum_hunter/shadow_trading.py`, `momentum_hunter/workstation_shadow.py`, and WPF Shadow presentation paths | Canonical write-once activation and accepted active-empty visual truth. Production-local activation is ignored generated state, not Git content. |
-| Prospective capture-to-report handoff | `tools/capture_job.py`, `momentum_hunter/providers.py`, and TradePlan export paths | Canonical write-once scheduled capture-to-report handoff with raw-capture nonmutation and bounded Finviz scan behavior. |
+| Prospective capture-to-report handoff | `tools/capture_job.py`, `momentum_hunter/providers.py`, and TradePlan export paths | Canonical write-once scheduled capture-to-report handoff with raw-capture nonmutation, bounded Finviz scan behavior, and a distinct immutable `shadow` session. |
+| Official Shadow opening cadence | `momentum_hunter/models.py`, `momentum_hunter/scheduling.py`, `tools/capture_job.py`, `tools/run_capture_job.ps1`, `tools/install_capture_tasks.ps1`, `momentum_hunter/engine_host_client.py`, and `momentum_hunter/engine_host.py` | One XNYS-market-day capture at 9:35 AM ET feeds the existing guarded Engine Host selector cycle. Deterministic report-hash command IDs and write-once receipts provide at-least-once retry without rescanning or duplicate official trades. |
 | Automatic official-sample selector | `momentum_hunter/shadow_selection.py`, `momentum_hunter/shadow_market_validity.py`, `momentum_hunter/shadow_trading.py`, `momentum_hunter/workstation_shadow.py`, `momentum_hunter/engine_host.py`, `momentum_hunter/schwab_market_data.py` | Canonical deterministic selector, market-validity, proof-backed arm, cycle, counterfactual, and read-only quote-proof boundaries. The selector remains `NOT_ARMED` until the regular-market proof and complete immutable proof bundle pass. |
-| Selector proof-bundle assembly | `momentum_hunter/shadow_proof_bundle.py`, `momentum_hunter/schwab_market_data.py` | Canonical nontransmitting preparation path. `prepare-static` atomically assembles 11 verified static artifacts only from clean synchronized `master`; `finalize` accepts the exact schema-v2 live Schwab candidate/SPY/IWM quote proof, adds the twelfth artifact, and invokes the existing nonmutating verifier. It does not arm, write policy/state/trades, or expose an order method. |
+| Selector proof-bundle assembly | `momentum_hunter/shadow_proof_bundle.py`, `momentum_hunter/shadow_market_validity.py`, `momentum_hunter/schwab_market_data.py` | Canonical nontransmitting preparation path. `prepare-static` atomically assembles 11 verified static artifacts only from clean synchronized `master`; `finalize` derives the candidate from the newest fresh canonical report, validates and copies its immutable source capture, accepts only the matching schema-v2 live Schwab candidate/SPY/IWM quote proof, adds the twelfth artifact, and invokes the existing nonmutating verifier. It does not arm, write policy/state/trades, or expose an order method. |
 | Official sample operational status | `momentum_hunter/shadow_trading.py` `sample-status` command | Canonical read-only activation, selector-arm, collection-enabled, next-gate, sample-count, and transmission-lock status. Activation readiness is explicitly scoped and cannot be mistaken for selector arming. |
 | Schwab OAuth and read-only account boundary | `momentum_hunter/schwab_setup.py`, `schwab_onboarding.py`, `schwab_oauth_listener.py`, `schwab_loopback_certificate.py`, `schwab_readonly.py`, `schwab_account_discovery.py`, `schwab_account_validation.py`, `schwab_cash_account_binding.py`, `schwab_bound_account_refresh.py` | Canonical credential-protected, read-only Schwab path bound immutably to the sole `2573` `CASH` account. No transmitting method exists. |
 | Future paper broker work | No code path yet | Schwab Trader API paperMoney is unavailable. Manual thinkorswim paperMoney reconciliation is the only current paper path. No paper broker adapter exists on `master` or R027. |
