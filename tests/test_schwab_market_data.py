@@ -9,14 +9,19 @@ import unittest
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import requests
 
 from momentum_hunter.schwab_market_data import (
     HTTP_TIMEOUT,
+    INJECTED_QUOTE_PROOF_ORIGIN,
+    LIVE_SCHWAB_QUOTE_PROOF_ORIGIN,
     MAX_QUOTE_RESPONSE_BYTES,
+    REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION,
     SCHWAB_QUOTE_SOURCE,
     SCHWAB_QUOTES_URL,
+    UNSPECIFIED_QUOTE_PROOF_ORIGIN,
     BoundSchwabAccessTokenProvider,
     SchwabMarketDataAuthorizationError,
     SchwabMarketDataError,
@@ -446,6 +451,15 @@ class SchwabRegularMarketQuoteProofTests(unittest.TestCase):
         )
 
         self.assertEqual("PASS", proof["proofStatus"])
+        self.assertEqual(
+            REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION,
+            proof["schemaVersion"],
+        )
+        self.assertEqual(
+            UNSPECIFIED_QUOTE_PROOF_ORIGIN,
+            proof["evidenceOrigin"],
+        )
+        self.assertFalse(proof["productionSource"])
         self.assertEqual(30, proof["maximumQuoteAgeSeconds"])
         self.assertEqual(
             [(("CRWV", "SPY", "IWM"), checked_at)],
@@ -478,10 +492,55 @@ class SchwabRegularMarketQuoteProofTests(unittest.TestCase):
             persisted = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(0, result)
             self.assertEqual(persisted, json.loads(stdout.getvalue()))
+            self.assertEqual(
+                INJECTED_QUOTE_PROOF_ORIGIN,
+                persisted["evidenceOrigin"],
+            )
+            self.assertFalse(persisted["productionSource"])
             serialized = json.dumps(persisted).lower()
             self.assertNotIn(ACCESS_TOKEN.lower(), serialized)
             self.assertNotIn("refresh_token", serialized)
             self.assertNotIn("account_hash", serialized)
+
+    def test_default_cli_marks_only_real_transport_as_live_origin(self) -> None:
+        checked_at = datetime(2026, 7, 27, 14, 0, tzinfo=timezone.utc)
+        source = _ProofQuoteSource(
+            {
+                symbol: proof_quote(symbol, checked_at - timedelta(seconds=5))
+                for symbol in ("CRWV", "SPY", "IWM")
+            }
+        )
+
+        with (
+            patch(
+                "momentum_hunter.schwab_market_data.SchwabMarketDataQuoteSource",
+                return_value=source,
+            ),
+            tempfile.TemporaryDirectory() as temporary,
+        ):
+            output_path = Path(temporary) / "quote-proof.json"
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = main(
+                    [
+                        "proof",
+                        "--symbols",
+                        "CRWV",
+                        "SPY",
+                        "IWM",
+                        "--output",
+                        str(output_path),
+                    ],
+                    checked_at=checked_at,
+                )
+            persisted = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(0, result)
+        self.assertEqual(
+            LIVE_SCHWAB_QUOTE_PROOF_ORIGIN,
+            persisted["evidenceOrigin"],
+        )
+        self.assertTrue(persisted["productionSource"])
 
     def test_missing_stale_closed_delayed_and_invalid_quotes_fail_honestly(
         self,

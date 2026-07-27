@@ -40,7 +40,10 @@ SCHWAB_QUOTE_SOURCE = "schwab_marketdata_v1_quotes:min_bid_ask_quote_time_v1"
 HTTP_TIMEOUT = (5.0, 30.0)
 MAX_QUOTE_RESPONSE_BYTES = 1024 * 1024
 MAX_QUOTE_SYMBOLS = 500
-REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION = 1
+REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION = 2
+LIVE_SCHWAB_QUOTE_PROOF_ORIGIN = "LIVE_SCHWAB_TRADER_API"
+INJECTED_QUOTE_PROOF_ORIGIN = "INJECTED_SOURCE"
+UNSPECIFIED_QUOTE_PROOF_ORIGIN = "UNSPECIFIED_SOURCE"
 
 
 class SchwabMarketDataError(RuntimeError):
@@ -450,6 +453,8 @@ def build_regular_market_quote_proof(
         "schemaVersion": REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION,
         "proofType": "SCHWAB_REGULAR_MARKET_QUOTE_BOUNDARY",
         "proofStatus": "PASS" if passed else "FAIL",
+        "evidenceOrigin": UNSPECIFIED_QUOTE_PROOF_ORIGIN,
+        "productionSource": False,
         "requestedAt": requested_at.isoformat(),
         "checkedAt": evaluated_at.isoformat(),
         "requestDurationSeconds": round(
@@ -616,19 +621,29 @@ def main(
     args = parser.parse_args(argv)
 
     assert args.command == "proof"
+    production_source = source is None
     active_source = source or SchwabMarketDataQuoteSource()
+    evidence_origin = (
+        LIVE_SCHWAB_QUOTE_PROOF_ORIGIN
+        if production_source
+        else INJECTED_QUOTE_PROOF_ORIGIN
+    )
     try:
         result = build_regular_market_quote_proof(
             active_source,
             args.symbols,
             checked_at=checked_at,
         )
+        result["evidenceOrigin"] = evidence_origin
+        result["productionSource"] = production_source
     except SchwabMarketDataError as exc:
         now = checked_at or datetime.now(timezone.utc)
         result = {
             "schemaVersion": REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION,
             "proofType": "SCHWAB_REGULAR_MARKET_QUOTE_BOUNDARY",
             "proofStatus": "FAIL",
+            "evidenceOrigin": evidence_origin,
+            "productionSource": production_source,
             "checkedAt": now.isoformat(),
             "requestedSymbols": list(normalize_symbols(args.symbols)),
             "failure": f"{type(exc).__name__}: {exc}",
