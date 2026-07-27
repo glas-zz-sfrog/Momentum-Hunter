@@ -11,6 +11,7 @@ from momentum_hunter.shadow_arm_ceremony import (
     ShadowArmCeremonyError,
     complete_shadow_selector_arm,
     run_command,
+    verify_shadow_opening_proof,
 )
 from momentum_hunter.shadow_proof_bundle import PROJECT_ROOT
 from momentum_hunter.shadow_trading import (
@@ -152,6 +153,7 @@ class ShadowArmCeremonyTests(unittest.TestCase):
             source,
             ("CRWV", "SPY", "IWM"),
             clock=ANY,
+            require_clock_proof=True,
         )
         self.assertEqual(
             CHECKED_AT,
@@ -162,6 +164,86 @@ class ShadowArmCeremonyTests(unittest.TestCase):
             confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
             prerequisite_proof_paths=ANY,
         )
+
+    def test_complete_bundle_can_be_verified_without_arming(self) -> None:
+        proofs = SimpleNamespace(hashes={"fresh_quote_boundary": "a" * 64})
+        self.service.verify_automatic_selector_prerequisites.return_value = (
+            proofs,
+            CHECKED_AT,
+        )
+
+        result = verify_shadow_opening_proof(
+            self.bundle,
+            self.report,
+            service=self.service,
+        )
+
+        self.assertEqual(
+            "PROOF_VERIFIED_FROM_COMPLETE_BUNDLE",
+            result.state,
+        )
+        self.assertEqual("", result.arm_id)
+        self.service.arm_automatic_selector.assert_not_called()
+
+    def test_missing_live_proof_can_finalize_without_arming(self) -> None:
+        proofs = SimpleNamespace(hashes={"fresh_quote_boundary": "a" * 64})
+        self.service.verify_automatic_selector_prerequisites.side_effect = (
+            ShadowStateError(
+                "Selector arm proof artifact is unavailable: "
+                "fresh_quote_boundary."
+            ),
+            (proofs, CHECKED_AT),
+        )
+        quote_result = {
+            "proofStatus": "PASS",
+            "checkedAt": CHECKED_AT.isoformat(),
+            "requestedSymbols": ["CRWV", "SPY", "IWM"],
+            "transmitting": False,
+            "orderTransmission": "UNAVAILABLE",
+        }
+
+        with (
+            patch(
+                "momentum_hunter.shadow_arm_ceremony.load_proof_context",
+                return_value=SimpleNamespace(),
+            ),
+            patch(
+                "momentum_hunter.shadow_arm_ceremony."
+                "verify_canonical_git_still_matches",
+            ),
+            patch(
+                "momentum_hunter.shadow_arm_ceremony."
+                "validate_static_artifact",
+            ),
+            patch(
+                "momentum_hunter.shadow_arm_ceremony."
+                "read_and_validate_candidate_report",
+                return_value=SimpleNamespace(candidate="CRWV"),
+            ),
+            patch(
+                "momentum_hunter.shadow_arm_ceremony."
+                "build_regular_market_quote_proof",
+                return_value=quote_result,
+            ),
+            patch(
+                "momentum_hunter.shadow_arm_ceremony."
+                "finalize_selector_proof_bundle",
+            ) as finalize,
+        ):
+            result = verify_shadow_opening_proof(
+                self.bundle,
+                self.report,
+                quote_proof_path=self.quote_proof,
+                quote_source=object(),
+                clock=lambda: CHECKED_AT,
+                service=self.service,
+            )
+
+        self.assertEqual("PROOF_VERIFIED_UNARMED", result.state)
+        self.assertEqual("CRWV", result.candidate)
+        self.assertEqual("", result.arm_id)
+        finalize.assert_called_once()
+        self.service.arm_automatic_selector.assert_not_called()
 
     def test_failed_quote_retries_and_never_finalizes_or_arms(self) -> None:
         self.service.verify_automatic_selector_prerequisites.side_effect = (

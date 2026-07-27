@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,8 +13,10 @@ from momentum_hunter.schwab_market_data import (
     INJECTED_QUOTE_PROOF_ORIGIN,
     LIVE_SCHWAB_QUOTE_PROOF_ORIGIN,
     SCHWAB_QUOTE_SOURCE,
+    SchwabQuoteEvidenceBatch,
     build_regular_market_quote_proof,
 )
+from momentum_hunter.shadow_opening import build_https_clock_skew_proof
 from momentum_hunter.shadow_proof_bundle import (
     STATIC_PROOF_NAMES,
     CommandResult,
@@ -116,6 +119,23 @@ class ProofQuoteSource:
             for symbol in symbols
         }
 
+    def quotes_with_clock(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        decision_at: datetime | None = None,
+    ) -> SchwabQuoteEvidenceBatch:
+        assert decision_at is not None
+        return SchwabQuoteEvidenceBatch(
+            quotes=self.quotes(symbols, decision_at=decision_at),
+            clock_skew_proof=build_https_clock_skew_proof(
+                request_started_at=decision_at,
+                response_received_at=decision_at,
+                remote_date_header=format_datetime(decision_at),
+                source_identity="synthetic-test-https-date",
+            ),
+        )
+
 
 class ShadowProofBundleTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -132,6 +152,11 @@ class ShadowProofBundleTests(unittest.TestCase):
         self.reports_dir.mkdir(parents=True)
         self.captures_dir.mkdir(parents=True)
         self.report_path, self.capture_path = self.write_candidate_report()
+        self.task_definition_path = self.root / "shadow-task.xml"
+        self.task_definition_path.write_text(
+            "<Task><Action>synthetic</Action></Task>\n",
+            encoding="utf-8",
+        )
         self.write_visual_evidence()
         service = ShadowTradingService(store=ShadowStateStore(self.state_path))
         with patch(
@@ -204,6 +229,7 @@ class ShadowProofBundleTests(unittest.TestCase):
             ProofQuoteSource(observed_at or checked_at - timedelta(seconds=5)),
             symbols,
             checked_at=checked_at,
+            require_clock_proof=True,
         )
         proof["evidenceOrigin"] = evidence_origin
         proof["productionSource"] = (
@@ -232,6 +258,8 @@ class ShadowProofBundleTests(unittest.TestCase):
         capture = {
             "capture_time": captured_at.isoformat(),
             "session": session,
+            "provider": "finviz",
+            "scanner": {"name": "Institutional Momentum"},
             "candidates": [{"symbol": symbol}],
         }
         capture_path.write_text(
@@ -253,6 +281,7 @@ class ShadowProofBundleTests(unittest.TestCase):
                 "source_capture_time": captured_at.isoformat(),
                 "source_session": session,
                 "source_provider": "finviz",
+                "source_scanner": "Institutional Momentum",
             },
             "candidates": [
                 {
@@ -284,6 +313,7 @@ class ShadowProofBundleTests(unittest.TestCase):
             state_path=self.state_path,
             reports_dir=self.reports_dir,
             captures_dir=self.captures_dir,
+            task_definition_path=self.task_definition_path,
             finalized_at=finalized_at or QUOTED_AT + timedelta(seconds=5),
             command_runner=runner or FakeCommandRunner(),
         )
@@ -369,7 +399,7 @@ class ShadowProofBundleTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(4, len(fresh_proof["evidence"]))
+        self.assertEqual(6, len(fresh_proof["evidence"]))
         self.assertTrue(
             (
                 self.bundle

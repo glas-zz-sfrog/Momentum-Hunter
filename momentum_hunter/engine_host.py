@@ -105,6 +105,27 @@ def process_is_running(pid: int) -> bool:
     return True
 
 
+def collection_failure_is_retryable(exc: BaseException) -> bool:
+    """Return true only for explicitly recognized transient provider failures."""
+    from momentum_hunter.providers import ProviderUnavailableError
+    from momentum_hunter.schwab_market_data import SchwabMarketDataNetworkError
+
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    retryable_types = (
+        ProviderUnavailableError,
+        SchwabMarketDataNetworkError,
+        TimeoutError,
+        ConnectionError,
+    )
+    while current is not None and id(current) not in seen:
+        if isinstance(current, retryable_types):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
 @dataclass(frozen=True)
 class EngineHostEndpoint:
     protocol_version: str
@@ -825,7 +846,16 @@ class EngineHostRuntime:
                 self._detail = f"Background collection cycle failed: {type(exc).__name__}: {exc}"
                 self._set_next_scheduled_locked()
                 self._schedule_changed.set()
-            return EngineHostCommandResult(False, "COLLECTION_FAILED", self._detail, self.snapshot())
+            return EngineHostCommandResult(
+                False,
+                "COLLECTION_FAILED",
+                self._detail,
+                self.snapshot(),
+                payload={
+                    "failureType": type(exc).__name__,
+                    "retryable": collection_failure_is_retryable(exc),
+                },
+            )
         finally:
             self._cycle_lock.release()
 

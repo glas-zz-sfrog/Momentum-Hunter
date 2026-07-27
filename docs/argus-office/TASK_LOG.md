@@ -78,3 +78,15 @@
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.
+## 2026-07-27 - ARGUS-SHADOW-013 Opening Ceremony Hardening
+
+- Branch: `codex/ARGUS-SHADOW-013-opening-ceremony-hardening` from synchronized `master` at `99b45ef`.
+- Added semantic handoff completion with allowlisted outcomes and verified host/capture/report/decision identities.
+- Added pre-arm and per-decision five-second clock-skew proof using the existing read-only Schwab HTTPS Date response, with five-minute maximum age.
+- Froze provider, scanner, schema, constitution, policy, fill/evidence model, runtime build, scheduled-task XML, and quote-source identity.
+- Replaced broad retry behavior with one initial attempt plus three retries only for recognized infrastructure failures.
+- Made proof-only/unarmed operation the scheduled default, left the Windows task disabled, and kept the selector, policy, cycle, handoff, trade state, and official sample unchanged.
+- Separated outcome-update result/logging from immutable Shadow opening success.
+- Configured the 8:50 heartbeat as inspection-only and tri-state.
+- Verification: compileall PASS; 229 affected tests PASS; 908/908 full Python PASS; 216/216 .NET PASS; PowerShell parse PASS; `git diff --check` PASS.
+- Status: implementation proven on branch; integration and real-session physical proof pending.

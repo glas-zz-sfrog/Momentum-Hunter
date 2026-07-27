@@ -1200,6 +1200,10 @@ class ShadowTradingService:
             constitution_version=SHADOW_CONSTITUTION_VERSION,
             constitution_hash=constitution_hash,
             build_hash=build_hash,
+            opening_configuration=dict(
+                verified_proofs.opening_configuration
+            ),
+            clock_skew_proof=dict(verified_proofs.clock_skew_proof),
             prerequisite_proofs=dict(prerequisite_proofs),
             prerequisite_proof_paths=dict(verified_proofs.paths),
         )
@@ -1314,6 +1318,10 @@ class ShadowTradingService:
         if (
             verified_proofs.hashes != record.prerequisite_proofs
             or verified_proofs.paths != record.prerequisite_proof_paths
+            or verified_proofs.opening_configuration
+            != record.opening_configuration
+            or verified_proofs.clock_skew_proof
+            != record.clock_skew_proof
         ):
             raise ShadowStateError(
                 "Selector arm prerequisite artifacts no longer match the "

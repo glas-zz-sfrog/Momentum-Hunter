@@ -33,6 +33,10 @@ from momentum_hunter.shadow_market_validity import (
     EASTERN_TZ,
     ShadowMarketValidityPolicy,
 )
+from momentum_hunter.shadow_opening import (
+    build_https_clock_skew_proof,
+    clock_skew_findings,
+)
 
 
 SCHWAB_QUOTES_URL = "https://api.schwabapi.com/marketdata/v1/quotes"
@@ -40,10 +44,11 @@ SCHWAB_QUOTE_SOURCE = "schwab_marketdata_v1_quotes:min_bid_ask_quote_time_v1"
 HTTP_TIMEOUT = (5.0, 30.0)
 MAX_QUOTE_RESPONSE_BYTES = 1024 * 1024
 MAX_QUOTE_SYMBOLS = 500
-REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION = 2
+REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION = 3
 LIVE_SCHWAB_QUOTE_PROOF_ORIGIN = "LIVE_SCHWAB_TRADER_API"
 INJECTED_QUOTE_PROOF_ORIGIN = "INJECTED_SOURCE"
 UNSPECIFIED_QUOTE_PROOF_ORIGIN = "UNSPECIFIED_SOURCE"
+SCHWAB_HTTPS_CLOCK_SOURCE = "schwab_marketdata_v1_quotes:https_date"
 
 
 class SchwabMarketDataError(RuntimeError):
@@ -161,6 +166,18 @@ class SchwabExecutableQuote:
         }
 
 
+@dataclass(frozen=True)
+class SchwabQuoteBatch:
+    quotes: dict[str, SchwabExecutableQuote]
+    clock_skew_proof: dict[str, object]
+
+
+@dataclass(frozen=True)
+class SchwabQuoteEvidenceBatch:
+    quotes: dict[str, dict[str, object]]
+    clock_skew_proof: dict[str, object]
+
+
 class SchwabMarketDataTransport:
     """Exact-host GET transport for Schwab's versioned quote endpoint."""
 
@@ -169,24 +186,46 @@ class SchwabMarketDataTransport:
         *,
         session: requests.Session | None = None,
         timeout: tuple[float, float] = HTTP_TIMEOUT,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.session = session or requests.Session()
         if session is None:
             self.session.trust_env = False
         self.timeout = timeout
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     def fetch_quotes(
         self,
         access_token: str,
         symbols: Sequence[str],
     ) -> dict[str, SchwabExecutableQuote]:
+        return self.fetch_quotes_with_clock(
+            access_token,
+            symbols,
+        ).quotes
+
+    def fetch_quotes_with_clock(
+        self,
+        access_token: str,
+        symbols: Sequence[str],
+    ) -> SchwabQuoteBatch:
         if not access_token.strip():
             raise SchwabMarketDataAuthorizationError(
                 "Schwab market data requires an active OAuth access token."
             )
         normalized = normalize_symbols(symbols)
         if not normalized:
-            return {}
+            now = self.clock()
+            return SchwabQuoteBatch(
+                quotes={},
+                clock_skew_proof=build_https_clock_skew_proof(
+                    request_started_at=now,
+                    response_received_at=now,
+                    remote_date_header="",
+                    source_identity=SCHWAB_HTTPS_CLOCK_SOURCE,
+                ),
+            )
+        request_started_at = self.clock()
         try:
             response = self.session.get(
                 SCHWAB_QUOTES_URL,
@@ -206,6 +245,7 @@ class SchwabMarketDataTransport:
             raise SchwabMarketDataNetworkError(
                 "Schwab market data could not reach the exact configured endpoint."
             ) from None
+        response_received_at = self.clock()
         if response.is_redirect:
             raise SchwabMarketDataResponseError(
                 "Schwab market data refused an HTTP redirect."
@@ -224,7 +264,24 @@ class SchwabMarketDataTransport:
             raise SchwabMarketDataResponseError(
                 "Schwab market data response was not valid JSON."
             ) from None
-        return parse_quote_response(payload, expected_symbols=normalized)
+        response_headers = getattr(response, "headers", {})
+        remote_date_header = (
+            str(response_headers.get("Date", ""))
+            if isinstance(response_headers, Mapping)
+            else ""
+        )
+        return SchwabQuoteBatch(
+            quotes=parse_quote_response(
+                payload,
+                expected_symbols=normalized,
+            ),
+            clock_skew_proof=build_https_clock_skew_proof(
+                request_started_at=request_started_at,
+                response_received_at=response_received_at,
+                remote_date_header=remote_date_header,
+                source_identity=SCHWAB_HTTPS_CLOCK_SOURCE,
+            ),
+        )
 
 
 class SchwabMarketDataQuoteSource:
@@ -270,6 +327,29 @@ class SchwabMarketDataQuoteSource:
                 normalized,
             ).items()
         }
+
+    def quotes_with_clock(
+        self,
+        symbols: Sequence[str],
+        *,
+        decision_at: datetime | None = None,
+    ) -> SchwabQuoteEvidenceBatch:
+        del decision_at
+        normalized = normalize_symbols(symbols)
+        if not normalized:
+            return SchwabQuoteEvidenceBatch({}, {})
+        access_token = self.token_provider.access_token()
+        batch = self.transport.fetch_quotes_with_clock(
+            access_token,
+            normalized,
+        )
+        return SchwabQuoteEvidenceBatch(
+            quotes={
+                symbol: quote.to_shadow_quote()
+                for symbol, quote in batch.quotes.items()
+            },
+            clock_skew_proof=dict(batch.clock_skew_proof),
+        )
 
 
 def normalize_symbols(symbols: Sequence[str]) -> tuple[str, ...]:
@@ -422,6 +502,7 @@ def build_regular_market_quote_proof(
     *,
     checked_at: datetime | None = None,
     clock: Callable[[], datetime] | None = None,
+    require_clock_proof: bool = False,
 ) -> dict[str, object]:
     active_clock = clock or (lambda: datetime.now(timezone.utc))
     requested_at = checked_at or active_clock()
@@ -430,10 +511,21 @@ def build_regular_market_quote_proof(
     normalized = normalize_symbols(symbols)
     if not normalized:
         raise ValueError("Quote proof requires at least one symbol.")
-    loader = getattr(source, "quotes", None)
-    if not callable(loader):
-        raise TypeError("Quote proof source does not provide batch quotes.")
-    quotes = loader(normalized, decision_at=requested_at)
+    clock_loader = getattr(source, "quotes_with_clock", None)
+    clock_proof: Mapping[str, object] | None = None
+    if callable(clock_loader):
+        batch = clock_loader(normalized, decision_at=requested_at)
+        if not isinstance(batch, SchwabQuoteEvidenceBatch):
+            raise SchwabMarketDataResponseError(
+                "Schwab market data proof received an invalid clock batch."
+            )
+        quotes = batch.quotes
+        clock_proof = batch.clock_skew_proof
+    else:
+        loader = getattr(source, "quotes", None)
+        if not callable(loader):
+            raise TypeError("Quote proof source does not provide batch quotes.")
+        quotes = loader(normalized, decision_at=requested_at)
     evaluated_at = checked_at or active_clock()
     if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
         raise ValueError(
@@ -458,7 +550,15 @@ def build_regular_market_quote_proof(
         )
         for symbol in normalized
     ]
-    passed = all(result["status"] == "PASS" for result in results)
+    clock_findings = (
+        clock_skew_findings(clock_proof, evaluated_at=evaluated_at)
+        if require_clock_proof
+        else ()
+    )
+    passed = (
+        all(result["status"] == "PASS" for result in results)
+        and not clock_findings
+    )
     return {
         "schemaVersion": REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION,
         "proofType": "SCHWAB_REGULAR_MARKET_QUOTE_BOUNDARY",
@@ -473,6 +573,18 @@ def build_regular_market_quote_proof(
         ),
         "maximumQuoteAgeSeconds": policy.quote_max_age_seconds,
         "source": SCHWAB_QUOTE_SOURCE,
+        "clockSkewProofRequired": require_clock_proof,
+        "clockSkewProof": (
+            dict(clock_proof)
+            if isinstance(clock_proof, Mapping)
+            else {
+                "status": (
+                    "BLOCKED" if require_clock_proof else "NOT_REQUIRED"
+                ),
+                "findings": list(clock_findings),
+            }
+        ),
+        "clockSkewFindings": list(clock_findings),
         "requestedSymbols": list(normalized),
         "quotes": results,
         "transmitting": False,
@@ -643,6 +755,7 @@ def main(
             active_source,
             args.symbols,
             checked_at=checked_at,
+            require_clock_proof=production_source,
         )
         result["evidenceOrigin"] = evidence_origin
         result["productionSource"] = production_source

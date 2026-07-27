@@ -68,18 +68,26 @@ def complete_shadow_selector_arm(
     reports_dir: Path = REPORTS_DIR,
     captures_dir: Path = CAPTURES_DIR,
     quote_proof_path: Path | None = None,
+    task_definition_path: Path | None = None,
+    expected_provider: str = "finviz",
+    expected_scanner: str = "Institutional Momentum",
     quote_source: object | None = None,
     quote_attempts: int = DEFAULT_QUOTE_ATTEMPTS,
     quote_retry_seconds: float = DEFAULT_QUOTE_RETRY_SECONDS,
     clock: Clock | None = None,
     sleeper: Sleeper = time.sleep,
     service: ShadowTradingService | None = None,
+    arm_selector: bool = True,
 ) -> ShadowArmCeremonyResult:
     active_clock = clock or (lambda: datetime.now(timezone.utc))
     active_service = service or ShadowTradingService(
         store=ShadowStateStore(state_path)
     )
     if active_service.selector_is_armed():
+        if not arm_selector:
+            raise ShadowArmCeremonyError(
+                "Unarmed opening proof cannot run after selector arming."
+            )
         arm = active_service.selector_arm_record()
         assert arm is not None
         return ShadowArmCeremonyResult(
@@ -103,6 +111,15 @@ def complete_shadow_selector_arm(
         if fresh_proof_path.exists():
             raise
     else:
+        if not arm_selector:
+            return ShadowArmCeremonyResult(
+                state="PROOF_VERIFIED_FROM_COMPLETE_BUNDLE",
+                candidate="",
+                bundle=str(bundle.resolve()),
+                quote_proof=str(fresh_proof_path.resolve()),
+                arm_id="",
+                verified_at=verified_at.isoformat(),
+            )
         arm = active_service.arm_automatic_selector(
             confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
             prerequisite_proof_paths=proof_paths,
@@ -137,6 +154,8 @@ def complete_shadow_selector_arm(
         captures_dir=captures_dir,
         context=context,
         finalized_at=checked_at,
+        expected_provider=expected_provider,
+        expected_scanner=expected_scanner,
     )
     candidate = report_evidence.candidate
     if quote_proof_path is not None and quote_proof_path.exists():
@@ -150,6 +169,7 @@ def complete_shadow_selector_arm(
             active_source,
             (candidate, "SPY", "IWM"),
             clock=active_clock,
+            require_clock_proof=True,
         )
         proof["evidenceOrigin"] = (
             LIVE_SCHWAB_QUOTE_PROOF_ORIGIN
@@ -184,6 +204,9 @@ def complete_shadow_selector_arm(
         state_path=state_path,
         reports_dir=reports_dir,
         captures_dir=captures_dir,
+        expected_provider=expected_provider,
+        expected_scanner=expected_scanner,
+        task_definition_path=task_definition_path,
         finalized_at=require_offset_aware(clock_value=active_clock()),
     )
     _proofs, verified_at = (
@@ -191,6 +214,15 @@ def complete_shadow_selector_arm(
             proof_paths
         )
     )
+    if not arm_selector:
+        return ShadowArmCeremonyResult(
+            state="PROOF_VERIFIED_UNARMED",
+            candidate=candidate,
+            bundle=str(bundle.resolve()),
+            quote_proof=str(output_path.resolve()),
+            arm_id="",
+            verified_at=verified_at.isoformat(),
+        )
     arm = active_service.arm_automatic_selector(
         confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
         prerequisite_proof_paths=proof_paths,
@@ -202,6 +234,21 @@ def complete_shadow_selector_arm(
         quote_proof=str(output_path.resolve()),
         arm_id=arm.arm_id,
         verified_at=verified_at.isoformat(),
+    )
+
+
+def verify_shadow_opening_proof(
+    bundle: Path,
+    report_path: Path,
+    **kwargs: object,
+) -> ShadowArmCeremonyResult:
+    if "arm_selector" in kwargs:
+        raise TypeError("verify_shadow_opening_proof fixes arm_selector=False.")
+    return complete_shadow_selector_arm(
+        bundle,
+        report_path,
+        arm_selector=False,
+        **kwargs,
     )
 
 

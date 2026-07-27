@@ -17,13 +17,14 @@ from momentum_hunter.opportunity_alerts import (
     load_price_observations,
 )
 from momentum_hunter.scheduling import is_market_open_day
+from momentum_hunter.shadow_opening import clock_skew_findings
 from momentum_hunter.trade_planning import parse_datetime
 
 
 EASTERN_TZ = ZoneInfo("America/New_York")
 SHADOW_MARKET_POLICY_VERSION = "official-shadow-market-validity-v1"
 SHADOW_CONSTITUTION_VERSION = "official-shadow-constitution-v1"
-SHADOW_SELECTOR_ARM_SCHEMA_VERSION = 2
+SHADOW_SELECTOR_ARM_SCHEMA_VERSION = 3
 SHADOW_DECISION_CYCLE_SCHEMA_VERSION = 1
 SHADOW_SELECTOR_ARM_CONFIRMATION = "ARM OFFICIAL SHADOW SELECTOR"
 SELECTOR_PROOF_ARTIFACT_SCHEMA_VERSION = 1
@@ -114,6 +115,8 @@ class SelectorArmRecord:
     constitution_version: str
     constitution_hash: str
     build_hash: str
+    opening_configuration: dict[str, Any]
+    clock_skew_proof: dict[str, Any]
     prerequisite_proofs: dict[str, str]
     prerequisite_proof_paths: dict[str, str]
 
@@ -122,6 +125,8 @@ class SelectorArmRecord:
 class VerifiedSelectorProofArtifacts:
     hashes: dict[str, str]
     paths: dict[str, str]
+    opening_configuration: dict[str, Any]
+    clock_skew_proof: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -214,6 +219,7 @@ def runtime_build_hash(paths: Iterable[Path] | None = None) -> str:
             root / "schwab_market_data.py",
             root / "shadow_arm_ceremony.py",
             root / "shadow_market_validity.py",
+            root / "shadow_opening.py",
             root / "shadow_selection.py",
             root / "shadow_trading.py",
             root / "storage.py",
@@ -633,6 +639,10 @@ class SelectorArmStore:
             constitution_version=str(payload.get("constitution_version", "")),
             constitution_hash=str(payload.get("constitution_hash", "")),
             build_hash=str(payload.get("build_hash", "")),
+            opening_configuration=dict(
+                payload.get("opening_configuration", {})
+            ),
+            clock_skew_proof=dict(payload.get("clock_skew_proof", {})),
             prerequisite_proofs={
                 str(key): str(value)
                 for key, value in dict(payload.get("prerequisite_proofs", {})).items()
@@ -873,6 +883,23 @@ def validate_arm_record(record: SelectorArmRecord) -> None:
             raise ValueError(
                 f"Selector arm prerequisite proof path is invalid: {name}."
             )
+    validate_opening_configuration_identity(
+        record.opening_configuration,
+        expected_build_hash=record.build_hash,
+        expected_constitution_hash=record.constitution_hash,
+        expected_selection_policy_fingerprint=(
+            record.selection_policy_fingerprint
+        ),
+    )
+    findings = clock_skew_findings(
+        record.clock_skew_proof,
+        evaluated_at=armed_at,
+    )
+    if findings:
+        raise ValueError(
+            "Selector arm clock-skew proof is invalid: "
+            + " | ".join(findings)
+        )
 
 
 def hash_prerequisite_proof_artifacts(
@@ -902,6 +929,8 @@ def hash_prerequisite_proof_artifacts(
     resolved_paths: set[Path] = set()
     proofs: dict[str, str] = {}
     canonical_paths: dict[str, str] = {}
+    opening_configuration: dict[str, Any] = {}
+    clock_skew_proof: dict[str, Any] = {}
     for name in SHADOW_SELECTOR_ARM_REQUIRED_PROOFS:
         raw_path = frozen_paths[name]
         if not isinstance(raw_path, (str, Path)):
@@ -932,9 +961,18 @@ def hash_prerequisite_proof_artifacts(
         )
         proofs[name] = f"PASS:{hashlib.sha256(payload).hexdigest()}"
         canonical_paths[name] = str(path)
+        if name == "fresh_quote_boundary":
+            opening_configuration, clock_skew_proof = (
+                read_opening_gate_evidence(
+                    path,
+                    evaluated_at=armed_at,
+                )
+            )
     return VerifiedSelectorProofArtifacts(
         hashes=proofs,
         paths=canonical_paths,
+        opening_configuration=opening_configuration,
+        clock_skew_proof=clock_skew_proof,
     )
 
 
@@ -1073,6 +1111,181 @@ def validate_selector_proof_artifact(
             raise ValueError(
                 f"Selector arm proof evidence hash does not match: {proof_name}."
             )
+
+
+def read_opening_gate_evidence(
+    fresh_proof_path: Path,
+    *,
+    evaluated_at: datetime,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    _, proof_bytes = read_stable_selector_artifact(
+        fresh_proof_path,
+        proof_name="fresh_quote_boundary",
+        artifact_role="proof",
+        maximum_bytes=MAX_SELECTOR_PROOF_ARTIFACT_BYTES,
+    )
+    try:
+        artifact = json.loads(proof_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError(
+            "Fresh quote proof is not valid UTF-8 JSON."
+        ) from None
+    evidence = artifact.get("evidence") if isinstance(artifact, dict) else None
+    if not isinstance(evidence, list):
+        raise ValueError("Fresh quote proof evidence is missing.")
+
+    opening_configuration: dict[str, Any] | None = None
+    clock_proof: dict[str, Any] | None = None
+    task_definition_sha256 = ""
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        relative_path = Path(str(item.get("path", "")))
+        evidence_path, evidence_bytes = read_stable_selector_artifact(
+            fresh_proof_path.parent / relative_path,
+            proof_name="fresh_quote_boundary",
+            artifact_role="evidence",
+            maximum_bytes=MAX_SELECTOR_EVIDENCE_ARTIFACT_BYTES,
+        )
+        if evidence_path.name == "scheduled_task_definition.xml":
+            task_definition_sha256 = hashlib.sha256(
+                evidence_bytes
+            ).hexdigest()
+            continue
+        try:
+            payload = json.loads(evidence_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if (
+            payload.get("proofType")
+            == "SHADOW_OPENING_CONFIGURATION_IDENTITY"
+        ):
+            if opening_configuration is not None:
+                raise ValueError(
+                    "Fresh quote proof has duplicate opening configuration evidence."
+                )
+            opening_configuration = dict(payload)
+        if (
+            payload.get("proofType")
+            == "SCHWAB_REGULAR_MARKET_QUOTE_BOUNDARY"
+        ):
+            raw_clock = payload.get("clockSkewProof")
+            if not isinstance(raw_clock, dict):
+                raise ValueError(
+                    "Fresh quote proof lacks clock-skew evidence."
+                )
+            if clock_proof is not None:
+                raise ValueError(
+                    "Fresh quote proof has duplicate clock-skew evidence."
+                )
+            clock_proof = dict(raw_clock)
+
+    if opening_configuration is None:
+        raise ValueError(
+            "Fresh quote proof lacks frozen opening configuration evidence."
+        )
+    if clock_proof is None:
+        raise ValueError(
+            "Fresh quote proof lacks pre-arm clock-skew evidence."
+        )
+    if (
+        not task_definition_sha256
+        or opening_configuration.get("scheduledTaskDefinitionSha256")
+        != task_definition_sha256
+    ):
+        raise ValueError(
+            "Frozen scheduled-task definition hash does not match its evidence."
+        )
+    validate_opening_configuration_identity(opening_configuration)
+    findings = clock_skew_findings(
+        clock_proof,
+        evaluated_at=evaluated_at,
+    )
+    if findings:
+        raise ValueError(
+            "Fresh quote clock-skew gate failed: " + " | ".join(findings)
+        )
+    return opening_configuration, clock_proof
+
+
+def validate_opening_configuration_identity(
+    identity: object,
+    *,
+    expected_build_hash: str = "",
+    expected_constitution_hash: str = "",
+    expected_selection_policy_fingerprint: str = "",
+) -> None:
+    if not isinstance(identity, Mapping):
+        raise ValueError("Opening configuration identity is missing.")
+    frozen = dict(identity)
+    supplied_hash = str(
+        frozen.pop("configurationIdentitySha256", "")
+    ).strip()
+    calculated_hash = hashlib.sha256(
+        canonical_json(frozen).encode("utf-8")
+    ).hexdigest()
+    required = (
+        "provider",
+        "scanner",
+        "reportSchemaVersion",
+        "constitutionHash",
+        "selectionPolicyVersion",
+        "selectionPolicyFingerprint",
+        "fillModelVersion",
+        "evidenceSchemaVersion",
+        "runtimeBuildHash",
+        "scheduledTaskDefinitionSha256",
+        "quoteSource",
+    )
+    if (
+        identity.get("schemaVersion") != 1
+        or identity.get("proofType")
+        != "SHADOW_OPENING_CONFIGURATION_IDENTITY"
+        or supplied_hash != calculated_hash
+        or any(not str(identity.get(name, "")).strip() for name in required)
+        or identity.get("transmitting") is not False
+        or identity.get("orderTransmission") != "UNAVAILABLE"
+    ):
+        raise ValueError("Opening configuration identity is invalid.")
+    for field_name in (
+        "constitutionHash",
+        "selectionPolicyFingerprint",
+        "runtimeBuildHash",
+        "scheduledTaskDefinitionSha256",
+    ):
+        value = str(identity.get(field_name, ""))
+        if (
+            len(value) != 64
+            or any(char not in "0123456789abcdef" for char in value)
+        ):
+            raise ValueError(
+                f"Opening configuration {field_name} is not SHA-256."
+            )
+    if (
+        expected_build_hash
+        and identity.get("runtimeBuildHash") != expected_build_hash
+    ):
+        raise ValueError(
+            "Opening configuration runtime build hash does not match."
+        )
+    if (
+        expected_constitution_hash
+        and identity.get("constitutionHash")
+        != expected_constitution_hash
+    ):
+        raise ValueError(
+            "Opening configuration constitution hash does not match."
+        )
+    if (
+        expected_selection_policy_fingerprint
+        and identity.get("selectionPolicyFingerprint")
+        != expected_selection_policy_fingerprint
+    ):
+        raise ValueError(
+            "Opening configuration selection policy hash does not match."
+        )
 
 
 def selector_arm_id(

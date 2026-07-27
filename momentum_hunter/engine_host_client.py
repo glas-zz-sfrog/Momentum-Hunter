@@ -32,6 +32,14 @@ class EngineHostClientError(RuntimeError):
     pass
 
 
+class EngineHostRetryableError(EngineHostClientError):
+    pass
+
+
+class EngineHostTerminalError(EngineHostClientError):
+    pass
+
+
 @dataclass(frozen=True)
 class EngineHostClientResult:
     accepted: bool
@@ -39,6 +47,7 @@ class EngineHostClientResult:
     summary: str
     snapshot: dict[str, Any]
     payload: dict[str, Any] | None
+    command_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -105,12 +114,13 @@ def send_engine_host_command(
     command_id: str | None = None,
 ) -> EngineHostClientResult:
     request_id = uuid.uuid4().hex
+    effective_command_id = command_id or uuid.uuid4().hex
     request = {
         "protocolVersion": PROTOCOL_VERSION,
         "requestId": request_id,
         "accessToken": endpoint.access_token,
         "command": command,
-        "commandId": command_id or uuid.uuid4().hex,
+        "commandId": effective_command_id,
         "arguments": {},
     }
     encoded = (json.dumps(request, separators=(",", ":")) + "\n").encode("utf-8")
@@ -125,13 +135,13 @@ def send_engine_host_command(
             connection.sendall(encoded)
             response_bytes = read_response_line(connection)
     except (OSError, TimeoutError) as exc:
-        raise EngineHostClientError(
+        raise EngineHostRetryableError(
             "The local Python Engine Host did not accept the command."
         ) from exc
     try:
         response = json.loads(response_bytes.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        raise EngineHostClientError(
+        raise EngineHostTerminalError(
             "The local Python Engine Host returned malformed data."
         ) from None
     if (
@@ -139,12 +149,12 @@ def send_engine_host_command(
         or response.get("protocolVersion") != PROTOCOL_VERSION
         or response.get("requestId") != request_id
     ):
-        raise EngineHostClientError(
+        raise EngineHostTerminalError(
             "The local Python Engine Host response identity did not match."
         )
     result = response.get("result")
     if not isinstance(result, dict) or not isinstance(result.get("snapshot"), dict):
-        raise EngineHostClientError(
+        raise EngineHostTerminalError(
             "The local Python Engine Host response was incomplete."
         )
     payload = result.get("payload")
@@ -154,6 +164,7 @@ def send_engine_host_command(
         summary=str(result.get("summary", "")),
         snapshot=dict(result["snapshot"]),
         payload=dict(payload) if isinstance(payload, Mapping) else None,
+        command_id=effective_command_id,
     )
 
 
@@ -202,7 +213,7 @@ def ensure_engine_host(
             except EngineHostClientError:
                 pass
         time.sleep(max(0.01, poll_interval_seconds))
-    raise EngineHostClientError(
+    raise EngineHostRetryableError(
         "The local Python Engine Host did not become ready in time."
     )
 
@@ -226,7 +237,13 @@ def run_immediate_collection_cycle(
         command_id=command_id or f"shadow-opening-capture-{uuid.uuid4().hex}",
     )
     if not result.accepted:
-        raise EngineHostClientError(
+        error_type = (
+            EngineHostRetryableError
+            if result.payload is not None
+            and result.payload.get("retryable") is True
+            else EngineHostTerminalError
+        )
+        raise error_type(
             f"Engine Host collection cycle failed: {result.code}: {result.summary}"
         )
     return result
@@ -256,7 +273,7 @@ def launch_engine_host(state_directory: Path) -> None:
     try:
         subprocess.Popen(command, **options)
     except OSError as exc:
-        raise EngineHostClientError(
+        raise EngineHostRetryableError(
             "The local Python Engine Host could not be started."
         ) from exc
 
@@ -272,11 +289,11 @@ def read_response_line(connection: socket.socket) -> bytes:
         if newline >= 0:
             return bytes(response[:newline])
     if len(response) > MAX_REQUEST_BYTES:
-        raise EngineHostClientError(
+        raise EngineHostTerminalError(
             "The local Python Engine Host response exceeded the protocol limit."
         )
     if not response:
-        raise EngineHostClientError(
+        raise EngineHostTerminalError(
             "The local Python Engine Host returned no response."
         )
     return bytes(response)

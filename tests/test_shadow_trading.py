@@ -7,7 +7,9 @@ import tempfile
 import unittest
 from dataclasses import asdict, replace
 from datetime import date, datetime, timedelta, timezone
+from email.utils import format_datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from momentum_hunter.engine_host import (
@@ -20,6 +22,7 @@ from momentum_hunter.shadow_market_validity import (
     SHADOW_SELECTOR_ARM_CONFIRMATION,
 )
 from momentum_hunter.shadow_selection import AutomaticShadowSelector
+from momentum_hunter.shadow_opening import build_https_clock_skew_proof
 from momentum_hunter.scheduling import is_market_open_day
 from momentum_hunter.shadow_trading import (
     MIN_MEANINGFUL_SAMPLE_SIZE,
@@ -69,6 +72,33 @@ class _BatchMarketQuoteSource:
             for symbol in symbols
             if symbol in self.values
         }
+
+
+class _ClockedQuoteSource:
+    def __init__(self, loader) -> None:
+        self.loader = loader
+
+    def quote(self, symbol: str, *, decision_at: datetime):
+        return self.loader(symbol, decision_at=decision_at)
+
+    def quotes_with_clock(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        decision_at: datetime,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            quotes={
+                symbol: self.loader(symbol, decision_at=decision_at)
+                for symbol in symbols
+            },
+            clock_skew_proof=build_https_clock_skew_proof(
+                request_started_at=decision_at,
+                response_received_at=decision_at,
+                remote_date_header=format_datetime(decision_at),
+                source_identity="synthetic-test-https-date",
+            ),
+        )
 
 
 class ShadowTradingLifecycleTests(unittest.TestCase):
@@ -1125,6 +1155,7 @@ def report_payload() -> dict:
             "source_capture_path": "synthetic/capture.json",
             "source_capture_time": "2026-07-23T09:58:00-05:00",
             "source_provider": "synthetic-test-provider",
+            "source_scanner": "Institutional Momentum",
             "market_regime": "risk_on",
         },
         "top_5_for_capital": [row],
@@ -1257,16 +1288,18 @@ def completed_auditable_trade(
         }
         result = AutomaticShadowSelector(
             service,
-            quote_source=lambda symbol, *, decision_at: (
-                selection_quote
-                if symbol == "TEST"
-                else {
-                    **selection_quote,
-                    "symbol": symbol,
-                    "bid": 100.0,
-                    "ask": 100.01,
-                    "last": 100.0,
-                }
+            quote_source=_ClockedQuoteSource(
+                lambda symbol, *, decision_at: (
+                    selection_quote
+                    if symbol == "TEST"
+                    else {
+                        **selection_quote,
+                        "symbol": symbol,
+                        "bid": 100.0,
+                        "ask": 100.01,
+                        "last": 100.0,
+                    }
+                )
             ),
         ).select(report, decision_at=decision)
         trade = next(

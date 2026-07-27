@@ -114,43 +114,7 @@ class ShadowWorkspaceService:
     def select_automatic(self) -> dict[str, Any]:
         report_path = latest_scheduled_trade_report_path(self.paths.reports_dir)
         if report_path is None:
-            result = no_report_result()
-            if self.service.sample_activation is not None and self.service.selector_is_armed():
-                decision_at = now_central()
-                self.service.decision_cycle_store.save_cycle(
-                    {
-                        "schema_version": 1,
-                        "cycle_kind": "DECISION",
-                        "cycle_id": stable_hash(
-                            "shadow-missing-report-cycle-v1",
-                            decision_at.isoformat(),
-                        ),
-                        "decision_at": decision_at.isoformat(),
-                        "updated_at": decision_at.isoformat(),
-                        "capture_succeeded": True,
-                        "report_path": "",
-                        "report_sha256": "",
-                        "source_capture_path": "",
-                        "source_capture_time": "",
-                        "report_generated_at": "",
-                        "selector_arm_id": (
-                            self.service.selector_arm_record().arm_id
-                        ),
-                        "candidate_assessments": [],
-                        "eligible_candidate_count": 0,
-                        "benchmark_symbols": ["SPY", "IWM"],
-                        "benchmark_baselines": {},
-                        "market_observations": [],
-                        "selected_symbol": None,
-                        "selected_rank": None,
-                        "opportunity_id": None,
-                        "selection_quote": None,
-                        "status": "NO_REPORT",
-                        "reason": result.reason,
-                        "shadow_trade_id": None,
-                    }
-                )
-            return result.to_dict()
+            return no_report_result().to_dict()
         return AutomaticShadowSelector(
             self.service,
             quote_source=self.quote_source,

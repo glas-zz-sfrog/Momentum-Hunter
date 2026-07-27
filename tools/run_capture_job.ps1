@@ -4,7 +4,13 @@ param(
     [string]$Session,
     [string]$ProjectRoot = "C:\Users\steve\OneDrive\Documents\Investing",
     [string]$PythonExe = "C:\Users\steve\OneDrive\Documents\Investing\.venv\Scripts\python.exe",
-    [string]$SelectorProofBundle = ""
+    [string]$SelectorProofBundle = "",
+    [string]$TaskDefinitionPath = "",
+    [string]$Provider = "finviz",
+    [string]$Scanner = "Institutional Momentum",
+    [switch]$ArmShadowSelector,
+    [int]$ShadowRetryCount = 3,
+    [int]$ShadowRetryDelaySeconds = 60
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,26 +20,84 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $timestamp = Get-Date -Format "yyyy-MM-dd-HHmmss"
 $logPath = Join-Path $logDir "capture-$Session-$timestamp.log"
+$outcomeLogPath = Join-Path $logDir "outcomes-$Session-$timestamp.log"
+$outcomeStatusPath = Join-Path $logDir "outcomes-$Session-$timestamp.status.json"
 $jobPath = Join-Path $ProjectRoot "tools\capture_job.py"
 $outcomePath = Join-Path $ProjectRoot "tools\update_outcomes.py"
+$retryableInfrastructureExit = 75
 
 try {
     "Momentum Hunter capture started: $(Get-Date -Format o)" | Tee-Object -FilePath $logPath
     "Session: $Session" | Tee-Object -FilePath $logPath -Append
     "ProjectRoot: $ProjectRoot" | Tee-Object -FilePath $logPath -Append
-    $captureArguments = @($jobPath, "--session", $Session)
+    $captureArguments = @(
+        $jobPath,
+        "--session", $Session,
+        "--provider", $Provider,
+        "--scanner", $Scanner
+    )
     if ($Session -eq "shadow") {
+        if (-not $SelectorProofBundle) {
+            throw "Shadow opening requires an explicit selector proof bundle."
+        }
+        if (-not $TaskDefinitionPath -or -not (Test-Path -LiteralPath $TaskDefinitionPath -PathType Leaf)) {
+            throw "Shadow opening requires the exported scheduled-task definition."
+        }
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $taskStream = [System.IO.File]::OpenRead($TaskDefinitionPath)
+        try {
+            $taskHash = [System.BitConverter]::ToString(
+                $sha256.ComputeHash($taskStream)
+            ).Replace("-", "").ToLowerInvariant()
+        }
+        finally {
+            $taskStream.Dispose()
+            $sha256.Dispose()
+        }
+        "TaskDefinitionPath: $TaskDefinitionPath" | Tee-Object -FilePath $logPath -Append
+        "TaskDefinitionSha256: $taskHash" | Tee-Object -FilePath $logPath -Append
         $captureArguments += "--trigger-shadow-selector"
-        if ($SelectorProofBundle) {
-            $captureArguments += @("--selector-proof-bundle", $SelectorProofBundle)
+        $captureArguments += @(
+            "--selector-proof-bundle", $SelectorProofBundle,
+            "--task-definition", $TaskDefinitionPath
+        )
+        if (-not $ArmShadowSelector) {
+            $captureArguments += "--shadow-opening-proof-only"
         }
     }
-    & $PythonExe @captureArguments 2>&1 | Tee-Object -FilePath $logPath -Append
-    $exitCode = $LASTEXITCODE
-    if ($exitCode -eq 0) {
-        "Updating outcomes: $(Get-Date -Format o)" | Tee-Object -FilePath $logPath -Append
-        & $PythonExe $outcomePath 2>&1 | Tee-Object -FilePath $logPath -Append
+    $maximumAttempts = if ($Session -eq "shadow") { 1 + [Math]::Max(0, $ShadowRetryCount) } else { 1 }
+    $exitCode = 1
+    for ($attempt = 1; $attempt -le $maximumAttempts; $attempt++) {
+        "OpeningAttempt: $attempt / $maximumAttempts" | Tee-Object -FilePath $logPath -Append
+        & $PythonExe @captureArguments 2>&1 | Tee-Object -FilePath $logPath -Append
         $exitCode = $LASTEXITCODE
+        "OpeningAttemptExitCode: $exitCode" | Tee-Object -FilePath $logPath -Append
+        if ($exitCode -ne $retryableInfrastructureExit) {
+            break
+        }
+        if ($attempt -lt $maximumAttempts) {
+            "Retrying retryable infrastructure failure without changing capture/report identity." | Tee-Object -FilePath $logPath -Append
+            Start-Sleep -Seconds ([Math]::Max(0, $ShadowRetryDelaySeconds))
+        }
+    }
+    if ($exitCode -eq 0) {
+        "Updating outcomes independently: $(Get-Date -Format o)" | Tee-Object -FilePath $outcomeLogPath
+        & $PythonExe $outcomePath 2>&1 | Tee-Object -FilePath $outcomeLogPath -Append
+        $outcomeExitCode = $LASTEXITCODE
+        @{
+            schemaVersion = 1
+            session = $Session
+            completedAt = (Get-Date -Format o)
+            exitCode = $outcomeExitCode
+            openingResultPreserved = ($Session -eq "shadow")
+        } | ConvertTo-Json | Set-Content -LiteralPath $outcomeStatusPath -Encoding utf8
+        "OutcomeUpdateExitCode: $outcomeExitCode" | Tee-Object -FilePath $logPath -Append
+        if ($Session -ne "shadow") {
+            $exitCode = $outcomeExitCode
+        }
+        elseif ($outcomeExitCode -ne 0) {
+            "WARNING: Shadow outcome update failed after the opening result became immutable; no opening retry will occur." | Tee-Object -FilePath $logPath -Append
+        }
     }
     "ExitCode: $exitCode" | Tee-Object -FilePath $logPath -Append
     exit $exitCode

@@ -17,10 +17,13 @@ from momentum_hunter.engine_host import (
 )
 from momentum_hunter.engine_host_client import (
     EngineHostClientError,
+    EngineHostRetryableError,
+    EngineHostTerminalError,
     ensure_engine_host,
     read_engine_host_endpoint,
     run_immediate_collection_cycle,
 )
+from momentum_hunter.providers import ProviderUnavailableError
 
 
 class EngineHostClientTests(unittest.TestCase):
@@ -114,7 +117,7 @@ class EngineHostClientTests(unittest.TestCase):
         )
         self.write_endpoint(self.root)
 
-        with self.assertRaises(EngineHostClientError) as context:
+        with self.assertRaises(EngineHostTerminalError) as context:
             run_immediate_collection_cycle(
                 state_directory=self.root,
                 launcher=lambda _path: self.fail("launcher should not run"),
@@ -123,6 +126,27 @@ class EngineHostClientTests(unittest.TestCase):
 
         self.assertNotIn(self.token, str(context.exception))
         self.assertIn("COLLECTION_FAILED", str(context.exception))
+
+    def test_retryable_provider_failure_is_distinct_from_terminal_failure(
+        self,
+    ) -> None:
+        self.runtime._cycle_runner = lambda: (_ for _ in ()).throw(
+            ProviderUnavailableError(
+                "finviz",
+                "temporary provider outage",
+                "network",
+            )
+        )
+        self.write_endpoint(self.root)
+
+        with self.assertRaises(EngineHostRetryableError):
+            run_immediate_collection_cycle(
+                state_directory=self.root,
+                launcher=lambda _path: self.fail("launcher should not run"),
+                process_checker=lambda _process_id: True,
+            )
+
+        self.assertTrue(issubclass(EngineHostRetryableError, EngineHostClientError))
 
     def _record_cycle(self):
         self.cycles.append("cycle")

@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -29,12 +30,14 @@ from momentum_hunter.schwab_market_data import (
     SchwabMarketDataQuoteSource,
     SchwabMarketDataResponseError,
     SchwabMarketDataTransport,
+    SchwabQuoteEvidenceBatch,
     StoredSchwabAccessTokenProvider,
     build_regular_market_quote_proof,
     main,
     normalize_symbols,
     parse_quote_response,
 )
+from momentum_hunter.shadow_opening import build_https_clock_skew_proof
 from momentum_hunter.schwab_onboarding import SchwabOAuthTokens
 
 
@@ -170,6 +173,23 @@ class _ProofQuoteSource:
             for symbol in symbols
             if symbol in self.values
         }
+
+    def quotes_with_clock(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        decision_at: datetime | None = None,
+    ) -> SchwabQuoteEvidenceBatch:
+        assert decision_at is not None
+        return SchwabQuoteEvidenceBatch(
+            quotes=self.quotes(symbols, decision_at=decision_at),
+            clock_skew_proof=build_https_clock_skew_proof(
+                request_started_at=decision_at,
+                response_received_at=decision_at,
+                remote_date_header=format_datetime(decision_at),
+                source_identity="synthetic-test-https-date",
+            ),
+        )
 
 
 class SchwabMarketDataTransportTests(unittest.TestCase):

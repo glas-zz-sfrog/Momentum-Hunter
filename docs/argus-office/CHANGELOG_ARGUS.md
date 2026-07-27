@@ -1,6 +1,12 @@
 # Argus Changelog
 
 ## Unreleased
+- Hardened the Official Shadow opening ceremony so receipt completeness requires an allowlisted semantic terminal result and verified Engine Host, command, capture, report, decision-cycle, and trade identity where applicable.
+- Added independently recomputed pre-arm and per-decision clock-skew proof from the existing read-only Schwab HTTPS Date response, with a five-second uncertainty-inclusive limit and five-minute maximum age.
+- Froze opening provider/scanner/schema/constitution/policy/fill/evidence/build/task/quote-source identity and fail closed on mismatch.
+- Replaced scheduler-native retry multiplication with runner-owned 1+3 retries only for recognized infrastructure failures; stable identities and write-once evidence prevent duplicate reports, cycles, handoffs, or trades.
+- Made proof-only/unarmed operation and disabled installation the Shadow task defaults; arming now requires a separately explicit switch and remains unused.
+- Separated outcome-update status from opening success and made the 8:50 heartbeat strictly read-only with `COMPLETED`, `IN_PROGRESS`, and `FAILED` outcomes.
 - Added SHADOW-012 bounded scheduler recovery: the Official Shadow opening task receives three one-minute Windows restarts, while morning/evening tasks remain unchanged. `IgnoreNew`, the five-minute market window, deterministic report identity, and write-once handoff receipt keep retries bounded and idempotent.
 - Passed compileall, 18 focused capture-job tests, all 46 named proof gates, 237 affected tests, PowerShell parsing, direct `RestartCount=3`/`RestartInterval=PT1M` construction proof, protected-state review, and secret/order-path scanning.
 - Fixed SHADOW-011 quote-proof timestamp ordering before the first live ceremony. Proof generation now records request start before guarded OAuth/provider work, evaluates quote freshness after the response, retains actual request duration, and rejects backward or timezone-naive evaluation clocks.

@@ -37,10 +37,18 @@ from momentum_hunter.shadow_market_validity import (
     validate_selector_proof_artifact,
 )
 from momentum_hunter.shadow_selection import load_report_object
+from momentum_hunter.shadow_opening import (
+    canonical_json as opening_canonical_json,
+    clock_skew_findings,
+)
 from momentum_hunter.shadow_trading import (
+    SHADOW_EVIDENCE_SCHEMA_VERSION,
+    SHADOW_FILL_MODEL_VERSION,
+    SHADOW_SELECTION_POLICY_VERSION,
     SHADOW_STATE_PATH,
     ShadowStateStore,
     ShadowTradingService,
+    expected_shadow_selection_policy_evidence,
     selector_proof_bundle_paths,
 )
 from momentum_hunter.trade_planning import REPORT_SCHEMA_VERSION
@@ -199,6 +207,10 @@ class ProofContext:
     activated_at: datetime
     constitution_hash: str
     build_hash: str
+    selection_policy_version: str
+    selection_policy_fingerprint: str
+    fill_model_version: str
+    evidence_schema_version: int
 
 
 @dataclass(frozen=True)
@@ -212,6 +224,8 @@ class CandidateReportEvidence:
     source_capture_sha256: str
     report_generated_at: str
     source_capture_time: str
+    source_provider: str
+    source_scanner: str
 
 
 CommandRunner = Callable[[Sequence[str], Path, float], CommandResult]
@@ -347,6 +361,9 @@ def finalize_selector_proof_bundle(
     state_path: Path = SHADOW_STATE_PATH,
     reports_dir: Path = REPORTS_DIR,
     captures_dir: Path = CAPTURES_DIR,
+    expected_provider: str = "finviz",
+    expected_scanner: str = "Institutional Momentum",
+    task_definition_path: Path | None = None,
     finalized_at: datetime | None = None,
     command_runner: CommandRunner = run_command,
 ) -> dict[str, object]:
@@ -376,11 +393,25 @@ def finalize_selector_proof_bundle(
         captures_dir=captures_dir,
         context=context,
         finalized_at=timestamp,
+        expected_provider=expected_provider,
+        expected_scanner=expected_scanner,
     )
     quote_payload, quote_bytes = read_and_validate_live_quote_proof(
         quote_proof_path,
         candidate=report_evidence.candidate,
         finalized_at=timestamp,
+    )
+    if task_definition_path is None:
+        raise SelectorProofBundleError(
+            "Fresh quote proof requires the frozen scheduled-task definition."
+        )
+    configuration_payload, task_definition_bytes = (
+        build_opening_configuration_identity(
+            context=context,
+            expected_provider=expected_provider,
+            expected_scanner=expected_scanner,
+            task_definition_path=task_definition_path,
+        )
     )
 
     evidence_root = target / "evidence"
@@ -388,12 +419,18 @@ def finalize_selector_proof_bundle(
     report_copy_path = evidence_root / "fresh_quote_source_report.json"
     capture_copy_path = evidence_root / "fresh_quote_source_capture.json"
     binding_path = evidence_root / "fresh_quote_report_binding.json"
+    task_copy_path = evidence_root / "scheduled_task_definition.xml"
+    configuration_path = (
+        evidence_root / "opening_configuration_identity.json"
+    )
     proof_path = target / "fresh_quote_boundary.json"
     fresh_paths = (
         evidence_path,
         report_copy_path,
         capture_copy_path,
         binding_path,
+        task_copy_path,
+        configuration_path,
         proof_path,
     )
     if any(path.exists() for path in fresh_paths):
@@ -404,6 +441,8 @@ def finalize_selector_proof_bundle(
         evidence_path.write_bytes(quote_bytes)
         report_copy_path.write_bytes(report_evidence.report_bytes)
         capture_copy_path.write_bytes(report_evidence.source_capture_bytes)
+        task_copy_path.write_bytes(task_definition_bytes)
+        write_json(configuration_path, configuration_payload)
         write_json(
             binding_path,
             {
@@ -423,6 +462,15 @@ def finalize_selector_proof_bundle(
                 ),
                 "sourceCaptureTime": report_evidence.source_capture_time,
                 "quoteCheckedAt": quote_payload["checkedAt"],
+                "clockCheckedAt": quote_payload["clockSkewProof"][
+                    "checkedAt"
+                ],
+                "configurationIdentitySha256": configuration_payload[
+                    "configurationIdentitySha256"
+                ],
+                "scheduledTaskDefinitionSha256": configuration_payload[
+                    "scheduledTaskDefinitionSha256"
+                ],
                 "transmitting": False,
                 "orderTransmission": "UNAVAILABLE",
             },
@@ -439,6 +487,8 @@ def finalize_selector_proof_bundle(
                 report_copy_path,
                 capture_copy_path,
                 evidence_path,
+                task_copy_path,
+                configuration_path,
             ),
             context=context,
             verified_at=timestamp,
@@ -467,6 +517,12 @@ def finalize_selector_proof_bundle(
         "activationHash": context.activation_hash,
         "constitutionHash": context.constitution_hash,
         "runtimeBuildHash": context.build_hash,
+        "configurationIdentitySha256": configuration_payload[
+            "configurationIdentitySha256"
+        ],
+        "scheduledTaskDefinitionSha256": configuration_payload[
+            "scheduledTaskDefinitionSha256"
+        ],
         "proofArtifactCount": len(proofs.hashes),
         "proofs": proofs.hashes,
         "stateMutated": False,
@@ -495,13 +551,80 @@ def load_proof_context(state_path: Path) -> ProofContext:
         raise SelectorProofBundleError(
             "Sample activation timestamp is invalid."
         )
+    policy_evidence = expected_shadow_selection_policy_evidence()
     return ProofContext(
         sample_version=activation.sample_metadata.sample_version,
         activation_hash=hashlib.sha256(activation_bytes).hexdigest(),
         activated_at=activated_at,
         constitution_hash=shadow_constitution_hash(),
         build_hash=runtime_build_hash(),
+        selection_policy_version=policy_evidence[
+            "selection_policy_version"
+        ],
+        selection_policy_fingerprint=policy_evidence[
+            "selection_policy_fingerprint"
+        ],
+        fill_model_version=service.sample_definition.fill_model_version,
+        evidence_schema_version=(
+            service.sample_definition.evidence_schema_version
+        ),
     )
+
+
+def build_opening_configuration_identity(
+    *,
+    context: ProofContext,
+    expected_provider: str,
+    expected_scanner: str,
+    task_definition_path: Path,
+) -> tuple[dict[str, object], bytes]:
+    _, task_definition_bytes = read_stable_selector_artifact(
+        task_definition_path,
+        proof_name="fresh_quote_boundary",
+        artifact_role="scheduled-task-definition",
+        maximum_bytes=MAX_SELECTOR_EVIDENCE_ARTIFACT_BYTES,
+    )
+    provider = expected_provider.strip().lower()
+    scanner = expected_scanner.strip()
+    if not provider or not scanner:
+        raise SelectorProofBundleError(
+            "Opening configuration requires explicit provider and scanner identities."
+        )
+    identity: dict[str, object] = {
+        "schemaVersion": 1,
+        "proofType": "SHADOW_OPENING_CONFIGURATION_IDENTITY",
+        "provider": provider,
+        "scanner": scanner,
+        "reportSchemaVersion": REPORT_SCHEMA_VERSION,
+        "constitutionHash": context.constitution_hash,
+        "selectionPolicyVersion": context.selection_policy_version,
+        "selectionPolicyFingerprint": (
+            context.selection_policy_fingerprint
+        ),
+        "fillModelVersion": context.fill_model_version,
+        "evidenceSchemaVersion": context.evidence_schema_version,
+        "runtimeBuildHash": context.build_hash,
+        "scheduledTaskDefinitionSha256": hashlib.sha256(
+            task_definition_bytes
+        ).hexdigest(),
+        "quoteSource": SCHWAB_QUOTE_SOURCE,
+        "transmitting": False,
+        "orderTransmission": "UNAVAILABLE",
+    }
+    if (
+        identity["selectionPolicyVersion"]
+        != SHADOW_SELECTION_POLICY_VERSION
+        or identity["fillModelVersion"] != SHADOW_FILL_MODEL_VERSION
+        or identity["evidenceSchemaVersion"]
+        != SHADOW_EVIDENCE_SCHEMA_VERSION
+    ):
+        raise SelectorProofBundleError(
+            "Opening configuration does not match the active Shadow contract."
+        )
+    identity["configurationIdentitySha256"] = hashlib.sha256(
+        opening_canonical_json(identity).encode("ascii")
+    ).hexdigest()
+    return identity, task_definition_bytes
 
 
 def require_current_timestamp(
@@ -857,6 +980,8 @@ def read_and_validate_candidate_report(
     captures_dir: Path,
     context: ProofContext,
     finalized_at: datetime,
+    expected_provider: str | None = None,
+    expected_scanner: str | None = None,
 ) -> CandidateReportEvidence:
     if path.is_symlink():
         raise SelectorProofBundleError(
@@ -941,14 +1066,31 @@ def read_and_validate_candidate_report(
         if isinstance(report.get("metadata"), dict)
         else {}
     )
+    source_provider = str(metadata.get("source_provider", "")).strip()
+    source_scanner = str(metadata.get("source_scanner", "")).strip()
     if (
         report.get("schema_version") != REPORT_SCHEMA_VERSION
-        or not str(metadata.get("source_provider", "")).strip()
+        or not source_provider
+        or not source_scanner
         or not str(metadata.get("source_capture_path", "")).strip()
         or not str(metadata.get("source_session", "")).strip()
     ):
         raise SelectorProofBundleError(
             "Fresh quote proof report identity is incomplete."
+        )
+    if (
+        expected_provider is not None
+        and source_provider.lower() != expected_provider.strip().lower()
+    ):
+        raise SelectorProofBundleError(
+            "Fresh quote proof report provider does not match frozen configuration."
+        )
+    if (
+        expected_scanner is not None
+        and source_scanner != expected_scanner.strip()
+    ):
+        raise SelectorProofBundleError(
+            "Fresh quote proof report scanner does not match frozen configuration."
         )
     clock_findings = validate_report_clocks(
         metadata,
@@ -1016,6 +1158,12 @@ def read_and_validate_candidate_report(
         if isinstance(source_rows, list)
         else set()
     )
+    capture_scanner = capture.get("scanner")
+    capture_scanner_name = (
+        str(capture_scanner.get("name", "")).strip()
+        if isinstance(capture_scanner, dict)
+        else ""
+    )
     if (
         str(capture.get("capture_time", ""))
         != str(metadata.get("source_capture_time", ""))
@@ -1026,6 +1174,9 @@ def read_and_validate_candidate_report(
         or "" in report_symbols
         or "" in source_symbols
         or report_symbols != source_symbols
+        or str(capture.get("provider", "")).strip().lower()
+        != source_provider.lower()
+        or capture_scanner_name != source_scanner
     ):
         raise SelectorProofBundleError(
             "Fresh quote report does not match its immutable source capture."
@@ -1040,6 +1191,8 @@ def read_and_validate_candidate_report(
         source_capture_sha256=hashlib.sha256(capture_bytes).hexdigest(),
         report_generated_at=str(metadata.get("generated_at", "")),
         source_capture_time=str(metadata.get("source_capture_time", "")),
+        source_provider=source_provider,
+        source_scanner=source_scanner,
     )
 
 
@@ -1068,6 +1221,11 @@ def read_and_validate_live_quote_proof(
     )
     checked_at = parse_datetime(str(proof.get("checkedAt", "")))
     quotes = proof.get("quotes")
+    clock_proof = proof.get("clockSkewProof")
+    clock_findings = clock_skew_findings(
+        clock_proof,
+        evaluated_at=finalized_at,
+    )
     if (
         proof.get("schemaVersion")
         != REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION
@@ -1077,6 +1235,9 @@ def read_and_validate_live_quote_proof(
         or proof.get("evidenceOrigin") != LIVE_SCHWAB_QUOTE_PROOF_ORIGIN
         or proof.get("productionSource") is not True
         or proof.get("source") != SCHWAB_QUOTE_SOURCE
+        or proof.get("clockSkewProofRequired") is not True
+        or proof.get("clockSkewFindings") != []
+        or clock_findings
         or proof.get("maximumQuoteAgeSeconds") != 30
         or requested_symbols != expected_symbols
         or checked_at is None

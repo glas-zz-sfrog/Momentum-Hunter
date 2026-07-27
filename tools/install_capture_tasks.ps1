@@ -5,6 +5,10 @@ param(
     [string]$ShadowTime = "08:35",
     [string]$EveningTime = "19:00",
     [string]$SelectorProofBundle = "",
+    [string]$Provider = "finviz",
+    [string]$Scanner = "Institutional Momentum",
+    [switch]$ArmShadowSelector,
+    [switch]$EnableShadowTask,
     [switch]$RunWhetherLoggedOn
 )
 
@@ -18,6 +22,7 @@ $morningTaskName = "Momentum Hunter Morning Capture"
 $shadowTaskName = "Momentum Hunter Shadow Opening Capture"
 $eveningTaskName = "Momentum Hunter Evening Capture"
 $runnerScript = Join-Path $toolsDir "run_capture_job.ps1"
+$taskDefinitionPath = Join-Path $ProjectRoot "MomentumHunterData\data\reports\shadow-opening-task-definition.xml"
 if (-not $SelectorProofBundle) {
     $head = (& git -C $ProjectRoot rev-parse --short=7 HEAD).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $head) {
@@ -37,9 +42,12 @@ function Register-CaptureTask {
         [string]$ScriptPath
     )
 
-    $argument = "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`" -Session $Session -ProjectRoot `"$ProjectRoot`" -PythonExe `"$PythonExe`""
+    $argument = "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`" -Session $Session -ProjectRoot `"$ProjectRoot`" -PythonExe `"$PythonExe`" -Provider `"$Provider`" -Scanner `"$Scanner`""
     if ($Session -eq "shadow") {
-        $argument += " -SelectorProofBundle `"$SelectorProofBundle`""
+        $argument += " -SelectorProofBundle `"$SelectorProofBundle`" -TaskDefinitionPath `"$taskDefinitionPath`""
+        if ($ArmShadowSelector) {
+            $argument += " -ArmShadowSelector"
+        }
     }
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $argument -WorkingDirectory $ProjectRoot
     $trigger = New-ScheduledTaskTrigger -Daily -At $Time
@@ -50,10 +58,6 @@ function Register-CaptureTask {
         MultipleInstances = "IgnoreNew"
         WakeToRun = $true
         ExecutionTimeLimit = (New-TimeSpan -Minutes 30)
-    }
-    if ($Session -eq "shadow") {
-        $settingsArguments["RestartCount"] = 3
-        $settingsArguments["RestartInterval"] = (New-TimeSpan -Minutes 1)
     }
     $settings = New-ScheduledTaskSettingsSet @settingsArguments
 
@@ -73,10 +77,19 @@ Register-CaptureTask -TaskName $morningTaskName -Session "morning" -Time $Mornin
 Register-CaptureTask -TaskName $shadowTaskName -Session "shadow" -Time $ShadowTime -ScriptPath $runnerScript
 Register-CaptureTask -TaskName $eveningTaskName -Session "evening" -Time $EveningTime -ScriptPath $runnerScript
 
+if (-not $EnableShadowTask) {
+    Disable-ScheduledTask -TaskName $shadowTaskName | Out-Null
+}
+$taskDefinitionDirectory = Split-Path -Parent $taskDefinitionPath
+New-Item -ItemType Directory -Force -Path $taskDefinitionDirectory | Out-Null
+Export-ScheduledTask -TaskName $shadowTaskName | Set-Content -LiteralPath $taskDefinitionPath -Encoding Unicode
+
 Write-Host "Installed scheduled tasks:"
 Write-Host " - $morningTaskName at $MorningTime"
 Write-Host " - $shadowTaskName at $ShadowTime"
 Write-Host " - $eveningTaskName at $EveningTime"
+Write-Host " - Shadow task enabled: $([bool]$EnableShadowTask)"
+Write-Host " - Frozen Shadow task definition: $taskDefinitionPath"
 Write-Host ""
 Write-Host "Market-calendar policy:"
 Write-Host " - Morning task captures only on XNYS market-open days."

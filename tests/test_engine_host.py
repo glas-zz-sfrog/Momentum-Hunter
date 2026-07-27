@@ -33,6 +33,7 @@ from momentum_hunter.engine_host import (
     HostLease,
     read_json,
 )
+from momentum_hunter.providers import ProviderUnavailableError
 
 
 class EngineHostRuntimeTests(unittest.TestCase):
@@ -245,6 +246,28 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertEqual("Blocked", snapshot.snapshot["collection"]["state"])
         self.assertEqual(1, len(recorded_failures))
         self.assertIn("provider unavailable", recorded_failures[0])
+        self.assertEqual(
+            {"failureType": "RuntimeError", "retryable": False},
+            failed.payload,
+        )
+
+    def test_recognized_provider_failure_is_marked_retryable(self) -> None:
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(
+                ProviderUnavailableError(
+                    "finviz",
+                    "temporary provider outage",
+                    "network",
+                )
+            ),
+        )
+
+        failed = runtime.execute(COMMAND_RUN_CYCLE, "provider-outage")
+
+        self.assertFalse(failed.accepted)
+        self.assertEqual("COLLECTION_FAILED", failed.code)
+        self.assertEqual("ProviderUnavailableError", failed.payload["failureType"])
+        self.assertIs(True, failed.payload["retryable"])
 
     def test_unexpected_command_failure_stays_structured(self) -> None:
         runtime = EngineHostRuntime(external_monitor_running=lambda: (_ for _ in ()).throw(RuntimeError("unexpected")))

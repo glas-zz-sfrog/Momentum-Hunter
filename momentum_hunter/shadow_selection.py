@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Protocol, Sequence
+from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from momentum_hunter.autonomy.risk_governor import evaluate_trade_plan
 from momentum_hunter.autonomy.view_models import (
@@ -25,9 +25,11 @@ from momentum_hunter.shadow_market_validity import (
     report_clock_evidence,
     shadow_constitution_hash,
     stable_hash,
+    validate_opening_configuration_identity,
     validate_report_clocks,
     validate_selection_quote,
 )
+from momentum_hunter.shadow_opening import clock_skew_findings
 from momentum_hunter.trade_planning import REPORT_SCHEMA_VERSION, parse_datetime
 from momentum_hunter.shadow_trading import (
     SHADOW_MODE,
@@ -51,6 +53,8 @@ SELECTION_CONSTITUTION_NOT_ARMED = "CONSTITUTION_NOT_ARMED"
 SELECTION_INVALID_REPORT = "INVALID_REPORT"
 SELECTION_DUPLICATE_CAPTURE = "SOURCE_CAPTURE_ALREADY_PROCESSED"
 SELECTION_FAILED = "SELECTION_FAILED"
+SELECTION_CLOCK_SKEW_BLOCKED = "CLOCK_SKEW_BLOCKED"
+SELECTION_CONFIGURATION_MISMATCH = "CONFIGURATION_MISMATCH"
 
 
 class QuoteSource(Protocol):
@@ -89,6 +93,7 @@ class AutomaticShadowSelectionResult:
     selection_policy_recorded_at: str = ""
     selection_policy_version: str = ""
     selection_policy_fingerprint: str = ""
+    terminal_cycle_status: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -113,6 +118,9 @@ class AutomaticShadowSelectionResult:
             "selectionPolicyVersion": self.selection_policy_version or None,
             "selectionPolicyFingerprint": (
                 self.selection_policy_fingerprint or None
+            ),
+            "terminalCycleStatus": (
+                self.terminal_cycle_status or self.status or None
             ),
             "orderTransmission": "UNAVAILABLE",
         }
@@ -216,15 +224,15 @@ class AutomaticShadowSelector:
                 arm_id=arm.arm_id,
             )
 
-        clock_findings = validate_report_clocks(
+        report_clock_findings = validate_report_clocks(
             metadata,
             decision_at=decision_at,
             policy=self.market_policy,
         )
-        if clock_findings:
+        if report_clock_findings:
             return self._record_terminal_cycle(
                 status=SELECTION_INVALID_REPORT,
-                reason=" | ".join(clock_findings),
+                reason=" | ".join(report_clock_findings),
                 report_path=report_path,
                 report_sha256=source_sha256,
                 metadata=metadata,
@@ -247,6 +255,22 @@ class AutomaticShadowSelector:
                 arm_id=arm.arm_id,
             )
 
+        configuration_findings = opening_configuration_findings(
+            arm.opening_configuration,
+            report=report,
+            metadata=metadata,
+        )
+        if configuration_findings:
+            return AutomaticShadowSelectionResult(
+                status=SELECTION_CONFIGURATION_MISMATCH,
+                reason=" | ".join(configuration_findings),
+                report_path=str(report_path),
+                report_sha256=source_sha256,
+                selector_arm_id=arm.arm_id,
+                constitution_hash=arm.constitution_hash,
+                terminal_cycle_status=SELECTION_CONFIGURATION_MISMATCH,
+            )
+
         selection_policy = self.service.load_automatic_selection_policy()
         state = self.service.store.load()
         canonical_rows = canonical_candidate_rows(rows)
@@ -255,10 +279,24 @@ class AutomaticShadowSelector:
             for _, row in canonical_rows
         ]
         quote_symbols.extend(self.market_policy.benchmark_symbols)
-        cycle_quotes = self._quotes(
+        cycle_quotes, decision_clock_proof = self._quotes_with_clock(
             quote_symbols,
             decision_at=decision_at,
         )
+        decision_clock_findings = clock_skew_findings(
+            decision_clock_proof,
+            evaluated_at=decision_at,
+        )
+        if decision_clock_findings:
+            return AutomaticShadowSelectionResult(
+                status=SELECTION_CLOCK_SKEW_BLOCKED,
+                reason=" | ".join(decision_clock_findings),
+                report_path=str(report_path),
+                report_sha256=source_sha256,
+                selector_arm_id=arm.arm_id,
+                constitution_hash=arm.constitution_hash,
+                terminal_cycle_status=SELECTION_CLOCK_SKEW_BLOCKED,
+            )
         assessments: list[dict[str, Any]] = []
         for persisted_index, row in canonical_rows:
             symbol = str(row.get("symbol", "")).strip().upper()
@@ -304,6 +342,9 @@ class AutomaticShadowSelector:
                 metadata,
                 decision_at=decision_at,
             ),
+            "pre_arm_clock_skew_proof": dict(arm.clock_skew_proof),
+            "decision_clock_skew_proof": dict(decision_clock_proof),
+            "opening_configuration": dict(arm.opening_configuration),
             "selector_arm_id": arm.arm_id,
             "constitution_hash": arm.constitution_hash,
             "selection_policy_fingerprint": (
@@ -362,6 +403,7 @@ class AutomaticShadowSelector:
                 selection_policy_fingerprint=(
                     selection_policy.selection_policy_fingerprint
                 ),
+                terminal_cycle_status=SELECTION_NO_ELIGIBLE_CANDIDATE,
             )
 
         command_id = stable_id("shadow-auto-report", source_sha256)
@@ -427,6 +469,7 @@ class AutomaticShadowSelector:
             selection_policy_fingerprint=(
                 selection_policy.selection_policy_fingerprint
             ),
+            terminal_cycle_status=SELECTION_STARTED,
         )
 
     def _assess_candidate(
@@ -603,6 +646,45 @@ class AutomaticShadowSelector:
             is not None
         }
 
+    def _quotes_with_clock(
+        self,
+        symbols: Sequence[str],
+        *,
+        decision_at: datetime,
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+        normalized = tuple(
+            dict.fromkeys(
+                str(symbol).strip().upper()
+                for symbol in symbols
+                if str(symbol).strip()
+            )
+        )
+        loader = getattr(self.quote_source, "quotes_with_clock", None)
+        if not callable(loader):
+            return self._quotes(
+                normalized,
+                decision_at=decision_at,
+            ), {}
+        batch = loader(normalized, decision_at=decision_at)
+        raw_quotes = getattr(batch, "quotes", None)
+        raw_clock = getattr(batch, "clock_skew_proof", None)
+        if not isinstance(raw_quotes, Mapping):
+            raise ValueError(
+                "Clocked batch quote source returned an invalid quote shape."
+            )
+        if not isinstance(raw_clock, Mapping):
+            raise ValueError(
+                "Clocked batch quote source returned invalid clock evidence."
+            )
+        return (
+            {
+                str(symbol).strip().upper(): dict(quote)
+                for symbol, quote in raw_quotes.items()
+                if isinstance(quote, Mapping)
+            },
+            dict(raw_clock),
+        )
+
     def _existing_source_capture_cycle(
         self,
         metadata: dict[str, Any],
@@ -677,6 +759,7 @@ class AutomaticShadowSelector:
             decision_cycle_id=cycle_id,
             selector_arm_id=arm_id,
             constitution_hash=shadow_constitution_hash(),
+            terminal_cycle_status=status,
         )
 
 
@@ -709,6 +792,7 @@ def result_for_existing_cycle(
         opportunity_id=str(cycle.get("opportunity_id") or ""),
         selector_arm_id=str(cycle.get("selector_arm_id") or ""),
         constitution_hash=str(cycle.get("constitution_hash") or ""),
+        terminal_cycle_status=str(cycle.get("status") or ""),
     )
 
 
@@ -716,4 +800,38 @@ def no_report_result() -> AutomaticShadowSelectionResult:
     return AutomaticShadowSelectionResult(
         status=SELECTION_NO_REPORT,
         reason="No canonical scheduled trade-planning report is available.",
+        terminal_cycle_status=SELECTION_NO_REPORT,
     )
+
+
+def opening_configuration_findings(
+    identity: object,
+    *,
+    report: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> tuple[str, ...]:
+    try:
+        validate_opening_configuration_identity(identity)
+    except ValueError as exc:
+        return (str(exc),)
+    assert isinstance(identity, Mapping)
+    findings: list[str] = []
+    if report.get("schema_version") != identity.get("reportSchemaVersion"):
+        findings.append(
+            "TradePlan report schema does not match frozen opening configuration."
+        )
+    if (
+        str(metadata.get("source_provider", "")).strip().lower()
+        != str(identity.get("provider", "")).strip().lower()
+    ):
+        findings.append(
+            "TradePlan provider does not match frozen opening configuration."
+        )
+    if (
+        str(metadata.get("source_scanner", "")).strip()
+        != str(identity.get("scanner", "")).strip()
+    ):
+        findings.append(
+            "TradePlan scanner does not match frozen opening configuration."
+        )
+    return tuple(findings)

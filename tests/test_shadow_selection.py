@@ -7,7 +7,9 @@ import tempfile
 import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta
+from email.utils import format_datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import momentum_hunter.shadow_market_validity as shadow_market_validity_module
@@ -25,10 +27,13 @@ from momentum_hunter.shadow_market_validity import (
     portfolio_findings,
     runtime_build_hash,
     shadow_constitution_hash,
+    validate_opening_configuration_identity,
     validate_arm_record,
 )
 from momentum_hunter.shadow_selection import (
     SELECTION_ALREADY_PROCESSED,
+    SELECTION_CONFIGURATION_MISMATCH,
+    SELECTION_CLOCK_SKEW_BLOCKED,
     SELECTION_CONSTITUTION_NOT_ARMED,
     SELECTION_DUPLICATE_CAPTURE,
     SELECTION_INVALID_REPORT,
@@ -36,6 +41,7 @@ from momentum_hunter.shadow_selection import (
     SELECTION_STARTED,
     AutomaticShadowSelector,
 )
+from momentum_hunter.shadow_opening import build_https_clock_skew_proof
 from momentum_hunter.shadow_trading import (
     SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
     ShadowStateError,
@@ -62,6 +68,27 @@ class DictQuoteSource:
         value = self.quotes.get(symbol)
         return copy.deepcopy(value) if value is not None else None
 
+    def quotes_with_clock(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        decision_at: datetime,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            quotes={
+                symbol: quote
+                for symbol in symbols
+                if (
+                    quote := self.quote(
+                        symbol,
+                        decision_at=decision_at,
+                    )
+                )
+                is not None
+            },
+            clock_skew_proof=synthetic_clock_proof(decision_at),
+        )
+
 
 class BatchQuoteSource:
     def __init__(self, quotes: dict[str, dict]) -> None:
@@ -80,6 +107,26 @@ class BatchQuoteSource:
             for symbol in symbols
             if symbol in self.values
         }
+
+    def quotes_with_clock(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        decision_at: datetime,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            quotes=self.quotes(symbols, decision_at=decision_at),
+            clock_skew_proof=synthetic_clock_proof(decision_at),
+        )
+
+
+def synthetic_clock_proof(checked_at: datetime) -> dict[str, object]:
+    return build_https_clock_skew_proof(
+        request_started_at=checked_at,
+        response_received_at=checked_at,
+        remote_date_header=format_datetime(checked_at),
+        source_identity="synthetic-test-https-date",
+    )
 
 
 class ShadowMarketValiditySelectionTests(unittest.TestCase):
@@ -363,6 +410,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
             root / "schwab_market_data.py",
             root / "shadow_arm_ceremony.py",
             root / "shadow_market_validity.py",
+            root / "shadow_opening.py",
             root / "shadow_selection.py",
             root / "shadow_trading.py",
             root / "storage.py",
@@ -409,6 +457,94 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         self.assertFalse(self.service.selection_policy_store.path.exists())
         self.assertFalse(self.service.decision_cycle_store.path.exists())
         self.assertFalse(self.state_path.exists())
+
+    def test_provider_and_scanner_mismatch_block_before_cycle_or_trade(
+        self,
+    ) -> None:
+        for field, value in (
+            ("source_provider", "wrong-provider"),
+            ("source_scanner", "Wrong Scanner"),
+        ):
+            with self.subTest(field=field):
+                self.tearDown()
+                self.setUp()
+                self.activate()
+                payload = report_payload()
+                payload["metadata"][field] = value
+                self.write_report(payload)
+
+                result = self.selector().select(
+                    self.report_path,
+                    decision_at=self.decision_at,
+                )
+
+                self.assertEqual(
+                    SELECTION_CONFIGURATION_MISMATCH,
+                    result.status,
+                )
+                self.assertFalse(
+                    self.service.decision_cycle_store.path.exists()
+                )
+                self.assertFalse(self.state_path.exists())
+
+    def test_missing_decision_clock_blocks_before_cycle_or_trade(self) -> None:
+        self.activate()
+        self.write_report()
+        source = BatchQuoteSource(self.quote_source.quotes)
+        source.quotes_with_clock = lambda *_args, **_kwargs: SimpleNamespace(
+            quotes=source.values,
+            clock_skew_proof={},
+        )
+
+        result = AutomaticShadowSelector(
+            self.service,
+            quote_source=source,
+        ).select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_CLOCK_SKEW_BLOCKED, result.status)
+        self.assertFalse(self.service.decision_cycle_store.path.exists())
+        self.assertFalse(self.state_path.exists())
+
+    def test_frozen_policy_and_build_hash_mismatch_fail_closed(self) -> None:
+        self.activate()
+        arm = self.service.selector_arm_record()
+        assert arm is not None
+        cases = (
+            (
+                "runtimeBuildHash",
+                "b" * 64,
+                {"expected_build_hash": arm.build_hash},
+                "runtime build hash does not match",
+            ),
+            (
+                "selectionPolicyFingerprint",
+                "c" * 64,
+                {
+                    "expected_selection_policy_fingerprint": (
+                        arm.selection_policy_fingerprint
+                    )
+                },
+                "selection policy hash does not match",
+            ),
+        )
+        for field, value, expected, message in cases:
+            with self.subTest(field=field):
+                identity = dict(arm.opening_configuration)
+                identity[field] = value
+                unsigned = dict(identity)
+                unsigned.pop("configurationIdentitySha256", None)
+                identity["configurationIdentitySha256"] = hashlib.sha256(
+                    canonical_json(unsigned).encode("utf-8")
+                ).hexdigest()
+
+                with self.assertRaisesRegex(ValueError, message):
+                    validate_opening_configuration_identity(
+                        identity,
+                        **expected,
+                    )
 
     def test_canonical_rank_is_primary_and_persisted_order_cannot_choose(self) -> None:
         self.activate()

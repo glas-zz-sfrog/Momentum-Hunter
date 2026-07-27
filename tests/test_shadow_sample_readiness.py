@@ -8,7 +8,9 @@ import unittest
 from contextlib import redirect_stdout
 from dataclasses import replace
 from datetime import timedelta
+from email.utils import format_datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from momentum_hunter.shadow_market_validity import (
@@ -18,6 +20,7 @@ from momentum_hunter.shadow_selection import (
     SELECTION_STARTED,
     AutomaticShadowSelector,
 )
+from momentum_hunter.shadow_opening import build_https_clock_skew_proof
 from momentum_hunter.shadow_trading import (
     DEFAULT_SHADOW_SAMPLE_VERSION,
     OFFICIAL_SHADOW_SAMPLE_VERSION,
@@ -37,6 +40,7 @@ from momentum_hunter.shadow_trading import (
     main,
 )
 from momentum_hunter.trade_planning import parse_datetime
+from momentum_hunter.time_utils import now_central
 from tests.test_shadow_trading import (
     at,
     completed_auditable_trade,
@@ -44,6 +48,28 @@ from tests.test_shadow_trading import (
     report_payload,
 )
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
+
+
+class ClockedQuoteSource:
+    def __init__(self, loader) -> None:
+        self.loader = loader
+
+    def quote(self, symbol: str, *, decision_at):
+        return self.loader(symbol, decision_at=decision_at)
+
+    def quotes_with_clock(self, symbols, *, decision_at):
+        return SimpleNamespace(
+            quotes={
+                symbol: self.loader(symbol, decision_at=decision_at)
+                for symbol in symbols
+            },
+            clock_skew_proof=build_https_clock_skew_proof(
+                request_started_at=decision_at,
+                response_received_at=decision_at,
+                remote_date_header=format_datetime(decision_at),
+                source_identity="synthetic-test-https-date",
+            ),
+        )
 
 
 class ShadowSampleReadinessTests(unittest.TestCase):
@@ -147,16 +173,18 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         }
         selector = AutomaticShadowSelector(
             service,
-            quote_source=lambda symbol, *, decision_at: (
-                quote
-                if symbol == "TEST"
-                else {
-                    **quote,
-                    "symbol": symbol,
-                    "bid": 100.0,
-                    "ask": 100.01,
-                    "last": 100.0,
-                }
+            quote_source=ClockedQuoteSource(
+                lambda symbol, *, decision_at: (
+                    quote
+                    if symbol == "TEST"
+                    else {
+                        **quote,
+                        "symbol": symbol,
+                        "bid": 100.0,
+                        "ask": 100.01,
+                        "last": 100.0,
+                    }
+                )
             ),
         )
         result = selector.select(
@@ -667,7 +695,7 @@ class ShadowSampleReadinessTests(unittest.TestCase):
             "cli-selector-arm",
             sample_version=service.sample_definition.sample_version,
             activation_path=service.activation_store.path,
-            verified_at=at("2026-07-23T09:57:20-05:00"),
+            verified_at=now_central(),
         )
         proof_bundle = next(iter(proof_paths.values())).parent
         policy_path = service.selection_policy_store.path

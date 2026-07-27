@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -20,6 +21,12 @@ from momentum_hunter.scheduling import SkipReason, evaluate_automatic_capture
 from momentum_hunter.scoring import score_candidates
 from momentum_hunter.score_breakdowns import upsert_score_breakdowns_for_capture_payload
 from momentum_hunter.storage import CAPTURES_DIR, file_sha256, save_capture_failure, save_daily_capture
+from momentum_hunter.shadow_opening import (
+    ShadowOpeningSafetyError,
+    build_shadow_handoff_receipt,
+    canonical_json,
+    shadow_handoff_findings,
+)
 from momentum_hunter.time_utils import now_central
 from momentum_hunter.trade_planning import (
     build_trade_planning_report,
@@ -31,7 +38,7 @@ from momentum_hunter.trade_planning import (
 
 REPORTS_DIR = DATA_DIR / "reports"
 SHADOW_HANDOFFS_DIR = DATA_DIR / "shadow-trading" / "capture-handoffs"
-SHADOW_HANDOFF_SCHEMA_VERSION = 1
+SHADOW_RETRYABLE_INFRASTRUCTURE_EXIT = 75
 
 
 @dataclass(frozen=True)
@@ -52,6 +59,8 @@ def main() -> int:
     scanner_name = args.scanner or "Institutional Momentum"
     failure_time = now_central()
     try:
+        if args.trigger_shadow_selector:
+            require_frozen_shadow_arguments(args)
         result = run_capture_with_result(args, session=session)
         if args.trigger_shadow_selector:
             if session != CaptureSession.SHADOW:
@@ -77,26 +86,47 @@ def main() -> int:
                 if selector_proof_bundle is not None:
                     from momentum_hunter.shadow_arm_ceremony import (
                         complete_shadow_selector_arm,
+                        verify_shadow_opening_proof,
                     )
 
-                    ceremony = complete_shadow_selector_arm(
+                    ceremony_runner = (
+                        verify_shadow_opening_proof
+                        if getattr(
+                            args,
+                            "shadow_opening_proof_only",
+                            False,
+                        )
+                        else complete_shadow_selector_arm
+                    )
+                    ceremony = ceremony_runner(
                         selector_proof_bundle,
                         report_path,
+                        task_definition_path=args.task_definition,
+                        expected_provider=args.provider,
+                        expected_scanner=args.scanner,
                     )
                     print(f"Shadow selector arm ceremony: {ceremony.state}")
                     if ceremony.candidate:
                         print(f"Proof candidate: {ceremony.candidate}")
+                if getattr(args, "shadow_opening_proof_only", False):
+                    print(
+                        "Engine Host selector cycle skipped: "
+                        "UNARMED_OPENING_PROOF_ONLY"
+                    )
+                    return result.exit_code
                 from momentum_hunter.engine_host_client import (
                     run_immediate_collection_cycle,
                 )
 
                 report_hash = file_sha256(report_path)
+                command_id = f"shadow-opening-capture-{report_hash}"
                 cycle = run_immediate_collection_cycle(
-                    command_id=f"shadow-opening-capture-{report_hash}",
+                    command_id=command_id,
                 )
                 write_shadow_handoff_receipt(
                     report_path,
                     report_hash=report_hash,
+                    capture_id=capture_identity(report_path),
                     cycle=cycle,
                 )
                 print(f"Engine Host selector cycle: {cycle.code}")
@@ -126,7 +156,17 @@ def main() -> int:
         print(f"Capture failed: {friendly_error_message(exc)}", file=sys.stderr)
         print(f"Failure record: {failure_path}", file=sys.stderr)
         print(traceback_text, file=sys.stderr)
-        return 1
+        return (
+            SHADOW_RETRYABLE_INFRASTRUCTURE_EXIT
+            if shadow_error_is_retryable(
+                exc,
+                session=session,
+                trigger_shadow_selector=bool(
+                    getattr(args, "trigger_shadow_selector", False)
+                ),
+            )
+            else 1
+        )
 
 
 def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
@@ -160,7 +200,13 @@ def run_capture_with_result(
                 reports_dir=REPORTS_DIR,
             )
             reports_preexisting = all(path.exists() for path in expected.values())
-            report_paths = ensure_trade_planning_report(capture_path)
+            report_paths = ensure_trade_planning_report(
+                capture_path,
+                expected_provider=args.provider or config.provider,
+                expected_scanner=(
+                    args.scanner or "Institutional Momentum"
+                ),
+            )
             print_report_paths(report_paths, prefix="Existing capture report")
             return CaptureRunResult(
                 exit_code=0,
@@ -207,7 +253,11 @@ def run_capture_with_result(
         print("Score breakdowns updated")
     except Exception as exc:
         print(f"Score breakdown update failed: {exc}", file=sys.stderr)
-    report_paths = ensure_trade_planning_report(json_path)
+    report_paths = ensure_trade_planning_report(
+        json_path,
+        expected_provider=provider.name,
+        expected_scanner=criteria.name,
+    )
     print_report_paths(report_paths, prefix="Trade planning")
     return CaptureRunResult(
         exit_code=0,
@@ -220,13 +270,20 @@ def ensure_trade_planning_report(
     capture_path: Path,
     *,
     reports_dir: Path = REPORTS_DIR,
+    expected_provider: str | None = None,
+    expected_scanner: str | None = None,
 ) -> dict[str, Path]:
     if not capture_path.exists():
         raise FileNotFoundError(f"Raw capture JSON is missing: {capture_path}")
     expected = trade_planning_report_paths(capture_path, reports_dir=reports_dir)
     existing = {name: path.exists() for name, path in expected.items()}
     if all(existing.values()):
-        validate_trade_planning_report(expected["json"], capture_path)
+        validate_trade_planning_report(
+            expected["json"],
+            capture_path,
+            expected_provider=expected_provider,
+            expected_scanner=expected_scanner,
+        )
         return expected
     if any(existing.values()):
         incomplete = ", ".join(name for name, exists in existing.items() if exists)
@@ -252,7 +309,12 @@ def ensure_trade_planning_report(
         raise RuntimeError("TradePlan report export returned unexpected output paths.")
     if file_sha256(capture_path) != capture_hash:
         raise RuntimeError("TradePlan report generation mutated the immutable raw capture.")
-    validate_trade_planning_report(actual["json"], capture_path)
+    validate_trade_planning_report(
+        actual["json"],
+        capture_path,
+        expected_provider=expected_provider,
+        expected_scanner=expected_scanner,
+    )
     return actual
 
 
@@ -282,7 +344,13 @@ def trade_planning_report_paths(
     }
 
 
-def validate_trade_planning_report(report_path: Path, capture_path: Path) -> None:
+def validate_trade_planning_report(
+    report_path: Path,
+    capture_path: Path,
+    *,
+    expected_provider: str | None = None,
+    expected_scanner: str | None = None,
+) -> None:
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     metadata = payload.get("metadata")
     capture_payload = json.loads(capture_path.read_text(encoding="utf-8"))
@@ -294,6 +362,37 @@ def validate_trade_planning_report(report_path: Path, capture_path: Path) -> Non
         raise ValueError("Derived TradePlan report does not match the source capture time.")
     if str(metadata.get("source_session", "")) != expected_session:
         raise ValueError("Derived TradePlan report does not match the source capture session.")
+    report_provider = str(metadata.get("source_provider", "")).strip()
+    report_scanner = str(metadata.get("source_scanner", "")).strip()
+    capture_provider = str(capture_payload.get("provider", "")).strip()
+    capture_scanner = capture_payload.get("scanner")
+    capture_scanner_name = (
+        str(capture_scanner.get("name", "")).strip()
+        if isinstance(capture_scanner, dict)
+        else ""
+    )
+    if report_provider != capture_provider:
+        raise ValueError(
+            "Derived TradePlan report provider does not match the source capture."
+        )
+    if report_scanner != capture_scanner_name:
+        raise ValueError(
+            "Derived TradePlan report scanner does not match the source capture."
+        )
+    if (
+        expected_provider is not None
+        and report_provider.lower() != expected_provider.strip().lower()
+    ):
+        raise ValueError(
+            "Derived TradePlan report provider does not match frozen configuration."
+        )
+    if (
+        expected_scanner is not None
+        and report_scanner != expected_scanner.strip()
+    ):
+        raise ValueError(
+            "Derived TradePlan report scanner does not match frozen configuration."
+        )
     source_path = Path(str(metadata.get("source_capture_path", "")))
     if source_path.resolve() != capture_path.resolve():
         raise ValueError("Derived TradePlan report does not match the source capture path.")
@@ -352,13 +451,9 @@ def shadow_handoff_is_complete(
         report_hash = file_sha256(report_path)
     except OSError:
         return False
-    return (
-        isinstance(payload, dict)
-        and payload.get("schemaVersion") == SHADOW_HANDOFF_SCHEMA_VERSION
-        and payload.get("status") == "ENGINE_HOST_ACCEPTED"
-        and payload.get("reportSha256") == report_hash
-        and payload.get("transmitting") is False
-        and payload.get("orderTransmission") == "UNAVAILABLE"
+    return not shadow_handoff_findings(
+        payload,
+        expected_report_sha256=report_hash,
     )
 
 
@@ -366,6 +461,7 @@ def write_shadow_handoff_receipt(
     report_path: Path,
     *,
     report_hash: str,
+    capture_id: str,
     cycle: object,
     handoffs_dir: Path = SHADOW_HANDOFFS_DIR,
 ) -> Path:
@@ -373,31 +469,20 @@ def write_shadow_handoff_receipt(
         report_path,
         handoffs_dir=handoffs_dir,
     )
+    payload = build_shadow_handoff_receipt(
+        report_path=report_path,
+        report_sha256=report_hash,
+        capture_id=capture_id,
+        cycle=cycle,
+        recorded_at=now_central(),
+    )
     if receipt_path.exists():
         if shadow_handoff_is_complete(
             report_path,
             handoffs_dir=handoffs_dir,
         ):
             return receipt_path
-        raise RuntimeError(
-            "Existing Shadow selector handoff receipt is invalid or mismatched."
-        )
-    snapshot = getattr(cycle, "snapshot", {})
-    payload = {
-        "schemaVersion": SHADOW_HANDOFF_SCHEMA_VERSION,
-        "status": "ENGINE_HOST_ACCEPTED",
-        "recordedAt": now_central().isoformat(),
-        "reportPath": str(report_path.resolve()),
-        "reportSha256": report_hash,
-        "engineHostInstanceId": (
-            str(snapshot.get("hostInstanceId", ""))
-            if isinstance(snapshot, dict)
-            else ""
-        ),
-        "cycleCode": str(getattr(cycle, "code", "")),
-        "transmitting": False,
-        "orderTransmission": "UNAVAILABLE",
-    }
+        preserve_incomplete_handoff_receipt(receipt_path)
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = receipt_path.with_name(
         f"{receipt_path.name}.{uuid.uuid4().hex}.tmp"
@@ -421,6 +506,96 @@ def write_shadow_handoff_receipt(
     return receipt_path
 
 
+def preserve_incomplete_handoff_receipt(receipt_path: Path) -> Path:
+    payload = receipt_path.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()[:16]
+    preserved = receipt_path.with_name(
+        f"{receipt_path.stem}.incomplete-{digest}{receipt_path.suffix}"
+    )
+    if preserved.exists():
+        preserved = receipt_path.with_name(
+            f"{receipt_path.stem}.incomplete-{digest}-{uuid.uuid4().hex}"
+            f"{receipt_path.suffix}"
+        )
+    receipt_path.replace(preserved)
+    return preserved
+
+
+def capture_identity(report_path: Path) -> str:
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ShadowOpeningSafetyError(
+            "Shadow handoff report identity cannot be loaded."
+        ) from exc
+    metadata = report.get("metadata") if isinstance(report, dict) else None
+    if not isinstance(metadata, dict):
+        raise ShadowOpeningSafetyError(
+            "Shadow handoff report metadata is missing."
+        )
+    source_path = str(metadata.get("source_capture_path", "")).strip()
+    source_time = str(metadata.get("source_capture_time", "")).strip()
+    if not source_path or not source_time:
+        raise ShadowOpeningSafetyError(
+            "Shadow handoff source capture identity is incomplete."
+        )
+    return hashlib.sha256(
+        canonical_json(
+            {
+                "sourceCapturePath": str(Path(source_path).resolve()),
+                "sourceCaptureTime": source_time,
+            }
+        ).encode("ascii")
+    ).hexdigest()
+
+
+def require_frozen_shadow_arguments(args: argparse.Namespace) -> None:
+    required = {
+        "provider": getattr(args, "provider", None),
+        "scanner": getattr(args, "scanner", None),
+        "selector proof bundle": getattr(
+            args,
+            "selector_proof_bundle",
+            None,
+        ),
+        "scheduled-task definition": getattr(
+            args,
+            "task_definition",
+            None,
+        ),
+    }
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        raise ShadowOpeningSafetyError(
+            "Official Shadow opening requires explicit frozen "
+            + ", ".join(missing)
+            + "."
+        )
+
+
+def shadow_error_is_retryable(
+    exc: Exception,
+    *,
+    session: CaptureSession,
+    trigger_shadow_selector: bool,
+) -> bool:
+    if session != CaptureSession.SHADOW or not trigger_shadow_selector:
+        return False
+    from momentum_hunter.engine_host_client import EngineHostRetryableError
+    from momentum_hunter.schwab_market_data import (
+        SchwabMarketDataNetworkError,
+    )
+
+    return isinstance(
+        exc,
+        (
+            EngineHostRetryableError,
+            ProviderUnavailableError,
+            SchwabMarketDataNetworkError,
+        ),
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a headless Momentum Hunter capture.")
     parser.add_argument("--session", choices=[item.value for item in CaptureSession], required=True)
@@ -432,6 +607,22 @@ def parse_args() -> argparse.Namespace:
         help=(
             "After a new or recovered shadow report, run one immediate guarded "
             "Engine Host collection/selector cycle."
+        ),
+    )
+    parser.add_argument(
+        "--task-definition",
+        type=Path,
+        help=(
+            "Exported immutable Windows scheduled-task definition used by "
+            "the Official Shadow opening proof."
+        ),
+    )
+    parser.add_argument(
+        "--shadow-opening-proof-only",
+        action="store_true",
+        help=(
+            "Finalize and verify opening evidence without arming or invoking "
+            "the selector."
         ),
     )
     parser.add_argument(

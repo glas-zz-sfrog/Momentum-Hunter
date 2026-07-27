@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import datetime
@@ -41,6 +43,17 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def shadow_args(self) -> argparse.Namespace:
+        return argparse.Namespace(
+            session=CaptureSession.SHADOW.value,
+            provider="finviz",
+            scanner="Institutional Momentum",
+            trigger_shadow_selector=True,
+            shadow_opening_proof_only=False,
+            selector_proof_bundle=self.root / "selector-proof-bundle",
+            task_definition=self.root / "shadow-task.xml",
+        )
 
     def test_derived_trade_plan_report_is_write_once_and_does_not_mutate_capture(self) -> None:
         before = file_sha256(self.capture_path)
@@ -176,7 +189,11 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             result = capture_job.run_capture(args, session=CaptureSession.MORNING)
 
         self.assertEqual(0, result)
-        ensure_report.assert_called_once_with(self.capture_path)
+        ensure_report.assert_called_once_with(
+            self.capture_path,
+            expected_provider="finviz",
+            expected_scanner="Institutional Momentum",
+        )
         provider.scan.assert_called_once()
         provider.fetch_news.assert_not_called()
 
@@ -258,7 +275,11 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         self.assertEqual(0, result.exit_code)
         self.assertEqual("REPORT_RECOVERED", result.disposition)
         self.assertTrue(result.should_trigger_shadow_selector)
-        ensure_report.assert_called_once_with(duplicate_path)
+        ensure_report.assert_called_once_with(
+            duplicate_path,
+            expected_provider="finviz",
+            expected_scanner="Institutional Momentum",
+        )
         provider_factory.assert_not_called()
 
     def test_duplicate_capture_with_complete_report_does_not_trigger_selector(self) -> None:
@@ -323,12 +344,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         report_path = self.reports_dir / "trade-plan-briefing-shadow.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text("{}", encoding="utf-8")
-        args = argparse.Namespace(
-            session=CaptureSession.SHADOW.value,
-            provider=None,
-            scanner=None,
-            trigger_shadow_selector=True,
-        )
+        args = self.shadow_args()
         run_result = capture_job.CaptureRunResult(
             exit_code=0,
             disposition="CAPTURED",
@@ -359,6 +375,15 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 "momentum_hunter.engine_host_client.run_immediate_collection_cycle",
                 return_value=cycle,
             ) as run_cycle,
+            patch(
+                "momentum_hunter.shadow_arm_ceremony."
+                "complete_shadow_selector_arm",
+            ),
+            patch.object(
+                capture_job,
+                "capture_identity",
+                return_value="capture-1",
+            ),
             patch.object(
                 capture_job,
                 "write_shadow_handoff_receipt",
@@ -373,6 +398,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         write_receipt.assert_called_once_with(
             report_path,
             report_hash=report_hash,
+            capture_id="capture-1",
             cycle=cycle,
         )
 
@@ -380,12 +406,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         report_path = self.reports_dir / "trade-plan-briefing-shadow.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text("{}", encoding="utf-8")
-        args = argparse.Namespace(
-            session=CaptureSession.SHADOW.value,
-            provider=None,
-            scanner=None,
-            trigger_shadow_selector=True,
-        )
+        args = self.shadow_args()
         run_result = capture_job.CaptureRunResult(
             exit_code=0,
             disposition="DUPLICATE",
@@ -425,13 +446,8 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text("{}", encoding="utf-8")
         bundle = self.root / "selector-proof-bundle"
-        args = argparse.Namespace(
-            session=CaptureSession.SHADOW.value,
-            provider=None,
-            scanner=None,
-            trigger_shadow_selector=True,
-            selector_proof_bundle=bundle,
-        )
+        args = self.shadow_args()
+        args.selector_proof_bundle = bundle
         run_result = capture_job.CaptureRunResult(
             exit_code=0,
             disposition="CAPTURED",
@@ -462,7 +478,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             patch(
                 "momentum_hunter.shadow_arm_ceremony."
                 "complete_shadow_selector_arm",
-                side_effect=lambda *_args: (
+                side_effect=lambda *_args, **_kwargs: (
                     calls.append("arm") or ceremony
                 ),
             ) as arm_selector,
@@ -477,23 +493,84 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 capture_job,
                 "write_shadow_handoff_receipt",
             ),
+            patch.object(
+                capture_job,
+                "capture_identity",
+                return_value="capture-1",
+            ),
         ):
             exit_code = capture_job.main()
 
         self.assertEqual(0, exit_code)
         self.assertEqual(["arm", "cycle"], calls)
-        arm_selector.assert_called_once_with(bundle, report_path)
+        arm_selector.assert_called_once_with(
+            bundle,
+            report_path,
+            task_definition_path=args.task_definition,
+            expected_provider="finviz",
+            expected_scanner="Institutional Momentum",
+        )
+
+    def test_proof_only_opening_never_arms_or_invokes_host_cycle(self) -> None:
+        report_path = self.reports_dir / "trade-plan-briefing-shadow.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text("{}", encoding="utf-8")
+        args = self.shadow_args()
+        args.shadow_opening_proof_only = True
+        run_result = capture_job.CaptureRunResult(
+            exit_code=0,
+            disposition="CAPTURED",
+            report_paths={"json": report_path},
+        )
+        ceremony = SimpleNamespace(
+            state="PROOF_VERIFIED_UNARMED",
+            candidate="CRWV",
+        )
+
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(
+                capture_job,
+                "run_capture_with_result",
+                return_value=run_result,
+            ),
+            patch(
+                "momentum_hunter.shadow_arm_ceremony."
+                "verify_shadow_opening_proof",
+                return_value=ceremony,
+            ) as verify_proof,
+            patch(
+                "momentum_hunter.shadow_arm_ceremony."
+                "complete_shadow_selector_arm",
+            ) as arm_selector,
+            patch(
+                "momentum_hunter.engine_host_client."
+                "run_immediate_collection_cycle",
+            ) as run_cycle,
+            patch.object(
+                capture_job,
+                "write_shadow_handoff_receipt",
+            ) as write_receipt,
+        ):
+            exit_code = capture_job.main()
+
+        self.assertEqual(0, exit_code)
+        verify_proof.assert_called_once_with(
+            args.selector_proof_bundle,
+            report_path,
+            task_definition_path=args.task_definition,
+            expected_provider="finviz",
+            expected_scanner="Institutional Momentum",
+        )
+        arm_selector.assert_not_called()
+        run_cycle.assert_not_called()
+        write_receipt.assert_not_called()
 
     def test_duplicate_shadow_report_retries_when_receipt_is_missing(self) -> None:
         report_path = self.reports_dir / "trade-plan-briefing-shadow.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text("{}", encoding="utf-8")
-        args = argparse.Namespace(
-            session=CaptureSession.SHADOW.value,
-            provider=None,
-            scanner=None,
-            trigger_shadow_selector=True,
-        )
+        args = self.shadow_args()
         run_result = capture_job.CaptureRunResult(
             exit_code=0,
             disposition="DUPLICATE",
@@ -525,6 +602,15 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 return_value=False,
             ),
             patch(
+                "momentum_hunter.shadow_arm_ceremony."
+                "complete_shadow_selector_arm",
+            ),
+            patch.object(
+                capture_job,
+                "capture_identity",
+                return_value="capture-1",
+            ),
+            patch(
                 "momentum_hunter.engine_host_client.run_immediate_collection_cycle",
                 return_value=cycle,
             ) as run_cycle,
@@ -546,19 +632,43 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         handoffs_dir = self.root / "handoffs"
         report_hash = file_sha256(report_path)
         cycle = SimpleNamespace(
+            accepted=True,
             code="COLLECTION_COMPLETED",
-            snapshot={"hostInstanceId": "host-1"},
+            command_id=f"shadow-opening-capture-{report_hash}",
+            payload={
+                "shadowAutomaticSelection": {
+                    "status": "NO_ELIGIBLE_CANDIDATE",
+                    "reportSha256": report_hash,
+                    "decisionCycleId": "cycle-1",
+                    "shadowTradeId": None,
+                }
+            },
+            snapshot={
+                "identity": {
+                    "hostInstanceId": "host-1",
+                    "processId": 123,
+                    "protocolVersion": "1",
+                    "transport": "loopback-tcp",
+                },
+                "collection": {
+                    "lastCompletedCycleAtUtc": (
+                        "2026-07-27T13:35:02+00:00"
+                    )
+                },
+            },
         )
 
         first = capture_job.write_shadow_handoff_receipt(
             report_path,
             report_hash=report_hash,
+            capture_id="capture-1",
             cycle=cycle,
             handoffs_dir=handoffs_dir,
         )
         second = capture_job.write_shadow_handoff_receipt(
             report_path,
             report_hash=report_hash,
+            capture_id="capture-1",
             cycle=cycle,
             handoffs_dir=handoffs_dir,
         )
@@ -577,13 +687,36 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 handoffs_dir=handoffs_dir,
             )
         )
-        with self.assertRaisesRegex(RuntimeError, "invalid or mismatched"):
-            capture_job.write_shadow_handoff_receipt(
+        replacement_hash = file_sha256(report_path)
+        replacement_cycle = SimpleNamespace(
+            **{
+                **cycle.__dict__,
+                "payload": {
+                    "shadowAutomaticSelection": {
+                        **cycle.payload["shadowAutomaticSelection"],
+                        "reportSha256": replacement_hash,
+                    }
+                },
+            }
+        )
+        replacement = capture_job.write_shadow_handoff_receipt(
+            report_path,
+            report_hash=replacement_hash,
+            capture_id="capture-2",
+            cycle=replacement_cycle,
+            handoffs_dir=handoffs_dir,
+        )
+        self.assertEqual(first, replacement)
+        self.assertTrue(
+            capture_job.shadow_handoff_is_complete(
                 report_path,
-                report_hash=file_sha256(report_path),
-                cycle=cycle,
                 handoffs_dir=handoffs_dir,
             )
+        )
+        self.assertEqual(
+            1,
+            len(tuple(handoffs_dir.glob("*.incomplete-*.json"))),
+        )
 
     def test_nonmarket_skip_does_not_generate_report_or_contact_provider(self) -> None:
         args = argparse.Namespace(provider=None, scanner=None)
@@ -649,15 +782,166 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         self.assertIn('-Session "shadow"', installer)
         self.assertIn("rev-parse --short=7 HEAD", installer)
         self.assertIn("-SelectorProofBundle", installer)
-        self.assertIn('$settingsArguments["RestartCount"] = 3', installer)
-        self.assertIn(
-            '$settingsArguments["RestartInterval"] = '
-            "(New-TimeSpan -Minutes 1)",
-            installer,
-        )
+        self.assertNotIn('$settingsArguments["RestartCount"]', installer)
+        self.assertNotIn('$settingsArguments["RestartInterval"]', installer)
+        self.assertIn("Export-ScheduledTask", installer)
+        self.assertIn("[switch]$EnableShadowTask", installer)
+        self.assertIn("Disable-ScheduledTask", installer)
+        self.assertIn('-Provider `"$Provider`"', installer)
+        self.assertIn('-Scanner `"$Scanner`"', installer)
         self.assertIn('"shadow"', runner)
         self.assertIn("--trigger-shadow-selector", runner)
         self.assertIn("--selector-proof-bundle", runner)
+        self.assertIn("--task-definition", runner)
+        self.assertIn("--shadow-opening-proof-only", runner)
+        self.assertIn("$retryableInfrastructureExit = 75", runner)
+        self.assertIn("$ShadowRetryCount = 3", runner)
+        self.assertIn("openingResultPreserved", runner)
+
+
+class ShadowOpeningRunnerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.tools_dir = self.root / "tools"
+        self.tools_dir.mkdir()
+        self.task_definition = self.root / "shadow-task.xml"
+        self.task_definition.write_text("<Task />\n", encoding="utf-8")
+        self.selector_proof = self.root / "selector-proof"
+        self.selector_proof.mkdir()
+        self.runner = (
+            Path(capture_job.__file__).resolve().parents[1]
+            / "tools"
+            / "run_capture_job.ps1"
+        )
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def test_three_retries_preserve_one_opening_identity_and_artifact_set(
+        self,
+    ) -> None:
+        (self.tools_dir / "capture_job.py").write_text(
+            "\n".join(
+                (
+                    "import json",
+                    "import sys",
+                    "from pathlib import Path",
+                    "root = Path(__file__).resolve().parents[1]",
+                    "counter = root / 'opening-attempts.txt'",
+                    "attempt = int(counter.read_text() or '0') + 1 if counter.exists() else 1",
+                    "counter.write_text(str(attempt))",
+                    "identity = root / 'opening-identity.txt'",
+                    "expected = 'stable-capture-report-command-cycle'",
+                    "if identity.exists() and identity.read_text() != expected:",
+                    "    raise SystemExit(91)",
+                    "identity.write_text(expected)",
+                    "if attempt <= 3:",
+                    "    raise SystemExit(75)",
+                    "evidence = root / 'opening-evidence'",
+                    "evidence.mkdir(exist_ok=True)",
+                    "for name in ('report.json', 'handoff.json', 'cycle.json', 'trade.json'):",
+                    "    path = evidence / name",
+                    "    if path.exists():",
+                    "        raise SystemExit(92)",
+                    "    path.write_text(expected)",
+                    "raise SystemExit(0)",
+                    "",
+                )
+            ),
+            encoding="utf-8",
+        )
+        (self.tools_dir / "update_outcomes.py").write_text(
+            "raise SystemExit(0)\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_runner()
+
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual(
+            "4",
+            (self.root / "opening-attempts.txt").read_text(encoding="utf-8"),
+        )
+        evidence = self.root / "opening-evidence"
+        self.assertEqual(
+            ["cycle.json", "handoff.json", "report.json", "trade.json"],
+            sorted(path.name for path in evidence.iterdir()),
+        )
+        self.assertTrue(
+            all(
+                path.read_text(encoding="utf-8")
+                == "stable-capture-report-command-cycle"
+                for path in evidence.iterdir()
+            )
+        )
+
+    def test_outcome_failure_cannot_make_completed_opening_retryable(
+        self,
+    ) -> None:
+        (self.tools_dir / "capture_job.py").write_text(
+            "\n".join(
+                (
+                    "from pathlib import Path",
+                    "root = Path(__file__).resolve().parents[1]",
+                    "counter = root / 'opening-attempts.txt'",
+                    "attempt = int(counter.read_text() or '0') + 1 if counter.exists() else 1",
+                    "counter.write_text(str(attempt))",
+                    "(root / 'opening-complete.txt').write_text('complete')",
+                    "raise SystemExit(0)",
+                    "",
+                )
+            ),
+            encoding="utf-8",
+        )
+        (self.tools_dir / "update_outcomes.py").write_text(
+            "raise SystemExit(9)\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_runner()
+
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual(
+            "1",
+            (self.root / "opening-attempts.txt").read_text(encoding="utf-8"),
+        )
+        self.assertTrue((self.root / "opening-complete.txt").is_file())
+        logs = tuple((self.root / "MomentumHunterData" / "logs").glob("capture-shadow-*.log"))
+        self.assertEqual(1, len(logs))
+        self.assertIn(
+            "no opening retry will occur",
+            logs[0].read_text(encoding="utf-16"),
+        )
+
+    def run_runner(self) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            (
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(self.runner),
+                "-Session",
+                "shadow",
+                "-ProjectRoot",
+                str(self.root),
+                "-PythonExe",
+                sys.executable,
+                "-SelectorProofBundle",
+                str(self.selector_proof),
+                "-TaskDefinitionPath",
+                str(self.task_definition),
+                "-ShadowRetryDelaySeconds",
+                "0",
+            ),
+            cwd=self.root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
 
 
 def capture_decision(
