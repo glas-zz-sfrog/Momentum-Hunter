@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Fast-forwarded SHADOW-013 implementation commit `58552da` into local `master` after final compile, focused regression, full Python/.NET regression, PowerShell, diff, secret, task-state, and production-nonmutation gates passed; the ordinary non-force backup includes the governance closeout.
 - Hardened the Official Shadow opening ceremony so receipt completeness requires an allowlisted semantic terminal result and verified Engine Host, command, capture, report, decision-cycle, and trade identity where applicable.
 - Added independently recomputed pre-arm and per-decision clock-skew proof from the existing read-only Schwab HTTPS Date response, with a five-second uncertainty-inclusive limit and five-minute maximum age.
 - Froze opening provider/scanner/schema/constitution/policy/fill/evidence/build/task/quote-source identity and fail closed on mismatch.

@@ -90,3 +90,10 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Configured the 8:50 heartbeat as inspection-only and tri-state.
 - Verification: compileall PASS; 229 affected tests PASS; 908/908 full Python PASS; 216/216 .NET PASS; PowerShell parse PASS; `git diff --check` PASS.
 - Status: implementation proven on branch; integration and real-session physical proof pending.
+
+## 2026-07-27 - ARGUS-MERGE-SHADOW-013 Opening Ceremony Hardening
+
+- Fast-forwarded `codex/ARGUS-SHADOW-013-opening-ceremony-hardening` into local `master` at implementation commit `58552da` with no merge commit.
+- Preserved the disabled installed task and byte-identical production activation record; no arm, policy, cycle, state, trade, or handoff artifact exists.
+- Classified the implementation `COMPLETE` while retaining `OPENING_CEREMONY_UNPROVEN`, `SELECTOR_NOT_ARMED`, and `0 / 30`.
+- Next gate: final-HEAD static bundle and disabled proof-only task definition, followed by one real-session unarmed opening proof and three physical failure/in-progress checks.
