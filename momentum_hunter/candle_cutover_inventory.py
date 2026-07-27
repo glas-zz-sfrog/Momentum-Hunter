@@ -439,7 +439,11 @@ def sqlite_sidecar_paths(database_path: Path) -> tuple[Path, ...]:
 
 
 def file_sha256(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest().upper()
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest().upper()
 
 
 def scalar_count(

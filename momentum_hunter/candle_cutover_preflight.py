@@ -214,10 +214,14 @@ def input_fingerprints(paths: Sequence[Path]) -> dict[str, dict[str, object]]:
         path = Path(value).resolve()
         if path.is_file():
             stat = path.stat()
+            digest = hashlib.sha256()
+            with path.open("rb") as source:
+                while chunk := source.read(1024 * 1024):
+                    digest.update(chunk)
             result[str(path)] = {
                 "exists": True,
                 "sizeBytes": int(stat.st_size),
-                "sha256": hashlib.sha256(path.read_bytes()).hexdigest().upper(),
+                "sha256": digest.hexdigest().upper(),
             }
         else:
             result[str(path)] = {

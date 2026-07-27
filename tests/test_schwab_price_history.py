@@ -10,6 +10,7 @@ from pathlib import Path
 import requests
 
 from momentum_hunter.schwab_price_history import (
+    MAX_PRICE_HISTORY_BARS,
     MAX_PRICE_HISTORY_RESPONSE_BYTES,
     SCHWAB_PRICE_HISTORY_URL,
     SchwabPriceBar,
@@ -43,6 +44,7 @@ class FakeResponse:
         content: bytes | None = None,
         headers: dict[str, str] | None = None,
         json_error: bool = False,
+        stream_error: Exception | None = None,
     ) -> None:
         self.payload = payload
         self.status_code = status_code
@@ -54,11 +56,26 @@ class FakeResponse:
         )
         self.headers = headers or {"Date": REMOTE_DATE}
         self.json_error = json_error
+        self.stream_error = stream_error
+        self.closed = False
+        self.iterated_bytes = 0
 
     def json(self) -> object:
         if self.json_error:
             raise ValueError("bad json")
         return self.payload
+
+    def iter_content(self, chunk_size: int) -> object:
+        content = b"{bad" if self.json_error else self.content
+        for offset in range(0, len(content), chunk_size):
+            chunk = content[offset : offset + chunk_size]
+            self.iterated_bytes += len(chunk)
+            yield chunk
+            if self.stream_error is not None:
+                raise self.stream_error
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class FakeSession:
@@ -193,9 +210,11 @@ class SchwabPriceHistoryTransportTests(unittest.TestCase):
             request["params"],
         )
         self.assertFalse(request["allow_redirects"])
+        self.assertTrue(request["stream"])
         self.assertEqual("Bearer access", request["headers"]["Authorization"])
         self.assertNotIn("account", json.dumps(request).lower())
         self.assertNotIn("order", json.dumps(request).lower())
+        self.assertTrue(session.response.closed)
 
     def test_daily_request_uses_one_year_daily_history(self) -> None:
         self.assertEqual(
@@ -266,6 +285,48 @@ class SchwabPriceHistoryTransportTests(unittest.TestCase):
                 )
                 with self.assertRaises(expected):
                     transport.fetch("access", "SPY", "1m")
+                if session.response is not None:
+                    self.assertTrue(session.response.closed)
+
+    def test_response_stream_stops_after_bounded_decoded_bytes(self) -> None:
+        response = FakeResponse(
+            valid_payload(),
+            content=b"x" * (MAX_PRICE_HISTORY_RESPONSE_BYTES + 100_000),
+        )
+        session = FakeSession(response)
+        transport = SchwabPriceHistoryTransport(
+            session=session,
+            clock=SequenceClock(REQUESTED_AT, RECEIVED_AT),
+        )
+
+        with self.assertRaises(SchwabPriceHistoryResponseError):
+            transport.fetch("access", "SPY", "1m")
+
+        self.assertTrue(response.closed)
+        self.assertLess(
+            response.iterated_bytes,
+            MAX_PRICE_HISTORY_RESPONSE_BYTES + 100_000,
+        )
+
+    def test_stream_failure_is_redacted_and_response_is_closed(self) -> None:
+        response = FakeResponse(
+            valid_payload(),
+            stream_error=requests.ConnectionError("sensitive provider detail"),
+        )
+        session = FakeSession(response)
+        transport = SchwabPriceHistoryTransport(
+            session=session,
+            clock=SequenceClock(REQUESTED_AT, RECEIVED_AT),
+        )
+
+        with self.assertRaisesRegex(
+            SchwabPriceHistoryNetworkError,
+            "streaming failed safely",
+        ) as raised:
+            transport.fetch("access", "SPY", "1m")
+
+        self.assertNotIn("sensitive", str(raised.exception))
+        self.assertTrue(response.closed)
 
     def test_malformed_identity_candles_and_clocks_fail_closed(self) -> None:
         malformed = [
@@ -350,6 +411,26 @@ class SchwabPriceHistoryTransportTests(unittest.TestCase):
                 received_at=RECEIVED_AT,
                 remote_date_header="",
             )
+
+    def test_interval_candle_limits_fail_before_parsing_large_collections(self) -> None:
+        for interval in ("1m", "Daily"):
+            with self.subTest(interval=interval):
+                payload = valid_payload()
+                payload["candles"] = [
+                    valid_payload()["candles"][0]
+                ] * (MAX_PRICE_HISTORY_BARS[interval] + 1)
+                with self.assertRaisesRegex(
+                    SchwabPriceHistoryResponseError,
+                    "interval candle limit",
+                ):
+                    parse_price_history_response(
+                        payload,
+                        expected_symbol="SPY",
+                        interval=interval,
+                        requested_at=REQUESTED_AT,
+                        received_at=RECEIVED_AT,
+                        remote_date_header=REMOTE_DATE,
+                    )
 
 
 class SchwabPriceHistorySourceTests(unittest.TestCase):

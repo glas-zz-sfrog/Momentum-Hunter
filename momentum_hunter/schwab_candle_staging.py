@@ -79,7 +79,13 @@ def load_monitor_target_selection(
         )
     path = Path(report_path)
     try:
-        raw = path.read_bytes()
+        size = path.stat().st_size
+        if size <= 0 or size > MAX_TARGET_REPORT_BYTES:
+            raise CandidateCandleStagingError(
+                "The persisted monitor-target report has an invalid size."
+            )
+        with path.open("rb") as source:
+            raw = source.read(MAX_TARGET_REPORT_BYTES + 1)
     except OSError:
         raise CandidateCandleStagingError(
             "The persisted monitor-target report could not be read."
@@ -376,7 +382,11 @@ def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest().upper()
 
 
 def require_timestamp(value: object, field_name: str) -> str:

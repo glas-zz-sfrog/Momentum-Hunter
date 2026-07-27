@@ -39,8 +39,13 @@ ACTIVE_CANDLE_FILENAMES = frozenset(
 )
 HTTP_TIMEOUT = (5.0, 30.0)
 MAX_PRICE_HISTORY_RESPONSE_BYTES = 4 * 1024 * 1024
+PRICE_HISTORY_RESPONSE_CHUNK_BYTES = 64 * 1024
 MAX_PRICE_HISTORY_SYMBOLS = 25
 SUPPORTED_PRICE_HISTORY_INTERVALS = frozenset({"1m", "Daily"})
+MAX_PRICE_HISTORY_BARS = {
+    "1m": 4_000,
+    "Daily": 400,
+}
 INTRADAY_LOOKBACK = timedelta(days=7)
 MAX_PROVIDER_FUTURE = timedelta(seconds=5)
 
@@ -135,36 +140,41 @@ class SchwabPriceHistoryTransport:
                 },
                 timeout=self.timeout,
                 allow_redirects=False,
+                stream=True,
             )
         except requests.RequestException:
             raise SchwabPriceHistoryNetworkError(
                 "Schwab price history could not reach the exact configured endpoint."
             ) from None
         received_at = require_aware(self.clock(), "Price-history response time")
-        if response.is_redirect:
-            raise SchwabPriceHistoryResponseError(
-                "Schwab price history refused an HTTP redirect."
-            )
-        if response.status_code != 200:
-            raise SchwabPriceHistoryResponseError(
-                f"Schwab price history failed safely with HTTP {response.status_code}."
-            )
-        if len(response.content) > MAX_PRICE_HISTORY_RESPONSE_BYTES:
-            raise SchwabPriceHistoryResponseError(
-                "Schwab price history response exceeded the size limit."
-            )
         try:
-            payload = response.json()
-        except ValueError:
+            if response.is_redirect:
+                raise SchwabPriceHistoryResponseError(
+                    "Schwab price history refused an HTTP redirect."
+                )
+            if response.status_code != 200:
+                raise SchwabPriceHistoryResponseError(
+                    f"Schwab price history failed safely with HTTP {response.status_code}."
+                )
+            raw = read_bounded_response(response)
+            headers = getattr(response, "headers", {})
+            remote_date_header = (
+                str(headers.get("Date", ""))
+                if isinstance(headers, Mapping)
+                else ""
+            )
+        except requests.RequestException:
+            raise SchwabPriceHistoryNetworkError(
+                "Schwab price history response streaming failed safely."
+            ) from None
+        finally:
+            response.close()
+        try:
+            payload = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError):
             raise SchwabPriceHistoryResponseError(
                 "Schwab price history response was not valid JSON."
             ) from None
-        headers = getattr(response, "headers", {})
-        remote_date_header = (
-            str(headers.get("Date", ""))
-            if isinstance(headers, Mapping)
-            else ""
-        )
         return parse_price_history_response(
             payload,
             expected_symbol=clean_symbol,
@@ -173,6 +183,23 @@ class SchwabPriceHistoryTransport:
             received_at=received_at,
             remote_date_header=remote_date_header,
         )
+
+
+def read_bounded_response(response: requests.Response) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    for chunk in response.iter_content(
+        chunk_size=PRICE_HISTORY_RESPONSE_CHUNK_BYTES
+    ):
+        if not chunk:
+            continue
+        total += len(chunk)
+        if total > MAX_PRICE_HISTORY_RESPONSE_BYTES:
+            raise SchwabPriceHistoryResponseError(
+                "Schwab price history response exceeded the size limit."
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 class SchwabPriceHistorySource:
@@ -290,6 +317,10 @@ def parse_price_history_response(
     if not isinstance(raw_candles, list):
         raise SchwabPriceHistoryResponseError(
             "Schwab price history response omitted the candle collection."
+        )
+    if len(raw_candles) > MAX_PRICE_HISTORY_BARS[clean_interval]:
+        raise SchwabPriceHistoryResponseError(
+            "Schwab price history response exceeded the interval candle limit."
         )
     bars = tuple(
         sorted(
