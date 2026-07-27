@@ -34,6 +34,9 @@ ACTIVE_CANDLE_PATHS = frozenset(
         DAILY_OHLC_SOURCE_PATH,
     }
 )
+ACTIVE_CANDLE_FILENAMES = frozenset(
+    path.name.casefold() for path in ACTIVE_CANDLE_PATHS
+)
 HTTP_TIMEOUT = (5.0, 30.0)
 MAX_PRICE_HISTORY_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_PRICE_HISTORY_SYMBOLS = 25
@@ -384,7 +387,7 @@ def write_staged_price_history(
 ) -> Path:
     target = Path(path).resolve()
     protected = {Path(item).resolve() for item in active_paths}
-    if target in protected:
+    if target in protected or target.name.casefold() in ACTIVE_CANDLE_FILENAMES:
         raise SchwabPriceHistoryStagingError(
             "Schwab candle staging cannot overwrite an active chart source."
         )
