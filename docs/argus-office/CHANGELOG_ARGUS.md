@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added SHADOW-012 bounded scheduler recovery: the Official Shadow opening task receives three one-minute Windows restarts, while morning/evening tasks remain unchanged. `IgnoreNew`, the five-minute market window, deterministic report identity, and write-once handoff receipt keep retries bounded and idempotent.
+- Passed compileall, 18 focused capture-job tests, all 46 named proof gates, 237 affected tests, PowerShell parsing, direct `RestartCount=3`/`RestartInterval=PT1M` construction proof, protected-state review, and secret/order-path scanning.
 - Fixed SHADOW-011 quote-proof timestamp ordering before the first live ceremony. Proof generation now records request start before guarded OAuth/provider work, evaluates quote freshness after the response, retains actual request duration, and rejects backward or timezone-naive evaluation clocks.
 - Added direct proof that quotes observed during a five-second request pass when they are one second old at response evaluation; expanded the immutable proof gate to 46 tests. Compileall, 237 affected tests, all 882 Python tests, and all 216 .NET tests pass; production remains unarmed and unchanged.
 - Added SHADOW-010 automatic opening proof/arm ceremony. The scheduled Shadow job now proves synchronized canonical Git and all static artifacts before any Schwab request, derives candidate/SPY/IWM from the newest fresh canonical report, finalizes and re-verifies the immutable 12-artifact bundle, and arms only through the existing exact guarded method before the Engine Host selector cycle.
