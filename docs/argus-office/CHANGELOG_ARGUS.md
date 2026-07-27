@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added R034 one-command candle cutover preflight: it requires the full persisted target set, refreshes hash-bound inactive Schwab 1-minute/Daily staging, audits the exact legacy files and SQLite rows read-only, compares source fingerprints, and emits one required write-once receipt while keeping cutover permission false.
+- Live R034 proof covered 22/22 targets and 44/44 available interval results, found exactly 710 legacy `CRWV` rows with zero other rows, aliases, or sidecars, and preserved every canonical input hash. Compileall, 47 focused/adjacent tests, 955/955 Python tests, and 216/216 .NET tests pass.
 - Implemented and remotely backed the R030-R033 staged-candle stack without moving canonical `master`: exact-host GET-only Schwab 1-minute/Daily history, report-bound inactive staging, validated read-only chart preview, and nonmutating legacy/cutover inventory now exist at `86defde`.
 - Proved full inactive coverage for 22 persisted monitor targets and 44 symbol/interval requests. The inventory found exactly 710 legacy `CRWV` SQLite rows, zero unrelated rows, zero path/hash aliases, and zero sidecars while keeping deletion, database mutation, active-source change, and cutover permission false.
 - Passed Python compileall, 40 focused tests, 120 adjacent tests, 948/948 full Python tests, 216/216 .NET tests, diff/secret/destructive-path review, and source-nonmutation proof for R030-R033. Canonical local/remote `master` remains synchronized at SHADOW-014 proof commit `4c35181`.

@@ -25,11 +25,11 @@ branches. Their complete stack is merged into local `master`; the relevant featu
 tips are backed up remotely. The production-local sample is `ACTIVATED`,
 `SELECTOR_NOT_ARMED`, and `0 / 30`.
 
-`codex/ARGUS-R033-candle-cutover-inventory` is the active isolated Phase 12
-development branch. It contains R030-R033 at `86defde`, is synchronized with its
-remote feature ref, and is not merged into local `master`. This preserves the exact
-SHADOW-014 scheduled-proof baseline while backing up the verified candle-source,
-staging, preview, and cutover-inventory work.
+`codex/ARGUS-R034-candle-cutover-preflight` is the active isolated Phase 12
+development branch. It contains R030-R034 through implementation commit `a882463`
+plus this governance closeout and is not merged into local `master`. This preserves
+the exact SHADOW-014 scheduled-proof baseline while backing up the verified
+candle-source, staging, preview, inventory, and one-command preflight work.
 
 Git evidence at reconciliation time:
 
@@ -45,6 +45,7 @@ Git evidence at reconciliation time:
 - SHADOW-014 `4c35181` schedules one proof-only, unarmed run for 2026-07-28 at 8:35 AM Central and one finite read-only 8:50 inspection heartbeat. Local and remote `master` remain synchronized at that exact proof-bound commit.
 - R030-R033 form a four-commit descendant stack from `4c35181`: `79b3419` adds GET-only Schwab price history, `b2b01b1` adds report-bound inactive staging, `fd143c7` adds validated read-only staged preview, and `86defde` adds the nonmutating cutover inventory. The branch is clean and remotely backed up.
 - R033 live evidence covered 22/22 monitor targets and 44/44 requested symbol/interval results. It found exactly 710 legacy `CRWV` rows, zero unrelated rows, zero aliases, and zero SQLite sidecars, but performed no deletion, database mutation, or active-source change. The stack passed compileall, 40 focused tests, 120 adjacent tests, 948 full Python tests, and 216 .NET tests.
+- R034 `a882463` composes full-target staging and the exact inventory into one required write-once preflight receipt. Its live proof covered 22/22 targets and 44/44 available interval results, reproduced the 710/0/0/0 legacy-row/other-row/alias/sidecar scope, and preserved every canonical input hash. Compileall, 47 focused/adjacent tests, 955 full Python tests, and 216 .NET tests pass.
 - `codex/ARGUS-SCHWAB-002A-credential-rotation` restores the existing approved Schwab app and OAuth state and is the source parent for the active SCHWAB-003 branch.
 - `codex/ARGUS-SCHWAB-003-readonly-account-discovery` is merged into local `master` through `6f308d7`. Live discovery, account-detail validation, and immutable binding proved and pinned one `CASH` account ending `2573`; bound-refresh safety is implemented and tested, while every transmitting capability remains unavailable.
 - R028 integrated workstation chrome and R029 canonical WPF launcher/icon passed automated and Steven manual verification.
@@ -97,10 +98,11 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `3f8acb8` | Fix Shadow quote proof timestamp ordering | Yes |
 | `c9c31f6` | Retry failed Shadow opening task | Yes |
 | `4c35181` | Schedule unarmed Shadow opening proof | Yes |
-| `79b3419` | Add staged Schwab candle source | No; R030-R033 feature stack only |
-| `b2b01b1` | Add candidate candle staging | No; R030-R033 feature stack only |
-| `fd143c7` | Add staged Schwab chart preview | No; R030-R033 feature stack only |
-| `86defde` | Add candle cutover inventory | No; R030-R033 feature stack only |
+| `79b3419` | Add staged Schwab candle source | No; R030-R034 feature stack only |
+| `b2b01b1` | Add candidate candle staging | No; R030-R034 feature stack only |
+| `fd143c7` | Add staged Schwab chart preview | No; R030-R034 feature stack only |
+| `86defde` | Add candle cutover inventory | No; R030-R034 feature stack only |
+| `a882463` | Add candle cutover preflight | No; R030-R034 feature stack only |
 | `54c58a8` | Map Shadow Trading lifecycle wiring | Yes |
 | `5d11f02` | Build prospective Shadow Trading validation | Yes |
 | `7fee390` | Add WPF Shadow Trading review surface | Yes |
@@ -112,7 +114,8 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `codex/ARGUS-R033-candle-cutover-inventory` | `86defde` | Yes | No | `ACTIVE / PUSHED_FEATURE_BRANCH / IMPLEMENTED_PENDING_MERGE` | R030-R033 add exact-host read-only Schwab candle retrieval, report-bound inactive staging, validated read-only preview, and a nonmutating legacy/cutover inventory. | Preserve until the SHADOW-014 proof audit, then fast-forward into `master`, regenerate evidence, and stop at Steven's explicit destructive cutover decision. |
+| `codex/ARGUS-R034-candle-cutover-preflight` | `a882463` plus governance closeout | Yes after this closeout | No | `ACTIVE / PUSHED_FEATURE_BRANCH / IMPLEMENTED_PENDING_MERGE` | R030-R034 add exact-host read-only Schwab candle retrieval, report-bound inactive staging, validated read-only preview, nonmutating inventory, and one fail-closed write-once preflight command. | Preserve until the SHADOW-014 proof audit, then fast-forward into `master`, rerun preflight, and stop at Steven's explicit destructive cutover decision. |
+| `codex/ARGUS-R033-candle-cutover-inventory` | `577af07` | Yes | No | `PUSHED_FEATURE_BRANCH / SUPERSEDED_BY_R034` | Preserves the R030-R033 implementation and truthful branch-only governance state. | Preserve as parent history; continue from R034. |
 | `codex/ARGUS-SHADOW-014-opening-proof-scheduled` | `4c35181` | Via `master` | Yes | `MERGED_TO_LOCAL_MASTER` | Binds the one-time 2026-07-28 proof-only task and finite observer to the synchronized canonical commit without arming or creating a trade. | Preserve branch and task evidence; inspect only at the scheduled times. |
 | `codex/ARGUS-SHADOW-013-opening-ceremony-hardening` | `58552da` | Via `master` | Yes | `MERGED_TO_LOCAL_MASTER` | Hardens semantic handoff completion, clock validity, frozen configuration, retry classification, proof-only opening rehearsal, outcome separation, and read-only heartbeat behavior. | Preserve branch; prepare the final-HEAD disabled proof-only task and real-session audit. |
 | `codex/ARGUS-SHADOW-012-scheduler-retry` | `c9c31f6` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Adds bounded one-minute Windows restarts to the idempotent Shadow opening task without changing other capture schedules. | Preserve as source history; use the regenerated SHADOW-012 final-HEAD bundle and inspect the first live run. |
