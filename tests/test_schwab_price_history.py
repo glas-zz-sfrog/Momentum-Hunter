@@ -451,6 +451,7 @@ class SchwabPriceHistoryStagingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             active = root / "opportunity-minute-bars.json"
+            alternate_active_name = root / "alternate" / "daily-ohlc-bars.json"
             active.write_bytes(b"legacy")
 
             with self.assertRaises(SchwabPriceHistoryStagingError):
@@ -463,6 +464,12 @@ class SchwabPriceHistoryStagingTests(unittest.TestCase):
                 write_staged_price_history(
                     [valid_result(), replace(valid_result())],
                     path=root / "staging.json",
+                    active_paths=[active],
+                )
+            with self.assertRaises(SchwabPriceHistoryStagingError):
+                write_staged_price_history(
+                    [valid_result()],
+                    path=alternate_active_name,
                     active_paths=[active],
                 )
 
