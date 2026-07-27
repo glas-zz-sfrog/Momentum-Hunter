@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Hardened R030-R034 candle inputs in R035: Schwab price-history bodies now stream through a four-megabyte decoded-byte ceiling, responses close on every completed-header path, and 1-minute/Daily candle collections have bounded pre-parse limits.
+- Added stat-before-read and bounded-read enforcement for persisted monitor-target and staged-chart files, plus incremental SHA-256 hashing for large staged artifacts and SQLite inputs.
+- Passed compileall, 52 affected tests, 960/960 full Python tests, 216/216 .NET tests, diff/secret/protected-path review, and a fresh live read-only preflight covering 22/22 targets and 44/44 interval results. The 710 legacy rows and all canonical source hashes remained unchanged; activation, deletion, database mutation, cutover permission, account data, and order transmission remain false or unavailable.
 - Added SHADOW-015 physical evidence for the three non-market opening cases: an actual temporary running task/process classified `IN_PROGRESS`, while structured Engine Host rejection and a greater-than-five-second clock failure classified `FAILED`; no case retired the heartbeat or created arm, cycle, handoff, or trade state.
 - Preserved the sanitized six-file rehearsal bundle outside the repository with before/after production snapshots and manifest SHA-256 `996204108C83E522AF769EAF21E6A7F1B82C06B3D5DFEBEA7FCBB3E14CC1DE36`; production Git, task scheduling, and activation hash remained unchanged.
 - Added R034 one-command candle cutover preflight: it requires the full persisted target set, refreshes hash-bound inactive Schwab 1-minute/Daily staging, audits the exact legacy files and SQLite rows read-only, compares source fingerprints, and emits one required write-once receipt while keeping cutover permission false.

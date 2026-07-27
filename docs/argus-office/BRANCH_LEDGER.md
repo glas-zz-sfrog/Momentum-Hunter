@@ -25,10 +25,11 @@ branches. Their complete stack is merged into local `master`; the relevant featu
 tips are backed up remotely. The production-local sample is `ACTIVATED`,
 `SELECTOR_NOT_ARMED`, and `0 / 30`.
 
-`codex/ARGUS-SHADOW-015-opening-failure-rehearsals` is the active evidence branch,
-stacked on R030-R034 through `972b5d9`, and is not merged into local `master`. This
-preserves the exact SHADOW-014 scheduled-proof baseline while retaining the verified
-candle-source stack and the three physical Shadow failure/in-progress rehearsals.
+`codex/ARGUS-R035-candle-input-hardening` is the active branch, stacked on
+R030-R034 and SHADOW-015 through implementation commit `f4fc613`, and is not merged
+into local `master`. This preserves the exact SHADOW-014 scheduled-proof baseline
+while retaining the verified candle-source stack, the three physical Shadow
+failure/in-progress rehearsals, and the bounded-input security hardening.
 
 Git evidence at reconciliation time:
 
@@ -46,6 +47,7 @@ Git evidence at reconciliation time:
 - R033 live evidence covered 22/22 monitor targets and 44/44 requested symbol/interval results. It found exactly 710 legacy `CRWV` rows, zero unrelated rows, zero aliases, and zero SQLite sidecars, but performed no deletion, database mutation, or active-source change. The stack passed compileall, 40 focused tests, 120 adjacent tests, 948 full Python tests, and 216 .NET tests.
 - R034 `a882463` composes full-target staging and the exact inventory into one required write-once preflight receipt. Its live proof covered 22/22 targets and 44/44 available interval results, reproduced the 710/0/0/0 legacy-row/other-row/alias/sidecar scope, and preserved every canonical input hash. Compileall, 47 focused/adjacent tests, 955 full Python tests, and 216 .NET tests pass.
 - SHADOW-015 physically proved the still-running, structured Engine Host failure, and greater-than-five-second clock-failure paths without touching the production task or Shadow state. The six-file external bundle contains before/after production snapshots and a hash manifest; no credential, account identity, token, raw market data, arm, policy, cycle, handoff, or trade is included.
+- R035 `f4fc613` streams and caps decoded Schwab price-history responses, caps interval candle collections before parsing, rejects oversized persisted target/stage files before parsing, and hashes large artifacts incrementally. Compileall, 52 affected tests, 960 full Python tests, 216 .NET tests, and a fresh read-only 22-target/44-result preflight pass; canonical inputs remained byte-identical and every mutation/transmission flag remained false.
 - `codex/ARGUS-SCHWAB-002A-credential-rotation` restores the existing approved Schwab app and OAuth state and is the source parent for the active SCHWAB-003 branch.
 - `codex/ARGUS-SCHWAB-003-readonly-account-discovery` is merged into local `master` through `6f308d7`. Live discovery, account-detail validation, and immutable binding proved and pinned one `CASH` account ending `2573`; bound-refresh safety is implemented and tested, while every transmitting capability remains unavailable.
 - R028 integrated workstation chrome and R029 canonical WPF launcher/icon passed automated and Steven manual verification.
@@ -103,6 +105,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `fd143c7` | Add staged Schwab chart preview | No; R030-R034 feature stack only |
 | `86defde` | Add candle cutover inventory | No; R030-R034 feature stack only |
 | `a882463` | Add candle cutover preflight | No; R030-R034 feature stack only |
+| `f4fc613` | Harden staged candle input bounds | No; R030-R035 feature stack only |
 | `54c58a8` | Map Shadow Trading lifecycle wiring | Yes |
 | `5d11f02` | Build prospective Shadow Trading validation | Yes |
 | `7fee390` | Add WPF Shadow Trading review surface | Yes |
@@ -114,7 +117,8 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `codex/ARGUS-SHADOW-015-opening-failure-rehearsals` | This evidence closeout | Yes after this closeout | No | `ACTIVE / PUSHED_FEATURE_BRANCH / IMPLEMENTED_PENDING_MERGE` | Preserves R030-R034 and records physical `IN_PROGRESS`/`FAILED` proof for the three non-market SHADOW-014 rehearsal cases with production nonmutation. | Preserve until the real SHADOW-014 run is audited; then integrate the full stack if the canonical proof passes. |
+| `codex/ARGUS-R035-candle-input-hardening` | `f4fc613` plus governance closeout | Yes after this closeout | No | `ACTIVE / PUSHED_FEATURE_BRANCH / IMPLEMENTED_PENDING_MERGE` | Preserves R030-R034 and SHADOW-015 while bounding provider bodies, interval candle collections, persisted target/stage inputs, and large-file hashing without activation or transmission. | Preserve until the real SHADOW-014 run is audited; then integrate the full stack if the canonical proof passes. |
+| `codex/ARGUS-SHADOW-015-opening-failure-rehearsals` | `cd828ac` | Yes | No | `PUSHED_FEATURE_BRANCH / SUPERSEDED_BY_R035` | Preserves R030-R034 and records physical `IN_PROGRESS`/`FAILED` proof for the three non-market SHADOW-014 rehearsal cases with production nonmutation. | Preserve as R035 parent history; do not continue here. |
 | `codex/ARGUS-R034-candle-cutover-preflight` | `972b5d9` | Yes | No | `PUSHED_FEATURE_BRANCH / SUPERSEDED_BY_SHADOW_015` | R030-R034 add exact-host read-only Schwab candle retrieval, report-bound inactive staging, validated read-only preview, nonmutating inventory, and one fail-closed write-once preflight command. | Preserve as parent history; continue from SHADOW-015. |
 | `codex/ARGUS-R033-candle-cutover-inventory` | `577af07` | Yes | No | `PUSHED_FEATURE_BRANCH / SUPERSEDED_BY_R034` | Preserves the R030-R033 implementation and truthful branch-only governance state. | Preserve as parent history; continue from R034. |
 | `codex/ARGUS-SHADOW-014-opening-proof-scheduled` | `4c35181` | Via `master` | Yes | `MERGED_TO_LOCAL_MASTER` | Binds the one-time 2026-07-28 proof-only task and finite observer to the synchronized canonical commit without arming or creating a trade. | Preserve branch and task evidence; inspect only at the scheduled times. |
