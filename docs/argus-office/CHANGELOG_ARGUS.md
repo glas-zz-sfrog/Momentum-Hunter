@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Fixed SHADOW-011 quote-proof timestamp ordering before the first live ceremony. Proof generation now records request start before guarded OAuth/provider work, evaluates quote freshness after the response, retains actual request duration, and rejects backward or timezone-naive evaluation clocks.
+- Added direct proof that quotes observed during a five-second request pass when they are one second old at response evaluation; expanded the immutable proof gate to 46 tests. Compileall, 237 affected tests, all 882 Python tests, and all 216 .NET tests pass; production remains unarmed and unchanged.
 - Added SHADOW-010 automatic opening proof/arm ceremony. The scheduled Shadow job now proves synchronized canonical Git and all static artifacts before any Schwab request, derives candidate/SPY/IWM from the newest fresh canonical report, finalizes and re-verifies the immutable 12-artifact bundle, and arms only through the existing exact guarded method before the Engine Host selector cycle.
 - Added fail-closed retries and recovery: three bounded quote-proof attempts, no finalization or arm on quote failure, no provider request for an invalid existing artifact or already armed sample, complete-bundle crash recovery, and deterministic handoff retry. Schwab remains quote-read-only, FakeBroker remains the only execution boundary, and real-order transmission remains unavailable.
 - Passed compileall, 235 affected tests, all 45 named proof gates, all 880 Python tests, all 216 .NET tests, PowerShell parsing, protected-state review, and secret/order-path scanning. Production remains `SELECTOR_NOT_ARMED` at `0 / 30` with only the immutable activation record present.
