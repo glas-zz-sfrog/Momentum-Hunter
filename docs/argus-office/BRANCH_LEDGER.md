@@ -4,9 +4,10 @@ Date reconciled: 2026-07-26
 
 ## Current Truth
 
-Local `master` is the canonical integrated product baseline and contains the complete
-SHADOW-004/005/006 stack through visual-acceptance commit `307a2e1`, alongside the
-Python automation/simulation foundation, R004-R029 workstation work,
+Local and remote `master` are synchronized through integration reconciliation
+`ee78b33`. The canonical product baseline contains the complete SHADOW-004/005/006
+stack through visual-acceptance commit `307a2e1`, alongside the Python
+automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
@@ -83,7 +84,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `codex/ARGUS-SHADOW-004-official-sample-activation` | `375da59` | No feature ref; commits are included through integrated `master` | Yes through SHADOW-006 | `MERGED_TO_LOCAL_MASTER` | Adds the write-once official-sample activation boundary and Steven-accepted activated-empty WPF status. The ignored local sample is `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`; no transmitting method exists. | Preserve as visual-parent history; do not merge again. |
 | `codex/ARGUS-SCHWAB-003-readonly-account-discovery` | `6f308d7` | No feature ref; commits are backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Adds exact GET-only discovery, live CASH validation, immutable DPAPI binding to the sole `2573` `INDIVIDUAL_CASH` account, bound-refresh revalidation, and the standing-delegation governance; every transmitting capability remains unavailable. | Preserve as audit history; current work continues from `master`. |
 | `codex/ARGUS-SCHWAB-002A-credential-rotation` | `cd73411` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves the credential containment history and restoration of the existing approved Schwab app, local DPAPI credentials, and fresh OAuth. | Preserve as audit history; its work is included through SCHWAB-003. |
-| `master` | Contains integration anchor `307a2e1` plus this ledger closeout | Backup follows final reconciliation verification | Yes | `MERGED_TO_LOCAL_MASTER` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample activation/evidence handoff/deterministic selector, and SCHWAB-001/002/002A/003 with immutable `2573` CASH binding. | Run the regular-market read-only proof, assemble the immutable arm bundle, and arm only after every proof passes. |
+| `master` | Contains integration anchor `307a2e1`, backup reconciliation `ee78b33`, and this closeout | Yes; ordinary non-force backup push | Yes | `MERGED_TO_LOCAL_MASTER` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample activation/evidence handoff/deterministic selector, and SCHWAB-001/002/002A/003 with immutable `2573` CASH binding. | Run the regular-market read-only proof, assemble the immutable arm bundle, and arm only after every proof passes. |
 | `codex/ARGUS-R029-canonical-wpf-launcher` | `1d3d8e5` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Makes the tracked normal launcher path WPF-only, restores the canonical icon, retains explicit Qt rollback, and refuses arbitrary review builds. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R028-integrated-workstation-chrome` | `0e7a6ce` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Replaces the separate native title strip with integrated dark WPF chrome while preserving native window interactions and one global mode treatment. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R027-integrate-r026-with-shadow-baseline` | `6fe3f97` plus accepted repair/closeout history through local `master` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves Shadow lifecycle/review/sample lock while adding the R013-R025 read-only WPF stack and R026 test hardening. | Preserve as audit history; do not merge again. |

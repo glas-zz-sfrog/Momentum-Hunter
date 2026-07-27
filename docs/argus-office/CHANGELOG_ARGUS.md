@@ -3,6 +3,7 @@
 ## Unreleased
 - Steven accepted the live SHADOW-004 active-empty WPF proof: the official sample identity, `0 / 30` progress, zero lifecycle counts, withheld metrics, and unclipped Test Trade Review layout all passed; this visual acceptance does not arm the selector or authorize broker transmission.
 - Fast-forwarded the complete SHADOW-004/005/006 stack into canonical `master` through `307a2e1` with no merge commit; the regular-market quote proof and immutable non-synthetic arm bundle remain pending, and the official sample remains unarmed at `0 / 30`.
+- Backed the reconciled canonical stack up to `origin/master` through `ee78b33` after 844 Python tests, 216 .NET tests, compilation, protected-path review, and secret-risk review passed.
 - Implemented SHADOW-006 deterministic Official Shadow V1 selection: canonical rank/score/identity ordering, fatal/informational warning policy, four-clock freshness, fresh quote/provider identity, Opportunity ID, same-day duplicate suppression, one global position, and frozen session/forced-flat rules.
 - Replaced the temporary compile-time construction switch with a write-once arm record bound to named prerequisite proof hashes, constitution hash, and Shadow runtime build hash; failed or partial arming creates no policy or arm state.
 - Added expected in-window five-minute cycle accounting with restart-downtime inference, complete rejection reasons, collection/selection/order outcome counts, and closure of collection, selection, and observation failure paths.
