@@ -3,7 +3,8 @@ param(
     [ValidateSet("morning", "evening", "preopen", "shadow", "manual")]
     [string]$Session,
     [string]$ProjectRoot = "C:\Users\steve\OneDrive\Documents\Investing",
-    [string]$PythonExe = "C:\Users\steve\OneDrive\Documents\Investing\.venv\Scripts\python.exe"
+    [string]$PythonExe = "C:\Users\steve\OneDrive\Documents\Investing\.venv\Scripts\python.exe",
+    [string]$SelectorProofBundle = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +24,9 @@ try {
     $captureArguments = @($jobPath, "--session", $Session)
     if ($Session -eq "shadow") {
         $captureArguments += "--trigger-shadow-selector"
+        if ($SelectorProofBundle) {
+            $captureArguments += @("--selector-proof-bundle", $SelectorProofBundle)
+        }
     }
     & $PythonExe @captureArguments 2>&1 | Tee-Object -FilePath $logPath -Append
     $exitCode = $LASTEXITCODE

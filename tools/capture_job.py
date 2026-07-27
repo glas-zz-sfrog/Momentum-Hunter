@@ -69,6 +69,23 @@ def main() -> int:
                     raise RuntimeError(
                         "Shadow selector handoff requires the canonical JSON report."
                     )
+                selector_proof_bundle = getattr(
+                    args,
+                    "selector_proof_bundle",
+                    None,
+                )
+                if selector_proof_bundle is not None:
+                    from momentum_hunter.shadow_arm_ceremony import (
+                        complete_shadow_selector_arm,
+                    )
+
+                    ceremony = complete_shadow_selector_arm(
+                        selector_proof_bundle,
+                        report_path,
+                    )
+                    print(f"Shadow selector arm ceremony: {ceremony.state}")
+                    if ceremony.candidate:
+                        print(f"Proof candidate: {ceremony.candidate}")
                 from momentum_hunter.engine_host_client import (
                     run_immediate_collection_cycle,
                 )
@@ -415,6 +432,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "After a new or recovered shadow report, run one immediate guarded "
             "Engine Host collection/selector cycle."
+        ),
+    )
+    parser.add_argument(
+        "--selector-proof-bundle",
+        type=Path,
+        help=(
+            "Exact canonical static proof bundle to finalize and arm before "
+            "the immediate Shadow selector cycle."
         ),
     )
     return parser.parse_args()

@@ -420,6 +420,70 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         self.assertEqual(0, exit_code)
         run_cycle.assert_not_called()
 
+    def test_main_completes_arm_ceremony_before_selector_cycle(self) -> None:
+        report_path = self.reports_dir / "trade-plan-briefing-shadow.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text("{}", encoding="utf-8")
+        bundle = self.root / "selector-proof-bundle"
+        args = argparse.Namespace(
+            session=CaptureSession.SHADOW.value,
+            provider=None,
+            scanner=None,
+            trigger_shadow_selector=True,
+            selector_proof_bundle=bundle,
+        )
+        run_result = capture_job.CaptureRunResult(
+            exit_code=0,
+            disposition="CAPTURED",
+            report_paths={"json": report_path},
+        )
+        calls: list[str] = []
+        ceremony = SimpleNamespace(state="ARMED", candidate="CRWV")
+        cycle = SimpleNamespace(
+            code="COLLECTION_COMPLETED",
+            summary="Background collection cycle completed.",
+            snapshot={"hostInstanceId": "host-1"},
+        )
+
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(
+                capture_job,
+                "now_central",
+                return_value=datetime.fromisoformat(
+                    "2026-07-27T08:35:00-05:00"
+                ),
+            ),
+            patch.object(
+                capture_job,
+                "run_capture_with_result",
+                return_value=run_result,
+            ),
+            patch(
+                "momentum_hunter.shadow_arm_ceremony."
+                "complete_shadow_selector_arm",
+                side_effect=lambda *_args: (
+                    calls.append("arm") or ceremony
+                ),
+            ) as arm_selector,
+            patch(
+                "momentum_hunter.engine_host_client."
+                "run_immediate_collection_cycle",
+                side_effect=lambda **_kwargs: (
+                    calls.append("cycle") or cycle
+                ),
+            ),
+            patch.object(
+                capture_job,
+                "write_shadow_handoff_receipt",
+            ),
+        ):
+            exit_code = capture_job.main()
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(["arm", "cycle"], calls)
+        arm_selector.assert_called_once_with(bundle, report_path)
+
     def test_duplicate_shadow_report_retries_when_receipt_is_missing(self) -> None:
         report_path = self.reports_dir / "trade-plan-briefing-shadow.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -583,8 +647,11 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         self.assertIn("Momentum Hunter Shadow Opening Capture", installer)
         self.assertIn('[string]$ShadowTime = "08:35"', installer)
         self.assertIn('-Session "shadow"', installer)
+        self.assertIn("rev-parse --short=7 HEAD", installer)
+        self.assertIn("-SelectorProofBundle", installer)
         self.assertIn('"shadow"', runner)
         self.assertIn("--trigger-shadow-selector", runner)
+        self.assertIn("--selector-proof-bundle", runner)
 
 
 def capture_decision(

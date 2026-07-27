@@ -212,6 +212,7 @@ def runtime_build_hash(paths: Iterable[Path] | None = None) -> str:
             root / "models.py",
             root / "scheduling.py",
             root / "schwab_market_data.py",
+            root / "shadow_arm_ceremony.py",
             root / "shadow_market_validity.py",
             root / "shadow_selection.py",
             root / "shadow_trading.py",

@@ -4,6 +4,7 @@ param(
     [string]$MorningTime = "07:00",
     [string]$ShadowTime = "08:35",
     [string]$EveningTime = "19:00",
+    [string]$SelectorProofBundle = "",
     [switch]$RunWhetherLoggedOn
 )
 
@@ -17,6 +18,16 @@ $morningTaskName = "Momentum Hunter Morning Capture"
 $shadowTaskName = "Momentum Hunter Shadow Opening Capture"
 $eveningTaskName = "Momentum Hunter Evening Capture"
 $runnerScript = Join-Path $toolsDir "run_capture_job.ps1"
+if (-not $SelectorProofBundle) {
+    $head = (& git -C $ProjectRoot rev-parse --short=7 HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $head) {
+        throw "Cannot derive the canonical Git HEAD for the Shadow proof bundle."
+    }
+    $SelectorProofBundle = Join-Path $ProjectRoot "MomentumHunterData\data\reports\official-shadow-v1-selector-proof-bundle-$head"
+}
+if (-not (Test-Path -LiteralPath $SelectorProofBundle -PathType Container)) {
+    throw "Shadow selector proof bundle is missing: $SelectorProofBundle"
+}
 
 function Register-CaptureTask {
     param(
@@ -27,6 +38,9 @@ function Register-CaptureTask {
     )
 
     $argument = "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`" -Session $Session -ProjectRoot `"$ProjectRoot`" -PythonExe `"$PythonExe`""
+    if ($Session -eq "shadow") {
+        $argument += " -SelectorProofBundle `"$SelectorProofBundle`""
+    }
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $argument -WorkingDirectory $ProjectRoot
     $trigger = New-ScheduledTaskTrigger -Daily -At $Time
     $settings = New-ScheduledTaskSettingsSet `

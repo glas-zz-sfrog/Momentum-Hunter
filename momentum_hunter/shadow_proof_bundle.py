@@ -100,6 +100,22 @@ STATIC_TEST_GATES: dict[str, tuple[str, ...]] = {
         "test_shadow_capture_has_distinct_immutable_report_identity",
         "tests.test_capture_job.CaptureJobTradePlanHandoffTests."
         "test_windows_task_wires_distinct_shadow_opening_capture",
+        "tests.test_capture_job.CaptureJobTradePlanHandoffTests."
+        "test_main_completes_arm_ceremony_before_selector_cycle",
+        "tests.test_shadow_arm_ceremony.ShadowArmCeremonyTests."
+        "test_complete_bundle_arms_only_through_existing_verifier",
+        "tests.test_shadow_arm_ceremony.ShadowArmCeremonyTests."
+        "test_missing_live_proof_builds_report_derived_proof_then_arms",
+        "tests.test_shadow_arm_ceremony.ShadowArmCeremonyTests."
+        "test_failed_quote_retries_and_never_finalizes_or_arms",
+        "tests.test_shadow_arm_ceremony.ShadowArmCeremonyTests."
+        "test_existing_invalid_live_artifact_stops_before_quote_request",
+        "tests.test_shadow_arm_ceremony.ShadowArmCeremonyTests."
+        "test_already_armed_is_nonmutating_and_skips_market_data",
+        "tests.test_shadow_arm_ceremony.ShadowArmCeremonyTests."
+        "test_static_or_git_preflight_failure_stops_before_quote",
+        "tests.test_shadow_arm_ceremony.ShadowArmCeremonyTests."
+        "test_existing_quote_output_stops_before_quote_request",
     ),
     "freshness_matrix": (
         "tests.test_shadow_selection.ShadowMarketValiditySelectionTests."
