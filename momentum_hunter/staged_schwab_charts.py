@@ -615,7 +615,13 @@ def require_schema(
 
 def read_bounded(path: Path, maximum: int, label: str) -> bytes:
     try:
-        raw = path.read_bytes()
+        size = path.stat().st_size
+        if size <= 0 or size > maximum:
+            raise StagedSchwabChartError(
+                f"The {label} has an invalid size."
+            )
+        with path.open("rb") as source:
+            raw = source.read(maximum + 1)
     except OSError:
         raise StagedSchwabChartError(f"The {label} could not be read.") from None
     if not raw or len(raw) > maximum:

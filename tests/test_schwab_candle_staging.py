@@ -9,6 +9,7 @@ from pathlib import Path
 
 from momentum_hunter.schwab_candle_staging import (
     CandidateCandleStagingError,
+    MAX_TARGET_REPORT_BYTES,
     latest_monitor_target_report,
     load_monitor_target_selection,
     stage_candidate_candles,
@@ -124,6 +125,17 @@ class CandidateCandleSelectionTests(unittest.TestCase):
         for limit in (0, 26):
             with self.assertRaises(CandidateCandleStagingError):
                 load_monitor_target_selection(report, limit=limit)
+
+    def test_oversized_target_report_fails_before_json_parsing(self) -> None:
+        report = self.root / "oversized-targets.json"
+        with report.open("wb") as destination:
+            destination.truncate(MAX_TARGET_REPORT_BYTES + 1)
+
+        with self.assertRaisesRegex(
+            CandidateCandleStagingError,
+            "invalid size",
+        ):
+            load_monitor_target_selection(report)
 
     def write_report(self, name: str, symbols: list[str]) -> Path:
         path = self.root / name

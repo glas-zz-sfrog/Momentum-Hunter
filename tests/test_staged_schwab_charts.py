@@ -16,6 +16,7 @@ from momentum_hunter.schwab_price_history import (
     SchwabPriceHistoryResult,
 )
 from momentum_hunter.staged_schwab_charts import (
+    MAX_STAGED_MANIFEST_BYTES,
     StagedSchwabChartError,
     StagedSchwabChartPaths,
     StagedSchwabChartService,
@@ -119,6 +120,13 @@ class StagedSchwabChartTests(unittest.TestCase):
 
         self.assertEqual("STALE", intraday["state"])
         self.assertEqual("INSUFFICIENT_DATA", daily["state"])
+
+    def test_oversized_manifest_fails_before_json_parsing(self) -> None:
+        with self.manifest_path.open("wb") as destination:
+            destination.truncate(MAX_STAGED_MANIFEST_BYTES + 1)
+
+        with self.assertRaisesRegex(StagedSchwabChartError, "invalid size"):
+            self.load()
 
     def test_stage_hash_target_hash_and_recorded_path_tampering_fail(self) -> None:
         original_stage = self.candles_path.read_bytes()
