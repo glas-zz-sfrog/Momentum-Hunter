@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added SHADOW-015 physical evidence for the three non-market opening cases: an actual temporary running task/process classified `IN_PROGRESS`, while structured Engine Host rejection and a greater-than-five-second clock failure classified `FAILED`; no case retired the heartbeat or created arm, cycle, handoff, or trade state.
+- Preserved the sanitized six-file rehearsal bundle outside the repository with before/after production snapshots and manifest SHA-256 `996204108C83E522AF769EAF21E6A7F1B82C06B3D5DFEBEA7FCBB3E14CC1DE36`; production Git, task scheduling, and activation hash remained unchanged.
 - Added R034 one-command candle cutover preflight: it requires the full persisted target set, refreshes hash-bound inactive Schwab 1-minute/Daily staging, audits the exact legacy files and SQLite rows read-only, compares source fingerprints, and emits one required write-once receipt while keeping cutover permission false.
 - Live R034 proof covered 22/22 targets and 44/44 available interval results, found exactly 710 legacy `CRWV` rows with zero other rows, aliases, or sidecars, and preserved every canonical input hash. Compileall, 47 focused/adjacent tests, 955/955 Python tests, and 216/216 .NET tests pass.
 - Implemented and remotely backed the R030-R033 staged-candle stack without moving canonical `master`: exact-host GET-only Schwab 1-minute/Daily history, report-bound inactive staging, validated read-only chart preview, and nonmutating legacy/cutover inventory now exist at `86defde`.
