@@ -27,12 +27,15 @@ from momentum_hunter.shadow_trading import (
     ShadowStateStore,
     ShadowTradingService,
 )
+from momentum_hunter.trade_planning import REPORT_SCHEMA_VERSION
 
 
 HEAD = "a" * 40
 ACTIVATED_AT = datetime(2026, 7, 26, 20, 0, tzinfo=timezone.utc)
 PREPARED_AT = datetime(2026, 7, 27, 13, 58, tzinfo=timezone.utc)
 QUOTED_AT = datetime(2026, 7, 27, 14, 0, tzinfo=timezone.utc)
+CAPTURED_AT = QUOTED_AT - timedelta(seconds=20)
+REPORTED_AT = QUOTED_AT - timedelta(seconds=10)
 
 
 class FakeCommandRunner:
@@ -123,6 +126,12 @@ class ShadowProofBundleTests(unittest.TestCase):
         self.state_path = self.root / "shadow-state.json"
         self.bundle = self.root / "selector-proof-bundle"
         self.quote_proof_path = self.root / "quote-proof.json"
+        self.data_dir = self.root / "data"
+        self.reports_dir = self.data_dir / "reports"
+        self.captures_dir = self.data_dir / "captures"
+        self.reports_dir.mkdir(parents=True)
+        self.captures_dir.mkdir(parents=True)
+        self.report_path, self.capture_path = self.write_candidate_report()
         self.write_visual_evidence()
         service = ShadowTradingService(store=ShadowStateStore(self.state_path))
         with patch(
@@ -206,19 +215,75 @@ class ShadowProofBundleTests(unittest.TestCase):
         )
         return proof
 
+    def write_candidate_report(
+        self,
+        *,
+        symbol: str = "CRWV",
+        session: str = "manual",
+        captured_at: datetime = CAPTURED_AT,
+        reported_at: datetime = REPORTED_AT,
+    ) -> tuple[Path, Path]:
+        capture_path = (
+            self.captures_dir
+            / captured_at.date().isoformat()
+            / f"{session}.json"
+        )
+        capture_path.parent.mkdir(parents=True, exist_ok=True)
+        capture = {
+            "capture_time": captured_at.isoformat(),
+            "session": session,
+            "candidates": [{"symbol": symbol}],
+        }
+        capture_path.write_text(
+            json.dumps(capture, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        report_path = (
+            self.reports_dir
+            / (
+                f"trade-plan-briefing-{captured_at.date().isoformat()}"
+                f"-{session}.json"
+            )
+        )
+        report = {
+            "schema_version": REPORT_SCHEMA_VERSION,
+            "metadata": {
+                "generated_at": reported_at.isoformat(),
+                "source_capture_path": str(capture_path.resolve()),
+                "source_capture_time": captured_at.isoformat(),
+                "source_session": session,
+                "source_provider": "finviz",
+            },
+            "candidates": [
+                {
+                    "rank": 1,
+                    "symbol": symbol,
+                    "candidate_id": f"{symbol}-candidate",
+                    "scoring": {"composite_score": 90.0},
+                }
+            ],
+        }
+        report_path.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return report_path, capture_path
+
     def finalize(
         self,
         *,
-        candidate: str = "CRWV",
+        report_path: Path | None = None,
         finalized_at: datetime | None = None,
         runner: FakeCommandRunner | None = None,
     ) -> dict[str, object]:
         return finalize_selector_proof_bundle(
             self.bundle,
             quote_proof_path=self.quote_proof_path,
-            candidate=candidate,
+            report_path=report_path or self.report_path,
             repo_root=self.repo_root,
             state_path=self.state_path,
+            reports_dir=self.reports_dir,
+            captures_dir=self.captures_dir,
             finalized_at=finalized_at or QUOTED_AT + timedelta(seconds=5),
             command_runner=runner or FakeCommandRunner(),
         )
@@ -288,8 +353,29 @@ class ShadowProofBundleTests(unittest.TestCase):
         self.assertEqual("READY_TO_ARM", result["bundleState"])
         self.assertEqual(12, result["proofArtifactCount"])
         self.assertEqual("CRWV", result["candidate"])
+        self.assertEqual(
+            file_hash(self.report_path),
+            result["sourceReportSha256"],
+        )
+        self.assertEqual(
+            file_hash(self.capture_path),
+            result["sourceCaptureSha256"],
+        )
         self.assertTrue(
             (self.bundle / "fresh_quote_boundary.json").exists()
+        )
+        fresh_proof = json.loads(
+            (self.bundle / "fresh_quote_boundary.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(4, len(fresh_proof["evidence"]))
+        self.assertTrue(
+            (
+                self.bundle
+                / "evidence"
+                / "fresh_quote_report_binding.json"
+            ).exists()
         )
         self.assertFalse(result["stateMutated"])
         self.assertFalse(result["transmitting"])
@@ -326,7 +412,99 @@ class ShadowProofBundleTests(unittest.TestCase):
         self.write_quote_proof(symbols=("NVDA", "SPY", "IWM"))
 
         with self.assertRaises(SelectorProofBundleError):
-            self.finalize(candidate="CRWV")
+            self.finalize()
+
+        self.assertFalse(
+            (self.bundle / "fresh_quote_boundary.json").exists()
+        )
+        self.assert_production_state_untouched()
+
+    def test_highest_canonical_rank_is_derived_from_report(self) -> None:
+        report = json.loads(self.report_path.read_text(encoding="utf-8"))
+        capture = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        report["candidates"] = [
+            {
+                "rank": 2,
+                "symbol": "CRWV",
+                "candidate_id": "CRWV-candidate",
+                "scoring": {"composite_score": 95.0},
+            },
+            {
+                "rank": 1,
+                "symbol": "NVDA",
+                "candidate_id": "NVDA-candidate",
+                "scoring": {"composite_score": 80.0},
+            },
+        ]
+        capture["candidates"] = [
+            {"symbol": "CRWV"},
+            {"symbol": "NVDA"},
+        ]
+        self.report_path.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.capture_path.write_text(
+            json.dumps(capture, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.prepare()
+        self.write_quote_proof(symbols=("NVDA", "SPY", "IWM"))
+
+        result = self.finalize()
+
+        self.assertEqual("NVDA", result["candidate"])
+        self.assert_production_state_untouched()
+
+    def test_noncanonical_or_not_latest_report_is_rejected(self) -> None:
+        self.prepare()
+        self.write_quote_proof()
+        copied_report = self.root / self.report_path.name
+        copied_report.write_bytes(self.report_path.read_bytes())
+
+        with self.assertRaises(SelectorProofBundleError):
+            self.finalize(report_path=copied_report)
+
+        later_report, _ = self.write_candidate_report(
+            symbol="NVDA",
+            session="morning",
+            captured_at=CAPTURED_AT + timedelta(seconds=1),
+            reported_at=REPORTED_AT + timedelta(seconds=1),
+        )
+        self.assertNotEqual(self.report_path, later_report)
+        with self.assertRaises(SelectorProofBundleError):
+            self.finalize(report_path=self.report_path)
+        self.assert_production_state_untouched()
+
+    def test_stale_report_is_rejected_even_with_fresh_quotes(self) -> None:
+        stale_report, _ = self.write_candidate_report(
+            session="morning",
+            captured_at=QUOTED_AT - timedelta(minutes=2),
+            reported_at=QUOTED_AT - timedelta(minutes=2),
+        )
+        self.prepare()
+        self.write_quote_proof()
+
+        with self.assertRaises(SelectorProofBundleError):
+            self.finalize(report_path=stale_report)
+
+        self.assertFalse(
+            (self.bundle / "fresh_quote_boundary.json").exists()
+        )
+        self.assert_production_state_untouched()
+
+    def test_report_and_source_capture_mismatch_is_rejected(self) -> None:
+        capture = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        capture["candidates"] = [{"symbol": "NVDA"}]
+        self.capture_path.write_text(
+            json.dumps(capture, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.prepare()
+        self.write_quote_proof()
+
+        with self.assertRaises(SelectorProofBundleError):
+            self.finalize()
 
         self.assertFalse(
             (self.bundle / "fresh_quote_boundary.json").exists()
@@ -366,6 +544,27 @@ class ShadowProofBundleTests(unittest.TestCase):
         )
         self.assertFalse(
             (self.bundle / "evidence" / "fresh_quote_boundary.json").exists()
+        )
+        self.assertFalse(
+            (
+                self.bundle
+                / "evidence"
+                / "fresh_quote_report_binding.json"
+            ).exists()
+        )
+        self.assertFalse(
+            (
+                self.bundle
+                / "evidence"
+                / "fresh_quote_source_report.json"
+            ).exists()
+        )
+        self.assertFalse(
+            (
+                self.bundle
+                / "evidence"
+                / "fresh_quote_source_capture.json"
+            ).exists()
         )
         self.assert_production_state_untouched()
 

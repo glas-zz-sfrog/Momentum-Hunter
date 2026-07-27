@@ -15,31 +15,40 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
+from momentum_hunter.config import DATA_DIR
 from momentum_hunter.schwab_market_data import (
     LIVE_SCHWAB_QUOTE_PROOF_ORIGIN,
     REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION,
     SCHWAB_QUOTE_SOURCE,
+    normalize_symbols,
 )
 from momentum_hunter.shadow_market_validity import (
     MAX_SELECTOR_EVIDENCE_ARTIFACT_BYTES,
     MAX_SELECTOR_PROOF_ARTIFACT_BYTES,
     SELECTOR_PROOF_ARTIFACT_SCHEMA_VERSION,
     SHADOW_SELECTOR_ARM_REQUIRED_PROOFS,
+    canonical_candidate_rows,
+    entry_window_findings,
     parse_datetime,
     read_stable_selector_artifact,
     runtime_build_hash,
     shadow_constitution_hash,
+    validate_report_clocks,
     validate_selector_proof_artifact,
 )
+from momentum_hunter.shadow_selection import load_report_object
 from momentum_hunter.shadow_trading import (
     SHADOW_STATE_PATH,
     ShadowStateStore,
     ShadowTradingService,
     selector_proof_bundle_paths,
 )
+from momentum_hunter.trade_planning import REPORT_SCHEMA_VERSION
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPORTS_DIR = DATA_DIR / "reports"
+CAPTURES_DIR = DATA_DIR / "captures"
 VISUAL_PROOF_PATH = (
     Path("docs")
     / "argus-office"
@@ -154,6 +163,19 @@ class ProofContext:
     activated_at: datetime
     constitution_hash: str
     build_hash: str
+
+
+@dataclass(frozen=True)
+class CandidateReportEvidence:
+    candidate: str
+    report_path: Path
+    report_bytes: bytes
+    report_sha256: str
+    source_capture_path: Path
+    source_capture_bytes: bytes
+    source_capture_sha256: str
+    report_generated_at: str
+    source_capture_time: str
 
 
 CommandRunner = Callable[[Sequence[str], Path, float], CommandResult]
@@ -284,9 +306,11 @@ def finalize_selector_proof_bundle(
     bundle: Path,
     *,
     quote_proof_path: Path,
-    candidate: str,
+    report_path: Path,
     repo_root: Path = PROJECT_ROOT,
     state_path: Path = SHADOW_STATE_PATH,
+    reports_dir: Path = REPORTS_DIR,
+    captures_dir: Path = CAPTURES_DIR,
     finalized_at: datetime | None = None,
     command_runner: CommandRunner = run_command,
 ) -> dict[str, object]:
@@ -310,34 +334,76 @@ def finalize_selector_proof_bundle(
             verified_at=timestamp,
         )
 
-    normalized_candidate = candidate.strip().upper()
-    if (
-        not normalized_candidate
-        or normalized_candidate in {"SPY", "IWM"}
-        or not normalized_candidate.isalnum()
-    ):
-        raise SelectorProofBundleError(
-            "Fresh quote proof requires one non-benchmark candidate symbol."
-        )
+    report_evidence = read_and_validate_candidate_report(
+        report_path,
+        reports_dir=reports_dir,
+        captures_dir=captures_dir,
+        context=context,
+        finalized_at=timestamp,
+    )
     quote_payload, quote_bytes = read_and_validate_live_quote_proof(
         quote_proof_path,
-        candidate=normalized_candidate,
+        candidate=report_evidence.candidate,
         finalized_at=timestamp,
     )
 
-    evidence_path = target / "evidence" / "fresh_quote_boundary.json"
+    evidence_root = target / "evidence"
+    evidence_path = evidence_root / "fresh_quote_boundary.json"
+    report_copy_path = evidence_root / "fresh_quote_source_report.json"
+    capture_copy_path = evidence_root / "fresh_quote_source_capture.json"
+    binding_path = evidence_root / "fresh_quote_report_binding.json"
     proof_path = target / "fresh_quote_boundary.json"
-    if evidence_path.exists() or proof_path.exists():
+    fresh_paths = (
+        evidence_path,
+        report_copy_path,
+        capture_copy_path,
+        binding_path,
+        proof_path,
+    )
+    if any(path.exists() for path in fresh_paths):
         raise SelectorProofBundleError(
             "Fresh quote boundary evidence already exists in this bundle."
         )
     try:
         evidence_path.write_bytes(quote_bytes)
+        report_copy_path.write_bytes(report_evidence.report_bytes)
+        capture_copy_path.write_bytes(report_evidence.source_capture_bytes)
+        write_json(
+            binding_path,
+            {
+                "schemaVersion": 1,
+                "proof": "fresh_quote_boundary",
+                "status": "PASS",
+                "verifiedAt": timestamp.isoformat(),
+                "candidate": report_evidence.candidate,
+                "sourceReport": report_evidence.report_path.name,
+                "sourceReportSha256": report_evidence.report_sha256,
+                "sourceReportGeneratedAt": (
+                    report_evidence.report_generated_at
+                ),
+                "sourceCapture": report_evidence.source_capture_path.name,
+                "sourceCaptureSha256": (
+                    report_evidence.source_capture_sha256
+                ),
+                "sourceCaptureTime": report_evidence.source_capture_time,
+                "quoteCheckedAt": quote_payload["checkedAt"],
+                "transmitting": False,
+                "orderTransmission": "UNAVAILABLE",
+            },
+        )
         write_proof_artifact(
             target,
             "fresh_quote_boundary",
-            "Live Schwab candidate and SPY/IWM quotes passed the 30-second boundary.",
-            (evidence_path,),
+            (
+                "The highest-ranked candidate from the latest fresh canonical "
+                "report and SPY/IWM passed the live Schwab 30-second boundary."
+            ),
+            (
+                binding_path,
+                report_copy_path,
+                capture_copy_path,
+                evidence_path,
+            ),
             context=context,
             verified_at=timestamp,
         )
@@ -347,8 +413,8 @@ def finalize_selector_proof_bundle(
             verified_at=timestamp,
         )
     except Exception:
-        proof_path.unlink(missing_ok=True)
-        evidence_path.unlink(missing_ok=True)
+        for path in reversed(fresh_paths):
+            path.unlink(missing_ok=True)
         raise
 
     return {
@@ -356,7 +422,11 @@ def finalize_selector_proof_bundle(
         "bundle": str(target),
         "verifiedAt": verified_at.isoformat(),
         "quoteCheckedAt": quote_payload["checkedAt"],
-        "candidate": normalized_candidate,
+        "candidate": report_evidence.candidate,
+        "sourceReport": str(report_evidence.report_path),
+        "sourceReportSha256": report_evidence.report_sha256,
+        "sourceCapture": str(report_evidence.source_capture_path),
+        "sourceCaptureSha256": report_evidence.source_capture_sha256,
         "sampleVersion": context.sample_version,
         "activationHash": context.activation_hash,
         "constitutionHash": context.constitution_hash,
@@ -744,6 +814,199 @@ def validate_static_artifact(
     )
 
 
+def read_and_validate_candidate_report(
+    path: Path,
+    *,
+    reports_dir: Path,
+    captures_dir: Path,
+    context: ProofContext,
+    finalized_at: datetime,
+) -> CandidateReportEvidence:
+    if path.is_symlink():
+        raise SelectorProofBundleError(
+            "Fresh quote source report cannot be a symlink."
+        )
+    try:
+        canonical_reports_dir = reports_dir.expanduser().resolve(strict=True)
+        canonical_captures_dir = captures_dir.expanduser().resolve(strict=True)
+    except OSError as exc:
+        raise SelectorProofBundleError(
+            "Canonical report or capture directory is unavailable."
+        ) from exc
+    if (
+        not canonical_reports_dir.is_dir()
+        or not canonical_captures_dir.is_dir()
+    ):
+        raise SelectorProofBundleError(
+            "Canonical report or capture path is not a directory."
+        )
+    report_path, report_bytes = read_stable_selector_artifact(
+        path,
+        proof_name="fresh_quote_boundary",
+        artifact_role="source-report",
+        maximum_bytes=MAX_SELECTOR_EVIDENCE_ARTIFACT_BYTES,
+    )
+    if (
+        report_path.parent != canonical_reports_dir
+        or not report_path.name.startswith("trade-plan-briefing-")
+        or report_path.suffix.lower() != ".json"
+    ):
+        raise SelectorProofBundleError(
+            "Fresh quote proof requires a canonical scheduled TradePlan report."
+        )
+    scheduled_reports = tuple(
+        item
+        for item in canonical_reports_dir.glob(
+            "trade-plan-briefing-*.json"
+        )
+        if item.is_file() and not item.is_symlink()
+    )
+    if not scheduled_reports:
+        raise SelectorProofBundleError(
+            "No canonical scheduled TradePlan report is available."
+        )
+    latest_report = max(
+        scheduled_reports,
+        key=lambda item: item.stat().st_mtime_ns,
+    ).resolve(strict=True)
+    if report_path != latest_report:
+        raise SelectorProofBundleError(
+            "Fresh quote proof report is not the latest canonical report."
+        )
+
+    try:
+        report = load_report_object(report_bytes)
+    except ValueError as exc:
+        raise SelectorProofBundleError(str(exc)) from exc
+    rows = report.get("candidates") or report.get("top_5_for_capital") or []
+    if not isinstance(rows, list):
+        raise SelectorProofBundleError(
+            "Fresh quote proof report lacks a candidate collection."
+        )
+    try:
+        canonical_rows = canonical_candidate_rows(rows)
+    except ValueError as exc:
+        raise SelectorProofBundleError(str(exc)) from exc
+    if not canonical_rows:
+        raise SelectorProofBundleError(
+            "Fresh quote proof report has no canonical candidate."
+        )
+    candidate = str(canonical_rows[0][1].get("symbol", "")).strip().upper()
+    if (
+        candidate in {"SPY", "IWM"}
+        or normalize_symbols((candidate,)) != (candidate,)
+    ):
+        raise SelectorProofBundleError(
+            "Highest-ranked report candidate is invalid for quote proof."
+        )
+
+    metadata = (
+        report.get("metadata", {})
+        if isinstance(report.get("metadata"), dict)
+        else {}
+    )
+    if (
+        report.get("schema_version") != REPORT_SCHEMA_VERSION
+        or not str(metadata.get("source_provider", "")).strip()
+        or not str(metadata.get("source_capture_path", "")).strip()
+        or not str(metadata.get("source_session", "")).strip()
+    ):
+        raise SelectorProofBundleError(
+            "Fresh quote proof report identity is incomplete."
+        )
+    clock_findings = validate_report_clocks(
+        metadata,
+        decision_at=finalized_at,
+    )
+    session_findings = entry_window_findings(finalized_at)
+    if clock_findings or session_findings:
+        raise SelectorProofBundleError(
+            "Fresh quote proof report is not currently eligible: "
+            + " | ".join((*clock_findings, *session_findings))
+        )
+    report_at = parse_datetime(str(metadata.get("generated_at", "")))
+    capture_at = parse_datetime(
+        str(metadata.get("source_capture_time", ""))
+    )
+    if (
+        report_at is None
+        or capture_at is None
+        or report_at < context.activated_at
+        or capture_at < context.activated_at
+    ):
+        raise SelectorProofBundleError(
+            "Fresh quote proof report predates the official sample activation."
+        )
+
+    supplied_capture = Path(
+        str(metadata.get("source_capture_path", ""))
+    ).expanduser()
+    if supplied_capture.is_symlink():
+        raise SelectorProofBundleError(
+            "Fresh quote source capture cannot be a symlink."
+        )
+    capture_path, capture_bytes = read_stable_selector_artifact(
+        supplied_capture,
+        proof_name="fresh_quote_boundary",
+        artifact_role="source-capture",
+        maximum_bytes=MAX_SELECTOR_EVIDENCE_ARTIFACT_BYTES,
+    )
+    if not capture_path.is_relative_to(canonical_captures_dir):
+        raise SelectorProofBundleError(
+            "Fresh quote source capture is outside canonical capture storage."
+        )
+    try:
+        capture = json.loads(capture_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise SelectorProofBundleError(
+            "Fresh quote source capture is not valid UTF-8 JSON."
+        ) from None
+    if not isinstance(capture, dict):
+        raise SelectorProofBundleError(
+            "Fresh quote source capture has an invalid shape."
+        )
+    source_rows = capture.get("candidates")
+    report_symbols = {
+        str(row.get("symbol", "")).strip().upper()
+        for row in rows
+        if isinstance(row, dict)
+    }
+    source_symbols = (
+        {
+            str(row.get("ticker") or row.get("symbol") or "").strip().upper()
+            for row in source_rows
+            if isinstance(row, dict)
+        }
+        if isinstance(source_rows, list)
+        else set()
+    )
+    if (
+        str(capture.get("capture_time", ""))
+        != str(metadata.get("source_capture_time", ""))
+        or str(capture.get("session", "")).strip()
+        != str(metadata.get("source_session", "")).strip()
+        or not isinstance(source_rows, list)
+        or len(source_rows) != len(rows)
+        or "" in report_symbols
+        or "" in source_symbols
+        or report_symbols != source_symbols
+    ):
+        raise SelectorProofBundleError(
+            "Fresh quote report does not match its immutable source capture."
+        )
+    return CandidateReportEvidence(
+        candidate=candidate,
+        report_path=report_path,
+        report_bytes=report_bytes,
+        report_sha256=hashlib.sha256(report_bytes).hexdigest(),
+        source_capture_path=capture_path,
+        source_capture_bytes=capture_bytes,
+        source_capture_sha256=hashlib.sha256(capture_bytes).hexdigest(),
+        report_generated_at=str(metadata.get("generated_at", "")),
+        source_capture_time=str(metadata.get("source_capture_time", "")),
+    )
+
+
 def read_and_validate_live_quote_proof(
     path: Path,
     *,
@@ -874,7 +1137,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     finalize_parser.add_argument("--bundle", type=Path, required=True)
     finalize_parser.add_argument("--quote-proof", type=Path, required=True)
-    finalize_parser.add_argument("--candidate", required=True)
+    finalize_parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == "prepare-static":
@@ -887,7 +1150,7 @@ def main(argv: list[str] | None = None) -> int:
             result = finalize_selector_proof_bundle(
                 args.bundle,
                 quote_proof_path=args.quote_proof,
-                candidate=args.candidate,
+                report_path=args.report,
                 repo_root=args.repo_root,
                 state_path=args.state_path,
             )
