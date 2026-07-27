@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Implemented and remotely backed the R030-R033 staged-candle stack without moving canonical `master`: exact-host GET-only Schwab 1-minute/Daily history, report-bound inactive staging, validated read-only chart preview, and nonmutating legacy/cutover inventory now exist at `86defde`.
+- Proved full inactive coverage for 22 persisted monitor targets and 44 symbol/interval requests. The inventory found exactly 710 legacy `CRWV` SQLite rows, zero unrelated rows, zero path/hash aliases, and zero sidecars while keeping deletion, database mutation, active-source change, and cutover permission false.
+- Passed Python compileall, 40 focused tests, 120 adjacent tests, 948/948 full Python tests, 216/216 .NET tests, diff/secret/destructive-path review, and source-nonmutation proof for R030-R033. Canonical local/remote `master` remains synchronized at SHADOW-014 proof commit `4c35181`.
 - Prepared and scheduled SHADOW-014 for a one-time unarmed opening proof: preserved the first disabled-task heartbeat as a safe `FAILED` audit, revalidated the sole `2573` cash binding through the guarded read-only refresh path, proved live SPY/IWM quote and HTTPS clock behavior, and bound the 2026-07-28 task/bundle/heartbeat to the final synchronized governance commit.
 - Fast-forwarded SHADOW-013 implementation commit `58552da` into local `master` after final compile, focused regression, full Python/.NET regression, PowerShell, diff, secret, task-state, and production-nonmutation gates passed; the ordinary non-force backup includes the governance closeout.
 - Hardened the Official Shadow opening ceremony so receipt completeness requires an allowlisted semantic terminal result and verified Engine Host, command, capture, report, decision-cycle, and trade identity where applicable.
