@@ -106,3 +106,22 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Live read-only SPY/IWM proof passed with quote age below two seconds and uncertainty-inclusive HTTPS clock skew of `1.596` seconds. A separate NTP diagnostic showed approximately `0.939` seconds offset; Windows Time service remains stopped because elevation is required.
 - This governance checkpoint precedes final bundle/task generation. After integration and backup, regenerate artifacts at the resulting canonical head and schedule one proof-only run for 2026-07-28 at 8:35 AM Central plus a finite 8:50 read-only audit.
 - Final closeout records that schedule before generating the artifacts so the resulting bundle and task definition bind to the synchronized commit containing this statement. The task is one-time, has no scheduler retry or arm switch, and must leave the sample at `0 / 30`.
+
+## 2026-07-27 - ARGUS-SHADOW-016 Manual paperMoney Reconciliation Evidence
+
+- Branch: `codex/ARGUS-SHADOW-016-paper-reconciliation-evidence` from synchronized
+  `master` at the frozen SHADOW-014 proof commit `4c35181`.
+- Runtime/test commit: `6c1fc7b`.
+- Added a separate write-once JSON record and CLI for manually entered thinkorswim
+  paperMoney ticket results; the source Shadow state remains byte-identical.
+- Bound each artifact to source-state SHA-256, Shadow trade/order, TradePlan, Risk
+  Governor decision, evidence snapshot, sample/fill-model, and available selector,
+  constitution, decision-cycle, and opportunity identities.
+- Exact duplicates are idempotent. Conflicting, malformed, tampered, over-limit,
+  chronologically impossible, missing-ticket, invalid fill/result, or concurrently
+  changing source evidence fails closed.
+- Compileall, 12 focused tests, 920/920 full Python tests, and 216/216 .NET tests pass.
+  No account, credential, network, broker, order, score, readiness, alert, scheduled
+  task, proof bundle, database, generated market data, or UI behavior changed.
+- Status: `IMPLEMENTED_PENDING_MERGE`; ordinary feature-branch backup is included in
+  this closeout. Canonical `master` stays frozen until the scheduled SHADOW-014 audit.

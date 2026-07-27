@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Added SHADOW-016 write-once manual thinkorswim paperMoney reconciliation evidence. The new CLI binds operator-entered ticket/result data to the exact frozen Shadow state, order, TradePlan, Risk Governor decision, sample, and selector/cycle identity; rejects invalid, conflicting, tampered, or chronologically impossible records; and exposes no account, credential, network, broker, or order action.
 - Prepared and scheduled SHADOW-014 for a one-time unarmed opening proof: preserved the first disabled-task heartbeat as a safe `FAILED` audit, revalidated the sole `2573` cash binding through the guarded read-only refresh path, proved live SPY/IWM quote and HTTPS clock behavior, and bound the 2026-07-28 task/bundle/heartbeat to the final synchronized governance commit.
 - Fast-forwarded SHADOW-013 implementation commit `58552da` into local `master` after final compile, focused regression, full Python/.NET regression, PowerShell, diff, secret, task-state, and production-nonmutation gates passed; the ordinary non-force backup includes the governance closeout.
 - Hardened the Official Shadow opening ceremony so receipt completeness requires an allowlisted semantic terminal result and verified Engine Host, command, capture, report, decision-cycle, and trade identity where applicable.

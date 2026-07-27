@@ -4,11 +4,17 @@ Date reconciled: 2026-07-27
 
 ## Current Truth
 
-Local and remote `master` are synchronized through SHADOW-012 implementation
-`c9c31f6` plus this governance closeout. The canonical product baseline contains the complete SHADOW-004 through
-SHADOW-012 stack, including visual-acceptance commit `307a2e1`, alongside the Python
+Local and remote `master` are synchronized at `4c35181`, the frozen SHADOW-014
+one-time opening-proof baseline. The canonical product baseline contains the complete SHADOW-004 through
+SHADOW-014 preparation stack, including visual-acceptance commit `307a2e1`, alongside the Python
 automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
+
+`codex/ARGUS-SHADOW-016-paper-reconciliation-evidence` is an isolated descendant of
+that baseline. Runtime/test commit `6c1fc7b` is verified but not merged; ordinary
+feature-branch backup is included in this closeout.
+It adds only append-only manual paperMoney reconciliation evidence and does not alter
+the scheduled task, proof bundle, Shadow state, broker boundary, or canonical `master`.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`, and
@@ -108,7 +114,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `codex/ARGUS-SHADOW-004-official-sample-activation` | `375da59` | No feature ref; commits are included through integrated `master` | Yes through SHADOW-006 | `MERGED_TO_LOCAL_MASTER` | Adds the write-once official-sample activation boundary and Steven-accepted activated-empty WPF status. The ignored local sample is `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`; no transmitting method exists. | Preserve as visual-parent history; do not merge again. |
 | `codex/ARGUS-SCHWAB-003-readonly-account-discovery` | `6f308d7` | No feature ref; commits are backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Adds exact GET-only discovery, live CASH validation, immutable DPAPI binding to the sole `2573` `INDIVIDUAL_CASH` account, bound-refresh revalidation, and the standing-delegation governance; every transmitting capability remains unavailable. | Preserve as audit history; current work continues from `master`. |
 | `codex/ARGUS-SCHWAB-002A-credential-rotation` | `cd73411` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves the credential containment history and restoration of the existing approved Schwab app, local DPAPI credentials, and fresh OAuth. | Preserve as audit history; its work is included through SCHWAB-003. |
-| `master` | Contains integration anchor `307a2e1`, SHADOW-007 `79e75b2`, SHADOW-008 `fdcf898`, SHADOW-009 `3cb7854`, SHADOW-010 `1e1bd21`, SHADOW-011 `3f8acb8`, SHADOW-012 `c9c31f6`, and this closeout | Yes; ordinary non-force backup push | Yes | `MERGED_TO_LOCAL_MASTER` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample activation/evidence handoff/deterministic selector/truthful pre-arm status/report-bound proof assembly/opening cadence/automatic proof ceremony/post-response quote evaluation/bounded task retry, and SCHWAB-001/002/002A/003 with immutable `2573` CASH binding. | Run and inspect the first automatic live market-day proof/arm/handoff from the final-HEAD static bundle; preserve every failed or successful artifact. |
+| `master` | `4c35181` | Yes; ordinary non-force backup push | Yes | `MERGED_TO_LOCAL_MASTER` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle through SHADOW-014 unarmed proof preparation, and SCHWAB-001/002/002A/003 with immutable `2573` CASH binding. | Preserve this exact baseline until the scheduled unarmed opening proof is audited. |
 | `codex/ARGUS-R029-canonical-wpf-launcher` | `1d3d8e5` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Makes the tracked normal launcher path WPF-only, restores the canonical icon, retains explicit Qt rollback, and refuses arbitrary review builds. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R028-integrated-workstation-chrome` | `0e7a6ce` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Replaces the separate native title strip with integrated dark WPF chrome while preserving native window interactions and one global mode treatment. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R027-integrate-r026-with-shadow-baseline` | `6fe3f97` plus accepted repair/closeout history through local `master` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves Shadow lifecycle/review/sample lock while adding the R013-R025 read-only WPF stack and R026 test hardening. | Preserve as audit history; do not merge again. |
@@ -116,6 +122,8 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `codex/ARGUS-TEST-001-unattended-qt-discovery` | `03ab813` | No | No | `SUPERSEDED` | Independent copy of the same two Qt test fixes carried by R026 `838ed22`; R027 full discovery passes 641/641. | Preserve as audit evidence; do not merge separately. |
 | `codex/ARGUS-SHADOW-003-sample-readiness-gate` | `9002df0`, `bb7aec6`, plus this merge-state closeout | No | Yes | `MERGED_TO_LOCAL_MASTER` | Immutable sample/config/fill/evidence metadata, fail-closed eligibility and readiness audit, gated metrics, and read-only locked WPF proof. | Preserve locally as audit history. Its historical merge did not start trade 1; current sample start follows the Roadmap's automated frozen-prerequisite gate. |
 | `codex/ARGUS-SHADOW-001-shadow-trading-wiring-audit` | `bb962be` | Yes; feature branch only | Yes | `MERGED_TO_LOCAL_MASTER` | Prospective frozen-evidence Shadow Trading, quote-driven FakeBroker lifecycle/outcomes, durable audit/metrics, manual paperMoney ticket, and network-free Schwab read-only preparation. | Preserve as remotely backed-up audit history. |
+| `codex/ARGUS-SHADOW-016-paper-reconciliation-evidence` | `6c1fc7b` plus governance closeout | Yes; feature branch only after this closeout | No | `PUSHED_FEATURE_BRANCH / IMPLEMENTED_PENDING_MERGE` | Adds a bounded write-once record and CLI for manually entered thinkorswim paperMoney results, tied to exact frozen Shadow state and plan/risk/evidence identities. It has no account, credential, network, broker, or order action. | Wait to integrate until the SHADOW-014 frozen proof baseline is released. |
+| `codex/ARGUS-R035-candle-input-hardening` | `00fcda6` | Yes; feature branch only | No | `PUSHED_FEATURE_BRANCH / IMPLEMENTED_PENDING_MERGE` | Adds bounded streaming and persisted-input protections for the future candle source without performing the destructive actual-data cutover. | Wait to integrate until the SHADOW-014 frozen proof baseline is released. |
 | `codex/ARGUS-SHADOW-002-wpf-shadow-review` | `fe3326d` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Read-only WPF Shadow review, strict identity-chain audit, filters, linked review panes, and minimum-sample metric gating. | Preserve locally; next work starts from local `master`, not this branch. |
 | `codex/ARGUS-R026-wpf-phase12-clean-room-integration` | `838ed22` | No | No | `SUPERSEDED` | Consolidated R013-R025 WPF implementation and unattended Qt test hardening; source parent for the verified R027 integration. | Preserve as immutable audit history; review R027 instead of merging R026 directly. |
 | `codex/ARGUS-R025-wpf-research-maturity-evidence` | `5f0d36c` | No | No | `SUPERSEDED` | Read-only research-maturity/evidence-census projection with fail-closed strategy locks. | Preserve as an R026/R027 source branch. |
