@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added the production SHADOW-008 proof-bundle ceremony: atomic static preparation verifies canonical Git, accepted visual evidence, and 28 named safety tests before writing 11 artifacts; live finalization accepts only the exact current candidate plus SPY/IWM and runs the complete nonmutating arm verifier.
+- Versioned regular-market quote proof provenance so injected/test sources cannot be mistaken for the normal live Schwab CLI transport. Stale, mismatched, tampered, duplicate, partial, dirty-build, and changed-context evidence fails closed without arm, policy, cycle, state, trade, account, or order mutation.
+- Passed compileall, 26 focused proof-builder tests, all 28 named proof gates, 123 adjacent Shadow/Engine Host tests, all 854 Python tests, and all 216 .NET tests; production activation remains byte-identical at `0 / 30` and `SELECTOR_NOT_ARMED`.
 - Clarified the official Shadow `sample-status` contract so activation readiness cannot be mistaken for selector arming: it now exposes readiness scope, arm state, collection enablement, official-trade eligibility, collection state, and the exact next gate without mutating production state.
 - Steven accepted the live SHADOW-004 active-empty WPF proof: the official sample identity, `0 / 30` progress, zero lifecycle counts, withheld metrics, and unclipped Test Trade Review layout all passed; this visual acceptance does not arm the selector or authorize broker transmission.
 - Fast-forwarded the complete SHADOW-004/005/006 stack into canonical `master` through `307a2e1` with no merge commit; the regular-market quote proof and immutable non-synthetic arm bundle remain pending, and the official sample remains unarmed at `0 / 30`.
