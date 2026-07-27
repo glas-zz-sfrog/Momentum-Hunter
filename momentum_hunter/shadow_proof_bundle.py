@@ -82,6 +82,24 @@ STATIC_TEST_GATES: dict[str, tuple[str, ...]] = {
         "test_selection_failure_still_advances_existing_shadow_observations",
         "tests.test_engine_host.EngineHostRuntimeTests."
         "test_observation_failure_closes_attempt_as_post_collection_failure",
+        "tests.test_engine_host_client.EngineHostClientTests."
+        "test_immediate_cycle_uses_existing_authenticated_loopback_host",
+        "tests.test_scheduling_policy.SchedulingPolicyTests."
+        "test_shadow_opening_capture_has_one_narrow_market_day_window",
+        "tests.test_scheduling_policy.SchedulingPolicyTests."
+        "test_shadow_capture_is_distinct_and_schedules_for_835_central",
+        "tests.test_capture_job.CaptureJobTradePlanHandoffTests."
+        "test_main_triggers_one_host_cycle_only_for_new_shadow_report",
+        "tests.test_capture_job.CaptureJobTradePlanHandoffTests."
+        "test_main_does_not_trigger_host_cycle_for_duplicate_shadow_report",
+        "tests.test_capture_job.CaptureJobTradePlanHandoffTests."
+        "test_duplicate_shadow_report_retries_when_receipt_is_missing",
+        "tests.test_capture_job.CaptureJobTradePlanHandoffTests."
+        "test_shadow_handoff_receipt_is_write_once_and_report_bound",
+        "tests.test_capture_job.CaptureJobTradePlanHandoffTests."
+        "test_shadow_capture_has_distinct_immutable_report_identity",
+        "tests.test_capture_job.CaptureJobTradePlanHandoffTests."
+        "test_windows_task_wires_distinct_shadow_opening_capture",
     ),
     "freshness_matrix": (
         "tests.test_shadow_selection.ShadowMarketValiditySelectionTests."

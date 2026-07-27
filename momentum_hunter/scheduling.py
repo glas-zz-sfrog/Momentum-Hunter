@@ -120,6 +120,16 @@ def evaluate_automatic_capture(
                 SkipReason.SKIP_NOT_PREOPEN_GAP_REVIEW_DAY,
             )
 
+    elif requested_session == CaptureSession.SHADOW:
+        if not is_market_open_day(current.date()):
+            return skip_decision(
+                requested_session,
+                requested_session,
+                current,
+                SkipReason.SKIP_NOT_MARKET_DAY,
+            )
+        target_session = CaptureSession.SHADOW
+
     return capture_decision(requested_session, target_session, current, captures_dir=captures_dir)
 
 
@@ -248,6 +258,8 @@ def is_capture_window(session: CaptureSession, current: datetime) -> bool:
         return time(19, 0) <= current.time().replace(second=0, microsecond=0) <= time(20, 0)
     if session == CaptureSession.PREOPEN:
         return time(19, 0) <= current.time().replace(second=0, microsecond=0) <= time(20, 0)
+    if session == CaptureSession.SHADOW:
+        return time(8, 35) <= current.time().replace(second=0, microsecond=0) <= time(8, 40)
     return True
 
 
@@ -258,7 +270,12 @@ def next_automatic_run(
     captures_dir: Path | None = None,
 ) -> datetime:
     current = normalize_central(after or now_central())
-    target_time = time(7, 0) if session == CaptureSession.MORNING else time(19, 0)
+    if session == CaptureSession.MORNING:
+        target_time = time(7, 0)
+    elif session == CaptureSession.SHADOW:
+        target_time = time(8, 35)
+    else:
+        target_time = time(19, 0)
     for offset in range(0, AUTOMATIC_RUN_SEARCH_DAYS):
         candidate = datetime.combine(current.date() + timedelta(days=offset), target_time, tzinfo=CENTRAL_TZ)
         if candidate <= current:

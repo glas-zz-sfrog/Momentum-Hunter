@@ -104,6 +104,24 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 reports_dir=self.reports_dir,
             )
 
+    def test_shadow_capture_has_distinct_immutable_report_identity(self) -> None:
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        payload["capture_time"] = "2026-07-27T08:35:00-05:00"
+        payload["capture_date"] = "2026-07-27"
+        payload["session"] = "shadow"
+        shadow_path = self.capture_path.with_name("shadow.json")
+        shadow_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        paths = capture_job.trade_planning_report_paths(
+            shadow_path,
+            reports_dir=self.reports_dir,
+        )
+
+        self.assertEqual(
+            "trade-plan-briefing-2026-07-27-shadow.json",
+            paths["json"].name,
+        )
+
     def test_existing_report_must_still_match_capture_identity_and_timing(self) -> None:
         paths = capture_job.ensure_trade_planning_report(
             self.capture_path,
@@ -217,6 +235,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
 
         with (
             patch.object(capture_job, "CAPTURES_DIR", self.captures_dir),
+            patch.object(capture_job, "REPORTS_DIR", self.reports_dir),
             patch.object(capture_job, "load_config", return_value=AppConfig(provider="finviz")),
             patch.object(capture_job, "now_central", return_value=decision.run_at),
             patch.object(capture_job, "evaluate_automatic_capture", return_value=decision),
@@ -231,11 +250,276 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             ) as ensure_report,
             patch.object(capture_job, "provider_from_name") as provider_factory,
         ):
-            result = capture_job.run_capture(args, session=CaptureSession.MORNING)
+            result = capture_job.run_capture_with_result(
+                args,
+                session=CaptureSession.MORNING,
+            )
 
-        self.assertEqual(0, result)
+        self.assertEqual(0, result.exit_code)
+        self.assertEqual("REPORT_RECOVERED", result.disposition)
+        self.assertTrue(result.should_trigger_shadow_selector)
         ensure_report.assert_called_once_with(duplicate_path)
         provider_factory.assert_not_called()
+
+    def test_duplicate_capture_with_complete_report_does_not_trigger_selector(self) -> None:
+        args = argparse.Namespace(provider=None, scanner=None)
+        decision = capture_decision(
+            should_capture=False,
+            skip_reason=SkipReason.SKIP_DUPLICATE_CAPTURE.value,
+        )
+        duplicate_path = (
+            self.captures_dir
+            / decision.run_at.date().isoformat()
+            / f"{decision.capture_session.value}.json"
+        )
+        duplicate_path.parent.mkdir(parents=True, exist_ok=True)
+        duplicate_path.write_text(
+            self.capture_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        expected = capture_job.trade_planning_report_paths(
+            duplicate_path,
+            reports_dir=self.reports_dir,
+        )
+        for path in expected.values():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("existing", encoding="utf-8")
+
+        with (
+            patch.object(capture_job, "CAPTURES_DIR", self.captures_dir),
+            patch.object(capture_job, "REPORTS_DIR", self.reports_dir),
+            patch.object(
+                capture_job,
+                "load_config",
+                return_value=AppConfig(provider="finviz"),
+            ),
+            patch.object(
+                capture_job,
+                "now_central",
+                return_value=decision.run_at,
+            ),
+            patch.object(
+                capture_job,
+                "evaluate_automatic_capture",
+                return_value=decision,
+            ),
+            patch.object(
+                capture_job,
+                "ensure_trade_planning_report",
+                return_value=expected,
+            ),
+            patch.object(capture_job, "provider_from_name") as provider_factory,
+        ):
+            result = capture_job.run_capture_with_result(
+                args,
+                session=CaptureSession.MORNING,
+            )
+
+        self.assertEqual("DUPLICATE", result.disposition)
+        self.assertFalse(result.should_trigger_shadow_selector)
+        provider_factory.assert_not_called()
+
+    def test_main_triggers_one_host_cycle_only_for_new_shadow_report(self) -> None:
+        report_path = self.reports_dir / "trade-plan-briefing-shadow.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text("{}", encoding="utf-8")
+        args = argparse.Namespace(
+            session=CaptureSession.SHADOW.value,
+            provider=None,
+            scanner=None,
+            trigger_shadow_selector=True,
+        )
+        run_result = capture_job.CaptureRunResult(
+            exit_code=0,
+            disposition="CAPTURED",
+            report_paths={"json": report_path},
+        )
+        cycle = SimpleNamespace(
+            code="COLLECTION_COMPLETED",
+            summary="Background collection cycle completed.",
+            snapshot={"hostInstanceId": "host-1"},
+        )
+        report_hash = file_sha256(report_path)
+
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(
+                capture_job,
+                "now_central",
+                return_value=datetime.fromisoformat(
+                    "2026-07-27T08:35:00-05:00"
+                ),
+            ),
+            patch.object(
+                capture_job,
+                "run_capture_with_result",
+                return_value=run_result,
+            ),
+            patch(
+                "momentum_hunter.engine_host_client.run_immediate_collection_cycle",
+                return_value=cycle,
+            ) as run_cycle,
+            patch.object(
+                capture_job,
+                "write_shadow_handoff_receipt",
+            ) as write_receipt,
+        ):
+            exit_code = capture_job.main()
+
+        self.assertEqual(0, exit_code)
+        run_cycle.assert_called_once_with(
+            command_id=f"shadow-opening-capture-{report_hash}",
+        )
+        write_receipt.assert_called_once_with(
+            report_path,
+            report_hash=report_hash,
+            cycle=cycle,
+        )
+
+    def test_main_does_not_trigger_host_cycle_for_duplicate_shadow_report(self) -> None:
+        report_path = self.reports_dir / "trade-plan-briefing-shadow.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text("{}", encoding="utf-8")
+        args = argparse.Namespace(
+            session=CaptureSession.SHADOW.value,
+            provider=None,
+            scanner=None,
+            trigger_shadow_selector=True,
+        )
+        run_result = capture_job.CaptureRunResult(
+            exit_code=0,
+            disposition="DUPLICATE",
+            report_paths={"json": report_path},
+        )
+
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(
+                capture_job,
+                "now_central",
+                return_value=datetime.fromisoformat(
+                    "2026-07-27T08:35:00-05:00"
+                ),
+            ),
+            patch.object(
+                capture_job,
+                "run_capture_with_result",
+                return_value=run_result,
+            ),
+            patch.object(
+                capture_job,
+                "shadow_handoff_is_complete",
+                return_value=True,
+            ),
+            patch(
+                "momentum_hunter.engine_host_client.run_immediate_collection_cycle",
+            ) as run_cycle,
+        ):
+            exit_code = capture_job.main()
+
+        self.assertEqual(0, exit_code)
+        run_cycle.assert_not_called()
+
+    def test_duplicate_shadow_report_retries_when_receipt_is_missing(self) -> None:
+        report_path = self.reports_dir / "trade-plan-briefing-shadow.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text("{}", encoding="utf-8")
+        args = argparse.Namespace(
+            session=CaptureSession.SHADOW.value,
+            provider=None,
+            scanner=None,
+            trigger_shadow_selector=True,
+        )
+        run_result = capture_job.CaptureRunResult(
+            exit_code=0,
+            disposition="DUPLICATE",
+            report_paths={"json": report_path},
+        )
+        cycle = SimpleNamespace(
+            code="COLLECTION_COMPLETED",
+            summary="Background collection cycle completed.",
+            snapshot={"hostInstanceId": "host-1"},
+        )
+
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(
+                capture_job,
+                "now_central",
+                return_value=datetime.fromisoformat(
+                    "2026-07-27T08:36:00-05:00"
+                ),
+            ),
+            patch.object(
+                capture_job,
+                "run_capture_with_result",
+                return_value=run_result,
+            ),
+            patch.object(
+                capture_job,
+                "shadow_handoff_is_complete",
+                return_value=False,
+            ),
+            patch(
+                "momentum_hunter.engine_host_client.run_immediate_collection_cycle",
+                return_value=cycle,
+            ) as run_cycle,
+            patch.object(
+                capture_job,
+                "write_shadow_handoff_receipt",
+            ) as write_receipt,
+        ):
+            exit_code = capture_job.main()
+
+        self.assertEqual(0, exit_code)
+        run_cycle.assert_called_once()
+        write_receipt.assert_called_once()
+
+    def test_shadow_handoff_receipt_is_write_once_and_report_bound(self) -> None:
+        report_path = self.reports_dir / "trade-plan-briefing-shadow.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text('{"report": 1}', encoding="utf-8")
+        handoffs_dir = self.root / "handoffs"
+        report_hash = file_sha256(report_path)
+        cycle = SimpleNamespace(
+            code="COLLECTION_COMPLETED",
+            snapshot={"hostInstanceId": "host-1"},
+        )
+
+        first = capture_job.write_shadow_handoff_receipt(
+            report_path,
+            report_hash=report_hash,
+            cycle=cycle,
+            handoffs_dir=handoffs_dir,
+        )
+        second = capture_job.write_shadow_handoff_receipt(
+            report_path,
+            report_hash=report_hash,
+            cycle=cycle,
+            handoffs_dir=handoffs_dir,
+        )
+
+        self.assertEqual(first, second)
+        self.assertTrue(
+            capture_job.shadow_handoff_is_complete(
+                report_path,
+                handoffs_dir=handoffs_dir,
+            )
+        )
+        report_path.write_text('{"report": 2}', encoding="utf-8")
+        self.assertFalse(
+            capture_job.shadow_handoff_is_complete(
+                report_path,
+                handoffs_dir=handoffs_dir,
+            )
+        )
+        with self.assertRaisesRegex(RuntimeError, "invalid or mismatched"):
+            capture_job.write_shadow_handoff_receipt(
+                report_path,
+                report_hash=file_sha256(report_path),
+                cycle=cycle,
+                handoffs_dir=handoffs_dir,
+            )
 
     def test_nonmarket_skip_does_not_generate_report_or_contact_provider(self) -> None:
         args = argparse.Namespace(provider=None, scanner=None)
@@ -286,6 +570,21 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             fetch_market_data=True,
             as_of=datetime.fromisoformat("2026-07-24T07:05:00-05:00"),
         )
+
+    def test_windows_task_wires_distinct_shadow_opening_capture(self) -> None:
+        project_root = Path(capture_job.__file__).resolve().parents[1]
+        installer = (
+            project_root / "tools" / "install_capture_tasks.ps1"
+        ).read_text(encoding="utf-8")
+        runner = (
+            project_root / "tools" / "run_capture_job.ps1"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("Momentum Hunter Shadow Opening Capture", installer)
+        self.assertIn('[string]$ShadowTime = "08:35"', installer)
+        self.assertIn('-Session "shadow"', installer)
+        self.assertIn('"shadow"', runner)
+        self.assertIn("--trigger-shadow-selector", runner)
 
 
 def capture_decision(

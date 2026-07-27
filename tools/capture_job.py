@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import traceback
+import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +30,19 @@ from momentum_hunter.trade_planning import (
 
 
 REPORTS_DIR = DATA_DIR / "reports"
+SHADOW_HANDOFFS_DIR = DATA_DIR / "shadow-trading" / "capture-handoffs"
+SHADOW_HANDOFF_SCHEMA_VERSION = 1
+
+
+@dataclass(frozen=True)
+class CaptureRunResult:
+    exit_code: int
+    disposition: str
+    report_paths: dict[str, Path]
+
+    @property
+    def should_trigger_shadow_selector(self) -> bool:
+        return self.disposition in {"CAPTURED", "REPORT_RECOVERED"}
 
 
 def main() -> int:
@@ -36,7 +52,44 @@ def main() -> int:
     scanner_name = args.scanner or "Institutional Momentum"
     failure_time = now_central()
     try:
-        return run_capture(args, session=session)
+        result = run_capture_with_result(args, session=session)
+        if args.trigger_shadow_selector:
+            if session != CaptureSession.SHADOW:
+                raise ValueError(
+                    "--trigger-shadow-selector is valid only for the shadow session."
+                )
+            report_path = result.report_paths.get("json")
+            needs_handoff = result.should_trigger_shadow_selector or (
+                result.disposition == "DUPLICATE"
+                and report_path is not None
+                and not shadow_handoff_is_complete(report_path)
+            )
+            if needs_handoff:
+                if report_path is None or not report_path.is_file():
+                    raise RuntimeError(
+                        "Shadow selector handoff requires the canonical JSON report."
+                    )
+                from momentum_hunter.engine_host_client import (
+                    run_immediate_collection_cycle,
+                )
+
+                report_hash = file_sha256(report_path)
+                cycle = run_immediate_collection_cycle(
+                    command_id=f"shadow-opening-capture-{report_hash}",
+                )
+                write_shadow_handoff_receipt(
+                    report_path,
+                    report_hash=report_hash,
+                    cycle=cycle,
+                )
+                print(f"Engine Host selector cycle: {cycle.code}")
+                print(cycle.summary)
+            else:
+                print(
+                    "Engine Host selector cycle skipped: "
+                    f"{result.disposition}"
+                )
+        return result.exit_code
     except Exception as exc:
         traceback_text = traceback.format_exc()
         try:
@@ -60,6 +113,14 @@ def main() -> int:
 
 
 def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
+    return run_capture_with_result(args, session=session).exit_code
+
+
+def run_capture_with_result(
+    args: argparse.Namespace,
+    *,
+    session: CaptureSession,
+) -> CaptureRunResult:
     config = load_config()
     criteria = SCANNER_PRESETS[args.scanner] if args.scanner else SCANNER_PRESETS["Institutional Momentum"]
     capture_time = now_central()
@@ -77,9 +138,27 @@ def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
                 / decision.run_at.date().isoformat()
                 / f"{decision.capture_session.value}.json"
             )
+            expected = trade_planning_report_paths(
+                capture_path,
+                reports_dir=REPORTS_DIR,
+            )
+            reports_preexisting = all(path.exists() for path in expected.values())
             report_paths = ensure_trade_planning_report(capture_path)
             print_report_paths(report_paths, prefix="Existing capture report")
-        return 0
+            return CaptureRunResult(
+                exit_code=0,
+                disposition=(
+                    "DUPLICATE"
+                    if reports_preexisting
+                    else "REPORT_RECOVERED"
+                ),
+                report_paths=report_paths,
+            )
+        return CaptureRunResult(
+            exit_code=0,
+            disposition="SKIPPED",
+            report_paths={},
+        )
 
     provider = provider_from_name(args.provider or config.provider)
     market_regime = detect_market_regime()
@@ -113,7 +192,11 @@ def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
         print(f"Score breakdown update failed: {exc}", file=sys.stderr)
     report_paths = ensure_trade_planning_report(json_path)
     print_report_paths(report_paths, prefix="Trade planning")
-    return 0
+    return CaptureRunResult(
+        exit_code=0,
+        disposition="CAPTURED",
+        report_paths=report_paths,
+    )
 
 
 def ensure_trade_planning_report(
@@ -227,11 +310,113 @@ def friendly_error_message(exc: Exception) -> str:
     return str(exc)
 
 
+def shadow_handoff_receipt_path(
+    report_path: Path,
+    *,
+    handoffs_dir: Path = SHADOW_HANDOFFS_DIR,
+) -> Path:
+    return handoffs_dir / f"{report_path.stem}.json"
+
+
+def shadow_handoff_is_complete(
+    report_path: Path,
+    *,
+    handoffs_dir: Path = SHADOW_HANDOFFS_DIR,
+) -> bool:
+    receipt_path = shadow_handoff_receipt_path(
+        report_path,
+        handoffs_dir=handoffs_dir,
+    )
+    try:
+        payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    try:
+        report_hash = file_sha256(report_path)
+    except OSError:
+        return False
+    return (
+        isinstance(payload, dict)
+        and payload.get("schemaVersion") == SHADOW_HANDOFF_SCHEMA_VERSION
+        and payload.get("status") == "ENGINE_HOST_ACCEPTED"
+        and payload.get("reportSha256") == report_hash
+        and payload.get("transmitting") is False
+        and payload.get("orderTransmission") == "UNAVAILABLE"
+    )
+
+
+def write_shadow_handoff_receipt(
+    report_path: Path,
+    *,
+    report_hash: str,
+    cycle: object,
+    handoffs_dir: Path = SHADOW_HANDOFFS_DIR,
+) -> Path:
+    receipt_path = shadow_handoff_receipt_path(
+        report_path,
+        handoffs_dir=handoffs_dir,
+    )
+    if receipt_path.exists():
+        if shadow_handoff_is_complete(
+            report_path,
+            handoffs_dir=handoffs_dir,
+        ):
+            return receipt_path
+        raise RuntimeError(
+            "Existing Shadow selector handoff receipt is invalid or mismatched."
+        )
+    snapshot = getattr(cycle, "snapshot", {})
+    payload = {
+        "schemaVersion": SHADOW_HANDOFF_SCHEMA_VERSION,
+        "status": "ENGINE_HOST_ACCEPTED",
+        "recordedAt": now_central().isoformat(),
+        "reportPath": str(report_path.resolve()),
+        "reportSha256": report_hash,
+        "engineHostInstanceId": (
+            str(snapshot.get("hostInstanceId", ""))
+            if isinstance(snapshot, dict)
+            else ""
+        ),
+        "cycleCode": str(getattr(cycle, "code", "")),
+        "transmitting": False,
+        "orderTransmission": "UNAVAILABLE",
+    }
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = receipt_path.with_name(
+        f"{receipt_path.name}.{uuid.uuid4().hex}.tmp"
+    )
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    try:
+        os.link(temporary, receipt_path)
+    except FileExistsError:
+        if not shadow_handoff_is_complete(
+            report_path,
+            handoffs_dir=handoffs_dir,
+        ):
+            raise RuntimeError(
+                "Concurrent Shadow selector handoff receipt is invalid."
+            ) from None
+    finally:
+        temporary.unlink(missing_ok=True)
+    return receipt_path
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a headless Momentum Hunter capture.")
     parser.add_argument("--session", choices=[item.value for item in CaptureSession], required=True)
     parser.add_argument("--provider", choices=["sample", "finviz"], default=None)
     parser.add_argument("--scanner", choices=list(SCANNER_PRESETS), default=None)
+    parser.add_argument(
+        "--trigger-shadow-selector",
+        action="store_true",
+        help=(
+            "After a new or recovered shadow report, run one immediate guarded "
+            "Engine Host collection/selector cycle."
+        ),
+    )
     return parser.parse_args()
 
 

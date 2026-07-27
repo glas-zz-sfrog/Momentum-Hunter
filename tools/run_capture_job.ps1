@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("morning", "evening", "preopen", "manual")]
+    [ValidateSet("morning", "evening", "preopen", "shadow", "manual")]
     [string]$Session,
     [string]$ProjectRoot = "C:\Users\steve\OneDrive\Documents\Investing",
     [string]$PythonExe = "C:\Users\steve\OneDrive\Documents\Investing\.venv\Scripts\python.exe"
@@ -20,7 +20,11 @@ try {
     "Momentum Hunter capture started: $(Get-Date -Format o)" | Tee-Object -FilePath $logPath
     "Session: $Session" | Tee-Object -FilePath $logPath -Append
     "ProjectRoot: $ProjectRoot" | Tee-Object -FilePath $logPath -Append
-    & $PythonExe $jobPath --session $Session 2>&1 | Tee-Object -FilePath $logPath -Append
+    $captureArguments = @($jobPath, "--session", $Session)
+    if ($Session -eq "shadow") {
+        $captureArguments += "--trigger-shadow-selector"
+    }
+    & $PythonExe @captureArguments 2>&1 | Tee-Object -FilePath $logPath -Append
     $exitCode = $LASTEXITCODE
     if ($exitCode -eq 0) {
         "Updating outcomes: $(Get-Date -Format o)" | Tee-Object -FilePath $logPath -Append

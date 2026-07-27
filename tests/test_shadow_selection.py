@@ -352,14 +352,23 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         ):
             self.service.selector_is_armed()
 
-    def test_runtime_build_hash_includes_schwab_quote_boundary(self) -> None:
+    def test_runtime_build_hash_includes_quote_and_capture_cadence_boundary(self) -> None:
         root = Path(shadow_market_validity_module.__file__).resolve().parent
+        project_root = root.parent
         expected_paths = (
+            root / "engine_host.py",
+            root / "engine_host_client.py",
+            root / "models.py",
+            root / "scheduling.py",
             root / "schwab_market_data.py",
             root / "shadow_market_validity.py",
             root / "shadow_selection.py",
             root / "shadow_trading.py",
+            root / "storage.py",
             root / "workstation_shadow.py",
+            project_root / "tools" / "capture_job.py",
+            project_root / "tools" / "install_capture_tasks.ps1",
+            project_root / "tools" / "run_capture_job.ps1",
         )
 
         self.assertEqual(

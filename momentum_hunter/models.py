@@ -14,6 +14,7 @@ class CaptureSession(str, Enum):
     MORNING = "morning"
     EVENING = "evening"
     PREOPEN = "preopen"
+    SHADOW = "shadow"
     MANUAL = "manual"
 
 

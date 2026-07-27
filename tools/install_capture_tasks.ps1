@@ -2,6 +2,7 @@ param(
     [string]$ProjectRoot = "C:\Users\steve\OneDrive\Documents\Investing",
     [string]$PythonExe = "C:\Users\steve\OneDrive\Documents\Investing\.venv\Scripts\python.exe",
     [string]$MorningTime = "07:00",
+    [string]$ShadowTime = "08:35",
     [string]$EveningTime = "19:00",
     [switch]$RunWhetherLoggedOn
 )
@@ -13,6 +14,7 @@ $logDir = Join-Path $ProjectRoot "MomentumHunterData\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $morningTaskName = "Momentum Hunter Morning Capture"
+$shadowTaskName = "Momentum Hunter Shadow Opening Capture"
 $eveningTaskName = "Momentum Hunter Evening Capture"
 $runnerScript = Join-Path $toolsDir "run_capture_job.ps1"
 
@@ -48,14 +50,17 @@ function Register-CaptureTask {
 }
 
 Register-CaptureTask -TaskName $morningTaskName -Session "morning" -Time $MorningTime -ScriptPath $runnerScript
+Register-CaptureTask -TaskName $shadowTaskName -Session "shadow" -Time $ShadowTime -ScriptPath $runnerScript
 Register-CaptureTask -TaskName $eveningTaskName -Session "evening" -Time $EveningTime -ScriptPath $runnerScript
 
 Write-Host "Installed scheduled tasks:"
 Write-Host " - $morningTaskName at $MorningTime"
+Write-Host " - $shadowTaskName at $ShadowTime"
 Write-Host " - $eveningTaskName at $EveningTime"
 Write-Host ""
 Write-Host "Market-calendar policy:"
 Write-Host " - Morning task captures only on XNYS market-open days."
+Write-Host " - Shadow opening task captures once at 9:35 AM ET on XNYS market-open days and immediately triggers the guarded Engine Host selector cycle."
 Write-Host " - Evening task captures ordinary market-day evenings and preopen gap-review sessions before the next market-open day."
 Write-Host ""
 Write-Host "Note: If Windows asks for credentials when using -RunWhetherLoggedOn, provide your Windows account password."

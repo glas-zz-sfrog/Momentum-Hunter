@@ -611,7 +611,13 @@ def list_capture_sessions(date_text: str) -> list[CaptureSession]:
     if not base.exists():
         return []
     sessions: list[CaptureSession] = []
-    for session in (CaptureSession.MORNING, CaptureSession.EVENING, CaptureSession.PREOPEN, CaptureSession.MANUAL):
+    for session in (
+        CaptureSession.MORNING,
+        CaptureSession.EVENING,
+        CaptureSession.PREOPEN,
+        CaptureSession.SHADOW,
+        CaptureSession.MANUAL,
+    ):
         if (base / f"{session.value}.json").exists() or (base / f"{session.value}.md").exists():
             sessions.append(session)
     return sessions

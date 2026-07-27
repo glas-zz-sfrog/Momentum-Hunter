@@ -44,6 +44,60 @@ class SchedulingPolicyTests(unittest.TestCase):
         self.assertEqual(CaptureSession.EVENING, decision.capture_session)
         self.assertTrue(decision.classification.is_study_eligible)
 
+    def test_shadow_opening_capture_has_one_narrow_market_day_window(self) -> None:
+        before = self.decision(
+            CaptureSession.SHADOW,
+            "2026-06-08T08:34:00-05:00",
+        )
+        opening = self.decision(
+            CaptureSession.SHADOW,
+            "2026-06-08T08:35:00-05:00",
+        )
+        late = self.decision(
+            CaptureSession.SHADOW,
+            "2026-06-08T08:41:00-05:00",
+        )
+        weekend = self.decision(
+            CaptureSession.SHADOW,
+            "2026-06-06T08:35:00-05:00",
+        )
+
+        self.assertEqual(
+            SkipReason.SKIP_OUTSIDE_CAPTURE_WINDOW.value,
+            before.skip_reason,
+        )
+        self.assertTrue(opening.should_capture)
+        self.assertEqual(CaptureSession.SHADOW, opening.capture_session)
+        self.assertFalse(opening.classification.is_study_eligible)
+        self.assertEqual(
+            SkipReason.SKIP_OUTSIDE_CAPTURE_WINDOW.value,
+            late.skip_reason,
+        )
+        self.assertEqual(
+            SkipReason.SKIP_NOT_MARKET_DAY.value,
+            weekend.skip_reason,
+        )
+
+    def test_shadow_capture_is_distinct_and_schedules_for_835_central(self) -> None:
+        day = self.captures_dir / "2026-06-08"
+        day.mkdir(parents=True)
+        (day / "morning.json").write_text("{}", encoding="utf-8")
+
+        decision = self.decision(
+            CaptureSession.SHADOW,
+            "2026-06-08T08:35:00-05:00",
+        )
+        next_run = next_automatic_run(
+            CaptureSession.SHADOW,
+            after=datetime.fromisoformat(
+                "2026-06-08T08:00:00-05:00"
+            ).astimezone(CENTRAL_TZ),
+            captures_dir=self.captures_dir,
+        )
+
+        self.assertTrue(decision.should_capture)
+        self.assertEqual("2026-06-08T08:35:00-05:00", next_run.isoformat())
+
     def test_friday_evening_capture_is_retained(self) -> None:
         decision = self.decision(CaptureSession.EVENING, "2026-06-05T19:00:00-05:00")
 

@@ -205,12 +205,21 @@ def shadow_constitution_hash(
 def runtime_build_hash(paths: Iterable[Path] | None = None) -> str:
     if paths is None:
         root = Path(__file__).resolve().parent
+        project_root = root.parent
         paths = (
+            root / "engine_host.py",
+            root / "engine_host_client.py",
+            root / "models.py",
+            root / "scheduling.py",
             root / "schwab_market_data.py",
             root / "shadow_market_validity.py",
             root / "shadow_selection.py",
             root / "shadow_trading.py",
+            root / "storage.py",
             root / "workstation_shadow.py",
+            project_root / "tools" / "capture_job.py",
+            project_root / "tools" / "install_capture_tasks.ps1",
+            project_root / "tools" / "run_capture_job.ps1",
         )
     evidence: list[str] = []
     for path in sorted((Path(item) for item in paths), key=lambda item: item.name):
