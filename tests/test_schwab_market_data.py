@@ -9,7 +9,7 @@ import unittest
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import requests
 
@@ -433,6 +433,81 @@ class SchwabMarketDataQuoteSourceTests(unittest.TestCase):
 
 
 class SchwabRegularMarketQuoteProofTests(unittest.TestCase):
+    def test_quote_proof_uses_post_request_evaluation_clock(self) -> None:
+        requested_at = datetime(
+            2026,
+            7,
+            27,
+            14,
+            0,
+            tzinfo=timezone.utc,
+        )
+        evaluated_at = requested_at + timedelta(seconds=5)
+        observed_at = requested_at + timedelta(seconds=4)
+        source = _ProofQuoteSource(
+            {
+                symbol: proof_quote(symbol, observed_at)
+                for symbol in ("CRWV", "SPY", "IWM")
+            }
+        )
+        clock = Mock(side_effect=(requested_at, evaluated_at))
+
+        proof = build_regular_market_quote_proof(
+            source,
+            ("CRWV", "SPY", "IWM"),
+            clock=clock,
+        )
+
+        self.assertEqual("PASS", proof["proofStatus"])
+        self.assertEqual(requested_at.isoformat(), proof["requestedAt"])
+        self.assertEqual(evaluated_at.isoformat(), proof["checkedAt"])
+        self.assertEqual(5.0, proof["requestDurationSeconds"])
+        self.assertEqual(
+            [(("CRWV", "SPY", "IWM"), requested_at)],
+            source.calls,
+        )
+        self.assertEqual(
+            [1.0, 1.0, 1.0],
+            [row["quoteAgeSeconds"] for row in proof["quotes"]],
+        )
+
+    def test_quote_proof_rejects_invalid_evaluation_clock(self) -> None:
+        requested_at = datetime(
+            2026,
+            7,
+            27,
+            14,
+            0,
+            tzinfo=timezone.utc,
+        )
+        source = _ProofQuoteSource(
+            {"CRWV": proof_quote("CRWV", requested_at)}
+        )
+
+        with self.assertRaisesRegex(ValueError, "cannot precede"):
+            build_regular_market_quote_proof(
+                source,
+                ("CRWV",),
+                clock=Mock(
+                    side_effect=(
+                        requested_at,
+                        requested_at - timedelta(seconds=1),
+                    )
+                ),
+            )
+
+        with self.assertRaisesRegex(ValueError, "UTC offset"):
+            build_regular_market_quote_proof(
+                source,
+                ("CRWV",),
+                clock=Mock(
+                    side_effect=(
+                        requested_at,
+                        datetime(2026, 7, 27, 14, 0),
+                    )
+                ),
+            )
+
     def test_fresh_regular_realtime_quotes_pass_and_cli_writes_redacted_proof(
         self,
     ) -> None:

@@ -118,6 +118,8 @@ STATIC_TEST_GATES: dict[str, tuple[str, ...]] = {
         "test_existing_quote_output_stops_before_quote_request",
     ),
     "freshness_matrix": (
+        "tests.test_schwab_market_data.SchwabRegularMarketQuoteProofTests."
+        "test_quote_proof_uses_post_request_evaluation_clock",
         "tests.test_shadow_selection.ShadowMarketValiditySelectionTests."
         "test_multi_clock_freshness_rejects_each_stale_or_ambiguous_boundary",
         "tests.test_shadow_selection.ShadowMarketValiditySelectionTests."

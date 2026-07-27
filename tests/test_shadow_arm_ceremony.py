@@ -151,7 +151,11 @@ class ShadowArmCeremonyTests(unittest.TestCase):
         build_quote.assert_called_once_with(
             source,
             ("CRWV", "SPY", "IWM"),
-            checked_at=CHECKED_AT,
+            clock=ANY,
+        )
+        self.assertEqual(
+            CHECKED_AT,
+            build_quote.call_args.kwargs["clock"](),
         )
         finalize.assert_called_once()
         self.service.arm_automatic_selector.assert_called_once_with(

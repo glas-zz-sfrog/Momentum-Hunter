@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 import requests
 
@@ -421,8 +421,10 @@ def build_regular_market_quote_proof(
     symbols: Sequence[str],
     *,
     checked_at: datetime | None = None,
+    clock: Callable[[], datetime] | None = None,
 ) -> dict[str, object]:
-    requested_at = checked_at or datetime.now(timezone.utc)
+    active_clock = clock or (lambda: datetime.now(timezone.utc))
+    requested_at = checked_at or active_clock()
     if requested_at.tzinfo is None or requested_at.utcoffset() is None:
         raise ValueError("Quote proof timestamp must include a UTC offset.")
     normalized = normalize_symbols(symbols)
@@ -432,7 +434,15 @@ def build_regular_market_quote_proof(
     if not callable(loader):
         raise TypeError("Quote proof source does not provide batch quotes.")
     quotes = loader(normalized, decision_at=requested_at)
-    evaluated_at = checked_at or datetime.now(timezone.utc)
+    evaluated_at = checked_at or active_clock()
+    if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
+        raise ValueError(
+            "Quote proof evaluation timestamp must include a UTC offset."
+        )
+    if evaluated_at < requested_at:
+        raise ValueError(
+            "Quote proof evaluation timestamp cannot precede the request."
+        )
     if not isinstance(quotes, Mapping):
         raise SchwabMarketDataResponseError(
             "Schwab market data proof received an invalid quote collection."

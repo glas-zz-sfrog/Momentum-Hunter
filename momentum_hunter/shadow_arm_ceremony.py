@@ -146,11 +146,10 @@ def complete_shadow_selector_arm(
     active_source = quote_source or SchwabMarketDataQuoteSource()
     proof: dict[str, object] | None = None
     for attempt in range(max(1, quote_attempts)):
-        checked_at = require_offset_aware(clock_value=active_clock())
         proof = build_regular_market_quote_proof(
             active_source,
             (candidate, "SPY", "IWM"),
-            checked_at=checked_at,
+            clock=active_clock,
         )
         proof["evidenceOrigin"] = (
             LIVE_SCHWAB_QUOTE_PROOF_ORIGIN
@@ -163,6 +162,7 @@ def complete_shadow_selector_arm(
         if attempt + 1 < max(1, quote_attempts):
             sleeper(max(0.0, quote_retry_seconds))
     assert proof is not None
+    checked_at = require_offset_aware(clock_value=active_clock())
 
     output_path = quote_proof_path or default_quote_proof_path(
         checked_at=checked_at
