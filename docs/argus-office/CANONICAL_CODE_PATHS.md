@@ -2,10 +2,9 @@
 
 Date reconciled: 2026-07-26
 
-This document names the merged implementation paths on synchronized local and remote
-`master` at `badee5c`. The active stacked Shadow branches are identified explicitly and
-do not become canonical until fast-forward integration. The Roadmap, not this file,
-decides priority and next work.
+This document names the merged implementation paths on `master` after fast-forward
+integration of the complete SHADOW-004/005/006 stack through `307a2e1`. The Roadmap,
+not this file, decides priority and next work.
 
 ## Canonical Paths
 
@@ -40,9 +39,9 @@ decides priority and next work.
 | WPF verification | `tests-dotnet/` | Canonical .NET presentation, lifecycle, shell-workflow, and layout test coverage for R004/R005. |
 | Python engine lifecycle contracts | `momentum_hunter/engine_host.py`, `src/MomentumHunter.Contracts/PythonEngineHostContracts.cs`, `src/MomentumHunter.Application/PythonEngineHostContracts.cs` | Merged implementation covers host identity, health, collection state, pause, resume, one cycle, shutdown, persisted workspace, chart snapshots, FakeBroker-only simulation, prospective Shadow state, and the five read-only R027 evidence commands. |
 | Shadow Trading lifecycle | `momentum_hunter/shadow_trading.py`, `momentum_hunter/workstation_shadow.py`, `momentum_hunter/engine_host.py` | Canonical merged Shadow lifecycle, persistent evidence, FakeBroker quote processing, audit, metrics, WPF read model, and host boundary. |
-| Official Shadow activation | Branch `codex/ARGUS-SHADOW-004-official-sample-activation`; `momentum_hunter/shadow_trading.py` and WPF Shadow presentation paths | Implemented and verified but not canonical until the pending visual acceptance and fast-forward integration. Production-local activation is ignored generated state, not Git content. |
-| Prospective capture-to-report handoff | Branch `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`; scheduled capture, TradePlan export, and bounded Finviz scan paths | Committed at `27f9411`, verified, and not yet canonical. |
-| Automatic official-sample selector | Active SHADOW-005 worktree: `momentum_hunter/shadow_selection.py`, `momentum_hunter/shadow_trading.py`, `momentum_hunter/workstation_shadow.py`, `momentum_hunter/engine_host.py` | Partial implementation only. The selector is `NOT_ARMED` until the Shadow Sample Constitution, freshness/quote, ranking, duplicate, cooldown, concurrency, and decision-cycle gates are implemented and integrated. |
+| Official Shadow activation | `momentum_hunter/shadow_trading.py`, `momentum_hunter/workstation_shadow.py`, and WPF Shadow presentation paths | Canonical write-once activation and accepted active-empty visual truth. Production-local activation is ignored generated state, not Git content. |
+| Prospective capture-to-report handoff | `tools/capture_job.py`, `momentum_hunter/providers.py`, and TradePlan export paths | Canonical write-once scheduled capture-to-report handoff with raw-capture nonmutation and bounded Finviz scan behavior. |
+| Automatic official-sample selector | `momentum_hunter/shadow_selection.py`, `momentum_hunter/shadow_market_validity.py`, `momentum_hunter/shadow_trading.py`, `momentum_hunter/workstation_shadow.py`, `momentum_hunter/engine_host.py`, `momentum_hunter/schwab_market_data.py` | Canonical deterministic selector, market-validity, proof-backed arm, cycle, counterfactual, and read-only quote-proof boundaries. The selector remains `NOT_ARMED` until the regular-market proof and complete immutable proof bundle pass. |
 | Schwab OAuth and read-only account boundary | `momentum_hunter/schwab_setup.py`, `schwab_onboarding.py`, `schwab_oauth_listener.py`, `schwab_loopback_certificate.py`, `schwab_readonly.py`, `schwab_account_discovery.py`, `schwab_account_validation.py`, `schwab_cash_account_binding.py`, `schwab_bound_account_refresh.py` | Canonical credential-protected, read-only Schwab path bound immutably to the sole `2573` `CASH` account. No transmitting method exists. |
 | Future paper broker work | No code path yet | Schwab Trader API paperMoney is unavailable. Manual thinkorswim paperMoney reconciliation is the only current paper path. No paper broker adapter exists on `master` or R027. |
 
@@ -66,7 +65,7 @@ Possibly as reference only. Its isolated TradePlan/RiskGovernor tests and naming
 
 ## Rules For Future Work
 
-- New work normally branches from synchronized local `master`. The Roadmap currently permits only the existing SHADOW-004 visual parent and SHADOW-005 stacked successor until they are reconciled.
+- New work normally branches from synchronized local `master`. SHADOW-004/005/006 are merged source history and must not be continued as active implementation branches.
 - R013-R029 and Shadow-001/002/003 are merged and backed up. Preserve R026 and individual R013-R025 branches as source/audit history; do not merge them again.
 - Do not inherit R012A/R012B icon artwork into R027. R012C must remain a separately approved visual-identity branch.
 - Do not build on the original `codex/ARGUS-A006-A015-argus-machine-simulation` branch.

@@ -2,6 +2,7 @@
 
 ## Unreleased
 - Steven accepted the live SHADOW-004 active-empty WPF proof: the official sample identity, `0 / 30` progress, zero lifecycle counts, withheld metrics, and unclipped Test Trade Review layout all passed; this visual acceptance does not arm the selector or authorize broker transmission.
+- Fast-forwarded the complete SHADOW-004/005/006 stack into canonical `master` through `307a2e1` with no merge commit; the regular-market quote proof and immutable non-synthetic arm bundle remain pending, and the official sample remains unarmed at `0 / 30`.
 - Implemented SHADOW-006 deterministic Official Shadow V1 selection: canonical rank/score/identity ordering, fatal/informational warning policy, four-clock freshness, fresh quote/provider identity, Opportunity ID, same-day duplicate suppression, one global position, and frozen session/forced-flat rules.
 - Replaced the temporary compile-time construction switch with a write-once arm record bound to named prerequisite proof hashes, constitution hash, and Shadow runtime build hash; failed or partial arming creates no policy or arm state.
 - Added expected in-window five-minute cycle accounting with restart-downtime inference, complete rejection reasons, collection/selection/order outcome counts, and closure of collection, selection, and observation failure paths.
@@ -21,7 +22,7 @@
 - Activated the write-once `official-shadow-v1` FakeBroker evidence sample at `0 / 30` after every frozen prerequisite passed; no Shadow trade state, broker call, order, or transmitting capability was created.
 - Added persisted official-sample activation, automatic process reload, direct authorization-bypass rejection, immutable definition validation, and prospective report/capture timing that prevents historical backfill.
 - Rejected the stale June 17 CRWV report in the real local runtime because it predates activation, leaving no command receipt, trade, ticket, FakeBroker order, or state file.
-- Replaced the obsolete separate-approval WPF message with `OFFICIAL SAMPLE • ACTIVE - AWAITING TRADE 1`; automated and 1920x1080 screenshot proof pass, with one Steven visual acceptance item pending before integration.
+- Replaced the obsolete separate-approval WPF message with `OFFICIAL SAMPLE • ACTIVE - AWAITING TRADE 1`; automated, 1920x1080 screenshot, and Steven live visual proof pass.
 - Passed Python compileall, 50 focused Shadow tests, 125 bounded Python tests, all 770 Python tests by bounded module discovery plus the final affected-module pass, all 216 .NET tests, and a zero-warning Release build for ARGUS-SHADOW-004.
 - Backed the integrated SCHWAB-002A/SCHWAB-003 baseline up to `origin/master` by ordinary non-force push after exact live-secret comparison and remote-divergence checks passed; no feature ref, local DPAPI state, credential, token, account hash, or generated data was pushed.
 - Fast-forwarded the complete SCHWAB-002A/SCHWAB-003 stack into local `master` through `6f308d7` after the immutable CASH binding, 123 bounded tests, 756 full tests, exact tracked-secret comparison, protected-path review, and remote-divergence preflight passed; no merge commit or order capability was created.
