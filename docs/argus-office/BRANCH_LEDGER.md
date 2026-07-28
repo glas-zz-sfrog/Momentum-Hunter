@@ -4,11 +4,16 @@ Date reconciled: 2026-07-27
 
 ## Current Truth
 
-Local and remote `master` are synchronized through SHADOW-012 implementation
-`c9c31f6` plus this governance closeout. The canonical product baseline contains the complete SHADOW-004 through
-SHADOW-012 stack, including visual-acceptance commit `307a2e1`, alongside the Python
+Local and remote `master` are synchronized at `4c35181` through SHADOW-014
+proof-only scheduling. The canonical product baseline contains the complete SHADOW-004 through
+SHADOW-014 preparation stack, including visual-acceptance commit `307a2e1`, alongside the Python
 automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
+
+SHADOW-015/016/017 and CANARY-001/002/003/004 are proven, remotely backed
+feature work pending integration while `master` remains frozen for the one-time
+SHADOW-014 opening proof. None contains a real-order action or grants canary
+authority.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`, and
@@ -96,6 +101,13 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-CANARY-004-order-reconciliation` | `36349e3` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds deterministic command identity and fail-closed broker-order/restart reconciliation with explicit current-contract incompleteness and no order action. | Preserve remotely; integrate and compose only after the SHADOW-014 baseline is released and official provider fields are verified. |
+| `codex/ARGUS-CANARY-003-funding-restrictions` | `ef9c0fc` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds a redacted settled-cash/restriction gate that blocks current incomplete balance evidence and has no position or order capability. | Integrate independently after the frozen baseline is released, then compose with CANARY-001/002/004. |
+| `codex/ARGUS-CANARY-002-position-evidence-chain` | `9a19d78` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds immutable ordered PRE/ACTIVE/POST position evidence on top of CANARY-001. | Preserve the stack; integrate CANARY-002 rather than merging CANARY-001 separately. |
+| `codex/ARGUS-CANARY-001-position-invariants` | `1c8006a` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds the GET-only pre/active/post canary position-invariant evaluator. | Preserve as CANARY-002's parent. |
+| `codex/ARGUS-SHADOW-017-evidence-checkpoints` | `4858d73` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds automatic immutable 5/10/20/30 evidence checkpoints on top of SHADOW-016. | Preserve the stack until the SHADOW-014 baseline is released. |
+| `codex/ARGUS-SHADOW-016-paper-reconciliation-evidence` | `a2c3637` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds immutable manual paperMoney reconciliation and a read-only fill-model-error audit. | Preserve as SHADOW-017's parent. |
+| `codex/ARGUS-SHADOW-015-opening-failure-rehearsals` | `cd828ac` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Preserves opening-failure rehearsal evidence and nontransmitting candle-source staging/cutover preflight without performing destructive cutover. | Review branch composition and integrate only after the proof-bound baseline is released. |
 | `codex/ARGUS-SHADOW-013-opening-ceremony-hardening` | `58552da` | Via `master` | Yes | `MERGED_TO_LOCAL_MASTER` | Hardens semantic handoff completion, clock validity, frozen configuration, retry classification, proof-only opening rehearsal, outcome separation, and read-only heartbeat behavior. | Preserve branch; prepare the final-HEAD disabled proof-only task and real-session audit. |
 | `codex/ARGUS-SHADOW-012-scheduler-retry` | `c9c31f6` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Adds bounded one-minute Windows restarts to the idempotent Shadow opening task without changing other capture schedules. | Preserve as source history; use the regenerated SHADOW-012 final-HEAD bundle and inspect the first live run. |
 | `codex/ARGUS-SHADOW-011-proof-timestamp-ordering` | `3f8acb8` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Evaluates proof freshness after guarded OAuth/provider completion instead of against the pre-request clock, while preserving future-data rejection. | Preserve as source history; use only the regenerated SHADOW-011 final-HEAD bundle for the opening task. |
@@ -108,7 +120,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `codex/ARGUS-SHADOW-004-official-sample-activation` | `375da59` | No feature ref; commits are included through integrated `master` | Yes through SHADOW-006 | `MERGED_TO_LOCAL_MASTER` | Adds the write-once official-sample activation boundary and Steven-accepted activated-empty WPF status. The ignored local sample is `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`; no transmitting method exists. | Preserve as visual-parent history; do not merge again. |
 | `codex/ARGUS-SCHWAB-003-readonly-account-discovery` | `6f308d7` | No feature ref; commits are backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Adds exact GET-only discovery, live CASH validation, immutable DPAPI binding to the sole `2573` `INDIVIDUAL_CASH` account, bound-refresh revalidation, and the standing-delegation governance; every transmitting capability remains unavailable. | Preserve as audit history; current work continues from `master`. |
 | `codex/ARGUS-SCHWAB-002A-credential-rotation` | `cd73411` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves the credential containment history and restoration of the existing approved Schwab app, local DPAPI credentials, and fresh OAuth. | Preserve as audit history; its work is included through SCHWAB-003. |
-| `master` | Contains integration anchor `307a2e1`, SHADOW-007 `79e75b2`, SHADOW-008 `fdcf898`, SHADOW-009 `3cb7854`, SHADOW-010 `1e1bd21`, SHADOW-011 `3f8acb8`, SHADOW-012 `c9c31f6`, and this closeout | Yes; ordinary non-force backup push | Yes | `MERGED_TO_LOCAL_MASTER` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle/review/sample activation/evidence handoff/deterministic selector/truthful pre-arm status/report-bound proof assembly/opening cadence/automatic proof ceremony/post-response quote evaluation/bounded task retry, and SCHWAB-001/002/002A/003 with immutable `2573` CASH binding. | Run and inspect the first automatic live market-day proof/arm/handoff from the final-HEAD static bundle; preserve every failed or successful artifact. |
+| `master` | `4c35181` | Yes; synchronized with `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Canonical Python engine, WPF operator surface through R029, Shadow lifecycle through SHADOW-014 proof-only scheduling, and SCHWAB-001/002/002A/003 with immutable `2573` CASH binding. | Keep frozen until the one-time unarmed opening proof and read-only audit finish; do not manually run, retry, repair, arm, select, or backfill. |
 | `codex/ARGUS-R029-canonical-wpf-launcher` | `1d3d8e5` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Makes the tracked normal launcher path WPF-only, restores the canonical icon, retains explicit Qt rollback, and refuses arbitrary review builds. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R028-integrated-workstation-chrome` | `0e7a6ce` | No feature ref; commit is backed up through `origin/master` | Yes | `MERGED_TO_LOCAL_MASTER` | Replaces the separate native title strip with integrated dark WPF chrome while preserving native window interactions and one global mode treatment. | Preserve as audit history; do not merge again. |
 | `codex/ARGUS-R027-integrate-r026-with-shadow-baseline` | `6fe3f97` plus accepted repair/closeout history through local `master` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Preserves Shadow lifecycle/review/sample lock while adding the R013-R025 read-only WPF stack and R026 test hardening. | Preserve as audit history; do not merge again. |
