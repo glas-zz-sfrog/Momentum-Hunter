@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added CANARY-005's write-once external stop latch and fail-closed shutdown/revocation drill evidence. Complete proof requires a matching stop request, disabled and stopped runtime acknowledgement, independent process-not-running observation, and provider-sourced revoked-credential observation.
+- The CANARY-005 module cannot clear or enable its latch, kill a process, revoke a credential, call a network, or act on an order. Compileall, 15 focused tests, all 157 Schwab tests, all 923 Python tests, and all 216 .NET tests pass; actual OS/provider wiring and physical drill evidence remain pending consequential work.
 - Added CANARY-004 deterministic command identity and nontransmitting broker-order reconciliation. A restart may resume only one exact fresh identity match; no match after a recorded attempt is `AMBIGUOUS_SUBMISSION_DO_NOT_RETRY`, multiple matches lock out, and quantity/lifecycle/clock/account/source anomalies fail closed.
 - Mapped the current Schwab read-only order model to `BROKER_EVIDENCE_INCOMPLETE` because client command identity, filled/remaining quantities, average fill, and update time are unavailable. Compileall, 26 focused tests, all 168 Schwab tests, all 934 Python tests, and all 216 .NET tests pass; no provider transport, credential, order action, UI, database, scoring, readiness, alert, or generated artifact changed.
 - Prepared and scheduled SHADOW-014 for a one-time unarmed opening proof: preserved the first disabled-task heartbeat as a safe `FAILED` audit, revalidated the sole `2573` cash binding through the guarded read-only refresh path, proved live SPY/IWM quote and HTTPS clock behavior, and bound the 2026-07-28 task/bundle/heartbeat to the final synchronized governance commit.

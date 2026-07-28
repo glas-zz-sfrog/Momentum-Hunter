@@ -10,7 +10,7 @@ SHADOW-014 preparation stack, including visual-acceptance commit `307a2e1`, alon
 automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
 
-SHADOW-015/016/017 and CANARY-001/002/003/004 are proven, remotely backed
+SHADOW-015/016/017 and CANARY-001/002/003/004/005 are proven, remotely backed
 feature work pending integration while `master` remains frozen for the one-time
 SHADOW-014 opening proof. None contains a real-order action or grants canary
 authority.
@@ -101,7 +101,8 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `codex/ARGUS-CANARY-004-order-reconciliation` | `36349e3` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds deterministic command identity and fail-closed broker-order/restart reconciliation with explicit current-contract incompleteness and no order action. | Preserve remotely; integrate and compose only after the SHADOW-014 baseline is released and official provider fields are verified. |
+| `codex/ARGUS-CANARY-005-independent-stop-evidence` | `73b939a` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds a write-once external stop latch and fail-closed shutdown/revocation drill evidence evaluator with no process, credential, network, or order mutation. | Preserve remotely; integrate only after the frozen baseline is released, then implement and physically prove separate OS/provider actions under consequential approval. |
+| `codex/ARGUS-CANARY-004-order-reconciliation` | `64ee677` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds deterministic command identity and fail-closed broker-order/restart reconciliation with explicit current-contract incompleteness and no order action. | Preserve remotely; integrate and compose only after the SHADOW-014 baseline is released and official provider fields are verified. |
 | `codex/ARGUS-CANARY-003-funding-restrictions` | `ef9c0fc` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds a redacted settled-cash/restriction gate that blocks current incomplete balance evidence and has no position or order capability. | Integrate independently after the frozen baseline is released, then compose with CANARY-001/002/004. |
 | `codex/ARGUS-CANARY-002-position-evidence-chain` | `9a19d78` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds immutable ordered PRE/ACTIVE/POST position evidence on top of CANARY-001. | Preserve the stack; integrate CANARY-002 rather than merging CANARY-001 separately. |
 | `codex/ARGUS-CANARY-001-position-invariants` | `1c8006a` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds the GET-only pre/active/post canary position-invariant evaluator. | Preserve as CANARY-002's parent. |
