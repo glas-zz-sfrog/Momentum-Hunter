@@ -4,13 +4,15 @@ import argparse
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-
-from momentum_hunter.pending_foundation_release_gate import (
-    evaluate_pending_foundation_release,
-)
-
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from momentum_hunter.pending_foundation_release_gate import (  # noqa: E402
+    evaluate_pending_foundation_release,
+)
 
 
 def main() -> int:

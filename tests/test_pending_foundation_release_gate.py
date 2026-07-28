@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -17,6 +18,7 @@ from momentum_hunter.pending_foundation_release_gate import (
 
 
 EVALUATED_AT = datetime(2026, 7, 28, 5, 0, tzinfo=timezone.utc)
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class PendingFoundationReleaseGateTests(unittest.TestCase):
@@ -293,6 +295,23 @@ class PendingFoundationReleaseGateTests(unittest.TestCase):
             "secretSignaturesAbsent",
         ):
             self.assertFalse(result[field], field)
+
+    def test_cli_can_start_directly_outside_repository(self) -> None:
+        completed = subprocess.run(
+            (
+                sys.executable,
+                "-B",
+                str(REPOSITORY_ROOT / "tools" / "verify_pending_foundation.py"),
+                "--help",
+            ),
+            cwd=self.root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("Verify the pending nontransmitting foundation", completed.stdout)
 
     def evaluate(
         self,
