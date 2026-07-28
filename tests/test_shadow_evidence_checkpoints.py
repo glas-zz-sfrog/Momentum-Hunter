@@ -557,6 +557,93 @@ class ShadowEvidenceCheckpointTests(unittest.TestCase):
         self.assertFalse(self.output_dir.exists())
         self.assertFalse(self.state_path.exists())
 
+    def test_post_transition_failure_is_recovered_before_next_quote(
+        self,
+    ) -> None:
+        store = ShadowStateStore(self.state_path)
+        service = ShadowTradingService(store=store)
+        events: list[str] = []
+        checkpoint_attempts = 0
+
+        class RecordingQuoteSource:
+            def quotes(
+                self,
+                symbols,
+                *,
+                decision_at: datetime,
+            ) -> dict:
+                events.append("quotes")
+                return {}
+
+        def checkpoint(_generated_at: datetime) -> dict:
+            nonlocal checkpoint_attempts
+            checkpoint_attempts += 1
+            events.append("checkpoint")
+            if checkpoint_attempts == 1:
+                raise ShadowEvidenceCheckpointError(
+                    "Synthetic post-transition checkpoint failure."
+                )
+            return {
+                "status": "CHECKPOINTS_AVAILABLE",
+                "checkpoints": [{"threshold": 5, "created": True}],
+                "transmitting": False,
+            }
+
+        before_threshold = _snapshot(4, self.metadata)
+        at_threshold = _snapshot(5, self.metadata)
+        for snapshot in (before_threshold, at_threshold):
+            snapshot["trades"] = [{"symbol": "TEST", "status": "open"}]
+            snapshot["metrics"] = snapshot["reviewMetrics"]
+
+        workspace = ShadowWorkspaceService(
+            paths=ShadowWorkspacePaths(
+                reports_dir=self.output_dir,
+                observations_path=self.root / "observations.json",
+                state_path=self.state_path,
+            ),
+            service=service,
+            quote_source=RecordingQuoteSource(),
+            evidence_checkpoint_generator=checkpoint,
+        )
+
+        with patch.object(
+            service,
+            "snapshot",
+            side_effect=[
+                before_threshold,
+                at_threshold,
+                at_threshold,
+                at_threshold,
+            ],
+        ):
+            with self.assertRaisesRegex(
+                ShadowEvidenceCheckpointError,
+                "post-transition checkpoint failure",
+            ):
+                workspace.advance_observations(
+                    received_at=self.generated_at
+                )
+            events.append("next-cycle")
+            recovered = workspace.advance_observations(
+                received_at=self.generated_at + timedelta(minutes=5)
+            )
+
+        self.assertEqual(
+            [
+                "quotes",
+                "checkpoint",
+                "next-cycle",
+                "checkpoint",
+                "quotes",
+            ],
+            events,
+        )
+        self.assertEqual(2, checkpoint_attempts)
+        self.assertEqual(
+            "CHECKPOINTS_AVAILABLE",
+            recovered["evidenceCheckpoints"]["status"],
+        )
+
     def test_concurrent_source_change_is_detected_after_write(self) -> None:
         self._write_activation_and_state_source()
 
