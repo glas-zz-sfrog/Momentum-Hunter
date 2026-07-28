@@ -24,6 +24,7 @@ from momentum_hunter.engine_host import (
     COMMAND_SAVED_WATCHLIST_SNAPSHOT,
     COMMAND_SHUTDOWN,
     COMMAND_SNAPSHOT,
+    COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
     COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
     ENDPOINT_FILENAME,
     HOST_LOCK_FILENAME,
@@ -34,6 +35,23 @@ from momentum_hunter.engine_host import (
     read_json,
 )
 from momentum_hunter.providers import ProviderUnavailableError
+
+
+def staged_preview(symbol: str, interval: str) -> dict[str, object]:
+    return {
+        "schemaVersion": 1,
+        "symbol": symbol,
+        "interval": interval,
+        "state": "AVAILABLE",
+        "previewOnly": True,
+        "activeChartSource": False,
+        "transmitting": False,
+        "orderTransmission": "UNAVAILABLE",
+        "lineage": {
+            "sourceLabel": "Schwab Trader API price history (inactive staging)",
+        },
+        "candles": [],
+    }
 
 
 class EngineHostRuntimeTests(unittest.TestCase):
@@ -341,6 +359,111 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertFalse(invalid.accepted)
         self.assertEqual("INVALID_CHART_REQUEST", invalid.code)
 
+    def test_staged_chart_preview_is_read_only_idempotent_and_inactive(self) -> None:
+        calls: list[tuple[str, str]] = []
+
+        def load_preview(symbol: str, interval: str) -> dict[str, object]:
+            calls.append((symbol, interval))
+            return staged_preview(symbol, interval)
+
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: (_ for _ in ()).throw(
+                AssertionError("collection should not run")
+            ),
+            staged_chart_preview_loader=load_preview,
+        )
+
+        result = runtime.execute(
+            COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+            "staged-chart-preview",
+            {"symbol": "nvda", "interval": "5m"},
+        )
+        repeated = runtime.execute(
+            COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+            "staged-chart-preview",
+            {"symbol": "nvda", "interval": "5m"},
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual("STAGED_SCHWAB_CHART_PREVIEW", result.code)
+        self.assertEqual(result, repeated)
+        self.assertEqual([("NVDA", "5m")], calls)
+        self.assertTrue(result.payload["previewOnly"])
+        self.assertFalse(result.payload["activeChartSource"])
+        self.assertFalse(result.payload["transmitting"])
+        self.assertEqual("UNAVAILABLE", result.payload["orderTransmission"])
+        self.assertEqual(0, result.snapshot["collection"]["cycleCount"])
+
+    def test_staged_chart_preview_rejects_bad_request_and_unsafe_payload(self) -> None:
+        runtime = EngineHostRuntime(
+            staged_chart_preview_loader=lambda symbol, interval: {
+                **staged_preview(symbol, interval),
+                "activeChartSource": True,
+            }
+        )
+
+        missing_symbol = runtime.execute(
+            COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+            "staged-missing-symbol",
+            {"interval": "5m"},
+        )
+        missing_interval = runtime.execute(
+            COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+            "staged-missing-interval",
+            {"symbol": "NVDA"},
+        )
+        invalid_interval = runtime.execute(
+            COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+            "staged-invalid-interval",
+            {"symbol": "NVDA", "interval": "60m"},
+        )
+        unsafe = runtime.execute(
+            COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+            "staged-unsafe",
+            {"symbol": "NVDA", "interval": "5m"},
+        )
+
+        self.assertFalse(missing_symbol.accepted)
+        self.assertEqual("STAGED_CHART_SYMBOL_REQUIRED", missing_symbol.code)
+        self.assertFalse(missing_interval.accepted)
+        self.assertEqual(
+            "STAGED_CHART_INTERVAL_REQUIRED",
+            missing_interval.code,
+        )
+        self.assertFalse(invalid_interval.accepted)
+        self.assertEqual(
+            "INVALID_STAGED_CHART_REQUEST",
+            invalid_interval.code,
+        )
+        self.assertFalse(unsafe.accepted)
+        self.assertEqual("UNSAFE_STAGED_CHART_PREVIEW", unsafe.code)
+
+    def test_staged_chart_preview_sanitizes_unavailable_evidence_failure(self) -> None:
+        from momentum_hunter.staged_schwab_charts import (
+            StagedSchwabChartError,
+        )
+
+        runtime = EngineHostRuntime(
+            staged_chart_preview_loader=lambda _symbol, _interval: (
+                _ for _ in ()
+            ).throw(
+                StagedSchwabChartError(
+                    r"C:\sensitive\staged-path.json failed verification"
+                )
+            )
+        )
+
+        result = runtime.execute(
+            COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+            "staged-unavailable",
+            {"symbol": "NVDA", "interval": "Daily"},
+        )
+
+        self.assertFalse(result.accepted)
+        self.assertEqual("STAGED_CHART_PREVIEW_UNAVAILABLE", result.code)
+        self.assertNotIn("sensitive", result.summary)
+        self.assertNotIn("staged-path", result.summary)
+
     def test_technical_research_command_is_read_only_idempotent_and_requires_symbol(self) -> None:
         calls: list[str] = []
         runtime = EngineHostRuntime(
@@ -532,6 +655,10 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertEqual("loopback-tcp", snapshot["identity"]["transport"])
         self.assertIn(COMMAND_RUN_CYCLE, snapshot["capabilities"])
         self.assertIn(COMMAND_CHART_SNAPSHOT, snapshot["capabilities"])
+        self.assertIn(
+            COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+            snapshot["capabilities"],
+        )
         self.assertIn(COMMAND_TECHNICAL_RESEARCH_SNAPSHOT, snapshot["capabilities"])
         self.assertIn(COMMAND_SAVED_WATCHLIST_SNAPSHOT, snapshot["capabilities"])
         self.assertIn(COMMAND_DAILY_WORKFLOW_SNAPSHOT, snapshot["capabilities"])
@@ -570,6 +697,28 @@ class EngineHostProtocolTests(unittest.TestCase):
         self.assertEqual("CHART_SNAPSHOT", response["result"]["code"])
         self.assertEqual("AAA", response["result"]["payload"]["symbol"])
         self.assertEqual("Daily", response["result"]["payload"]["interval"])
+
+    def test_protocol_returns_inactive_staged_chart_preview(self) -> None:
+        self.runtime._staged_chart_preview_loader = staged_preview
+
+        response = self.send(
+            command=COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+            command_id="staged-chart-preview",
+            arguments={"symbol": "nvda", "interval": "15m"},
+        )
+
+        self.assertTrue(response["accepted"])
+        self.assertEqual(
+            "STAGED_SCHWAB_CHART_PREVIEW",
+            response["result"]["code"],
+        )
+        payload = response["result"]["payload"]
+        self.assertEqual("NVDA", payload["symbol"])
+        self.assertEqual("15m", payload["interval"])
+        self.assertTrue(payload["previewOnly"])
+        self.assertFalse(payload["activeChartSource"])
+        self.assertFalse(payload["transmitting"])
+        self.assertEqual("UNAVAILABLE", payload["orderTransmission"])
 
     def test_protocol_returns_technical_research_payload_with_symbol(self) -> None:
         self.runtime._technical_research_snapshot_loader = lambda symbol: {
