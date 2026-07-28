@@ -111,7 +111,7 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 
 - Branch: `codex/ARGUS-SHADOW-016-paper-reconciliation-evidence` from synchronized
   `master` at the frozen SHADOW-014 proof commit `4c35181`.
-- Runtime/test commit: `6c1fc7b`.
+- Runtime/test commits: `6c1fc7b`, `501e9ac`.
 - Added a separate write-once JSON record and CLI for manually entered thinkorswim
   paperMoney ticket results; the source Shadow state remains byte-identical.
 - Bound each artifact to source-state SHA-256, Shadow trade/order, TradePlan, Risk
@@ -120,7 +120,11 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Exact duplicates are idempotent. Conflicting, malformed, tampered, over-limit,
   chronologically impossible, missing-ticket, invalid fill/result, or concurrently
   changing source evidence fails closed.
-- Compileall, 12 focused tests, 920/920 full Python tests, and 216/216 .NET tests pass.
+- Added frozen paperMoney-versus-FakeBroker comparisons for entry price and basis
+  points, exit price, actual filled quantity, executable P&L, and per-share P&L.
+  Quantity mismatches remain explicit and withhold misleading total-P&L deltas.
+- Compileall, 16 focused tests, 152 adjacent Shadow tests, 924/924 full Python tests,
+  and 216/216 .NET tests pass.
   No account, credential, network, broker, order, score, readiness, alert, scheduled
   task, proof bundle, database, generated market data, or UI behavior changed.
 - Status: `IMPLEMENTED_PENDING_MERGE`; ordinary feature-branch backup is included in
