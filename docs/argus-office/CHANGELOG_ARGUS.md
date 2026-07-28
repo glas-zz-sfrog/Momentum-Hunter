@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added CANARY-009's sanitized Schwab order-contract emulator. It deterministically models accepted, rejected, and acknowledgement-lost attempts; partial fills; cancel/fill races; expiration; terminal immutability; snapshot tamper rejection; and restart recovery entirely in memory.
+- The emulator accepts no credentials, has no network or broker-action method, permanently reports synthetic-only and transmission unavailable, and cannot serve as Schwab provider evidence. Compileall, 13 focused tests, 39 focused-plus-reconciler tests, all 293 Schwab tests, all 1,059 Python tests, and all 216 .NET tests pass.
 - Added CANARY-008's exact manual decision-intent contract. It can record one write-once approve/decline intent only while an exact CANARY-007 receipt and source chain remain current and the BUY LIMIT order identity, quantity, price, maximum debit, account commitment, actor label, and clocks match frozen policy.
 - The contract creates no production decision and explicitly reports actor authentication unavailable, operator presence unproven, broker action disallowed, and execution/transmission unavailable. Compileall, 18 focused tests, all 280 Schwab tests, all 1,046 Python tests, and all 216 .NET tests pass.
 - Added CANARY-007's redacted write-once preflight receipt. It binds the exact CANARY-006 evidence payloads and validated position-chain hash to one deterministic identity and externally frozen short decision window.

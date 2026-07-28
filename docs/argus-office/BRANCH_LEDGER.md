@@ -10,7 +10,7 @@ SHADOW-014 preparation stack, including visual-acceptance commit `307a2e1`, alon
 automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
 
-SHADOW-015/016/017 and CANARY-001/002/003/004/005/006/007/008 are proven, remotely backed
+SHADOW-015/016/017 and CANARY-001/002/003/004/005/006/007/008/009 are proven, remotely backed
 feature work pending integration while `master` remains frozen for the one-time
 SHADOW-014 opening proof. None contains a real-order action or grants canary
 authority.
@@ -101,6 +101,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-CANARY-009-order-contract-emulator` | `0a8f038` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds a sanitized, deterministic, nonnetwork order-contract emulator for acknowledgement loss, partial fills, cancel/fill races, terminal states, restart recovery, and tamper rejection. It cannot accept credentials, call Schwab, or act on an order. | Preserve remotely; integrate only after the SHADOW-014 baseline is released. Use it for failure-state proof, never as provider evidence or execution authority. |
 | `codex/ARGUS-CANARY-008-manual-decision-intent` | `3d070e8` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds an unauthenticated, nontransmitting, write-once exact approve/decline intent contract over one valid receipt and bounded BUY LIMIT order. It creates no Steven decision or broker authority. | Preserve remotely; integrate only after the SHADOW-014 baseline is released. A later physically verified confirmation channel must remain a consequential Steven gate. |
 | `codex/ARGUS-CANARY-007-immutable-preflight-receipt` | `a35bfc9` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds a redacted write-once, expiring receipt for the exact CANARY-006 evidence set and revalidates source-chain continuity during inspection; it has no network, credential, process, or order action. | Preserve remotely; integrate only after the SHADOW-014 baseline is released, then use it only after unavailable official provider/physical evidence is obtained. |
 | `codex/ARGUS-CANARY-006-preflight-composition` | `a6c2aeb` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Composes CANARY-001 through CANARY-005 into one fresh, identity-bound, fail-closed preflight that can only await Steven's separate real-order decision; it has no network, credential, process, or order action. | Preserve remotely; integrate only after the SHADOW-014 baseline is released, then obtain the currently unavailable official funding/order/stop evidence without weakening the contracts. |
