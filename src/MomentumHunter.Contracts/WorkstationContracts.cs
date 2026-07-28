@@ -208,7 +208,9 @@ public sealed record ChartSnapshot(
     DateTimeOffset AsOf,
     string Summary,
     DataLineage DataLineage,
-    IReadOnlyList<CandleSnapshot> Candles);
+    IReadOnlyList<CandleSnapshot> Candles,
+    bool PreviewOnly = false,
+    bool ActiveChartSource = true);
 
 public sealed record TechnicalResearchEventSnapshot(
     string EventId,

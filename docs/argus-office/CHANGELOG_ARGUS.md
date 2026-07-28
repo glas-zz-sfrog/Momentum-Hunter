@@ -1,6 +1,10 @@
 # Argus Changelog
 
 ## Unreleased
+- Reconciled the explicit WPF staged-candle preview onto the clean R036 chain without carrying the contaminated source branch, stale governance, or old screenshots.
+- Added a compact session-only `Stored` / `Staged preview` chart-source segment. Stored remains the startup/default source; staged failure stays visibly unavailable and never falls back to stored, mock, cross-symbol, or cross-timeframe candles.
+- Hardened the .NET process boundary to independently reject expanded account/token fields, noncanonical summaries, ambiguous timestamps, invalid source/safety flags, malformed or unordered OHLCV, and state/count mismatches before presentation.
+- Passed 21 focused and 224 total .NET tests, Python compileall, 61 focused and 980 total Python tests, a warnings-as-errors Release build, protected-path/secret/source-identity checks, and fresh `1440 x 900` plus `1120 x 650` offscreen proof. Steven visual acceptance remains required before merge.
 - Reconciled the focused staged-candle Engine Host command onto the canonical R035 tip without carrying the contaminated source branch's WPF or unrelated history.
 - Added one idempotent `get_staged_schwab_chart_preview` capability that reads only the hash-verified inactive stage and matching manifest, returns an exact bounded chart payload, and sanitizes evidence failures.
 - Hardened the host boundary against extra account/token fields, malformed timestamps, unordered or duplicate candles, invalid OHLC geometry, unsafe state/count combinations, oversized summaries, active-source claims, and transmission claims. Self-review fixed the valid one-candle `INSUFFICIENT DATA` display path.

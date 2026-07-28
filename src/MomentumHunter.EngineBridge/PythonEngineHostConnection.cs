@@ -266,6 +266,39 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         return result.Payload.Value.Clone();
     }
 
+    public async Task<JsonElement> GetStagedSchwabChartPreviewAsync(
+        string symbol,
+        string interval,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            throw new ArgumentException("A symbol is required for a staged chart preview.", nameof(symbol));
+        }
+        if (string.IsNullOrWhiteSpace(interval))
+        {
+            throw new ArgumentException("An interval is required for a staged chart preview.", nameof(interval));
+        }
+
+        await EnsureConnectedAsync(cancellationToken);
+        var result = await SendCommandWithArgumentsAsync(
+            PythonEngineHostProtocol.GetStagedSchwabChartPreview,
+            Guid.NewGuid().ToString("N"),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["symbol"] = symbol.Trim().ToUpperInvariant(),
+                ["interval"] = interval.Trim(),
+            },
+            cancellationToken);
+        if (!result.Accepted || result.Payload is null)
+        {
+            throw new InvalidOperationException(
+                $"The Python Engine Host did not provide an inactive staged chart preview: {result.Code}.");
+        }
+
+        return result.Payload.Value.Clone();
+    }
+
     public async Task<JsonElement> GetTechnicalResearchSnapshotAsync(
         string symbol,
         CancellationToken cancellationToken = default)

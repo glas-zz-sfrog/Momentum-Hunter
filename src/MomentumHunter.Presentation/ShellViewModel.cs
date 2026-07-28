@@ -26,6 +26,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IResearchMaturityWorkspaceClient? _researchMaturityWorkspaceClient;
     private readonly IWorkspaceLayoutStore? _layoutStore;
     private readonly LayoutAutosaveCoordinator? _layoutAutosave;
+    private readonly SemaphoreSlim _chartSourceSelectionGate = new(1, 1);
     private LinkGroupCoordinator _linkGroups = null!;
     private string? _dockLayoutXml;
     private RectGeometry? _windowBounds;
@@ -33,6 +34,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private SimulationWorkspaceSnapshot? _simulationWorkspaceSnapshot;
     private ShadowReviewSnapshot? _shadowReviewSnapshot;
     private long _candidateStoryRequestVersion;
+    private ChartSourceMode _selectedChartSource = ChartSourceMode.Stored;
 
     public ShellViewModel(IEngineClient engineClient)
         : this(engineClient, layoutStore: null, readOnlyWorkspaceClient: null, simulationWorkspaceClient: null, chartWorkspaceClient: null, savedWatchlistWorkspaceClient: null, isInternalConstruction: true)
@@ -693,6 +695,21 @@ public sealed partial class ShellViewModel : ObservableObject
             ? "Chart evidence unavailable; no simulated candle fallback is shown."
             : "Local simulation candle data");
 
+    public ChartSourceMode SelectedChartSource => _selectedChartSource;
+
+    public bool IsStoredChartSource => SelectedChartSource == ChartSourceMode.Stored;
+
+    public bool IsStagedChartPreview => SelectedChartSource == ChartSourceMode.StagedPreview;
+
+    public bool CanUseStagedChartPreview => UsesPythonWorkspaceBoundary && _chartWorkspaceClient is not null;
+
+    public string ChartDisplayModeLabel => IsStagedChartPreview
+        ? "INACTIVE STAGED PREVIEW | Active chart source unchanged | Nontransmitting"
+        : "Research display only | Stored chart source";
+
+    public string ChartFooterLabel =>
+        $"{ChartDisplayModeLabel} | Linked panes update only within their selected link group";
+
     public string ActivitySourceLabel => IsPythonSimulationWorkspaceMode
         ? "Activity combines persisted Python evidence with the in-memory simulation ledger."
         : IsReadOnlySnapshotMode
@@ -1287,6 +1304,54 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private Task UseStoredChartSourceAsync() =>
+        SetChartSourceAsync(ChartSourceMode.Stored);
+
+    [RelayCommand]
+    private Task UseStagedChartPreviewAsync() =>
+        SetChartSourceAsync(ChartSourceMode.StagedPreview);
+
+    private async Task SetChartSourceAsync(
+        ChartSourceMode source,
+        CancellationToken cancellationToken = default)
+    {
+        if (source == ChartSourceMode.StagedPreview && !CanUseStagedChartPreview)
+        {
+            StatusMessage = "Inactive staged chart preview is unavailable at this workspace boundary.";
+            return;
+        }
+
+        await _chartSourceSelectionGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_selectedChartSource == source && PrimaryChart is not null)
+            {
+                return;
+            }
+
+            _selectedChartSource = source;
+            RaiseChartSourceProperties();
+            await RefreshChartPaneDataAsync(cancellationToken);
+            StatusMessage = source switch
+            {
+                ChartSourceMode.StagedPreview
+                    when PrimaryChart?.DataState == ChartDataState.Unavailable =>
+                    "Inactive staged Schwab preview is unavailable. The stored chart source remains unchanged and no fallback was shown.",
+                ChartSourceMode.StagedPreview
+                    when PrimaryChart?.DataState == ChartDataState.InsufficientData =>
+                    "Inactive staged Schwab preview has insufficient candles. The stored chart source remains unchanged.",
+                ChartSourceMode.StagedPreview =>
+                    "Showing inactive staged Schwab chart preview. The active chart source is unchanged and order transmission is unavailable.",
+                _ => "Showing the stored chart source. Inactive staged preview is not active.",
+            };
+        }
+        finally
+        {
+            _chartSourceSelectionGate.Release();
+        }
+    }
+
+    [RelayCommand]
     private async Task TogglePrimaryTradePlanPinAsync()
     {
         if (PrimaryTradePlanPane is null)
@@ -1858,11 +1923,19 @@ public sealed partial class ShellViewModel : ObservableObject
 
         try
         {
-            return await _chartWorkspaceClient!.GetSnapshotAsync(symbol, interval, cancellationToken);
+            return IsStagedChartPreview
+                ? await _chartWorkspaceClient!.GetStagedPreviewAsync(symbol, interval, cancellationToken)
+                : await _chartWorkspaceClient!.GetSnapshotAsync(symbol, interval, cancellationToken);
         }
-        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        catch (Exception exception) when (
+            exception is IOException
+                or InvalidDataException
+                or InvalidOperationException
+                or NotSupportedException
+                or JsonException)
         {
             var now = DateTimeOffset.UtcNow;
+            var stagedPreview = IsStagedChartPreview;
             return new ChartSnapshot(
                 1,
                 symbol,
@@ -1870,10 +1943,30 @@ public sealed partial class ShellViewModel : ObservableObject
                 ChartDataState.Unavailable,
                 now,
                 now,
-                $"UNAVAILABLE | Stored chart evidence could not be loaded: {exception.Message} No simulated fallback was created.",
-                new DataLineage("Unavailable chart source", now, "The Python chart boundary did not return usable stored OHLC evidence."),
-                []);
+                stagedPreview
+                    ? $"UNAVAILABLE | Inactive staged chart preview could not be loaded: {exception.Message} The active chart source was not changed."
+                    : $"UNAVAILABLE | Stored chart evidence could not be loaded: {exception.Message} No simulated fallback was created.",
+                new DataLineage(
+                    stagedPreview ? "Unavailable inactive staging" : "Unavailable chart source",
+                    now,
+                    stagedPreview
+                        ? "The Python chart boundary did not return a usable inactive staged preview."
+                        : "The Python chart boundary did not return usable stored OHLC evidence."),
+                [],
+                PreviewOnly: stagedPreview,
+                ActiveChartSource: !stagedPreview);
         }
+    }
+
+    private void RaiseChartSourceProperties()
+    {
+        OnPropertyChanged(nameof(SelectedChartSource));
+        OnPropertyChanged(nameof(IsStoredChartSource));
+        OnPropertyChanged(nameof(IsStagedChartPreview));
+        OnPropertyChanged(nameof(CanUseStagedChartPreview));
+        OnPropertyChanged(nameof(ChartDisplayModeLabel));
+        OnPropertyChanged(nameof(ChartFooterLabel));
+        OnPropertyChanged(nameof(ChartSourceLabel));
     }
 
     private void RaisePresentationProperties()
@@ -1896,7 +1989,7 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(TradePlanRiskStatusLabel));
         OnPropertyChanged(nameof(PlanningStatus));
         OnPropertyChanged(nameof(PrimaryActionLabel));
-        OnPropertyChanged(nameof(ChartSourceLabel));
+        RaiseChartSourceProperties();
         OnPropertyChanged(nameof(ActivitySourceLabel));
         OnPropertyChanged(nameof(ResearchSummary));
         OnPropertyChanged(nameof(CandidateEvidenceSymbolLabel));

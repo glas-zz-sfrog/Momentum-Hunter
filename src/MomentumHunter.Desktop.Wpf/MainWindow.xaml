@@ -86,6 +86,42 @@
             <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
             <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
         </Style>
+        <Style x:Key="ChartSourceToggleStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+            <Setter Property="Background" Value="#121C24" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="ToolTipService.InitialShowDelay" Value="150" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border x:Name="SourceBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="SourceBorder" Property="Background" Value="#284B52" />
+                                <Setter TargetName="SourceBorder" Property="BorderBrush" Value="{StaticResource Teal}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#64727F" />
+                                <Setter TargetName="SourceBorder" Property="Background" Value="#17212B" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="TopBarButtonStyle"
                TargetType="{x:Type Button}"
                BasedOn="{StaticResource {x:Type Button}}">
@@ -389,24 +425,51 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <DockPanel>
-                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
-                                                <Border Padding="7,3" Margin="4,0" Background="#263846" CornerRadius="3">
-                                                    <TextBlock Text="{Binding PrimaryChartLinkLabel}" Foreground="{StaticResource Teal}" FontSize="11" />
-                                                </Border>
-                                                <Button Content="Link" Command="{Binding CyclePrimaryChartLinkGroupCommand}" />
-                                                <Button Content="Pin" Command="{Binding TogglePrimaryChartPinCommand}" />
-                                                <Button Content="New Chart" Click="NewChartButton_Click" />
-                                            </StackPanel>
-                                            <StackPanel Margin="0,0,12,0">
-                                                <TextBlock Text="{Binding PrimaryChart.Pane.Symbol}" FontSize="20" FontWeight="SemiBold" />
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <DockPanel>
+                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                                                 <Border Padding="7,3" Margin="4,0" Background="#263846" CornerRadius="3">
+                                                     <TextBlock Text="{Binding PrimaryChartLinkLabel}" Foreground="{StaticResource Teal}" FontSize="11" />
+                                                 </Border>
+                                                 <Button Content="Link" Command="{Binding CyclePrimaryChartLinkGroupCommand}" />
+                                                 <Button Content="Pin" Command="{Binding TogglePrimaryChartPinCommand}" />
+                                                 <Button Content="New Chart" Click="NewChartButton_Click" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding PrimaryChart.Pane.Symbol}"
+                                                           FontSize="20"
+                                                           FontWeight="SemiBold"
+                                                           VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </DockPanel>
+                                            <DockPanel Grid.Row="1" Margin="0,5,0,0">
+                                                <StackPanel DockPanel.Dock="Right"
+                                                            Orientation="Horizontal"
+                                                            Margin="8,0,0,0"
+                                                            ToolTip="Choose the displayed chart evidence. Staged preview never changes the active stored source.">
+                                                    <ToggleButton Content="Stored"
+                                                                  MinWidth="52"
+                                                                  Style="{StaticResource ChartSourceToggleStyle}"
+                                                                  IsChecked="{Binding IsStoredChartSource, Mode=OneWay}"
+                                                                  Command="{Binding UseStoredChartSourceCommand}" />
+                                                    <ToggleButton Content="Staged preview"
+                                                                  MinWidth="88"
+                                                                  Style="{StaticResource ChartSourceToggleStyle}"
+                                                                  IsChecked="{Binding IsStagedChartPreview, Mode=OneWay}"
+                                                                  IsEnabled="{Binding CanUseStagedChartPreview}"
+                                                                  Command="{Binding UseStagedChartPreviewCommand}" />
+                                                </StackPanel>
                                                 <TextBlock Text="{Binding ChartSourceLabel}"
                                                            Foreground="{StaticResource TextMuted}"
                                                            FontSize="11"
+                                                           VerticalAlignment="Center"
                                                            TextTrimming="CharacterEllipsis"
                                                            ToolTip="{Binding ChartSourceLabel}" />
-                                            </StackPanel>
-                                        </DockPanel>
+                                            </DockPanel>
+                                        </Grid>
                                         <controls:CandleChart Grid.Row="1"
                                                               Candles="{Binding PrimaryChart.Candles}"
                                                               EmptyStateText="{Binding PrimaryChart.EmptyStateText}"
@@ -431,10 +494,12 @@
                                                            ToolTip="{Binding PrimaryChart.ActiveBarSummary}" />
                                             </DockPanel>
                                         </Border>
-                                        <StackPanel Grid.Row="3" Orientation="Horizontal">
-                                            <TextBlock Text="Research display only" Foreground="{StaticResource TextMuted}" FontSize="11" />
-                                            <TextBlock Text="  |  Linked panes update only within their selected link group" Foreground="{StaticResource TextMuted}" FontSize="11" />
-                                        </StackPanel>
+                                        <TextBlock Grid.Row="3"
+                                                   Text="{Binding ChartFooterLabel}"
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   FontSize="11"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding ChartFooterLabel}" />
                                     </Grid>
                                 </Border>
                             </avalon:LayoutDocument>

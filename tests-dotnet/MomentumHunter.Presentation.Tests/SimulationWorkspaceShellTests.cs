@@ -121,6 +121,66 @@ public sealed class SimulationWorkspaceShellTests
     }
 
     [Fact]
+    public async Task StagedChartPreviewIsExplicitReversibleAndSessionOnly()
+    {
+        var client = new StaticSimulationWorkspaceClient(Snapshot(allowed: true));
+        var chartClient = new RecordingChartWorkspaceClient(ChartDataState.Available);
+        var viewModel = new ShellViewModel(new ThrowingEngineClient(), client, chartClient);
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.IsStoredChartSource);
+        Assert.False(viewModel.IsStagedChartPreview);
+        Assert.Equal(ChartSourceMode.Stored, viewModel.SelectedChartSource);
+        Assert.Empty(chartClient.StagedRequests);
+
+        await viewModel.UseStagedChartPreviewCommand.ExecuteAsync(null);
+
+        Assert.False(viewModel.IsStoredChartSource);
+        Assert.True(viewModel.IsStagedChartPreview);
+        Assert.Equal([("NVDA", "5m")], chartClient.StagedRequests);
+        Assert.True(viewModel.PrimaryChart!.PreviewOnly);
+        Assert.False(viewModel.PrimaryChart.ActiveChartSource);
+        Assert.Contains("INACTIVE STAGED PREVIEW", viewModel.ChartDisplayModeLabel, StringComparison.Ordinal);
+        Assert.Contains("active chart source is unchanged", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+
+        await viewModel.UseStoredChartSourceCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsStoredChartSource);
+        Assert.False(viewModel.PrimaryChart.PreviewOnly);
+        Assert.True(viewModel.PrimaryChart.ActiveChartSource);
+        Assert.Equal(2, chartClient.Requests.Count);
+
+        var freshViewModel = new ShellViewModel(
+            new ThrowingEngineClient(),
+            client,
+            new RecordingChartWorkspaceClient(ChartDataState.Available));
+        await freshViewModel.InitializeAsync();
+        Assert.True(freshViewModel.IsStoredChartSource);
+    }
+
+    [Fact]
+    public async Task FailedStagedPreviewStaysUnavailableAndNeverFallsBackToStored()
+    {
+        var client = new StaticSimulationWorkspaceClient(Snapshot(allowed: true));
+        var chartClient = new FailingStagedChartWorkspaceClient();
+        var viewModel = new ShellViewModel(new ThrowingEngineClient(), client, chartClient);
+        await viewModel.InitializeAsync();
+
+        await viewModel.UseStagedChartPreviewCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, chartClient.StoredRequestCount);
+        Assert.Equal(1, chartClient.StagedRequestCount);
+        Assert.True(viewModel.IsStagedChartPreview);
+        Assert.True(viewModel.PrimaryChart!.PreviewOnly);
+        Assert.False(viewModel.PrimaryChart.ActiveChartSource);
+        Assert.Empty(viewModel.PrimaryChart.Candles);
+        Assert.Equal("No staged preview candles available", viewModel.PrimaryChart.EmptyStateText);
+        Assert.Contains("active chart source was not changed", viewModel.ChartSourceLabel, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("preview is unavailable", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Showing inactive", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task BlockedPythonPlanDoesNotCallSimulationOrMutateEvidence()
     {
         var client = new StaticSimulationWorkspaceClient(Snapshot(allowed: false));
@@ -260,6 +320,8 @@ public sealed class SimulationWorkspaceShellTests
 
         public List<(string Symbol, string Interval)> Requests { get; } = [];
 
+        public List<(string Symbol, string Interval)> StagedRequests { get; } = [];
+
         public Task<ChartSnapshot> GetSnapshotAsync(
             string symbol,
             string interval,
@@ -286,6 +348,69 @@ public sealed class SimulationWorkspaceShellTests
                     : $"{label} | {candles.Length} stored {interval} candle(s) | no provider fetch",
                 new DataLineage("stored-bars.json", at, "Read-only local evidence."),
                 candles));
+        }
+
+        public Task<ChartSnapshot> GetStagedPreviewAsync(
+            string symbol,
+            string interval,
+            CancellationToken cancellationToken = default)
+        {
+            StagedRequests.Add((symbol, interval));
+            var at = DateTimeOffset.Parse("2026-07-28T14:35:00Z");
+            return Task.FromResult(new ChartSnapshot(
+                1,
+                symbol,
+                interval,
+                ChartDataState.Available,
+                at,
+                at,
+                $"AVAILABLE | 2 inactive staged {interval} candle(s)",
+                new DataLineage(
+                    "Schwab Trader API price history (inactive staging)",
+                    at,
+                    "Hash-verified inactive preview."),
+                [
+                    new CandleSnapshot(at.AddMinutes(-5), 120.00m, 121.00m, 119.50m, 120.50m, 800),
+                    new CandleSnapshot(at, 120.50m, 122.00m, 120.25m, 121.75m, 1200),
+                ],
+                PreviewOnly: true,
+                ActiveChartSource: false));
+        }
+    }
+
+    private sealed class FailingStagedChartWorkspaceClient : IChartWorkspaceClient
+    {
+        public int StoredRequestCount { get; private set; }
+
+        public int StagedRequestCount { get; private set; }
+
+        public Task<ChartSnapshot> GetSnapshotAsync(
+            string symbol,
+            string interval,
+            CancellationToken cancellationToken = default)
+        {
+            StoredRequestCount++;
+            var at = DateTimeOffset.Parse("2026-07-28T14:30:00Z");
+            return Task.FromResult(new ChartSnapshot(
+                1,
+                symbol,
+                interval,
+                ChartDataState.Available,
+                at,
+                at,
+                "AVAILABLE | Stored chart source",
+                new DataLineage("stored-bars.json", at, "Read-only local evidence."),
+                [new CandleSnapshot(at, 100m, 101m, 99m, 100.50m, 500)]));
+        }
+
+        public Task<ChartSnapshot> GetStagedPreviewAsync(
+            string symbol,
+            string interval,
+            CancellationToken cancellationToken = default)
+        {
+            StagedRequestCount++;
+            return Task.FromException<ChartSnapshot>(
+                new InvalidDataException("Unsafe staged preview envelope."));
         }
     }
 

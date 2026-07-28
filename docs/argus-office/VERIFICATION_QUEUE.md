@@ -29,6 +29,7 @@ create a rubber-stamp Steven item.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
+| ARGUS-R037 explicit WPF staged-candle preview | `AUTOMATED_PASS`; 21 focused and 224 total .NET tests, compileall, 61 focused and 980 total Python tests, warnings-as-errors Release build, strict-wire/protected/source/secret review, and fresh normal/minimum offscreen proof pass | `MANUAL_PENDING`; exact seven-step visual check below | `IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE` on `codex/ARGUS-R037-wpf-staged-candle-preview-02f6423`; do not merge before acceptance or before R035/R036 | Confirm Stored remains default; Staged preview is explicit, visibly inactive/nontransmitting, honestly unavailable without fallback, reversible, session-only, unclipped, and adds no Paper/Live control. |
 | ARGUS-R036 staged candle preview Engine Host boundary | `AUTOMATED_PASS`; compileall, 61 focused host/stage tests, 980 full Python tests, 216 .NET tests, zero-warning Release build, exact-wire/protected-path review, and secret scan pass | `NO_STEVEN_ACTION`; backend-only command with no WPF consumer, provider call, file write, chart activation, or transmitting capability | `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R036-staged-candle-preview-host-7cbc2cb`, stacked on R035; merge waits for R035 and the frozen SHADOW-016 operational audit | Nothing now. A later WPF consumer will require an exact visual checklist; actual candle cutover remains a separate destructive decision and visual proof. |
 | ARGUS-R035 staged Schwab candle inputs | `AUTOMATED_PASS`; compileall, 56 focused candle tests, 173 Schwab regressions, 973 full Python tests, 216 .NET tests, zero-warning Release build, protected-path/source-hash review, and secret scan pass | `NO_STEVEN_ACTION`; this lane is nonvisual and cannot activate or purge candle data | `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-R035-candle-input-reconcile-1af5b31`; merge waits only for the frozen SHADOW-016 operational audit | Nothing now. The future actual-data cutover remains a separate destructive decision plus visual proof; staged previews are not the active workstation chart source. |
 | ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `NO_STEVEN_ACTION`; later WPF representation was visually accepted through R027 | Integrated into local `master` at `bb962be`; remotely backed up on its feature branch | Historical evidence only; no approval remains pending |
@@ -53,6 +54,66 @@ create a rubber-stamp Steven item.
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted visual baseline; subsequent nonvisual roadmap work follows standing delegation |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | Destructive decision not yet due | Future market-data cutover task | Interrupt Steven immediately before deleting the exact legacy paths/rows; visual cutover proof remains manual |
+
+## ARGUS-R037 - Explicit WPF Staged-Candle Preview
+
+Branch: `codex/ARGUS-R037-wpf-staged-candle-preview-02f6423`
+
+Automated result: `AUTOMATED_PASS`
+
+Integration state: `IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE`; stacked on verified
+R036 and not merged into frozen `master`
+
+Automated proof:
+
+- The chart starts on `Stored`. `Staged preview` is an explicit session-only display
+  mode and is not persisted as an active source.
+- The .NET bridge independently checks the complete exact inactive wire envelope,
+  not only the two display flags. Extra account/token-shaped fields, wrong lineage,
+  ambiguous clocks, malformed or unordered candles, invalid state/count pairs, and
+  transmitting/active claims fail closed.
+- Preview failure remains `UNAVAILABLE`, shows no candles, and never substitutes
+  stored, mock, cross-symbol, or cross-timeframe data.
+- Switching either direction only invokes the authenticated local Engine Host read
+  boundary. No provider fetch, account read, source write, collection cycle, broker
+  action, or order method was added.
+- Focused .NET tests pass 21/21; the complete .NET solution passes 224/224.
+  Python compileall, 61 focused host/stage tests, and all 980 Python tests pass.
+  The warnings-as-errors Release build passes with zero warnings and zero errors.
+- Production minute bars, daily bars, and SQLite retain SHA-256 identities
+  `DAAC049E4DA87729DE23B312D86B9034FF724F9BF4B2B8ED7FC1AFD293A6AD69`,
+  `2B1FDC1482D9D98A810D6F06AACDB7E9DE1E6123BE39E5F35634DF34C66BB521`,
+  and `CA2FA2080EE1E5C856230E36C8E03B15A76DEED129E0374065B299B02D749BBA`.
+- Fresh proof:
+  `docs/argus-office/reports/releases/ARGUS-R037-wpf-staged-candle-preview-cli-proof.png`
+  is `1440 x 1818` and contains stored plus staged frames at `1440 x 900`;
+  `docs/argus-office/reports/releases/ARGUS-R037-wpf-staged-candle-preview-minimum-window-proof.png`
+  is `1120 x 1318` and repeats both states at the supported `1120 x 650`.
+  Both are nonblank and were visually inspected without desktop takeover.
+
+When Steven is ready, check these one by one:
+
+1. Open the R037 review build and confirm `Stored` is selected initially.
+   `Staged preview` must not select itself.
+2. Click `Staged preview`. Confirm only that segment highlights and the footer says
+   `INACTIVE STAGED PREVIEW`, `Active chart source unchanged`, and
+   `Nontransmitting`.
+3. With no verified staged artifact, confirm the chart says
+   `No staged preview candles available` and shows no stored, mock, CRWV, or other
+   fallback candles. If a verified stage exists later, confirm its symbol, interval,
+   candles, inactive Schwab lineage, and as-of time agree.
+4. Click `Stored`. Confirm the previous stored state returns and all staged-preview
+   wording disappears.
+5. Close and reopen the review build. Confirm it starts on `Stored`; preview mode
+   was not persisted or activated.
+6. At normal size and the minimum supported window, confirm symbol, source summary,
+   selector, chart, latest-bar strip, and footer do not overlap. Hover any truncated
+   source/footer text and confirm its complete value appears.
+7. Confirm the global mode remains `SIMULATION`, no Paper/Live execution control
+   appears, and neither source choice can submit, replace, or cancel an order.
+
+This acceptance is presentation-only. It does not approve actual candle activation,
+legacy-data deletion, provider fetching, brokerage access, or order transmission.
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
 

@@ -20,12 +20,17 @@ successor stacked directly on R035. It reconciles the focused historical Engine 
 preview command, hardens the wire boundary, and is verified pending the same frozen
 operational audit. It adds no WPF consumer or active chart cutover.
 
+`codex/ARGUS-R037-wpf-staged-candle-preview-02f6423` is the isolated visual
+successor stacked directly on R036. It reconciles and hardens only the WPF consumer,
+current screenshots, and focused tests. It is implemented pending Steven's exact
+visual acceptance and may not merge before that acceptance.
+
 `codex/ARGUS-R035-candle-input-hardening` is superseded because it starts from the
 older `4c35181` baseline and carries stale governance. The 62-commit
 `codex/ARGUS-R035-staged-schwab-chart-preview-host` integration stack is
 `DO_NOT_USE`; its focused candle and Engine Host content is preserved on the
 canonical R035/R036 chain without its unrelated history. Its historical WPF preview
-commit remains unintegrated visual audit source only.
+idea is reconciled on R037 without reusing the contaminated branch or stale proof.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`, and
@@ -113,10 +118,11 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-R037-wpf-staged-candle-preview-02f6423` | Branch tip containing the clean R037 implementation and proof above R036 | Pending ordinary non-force feature-branch backup | No | `ACTIVE / IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE` | Explicit session-only WPF `Stored` / `Staged preview` selector, independently strict .NET envelope mapping, truthful no-fallback states, current screenshots, and no active chart/provider/account/write/order behavior. | Back up the branch; wait for Steven's exact seven-step visual acceptance, then integrate only after R035/R036 and the frozen Shadow audit. |
 | `codex/ARGUS-R036-staged-candle-preview-host-7cbc2cb` | `05008f3` plus feature-backup closeout | Yes; ordinary non-force feature-branch backup | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE / PUSHED_FEATURE_BRANCH` | Canonical backend-only successor exposing the hash-verified inactive R035 stage through one bounded idempotent Engine Host command, with strict payload sanitization and no WPF/provider/account/write/order path. | Merge after R035 only when the frozen SHADOW-016 operational audit releases `master`. |
 | `codex/ARGUS-R035-candle-input-reconcile-1af5b31` | Branch tip containing the R035 verification closeout | Yes; ordinary non-force feature-branch backup | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE / PUSHED_FEATURE_BRANCH` | Canonical current-baseline lane for bounded GET-only Schwab candle staging, verified inactive chart previews, read-only cutover inventory/preflight, and file-boundary hardening. | Merge only after the frozen SHADOW-016 operational audit releases `master`. |
 | `codex/ARGUS-R035-candle-input-hardening` | `00fcda6` | No | No | `SUPERSEDED` | Older-base source lane containing the six focused candle commits plus stale governance and obsolete rehearsal history. | Preserve as audit history; do not merge or continue. |
-| `codex/ARGUS-R035-staged-schwab-chart-preview-host` | `16107c7` | No | No | `DO_NOT_USE` | Contaminated 62-commit integration stack that mixes focused candle/host/WPF preview work with unrelated branch history. | Preserve for forensic reference only. Candle and host work are reconciled on R035/R036; the WPF commit remains a separately gated visual source and must not be merged from this branch. |
+| `codex/ARGUS-R035-staged-schwab-chart-preview-host` | `16107c7` | No | No | `DO_NOT_USE` | Contaminated 62-commit integration stack that mixes focused candle/host/WPF preview work with unrelated branch history. | Preserve for forensic reference only. Candle, host, and WPF ideas are reconciled on the clean R035/R036/R037 chain; never merge or continue this branch. |
 | `codex/ARGUS-SHADOW-016-017-reconcile-1af5b31` | `97884ea` | Yes | No | `IMPLEMENTED_PENDING_MERGE / PUSHED_FEATURE_BRANCH` | Preserves manual paperMoney reconciliation, model-error audit, immutable 5/10/20/30 evidence checkpoints, and checkpoint recovery on the frozen SHADOW-016 baseline. | Merge only after the scheduled opening audit; do not move the frozen runtime checkout early. |
 | `codex/ARGUS-SHADOW-013-opening-ceremony-hardening` | `58552da` | Via `master` | Yes | `MERGED_TO_LOCAL_MASTER` | Hardens semantic handoff completion, clock validity, frozen configuration, retry classification, proof-only opening rehearsal, outcome separation, and read-only heartbeat behavior. | Preserve branch; prepare the final-HEAD disabled proof-only task and real-session audit. |
 | `codex/ARGUS-SHADOW-012-scheduler-retry` | `c9c31f6` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Adds bounded one-minute Windows restarts to the idempotent Shadow opening task without changing other capture schedules. | Preserve as source history; use the regenerated SHADOW-012 final-HEAD bundle and inspect the first live run. |
