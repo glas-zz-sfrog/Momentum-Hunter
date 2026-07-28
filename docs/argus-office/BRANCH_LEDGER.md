@@ -10,7 +10,7 @@ SHADOW-014 preparation stack, including visual-acceptance commit `307a2e1`, alon
 automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
 
-SHADOW-015/016/017 and CANARY-001/002/003/004/005/006 are proven, remotely backed
+SHADOW-015/016/017 and CANARY-001/002/003/004/005/006/007 are proven, remotely backed
 feature work pending integration while `master` remains frozen for the one-time
 SHADOW-014 opening proof. None contains a real-order action or grants canary
 authority.
@@ -101,6 +101,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-CANARY-007-immutable-preflight-receipt` | `a35bfc9` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds a redacted write-once, expiring receipt for the exact CANARY-006 evidence set and revalidates source-chain continuity during inspection; it has no network, credential, process, or order action. | Preserve remotely; integrate only after the SHADOW-014 baseline is released, then use it only after unavailable official provider/physical evidence is obtained. |
 | `codex/ARGUS-CANARY-006-preflight-composition` | `a6c2aeb` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Composes CANARY-001 through CANARY-005 into one fresh, identity-bound, fail-closed preflight that can only await Steven's separate real-order decision; it has no network, credential, process, or order action. | Preserve remotely; integrate only after the SHADOW-014 baseline is released, then obtain the currently unavailable official funding/order/stop evidence without weakening the contracts. |
 | `codex/ARGUS-CANARY-005-independent-stop-evidence` | `73b939a` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds a write-once external stop latch and fail-closed shutdown/revocation drill evidence evaluator with no process, credential, network, or order mutation. | Preserve remotely; integrate only after the frozen baseline is released, then implement and physically prove separate OS/provider actions under consequential approval. |
 | `codex/ARGUS-CANARY-004-order-reconciliation` | `64ee677` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds deterministic command identity and fail-closed broker-order/restart reconciliation with explicit current-contract incompleteness and no order action. | Preserve remotely; integrate and compose only after the SHADOW-014 baseline is released and official provider fields are verified. |

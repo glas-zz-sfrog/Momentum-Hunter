@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added CANARY-007's redacted write-once preflight receipt. It binds the exact CANARY-006 evidence payloads and validated position-chain hash to one deterministic identity and externally frozen short decision window.
+- Receipt creation, persistence, and inspection remain nontransmitting. Tamper, conflict, expiry, future clocks, policy mismatch, missing source, and source-chain advancement fail closed; compileall, 16 focused tests, all 262 Schwab tests, all 1,028 Python tests, and all 216 .NET tests pass.
 - Added CANARY-006's fail-closed supervised canary preflight. It independently reloads the immutable PRE_CANARY chain and composes position, funding, no-prior-submission, and independent-stop evidence only when account, intent, sequence, requirement, command, latch, chronology, freshness, and safety flags agree.
 - A complete synthetic preflight concludes only `PRECONDITIONS_PROVEN_AWAITING_STEVEN_REAL_ORDER_DECISION`; execution permit, real-order approval, retry, transmission, network, credential mutation, and order action remain false or unavailable. Compileall, 13 focused tests, all 246 Schwab tests, all 1,012 Python tests, and all 216 .NET tests pass.
 - Added CANARY-005's write-once external stop latch and fail-closed shutdown/revocation drill evidence. Complete proof requires a matching stop request, disabled and stopped runtime acknowledgement, independent process-not-running observation, and provider-sourced revoked-credential observation.
