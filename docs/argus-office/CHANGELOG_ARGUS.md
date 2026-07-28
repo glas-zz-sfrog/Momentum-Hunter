@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added CANARY-004 deterministic command identity and nontransmitting broker-order reconciliation. A restart may resume only one exact fresh identity match; no match after a recorded attempt is `AMBIGUOUS_SUBMISSION_DO_NOT_RETRY`, multiple matches lock out, and quantity/lifecycle/clock/account/source anomalies fail closed.
+- Mapped the current Schwab read-only order model to `BROKER_EVIDENCE_INCOMPLETE` because client command identity, filled/remaining quantities, average fill, and update time are unavailable. Compileall, 26 focused tests, all 168 Schwab tests, all 934 Python tests, and all 216 .NET tests pass; no provider transport, credential, order action, UI, database, scoring, readiness, alert, or generated artifact changed.
 - Prepared and scheduled SHADOW-014 for a one-time unarmed opening proof: preserved the first disabled-task heartbeat as a safe `FAILED` audit, revalidated the sole `2573` cash binding through the guarded read-only refresh path, proved live SPY/IWM quote and HTTPS clock behavior, and bound the 2026-07-28 task/bundle/heartbeat to the final synchronized governance commit.
 - Fast-forwarded SHADOW-013 implementation commit `58552da` into local `master` after final compile, focused regression, full Python/.NET regression, PowerShell, diff, secret, task-state, and production-nonmutation gates passed; the ordinary non-force backup includes the governance closeout.
 - Hardened the Official Shadow opening ceremony so receipt completeness requires an allowlisted semantic terminal result and verified Engine Host, command, capture, report, decision-cycle, and trade identity where applicable.
