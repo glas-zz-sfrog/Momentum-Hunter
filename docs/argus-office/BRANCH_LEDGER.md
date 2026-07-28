@@ -1,6 +1,6 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-27
+Date reconciled: 2026-07-28
 
 ## Current Truth
 
@@ -12,8 +12,8 @@ ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
 
 SHADOW-015/016/017 and CANARY-001/002/003/004/005/006/007/008/009/010/011/012/013/014
 are proven feature work consolidated on
-`codex/ARGUS-INTEGRATION-002-release-gate`. SCHWAB-004 is the one active stacked
-successor. The linear chain preserves
+`codex/ARGUS-INTEGRATION-002-release-gate`. SCHWAB-004/004A share the one active
+stacked successor. The linear chain preserves
 byte-equivalent runtime/test content while the original branches remain remotely
 backed source history, and a committed non-mutating gate now rechecks source refs,
 ancestry, exact path union, byte identity, risky paths, and secret signatures. It
@@ -107,7 +107,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `codex/ARGUS-SCHWAB-004-account-shape-evidence` | `f704c44` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | One stacked successor adding confirmation-gated, value-erasing account-response shape evidence. A live GET-only proof revalidated exactly one pinned `2573` CASH account, retained no raw values or payload/hash, and found field presence/types without assigning financial semantics. Compileall, 15 focused, 388 Schwab, 1,235 full Python, and 216 .NET tests pass. | Preserve remotely. Seek authoritative settled-cash/restriction semantics without guessing; after SHADOW-014 releases `master`, rebuild from an advanced audit head if necessary or integrate the exact clean linear chain after all release gates pass. |
+| `codex/ARGUS-SCHWAB-004-account-shape-evidence` | `3b65e16` plus governance closeout | Yes after closeout push | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | One stacked successor containing confirmation-gated, value-erasing live account-shape evidence plus SCHWAB-004A's offline-only account OpenAPI inspector. The latter validates one GET account-detail response, bounds local-reference traversal, retains structural evidence only, and keeps funding/execution authority false. Compileall, 17 focused, 405 Schwab, 1,252 full Python, and 216 .NET tests pass. | Preserve remotely. Inspect an authenticated official local export when available and review descriptions manually; after SHADOW-014 releases `master`, rebuild from an advanced audit head if necessary or integrate the exact clean linear chain after all release gates pass. |
 | `codex/ARGUS-INTEGRATION-002-release-gate` | `390fb3d` | Yes | No | `STACK_BASE / IMPLEMENTED_PENDING_MERGE` | Adds a read-only release gate over the exact consolidated foundation. The real CLI passes with clean synchronized ancestry, frozen source refs, 53 exact changed paths, 50 source-union paths, 43 byte-equivalent runtime/test paths, zero risky/secret findings, and false execution authority. Compileall, 13 focused, 1,220 full Python, and 216 .NET tests pass. | Preserve remotely as SCHWAB-004's exact parent. Rerun the gate, final stack manifest, complete tests, and protected review after SHADOW-014; never rewrite it to absorb an advanced audit head. |
 | `codex/ARGUS-INTEGRATION-001-pending-foundation` | `686b0da` | Yes | No | `SUPERSEDED` | Linear successor of frozen `master` containing byte-equivalent reviewed runtime/test content from SHADOW-015, stacked SHADOW-016/017, and CANARY-001 through CANARY-014. Competing source-branch governance commits were excluded and reconciled once here. Compileall, 299 focused, 1,207 full Python, and 216 .NET tests pass. | Preserve as source history; ARGUS-INTEGRATION-002 carries its exact content plus the release gate. |
 | `codex/ARGUS-CANARY-014-complete-stack-integrity` | `0aa4933` plus governance closeout | Yes | No | `SUPERSEDED` | Expands the nonauthorizing integration manifest to frozen V2 coverage of CANARY-001 through CANARY-013. Default verification rejects V1 downgrade, arbitrary partial sets, missing successor files, unsafe imports/actions, and widened component exceptions while retaining explicit exact-policy V1 verification. | Preserve as source history; its exact runtime/test content is carried by ARGUS-INTEGRATION-002. |

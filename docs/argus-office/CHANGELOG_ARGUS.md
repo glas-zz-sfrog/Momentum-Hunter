@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added SCHWAB-004A's offline-only account OpenAPI inspector. It validates one local GET account-detail schema on Schwab's exact HTTPS host, follows local references only, bounds recursive/malformed input, retains description hashes instead of text, and keeps funding, execution, retry, broker-action, and transmission authority false.
+- Verified the inspector with compileall, 17 focused tests, all 405 Schwab tests, all 1,252 Python tests, and all 216 .NET tests. No authenticated official account export has been inspected yet, and structural field evidence does not establish settled-cash or restriction semantics.
 - Added SCHWAB-004's confirmation-gated, value-erasing account-response shape inspector. It uses only the existing account-number and single-account GET transports, revalidates the immutable sole-account binding, retains no provider values or raw payload/hash, persists nothing, and exposes no position, order, market-data, or execution method.
 - A live read-only run passed for the sole pinned `2573` CASH account with shape SHA-256 `1f763fd53776f3db7cb0b2fd7c067a910747da086e0268b4efb9dc95aca2d7d4`. Field presence included `unsettledCash`, `isClosingOnlyRestricted`, and `isInCall` but no explicit `settledCash`; semantic mapping remains unavailable. Compileall, 15 focused tests, 388 Schwab tests, all 1,235 Python tests, and all 216 .NET tests pass.
 - Added ARGUS-INTEGRATION-002's read-only pending-foundation release gate and direct CLI. It verifies clean synchronized ancestry, three frozen source commits, exact changed-path union, runtime/test blob equivalence, safe bounded UTF-8 paths, and absence of high-risk secret signatures without changing Git or runtime state.
