@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added R030's idempotent `get_staged_schwab_chart_preview` Engine Host command over the existing hash-verified inactive Schwab chart service. The host requires exact requested identity, schema/state/lineage, list-shaped candles, and preview-only/inactive/nontransmitting/order-unavailable flags; invalid evidence returns a sanitized bounded failure.
+- R030 performs no provider fetch, OAuth/account access, source write/delete, active chart switch, legacy CRWV removal, WPF rendering, broker action, or order transmission. Compileall, 43 focused tests, 94 bounded chart/staging/cutover tests, all 1,317 Python tests, and all 216 .NET tests pass.
 - Added CANARY-020's exact final stacked release gate and CLI. It composes the frozen ARGUS-INTEGRATION-002 source audit with CANARY-019 V3 integrity proof only after the exact branch, clean worktree, synchronized branch upstream/base, frozen source commit, exact changed-path union, reviewed runtime/test/tool blob identity, safe paths/content, and false authority flags pass.
 - Dirty, unpushed, missing-upstream, lookalike-branch, source/base drift, runtime drift, risky/secret content, partial manifests, and authority escalation fail closed. The real synchronized branch passes at `87a811a` with 17 components and zero findings; execution permit remains false and order transmission unavailable.
 - Added CANARY-019's frozen V3 nonauthorizing stack-integrity policy for the exact 17 runtime components in CANARY-001 through CANARY-013 and CANARY-015 through CANARY-018. V1/V2 remain explicit historical modes but are rejected by default.
