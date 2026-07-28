@@ -32,6 +32,7 @@ COMMAND_SHUTDOWN = "shutdown_host"
 COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT = "get_readonly_workspace_snapshot"
 COMMAND_SIMULATION_WORKSPACE_SNAPSHOT = "get_simulation_workspace_snapshot"
 COMMAND_CHART_SNAPSHOT = "get_chart_snapshot"
+COMMAND_STAGED_SCHWAB_CHART_PREVIEW = "get_staged_schwab_chart_preview"
 COMMAND_TECHNICAL_RESEARCH_SNAPSHOT = "get_technical_research_snapshot"
 COMMAND_SAVED_WATCHLIST_SNAPSHOT = "get_saved_watchlist_snapshot"
 COMMAND_DAILY_WORKFLOW_SNAPSHOT = "get_daily_workflow_snapshot"
@@ -51,6 +52,7 @@ SUPPORTED_COMMANDS = frozenset(
         COMMAND_READ_ONLY_WORKSPACE_SNAPSHOT,
         COMMAND_SIMULATION_WORKSPACE_SNAPSHOT,
         COMMAND_CHART_SNAPSHOT,
+        COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
         COMMAND_TECHNICAL_RESEARCH_SNAPSHOT,
         COMMAND_SAVED_WATCHLIST_SNAPSHOT,
         COMMAND_DAILY_WORKFLOW_SNAPSHOT,
@@ -81,6 +83,30 @@ def read_json(path: Path) -> dict[str, Any] | None:
     except (json.JSONDecodeError, OSError):
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def staged_chart_preview_is_safe(
+    payload: object,
+    *,
+    symbol: str,
+    interval: str,
+) -> bool:
+    return bool(
+        isinstance(payload, dict)
+        and payload.get("schemaVersion") == 1
+        and payload.get("symbol") == symbol
+        and payload.get("interval") == interval
+        and payload.get("state")
+        in {"AVAILABLE", "STALE", "INSUFFICIENT_DATA", "UNAVAILABLE"}
+        and isinstance(payload.get("candles"), list)
+        and isinstance(payload.get("lineage"), dict)
+        and payload["lineage"].get("sourceLabel")
+        == "Schwab Trader API price history (inactive staging)"
+        and payload.get("previewOnly") is True
+        and payload.get("activeChartSource") is False
+        and payload.get("transmitting") is False
+        and payload.get("orderTransmission") == "UNAVAILABLE"
+    )
 
 
 def process_is_running(pid: int) -> bool:
@@ -248,6 +274,9 @@ class EngineHostRuntime:
         simulation_workspace_loader: Callable[[], dict[str, Any]] | None = None,
         simulation_runner: Callable[[str], dict[str, Any]] | None = None,
         chart_snapshot_loader: Callable[[str, str], dict[str, Any]] | None = None,
+        staged_chart_preview_loader: (
+            Callable[[str, str], dict[str, Any]] | None
+        ) = None,
         shadow_workspace_loader: Callable[[], dict[str, Any]] | None = None,
         shadow_starter: Callable[[str, str], dict[str, Any]] | None = None,
         shadow_observation_runner: Callable[[], dict[str, Any]] | None = None,
@@ -284,6 +313,10 @@ class EngineHostRuntime:
         else:
             self._chart_service = None
         self._chart_snapshot_loader = chart_snapshot_loader or self._chart_service.snapshot
+        self._staged_chart_preview_loader = (
+            staged_chart_preview_loader
+            or self._load_staged_schwab_chart_preview
+        )
         self._shadow_workspace_service = None
         if shadow_workspace_loader is None or shadow_starter is None or shadow_observation_runner is None:
             from momentum_hunter.workstation_shadow import ShadowWorkspaceService
@@ -557,6 +590,70 @@ class EngineHostRuntime:
                 True,
                 "CHART_SNAPSHOT",
                 "Read-only chart snapshot returned.",
+                self.snapshot(),
+                payload=payload,
+            )
+        if command == COMMAND_STAGED_SCHWAB_CHART_PREVIEW:
+            symbol = arguments.get("symbol")
+            interval = arguments.get("interval")
+            if not isinstance(symbol, str) or not symbol.strip():
+                return EngineHostCommandResult(
+                    False,
+                    "STAGED_CHART_SYMBOL_REQUIRED",
+                    "A non-empty symbol is required for a staged chart preview.",
+                    self.snapshot(),
+                )
+            if not isinstance(interval, str) or not interval.strip():
+                return EngineHostCommandResult(
+                    False,
+                    "STAGED_CHART_INTERVAL_REQUIRED",
+                    "A supported interval is required for a staged chart preview.",
+                    self.snapshot(),
+                )
+            try:
+                from momentum_hunter.staged_schwab_charts import (
+                    StagedSchwabChartError,
+                )
+                from momentum_hunter.workstation_charts import (
+                    normalize_interval,
+                    normalize_symbol,
+                )
+
+                clean_symbol = normalize_symbol(symbol)
+                clean_interval = normalize_interval(interval)
+                payload = self._staged_chart_preview_loader(
+                    clean_symbol,
+                    clean_interval,
+                )
+            except ValueError as exc:
+                return EngineHostCommandResult(
+                    False,
+                    "INVALID_STAGED_CHART_REQUEST",
+                    str(exc),
+                    self.snapshot(),
+                )
+            except StagedSchwabChartError:
+                return EngineHostCommandResult(
+                    False,
+                    "STAGED_CHART_PREVIEW_UNAVAILABLE",
+                    "The inactive staged Schwab chart preview is unavailable or invalid.",
+                    self.snapshot(),
+                )
+            if not staged_chart_preview_is_safe(
+                payload,
+                symbol=clean_symbol,
+                interval=clean_interval,
+            ):
+                return EngineHostCommandResult(
+                    False,
+                    "UNSAFE_STAGED_CHART_PREVIEW",
+                    "The staged chart preview did not preserve its inactive nontransmitting boundary.",
+                    self.snapshot(),
+                )
+            return EngineHostCommandResult(
+                True,
+                "STAGED_SCHWAB_CHART_PREVIEW",
+                "Inactive staged Schwab chart preview returned.",
                 self.snapshot(),
                 payload=payload,
             )
@@ -878,6 +975,29 @@ class EngineHostRuntime:
         from momentum_hunter.workstation_read_models import build_read_only_workspace_snapshot
 
         return build_read_only_workspace_snapshot()
+
+    @staticmethod
+    def _load_staged_schwab_chart_preview(
+        symbol: str,
+        interval: str,
+    ) -> dict[str, Any]:
+        from momentum_hunter.schwab_candle_staging import (
+            DEFAULT_STAGED_CANDLES_PATH,
+        )
+        from momentum_hunter.staged_schwab_charts import (
+            StagedSchwabChartPaths,
+            StagedSchwabChartService,
+        )
+
+        manifest_path = DEFAULT_STAGED_CANDLES_PATH.with_name(
+            f"{DEFAULT_STAGED_CANDLES_PATH.stem}.manifest.json"
+        )
+        return StagedSchwabChartService(
+            paths=StagedSchwabChartPaths(
+                candles_path=DEFAULT_STAGED_CANDLES_PATH,
+                manifest_path=manifest_path,
+            )
+        ).snapshot(symbol, interval)
 
     @staticmethod
     def _load_daily_workflow_snapshot() -> dict[str, Any]:
