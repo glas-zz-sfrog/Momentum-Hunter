@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added CANARY-006's fail-closed supervised canary preflight. It independently reloads the immutable PRE_CANARY chain and composes position, funding, no-prior-submission, and independent-stop evidence only when account, intent, sequence, requirement, command, latch, chronology, freshness, and safety flags agree.
+- A complete synthetic preflight concludes only `PRECONDITIONS_PROVEN_AWAITING_STEVEN_REAL_ORDER_DECISION`; execution permit, real-order approval, retry, transmission, network, credential mutation, and order action remain false or unavailable. Compileall, 13 focused tests, all 246 Schwab tests, all 1,012 Python tests, and all 216 .NET tests pass.
 - Added CANARY-005's write-once external stop latch and fail-closed shutdown/revocation drill evidence. Complete proof requires a matching stop request, disabled and stopped runtime acknowledgement, independent process-not-running observation, and provider-sourced revoked-credential observation.
 - The CANARY-005 module cannot clear or enable its latch, kill a process, revoke a credential, call a network, or act on an order. Compileall, 15 focused tests, all 157 Schwab tests, all 923 Python tests, and all 216 .NET tests pass; actual OS/provider wiring and physical drill evidence remain pending consequential work.
 - Added CANARY-004 deterministic command identity and nontransmitting broker-order reconciliation. A restart may resume only one exact fresh identity match; no match after a recorded attempt is `AMBIGUOUS_SUBMISSION_DO_NOT_RETRY`, multiple matches lock out, and quantity/lifecycle/clock/account/source anomalies fail closed.
