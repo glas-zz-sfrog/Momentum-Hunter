@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added CANARY-015's immutable broker-worker identity receipt and verifier. It binds exact expected build/artifact, account, runtime, executable, process-target, observer/source, and fresh persisted liveness commitments while rejecting missing, stale, future, unavailable, stopped-only, tampered, drifted, or unpersisted evidence.
+- A passing CANARY-015 identity remains nonauthorizing: runtime acknowledgement, provider revocation, physical-stop completion, execution, retry, and transmission stay false. Compileall, 16 focused tests, 90 adjacent CANARY tests, all 421 Schwab tests, all 1,268 Python tests, and all 216 .NET tests pass.
 - Added SCHWAB-004A's offline-only account OpenAPI inspector. It validates one local GET account-detail schema on Schwab's exact HTTPS host, follows local references only, bounds recursive/malformed input, retains description hashes instead of text, and keeps funding, execution, retry, broker-action, and transmission authority false.
 - Verified the inspector with compileall, 17 focused tests, all 405 Schwab tests, all 1,252 Python tests, and all 216 .NET tests. No authenticated official account export has been inspected yet, and structural field evidence does not establish settled-cash or restriction semantics.
 - Added SCHWAB-004's confirmation-gated, value-erasing account-response shape inspector. It uses only the existing account-number and single-account GET transports, revalidates the immutable sole-account binding, retains no provider values or raw payload/hash, persists nothing, and exposes no position, order, market-data, or execution method.
