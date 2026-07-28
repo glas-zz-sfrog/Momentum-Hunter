@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Reconciled the substantive Shadow evidence work onto canonical `1af5b31`: manual paperMoney results are recorded as write-once frozen evidence, paper-versus-FakeBroker model error is audited without mixing versions or releasing sub-30 statistics, and immutable 5/10/20/30 checkpoints run automatically on both observation paths. Checkpoint code now participates in the selector runtime hash, and a failed threshold transition must recover its checkpoint before another quote is processed.
 - Hardened SHADOW-016 scheduling for the first armed FakeBroker-only opening: armed installation now requires one future Shadow-only task at exactly 8:35 AM Central, explicit enablement, no late start, no Task Scheduler retry, and a fresh final-head proof bundle. The default daily installer remains unarmed and disabled for Shadow.
 - Added a nonmutating scheduler plan mode and executable negative coverage for recurring, broad, disabled, past, late, and wrong-time arm shapes. PowerShell parsing, 3 focused scheduling tests, 130 affected Shadow/Engine Host tests, all 917 Python tests, and all 216 .NET tests pass.
 - Prepared and scheduled SHADOW-014 for a one-time unarmed opening proof: preserved the first disabled-task heartbeat as a safe `FAILED` audit, revalidated the sole `2573` cash binding through the guarded read-only refresh path, proved live SPY/IWM quote and HTTPS clock behavior, and bound the 2026-07-28 task/bundle/heartbeat to the final synchronized governance commit.

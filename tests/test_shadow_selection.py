@@ -409,6 +409,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
             root / "scheduling.py",
             root / "schwab_market_data.py",
             root / "shadow_arm_ceremony.py",
+            root / "shadow_evidence_checkpoints.py",
             root / "shadow_market_validity.py",
             root / "shadow_opening.py",
             root / "shadow_selection.py",
