@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added CANARY-003's nontransmitting settled-cash and account-restriction gate. It requires an explicit maximum debit plus reserve, exact evidence source, fresh account/balance clocks, an open pinned CASH account, independently supplied settled cash, and known-clear restrictions.
+- The current read-only Schwab balance contract now maps explicitly to a blocked funding observation because cash available and buying power do not prove settled cash and no restriction evidence exists. Sixteen focused tests, all 158 Schwab tests, all 924 Python tests, and all 216 .NET tests pass; no actual balances, account hash, provider endpoint, position, credential, order, UI, schema, or generated artifact is exposed or changed.
 - Prepared and scheduled SHADOW-014 for a one-time unarmed opening proof: preserved the first disabled-task heartbeat as a safe `FAILED` audit, revalidated the sole `2573` cash binding through the guarded read-only refresh path, proved live SPY/IWM quote and HTTPS clock behavior, and bound the 2026-07-28 task/bundle/heartbeat to the final synchronized governance commit.
 - Fast-forwarded SHADOW-013 implementation commit `58552da` into local `master` after final compile, focused regression, full Python/.NET regression, PowerShell, diff, secret, task-state, and production-nonmutation gates passed; the ordinary non-force backup includes the governance closeout.
 - Hardened the Official Shadow opening ceremony so receipt completeness requires an allowlisted semantic terminal result and verified Engine Host, command, capture, report, decision-cycle, and trade identity where applicable.

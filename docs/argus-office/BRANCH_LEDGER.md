@@ -4,11 +4,16 @@ Date reconciled: 2026-07-27
 
 ## Current Truth
 
-Local and remote `master` are synchronized through SHADOW-012 implementation
-`c9c31f6` plus this governance closeout. The canonical product baseline contains the complete SHADOW-004 through
-SHADOW-012 stack, including visual-acceptance commit `307a2e1`, alongside the Python
+Local and remote `master` are synchronized at `4c35181` through SHADOW-014
+proof-only scheduling. The canonical product baseline contains the complete SHADOW-004 through
+SHADOW-014 preparation stack, including visual-acceptance commit `307a2e1`, alongside the Python
 automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
+
+SHADOW-016/017, stacked CANARY-001/002, and independent CANARY-003 are proven
+feature work pending integration while `master` remains frozen for the
+one-time SHADOW-014 opening proof. None contains a real-order path or grants
+canary authority.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`, and
@@ -96,6 +101,11 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-CANARY-003-funding-restrictions` | `5702ad7` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds a redacted settled-cash/restriction gate that blocks current incomplete balance evidence and has no position or order capability. | Integrate independently after the frozen SHADOW-014 baseline is released, then compose with CANARY-001/002. |
+| `codex/ARGUS-CANARY-002-position-evidence-chain` | `9a19d78` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds immutable ordered PRE/ACTIVE/POST position evidence on top of CANARY-001. | Preserve the stack; integrate CANARY-002 rather than merging CANARY-001 separately. |
+| `codex/ARGUS-CANARY-001-position-invariants` | `1c8006a` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds the GET-only pre/active/post canary position-invariant evaluator. | Preserve as CANARY-002's parent. |
+| `codex/ARGUS-SHADOW-017-evidence-checkpoints` | `4858d73` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds automatic immutable 5/10/20/30 evidence checkpoints on top of SHADOW-016. | Preserve the stack until the SHADOW-014 baseline is released. |
+| `codex/ARGUS-SHADOW-016-paper-reconciliation-evidence` | `a2c3637` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds immutable manual paperMoney reconciliation and a read-only fill-model-error audit. | Preserve as SHADOW-017's parent. |
 | `codex/ARGUS-SHADOW-013-opening-ceremony-hardening` | `58552da` | Via `master` | Yes | `MERGED_TO_LOCAL_MASTER` | Hardens semantic handoff completion, clock validity, frozen configuration, retry classification, proof-only opening rehearsal, outcome separation, and read-only heartbeat behavior. | Preserve branch; prepare the final-HEAD disabled proof-only task and real-session audit. |
 | `codex/ARGUS-SHADOW-012-scheduler-retry` | `c9c31f6` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Adds bounded one-minute Windows restarts to the idempotent Shadow opening task without changing other capture schedules. | Preserve as source history; use the regenerated SHADOW-012 final-HEAD bundle and inspect the first live run. |
 | `codex/ARGUS-SHADOW-011-proof-timestamp-ordering` | `3f8acb8` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Evaluates proof freshness after guarded OAuth/provider completion instead of against the pre-request clock, while preserving future-data rejection. | Preserve as source history; use only the regenerated SHADOW-011 final-HEAD bundle for the opening task. |
