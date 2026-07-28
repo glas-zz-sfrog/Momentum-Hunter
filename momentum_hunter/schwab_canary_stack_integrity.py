@@ -15,8 +15,11 @@ from typing import Final, Mapping, Sequence
 CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V1: Final = (
     "SCHWAB_CANARY_STACK_INTEGRITY_V1"
 )
-CANARY_STACK_INTEGRITY_SCHEMA_VERSION: Final = (
+CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V2: Final = (
     "SCHWAB_CANARY_STACK_INTEGRITY_V2"
+)
+CANARY_STACK_INTEGRITY_SCHEMA_VERSION: Final = (
+    "SCHWAB_CANARY_STACK_INTEGRITY_V3"
 )
 CANARY_STACK_INTEGRITY_MANIFEST_TYPE: Final = (
     "NONAUTHORIZING_CANARY_STACK_INTEGRATION_MANIFEST"
@@ -112,6 +115,7 @@ class CanaryStackComponent:
     role: str
     relative_path: str
     allowed_imports: tuple[str, ...] = ()
+    allowed_actions: tuple[str, ...] = ()
 
 
 CANARY_STACK_COMPONENTS_V1: Final = (
@@ -168,12 +172,13 @@ CANARY_STACK_COMPONENTS_V1: Final = (
         relative_path="momentum_hunter/schwab_canary_stack_integrity.py",
     ),
 )
-CANARY_STACK_COMPONENTS: Final = CANARY_STACK_COMPONENTS_V1 + (
+CANARY_STACK_COMPONENTS_V2: Final = CANARY_STACK_COMPONENTS_V1 + (
     CanaryStackComponent(
         name="CANARY-011",
         role="offline official order schema evidence",
         relative_path="momentum_hunter/schwab_order_schema_evidence.py",
         allowed_imports=("urllib.parse",),
+        allowed_actions=("urlparse",),
     ),
     CanaryStackComponent(
         name="CANARY-012",
@@ -184,6 +189,32 @@ CANARY_STACK_COMPONENTS: Final = CANARY_STACK_COMPONENTS_V1 + (
         name="CANARY-013",
         role="immutable process evidence chain",
         relative_path="momentum_hunter/schwab_canary_process_evidence.py",
+    ),
+)
+CANARY_STACK_COMPONENTS: Final = CANARY_STACK_COMPONENTS_V2 + (
+    CanaryStackComponent(
+        name="CANARY-015",
+        role="broker-worker identity binding",
+        relative_path="momentum_hunter/schwab_canary_worker_identity.py",
+    ),
+    CanaryStackComponent(
+        name="CANARY-016",
+        role="bounded nontransmitting broker-worker lifecycle",
+        relative_path="momentum_hunter/schwab_canary_broker_worker.py",
+    ),
+    CanaryStackComponent(
+        name="CANARY-017",
+        role="bounded broker-worker lifecycle supervision",
+        relative_path="momentum_hunter/schwab_canary_worker_lifecycle.py",
+        allowed_imports=("subprocess",),
+        allowed_actions=("Popen",),
+    ),
+    CanaryStackComponent(
+        name="CANARY-018",
+        role="read-only worker-lifecycle package verification",
+        relative_path=(
+            "momentum_hunter/schwab_canary_worker_lifecycle_evidence.py"
+        ),
     ),
 )
 
@@ -387,6 +418,7 @@ def _build_component_entry(
     source_findings = _source_safety_findings(
         source,
         allowed_imports=component.allowed_imports,
+        allowed_actions=component.allowed_actions,
     )
     if source_findings:
         raise CanaryStackIntegrityError(
@@ -434,6 +466,7 @@ def _verify_component_entry(
         for source_finding in _source_safety_findings(
             source,
             allowed_imports=component.allowed_imports,
+            allowed_actions=component.allowed_actions,
         ):
             findings.append(f"{component.name}: {source_finding}")
     return tuple(findings)
@@ -443,27 +476,58 @@ def _source_safety_findings(
     source: str,
     *,
     allowed_imports: Sequence[str] = (),
+    allowed_actions: Sequence[str] = (),
 ) -> tuple[str, ...]:
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return ("Python source cannot be parsed.",)
     imports: set[str] = set()
+    blocked_import_aliases: dict[str, str] = {}
     defined_names: set[str] = set()
     called_names: set[str] = set()
+    blocked_module_calls: set[str] = set()
     url_literals: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            imports.update(alias.name for alias in node.names)
+            for alias in node.names:
+                imports.add(alias.name)
+                if any(
+                    alias.name == blocked
+                    or alias.name.startswith(f"{blocked}.")
+                    for blocked in _DISALLOWED_IMPORTS
+                ):
+                    local_name = alias.asname or alias.name.split(".", 1)[0]
+                    blocked_import_aliases[local_name] = alias.name
         elif isinstance(node, ast.ImportFrom) and node.module:
             imports.add(node.module)
+            if any(
+                node.module == blocked
+                or node.module.startswith(f"{blocked}.")
+                for blocked in _DISALLOWED_IMPORTS
+            ):
+                for alias in node.names:
+                    local_name = alias.asname or alias.name
+                    blocked_import_aliases[local_name] = (
+                        f"{node.module}.{alias.name}"
+                    )
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             defined_names.add(node.name)
         elif isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name):
                 called_names.add(node.func.id)
+                blocked_target = blocked_import_aliases.get(node.func.id)
+                if blocked_target:
+                    blocked_module_calls.add(
+                        blocked_target.rsplit(".", 1)[-1]
+                    )
             elif isinstance(node.func, ast.Attribute):
                 called_names.add(node.func.attr)
+                if (
+                    isinstance(node.func.value, ast.Name)
+                    and node.func.value.id in blocked_import_aliases
+                ):
+                    blocked_module_calls.add(node.func.attr)
         elif isinstance(node, ast.Constant) and isinstance(node.value, str):
             lowered = node.value.strip().lower()
             if lowered.startswith(_NETWORK_ENDPOINT_PREFIXES):
@@ -478,7 +542,14 @@ def _source_safety_findings(
         )
     )
     unsafe_actions = sorted(
-        (defined_names | called_names) & _DISALLOWED_ACTION_NAMES
+        action
+        for action in (defined_names | called_names) & _DISALLOWED_ACTION_NAMES
+        if action not in allowed_actions
+    )
+    unsafe_module_calls = sorted(
+        action
+        for action in blocked_module_calls
+        if action not in allowed_actions
     )
     findings: list[str] = []
     if unsafe_imports:
@@ -491,6 +562,12 @@ def _source_safety_findings(
         findings.append(
             "Disallowed broker or process-action name: "
             + ", ".join(unsafe_actions)
+            + "."
+        )
+    if unsafe_module_calls:
+        findings.append(
+            "Disallowed call through a provider, network, or process import: "
+            + ", ".join(unsafe_module_calls)
             + "."
         )
     if url_literals:
@@ -515,26 +592,42 @@ def _require_component_contract(
             or not component.role.strip()
             or not component.relative_path.strip()
             or not isinstance(component.allowed_imports, tuple)
+            or not isinstance(component.allowed_actions, tuple)
             or any(
                 not isinstance(item, str) or not item
                 for item in component.allowed_imports
+            )
+            or any(
+                not isinstance(item, str) or not item
+                for item in component.allowed_actions
             )
         ):
             raise CanaryStackIntegrityError(
                 "Canary stack component policy is malformed."
             )
-        expected_allowed = (
-            ("urllib.parse",)
-            if (
-                component.name == "CANARY-011"
-                and component.relative_path
-                == "momentum_hunter/schwab_order_schema_evidence.py"
-            )
-            else ()
-        )
-        if component.allowed_imports != expected_allowed:
+        expected_allowed_imports: tuple[str, ...] = ()
+        expected_allowed_actions: tuple[str, ...] = ()
+        if (
+            component.name == "CANARY-011"
+            and component.relative_path
+            == "momentum_hunter/schwab_order_schema_evidence.py"
+        ):
+            expected_allowed_imports = ("urllib.parse",)
+            expected_allowed_actions = ("urlparse",)
+        elif (
+            component.name == "CANARY-017"
+            and component.relative_path
+            == "momentum_hunter/schwab_canary_worker_lifecycle.py"
+        ):
+            expected_allowed_imports = ("subprocess",)
+            expected_allowed_actions = ("Popen",)
+        if component.allowed_imports != expected_allowed_imports:
             raise CanaryStackIntegrityError(
                 "Canary stack component import exceptions do not match policy."
+            )
+        if component.allowed_actions != expected_allowed_actions:
+            raise CanaryStackIntegrityError(
+                "Canary stack component action exceptions do not match policy."
             )
         if component.name in names or component.relative_path in paths:
             raise CanaryStackIntegrityError(
@@ -544,6 +637,7 @@ def _require_component_contract(
         paths.add(component.relative_path)
     if items not in {
         CANARY_STACK_COMPONENTS_V1,
+        CANARY_STACK_COMPONENTS_V2,
         CANARY_STACK_COMPONENTS,
     }:
         raise CanaryStackIntegrityError(
@@ -557,6 +651,8 @@ def _schema_version_for_components(
 ) -> str:
     if tuple(components) == CANARY_STACK_COMPONENTS_V1:
         return CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V1
+    if tuple(components) == CANARY_STACK_COMPONENTS_V2:
+        return CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V2
     return CANARY_STACK_INTEGRITY_SCHEMA_VERSION
 
 

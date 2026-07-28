@@ -14,8 +14,10 @@ import momentum_hunter.schwab_canary_stack_integrity as integrity_module
 from momentum_hunter.schwab_canary_stack_integrity import (
     CANARY_STACK_COMPONENTS,
     CANARY_STACK_COMPONENTS_V1,
+    CANARY_STACK_COMPONENTS_V2,
     CANARY_STACK_INTEGRITY_SCHEMA_VERSION,
     CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V1,
+    CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V2,
     CanaryStackIntegrityError,
     build_canary_stack_integrity_manifest,
     canonical_manifest_json,
@@ -40,10 +42,18 @@ class CanaryStackIntegrityTests(unittest.TestCase):
             CANARY_STACK_INTEGRITY_SCHEMA_VERSION,
             manifest["schemaVersion"],
         )
-        self.assertEqual(13, manifest["componentCount"])
+        self.assertEqual(17, manifest["componentCount"])
         self.assertEqual(len(CANARY_STACK_COMPONENTS), manifest["componentCount"])
+        expected_names = [
+            *(f"CANARY-{index:03d}" for index in range(1, 14)),
+            *(f"CANARY-{index:03d}" for index in range(15, 19)),
+        ]
         self.assertEqual(
+            expected_names,
             [item.name for item in CANARY_STACK_COMPONENTS],
+        )
+        self.assertEqual(
+            expected_names,
             [item["name"] for item in manifest["components"]],
         )
         self.assertTrue(manifest["integrationOnly"])
@@ -83,6 +93,42 @@ class CanaryStackIntegrityTests(unittest.TestCase):
         self.assertEqual(10, manifest["componentCount"])
         self.assertEqual(
             [f"CANARY-{index:03d}" for index in range(1, 11)],
+            [item["name"] for item in manifest["components"]],
+        )
+        self.assertIn(
+            "Canary stack integrity schema is unsupported.",
+            default_findings,
+        )
+        self.assertIn(
+            "Canary stack component count does not match policy.",
+            default_findings,
+        )
+
+    def test_legacy_v2_manifest_policy_remains_explicitly_verifiable(self) -> None:
+        manifest = build_canary_stack_integrity_manifest(
+            repository_root=REPOSITORY_ROOT,
+            build_identity=BUILD_IDENTITY,
+            created_at=CREATED_AT,
+            components=CANARY_STACK_COMPONENTS_V2,
+        )
+
+        findings = verify_canary_stack_integrity_manifest(
+            manifest,
+            repository_root=REPOSITORY_ROOT,
+            expected_build_identity=BUILD_IDENTITY,
+            evaluated_at=CREATED_AT,
+            components=CANARY_STACK_COMPONENTS_V2,
+        )
+        default_findings = self.verify(manifest, REPOSITORY_ROOT)
+
+        self.assertEqual((), findings)
+        self.assertEqual(
+            CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V2,
+            manifest["schemaVersion"],
+        )
+        self.assertEqual(13, manifest["componentCount"])
+        self.assertEqual(
+            [f"CANARY-{index:03d}" for index in range(1, 14)],
             [item["name"] for item in manifest["components"]],
         )
         self.assertIn(
@@ -136,7 +182,7 @@ class CanaryStackIntegrityTests(unittest.TestCase):
             findings = self.verify(manifest, root)
 
         self.assertTrue(
-            any("CANARY-013 cannot be re-read" in item for item in findings)
+            any("CANARY-018 cannot be re-read" in item for item in findings)
         )
 
     def test_unsafe_import_action_and_endpoint_cannot_build_manifest(self) -> None:
@@ -170,6 +216,8 @@ class CanaryStackIntegrityTests(unittest.TestCase):
                 for item in CANARY_STACK_COMPONENTS
                 if item.name == "CANARY-011"
             )
+            self.assertEqual(("urllib.parse",), schema_component.allowed_imports)
+            self.assertEqual(("urlparse",), schema_component.allowed_actions)
             target = root / schema_component.relative_path
             target.write_text(
                 target.read_text(encoding="utf-8")
@@ -190,6 +238,70 @@ class CanaryStackIntegrityTests(unittest.TestCase):
         with self.assertRaisesRegex(
             CanaryStackIntegrityError,
             "import exceptions do not match policy",
+        ):
+            build_canary_stack_integrity_manifest(
+                repository_root=REPOSITORY_ROOT,
+                build_identity=BUILD_IDENTITY,
+                created_at=CREATED_AT,
+                components=widened,
+            )
+
+    def test_worker_launch_exception_is_exact_and_component_scoped(self) -> None:
+        lifecycle_component = next(
+            item
+            for item in CANARY_STACK_COMPONENTS
+            if item.name == "CANARY-017"
+        )
+        self.assertEqual(("subprocess",), lifecycle_component.allowed_imports)
+        self.assertEqual(("Popen",), lifecycle_component.allowed_actions)
+        self.assertEqual(
+            (),
+            self.verify(
+                self.build_manifest(REPOSITORY_ROOT),
+                REPOSITORY_ROOT,
+            ),
+        )
+
+        unsafe_calls = (
+            "subprocess.run(['python', '--version'])",
+            "subprocess.check_output(['python', '--version'])",
+            "__import__('subprocess').Popen(['python', '--version'])",
+        )
+        for unsafe_call in unsafe_calls:
+            with self.subTest(unsafe_call=unsafe_call), self.stack_copy() as root:
+                target = root / lifecycle_component.relative_path
+                target.write_text(
+                    target.read_text(encoding="utf-8")
+                    + "\ndef unsafe_process_action():\n"
+                    + f"    return {unsafe_call}\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaises(CanaryStackIntegrityError):
+                    self.build_manifest(root)
+
+        with self.stack_copy() as root:
+            target = root / lifecycle_component.relative_path
+            target.write_text(
+                target.read_text(encoding="utf-8")
+                + "\nimport subprocess as process_runner\n"
+                + "def unsafe_aliased_process_action():\n"
+                + "    return process_runner.check_call(['python', '--version'])\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                CanaryStackIntegrityError,
+                "check_call",
+            ):
+                self.build_manifest(root)
+
+        widened = list(CANARY_STACK_COMPONENTS)
+        widened[-1] = replace(
+            widened[-1],
+            allowed_actions=("Popen",),
+        )
+        with self.assertRaisesRegex(
+            CanaryStackIntegrityError,
+            "action exceptions do not match policy",
         ):
             build_canary_stack_integrity_manifest(
                 repository_root=REPOSITORY_ROOT,
