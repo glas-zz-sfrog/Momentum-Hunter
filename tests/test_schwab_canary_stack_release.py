@@ -37,6 +37,7 @@ OWNED_PATHS = (
     "tests/test_release_gate.py",
     "tools/verify_release_gate.py",
 )
+REVIEWED_TOOL_PATH = "tools/reviewed_stack_verifier.py"
 
 
 class FinalCanaryStackReleaseTests(unittest.TestCase):
@@ -60,6 +61,7 @@ class FinalCanaryStackReleaseTests(unittest.TestCase):
             "docs/argus-office/ROADMAP.md",
             "reviewed stack roadmap\n",
         )
+        self.write(REVIEWED_TOOL_PATH, "REVIEWED_TOOL = True\n")
         self.commit("reviewed stack")
         self.source = self.head()
 
@@ -70,6 +72,7 @@ class FinalCanaryStackReleaseTests(unittest.TestCase):
                 self.source,
                 component.relative_path,
             )
+        self.checkout_file(self.source, REVIEWED_TOOL_PATH)
         self.write(
             "docs/argus-office/ROADMAP.md",
             "reconciled stack roadmap\n",
@@ -89,6 +92,11 @@ class FinalCanaryStackReleaseTests(unittest.TestCase):
                 ),
             ),
             integration_owned_paths=OWNED_PATHS,
+            equivalent_prefixes=(
+                "momentum_hunter/",
+                "tests/",
+                "tools/",
+            ),
         )
 
     def test_clean_synchronized_stack_emits_verified_v3_manifest(self) -> None:
@@ -257,6 +265,10 @@ class FinalCanaryStackReleaseTests(unittest.TestCase):
                 "tools/verify_canary_stack_release.py",
             ),
             DEFAULT_FINAL_CANARY_STACK_POLICY.integration_owned_paths,
+        )
+        self.assertEqual(
+            ("momentum_hunter/", "tests/", "tools/"),
+            DEFAULT_FINAL_CANARY_STACK_POLICY.equivalent_prefixes,
         )
 
     def test_render_is_stable_json_without_authority(self) -> None:

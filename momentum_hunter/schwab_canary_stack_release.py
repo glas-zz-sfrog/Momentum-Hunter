@@ -51,6 +51,11 @@ DEFAULT_FINAL_CANARY_STACK_POLICY: Final = (
             ),
         ),
         integration_owned_paths=_OWNED_PATHS,
+        equivalent_prefixes=(
+            "momentum_hunter/",
+            "tests/",
+            "tools/",
+        ),
     )
 )
 
