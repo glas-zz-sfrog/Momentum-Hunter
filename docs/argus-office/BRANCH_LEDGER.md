@@ -1,14 +1,25 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-27
+Date reconciled: 2026-07-28
 
 ## Current Truth
 
-Local and remote `master` are synchronized through SHADOW-012 implementation
-`c9c31f6` plus this governance closeout. The canonical product baseline contains the complete SHADOW-004 through
-SHADOW-012 stack, including visual-acceptance commit `307a2e1`, alongside the Python
+Local and remote `master` are synchronized at SHADOW-016 scheduling closeout
+`1af5b31`. The canonical product baseline contains the complete SHADOW-004 through
+SHADOW-016 stack, including visual-acceptance commit `307a2e1`, alongside the Python
 automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
+
+`codex/ARGUS-R035-candle-input-reconcile-1af5b31` is the only canonical R035
+implementation lane. It replays six focused read-only candle commits onto current
+`master`, adds a narrow file-boundary hardening closeout, and is verified pending
+merge after the frozen 2026-07-29 SHADOW-016 operational audit.
+
+`codex/ARGUS-R035-candle-input-hardening` is superseded because it starts from the
+older `4c35181` baseline and carries stale governance. The 62-commit
+`codex/ARGUS-R035-staged-schwab-chart-preview-host` integration stack is
+`DO_NOT_USE`; its focused candle content is already preserved on the canonical
+reconciliation branch without its unrelated history.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`, and
@@ -96,6 +107,10 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-R035-candle-input-reconcile-1af5b31` | Branch tip containing the R035 verification closeout | Yes; ordinary non-force feature-branch backup | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE / PUSHED_FEATURE_BRANCH` | Canonical current-baseline lane for bounded GET-only Schwab candle staging, verified inactive chart previews, read-only cutover inventory/preflight, and file-boundary hardening. | Merge only after the frozen SHADOW-016 operational audit releases `master`. |
+| `codex/ARGUS-R035-candle-input-hardening` | `00fcda6` | No | No | `SUPERSEDED` | Older-base source lane containing the six focused candle commits plus stale governance and obsolete rehearsal history. | Preserve as audit history; do not merge or continue. |
+| `codex/ARGUS-R035-staged-schwab-chart-preview-host` | `16107c7` | No | No | `DO_NOT_USE` | Contaminated 62-commit integration stack that mixes R035 preview work with unrelated branch history. | Preserve only for forensic reference; all valid focused content is reconciled elsewhere. |
+| `codex/ARGUS-SHADOW-016-017-reconcile-1af5b31` | `97884ea` | Yes | No | `IMPLEMENTED_PENDING_MERGE / PUSHED_FEATURE_BRANCH` | Preserves manual paperMoney reconciliation, model-error audit, immutable 5/10/20/30 evidence checkpoints, and checkpoint recovery on the frozen SHADOW-016 baseline. | Merge only after the scheduled opening audit; do not move the frozen runtime checkout early. |
 | `codex/ARGUS-SHADOW-013-opening-ceremony-hardening` | `58552da` | Via `master` | Yes | `MERGED_TO_LOCAL_MASTER` | Hardens semantic handoff completion, clock validity, frozen configuration, retry classification, proof-only opening rehearsal, outcome separation, and read-only heartbeat behavior. | Preserve branch; prepare the final-HEAD disabled proof-only task and real-session audit. |
 | `codex/ARGUS-SHADOW-012-scheduler-retry` | `c9c31f6` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Adds bounded one-minute Windows restarts to the idempotent Shadow opening task without changing other capture schedules. | Preserve as source history; use the regenerated SHADOW-012 final-HEAD bundle and inspect the first live run. |
 | `codex/ARGUS-SHADOW-011-proof-timestamp-ordering` | `3f8acb8` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Evaluates proof freshness after guarded OAuth/provider completion instead of against the pre-request clock, while preserving future-data rejection. | Preserve as source history; use only the regenerated SHADOW-011 final-HEAD bundle for the opening task. |

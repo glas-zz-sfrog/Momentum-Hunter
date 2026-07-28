@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -386,6 +387,10 @@ def write_cutover_inventory_receipt(
         raise CandleCutoverInventoryError(
             "The cutover inventory receipt cannot overwrite a source or data store."
         )
+    if target.exists():
+        raise CandleCutoverInventoryError(
+            "The cutover inventory receipt is write-once and already exists."
+        )
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
     try:
@@ -393,7 +398,12 @@ def write_cutover_inventory_receipt(
             json.dumps(dict(payload), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        temporary.replace(target)
+        try:
+            os.link(temporary, target)
+        except FileExistsError:
+            raise CandleCutoverInventoryError(
+                "The cutover inventory receipt is write-once and already exists."
+            ) from None
     finally:
         temporary.unlink(missing_ok=True)
     return target

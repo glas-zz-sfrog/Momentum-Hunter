@@ -293,6 +293,8 @@ class StagedSchwabChartTests(unittest.TestCase):
         )
 
     def restore_valid_stage(self) -> None:
+        self.candles_path.unlink(missing_ok=True)
+        self.manifest_path.unlink(missing_ok=True)
         self.target_report.write_text(
             json.dumps(
                 {

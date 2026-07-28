@@ -528,6 +528,46 @@ class SchwabPriceHistoryStagingTests(unittest.TestCase):
             self.assertEqual(b"legacy-daily", active_daily.read_bytes())
             self.assertEqual([], list(staged.parent.glob("*.tmp")))
 
+    def test_existing_unrelated_file_is_never_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            staged = Path(temporary) / "existing.json"
+            staged.write_bytes(b"preserve-this-unrelated-file")
+
+            with self.assertRaisesRegex(
+                SchwabPriceHistoryStagingError,
+                "not a replaceable inactive artifact",
+            ):
+                write_staged_price_history(
+                    [valid_result()],
+                    path=staged,
+                    active_paths=(),
+                )
+
+            self.assertEqual(
+                b"preserve-this-unrelated-file",
+                staged.read_bytes(),
+            )
+
+    def test_valid_inactive_stage_can_be_refreshed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            staged = Path(temporary) / "staging.json"
+            write_staged_price_history(
+                [valid_result()],
+                path=staged,
+                active_paths=(),
+            )
+
+            write_staged_price_history(
+                [valid_result(), valid_result(symbol="IWM", interval="Daily")],
+                path=staged,
+                active_paths=(),
+            )
+
+            payload = json.loads(staged.read_text(encoding="utf-8"))
+            self.assertEqual(2, len(payload["results"]))
+            self.assertFalse(payload["activeChartSource"])
+            self.assertEqual("UNAVAILABLE", payload["orderTransmission"])
+
     def test_active_source_paths_and_duplicate_results_are_refused(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

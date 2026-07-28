@@ -19,6 +19,7 @@ from momentum_hunter.schwab_price_history import (
     SCHWAB_PRICE_HISTORY_SOURCE,
     SchwabPriceBar,
     SchwabPriceHistoryResult,
+    SchwabPriceHistoryStagingError,
 )
 
 
@@ -63,6 +64,26 @@ class MutatingSource(RecordingSource):
     ) -> tuple[SchwabPriceHistoryResult, ...]:
         results = super().history_batch(symbols, intervals)
         self.report_path.write_text('{"changed": true}', encoding="utf-8")
+        return results
+
+
+class ArtifactMutatingSource(RecordingSource):
+    def __init__(
+        self,
+        target_path: Path,
+        results: tuple[SchwabPriceHistoryResult, ...],
+    ) -> None:
+        super().__init__(results)
+        self.target_path = target_path
+
+    def history_batch(
+        self,
+        symbols: tuple[str, ...],
+        intervals: tuple[str, ...],
+    ) -> tuple[SchwabPriceHistoryResult, ...]:
+        results = super().history_batch(symbols, intervals)
+        self.target_path.parent.mkdir(parents=True, exist_ok=True)
+        self.target_path.write_bytes(b"concurrent artifact must be preserved")
         return results
 
 
@@ -257,34 +278,108 @@ class CandidateCandleStagingTests(unittest.TestCase):
     def test_active_or_colliding_output_paths_fail_before_provider_access(self) -> None:
         active = self.root / "opportunity-minute-bars.json"
         alternate_active_name = self.root / "alternate" / "daily-ohlc-bars.json"
+        unrelated_output = self.root / "unrelated-output.json"
+        unrelated_manifest = self.root / "unrelated-manifest.json"
         active.write_text("legacy", encoding="utf-8")
+        unrelated_output.write_text("preserve output", encoding="utf-8")
+        unrelated_manifest.write_text("preserve manifest", encoding="utf-8")
         source = RecordingSource(all_results(("SPY", "IWM")))
 
-        with self.assertRaises(CandidateCandleStagingError):
-            stage_candidate_candles(
-                self.selection,
-                source=source,
-                output_path=active,
-                active_paths=(active,),
-            )
-        with self.assertRaises(CandidateCandleStagingError):
-            stage_candidate_candles(
-                self.selection,
-                source=source,
-                output_path=self.root / "same.json",
-                manifest_path=self.root / "same.json",
-                active_paths=(active,),
-            )
-        with self.assertRaises(CandidateCandleStagingError):
-            stage_candidate_candles(
-                self.selection,
-                source=source,
-                output_path=alternate_active_name,
-                active_paths=(active,),
-            )
+        cases = (
+            {
+                "output_path": active,
+                "active_paths": (active,),
+            },
+            {
+                "output_path": self.root / "same.json",
+                "manifest_path": self.root / "same.json",
+                "active_paths": (active,),
+            },
+            {
+                "output_path": alternate_active_name,
+                "active_paths": (active,),
+            },
+            {
+                "output_path": self.report,
+                "active_paths": (active,),
+            },
+            {
+                "output_path": self.root / "source-manifest-output.json",
+                "manifest_path": self.report,
+                "active_paths": (active,),
+            },
+            {
+                "output_path": unrelated_output,
+                "active_paths": (active,),
+            },
+            {
+                "output_path": self.root / "new-output.json",
+                "manifest_path": unrelated_manifest,
+                "active_paths": (active,),
+            },
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                with self.assertRaises(
+                    (
+                        CandidateCandleStagingError,
+                        SchwabPriceHistoryStagingError,
+                    )
+                ):
+                    stage_candidate_candles(
+                        self.selection,
+                        source=source,
+                        observed_at=OBSERVED_AT,
+                        **case,
+                    )
 
         self.assertEqual([], source.calls)
         self.assertEqual("legacy", active.read_text(encoding="utf-8"))
+        self.assertEqual(
+            "preserve output",
+            unrelated_output.read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            "preserve manifest",
+            unrelated_manifest.read_text(encoding="utf-8"),
+        )
+
+    def test_valid_inactive_stage_and_manifest_can_be_refreshed(self) -> None:
+        output = self.root / "refresh" / "candles.json"
+        report_before = self.report.read_bytes()
+        first_source = RecordingSource(all_results(("SPY", "IWM")))
+        stage_candidate_candles(
+            self.selection,
+            source=first_source,
+            output_path=output,
+            observed_at=OBSERVED_AT,
+        )
+        first_hash = hashlib.sha256(output.read_bytes()).hexdigest().upper()
+
+        refreshed_results = tuple(
+            result(symbol, interval, count=3)
+            for symbol in ("SPY", "IWM")
+            for interval in ("1m", "Daily")
+        )
+        second_source = RecordingSource(refreshed_results)
+        summary = stage_candidate_candles(
+            self.selection,
+            source=second_source,
+            output_path=output,
+            observed_at=OBSERVED_AT,
+        )
+
+        manifest_path = output.with_name("candles.manifest.json")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertNotEqual(first_hash, summary["stagedSha256"])
+        self.assertEqual(
+            summary["stagedSha256"],
+            manifest["stagedArtifact"]["sha256"],
+        )
+        staged_payload = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(3, len(staged_payload["results"][0]["bars"]))
+        self.assertEqual(report_before, self.report.read_bytes())
+        self.assertEqual(1, len(second_source.calls))
 
     def test_target_report_change_during_fetch_refuses_staging(self) -> None:
         output = self.root / "changed-source.json"
@@ -308,6 +403,38 @@ class CandidateCandleStagingTests(unittest.TestCase):
         self.assertFalse(
             output.with_name("changed-source.manifest.json").exists()
         )
+
+    def test_output_or_manifest_change_during_fetch_stops_before_staging(self) -> None:
+        for changed_part in ("output", "manifest"):
+            with self.subTest(changed_part=changed_part):
+                output = self.root / changed_part / "candles.json"
+                manifest = output.with_name("candles.manifest.json")
+                changed_path = output if changed_part == "output" else manifest
+                source = ArtifactMutatingSource(
+                    changed_path,
+                    all_results(("SPY", "IWM")),
+                )
+
+                with self.assertRaises(
+                    (
+                        CandidateCandleStagingError,
+                        SchwabPriceHistoryStagingError,
+                    )
+                ):
+                    stage_candidate_candles(
+                        self.selection,
+                        source=source,
+                        output_path=output,
+                        manifest_path=manifest,
+                        observed_at=OBSERVED_AT,
+                    )
+
+                self.assertEqual(
+                    b"concurrent artifact must be preserved",
+                    changed_path.read_bytes(),
+                )
+                unchanged_path = manifest if changed_part == "output" else output
+                self.assertFalse(unchanged_path.exists())
 
     def test_identity_duplicate_clock_and_candle_mismatches_fail_without_writes(self) -> None:
         output = self.root / "invalid.json"

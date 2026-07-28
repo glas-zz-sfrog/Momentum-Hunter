@@ -248,6 +248,17 @@ class CandleCutoverInventoryTests(unittest.TestCase):
             "READY_FOR_EXPLICIT_DESTRUCTIVE_DECISION",
             json.loads(receipt.read_text(encoding="utf-8"))["status"],
         )
+        first_receipt = receipt.read_bytes()
+        with self.assertRaisesRegex(
+            CandleCutoverInventoryError,
+            "write-once",
+        ):
+            write_cutover_inventory_receipt(
+                payload,
+                receipt,
+                protected_inputs=protected,
+            )
+        self.assertEqual(first_receipt, receipt.read_bytes())
 
     def test_module_contains_no_destructive_or_active_chart_operation(self) -> None:
         source = (

@@ -22,6 +22,8 @@ from momentum_hunter.schwab_price_history import (
     SchwabPriceHistorySource,
     normalize_symbol,
     parse_timestamp,
+    require_artifact_snapshot_unchanged,
+    replaceable_staged_artifact_snapshot,
     timestamp_text,
     write_staged_price_history,
 )
@@ -32,6 +34,7 @@ MONITOR_TARGET_REPORT_PATTERN = "opportunity-monitor-targets-*.json"
 DEFAULT_REPORTS_DIR = DATA_DIR / "reports"
 DEFAULT_STAGED_CANDLES_PATH = DATA_DIR / "staging" / "schwab-candidate-candles.json"
 MAX_TARGET_REPORT_BYTES = 2 * 1024 * 1024
+MAX_STAGING_MANIFEST_BYTES = 4 * 1024 * 1024
 REQUIRED_INTERVALS = ("1m", "Daily")
 INTRADAY_STALE_AFTER = timedelta(days=1)
 DAILY_STALE_AFTER = timedelta(days=7)
@@ -159,7 +162,10 @@ def stage_candidate_candles(
         output_path,
         manifest_path=manifest_path,
         active_paths=active_paths,
+        protected_inputs=(selection.report_path,),
     )
+    staged_snapshot = replaceable_staged_artifact_snapshot(output)
+    manifest_snapshot = replaceable_staging_manifest_snapshot(manifest)
     require_selection_source_unchanged(selection)
     history_source = source or SchwabPriceHistorySource()
     history_batch = getattr(history_source, "history_batch", None)
@@ -175,10 +181,13 @@ def stage_candidate_candles(
         results,
         observed_at=checked_at,
     )
+    require_artifact_snapshot_unchanged(output, staged_snapshot)
+    require_manifest_snapshot_unchanged(manifest, manifest_snapshot)
     write_staged_price_history(
         results,
         path=output,
         active_paths=active_paths,
+        expected_existing=staged_snapshot,
     )
     staged_sha256 = file_sha256(output)
     manifest_payload = {
@@ -213,7 +222,11 @@ def stage_candidate_candles(
             "reason": "Legacy candle purge and actual-source cutover remain separately gated.",
         },
     }
-    atomic_write_json(manifest, manifest_payload)
+    atomic_write_json(
+        manifest,
+        manifest_payload,
+        expected_existing=manifest_snapshot,
+    )
     return {
         "schemaVersion": STAGING_MANIFEST_SCHEMA_VERSION,
         "status": "PASS",
@@ -329,6 +342,7 @@ def validate_output_paths(
     *,
     manifest_path: Path | None,
     active_paths: Sequence[Path],
+    protected_inputs: Sequence[Path] = (),
 ) -> tuple[Path, Path]:
     output = Path(output_path).resolve()
     manifest = (
@@ -336,7 +350,10 @@ def validate_output_paths(
         if manifest_path is not None
         else output.with_name(f"{output.stem}.manifest.json")
     )
-    protected = {Path(item).resolve() for item in active_paths}
+    protected = {
+        Path(item).resolve()
+        for item in (*active_paths, *protected_inputs)
+    }
     if (
         output in protected
         or manifest in protected
@@ -344,7 +361,7 @@ def validate_output_paths(
         or manifest.name.casefold() in ACTIVE_CANDLE_FILENAMES
     ):
         raise CandidateCandleStagingError(
-            "Candidate candle staging cannot overwrite an active chart source."
+            "Candidate candle staging cannot overwrite a source or active chart artifact."
         )
     if output == manifest:
         raise CandidateCandleStagingError(
@@ -368,7 +385,72 @@ def require_selection_source_unchanged(
         )
 
 
-def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
+def replaceable_staging_manifest_snapshot(path: Path) -> bytes | None:
+    target = Path(path).resolve()
+    try:
+        stat = target.stat()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise CandidateCandleStagingError(
+            "The existing candle staging manifest could not be inspected."
+        ) from None
+    if (
+        target.is_symlink()
+        or not target.is_file()
+        or stat.st_size <= 0
+        or stat.st_size > MAX_STAGING_MANIFEST_BYTES
+    ):
+        raise CandidateCandleStagingError(
+            "The existing candle staging manifest is not replaceable."
+        )
+    try:
+        raw = target.read_bytes()
+        payload = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        raise CandidateCandleStagingError(
+            "The existing candle staging manifest is not replaceable."
+        ) from None
+    activation = payload.get("activation") if isinstance(payload, Mapping) else None
+    staged_artifact = (
+        payload.get("stagedArtifact")
+        if isinstance(payload, Mapping)
+        else None
+    )
+    selection = payload.get("selection") if isinstance(payload, Mapping) else None
+    coverage = payload.get("coverage") if isinstance(payload, Mapping) else None
+    if (
+        not isinstance(payload, Mapping)
+        or payload.get("schemaVersion") != STAGING_MANIFEST_SCHEMA_VERSION
+        or payload.get("status") != "STAGED_INACTIVE"
+        or payload.get("source") != SCHWAB_PRICE_HISTORY_SOURCE
+        or payload.get("readOnlyProvider") is not True
+        or payload.get("activeChartSource") is not False
+        or payload.get("transmitting") is not False
+        or payload.get("orderTransmission") != "UNAVAILABLE"
+        or payload.get("accountDataIncluded") is not False
+        or not isinstance(payload.get("generatedAt"), str)
+        or not isinstance(selection, Mapping)
+        or not isinstance(selection.get("symbols"), list)
+        or not isinstance(staged_artifact, Mapping)
+        or not isinstance(staged_artifact.get("path"), str)
+        or not isinstance(staged_artifact.get("sha256"), str)
+        or not isinstance(coverage, list)
+        or not isinstance(activation, Mapping)
+        or activation.get("permitted") is not False
+    ):
+        raise CandidateCandleStagingError(
+            "The existing candle staging manifest is not replaceable."
+        )
+    return raw
+
+
+def atomic_write_json(
+    path: Path,
+    payload: Mapping[str, Any],
+    *,
+    expected_existing: bytes | None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     try:
@@ -376,9 +458,26 @@ def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
             json.dumps(dict(payload), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        require_manifest_snapshot_unchanged(path, expected_existing)
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def require_manifest_snapshot_unchanged(
+    path: Path,
+    expected: bytes | None,
+) -> None:
+    try:
+        current = replaceable_staging_manifest_snapshot(path)
+    except CandidateCandleStagingError:
+        raise CandidateCandleStagingError(
+            "The candle staging manifest changed during the write."
+        ) from None
+    if current != expected:
+        raise CandidateCandleStagingError(
+            "The candle staging manifest changed during the write."
+        )
 
 
 def file_sha256(path: Path) -> str:

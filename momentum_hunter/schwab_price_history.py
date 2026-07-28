@@ -41,6 +41,7 @@ HTTP_TIMEOUT = (5.0, 30.0)
 MAX_PRICE_HISTORY_RESPONSE_BYTES = 4 * 1024 * 1024
 PRICE_HISTORY_RESPONSE_CHUNK_BYTES = 64 * 1024
 MAX_PRICE_HISTORY_SYMBOLS = 25
+MAX_STAGED_CANDLE_ARTIFACT_BYTES = 256 * 1024 * 1024
 SUPPORTED_PRICE_HISTORY_INTERVALS = frozenset({"1m", "Daily"})
 MAX_PRICE_HISTORY_BARS = {
     "1m": 4_000,
@@ -48,6 +49,7 @@ MAX_PRICE_HISTORY_BARS = {
 }
 INTRADAY_LOOKBACK = timedelta(days=7)
 MAX_PROVIDER_FUTURE = timedelta(seconds=5)
+_UNCHECKED_EXISTING_ARTIFACT = object()
 
 
 class SchwabPriceHistoryError(RuntimeError):
@@ -415,6 +417,7 @@ def write_staged_price_history(
     *,
     path: Path = DEFAULT_STAGING_PATH,
     active_paths: Sequence[Path] = tuple(ACTIVE_CANDLE_PATHS),
+    expected_existing: object = _UNCHECKED_EXISTING_ARTIFACT,
 ) -> Path:
     target = Path(path).resolve()
     protected = {Path(item).resolve() for item in active_paths}
@@ -422,6 +425,13 @@ def write_staged_price_history(
         raise SchwabPriceHistoryStagingError(
             "Schwab candle staging cannot overwrite an active chart source."
         )
+    if expected_existing is _UNCHECKED_EXISTING_ARTIFACT:
+        existing_snapshot = replaceable_staged_artifact_snapshot(target)
+    elif expected_existing is None or isinstance(expected_existing, bytes):
+        existing_snapshot = expected_existing
+        require_artifact_snapshot_unchanged(target, existing_snapshot)
+    else:
+        raise TypeError("Expected staged-artifact state must be bytes or None.")
     normalized = tuple(results)
     if not normalized:
         raise SchwabPriceHistoryStagingError(
@@ -465,10 +475,79 @@ def write_staged_price_history(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        require_artifact_snapshot_unchanged(target, existing_snapshot)
         temporary.replace(target)
     finally:
         temporary.unlink(missing_ok=True)
     return target
+
+
+def replaceable_staged_artifact_snapshot(path: Path) -> bytes | None:
+    target = Path(path).resolve()
+    try:
+        stat = target.stat()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise SchwabPriceHistoryStagingError(
+            "The existing candle staging target could not be inspected."
+        ) from None
+    if (
+        target.is_symlink()
+        or not target.is_file()
+        or stat.st_size <= 0
+        or stat.st_size > MAX_STAGED_CANDLE_ARTIFACT_BYTES
+    ):
+        raise SchwabPriceHistoryStagingError(
+            "The existing candle staging target is not a replaceable inactive artifact."
+        )
+    try:
+        raw = target.read_bytes()
+        payload = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        raise SchwabPriceHistoryStagingError(
+            "The existing candle staging target is not a replaceable inactive artifact."
+        ) from None
+    if (
+        not isinstance(payload, Mapping)
+        or payload.get("schemaVersion") != STAGED_CANDLE_SCHEMA_VERSION
+        or payload.get("source") != SCHWAB_PRICE_HISTORY_SOURCE
+        or payload.get("readOnlyProvider") is not True
+        or payload.get("activeChartSource") is not False
+        or payload.get("transmitting") is not False
+        or payload.get("orderTransmission") != "UNAVAILABLE"
+        or payload.get("accountDataIncluded") is not False
+        or not isinstance(payload.get("generatedAt"), str)
+        or not isinstance(payload.get("results"), list)
+        or not payload["results"]
+        or any(
+            not isinstance(item, Mapping)
+            or not isinstance(item.get("symbol"), str)
+            or item.get("interval") not in SUPPORTED_PRICE_HISTORY_INTERVALS
+            or not isinstance(item.get("bars"), list)
+            for item in payload["results"]
+        )
+    ):
+        raise SchwabPriceHistoryStagingError(
+            "The existing candle staging target is not a replaceable inactive artifact."
+        )
+    return raw
+
+
+def require_artifact_snapshot_unchanged(
+    path: Path,
+    expected: bytes | None,
+) -> None:
+    try:
+        current = replaceable_staged_artifact_snapshot(path)
+    except SchwabPriceHistoryStagingError:
+        raise SchwabPriceHistoryStagingError(
+            "The candle staging target changed during the write."
+        ) from None
+    if current != expected:
+        raise SchwabPriceHistoryStagingError(
+            "The candle staging target changed during the write."
+        )
 
 
 def normalize_symbol(symbol: object) -> str:
