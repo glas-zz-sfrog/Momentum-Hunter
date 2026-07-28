@@ -49,6 +49,7 @@ create a rubber-stamp Steven item.
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted visual baseline; subsequent nonvisual roadmap work follows standing delegation |
 | R030-R034 staged candle and cutover preflight | `AUTOMATED_PASS`; live 22/22-target, 44/44-result, 710-row proof plus source-branch tests and consolidated 299 focused, 1,207 Python, and 216 .NET tests pass | `NO_STEVEN_ACTION`; read-only/nonvisual preparation is standing-authorized | `IMPLEMENTED_PENDING_MERGE` on `codex/ARGUS-INTEGRATION-001-pending-foundation` | After SHADOW-014 audit, rerun the required write-once preflight on the final integrated head before the destructive decision |
+| R036 WPF staged Schwab chart preview | `AUTOMATED_PASS`; 19 focused and 222 total .NET tests, 43 bounded Python host/staging tests, zero-warning Release build, and normal/minimum offscreen proof pass | `MANUAL_PENDING` | `IMPLEMENTED_PENDING_MERGE` on the sole R035/R036 product successor | Confirm the explicit source selector, truthful inactive-preview language, no fallback, stored-default restart, compact layout, and continued simulation/nontransmitting boundary |
 | Actual candle-data cutover purge | `NOT_STARTED`; exact two legacy files and 710 mirrored `CRWV` rows are identified; R034 preflight still reports `cutoverPermitted: false` | Destructive decision not yet due | Future market-data cutover task | Interrupt Steven immediately before deleting the exact legacy paths/rows; visual cutover proof remains manual |
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
@@ -1027,3 +1028,45 @@ Physical results:
 
 This launcher change grants no credential, OAuth, account, broker, Paper, Live,
 order, provider-fetch, sample-start, merge, or push authority.
+
+## R036 WPF Staged Schwab Chart Preview
+
+Branch: `codex/ARGUS-R035-staged-schwab-chart-preview-host`
+
+Automated result: `AUTOMATED_PASS`
+
+Steven status: `MANUAL_PENDING`
+
+Proof:
+
+- `docs/argus-office/reports/releases/ARGUS-R036-wpf-staged-chart-preview-cli-proof.png`
+  shows `Stored` and explicitly selected `Staged preview` at `1440x900`.
+- `docs/argus-office/reports/releases/ARGUS-R036-wpf-staged-chart-preview-minimum-window-proof.png`
+  repeats both states at the supported `1120x650` minimum window.
+- Offscreen rendering did not focus the desktop, move the pointer, fetch Schwab,
+  write candle evidence, activate a source, or invoke any broker/order action.
+
+Exact operator checks:
+
+1. Open the R036 review build and confirm the chart starts with `Stored` selected;
+   `Staged preview` must not select itself automatically.
+2. Click `Staged preview`. Confirm only that segment highlights and the footer says
+   `INACTIVE STAGED PREVIEW`, `Active chart source unchanged`, and
+   `Nontransmitting`.
+3. If no staged artifact exists, confirm the chart says
+   `No staged preview candles available` and does not show stored, mock, or CRWV
+   fallback candles. If a verified staged artifact exists, confirm its symbol,
+   interval, candles, and inactive Schwab lineage agree.
+4. Click `Stored`. Confirm the previous stored state returns and the preview warning
+   disappears.
+5. Close and reopen the review build. Confirm it starts on `Stored`; the preview
+   choice was not persisted as an active source.
+6. At normal size and the minimum supported window, confirm the symbol, source
+   summary, selector, chart, and footer do not overlap. Truncated source/footer text
+   must expose the complete value in a tooltip.
+7. Confirm the global mode remains `SIMULATION`, no Paper/Live execution control
+   appears, and choosing either chart source cannot submit, replace, or cancel an
+   order.
+
+This check accepts presentation only. Actual candle activation and deletion of the
+legacy CRWV source remain a separate destructive decision gate.

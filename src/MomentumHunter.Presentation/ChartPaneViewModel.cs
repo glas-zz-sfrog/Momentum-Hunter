@@ -48,8 +48,14 @@ public sealed class ChartPaneViewModel : ObservableObject
 
     public string SourceSummary { get; private set; } = "Chart evidence unavailable.";
 
+    public bool PreviewOnly { get; private set; }
+
+    public bool ActiveChartSource { get; private set; } = true;
+
     public string EmptyStateText => DataState switch
     {
+        ChartDataState.InsufficientData when PreviewOnly => "Insufficient staged preview candles",
+        ChartDataState.Unavailable when PreviewOnly => "No staged preview candles available",
         ChartDataState.InsufficientData => "Insufficient stored candles",
         ChartDataState.Unavailable => "No stored candles available",
         _ => "No deterministic candles available",
@@ -114,10 +120,14 @@ public sealed class ChartPaneViewModel : ObservableObject
         DataState = snapshot.State;
         DataLineage = snapshot.DataLineage;
         SourceSummary = snapshot.Summary;
+        PreviewOnly = snapshot.PreviewOnly;
+        ActiveChartSource = snapshot.ActiveChartSource;
         ReplaceCandles(snapshot.Candles);
         OnPropertyChanged(nameof(DataState));
         OnPropertyChanged(nameof(DataLineage));
         OnPropertyChanged(nameof(SourceSummary));
+        OnPropertyChanged(nameof(PreviewOnly));
+        OnPropertyChanged(nameof(ActiveChartSource));
         OnPropertyChanged(nameof(EmptyStateText));
         OnPropertyChanged(nameof(DetailLabel));
     }

@@ -29,6 +29,12 @@ public interface IPythonEngineHostConnection
         CancellationToken cancellationToken = default) =>
         Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose read-only chart snapshots."));
 
+    Task<JsonElement> GetStagedSchwabChartPreviewAsync(
+        string symbol,
+        string interval,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<JsonElement>(new NotSupportedException("This Python Engine Host connection does not expose inactive staged Schwab chart previews."));
+
     Task<JsonElement> GetTechnicalResearchSnapshotAsync(
         string symbol,
         CancellationToken cancellationToken = default) =>

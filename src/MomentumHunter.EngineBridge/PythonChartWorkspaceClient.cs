@@ -7,6 +7,8 @@ namespace MomentumHunter.EngineBridge;
 
 public sealed class PythonChartWorkspaceClient : IChartWorkspaceClient
 {
+    public const string StagedSchwabSourceLabel = "Schwab Trader API price history (inactive staging)";
+
     private readonly IPythonEngineHostConnection _connection;
 
     public PythonChartWorkspaceClient(IPythonEngineHostConnection connection)
@@ -23,21 +25,57 @@ public sealed class PythonChartWorkspaceClient : IChartWorkspaceClient
         var requestedInterval = interval.Trim();
         var snapshot = PythonChartSnapshotMapper.Map(
             await _connection.GetChartSnapshotAsync(requestedSymbol, requestedInterval, cancellationToken));
-        if (!string.Equals(snapshot.Symbol, requestedSymbol, StringComparison.Ordinal)
-            || !string.Equals(snapshot.Interval, requestedInterval, StringComparison.Ordinal))
+        EnsureIdentity(snapshot, requestedSymbol, requestedInterval);
+        if (snapshot.PreviewOnly || !snapshot.ActiveChartSource)
         {
             throw new InvalidDataException(
-                $"Python chart snapshot identity mismatch: requested {requestedSymbol} {requestedInterval}, "
-                + $"received {snapshot.Symbol} {snapshot.Interval}.");
+                "The active chart boundary returned preview-only or inactive chart evidence.");
         }
 
         return snapshot;
+    }
+
+    public async Task<ChartSnapshot> GetStagedPreviewAsync(
+        string symbol,
+        string interval,
+        CancellationToken cancellationToken = default)
+    {
+        var requestedSymbol = symbol.Trim().ToUpperInvariant();
+        var requestedInterval = interval.Trim();
+        var snapshot = PythonChartSnapshotMapper.MapStagedPreview(
+            await _connection.GetStagedSchwabChartPreviewAsync(
+                requestedSymbol,
+                requestedInterval,
+                cancellationToken));
+        EnsureIdentity(snapshot, requestedSymbol, requestedInterval);
+        return snapshot;
+    }
+
+    private static void EnsureIdentity(
+        ChartSnapshot snapshot,
+        string requestedSymbol,
+        string requestedInterval)
+    {
+        if (string.Equals(snapshot.Symbol, requestedSymbol, StringComparison.Ordinal)
+            && string.Equals(snapshot.Interval, requestedInterval, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        throw new InvalidDataException(
+            $"Python chart snapshot identity mismatch: requested {requestedSymbol} {requestedInterval}, "
+            + $"received {snapshot.Symbol} {snapshot.Interval}.");
     }
 }
 
 public static class PythonChartSnapshotMapper
 {
-    public static ChartSnapshot Map(JsonElement root)
+    public static ChartSnapshot Map(JsonElement root) => Map(root, requireStagedPreview: false);
+
+    public static ChartSnapshot MapStagedPreview(JsonElement root) =>
+        Map(root, requireStagedPreview: true);
+
+    private static ChartSnapshot Map(JsonElement root, bool requireStagedPreview)
     {
         if (root.ValueKind != JsonValueKind.Object)
         {
@@ -53,6 +91,21 @@ public static class PythonChartSnapshotMapper
         var observedAt = Timestamp(root, "observedAt", DateTimeOffset.UtcNow);
         var asOf = Timestamp(root, "asOf", observedAt);
         var lineage = Object(root, "lineage");
+        var previewOnly = Boolean(root, "previewOnly") ?? false;
+        var activeChartSource = Boolean(root, "activeChartSource") ?? true;
+        if (requireStagedPreview
+            && (!previewOnly
+                || activeChartSource
+                || Boolean(root, "transmitting") is not false
+                || !string.Equals(String(root, "orderTransmission"), "UNAVAILABLE", StringComparison.Ordinal)
+                || !string.Equals(
+                    String(lineage, "sourceLabel"),
+                    PythonChartWorkspaceClient.StagedSchwabSourceLabel,
+                    StringComparison.Ordinal)))
+        {
+            throw new InvalidDataException(
+                "The Python staged chart preview is missing its inactive, nontransmitting safety envelope.");
+        }
         var candles = Array(root, "candles").Select(Candle).ToArray();
         if (candles.Any(candle => candle.Open <= 0m
             || candle.High < Math.Max(candle.Open, Math.Max(candle.Close, candle.Low))
@@ -74,7 +127,9 @@ public static class PythonChartSnapshotMapper
                 String(lineage, "sourceLabel") ?? "Unavailable chart source",
                 Timestamp(lineage, "asOf", asOf),
                 String(lineage, "summary") ?? "Chart source lineage unavailable."),
-            candles);
+            candles,
+            previewOnly,
+            activeChartSource);
     }
 
     private static CandleSnapshot Candle(JsonElement item)
@@ -135,6 +190,20 @@ public static class PythonChartSnapshotMapper
         return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)
             ? number
             : null;
+    }
+
+    private static bool? Boolean(JsonElement item, string name)
+    {
+        if (!Property(item, name, out var value))
+        {
+            return null;
+        }
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null,
+        };
     }
 
     private static long? Long(JsonElement item, string name)

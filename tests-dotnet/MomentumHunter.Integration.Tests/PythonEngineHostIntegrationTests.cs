@@ -53,6 +53,7 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.Contains(PythonEngineHostProtocol.GetSimulationWorkspaceSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetShadowTradingSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetChartSnapshot, first.Capabilities);
+            Assert.Contains(PythonEngineHostProtocol.GetStagedSchwabChartPreview, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetTechnicalResearchSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetSavedWatchlistSnapshot, first.Capabilities);
             Assert.Contains(PythonEngineHostProtocol.GetDailyWorkflowSnapshot, first.Capabilities);
