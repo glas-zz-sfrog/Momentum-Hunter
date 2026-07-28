@@ -6,11 +6,15 @@ import math
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
-from typing import Any, Protocol, Sequence
+from typing import Any, Callable, Protocol, Sequence
 
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.monitor_targets import latest_trade_report_path
 from momentum_hunter.opportunity_alerts import OPPORTUNITY_OBSERVATIONS_PATH, PriceObservation, load_price_observations
+from momentum_hunter.shadow_evidence_checkpoints import (
+    SHADOW_CHECKPOINT_THRESHOLDS,
+    generate_shadow_evidence_checkpoints,
+)
 from momentum_hunter.shadow_trading import (
     SHADOW_MODE,
     SHADOW_STATE_PATH,
@@ -75,6 +79,9 @@ class ShadowWorkspaceService:
         paths: ShadowWorkspacePaths | None = None,
         service: ShadowTradingService | None = None,
         quote_source: ShadowQuoteSource | ShadowBatchQuoteSource | None = None,
+        evidence_checkpoint_generator: (
+            Callable[[datetime], dict[str, Any]] | None
+        ) = None,
     ) -> None:
         production_defaults = paths is None and service is None
         self.paths = paths or ShadowWorkspacePaths.from_data_dir()
@@ -91,6 +98,19 @@ class ShadowWorkspaceService:
             self.quote_source = PersistedObservationQuoteSource(
                 self.paths.observations_path
             )
+        self._evidence_checkpoint_generator = (
+            evidence_checkpoint_generator
+            or (
+                lambda generated_at: generate_shadow_evidence_checkpoints(
+                    state_path=self.service.store.path,
+                    output_dir=(
+                        self.paths.reports_dir
+                        / "shadow-evidence-checkpoints"
+                    ),
+                    generated_at=generated_at,
+                )
+            )
+        )
 
     def snapshot(self) -> dict[str, Any]:
         return self.service.snapshot()
@@ -250,9 +270,18 @@ class ShadowWorkspaceService:
 
     def advance_observations(self, *, received_at: datetime | None = None) -> dict[str, Any]:
         received_at = received_at or now_central()
+        initial_snapshot = self.service.snapshot()
+        initial_eligible_count = _eligible_completed_count(
+            initial_snapshot
+        )
+        checkpoint_preflight = (
+            self._evidence_checkpoint_generator(received_at)
+            if initial_eligible_count in SHADOW_CHECKPOINT_THRESHOLDS
+            else None
+        )
         active_symbols = {
             trade["symbol"]
-            for trade in self.service.snapshot()["trades"]
+            for trade in initial_snapshot["trades"]
             if trade["status"] in {"pending_entry", "partially_filled", "open"}
         }
         batch_loader = getattr(self.quote_source, "quotes", None)
@@ -275,6 +304,8 @@ class ShadowWorkspaceService:
                 received_at=received_at,
                 active_symbols=active_symbols,
                 requested_symbols=set(tracked_symbols),
+                initial_eligible_count=initial_eligible_count,
+                checkpoint_preflight=checkpoint_preflight,
             )
         observations = sorted(
             load_price_observations(self.paths.observations_path),
@@ -345,6 +376,15 @@ class ShadowWorkspaceService:
                     horizon_at=trade.outcome.exit_timestamp,
                 )
         snapshot = self.service.snapshot()
+        final_eligible_count = _eligible_completed_count(snapshot)
+        evidence_checkpoints = (
+            checkpoint_preflight
+            if (
+                checkpoint_preflight is not None
+                and final_eligible_count == initial_eligible_count
+            )
+            else self._evidence_checkpoint_generator(received_at)
+        )
         return {
             "mode": SHADOW_MODE,
             "observationsSeen": len(observations),
@@ -357,6 +397,7 @@ class ShadowWorkspaceService:
                 if trade["status"] in {"pending_entry", "partially_filled", "open"}
             ),
             "completedTradeCount": snapshot["metrics"]["completedTradeCount"],
+            "evidenceCheckpoints": evidence_checkpoints,
             "snapshot": snapshot,
         }
 
@@ -367,6 +408,8 @@ class ShadowWorkspaceService:
         received_at: datetime,
         active_symbols: set[str],
         requested_symbols: set[str],
+        initial_eligible_count: int,
+        checkpoint_preflight: dict[str, Any] | None,
     ) -> dict[str, Any]:
         normalized: dict[str, dict[str, Any]] = {}
         invalid_quote_symbols: list[str] = []
@@ -430,6 +473,15 @@ class ShadowWorkspaceService:
                     horizon_at=trade.outcome.exit_timestamp,
                 )
         snapshot = self.service.snapshot()
+        final_eligible_count = _eligible_completed_count(snapshot)
+        evidence_checkpoints = (
+            checkpoint_preflight
+            if (
+                checkpoint_preflight is not None
+                and final_eligible_count == initial_eligible_count
+            )
+            else self._evidence_checkpoint_generator(received_at)
+        )
         return {
             "mode": SHADOW_MODE,
             "observationsSeen": len(normalized),
@@ -443,6 +495,7 @@ class ShadowWorkspaceService:
                 if trade["status"] in {"pending_entry", "partially_filled", "open"}
             ),
             "completedTradeCount": snapshot["metrics"]["completedTradeCount"],
+            "evidenceCheckpoints": evidence_checkpoints,
             "snapshot": snapshot,
         }
 
@@ -500,6 +553,20 @@ def tracked_shadow_symbols(
             for item in cycle.get("benchmark_symbols", [])
         )
     return tuple(sorted(symbol for symbol in symbols if symbol))
+
+
+def _eligible_completed_count(snapshot: dict[str, Any]) -> int:
+    sample = snapshot.get("sample")
+    value = (
+        sample.get("eligibleCompleted")
+        if isinstance(sample, dict)
+        else None
+    )
+    return (
+        value
+        if isinstance(value, int) and not isinstance(value, bool)
+        else -1
+    )
 
 
 def provider_observation(quote: dict[str, Any]) -> dict[str, Any]:

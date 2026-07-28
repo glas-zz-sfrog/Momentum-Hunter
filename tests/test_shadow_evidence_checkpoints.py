@@ -28,10 +28,15 @@ from momentum_hunter.shadow_trading import (
     ShadowSampleActivation,
     ShadowSampleActivationStore,
     ShadowStateStore,
+    ShadowTradingState,
     ShadowTradingService,
     build_shadow_sample_metadata,
     canonical_json,
     shadow_sample_metadata_to_dict,
+)
+from momentum_hunter.workstation_shadow import (
+    ShadowWorkspacePaths,
+    ShadowWorkspaceService,
 )
 
 
@@ -370,6 +375,188 @@ class ShadowEvidenceCheckpointTests(unittest.TestCase):
         self.assertEqual(state_before, self.state_path.read_bytes())
         self.assertEqual(activation_before, self.activation_path.read_bytes())
 
+    def test_workspace_automatically_freezes_exact_checkpoint_once(
+        self,
+    ) -> None:
+        store = ShadowStateStore(self.state_path)
+        store.save(ShadowTradingState())
+        ShadowSampleActivationStore(self.activation_path).save_once(
+            self.activation
+        )
+        source_before = self.state_path.read_bytes()
+        activation_before = self.activation_path.read_bytes()
+        snapshot = _snapshot(5, self.metadata)
+        snapshot["trades"] = []
+        snapshot["metrics"] = snapshot["reviewMetrics"]
+        paths = ShadowWorkspacePaths(
+            reports_dir=self.output_dir,
+            observations_path=self.root / "observations.json",
+            state_path=self.state_path,
+        )
+
+        with patch.object(
+            ShadowTradingService,
+            "snapshot",
+            return_value=snapshot,
+        ):
+            first_workspace = ShadowWorkspaceService(
+                paths=paths,
+                service=ShadowTradingService(
+                    store=store,
+                    policy=self.policy,
+                    sample_version=self.metadata.sample_version,
+                ),
+                quote_source=_EmptyBatchQuoteSource(),
+            )
+            first = first_workspace.advance_observations(
+                received_at=self.generated_at
+            )
+            checkpoint_path = Path(
+                first["evidenceCheckpoints"]["checkpoints"][0]["jsonPath"]
+            )
+            checkpoint_before = checkpoint_path.read_bytes()
+
+            restarted_workspace = ShadowWorkspaceService(
+                paths=paths,
+                service=ShadowTradingService(
+                    store=store,
+                    policy=self.policy,
+                    sample_version=self.metadata.sample_version,
+                ),
+                quote_source=_EmptyBatchQuoteSource(),
+            )
+            repeated = restarted_workspace.advance_observations(
+                received_at=self.generated_at + timedelta(minutes=5)
+            )
+
+        self.assertEqual(
+            "CHECKPOINTS_AVAILABLE",
+            first["evidenceCheckpoints"]["status"],
+        )
+        self.assertTrue(
+            first["evidenceCheckpoints"]["checkpoints"][0]["created"]
+        )
+        self.assertFalse(
+            repeated["evidenceCheckpoints"]["checkpoints"][0]["created"]
+        )
+        self.assertEqual(checkpoint_before, checkpoint_path.read_bytes())
+        self.assertEqual(source_before, self.state_path.read_bytes())
+        self.assertEqual(activation_before, self.activation_path.read_bytes())
+
+    def test_workspace_does_not_silence_checkpoint_failure(self) -> None:
+        store = ShadowStateStore(self.state_path)
+
+        def fail_checkpoint(_generated_at: datetime) -> dict:
+            raise ShadowEvidenceCheckpointError(
+                "Synthetic checkpoint failure."
+            )
+
+        workspace = ShadowWorkspaceService(
+            paths=ShadowWorkspacePaths(
+                reports_dir=self.output_dir,
+                observations_path=self.root / "observations.json",
+                state_path=self.state_path,
+            ),
+            service=ShadowTradingService(store=store),
+            quote_source=_EmptyBatchQuoteSource(),
+            evidence_checkpoint_generator=fail_checkpoint,
+        )
+
+        with self.assertRaisesRegex(
+            ShadowEvidenceCheckpointError,
+            "Synthetic checkpoint failure",
+        ):
+            workspace.advance_observations(
+                received_at=self.generated_at
+            )
+
+        self.assertFalse(self.output_dir.exists())
+        self.assertFalse(self.state_path.exists())
+
+    def test_persisted_observation_path_returns_checkpoint_result(
+        self,
+    ) -> None:
+        calls: list[datetime] = []
+
+        def checkpoint(generated_at: datetime) -> dict:
+            calls.append(generated_at)
+            return {
+                "status": "AWAITING_FIRST_CHECKPOINT",
+                "checkpoints": [],
+                "transmitting": False,
+            }
+
+        workspace = ShadowWorkspaceService(
+            paths=ShadowWorkspacePaths(
+                reports_dir=self.output_dir,
+                observations_path=self.root / "observations.json",
+                state_path=self.state_path,
+            ),
+            service=ShadowTradingService(
+                store=ShadowStateStore(self.state_path)
+            ),
+            quote_source=_SingleQuoteSource(),
+            evidence_checkpoint_generator=checkpoint,
+        )
+
+        result = workspace.advance_observations(
+            received_at=self.generated_at
+        )
+
+        self.assertEqual([self.generated_at], calls)
+        self.assertEqual(
+            "AWAITING_FIRST_CHECKPOINT",
+            result["evidenceCheckpoints"]["status"],
+        )
+        self.assertFalse(self.state_path.exists())
+
+    def test_threshold_checkpoint_failure_stops_before_quote_processing(
+        self,
+    ) -> None:
+        store = ShadowStateStore(self.state_path)
+        source = _EmptyBatchQuoteSource()
+        snapshot = _snapshot(5, self.metadata)
+        snapshot["trades"] = [
+            {
+                "symbol": "TEST",
+                "status": "open",
+            }
+        ]
+        snapshot["metrics"] = snapshot["reviewMetrics"]
+
+        def fail_checkpoint(_generated_at: datetime) -> dict:
+            raise ShadowEvidenceCheckpointError(
+                "Synthetic threshold checkpoint failure."
+            )
+
+        service = ShadowTradingService(store=store)
+        workspace = ShadowWorkspaceService(
+            paths=ShadowWorkspacePaths(
+                reports_dir=self.output_dir,
+                observations_path=self.root / "observations.json",
+                state_path=self.state_path,
+            ),
+            service=service,
+            quote_source=source,
+            evidence_checkpoint_generator=fail_checkpoint,
+        )
+
+        with patch.object(
+            service,
+            "snapshot",
+            return_value=snapshot,
+        ), self.assertRaisesRegex(
+            ShadowEvidenceCheckpointError,
+            "threshold checkpoint failure",
+        ):
+            workspace.advance_observations(
+                received_at=self.generated_at
+            )
+
+        self.assertEqual([], source.calls)
+        self.assertFalse(self.output_dir.exists())
+        self.assertFalse(self.state_path.exists())
+
     def test_concurrent_source_change_is_detected_after_write(self) -> None:
         self._write_activation_and_state_source()
 
@@ -565,6 +752,30 @@ def _review_row(index: int, metadata) -> dict:
             "technicalCodes": [],
         },
     }
+
+
+class _EmptyBatchQuoteSource:
+    def __init__(self) -> None:
+        self.calls: list[tuple[tuple[str, ...], datetime]] = []
+
+    def quotes(
+        self,
+        symbols,
+        *,
+        decision_at: datetime,
+    ) -> dict:
+        self.calls.append((tuple(symbols), decision_at))
+        return {}
+
+
+class _SingleQuoteSource:
+    def quote(
+        self,
+        symbol: str,
+        *,
+        decision_at: datetime,
+    ) -> None:
+        return None
 
 
 if __name__ == "__main__":
