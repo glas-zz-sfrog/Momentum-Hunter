@@ -119,6 +119,20 @@ class PaperMoneyReconciliationResult:
     source_state_unchanged: bool
 
 
+def load_paper_money_reconciliation(
+    path: Path,
+) -> PaperMoneyReconciliationRecord:
+    """Load and fully validate one persisted reconciliation artifact."""
+
+    resolved = path.expanduser().resolve()
+    record = _load_existing_record(resolved)
+    if record is None:
+        raise FileNotFoundError(
+            f"paperMoney reconciliation does not exist: {resolved}"
+        )
+    return record
+
+
 def record_paper_money_reconciliation(
     *,
     state_path: Path = SHADOW_STATE_PATH,
