@@ -10,10 +10,11 @@ SHADOW-014 preparation stack, including visual-acceptance commit `307a2e1`, alon
 automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003.
 
-SHADOW-016, stacked SHADOW-017, and independent CANARY-001 are proven feature
+SHADOW-016, stacked SHADOW-017, and independent CANARY-001/CANARY-002 are proven feature
 work pending integration while `master` remains frozen for the one-time
 SHADOW-014 opening proof. CANARY-001's nontransmitting position-invariant core
-is implemented at `7330983`; it is not a real-order path or canary approval.
+is implemented at `7330983`, and CANARY-002's immutable phase-evidence chain is
+implemented at `f1b9042`; neither is a real-order path or canary approval.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`, and
@@ -101,7 +102,8 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `codex/ARGUS-CANARY-001-position-invariants` | `7330983` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds a redacted, GET-only pre/active/post canary position-invariant evaluator with fail-closed account, clock, position, symbol, and quantity checks. | Integrate only after the frozen SHADOW-014 baseline is released. |
+| `codex/ARGUS-CANARY-002-position-evidence-chain` | `f1b9042` plus governance closeout | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds a hash-linked immutable pre/active/post position-evidence chain that preserves blocks, enforces phase and chronology, and remains redacted and nontransmitting. | Integrate the full CANARY-001/002 stack only after the frozen SHADOW-014 baseline is released. |
+| `codex/ARGUS-CANARY-001-position-invariants` | `1c8006a` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds a redacted, GET-only pre/active/post canary position-invariant evaluator with fail-closed account, clock, position, symbol, and quantity checks. | Preserve as CANARY-002's parent; do not merge separately without ancestry reconciliation. |
 | `codex/ARGUS-SHADOW-017-evidence-checkpoints` | `4858d73` | Yes | No | `ACTIVE / IMPLEMENTED_PENDING_MERGE` | Adds automatic immutable 5/10/20/30 evidence checkpoints on top of SHADOW-016. | Preserve the stack until the SHADOW-014 baseline is released, then reconcile and fast-forward cleanly. |
 | `codex/ARGUS-SHADOW-016-paper-reconciliation-evidence` | `a2c3637` | Yes | No | `IMPLEMENTED_PENDING_MERGE` | Adds immutable manual paperMoney reconciliation and a read-only fill-model-error audit. | Preserve as SHADOW-017's parent; do not merge separately without ancestry reconciliation. |
 | `codex/ARGUS-SHADOW-013-opening-ceremony-hardening` | `58552da` | Via `master` | Yes | `MERGED_TO_LOCAL_MASTER` | Hardens semantic handoff completion, clock validity, frozen configuration, retry classification, proof-only opening rehearsal, outcome separation, and read-only heartbeat behavior. | Preserve branch; prepare the final-HEAD disabled proof-only task and real-session audit. |
