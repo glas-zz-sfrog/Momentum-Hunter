@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added CANARY-020's exact final stacked release gate and CLI. It composes the frozen ARGUS-INTEGRATION-002 source audit with CANARY-019 V3 integrity proof only after the exact branch, clean worktree, synchronized branch upstream/base, frozen source commit, exact changed-path union, reviewed runtime/test/tool blob identity, safe paths/content, and false authority flags pass.
+- Dirty, unpushed, missing-upstream, lookalike-branch, source/base drift, runtime drift, risky/secret content, partial manifests, and authority escalation fail closed. The real synchronized branch passes at `87a811a` with 17 components and zero findings; execution permit remains false and order transmission unavailable.
 - Added CANARY-019's frozen V3 nonauthorizing stack-integrity policy for the exact 17 runtime components in CANARY-001 through CANARY-013 and CANARY-015 through CANARY-018. V1/V2 remain explicit historical modes but are rejected by default.
 - Pinned CANARY-017's static process exception to exactly `subprocess.Popen` and reject other subprocess calls and aliases, unsafe imports/actions, content drift, partial sets, exception widening, and authority escalation. A working-tree V3 proof found zero findings with all execution flags closed; compileall, 15 focused tests, 244 CANARY tests, 455 Schwab tests, all 1,302 Python tests, and all 216 .NET tests pass.
 - Added CANARY-018's read-only lifecycle-package verifier. It requires externally pinned release/runtime/result identity, reloads the complete CANARY-017 evidence set, recomputes worker/process binding, checks cross-record hashes and chronology, and replays the stop evaluator instead of trusting the summary file.
