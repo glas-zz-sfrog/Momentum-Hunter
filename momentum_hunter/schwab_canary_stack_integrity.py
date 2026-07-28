@@ -12,8 +12,11 @@ import re
 from typing import Final, Mapping, Sequence
 
 
-CANARY_STACK_INTEGRITY_SCHEMA_VERSION: Final = (
+CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V1: Final = (
     "SCHWAB_CANARY_STACK_INTEGRITY_V1"
+)
+CANARY_STACK_INTEGRITY_SCHEMA_VERSION: Final = (
+    "SCHWAB_CANARY_STACK_INTEGRITY_V2"
 )
 CANARY_STACK_INTEGRITY_MANIFEST_TYPE: Final = (
     "NONAUTHORIZING_CANARY_STACK_INTEGRATION_MANIFEST"
@@ -41,13 +44,30 @@ _DISALLOWED_IMPORTS: Final = frozenset(
 _DISALLOWED_ACTION_NAMES: Final = frozenset(
     {
         "cancel_order",
+        "delete_credentials",
+        "eval",
+        "exec",
+        "__import__",
+        "import_module",
+        "kill",
         "place_order",
+        "Popen",
+        "popen",
         "preview_order",
+        "revoke",
         "replace_order",
+        "rotate_credentials",
+        "run",
+        "send_signal",
+        "startfile",
         "submit_order",
+        "system",
+        "terminate",
+        "TerminateProcess",
         "transfer_money",
         "transmit_order",
         "withdraw",
+        "urlopen",
     }
 )
 _MANIFEST_KEYS: Final = frozenset(
@@ -91,9 +111,10 @@ class CanaryStackComponent:
     name: str
     role: str
     relative_path: str
+    allowed_imports: tuple[str, ...] = ()
 
 
-CANARY_STACK_COMPONENTS: Final = (
+CANARY_STACK_COMPONENTS_V1: Final = (
     CanaryStackComponent(
         name="CANARY-001",
         role="position invariant",
@@ -147,6 +168,24 @@ CANARY_STACK_COMPONENTS: Final = (
         relative_path="momentum_hunter/schwab_canary_stack_integrity.py",
     ),
 )
+CANARY_STACK_COMPONENTS: Final = CANARY_STACK_COMPONENTS_V1 + (
+    CanaryStackComponent(
+        name="CANARY-011",
+        role="offline official order schema evidence",
+        relative_path="momentum_hunter/schwab_order_schema_evidence.py",
+        allowed_imports=("urllib.parse",),
+    ),
+    CanaryStackComponent(
+        name="CANARY-012",
+        role="read-only process identity observer",
+        relative_path="momentum_hunter/schwab_canary_process_observer.py",
+    ),
+    CanaryStackComponent(
+        name="CANARY-013",
+        role="immutable process evidence chain",
+        relative_path="momentum_hunter/schwab_canary_process_evidence.py",
+    ),
+)
 
 
 def build_canary_stack_integrity_manifest(
@@ -160,12 +199,13 @@ def build_canary_stack_integrity_manifest(
     identity = _require_build_identity(build_identity)
     created = _require_aware_datetime(created_at, field="manifest creation")
     expected = _require_component_contract(components)
+    schema_version = _schema_version_for_components(expected)
     entries = [
         _build_component_entry(root=root, component=component)
         for component in expected
     ]
     manifest = {
-        "schemaVersion": CANARY_STACK_INTEGRITY_SCHEMA_VERSION,
+        "schemaVersion": schema_version,
         "manifestType": CANARY_STACK_INTEGRITY_MANIFEST_TYPE,
         "buildIdentity": identity,
         "createdAt": created.isoformat(),
@@ -212,6 +252,7 @@ def verify_canary_stack_integrity_manifest(
             field="manifest evaluation",
         )
         expected = _require_component_contract(components)
+        expected_schema_version = _schema_version_for_components(expected)
     except CanaryStackIntegrityError as exc:
         return (str(exc),)
     if (
@@ -227,7 +268,7 @@ def verify_canary_stack_integrity_manifest(
         findings.append(
             "Canary stack integrity manifest fields do not match the schema."
         )
-    if payload.get("schemaVersion") != CANARY_STACK_INTEGRITY_SCHEMA_VERSION:
+    if payload.get("schemaVersion") != expected_schema_version:
         findings.append("Canary stack integrity schema is unsupported.")
     if payload.get("manifestType") != CANARY_STACK_INTEGRITY_MANIFEST_TYPE:
         findings.append("Canary stack manifest type is invalid.")
@@ -343,7 +384,10 @@ def _build_component_entry(
         raise CanaryStackIntegrityError(
             f"Canary stack component is not UTF-8: {component.name}."
         ) from exc
-    source_findings = _source_safety_findings(source)
+    source_findings = _source_safety_findings(
+        source,
+        allowed_imports=component.allowed_imports,
+    )
     if source_findings:
         raise CanaryStackIntegrityError(
             f"{component.name}: " + " | ".join(source_findings)
@@ -387,12 +431,19 @@ def _verify_component_entry(
     except UnicodeDecodeError:
         findings.append(f"{component.name} is not UTF-8.")
     else:
-        for source_finding in _source_safety_findings(source):
+        for source_finding in _source_safety_findings(
+            source,
+            allowed_imports=component.allowed_imports,
+        ):
             findings.append(f"{component.name}: {source_finding}")
     return tuple(findings)
 
 
-def _source_safety_findings(source: str) -> tuple[str, ...]:
+def _source_safety_findings(
+    source: str,
+    *,
+    allowed_imports: Sequence[str] = (),
+) -> tuple[str, ...]:
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -420,6 +471,7 @@ def _source_safety_findings(source: str) -> tuple[str, ...]:
     unsafe_imports = sorted(
         imported
         for imported in imports
+        if imported not in allowed_imports
         if any(
             imported == blocked or imported.startswith(f"{blocked}.")
             for blocked in _DISALLOWED_IMPORTS
@@ -437,7 +489,7 @@ def _source_safety_findings(source: str) -> tuple[str, ...]:
         )
     if unsafe_actions:
         findings.append(
-            "Disallowed broker-action name: "
+            "Disallowed broker or process-action name: "
             + ", ".join(unsafe_actions)
             + "."
         )
@@ -462,9 +514,27 @@ def _require_component_contract(
             or not component.name.strip()
             or not component.role.strip()
             or not component.relative_path.strip()
+            or not isinstance(component.allowed_imports, tuple)
+            or any(
+                not isinstance(item, str) or not item
+                for item in component.allowed_imports
+            )
         ):
             raise CanaryStackIntegrityError(
                 "Canary stack component policy is malformed."
+            )
+        expected_allowed = (
+            ("urllib.parse",)
+            if (
+                component.name == "CANARY-011"
+                and component.relative_path
+                == "momentum_hunter/schwab_order_schema_evidence.py"
+            )
+            else ()
+        )
+        if component.allowed_imports != expected_allowed:
+            raise CanaryStackIntegrityError(
+                "Canary stack component import exceptions do not match policy."
             )
         if component.name in names or component.relative_path in paths:
             raise CanaryStackIntegrityError(
@@ -472,7 +542,22 @@ def _require_component_contract(
             )
         names.add(component.name)
         paths.add(component.relative_path)
+    if items not in {
+        CANARY_STACK_COMPONENTS_V1,
+        CANARY_STACK_COMPONENTS,
+    }:
+        raise CanaryStackIntegrityError(
+            "Canary stack components must match a frozen policy version."
+        )
     return items
+
+
+def _schema_version_for_components(
+    components: Sequence[CanaryStackComponent],
+) -> str:
+    if tuple(components) == CANARY_STACK_COMPONENTS_V1:
+        return CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V1
+    return CANARY_STACK_INTEGRITY_SCHEMA_VERSION
 
 
 def _resolve_component_path(root: Path, relative_path: str) -> Path:
