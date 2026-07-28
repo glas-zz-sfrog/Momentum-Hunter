@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import inspect
 from pathlib import Path
@@ -12,6 +13,9 @@ import unittest
 import momentum_hunter.schwab_canary_stack_integrity as integrity_module
 from momentum_hunter.schwab_canary_stack_integrity import (
     CANARY_STACK_COMPONENTS,
+    CANARY_STACK_COMPONENTS_V1,
+    CANARY_STACK_INTEGRITY_SCHEMA_VERSION,
+    CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V1,
     CanaryStackIntegrityError,
     build_canary_stack_integrity_manifest,
     canonical_manifest_json,
@@ -32,6 +36,11 @@ class CanaryStackIntegrityTests(unittest.TestCase):
         findings = self.verify(manifest, REPOSITORY_ROOT)
 
         self.assertEqual((), findings)
+        self.assertEqual(
+            CANARY_STACK_INTEGRITY_SCHEMA_VERSION,
+            manifest["schemaVersion"],
+        )
+        self.assertEqual(13, manifest["componentCount"])
         self.assertEqual(len(CANARY_STACK_COMPONENTS), manifest["componentCount"])
         self.assertEqual(
             [item.name for item in CANARY_STACK_COMPONENTS],
@@ -47,6 +56,42 @@ class CanaryStackIntegrityTests(unittest.TestCase):
         self.assertEqual(
             canonical_manifest_json(manifest),
             canonical_manifest_json(deepcopy(manifest)),
+        )
+
+    def test_legacy_v1_manifest_policy_remains_explicitly_verifiable(self) -> None:
+        manifest = build_canary_stack_integrity_manifest(
+            repository_root=REPOSITORY_ROOT,
+            build_identity=BUILD_IDENTITY,
+            created_at=CREATED_AT,
+            components=CANARY_STACK_COMPONENTS_V1,
+        )
+
+        findings = verify_canary_stack_integrity_manifest(
+            manifest,
+            repository_root=REPOSITORY_ROOT,
+            expected_build_identity=BUILD_IDENTITY,
+            evaluated_at=CREATED_AT,
+            components=CANARY_STACK_COMPONENTS_V1,
+        )
+        default_findings = self.verify(manifest, REPOSITORY_ROOT)
+
+        self.assertEqual((), findings)
+        self.assertEqual(
+            CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V1,
+            manifest["schemaVersion"],
+        )
+        self.assertEqual(10, manifest["componentCount"])
+        self.assertEqual(
+            [f"CANARY-{index:03d}" for index in range(1, 11)],
+            [item["name"] for item in manifest["components"]],
+        )
+        self.assertIn(
+            "Canary stack integrity schema is unsupported.",
+            default_findings,
+        )
+        self.assertIn(
+            "Canary stack component count does not match policy.",
+            default_findings,
         )
 
     def test_manifest_build_and_verify_do_not_mutate_stack_sources(self) -> None:
@@ -91,13 +136,16 @@ class CanaryStackIntegrityTests(unittest.TestCase):
             findings = self.verify(manifest, root)
 
         self.assertTrue(
-            any("CANARY-010 cannot be re-read" in item for item in findings)
+            any("CANARY-013 cannot be re-read" in item for item in findings)
         )
 
     def test_unsafe_import_action_and_endpoint_cannot_build_manifest(self) -> None:
         unsafe_fragments = (
             "import requests\n",
             "def submit_order():\n    return None\n",
+            "def revoke():\n    return None\n",
+            "def terminate():\n    return None\n",
+            "def urlopen():\n    return None\n",
             "UNSAFE_ENDPOINT = 'https://broker.invalid/order'\n",
         )
         for fragment in unsafe_fragments:
@@ -109,6 +157,46 @@ class CanaryStackIntegrityTests(unittest.TestCase):
                 )
                 with self.assertRaises(CanaryStackIntegrityError):
                     self.build_manifest(root)
+
+    def test_offline_url_parser_exception_is_exact_and_component_scoped(
+        self,
+    ) -> None:
+        manifest = self.build_manifest(REPOSITORY_ROOT)
+        self.assertEqual((), self.verify(manifest, REPOSITORY_ROOT))
+
+        with self.stack_copy() as root:
+            schema_component = next(
+                item
+                for item in CANARY_STACK_COMPONENTS
+                if item.name == "CANARY-011"
+            )
+            target = root / schema_component.relative_path
+            target.write_text(
+                target.read_text(encoding="utf-8")
+                + "\nimport urllib.request\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                CanaryStackIntegrityError,
+                "urllib.request",
+            ):
+                self.build_manifest(root)
+
+        widened = list(CANARY_STACK_COMPONENTS)
+        widened[-1] = replace(
+            widened[-1],
+            allowed_imports=("urllib.parse",),
+        )
+        with self.assertRaisesRegex(
+            CanaryStackIntegrityError,
+            "import exceptions do not match policy",
+        ):
+            build_canary_stack_integrity_manifest(
+                repository_root=REPOSITORY_ROOT,
+                build_identity=BUILD_IDENTITY,
+                created_at=CREATED_AT,
+                components=widened,
+            )
 
     def test_authority_and_provider_escalation_fail_revalidation(self) -> None:
         manifest = self.build_manifest(REPOSITORY_ROOT)
@@ -229,6 +317,16 @@ class CanaryStackIntegrityTests(unittest.TestCase):
                 build_identity=BUILD_IDENTITY,
                 created_at=CREATED_AT,
                 components=(),
+            )
+        with self.assertRaisesRegex(
+            CanaryStackIntegrityError,
+            "frozen policy version",
+        ):
+            build_canary_stack_integrity_manifest(
+                repository_root=REPOSITORY_ROOT,
+                build_identity=BUILD_IDENTITY,
+                created_at=CREATED_AT,
+                components=CANARY_STACK_COMPONENTS[:-1],
             )
 
     def test_verifier_has_no_git_network_credential_or_broker_action_capability(
