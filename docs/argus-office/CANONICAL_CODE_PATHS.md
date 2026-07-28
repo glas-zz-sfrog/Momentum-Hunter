@@ -49,6 +49,7 @@ SHADOW-012. The Roadmap, not this file, decides priority and next work.
 | Future Schwab canary position safety | `momentum_hunter/schwab_canary_positions.py` and `momentum_hunter/schwab_canary_evidence.py` on stacked CANARY-001/002 branches | Pending nontransmitting position invariant and immutable phase-evidence paths. They become canonical only after clean stack integration; no order path uses them. |
 | Future Schwab canary funding gate | `momentum_hunter/schwab_canary_funding.py` on CANARY-003 | Pending R-034 settled-cash/restriction gate. It rejects the current incomplete balance model and becomes canonical only after clean integration. |
 | Future Schwab canary order reconciliation | `momentum_hunter/schwab_canary_order_reconciliation.py` on CANARY-004 | Pending R-033 deterministic command identity and broker-truth lifecycle/restart guard. It has no provider transport or order action and becomes canonical only after clean integration plus verified Schwab field mapping. |
+| Future Schwab canary stop evidence | `momentum_hunter/schwab_canary_stop_evidence.py` on CANARY-005 | Pending R-035 one-way latch and shutdown/revocation drill-evidence contract. It neither stops a process nor revokes a credential; actual independent actions and physical proof remain separate consequential work. |
 | Future paper broker work | No code path yet | Schwab Trader API paperMoney is unavailable. Manual thinkorswim paperMoney reconciliation is the only current paper path. No paper broker adapter exists on `master` or R027. |
 
 ## Direct Answers
