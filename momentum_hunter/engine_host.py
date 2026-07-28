@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import secrets
 import signal
@@ -10,7 +11,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -23,6 +24,34 @@ DEFAULT_COLLECTION_INTERVAL_SECONDS = 300
 HOST_LOCK_FILENAME = "python-engine-host.lock"
 ENDPOINT_FILENAME = "python-engine-endpoint.json"
 MAX_REQUEST_BYTES = 64 * 1024
+MAX_STAGED_PREVIEW_CANDLES = 180
+MAX_STAGED_PREVIEW_TEXT = 2_048
+STAGED_PREVIEW_SOURCE_LABEL = (
+    "Schwab Trader API price history (inactive staging)"
+)
+STAGED_PREVIEW_FIELDS = frozenset(
+    {
+        "schemaVersion",
+        "symbol",
+        "interval",
+        "state",
+        "observedAt",
+        "asOf",
+        "summary",
+        "previewOnly",
+        "activeChartSource",
+        "transmitting",
+        "orderTransmission",
+        "lineage",
+        "candles",
+    }
+)
+STAGED_PREVIEW_LINEAGE_FIELDS = frozenset(
+    {"sourceLabel", "asOf", "summary"}
+)
+STAGED_PREVIEW_CANDLE_FIELDS = frozenset(
+    {"timestamp", "open", "high", "low", "close", "volume"}
+)
 
 COMMAND_SNAPSHOT = "get_host_snapshot"
 COMMAND_PAUSE = "pause_collection"
@@ -91,21 +120,116 @@ def staged_chart_preview_is_safe(
     symbol: str,
     interval: str,
 ) -> bool:
+    state = payload.get("state") if isinstance(payload, dict) else None
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != STAGED_PREVIEW_FIELDS
+        or type(payload.get("schemaVersion")) is not int
+        or payload["schemaVersion"] != 1
+        or payload.get("symbol") != symbol
+        or payload.get("interval") != interval
+        or not isinstance(state, str)
+        or state
+        not in {"AVAILABLE", "STALE", "INSUFFICIENT_DATA", "UNAVAILABLE"}
+        or payload.get("previewOnly") is not True
+        or payload.get("activeChartSource") is not False
+        or payload.get("transmitting") is not False
+        or payload.get("orderTransmission") != "UNAVAILABLE"
+        or not bounded_text(payload.get("summary"))
+        or not payload["summary"].startswith(
+            f"STAGED PREVIEW ONLY | {state.replace('_', ' ')} |"
+        )
+    ):
+        return False
+    observed_at = preview_timestamp(payload.get("observedAt"))
+    as_of = preview_timestamp(payload.get("asOf"))
+    if (
+        observed_at is None
+        or as_of is None
+        or as_of > observed_at + timedelta(seconds=5)
+    ):
+        return False
+    lineage = payload.get("lineage")
+    if (
+        not isinstance(lineage, dict)
+        or set(lineage) != STAGED_PREVIEW_LINEAGE_FIELDS
+        or lineage.get("sourceLabel") != STAGED_PREVIEW_SOURCE_LABEL
+        or lineage.get("asOf") != payload.get("asOf")
+        or not bounded_text(lineage.get("summary"))
+    ):
+        return False
+    candles = payload.get("candles")
+    if (
+        not isinstance(candles, list)
+        or len(candles) > MAX_STAGED_PREVIEW_CANDLES
+    ):
+        return False
+    timestamps: list[datetime] = []
+    for candle in candles:
+        timestamp = safe_staged_candle(candle)
+        if timestamp is None:
+            return False
+        timestamps.append(timestamp)
+    if (
+        timestamps != sorted(timestamps)
+        or len(timestamps) != len(set(timestamps))
+        or (timestamps and timestamps[-1] != as_of)
+    ):
+        return False
     return bool(
-        isinstance(payload, dict)
-        and payload.get("schemaVersion") == 1
-        and payload.get("symbol") == symbol
-        and payload.get("interval") == interval
-        and payload.get("state")
-        in {"AVAILABLE", "STALE", "INSUFFICIENT_DATA", "UNAVAILABLE"}
-        and isinstance(payload.get("candles"), list)
-        and isinstance(payload.get("lineage"), dict)
-        and payload["lineage"].get("sourceLabel")
-        == "Schwab Trader API price history (inactive staging)"
-        and payload.get("previewOnly") is True
-        and payload.get("activeChartSource") is False
-        and payload.get("transmitting") is False
-        and payload.get("orderTransmission") == "UNAVAILABLE"
+        (state == "UNAVAILABLE" and not candles)
+        or (state == "INSUFFICIENT_DATA" and len(candles) == 1)
+        or (state in {"AVAILABLE", "STALE"} and len(candles) >= 2)
+    )
+
+
+def safe_staged_candle(value: object) -> datetime | None:
+    if not isinstance(value, dict) or set(value) != STAGED_PREVIEW_CANDLE_FIELDS:
+        return None
+    timestamp = preview_timestamp(value.get("timestamp"))
+    prices = tuple(value.get(field) for field in ("open", "high", "low", "close"))
+    if (
+        timestamp is None
+        or any(
+            isinstance(item, bool)
+            or not isinstance(item, (int, float))
+            or not math.isfinite(float(item))
+            or float(item) <= 0
+            for item in prices
+        )
+    ):
+        return None
+    open_price, high, low, close = (float(item) for item in prices)
+    volume = value.get("volume")
+    if (
+        high < max(open_price, close)
+        or low > min(open_price, close)
+        or low > high
+        or isinstance(volume, bool)
+        or not isinstance(volume, int)
+        or volume < 0
+    ):
+        return None
+    return timestamp
+
+
+def preview_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def bounded_text(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and bool(value.strip())
+        and len(value) <= MAX_STAGED_PREVIEW_TEXT
     )
 
 

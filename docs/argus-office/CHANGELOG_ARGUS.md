@@ -1,6 +1,10 @@
 # Argus Changelog
 
 ## Unreleased
+- Reconciled the focused staged-candle Engine Host command onto the canonical R035 tip without carrying the contaminated source branch's WPF or unrelated history.
+- Added one idempotent `get_staged_schwab_chart_preview` capability that reads only the hash-verified inactive stage and matching manifest, returns an exact bounded chart payload, and sanitizes evidence failures.
+- Hardened the host boundary against extra account/token fields, malformed timestamps, unordered or duplicate candles, invalid OHLC geometry, unsafe state/count combinations, oversized summaries, active-source claims, and transmission claims. Self-review fixed the valid one-candle `INSUFFICIENT DATA` display path.
+- Passed Python compileall, 61 focused Engine Host/stage tests, all 980 Python tests, all 216 .NET tests, and a zero-warning Release build. No provider fetch, account read, file write, active chart/UI change, broker/order path, generated tracked report, or protected semantic change was added.
 - Reconciled the six focused R035 candle-input commits onto the current `1af5b31` baseline without carrying stale governance or the contaminated staged-preview integration stack.
 - Added bounded exact-host Schwab price history, persisted-target candidate staging, hash-verified inactive chart previews, read-only SQLite cutover inventory, and a nonactivating cutover preflight. No source candle, mirrored row, chart source, score, readiness rule, alert, TradePlan, Shadow, account, broker, or order behavior changed.
 - Hardened inactive file ownership: source reports and unrelated existing files cannot be overwritten, valid inactive stages can refresh, concurrent target changes fail before staging, and cutover inventory receipts are atomic and write-once.

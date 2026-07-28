@@ -11,6 +11,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from momentum_hunter.engine_host import (
     COMMAND_CANDIDATE_STORY_SNAPSHOT,
@@ -43,14 +44,36 @@ def staged_preview(symbol: str, interval: str) -> dict[str, object]:
         "symbol": symbol,
         "interval": interval,
         "state": "AVAILABLE",
+        "observedAt": "2026-07-28T15:02:00Z",
+        "asOf": "2026-07-28T15:01:00Z",
+        "summary": (
+            "STAGED PREVIEW ONLY | AVAILABLE | 2 verified candles; "
+            "inactive; no active chart source changed"
+        ),
         "previewOnly": True,
         "activeChartSource": False,
         "transmitting": False,
         "orderTransmission": "UNAVAILABLE",
         "lineage": {
             "sourceLabel": "Schwab Trader API price history (inactive staging)",
+            "asOf": "2026-07-28T15:01:00Z",
+            "summary": "Hash-verified inactive staged evidence.",
         },
-        "candles": [],
+        "candles": [
+            staged_candle("2026-07-28T15:00:00Z", close=101.0),
+            staged_candle("2026-07-28T15:01:00Z", close=102.0),
+        ],
+    }
+
+
+def staged_candle(timestamp: str, *, close: float) -> dict[str, object]:
+    return {
+        "timestamp": timestamp,
+        "open": 100.0,
+        "high": max(102.5, close),
+        "low": 99.0,
+        "close": close,
+        "volume": 1000,
     }
 
 
@@ -438,6 +461,104 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertFalse(unsafe.accepted)
         self.assertEqual("UNSAFE_STAGED_CHART_PREVIEW", unsafe.code)
 
+    def test_staged_chart_preview_accepts_insufficient_data_display_label(self) -> None:
+        payload = staged_preview("NVDA", "Daily")
+        payload.update(
+            {
+                "state": "INSUFFICIENT_DATA",
+                "asOf": "2026-07-28T15:00:00Z",
+                "summary": (
+                    "STAGED PREVIEW ONLY | INSUFFICIENT DATA | "
+                    "1 verified Daily candle; inactive"
+                ),
+                "lineage": {
+                    **payload["lineage"],
+                    "asOf": "2026-07-28T15:00:00Z",
+                },
+                "candles": [payload["candles"][0]],
+            }
+        )
+        runtime = EngineHostRuntime(
+            staged_chart_preview_loader=lambda _symbol, _interval: payload
+        )
+
+        result = runtime.execute(
+            COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+            "staged-insufficient",
+            {"symbol": "NVDA", "interval": "Daily"},
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertEqual("INSUFFICIENT_DATA", result.payload["state"])
+        self.assertEqual(1, len(result.payload["candles"]))
+
+    def test_staged_chart_preview_rejects_malformed_or_expanded_wire_payload(self) -> None:
+        base = staged_preview("NVDA", "5m")
+        unsafe_payloads = (
+            {**base, "accountNumber": "must-not-cross-boundary"},
+            {
+                **base,
+                "lineage": {
+                    **base["lineage"],
+                    "providerToken": "must-not-cross-boundary",
+                },
+            },
+            {
+                **base,
+                "candles": [
+                    *base["candles"],
+                    staged_candle("2026-07-28T15:01:00Z", close=103.0),
+                ],
+            },
+            {
+                **base,
+                "candles": [
+                    {
+                        **base["candles"][0],
+                        "low": 103.0,
+                    },
+                    base["candles"][1],
+                ],
+            },
+            {
+                **base,
+                "state": "UNAVAILABLE",
+            },
+            {
+                **base,
+                "state": [],
+            },
+            {
+                **base,
+                "summary": (
+                    "STAGED PREVIEW ONLY | STALE | "
+                    "mismatched state label"
+                ),
+            },
+            {
+                **base,
+                "observedAt": "timezone-missing",
+            },
+            {
+                **base,
+                "summary": "x" * 2049,
+            },
+        )
+        for index, payload in enumerate(unsafe_payloads):
+            with self.subTest(index=index):
+                runtime = EngineHostRuntime(
+                    staged_chart_preview_loader=(
+                        lambda _symbol, _interval, value=payload: value
+                    )
+                )
+                result = runtime.execute(
+                    COMMAND_STAGED_SCHWAB_CHART_PREVIEW,
+                    f"staged-malformed-{index}",
+                    {"symbol": "NVDA", "interval": "5m"},
+                )
+                self.assertFalse(result.accepted)
+                self.assertEqual("UNSAFE_STAGED_CHART_PREVIEW", result.code)
+
     def test_staged_chart_preview_sanitizes_unavailable_evidence_failure(self) -> None:
         from momentum_hunter.staged_schwab_charts import (
             StagedSchwabChartError,
@@ -463,6 +584,42 @@ class EngineHostRuntimeTests(unittest.TestCase):
         self.assertEqual("STAGED_CHART_PREVIEW_UNAVAILABLE", result.code)
         self.assertNotIn("sensitive", result.summary)
         self.assertNotIn("staged-path", result.summary)
+
+    def test_default_staged_preview_loader_uses_only_inactive_stage_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            staged_path = root / "staging" / "candles.json"
+            expected = staged_preview("NVDA", "15m")
+            with (
+                patch(
+                    "momentum_hunter.schwab_candle_staging."
+                    "DEFAULT_STAGED_CANDLES_PATH",
+                    staged_path,
+                ),
+                patch(
+                    "momentum_hunter.staged_schwab_charts."
+                    "StagedSchwabChartService"
+                ) as service_type,
+            ):
+                service_type.return_value.snapshot.return_value = expected
+
+                payload = EngineHostRuntime._load_staged_schwab_chart_preview(
+                    "NVDA",
+                    "15m",
+                )
+
+            self.assertEqual(expected, payload)
+            paths = service_type.call_args.kwargs["paths"]
+            self.assertEqual(staged_path, paths.candles_path)
+            self.assertEqual(
+                staged_path.with_name("candles.manifest.json"),
+                paths.manifest_path,
+            )
+            service_type.return_value.snapshot.assert_called_once_with(
+                "NVDA",
+                "15m",
+            )
+            self.assertEqual([], list(root.rglob("*")))
 
     def test_technical_research_command_is_read_only_idempotent_and_requires_symbol(self) -> None:
         calls: list[str] = []
