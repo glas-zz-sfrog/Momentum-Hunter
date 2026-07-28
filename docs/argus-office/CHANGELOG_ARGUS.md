@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Hardened SHADOW-016 scheduling for the first armed FakeBroker-only opening: armed installation now requires one future Shadow-only task at exactly 8:35 AM Central, explicit enablement, no late start, no Task Scheduler retry, and a fresh final-head proof bundle. The default daily installer remains unarmed and disabled for Shadow.
+- Added a nonmutating scheduler plan mode and executable negative coverage for recurring, broad, disabled, past, late, and wrong-time arm shapes. PowerShell parsing, 3 focused scheduling tests, 130 affected Shadow/Engine Host tests, all 917 Python tests, and all 216 .NET tests pass.
 - Prepared and scheduled SHADOW-014 for a one-time unarmed opening proof: preserved the first disabled-task heartbeat as a safe `FAILED` audit, revalidated the sole `2573` cash binding through the guarded read-only refresh path, proved live SPY/IWM quote and HTTPS clock behavior, and bound the 2026-07-28 task/bundle/heartbeat to the final synchronized governance commit.
 - Fast-forwarded SHADOW-013 implementation commit `58552da` into local `master` after final compile, focused regression, full Python/.NET regression, PowerShell, diff, secret, task-state, and production-nonmutation gates passed; the ordinary non-force backup includes the governance closeout.
 - Hardened the Official Shadow opening ceremony so receipt completeness requires an allowlisted semantic terminal result and verified Engine Host, command, capture, report, decision-cycle, and trade identity where applicable.

@@ -786,6 +786,29 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         self.assertNotIn('$settingsArguments["RestartInterval"]', installer)
         self.assertIn("Export-ScheduledTask", installer)
         self.assertIn("[switch]$EnableShadowTask", installer)
+        self.assertIn("[switch]$ShadowOnly", installer)
+        self.assertIn("[switch]$PlanOnly", installer)
+        self.assertIn("New-ScheduledTaskTrigger -Once -At $ShadowRunAt", installer)
+        self.assertIn(
+            "An armed Shadow task must use an explicit one-time -ShadowRunAt value.",
+            installer,
+        )
+        self.assertIn(
+            "An armed Shadow task must be installed with -ShadowOnly.",
+            installer,
+        )
+        self.assertIn(
+            "An armed Shadow task must be explicitly enabled with -EnableShadowTask.",
+            installer,
+        )
+        self.assertIn(
+            "requires the Windows Central Standard Time zone",
+            installer,
+        )
+        self.assertIn(
+            "must use the limited interactive Windows principal",
+            installer,
+        )
         self.assertIn("Disable-ScheduledTask", installer)
         self.assertIn('-Provider `"$Provider`"', installer)
         self.assertIn('-Scanner `"$Scanner`"', installer)
@@ -797,6 +820,152 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         self.assertIn("$retryableInfrastructureExit = 75", runner)
         self.assertIn("$ShadowRetryCount = 3", runner)
         self.assertIn("openingResultPreserved", runner)
+
+    def test_armed_shadow_installer_plans_one_future_task_only(self) -> None:
+        result = self.run_installer_plan(
+            "-ShadowOnly",
+            "-ShadowRunAt",
+            "2099-07-29T08:35:00-05:00",
+            "-EnableShadowTask",
+            "-ArmShadowSelector",
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual("Momentum Hunter Shadow Opening Capture", plan["taskName"])
+        self.assertEqual("shadow", plan["session"])
+        self.assertEqual("ONCE", plan["triggerKind"])
+        self.assertTrue(plan["runAt"].startswith("2099-07-29T08:35:00"))
+        self.assertTrue(plan["enabled"])
+        self.assertTrue(plan["armShadowSelector"])
+        self.assertFalse(plan["startWhenAvailable"])
+        self.assertEqual(0, plan["schedulerRestartCount"])
+        self.assertEqual(4, plan["runnerOwnedMaximumAttempts"])
+        self.assertEqual("Central Standard Time", plan["requiredWindowsTimeZone"])
+        self.assertIn("-ArmShadowSelector", plan["arguments"])
+        self.assertNotIn("-Session morning", plan["arguments"])
+        self.assertNotIn("-Session evening", plan["arguments"])
+
+    def test_default_installer_plan_preserves_three_daily_unarmed_tasks(
+        self,
+    ) -> None:
+        result = self.run_installer_plan()
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        plans = json.loads(result.stdout)
+        self.assertEqual(
+            ["morning", "shadow", "evening"],
+            [plan["session"] for plan in plans],
+        )
+        self.assertTrue(all(plan["triggerKind"] == "DAILY" for plan in plans))
+        self.assertTrue(all(plan["startWhenAvailable"] for plan in plans))
+        shadow = plans[1]
+        self.assertFalse(shadow["enabled"])
+        self.assertFalse(shadow["armShadowSelector"])
+        self.assertNotIn("-ArmShadowSelector", shadow["arguments"])
+
+    def test_armed_shadow_installer_rejects_unsafe_shapes_before_registration(
+        self,
+    ) -> None:
+        cases = (
+            (
+                (
+                    "-ShadowRunAt",
+                    "2099-07-29T08:35:00-05:00",
+                    "-EnableShadowTask",
+                    "-ArmShadowSelector",
+                ),
+                "-ShadowOnly",
+            ),
+            (
+                (
+                    "-ShadowOnly",
+                    "-EnableShadowTask",
+                    "-ArmShadowSelector",
+                ),
+                "one-time -ShadowRunAt",
+            ),
+            (
+                (
+                    "-ShadowOnly",
+                    "-ShadowRunAt",
+                    "2099-07-29T08:35:00-05:00",
+                    "-ArmShadowSelector",
+                ),
+                "-EnableShadowTask",
+            ),
+            (
+                (
+                    "-ShadowRunAt",
+                    "2099-07-29T08:35:00-05:00",
+                ),
+                "may only be used with -ShadowOnly",
+            ),
+            (
+                (
+                    "-ShadowOnly",
+                    "-ShadowRunAt",
+                    "2020-07-29T08:35:00-05:00",
+                ),
+                "scheduled in the future",
+            ),
+            (
+                (
+                    "-ShadowOnly",
+                    "-ShadowRunAt",
+                    "2099-07-29T08:36:00-05:00",
+                    "-EnableShadowTask",
+                    "-ArmShadowSelector",
+                ),
+                "exactly 08:35:00 local Central time",
+            ),
+            (
+                (
+                    "-ShadowOnly",
+                    "-ShadowRunAt",
+                    "2099-07-29T08:35:00-05:00",
+                    "-EnableShadowTask",
+                    "-ArmShadowSelector",
+                    "-RunWhetherLoggedOn",
+                ),
+                "limited interactive Windows principal",
+            ),
+        )
+
+        for arguments, expected in cases:
+            with self.subTest(arguments=arguments):
+                result = self.run_installer_plan(*arguments)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn(expected, result.stderr + result.stdout)
+
+    def run_installer_plan(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+        project_root = Path(capture_job.__file__).resolve().parents[1]
+        installer = project_root / "tools" / "install_capture_tasks.ps1"
+        selector_proof = self.root / "selector-proof-installer-plan"
+        selector_proof.mkdir(exist_ok=True)
+        return subprocess.run(
+            (
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(installer),
+                "-ProjectRoot",
+                str(project_root),
+                "-PythonExe",
+                sys.executable,
+                "-SelectorProofBundle",
+                str(selector_proof),
+                "-PlanOnly",
+                *arguments,
+            ),
+            cwd=project_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
 
 
 class ShadowOpeningRunnerTests(unittest.TestCase):

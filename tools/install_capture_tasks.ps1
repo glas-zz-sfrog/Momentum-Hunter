@@ -3,20 +3,54 @@ param(
     [string]$PythonExe = "C:\Users\steve\OneDrive\Documents\Investing\.venv\Scripts\python.exe",
     [string]$MorningTime = "07:00",
     [string]$ShadowTime = "08:35",
+    [datetime]$ShadowRunAt = [datetime]::MinValue,
     [string]$EveningTime = "19:00",
     [string]$SelectorProofBundle = "",
     [string]$Provider = "finviz",
     [string]$Scanner = "Institutional Momentum",
     [switch]$ArmShadowSelector,
     [switch]$EnableShadowTask,
+    [switch]$ShadowOnly,
+    [switch]$PlanOnly,
     [switch]$RunWhetherLoggedOn
 )
 
 $ErrorActionPreference = "Stop"
 
+$hasOneTimeShadow = $ShadowRunAt -ne [datetime]::MinValue
+if ($ArmShadowSelector -and -not $ShadowOnly) {
+    throw "An armed Shadow task must be installed with -ShadowOnly."
+}
+if ($ArmShadowSelector -and -not $hasOneTimeShadow) {
+    throw "An armed Shadow task must use an explicit one-time -ShadowRunAt value."
+}
+if ($ArmShadowSelector -and -not $EnableShadowTask) {
+    throw "An armed Shadow task must be explicitly enabled with -EnableShadowTask."
+}
+if ($ArmShadowSelector -and $RunWhetherLoggedOn) {
+    throw "An armed Shadow task must use the limited interactive Windows principal."
+}
+if ($ShadowOnly -and -not $hasOneTimeShadow) {
+    throw "-ShadowOnly requires an explicit one-time -ShadowRunAt value."
+}
+if ($hasOneTimeShadow -and -not $ShadowOnly) {
+    throw "-ShadowRunAt may only be used with -ShadowOnly."
+}
+if ($hasOneTimeShadow -and $ShadowRunAt -le (Get-Date)) {
+    throw "The one-time Shadow run must be scheduled in the future."
+}
+if ($ArmShadowSelector -and $ShadowRunAt.ToString("HH:mm:ss") -ne "08:35:00") {
+    throw "The armed Shadow opening must be scheduled at exactly 08:35:00 local Central time."
+}
+if ($ArmShadowSelector -and -not $PlanOnly -and (Get-TimeZone).Id -ne "Central Standard Time") {
+    throw "The armed Shadow opening requires the Windows Central Standard Time zone."
+}
+
 $toolsDir = Join-Path $ProjectRoot "tools"
 $logDir = Join-Path $ProjectRoot "MomentumHunterData\logs"
-New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+if (-not $PlanOnly) {
+    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+}
 
 $morningTaskName = "Momentum Hunter Morning Capture"
 $shadowTaskName = "Momentum Hunter Shadow Opening Capture"
@@ -49,10 +83,35 @@ function Register-CaptureTask {
             $argument += " -ArmShadowSelector"
         }
     }
+    $oneTime = $Session -eq "shadow" -and $hasOneTimeShadow
+    $startWhenAvailable = -not $oneTime
+    if ($PlanOnly) {
+        return [pscustomobject]@{
+            taskName = $TaskName
+            session = $Session
+            triggerKind = if ($oneTime) { "ONCE" } else { "DAILY" }
+            runAt = if ($oneTime) { $ShadowRunAt.ToString("o") } else { $Time }
+            enabled = if ($Session -eq "shadow") { [bool]$EnableShadowTask } else { $true }
+            armShadowSelector = $Session -eq "shadow" -and [bool]$ArmShadowSelector
+            executable = "powershell.exe"
+            arguments = $argument
+            workingDirectory = $ProjectRoot
+            requiredWindowsTimeZone = if ($Session -eq "shadow") { "Central Standard Time" } else { "" }
+            startWhenAvailable = $startWhenAvailable
+            schedulerRestartCount = 0
+            runnerOwnedMaximumAttempts = if ($Session -eq "shadow") { 4 } else { 1 }
+        }
+    }
+
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $argument -WorkingDirectory $ProjectRoot
-    $trigger = New-ScheduledTaskTrigger -Daily -At $Time
+    $trigger = if ($oneTime) {
+        New-ScheduledTaskTrigger -Once -At $ShadowRunAt
+    }
+    else {
+        New-ScheduledTaskTrigger -Daily -At $Time
+    }
     $settingsArguments = @{
-        StartWhenAvailable = $true
+        StartWhenAvailable = $startWhenAvailable
         AllowStartIfOnBatteries = $true
         DontStopIfGoingOnBatteries = $true
         MultipleInstances = "IgnoreNew"
@@ -73,9 +132,19 @@ function Register-CaptureTask {
     }
 }
 
-Register-CaptureTask -TaskName $morningTaskName -Session "morning" -Time $MorningTime -ScriptPath $runnerScript
-Register-CaptureTask -TaskName $shadowTaskName -Session "shadow" -Time $ShadowTime -ScriptPath $runnerScript
-Register-CaptureTask -TaskName $eveningTaskName -Session "evening" -Time $EveningTime -ScriptPath $runnerScript
+$plans = @()
+if (-not $ShadowOnly) {
+    $plans += Register-CaptureTask -TaskName $morningTaskName -Session "morning" -Time $MorningTime -ScriptPath $runnerScript
+}
+$plans += Register-CaptureTask -TaskName $shadowTaskName -Session "shadow" -Time $ShadowTime -ScriptPath $runnerScript
+if (-not $ShadowOnly) {
+    $plans += Register-CaptureTask -TaskName $eveningTaskName -Session "evening" -Time $EveningTime -ScriptPath $runnerScript
+}
+
+if ($PlanOnly) {
+    $plans | ConvertTo-Json -Depth 4
+    exit 0
+}
 
 if (-not $EnableShadowTask) {
     Disable-ScheduledTask -TaskName $shadowTaskName | Out-Null
@@ -85,10 +154,20 @@ New-Item -ItemType Directory -Force -Path $taskDefinitionDirectory | Out-Null
 Export-ScheduledTask -TaskName $shadowTaskName | Set-Content -LiteralPath $taskDefinitionPath -Encoding Unicode
 
 Write-Host "Installed scheduled tasks:"
-Write-Host " - $morningTaskName at $MorningTime"
-Write-Host " - $shadowTaskName at $ShadowTime"
-Write-Host " - $eveningTaskName at $EveningTime"
+if (-not $ShadowOnly) {
+    Write-Host " - $morningTaskName at $MorningTime"
+}
+if ($hasOneTimeShadow) {
+    Write-Host " - $shadowTaskName once at $($ShadowRunAt.ToString('o'))"
+}
+else {
+    Write-Host " - $shadowTaskName daily at $ShadowTime"
+}
+if (-not $ShadowOnly) {
+    Write-Host " - $eveningTaskName at $EveningTime"
+}
 Write-Host " - Shadow task enabled: $([bool]$EnableShadowTask)"
+Write-Host " - Shadow selector arm requested: $([bool]$ArmShadowSelector)"
 Write-Host " - Frozen Shadow task definition: $taskDefinitionPath"
 Write-Host ""
 Write-Host "Market-calendar policy:"
