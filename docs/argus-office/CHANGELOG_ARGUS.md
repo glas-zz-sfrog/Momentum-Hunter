@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added CANARY-011's offline Schwab order-schema evidence inspector and read-only CLI. It accepts a local OpenAPI document or portal export, hashes the exact source bytes, follows local references only, verifies one GET order collection and detail operation on Schwab's exact HTTPS host, resolves nested response fields, and fails reconciliation readiness when required exact fields are absent or inconsistent.
+- Credential-shaped portal-envelope fields are reported by name without returning their values; raw specifications are never persisted by the module. Provider evidence, execution permission, broker action, and transmission remain false or unavailable. Compileall, 14 focused tests, all 1,084 Python tests, and all 216 .NET tests pass.
 - Added CANARY-010's content-addressed integration manifest and verifier for the exact CANARY-001 through CANARY-010 runtime stack. Missing, extra, duplicate, escaped, changed, unsafe, stale, future, wrong-build, aggregate-tampered, or authority-escalated evidence fails closed.
 - The actual implementation commit `ea6ee3e` passed with 10 components, zero findings, and stack SHA-256 `fc393b83edff078047d1ca3191f6655b1fc8e2f539919418201addbdc2421119`. The verifier is integration-only, nonauthorizing, provider-free, credential-free, and nontransmitting; compileall, 11 focused tests, 162 CANARY tests, all 304 Schwab tests, all 1,070 Python tests, and all 216 .NET tests pass.
 - Added CANARY-009's sanitized Schwab order-contract emulator. It deterministically models accepted, rejected, and acknowledgement-lost attempts; partial fills; cancel/fill races; expiration; terminal immutability; snapshot tamper rejection; and restart recovery entirely in memory.
