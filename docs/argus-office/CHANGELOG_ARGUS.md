@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added CANARY-010's content-addressed integration manifest and verifier for the exact CANARY-001 through CANARY-010 runtime stack. Missing, extra, duplicate, escaped, changed, unsafe, stale, future, wrong-build, aggregate-tampered, or authority-escalated evidence fails closed.
+- The actual implementation commit `ea6ee3e` passed with 10 components, zero findings, and stack SHA-256 `fc393b83edff078047d1ca3191f6655b1fc8e2f539919418201addbdc2421119`. The verifier is integration-only, nonauthorizing, provider-free, credential-free, and nontransmitting; compileall, 11 focused tests, 162 CANARY tests, all 304 Schwab tests, all 1,070 Python tests, and all 216 .NET tests pass.
 - Added CANARY-009's sanitized Schwab order-contract emulator. It deterministically models accepted, rejected, and acknowledgement-lost attempts; partial fills; cancel/fill races; expiration; terminal immutability; snapshot tamper rejection; and restart recovery entirely in memory.
 - The emulator accepts no credentials, has no network or broker-action method, permanently reports synthetic-only and transmission unavailable, and cannot serve as Schwab provider evidence. Compileall, 13 focused tests, 39 focused-plus-reconciler tests, all 293 Schwab tests, all 1,059 Python tests, and all 216 .NET tests pass.
 - Added CANARY-008's exact manual decision-intent contract. It can record one write-once approve/decline intent only while an exact CANARY-007 receipt and source chain remain current and the BUY LIMIT order identity, quantity, price, maximum debit, account commitment, actor label, and clocks match frozen policy.
