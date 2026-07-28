@@ -3,7 +3,8 @@
 Date reconciled: 2026-07-27
 
 This document names the merged implementation paths on `master` through
-SHADOW-012. The Roadmap, not this file, decides priority and next work.
+SHADOW-014 and the explicitly pending canary paths. The Roadmap, not this file,
+decides priority and next work.
 
 ## Canonical Paths
 
@@ -57,6 +58,7 @@ SHADOW-012. The Roadmap, not this file, decides priority and next work.
 | Future Schwab canary stack integrity | `momentum_hunter/schwab_canary_stack_integrity.py` on CANARY-010 | Pending nonauthorizing integration-only manifest/verifier for the exact CANARY-001 through CANARY-010 runtime paths, hashes, static safety boundary, build identity, and fixed false execution flags. A pass is change-detection evidence, not provider or execution evidence. |
 | Future Schwab official order-schema evidence | `momentum_hunter/schwab_order_schema_evidence.py` on CANARY-011 | Pending offline inspector and read-only CLI for a locally exported official OpenAPI document. It hashes the source, strips credential-shaped portal-wrapper values from output, follows local references only, verifies GET order collection/detail response fields, and fails reconciliation readiness on missing exact fields. It never fetches the specification or acts on an order. |
 | Future Schwab canary process observation | `momentum_hunter/schwab_canary_process_observer.py` on CANARY-012 | Pending Windows query-only producer for CANARY-005 process evidence. It binds PID, process creation time, runtime identity, and executable-path commitment; detects PID reuse; and keeps access denial/query failure unavailable. It cannot terminate or signal a process and is not a completed stop drill until bound to the future broker worker with separate provider-revocation evidence. |
+| Future Schwab canary process evidence persistence | `momentum_hunter/schwab_canary_process_evidence.py` on CANARY-013 | Pending immutable store for one exact CANARY-012 target and sequential hash-linked liveness observations. It rejects tamper, gaps, conflicts, identity/chronology drift, stopped-to-running contradiction, symlinks, partial files, and competing writers without repair or deletion. It is evidence persistence only, not a process controller, provider revocation path, stop-drill pass, or order authority. |
 | Future paper broker work | No code path yet | Schwab Trader API paperMoney is unavailable. Manual thinkorswim paperMoney reconciliation is the only current paper path. No paper broker adapter exists on `master` or R027. |
 
 ## Direct Answers
