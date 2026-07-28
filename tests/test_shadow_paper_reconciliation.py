@@ -18,6 +18,7 @@ from momentum_hunter.shadow_paper_reconciliation import (
     record_paper_money_reconciliation,
 )
 from momentum_hunter.shadow_trading import (
+    ShadowQuote,
     ShadowStateStore,
     ShadowTradingService,
     shadow_state_to_dict,
@@ -66,6 +67,23 @@ class PaperMoneyReconciliationTests(unittest.TestCase):
         values.update(overrides)
         return record_paper_money_reconciliation(**values)
 
+    def complete_fakebroker_lifecycle(self):
+        self.service.process_quote(
+            _quote("2026-07-27T10:01:00-05:00", bid=9.94, ask=9.95),
+            received_at=datetime.fromisoformat("2026-07-27T10:01:00-05:00"),
+        )
+        self.service.process_quote(
+            _quote(
+                "2026-07-27T10:30:00-05:00",
+                bid=10.55,
+                ask=10.56,
+                high=10.57,
+                low=10.50,
+            ),
+            received_at=datetime.fromisoformat("2026-07-27T10:30:00-05:00"),
+        )
+        return self.service.store.load().trades[0]
+
     def test_record_is_write_once_nontransmitting_and_preserves_source_state(self) -> None:
         before = self.state_path.read_bytes()
         before_hash = hashlib.sha256(before).hexdigest()
@@ -77,7 +95,7 @@ class PaperMoneyReconciliationTests(unittest.TestCase):
         self.assertEqual(before, self.state_path.read_bytes())
         payload = json.loads(result.path.read_text(encoding="utf-8"))
         record = payload["reconciliation"]
-        self.assertEqual(1, payload["schema_version"])
+        self.assertEqual(2, payload["schema_version"])
         self.assertEqual(PAPER_RECONCILIATION_MODE, record["mode"])
         self.assertFalse(record["transmitting"])
         self.assertFalse(record["broker_request_performed"])
@@ -92,7 +110,101 @@ class PaperMoneyReconciliationTests(unittest.TestCase):
         )
         self.assertEqual(self.trade.plan_fingerprint, record["plan_fingerprint"])
         self.assertEqual("FILLED", record["paper_money_result"])
+        self.assertEqual(2, record["paper_money_filled_quantity"])
         self.assertEqual(9.99, record["paper_money_fill_price"])
+        self.assertIsNone(record["paper_money_exit_price"])
+        self.assertEqual(2, record["ticket_quantity"])
+        self.assertEqual("BUY", record["ticket_side"])
+        self.assertEqual("accepted", record["fakebroker_order_status"])
+        self.assertEqual(0, record["fakebroker_filled_quantity"])
+        self.assertIsNone(record["fakebroker_fill_price"])
+        self.assertEqual("PAPER_FILL_ONLY", record["comparison_status"])
+        self.assertIsNone(record["paper_minus_fake_entry_price"])
+
+    def test_full_lifecycle_comparison_quantifies_fill_exit_and_pnl_deltas(self) -> None:
+        frozen_trade = self.complete_fakebroker_lifecycle()
+        assert frozen_trade.order is not None
+        assert frozen_trade.outcome is not None
+        before = self.state_path.read_bytes()
+
+        result = self.record(
+            paper_money_fill_price=9.96,
+            paper_money_exit_price=10.53,
+            paper_money_exit="Target exit entered manually.",
+            paper_money_outcome="CLOSED_WIN",
+            recorded_at=datetime.fromisoformat("2026-07-27T10:31:00-05:00"),
+        )
+
+        record = result.record
+        self.assertEqual(before, self.state_path.read_bytes())
+        self.assertEqual("FULL_LIFECYCLE_COMPARISON", record.comparison_status)
+        self.assertEqual(
+            frozen_trade.order.average_fill_price,
+            record.fakebroker_fill_price,
+        )
+        self.assertEqual(
+            frozen_trade.outcome.exit_price,
+            record.fakebroker_exit_price,
+        )
+        self.assertEqual(
+            round(9.96 - frozen_trade.order.average_fill_price, 6),
+            record.paper_minus_fake_entry_price,
+        )
+        self.assertEqual(
+            round(10.53 - frozen_trade.outcome.exit_price, 6),
+            record.paper_minus_fake_exit_price,
+        )
+        self.assertEqual(1.14, record.paper_money_estimated_pnl)
+        self.assertEqual(0.57, record.paper_money_estimated_pnl_per_share)
+        self.assertEqual(
+            round(1.14 - frozen_trade.outcome.executable_pnl, 2),
+            record.paper_minus_fake_executable_pnl,
+        )
+        self.assertEqual(
+            round(
+                0.57
+                - frozen_trade.outcome.executable_pnl
+                / frozen_trade.order.filled_quantity,
+                6,
+            ),
+            record.paper_minus_fake_pnl_per_share,
+        )
+
+    def test_quantity_mismatch_withholds_total_pnl_delta_but_keeps_per_share_delta(
+        self,
+    ) -> None:
+        frozen_trade = self.complete_fakebroker_lifecycle()
+        assert frozen_trade.outcome is not None
+
+        result = self.record(
+            paper_money_result="PARTIALLY_FILLED",
+            paper_money_filled_quantity=1,
+            paper_money_fill_price=9.96,
+            paper_money_exit_price=10.53,
+            paper_money_outcome="CLOSED_PARTIAL",
+            recorded_at=datetime.fromisoformat("2026-07-27T10:31:00-05:00"),
+        )
+
+        record = result.record
+        self.assertEqual(
+            "FULL_LIFECYCLE_QUANTITY_MISMATCH",
+            record.comparison_status,
+        )
+        self.assertIsNone(record.paper_minus_fake_executable_pnl)
+        self.assertIsNotNone(record.paper_minus_fake_pnl_per_share)
+
+    def test_partial_fill_requires_and_uses_actual_filled_quantity(self) -> None:
+        result = self.record(
+            paper_money_result="PARTIALLY_FILLED",
+            paper_money_filled_quantity=1,
+            paper_money_fill_price=9.99,
+            paper_money_exit_price=10.09,
+            paper_money_outcome="CLOSED_PARTIAL",
+        )
+
+        self.assertEqual(1, result.record.paper_money_filled_quantity)
+        self.assertEqual(0.10, result.record.paper_money_estimated_pnl)
+        self.assertEqual("PAPER_FILL_ONLY", result.record.comparison_status)
 
     def test_exact_duplicate_is_idempotent_without_rewriting_artifact(self) -> None:
         first = self.record()
@@ -167,6 +279,43 @@ class PaperMoneyReconciliationTests(unittest.TestCase):
                 {"paper_money_result": "FILLED", "paper_money_fill_price": float("nan")},
                 "required",
             ),
+            (
+                {
+                    "paper_money_result": "PARTIALLY_FILLED",
+                    "paper_money_fill_price": 9.99,
+                },
+                "requires a quantity",
+            ),
+            (
+                {
+                    "paper_money_result": "FILLED",
+                    "paper_money_filled_quantity": 1,
+                },
+                "complete frozen ticket quantity",
+            ),
+            (
+                {
+                    "paper_money_result": "REJECTED",
+                    "paper_money_fill_price": None,
+                    "paper_money_filled_quantity": 1,
+                },
+                "must be omitted",
+            ),
+            (
+                {
+                    "paper_money_result": "REJECTED",
+                    "paper_money_fill_price": None,
+                    "paper_money_exit_price": 10.0,
+                },
+                "requires a filled",
+            ),
+            (
+                {
+                    "paper_money_result": "FILLED",
+                    "paper_money_exit_price": float("nan"),
+                },
+                "finite and positive",
+            ),
         )
         for overrides, expected in scenarios:
             with self.subTest(overrides=overrides):
@@ -215,6 +364,26 @@ class PaperMoneyReconciliationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "embedded"):
             self.record()
 
+    def test_ticket_execution_fields_must_match_frozen_fakebroker_order(self) -> None:
+        state = self.service.store.load()
+        ticket = state.trades[0].ticket
+        assert ticket is not None
+        mismatched_trade = replace(
+            state.trades[0],
+            ticket=replace(ticket, quantity=ticket.quantity + 1),
+        )
+        self.state_path.write_text(
+            json.dumps(
+                shadow_state_to_dict(replace(state, trades=(mismatched_trade,))),
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(ValueError, "quantity"):
+            self.record()
+        self.assertFalse(self.output_dir.exists())
+
     def test_output_cannot_be_state_file_or_unbounded_existing_artifact(self) -> None:
         with self.assertRaisesRegex(ValueError, "directory"):
             self.record(output_dir=self.state_path)
@@ -242,9 +411,15 @@ class PaperMoneyReconciliationTests(unittest.TestCase):
                     "--exact-ticket-entered",
                     "BUY 2 TEST LIMIT 10.00 DAY REGULAR",
                     "--result",
-                    "NOT_FILLED",
+                    "PARTIALLY_FILLED",
+                    "--filled-quantity",
+                    "1",
+                    "--fill-price",
+                    "9.99",
+                    "--exit-price",
+                    "10.09",
                     "--notes",
-                    "Order was not filled in paperMoney.",
+                    "One share filled and was closed in paperMoney.",
                 ]
             )
 
@@ -255,6 +430,14 @@ class PaperMoneyReconciliationTests(unittest.TestCase):
         self.assertFalse(payload["transmitting"])
         self.assertFalse(payload["brokerRequestPerformed"])
         self.assertFalse(payload["orderActionPerformed"])
+        self.assertEqual(
+            1,
+            payload["reconciliation"]["paper_money_filled_quantity"],
+        )
+        self.assertEqual(
+            0.10,
+            payload["reconciliation"]["paper_money_estimated_pnl"],
+        )
 
     def test_module_declares_no_network_broker_or_order_action_capability(self) -> None:
         source_path = Path(reconciliation_module.__file__)
@@ -337,6 +520,28 @@ def _report_payload() -> dict:
         "top_5_for_capital": [row],
         "candidates": [row],
     }
+
+
+def _quote(
+    timestamp: str,
+    *,
+    bid: float,
+    ask: float,
+    high: float | None = None,
+    low: float | None = None,
+) -> ShadowQuote:
+    return ShadowQuote(
+        symbol="TEST",
+        timestamp=timestamp,
+        bid=bid,
+        ask=ask,
+        last=bid,
+        high=high,
+        low=low,
+        session="regular",
+        trading_state="tradable",
+        source="synthetic-paper-comparison",
+    )
 
 
 if __name__ == "__main__":

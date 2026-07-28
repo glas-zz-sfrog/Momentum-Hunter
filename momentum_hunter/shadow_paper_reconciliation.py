@@ -12,7 +12,7 @@ import json
 import math
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -31,7 +31,7 @@ from momentum_hunter.time_utils import now_central
 from momentum_hunter.trade_planning import parse_datetime
 
 
-PAPER_RECONCILIATION_SCHEMA_VERSION = 1
+PAPER_RECONCILIATION_SCHEMA_VERSION = 2
 PAPER_RECONCILIATION_MODE = (
     "MANUAL THINKORSWIM PAPERMONEY RECONCILIATION / NONTRANSMITTING"
 )
@@ -83,10 +83,29 @@ class PaperMoneyReconciliationRecord:
     exact_ticket_entered: str
     operator_modifications: str
     paper_money_result: str
+    paper_money_filled_quantity: int
     paper_money_fill_price: float | None
+    paper_money_exit_price: float | None
     paper_money_exit: str
     paper_money_outcome: str
     reconciliation_notes: str
+    ticket_quantity: int
+    ticket_side: str
+    planned_entry_price: float
+    fakebroker_order_status: str
+    fakebroker_filled_quantity: int
+    fakebroker_fill_price: float | None
+    fakebroker_exit_price: float | None
+    fakebroker_executable_pnl: float | None
+    fakebroker_executable_pnl_per_share: float | None
+    comparison_status: str
+    paper_minus_fake_entry_price: float | None
+    paper_minus_fake_entry_bps: float | None
+    paper_minus_fake_exit_price: float | None
+    paper_money_estimated_pnl: float | None
+    paper_money_estimated_pnl_per_share: float | None
+    paper_minus_fake_executable_pnl: float | None
+    paper_minus_fake_pnl_per_share: float | None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -107,7 +126,9 @@ def record_paper_money_reconciliation(
     shadow_trade_id: str,
     exact_ticket_entered: str,
     paper_money_result: str,
+    paper_money_filled_quantity: int | None = None,
     paper_money_fill_price: float | None = None,
+    paper_money_exit_price: float | None = None,
     operator_modifications: str = "",
     paper_money_exit: str = "",
     paper_money_outcome: str = "",
@@ -126,6 +147,7 @@ def record_paper_money_reconciliation(
 
     result = _normalize_result(paper_money_result)
     fill_price = _validate_fill_price(result, paper_money_fill_price)
+    exit_price = _validate_exit_price(result, fill_price, paper_money_exit_price)
     ticket_text = _bounded_text(
         exact_ticket_entered,
         "Exact ticket entered",
@@ -158,6 +180,11 @@ def record_paper_money_reconciliation(
 
     ticket = trade.ticket
     assert ticket is not None
+    filled_quantity = _validate_filled_quantity(
+        result,
+        paper_money_filled_quantity,
+        ticket.quantity,
+    )
     decision_at = parse_datetime(trade.decision_timestamp)
     ticket_at = parse_datetime(ticket.generated_timestamp)
     if decision_at is None or ticket_at is None:
@@ -166,47 +193,16 @@ def record_paper_money_reconciliation(
         raise ValueError(
             "Reconciliation timestamp cannot precede the frozen decision or ticket."
         )
-    request_payload = {
-        "source_state_path": str(source_path),
-        "source_state_sha256": source_sha256,
-        "shadow_trade_id": trade.shadow_trade_id,
-        "shadow_order_id": ticket.shadow_order_id,
-        "symbol": trade.symbol,
-        "trade_plan_id": trade.trade_plan_id,
-        "risk_decision_id": trade.risk_decision_id,
-        "evidence_snapshot_id": trade.evidence_snapshot_id,
-        "plan_fingerprint": trade.plan_fingerprint,
-        "sample_version": trade.sample_metadata.sample_version,
-        "strategy_configuration_fingerprint": (
-            trade.sample_metadata.strategy_configuration_fingerprint
-        ),
-        "fill_model_version": trade.sample_metadata.fill_model_version,
-        "evidence_schema_version": trade.sample_metadata.evidence_schema_version,
-        "selection_policy_version": trade.selection_policy_version,
-        "selection_policy_fingerprint": trade.selection_policy_fingerprint,
-        "selector_arm_id": trade.selector_arm_id,
-        "constitution_hash": trade.constitution_hash,
-        "decision_cycle_id": trade.decision_cycle_id,
-        "opportunity_id": trade.opportunity_id,
-        "exact_ticket_entered": ticket_text,
-        "operator_modifications": modifications,
-        "paper_money_result": result,
-        "paper_money_fill_price": fill_price,
-        "paper_money_exit": exit_text,
-        "paper_money_outcome": outcome,
-        "reconciliation_notes": notes,
-    }
-    request_fingerprint = hashlib.sha256(
-        canonical_json(request_payload).encode("utf-8")
-    ).hexdigest()
+    comparison = _build_comparison(
+        trade,
+        paper_money_filled_quantity=filled_quantity,
+        paper_money_fill_price=fill_price,
+        paper_money_exit_price=exit_price,
+    )
     record = PaperMoneyReconciliationRecord(
         schema_version=PAPER_RECONCILIATION_SCHEMA_VERSION,
-        reconciliation_id=stable_id(
-            "paper-reconciliation",
-            trade.shadow_trade_id,
-            request_fingerprint,
-        ),
-        request_fingerprint=request_fingerprint,
+        reconciliation_id="",
+        request_fingerprint="",
         recorded_at=timestamp.isoformat(),
         mode=PAPER_RECONCILIATION_MODE,
         transmitting=False,
@@ -236,10 +232,25 @@ def record_paper_money_reconciliation(
         exact_ticket_entered=ticket_text,
         operator_modifications=modifications,
         paper_money_result=result,
+        paper_money_filled_quantity=filled_quantity,
         paper_money_fill_price=fill_price,
+        paper_money_exit_price=exit_price,
         paper_money_exit=exit_text,
         paper_money_outcome=outcome,
         reconciliation_notes=notes,
+        **comparison,
+    )
+    request_fingerprint = hashlib.sha256(
+        canonical_json(_request_payload_from_record(record)).encode("utf-8")
+    ).hexdigest()
+    record = replace(
+        record,
+        reconciliation_id=stable_id(
+            "paper-reconciliation",
+            trade.shadow_trade_id,
+            request_fingerprint,
+        ),
+        request_fingerprint=request_fingerprint,
     )
     _validate_record(record)
 
@@ -362,6 +373,13 @@ def _validate_frozen_ticket(trade: ShadowTrade) -> None:
     bindings = {
         "order identifier": (ticket.shadow_order_id, trade.order.order_id),
         "symbol": (ticket.symbol, trade.symbol),
+        "side": (ticket.side.strip().lower(), trade.order.side.strip().lower()),
+        "quantity": (ticket.quantity, trade.order.quantity),
+        "order type": (
+            ticket.order_type.strip().lower(),
+            trade.order.order_type.strip().lower(),
+        ),
+        "limit price": (ticket.limit_price, trade.order.limit_price),
         "TradePlan identifier": (ticket.trade_plan_id, trade.trade_plan_id),
         "evidence snapshot identifier": (
             ticket.evidence_snapshot_id,
@@ -398,16 +416,275 @@ def _normalize_result(value: str) -> str:
 
 def _validate_fill_price(result: str, value: float | None) -> float | None:
     if result in PAPER_RESULTS_REQUIRING_FILL:
-        if value is None or not math.isfinite(value) or value <= 0:
+        if value is None:
             raise ValueError(
                 "A finite positive paperMoney fill price is required for filled results."
             )
-        return round(float(value), 6)
+        try:
+            return _finite_number(
+                value,
+                "paperMoney fill price",
+                positive=True,
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "A finite positive paperMoney fill price is required for filled results."
+            ) from exc
     if value is not None:
         raise ValueError(
             "paperMoney fill price must be omitted when the result is not filled."
         )
     return None
+
+
+def _validate_filled_quantity(
+    result: str,
+    value: int | None,
+    ticket_quantity: int,
+) -> int:
+    if (
+        isinstance(ticket_quantity, bool)
+        or not isinstance(ticket_quantity, int)
+        or ticket_quantity <= 0
+    ):
+        raise ValueError("Frozen ticket quantity must be positive.")
+    if result == "FILLED":
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or value != ticket_quantity
+        ):
+            raise ValueError(
+                "A FILLED paperMoney result must use the complete frozen ticket quantity."
+            )
+        return ticket_quantity
+    if result == "PARTIALLY_FILLED":
+        if (
+            value is None
+            or isinstance(value, bool)
+            or not isinstance(value, int)
+            or value <= 0
+            or value >= ticket_quantity
+        ):
+            raise ValueError(
+                "PARTIALLY_FILLED requires a quantity between one and "
+                "the frozen ticket quantity minus one."
+            )
+        return value
+    if value not in (None, 0):
+        raise ValueError(
+            "paperMoney filled quantity must be omitted when the result is not filled."
+        )
+    return 0
+
+
+def _validate_exit_price(
+    result: str,
+    fill_price: float | None,
+    value: float | None,
+) -> float | None:
+    if value is None:
+        return None
+    if result not in PAPER_RESULTS_REQUIRING_FILL or fill_price is None:
+        raise ValueError(
+            "paperMoney exit price requires a filled or partially filled result."
+        )
+    return _finite_number(
+        value,
+        "paperMoney exit price",
+        positive=True,
+    )
+
+
+def _build_comparison(
+    trade: ShadowTrade,
+    *,
+    paper_money_filled_quantity: int,
+    paper_money_fill_price: float | None,
+    paper_money_exit_price: float | None,
+) -> dict[str, Any]:
+    ticket = trade.ticket
+    order = trade.order
+    assert ticket is not None and order is not None
+
+    planned_entry = _finite_number(
+        ticket.limit_price,
+        "Frozen planned entry price",
+        positive=True,
+    )
+    fake_fill = _optional_finite_number(
+        order.average_fill_price,
+        "FakeBroker fill price",
+        positive=True,
+    )
+    fake_exit = _optional_finite_number(
+        trade.outcome.exit_price if trade.outcome is not None else None,
+        "FakeBroker exit price",
+        positive=True,
+    )
+    fake_pnl = _optional_finite_number(
+        trade.outcome.executable_pnl if trade.outcome is not None else None,
+        "FakeBroker executable P&L",
+    )
+    return _comparison_values(
+        ticket_quantity=ticket.quantity,
+        ticket_side=ticket.side,
+        planned_entry_price=planned_entry,
+        fakebroker_order_status=order.status,
+        fakebroker_filled_quantity=order.filled_quantity,
+        fakebroker_fill_price=fake_fill,
+        fakebroker_exit_price=fake_exit,
+        fakebroker_executable_pnl=fake_pnl,
+        paper_money_filled_quantity=paper_money_filled_quantity,
+        paper_money_fill_price=paper_money_fill_price,
+        paper_money_exit_price=paper_money_exit_price,
+    )
+
+
+def _comparison_values(
+    *,
+    ticket_quantity: int,
+    ticket_side: str,
+    planned_entry_price: float,
+    fakebroker_order_status: str,
+    fakebroker_filled_quantity: int,
+    fakebroker_fill_price: float | None,
+    fakebroker_exit_price: float | None,
+    fakebroker_executable_pnl: float | None,
+    paper_money_filled_quantity: int,
+    paper_money_fill_price: float | None,
+    paper_money_exit_price: float | None,
+) -> dict[str, Any]:
+    normalized_side = ticket_side.strip().upper()
+    if normalized_side not in {"BUY", "SELL"}:
+        raise ValueError("Frozen ticket side must be BUY or SELL.")
+    if (
+        fakebroker_filled_quantity > 0
+        and fakebroker_fill_price is None
+    ) or (
+        fakebroker_filled_quantity == 0
+        and fakebroker_fill_price is not None
+    ):
+        raise ValueError("FakeBroker filled quantity and fill price are inconsistent.")
+    if (fakebroker_exit_price is None) != (fakebroker_executable_pnl is None):
+        raise ValueError("FakeBroker exit and executable P&L are inconsistent.")
+
+    entry_delta = (
+        round(paper_money_fill_price - fakebroker_fill_price, 6)
+        if paper_money_fill_price is not None
+        and fakebroker_fill_price is not None
+        else None
+    )
+    entry_delta_bps = (
+        round(entry_delta / fakebroker_fill_price * 10_000, 4)
+        if entry_delta is not None and fakebroker_fill_price
+        else None
+    )
+    exit_delta = (
+        round(paper_money_exit_price - fakebroker_exit_price, 6)
+        if paper_money_exit_price is not None
+        and fakebroker_exit_price is not None
+        else None
+    )
+    paper_pnl = (
+        round(
+            (paper_money_exit_price - paper_money_fill_price)
+            * paper_money_filled_quantity,
+            2,
+        )
+        if paper_money_exit_price is not None
+        and paper_money_fill_price is not None
+        and paper_money_filled_quantity > 0
+        else None
+    )
+    if paper_pnl is not None and normalized_side == "SELL":
+        paper_pnl = -paper_pnl
+    fake_pnl_per_share = (
+        round(fakebroker_executable_pnl / fakebroker_filled_quantity, 6)
+        if fakebroker_executable_pnl is not None
+        and fakebroker_filled_quantity > 0
+        else None
+    )
+    paper_pnl_per_share = (
+        round(paper_pnl / paper_money_filled_quantity, 6)
+        if paper_pnl is not None and paper_money_filled_quantity > 0
+        else None
+    )
+    pnl_delta = (
+        round(paper_pnl - fakebroker_executable_pnl, 2)
+        if paper_pnl is not None
+        and fakebroker_executable_pnl is not None
+        and paper_money_filled_quantity == fakebroker_filled_quantity
+        else None
+    )
+    pnl_per_share_delta = (
+        round(paper_pnl_per_share - fake_pnl_per_share, 6)
+        if paper_pnl_per_share is not None and fake_pnl_per_share is not None
+        else None
+    )
+
+    if paper_money_fill_price is None:
+        comparison_status = "UNAVAILABLE_NO_PAPER_FILL"
+    elif fakebroker_fill_price is None:
+        comparison_status = "PAPER_FILL_ONLY"
+    elif (
+        paper_money_exit_price is not None
+        and fakebroker_exit_price is not None
+        and fakebroker_executable_pnl is not None
+    ):
+        comparison_status = (
+            "FULL_LIFECYCLE_COMPARISON"
+            if paper_money_filled_quantity == fakebroker_filled_quantity
+            else "FULL_LIFECYCLE_QUANTITY_MISMATCH"
+        )
+    elif paper_money_exit_price is not None or fakebroker_exit_price is not None:
+        comparison_status = "PARTIAL_LIFECYCLE_COMPARISON"
+    else:
+        comparison_status = "ENTRY_COMPARISON"
+
+    return {
+        "ticket_quantity": ticket_quantity,
+        "ticket_side": normalized_side,
+        "planned_entry_price": planned_entry_price,
+        "fakebroker_order_status": fakebroker_order_status,
+        "fakebroker_filled_quantity": fakebroker_filled_quantity,
+        "fakebroker_fill_price": fakebroker_fill_price,
+        "fakebroker_exit_price": fakebroker_exit_price,
+        "fakebroker_executable_pnl": fakebroker_executable_pnl,
+        "fakebroker_executable_pnl_per_share": fake_pnl_per_share,
+        "comparison_status": comparison_status,
+        "paper_minus_fake_entry_price": entry_delta,
+        "paper_minus_fake_entry_bps": entry_delta_bps,
+        "paper_minus_fake_exit_price": exit_delta,
+        "paper_money_estimated_pnl": paper_pnl,
+        "paper_money_estimated_pnl_per_share": paper_pnl_per_share,
+        "paper_minus_fake_executable_pnl": pnl_delta,
+        "paper_minus_fake_pnl_per_share": pnl_per_share_delta,
+    }
+
+
+def _finite_number(
+    value: float,
+    label: str,
+    *,
+    positive: bool = False,
+) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{label} must be numeric.")
+    numeric = float(value)
+    if not math.isfinite(numeric) or (positive and numeric <= 0):
+        qualifier = "finite and positive" if positive else "finite"
+        raise ValueError(f"{label} must be {qualifier}.")
+    return round(numeric, 6)
+
+
+def _optional_finite_number(
+    value: float | None,
+    label: str,
+    *,
+    positive: bool = False,
+) -> float | None:
+    return None if value is None else _finite_number(value, label, positive=positive)
 
 
 def _bounded_text(
@@ -492,11 +769,73 @@ def _validate_record(record: PaperMoneyReconciliationRecord) -> None:
         or recorded_at.utcoffset() is None
     ):
         raise ValueError("Paper reconciliation record timestamp must include an offset.")
-    _normalize_result(record.paper_money_result)
-    _validate_fill_price(
+    normalized_result = _normalize_result(record.paper_money_result)
+    if normalized_result != record.paper_money_result:
+        raise ValueError("Paper reconciliation result must use its canonical label.")
+    validated_fill = _validate_fill_price(
         record.paper_money_result,
         record.paper_money_fill_price,
     )
+    if validated_fill != record.paper_money_fill_price:
+        raise ValueError("Paper reconciliation fill price is not normalized.")
+    validated_quantity = _validate_filled_quantity(
+        record.paper_money_result,
+        record.paper_money_filled_quantity,
+        record.ticket_quantity,
+    )
+    if validated_quantity != record.paper_money_filled_quantity:
+        raise ValueError("Paper reconciliation filled quantity is inconsistent.")
+    validated_exit = _validate_exit_price(
+        record.paper_money_result,
+        record.paper_money_fill_price,
+        record.paper_money_exit_price,
+    )
+    if validated_exit != record.paper_money_exit_price:
+        raise ValueError("Paper reconciliation exit price is not normalized.")
+    if (
+        isinstance(record.fakebroker_filled_quantity, bool)
+        or not isinstance(record.fakebroker_filled_quantity, int)
+        or record.fakebroker_filled_quantity < 0
+        or record.fakebroker_filled_quantity > record.ticket_quantity
+    ):
+        raise ValueError("FakeBroker filled quantity is inconsistent.")
+    planned_entry = _finite_number(
+        record.planned_entry_price,
+        "Frozen planned entry price",
+        positive=True,
+    )
+    fake_fill = _optional_finite_number(
+        record.fakebroker_fill_price,
+        "FakeBroker fill price",
+        positive=True,
+    )
+    fake_exit = _optional_finite_number(
+        record.fakebroker_exit_price,
+        "FakeBroker exit price",
+        positive=True,
+    )
+    fake_pnl = _optional_finite_number(
+        record.fakebroker_executable_pnl,
+        "FakeBroker executable P&L",
+    )
+    expected_comparison = _comparison_values(
+        ticket_quantity=record.ticket_quantity,
+        ticket_side=record.ticket_side,
+        planned_entry_price=planned_entry,
+        fakebroker_order_status=record.fakebroker_order_status,
+        fakebroker_filled_quantity=record.fakebroker_filled_quantity,
+        fakebroker_fill_price=fake_fill,
+        fakebroker_exit_price=fake_exit,
+        fakebroker_executable_pnl=fake_pnl,
+        paper_money_filled_quantity=record.paper_money_filled_quantity,
+        paper_money_fill_price=record.paper_money_fill_price,
+        paper_money_exit_price=record.paper_money_exit_price,
+    )
+    for field_name, expected_value in expected_comparison.items():
+        if getattr(record, field_name) != expected_value:
+            raise ValueError(
+                f"Paper reconciliation comparison field {field_name!r} is inconsistent."
+            )
     expected_fingerprint = hashlib.sha256(
         canonical_json(_request_payload_from_record(record)).encode("utf-8")
     ).hexdigest()
@@ -514,36 +853,10 @@ def _validate_record(record: PaperMoneyReconciliationRecord) -> None:
 def _request_payload_from_record(
     record: PaperMoneyReconciliationRecord,
 ) -> dict[str, Any]:
-    return {
-        "source_state_path": record.source_state_path,
-        "source_state_sha256": record.source_state_sha256,
-        "shadow_trade_id": record.shadow_trade_id,
-        "shadow_order_id": record.shadow_order_id,
-        "symbol": record.symbol,
-        "trade_plan_id": record.trade_plan_id,
-        "risk_decision_id": record.risk_decision_id,
-        "evidence_snapshot_id": record.evidence_snapshot_id,
-        "plan_fingerprint": record.plan_fingerprint,
-        "sample_version": record.sample_version,
-        "strategy_configuration_fingerprint": (
-            record.strategy_configuration_fingerprint
-        ),
-        "fill_model_version": record.fill_model_version,
-        "evidence_schema_version": record.evidence_schema_version,
-        "selection_policy_version": record.selection_policy_version,
-        "selection_policy_fingerprint": record.selection_policy_fingerprint,
-        "selector_arm_id": record.selector_arm_id,
-        "constitution_hash": record.constitution_hash,
-        "decision_cycle_id": record.decision_cycle_id,
-        "opportunity_id": record.opportunity_id,
-        "exact_ticket_entered": record.exact_ticket_entered,
-        "operator_modifications": record.operator_modifications,
-        "paper_money_result": record.paper_money_result,
-        "paper_money_fill_price": record.paper_money_fill_price,
-        "paper_money_exit": record.paper_money_exit,
-        "paper_money_outcome": record.paper_money_outcome,
-        "reconciliation_notes": record.reconciliation_notes,
-    }
+    payload = record.to_dict()
+    for field_name in ("reconciliation_id", "request_fingerprint", "recorded_at"):
+        payload.pop(field_name)
+    return payload
 
 
 def _source_matches(path: Path, expected: bytes, expected_sha256: str) -> bool:
@@ -575,7 +888,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--trade-id", required=True)
     parser.add_argument("--exact-ticket-entered", required=True)
     parser.add_argument("--result", required=True, choices=sorted(PAPER_RESULTS))
+    parser.add_argument("--filled-quantity", type=int)
     parser.add_argument("--fill-price", type=float)
+    parser.add_argument("--exit-price", type=float)
     parser.add_argument("--operator-modifications", default="")
     parser.add_argument("--exit", dest="paper_money_exit", default="")
     parser.add_argument("--outcome", dest="paper_money_outcome", default="")
@@ -588,7 +903,9 @@ def main(argv: list[str] | None = None) -> int:
         shadow_trade_id=args.trade_id,
         exact_ticket_entered=args.exact_ticket_entered,
         paper_money_result=args.result,
+        paper_money_filled_quantity=args.filled_quantity,
         paper_money_fill_price=args.fill_price,
+        paper_money_exit_price=args.exit_price,
         operator_modifications=args.operator_modifications,
         paper_money_exit=args.paper_money_exit,
         paper_money_outcome=args.paper_money_outcome,
