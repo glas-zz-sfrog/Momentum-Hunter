@@ -21,6 +21,7 @@ from momentum_hunter.technical_confluence import (
     BLOCKED,
     CAUTION,
     CLEAR,
+    FAMILY_BREAKOUT,
     FAMILY_MARKET_REGIME,
     FAMILY_MOMENTUM,
     FAMILY_RELATIVE_STRENGTH,
@@ -43,6 +44,7 @@ from momentum_hunter.technical_confluence import (
     average_daily_range_expansion_state,
     benchmark_sma_regime_state,
     bollinger_bandwidth_state,
+    breakout_context_state,
     build_technical_confluence_report_payload,
     build_technical_confluence_study_payload,
     chaikin_money_flow_state,
@@ -245,7 +247,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             HOSTILE,
             hostile.family_states[FAMILY_MARKET_REGIME].state,
         )
-        self.assertLessEqual(hostile.independent_total_families, 5)
+        self.assertLessEqual(hostile.independent_total_families, 6)
         self.assertEqual(
             hostile.major_red_flags,
             sum(
@@ -600,7 +602,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             },
             volatility_names,
         )
-        self.assertLessEqual(summary.independent_total_families, 5)
+        self.assertLessEqual(summary.independent_total_families, 6)
 
     def test_volume_confirmation_uses_prior_average(self) -> None:
         bars = daily_bars("AAA", [10.0] * 21, volume=100)
@@ -923,7 +925,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             {state.name for state in momentum_indicators},
         )
         self.assertIn(FAMILY_MOMENTUM, summary.family_states)
-        self.assertLessEqual(summary.independent_total_families, 5)
+        self.assertLessEqual(summary.independent_total_families, 6)
 
     def test_redundant_volume_checks_count_as_one_family(self) -> None:
         bars = [
@@ -954,7 +956,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             "up_down_volume",
             {state.name for state in volume_indicators},
         )
-        self.assertLessEqual(summary.independent_total_families, 5)
+        self.assertLessEqual(summary.independent_total_families, 6)
 
     def test_redundant_sma_and_relative_strength_checks_stay_family_capped(self) -> None:
         stock = daily_bars(
@@ -990,7 +992,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             },
             relative_names,
         )
-        self.assertLessEqual(summary.independent_total_families, 5)
+        self.assertLessEqual(summary.independent_total_families, 6)
 
     def test_green_plus_yellow_family_is_confirming_but_red_conflict_is_not(self) -> None:
         green = technical_confluence.indicator(
@@ -1270,6 +1272,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
         summary = evaluate_wave1_confluence(symbol="AAA", bars=bars, breakout_events=[event])
 
         self.assertEqual(BLOCKED, summary.family_states["Overextension / Risk"].state)
+        self.assertEqual(RED, summary.family_states[FAMILY_BREAKOUT].state)
         self.assertGreaterEqual(summary.major_red_flags, 1)
 
     def test_latest_breakout_context_replaces_older_failure(self) -> None:
@@ -1295,6 +1298,10 @@ class TechnicalConfluenceTests(unittest.TestCase):
             BLOCKED,
             summary.family_states["Overextension / Risk"].state,
         )
+        self.assertEqual(
+            GREEN,
+            summary.family_states[FAMILY_BREAKOUT].state,
+        )
 
     def test_future_failed_breakout_does_not_block_current_context(self) -> None:
         bars = daily_bars("AAA", [10 + offset * 0.2 for offset in range(70)], volume=200)
@@ -1318,6 +1325,10 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertNotEqual(
             BLOCKED,
             summary.family_states["Overextension / Risk"].state,
+        )
+        self.assertEqual(
+            GREEN,
+            summary.family_states[FAMILY_BREAKOUT].state,
         )
 
     def test_offset_aware_breakout_context_is_compared_without_clock_error(self) -> None:
@@ -1371,6 +1382,100 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
         self.assertEqual("UNAVAILABLE", state.state)
         self.assertIn("conflicting", state.reason)
+        breakout_state = breakout_context_state(
+            symbol="AAA",
+            breakout_events=events,
+            as_of="2026-03-02",
+        )
+        self.assertEqual("UNAVAILABLE", breakout_state.state)
+        self.assertIn("conflicting", breakout_state.reason)
+
+    def test_breakout_context_is_an_independent_green_family(self) -> None:
+        bars = daily_bars(
+            "AAA",
+            [10 + offset * 0.2 for offset in range(70)],
+            volume=200,
+        )
+
+        summary = evaluate_wave1_confluence(
+            symbol="AAA",
+            bars=bars,
+            breakout_events=[breakout_event("AAA", BREAKOUT_PRESENT)],
+        )
+
+        state = next(
+            item
+            for item in summary.indicator_states
+            if item.name == "breakout_context"
+        )
+        self.assertEqual(GREEN, state.state)
+        self.assertEqual(FAMILY_BREAKOUT, state.family)
+        self.assertEqual(GREEN, summary.family_states[FAMILY_BREAKOUT].state)
+
+    def test_latest_breakout_failure_replaces_older_present_context(self) -> None:
+        bars = daily_bars(
+            "AAA",
+            [10 + offset * 0.2 for offset in range(70)],
+            volume=200,
+        )
+        events = [
+            breakout_event(
+                "AAA",
+                BREAKOUT_PRESENT,
+                event_timestamp="2026-02-01",
+            ),
+            breakout_event(
+                "AAA",
+                BREAKOUT_FAILED,
+                event_timestamp="2026-03-01",
+            ),
+        ]
+
+        summary = evaluate_wave1_confluence(
+            symbol="AAA",
+            bars=bars,
+            breakout_events=events,
+        )
+
+        self.assertEqual(RED, summary.family_states[FAMILY_BREAKOUT].state)
+        self.assertEqual(
+            BLOCKED,
+            summary.family_states["Overextension / Risk"].state,
+        )
+
+    def test_duplicate_present_breakout_types_count_as_one_family(self) -> None:
+        bars = daily_bars(
+            "AAA",
+            [10 + offset * 0.2 for offset in range(70)],
+            volume=200,
+        )
+        events = [
+            breakout_event(
+                "AAA",
+                BREAKOUT_PRESENT,
+                event_type="donchian_20_day_breakout",
+            ),
+            breakout_event(
+                "AAA",
+                BREAKOUT_PRESENT,
+                event_type="bollinger_upper_band_breakout",
+            ),
+        ]
+
+        summary = evaluate_wave1_confluence(
+            symbol="AAA",
+            bars=bars,
+            breakout_events=events,
+        )
+
+        breakout_states = [
+            item
+            for item in summary.indicator_states
+            if item.family == FAMILY_BREAKOUT
+        ]
+        self.assertEqual(1, len(breakout_states))
+        self.assertEqual(GREEN, summary.family_states[FAMILY_BREAKOUT].state)
+        self.assertEqual(6, summary.independent_total_families)
 
     def test_one_green_does_not_override_reds_in_same_family(self) -> None:
         states = [
@@ -1501,7 +1606,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             len(summary.indicator_states),
             summary.raw_total_checks,
         )
-        self.assertEqual(26, summary.raw_total_checks)
+        self.assertEqual(27, summary.raw_total_checks)
         self.assertEqual(
             summary.raw_total_checks,
             (
@@ -1514,7 +1619,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             summary.raw_total_checks,
             sum(summary.raw_state_counts.values()),
         )
-        self.assertEqual(5, summary.independent_total_families)
+        self.assertEqual(6, summary.independent_total_families)
         self.assertEqual(
             summary.independent_total_families,
             (

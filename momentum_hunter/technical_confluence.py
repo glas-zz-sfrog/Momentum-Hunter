@@ -31,7 +31,7 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v9"
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v10"
 TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 2
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
@@ -79,6 +79,7 @@ WEAK_CONFLUENCE = "WEAK_CONFLUENCE"
 CONFLICTED_CONFLUENCE = "CONFLICTED_CONFLUENCE"
 
 FAMILY_TREND = "Trend / Structure"
+FAMILY_BREAKOUT = "Breakout Structure"
 FAMILY_MOMENTUM = "Momentum"
 FAMILY_VOLATILITY = "Volatility / Compression"
 FAMILY_VOLUME = "Volume / Participation"
@@ -503,6 +504,11 @@ def evaluate_wave1_confluence(
             as_of=timestamp,
             options=options,
         ),
+        breakout_context_state(
+            symbol=normalized_symbol,
+            breakout_events=breakout_events or [],
+            as_of=timestamp,
+        ),
         atr_extension_risk_state(ordered_bars, index, options=options),
         failed_breakout_state(
             symbol=normalized_symbol,
@@ -522,6 +528,7 @@ def evaluate_wave1_confluence(
     raw_available = raw_total - raw_unavailable - raw_insufficient
     signal_families = [
         FAMILY_TREND,
+        FAMILY_BREAKOUT,
         FAMILY_MOMENTUM,
         FAMILY_VOLATILITY,
         FAMILY_VOLUME,
@@ -3136,6 +3143,84 @@ def failed_breakout_state(
     breakout_events: list[BreakoutEvent],
     as_of: str | None = None,
 ) -> IndicatorState:
+    latest_status, unavailable_reason = _latest_breakout_context_status(
+        symbol=symbol,
+        breakout_events=breakout_events,
+        as_of=as_of,
+    )
+    if latest_status == BREAKOUT_FAILED:
+        return indicator(
+            "failed_breakout",
+            FAMILY_RISK,
+            BLOCKED,
+            "blocker / gate",
+            True,
+            "A breakout event failed back below its trigger.",
+        )
+    if latest_status == BREAKOUT_PRESENT:
+        return indicator(
+            "failed_breakout",
+            FAMILY_RISK,
+            CLEAR,
+            "blocker / gate",
+            False,
+            "Breakout context is present and no failed breakout was supplied.",
+        )
+    return indicator(
+        "failed_breakout",
+        FAMILY_RISK,
+        UNAVAILABLE,
+        "blocker / gate",
+        None,
+        unavailable_reason,
+    )
+
+
+def breakout_context_state(
+    *,
+    symbol: str,
+    breakout_events: list[BreakoutEvent],
+    as_of: str | None = None,
+) -> IndicatorState:
+    latest_status, unavailable_reason = _latest_breakout_context_status(
+        symbol=symbol,
+        breakout_events=breakout_events,
+        as_of=as_of,
+    )
+    if latest_status == BREAKOUT_PRESENT:
+        return indicator(
+            "breakout_context",
+            FAMILY_BREAKOUT,
+            GREEN,
+            "primary signal",
+            latest_status,
+            "Latest breakout context is present.",
+        )
+    if latest_status == BREAKOUT_FAILED:
+        return indicator(
+            "breakout_context",
+            FAMILY_BREAKOUT,
+            RED,
+            "primary signal",
+            latest_status,
+            "Latest breakout context failed back below its trigger.",
+        )
+    return indicator(
+        "breakout_context",
+        FAMILY_BREAKOUT,
+        UNAVAILABLE,
+        "primary signal",
+        None,
+        unavailable_reason,
+    )
+
+
+def _latest_breakout_context_status(
+    *,
+    symbol: str,
+    breakout_events: list[BreakoutEvent],
+    as_of: str | None,
+) -> tuple[str | None, str]:
     as_of_time = parse_datetime(as_of)
     matching_events: list[tuple[tuple[int, int, int, int, int], BreakoutEvent]] = []
     for event in breakout_events:
@@ -3161,44 +3246,18 @@ def failed_breakout_state(
             if event_key == latest_key
         }
         if len(latest_statuses) > 1:
-            return indicator(
-                "failed_breakout",
-                FAMILY_RISK,
-                UNAVAILABLE,
-                "blocker / gate",
+            return (
                 None,
                 "Latest breakout context contains conflicting statuses.",
             )
-    if latest is not None and latest.status == BREAKOUT_FAILED:
-        return indicator(
-            "failed_breakout",
-            FAMILY_RISK,
-            BLOCKED,
-            "blocker / gate",
-            True,
-            "A breakout event failed back below its trigger.",
-        )
-    if latest is not None and latest.status == BREAKOUT_PRESENT:
-        return indicator(
-            "failed_breakout",
-            FAMILY_RISK,
-            CLEAR,
-            "blocker / gate",
-            False,
-            "Breakout context is present and no failed breakout was supplied.",
-        )
-    return indicator(
-        "failed_breakout",
-        FAMILY_RISK,
-        UNAVAILABLE,
-        "blocker / gate",
-        None,
-        (
+    if latest is not None:
+        return (
+            latest.status,
             "Latest breakout context is not a present or failed signal."
-            if latest is not None
-            else "No usable breakout context supplied."
-        ),
-    )
+            if latest.status not in {BREAKOUT_PRESENT, BREAKOUT_FAILED}
+            else "",
+        )
+    return None, "No usable breakout context supplied."
 
 
 def build_family_states(indicators: list[IndicatorState]) -> dict[str, ConfluenceFamilyState]:
@@ -3207,6 +3266,10 @@ def build_family_states(indicators: list[IndicatorState]) -> dict[str, Confluenc
         grouped.setdefault(item.family, []).append(item)
     family_states = {
         FAMILY_TREND: summarize_signal_family(FAMILY_TREND, grouped.get(FAMILY_TREND, [])),
+        FAMILY_BREAKOUT: summarize_signal_family(
+            FAMILY_BREAKOUT,
+            grouped.get(FAMILY_BREAKOUT, []),
+        ),
         FAMILY_MOMENTUM: summarize_signal_family(
             FAMILY_MOMENTUM,
             grouped.get(FAMILY_MOMENTUM, []),
@@ -3226,6 +3289,7 @@ def build_family_states(indicators: list[IndicatorState]) -> dict[str, Confluenc
         1
         for family in (
             FAMILY_TREND,
+            FAMILY_BREAKOUT,
             FAMILY_MOMENTUM,
             FAMILY_VOLATILITY,
             FAMILY_VOLUME,
