@@ -128,7 +128,7 @@ class FinalCanaryStackReleaseTests(unittest.TestCase):
             CANARY_STACK_INTEGRITY_SCHEMA_VERSION,
             manifest["schemaVersion"],
         )
-        self.assertEqual(17, manifest["componentCount"])
+        self.assertEqual(18, manifest["componentCount"])
         self.assertFalse(result["gitMutationPerformed"])
         self.assertFalse(result["networkAccessed"])
         self.assertFalse(result["providerEvidence"])

@@ -15,9 +15,11 @@ from momentum_hunter.schwab_canary_stack_integrity import (
     CANARY_STACK_COMPONENTS,
     CANARY_STACK_COMPONENTS_V1,
     CANARY_STACK_COMPONENTS_V2,
+    CANARY_STACK_COMPONENTS_V3,
     CANARY_STACK_INTEGRITY_SCHEMA_VERSION,
     CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V1,
     CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V2,
+    CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V3,
     CanaryStackIntegrityError,
     build_canary_stack_integrity_manifest,
     canonical_manifest_json,
@@ -42,11 +44,12 @@ class CanaryStackIntegrityTests(unittest.TestCase):
             CANARY_STACK_INTEGRITY_SCHEMA_VERSION,
             manifest["schemaVersion"],
         )
-        self.assertEqual(17, manifest["componentCount"])
+        self.assertEqual(18, manifest["componentCount"])
         self.assertEqual(len(CANARY_STACK_COMPONENTS), manifest["componentCount"])
         expected_names = [
             *(f"CANARY-{index:03d}" for index in range(1, 14)),
             *(f"CANARY-{index:03d}" for index in range(15, 19)),
+            "CANARY-022",
         ]
         self.assertEqual(
             expected_names,
@@ -140,6 +143,45 @@ class CanaryStackIntegrityTests(unittest.TestCase):
             default_findings,
         )
 
+    def test_legacy_v3_manifest_policy_remains_explicitly_verifiable(self) -> None:
+        manifest = build_canary_stack_integrity_manifest(
+            repository_root=REPOSITORY_ROOT,
+            build_identity=BUILD_IDENTITY,
+            created_at=CREATED_AT,
+            components=CANARY_STACK_COMPONENTS_V3,
+        )
+
+        findings = verify_canary_stack_integrity_manifest(
+            manifest,
+            repository_root=REPOSITORY_ROOT,
+            expected_build_identity=BUILD_IDENTITY,
+            evaluated_at=CREATED_AT,
+            components=CANARY_STACK_COMPONENTS_V3,
+        )
+        default_findings = self.verify(manifest, REPOSITORY_ROOT)
+
+        self.assertEqual((), findings)
+        self.assertEqual(
+            CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V3,
+            manifest["schemaVersion"],
+        )
+        self.assertEqual(17, manifest["componentCount"])
+        self.assertEqual(
+            [
+                *(f"CANARY-{index:03d}" for index in range(1, 14)),
+                *(f"CANARY-{index:03d}" for index in range(15, 19)),
+            ],
+            [item["name"] for item in manifest["components"]],
+        )
+        self.assertIn(
+            "Canary stack integrity schema is unsupported.",
+            default_findings,
+        )
+        self.assertIn(
+            "Canary stack component count does not match policy.",
+            default_findings,
+        )
+
     def test_manifest_build_and_verify_do_not_mutate_stack_sources(self) -> None:
         before = {
             component.relative_path: (
@@ -182,7 +224,7 @@ class CanaryStackIntegrityTests(unittest.TestCase):
             findings = self.verify(manifest, root)
 
         self.assertTrue(
-            any("CANARY-018 cannot be re-read" in item for item in findings)
+            any("CANARY-022 cannot be re-read" in item for item in findings)
         )
 
     def test_unsafe_import_action_and_endpoint_cannot_build_manifest(self) -> None:
@@ -438,7 +480,10 @@ class CanaryStackIntegrityTests(unittest.TestCase):
                 repository_root=REPOSITORY_ROOT,
                 build_identity=BUILD_IDENTITY,
                 created_at=CREATED_AT,
-                components=CANARY_STACK_COMPONENTS[:-1],
+                components=(
+                    CANARY_STACK_COMPONENTS[:-2]
+                    + CANARY_STACK_COMPONENTS[-1:]
+                ),
             )
 
     def test_verifier_has_no_git_network_credential_or_broker_action_capability(

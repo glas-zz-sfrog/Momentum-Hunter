@@ -8,6 +8,11 @@ from math import isfinite
 import re
 from typing import Callable, Final
 
+from momentum_hunter.schwab_canary_credential_remediation import (
+    CREDENTIAL_REMEDIATION_PASS,
+    CREDENTIAL_REMEDIATION_PROVEN,
+    CanaryCredentialRemediationResult,
+)
 from momentum_hunter.schwab_canary_evidence import (
     PRE_CANARY_VERIFIED,
     CanaryPositionEvidenceError,
@@ -30,7 +35,8 @@ from momentum_hunter.schwab_canary_stop_evidence import (
 )
 
 
-CANARY_PREFLIGHT_SCHEMA_VERSION: Final = "SCHWAB_CANARY_PREFLIGHT_V1"
+CANARY_PREFLIGHT_SCHEMA_VERSION_V1: Final = "SCHWAB_CANARY_PREFLIGHT_V1"
+CANARY_PREFLIGHT_SCHEMA_VERSION: Final = "SCHWAB_CANARY_PREFLIGHT_V2"
 PREFLIGHT_READY: Final = "READY_FOR_DECISION"
 PREFLIGHT_BLOCKED: Final = "BLOCK"
 PREFLIGHT_READY_CONCLUSION: Final = (
@@ -45,6 +51,7 @@ _COMPONENTS: Final = (
     "positionInvariant",
     "positionEvidenceChain",
     "fundingGate",
+    "credentialRemediation",
     "orderReconciliation",
     "independentStopDrill",
 )
@@ -62,6 +69,9 @@ class CanaryPreflightPolicy:
     expected_canary_intent_id: str
     expected_sequence_id: str
     expected_funding_requirement_id: str
+    expected_credential_incident_id: str
+    expected_application_commitment_sha256: str
+    expected_credential_evidence_sha256: str
     expected_order_command_id: str
     expected_stop_latch_sha256: str
     max_evidence_age_seconds: float
@@ -82,11 +92,28 @@ class CanaryPreflightPolicy:
             ("expected_canary_intent_id", "canary intent ID"),
             ("expected_sequence_id", "sequence ID"),
             ("expected_funding_requirement_id", "funding requirement ID"),
+            ("expected_credential_incident_id", "credential incident ID"),
             ("expected_order_command_id", "order command ID"),
         ):
             value = str(getattr(self, attribute)).strip()
             if not _SIMPLE_IDENTIFIER.fullmatch(value):
                 raise CanaryPreflightError(f"Expected {field} is invalid.")
+            object.__setattr__(self, attribute, value)
+        for attribute, field in (
+            (
+                "expected_application_commitment_sha256",
+                "application commitment",
+            ),
+            (
+                "expected_credential_evidence_sha256",
+                "credential evidence",
+            ),
+        ):
+            value = str(getattr(self, attribute)).strip().lower()
+            if not _HEX_SHA256.fullmatch(value):
+                raise CanaryPreflightError(
+                    f"Expected {field} must be a lowercase SHA-256 value."
+                )
             object.__setattr__(self, attribute, value)
         latch_sha256 = str(self.expected_stop_latch_sha256).strip().lower()
         if not _HEX_SHA256.fullmatch(latch_sha256):
@@ -138,6 +165,9 @@ class CanaryPreflightResult:
     canary_intent_id: str
     sequence_id: str
     funding_requirement_id: str
+    credential_incident_id: str
+    application_commitment_sha256: str
+    credential_evidence_sha256: str
     order_command_id: str
     stop_latch_sha256: str
     component_statuses: tuple[tuple[str, str], ...]
@@ -158,6 +188,11 @@ class CanaryPreflightResult:
             "canaryIntentId": self.canary_intent_id,
             "sequenceId": self.sequence_id,
             "fundingRequirementId": self.funding_requirement_id,
+            "credentialIncidentId": self.credential_incident_id,
+            "applicationCommitmentSha256": (
+                self.application_commitment_sha256
+            ),
+            "credentialEvidenceSha256": self.credential_evidence_sha256,
             "orderCommandId": self.order_command_id,
             "stopLatchSha256": self.stop_latch_sha256,
             "components": dict(self.component_statuses),
@@ -177,6 +212,7 @@ def evaluate_canary_preflight(
     evidence_store: CanaryPositionEvidenceStore,
     position_result: CanaryPositionInvariantResult,
     funding_result: CanaryFundingResult,
+    credential_result: CanaryCredentialRemediationResult,
     order_result: CanaryOrderReconciliationResult,
     stop_result: CanaryStopDrillResult,
     evaluated_at: datetime,
@@ -229,6 +265,12 @@ def evaluate_canary_preflight(
         policy=policy,
         add=add,
     )
+    _validate_credential_result(
+        result=credential_result,
+        evaluated_at=normalized_evaluated_at,
+        policy=policy,
+        add=add,
+    )
     _validate_order_result(
         result=order_result,
         evaluated_at=normalized_evaluated_at,
@@ -267,6 +309,13 @@ def evaluate_canary_preflight(
         canary_intent_id=policy.expected_canary_intent_id,
         sequence_id=policy.expected_sequence_id,
         funding_requirement_id=policy.expected_funding_requirement_id,
+        credential_incident_id=policy.expected_credential_incident_id,
+        application_commitment_sha256=(
+            policy.expected_application_commitment_sha256
+        ),
+        credential_evidence_sha256=(
+            policy.expected_credential_evidence_sha256
+        ),
         order_command_id=policy.expected_order_command_id,
         stop_latch_sha256=policy.expected_stop_latch_sha256,
         component_statuses=component_statuses,
@@ -459,6 +508,79 @@ def _validate_funding_result(
         add=add,
     )
     _require_nontransmitting_flags(component, result.to_dict(), add)
+
+
+def _validate_credential_result(
+    *,
+    result: CanaryCredentialRemediationResult,
+    evaluated_at: datetime,
+    policy: CanaryPreflightPolicy,
+    add: _AddFinding,
+) -> None:
+    component = "credentialRemediation"
+    if (
+        result.status != CREDENTIAL_REMEDIATION_PASS
+        or result.conclusion != CREDENTIAL_REMEDIATION_PROVEN
+        or result.findings
+        or not result.remediation_proven
+        or result.old_credential_invalidated is not True
+    ):
+        add(
+            component,
+            "CREDENTIAL_REMEDIATION_NOT_PROVEN",
+            "The known credential incident has not been remediated.",
+        )
+    for actual, expected, code, message in (
+        (
+            result.incident_id,
+            policy.expected_credential_incident_id,
+            "CREDENTIAL_INCIDENT_MISMATCH",
+            "Credential incident ID does not match policy.",
+        ),
+        (
+            result.application_commitment_sha256,
+            policy.expected_application_commitment_sha256,
+            "CREDENTIAL_APPLICATION_MISMATCH",
+            "Credential application commitment does not match policy.",
+        ),
+        (
+            result.evidence_artifact_sha256,
+            policy.expected_credential_evidence_sha256,
+            "CREDENTIAL_EVIDENCE_MISMATCH",
+            "Credential-remediation evidence hash does not match policy.",
+        ),
+    ):
+        _check_identity(
+            component=component,
+            actual=actual,
+            expected=expected,
+            code=code,
+            message=message,
+            add=add,
+        )
+    _check_freshness(
+        component=component,
+        timestamp=result.evaluated_at,
+        evaluated_at=evaluated_at,
+        policy=policy,
+        label="credential-remediation result",
+        add=add,
+    )
+    payload = result.to_dict()
+    _require_nontransmitting_flags(component, payload, add)
+    if (
+        payload.get("credentialAccessed") is not False
+        or payload.get("credentialMutationPerformed") is not False
+        or payload.get("providerContactPerformed") is not False
+        or payload.get("executionPermit") is not False
+        or payload.get("brokerActionAllowed") is not False
+        or payload.get("retryAllowed") is not False
+    ):
+        add(
+            component,
+            "CREDENTIAL_REMEDIATION_SAFETY_FLAGS_INVALID",
+            "Credential-remediation evidence contains an authority-bearing flag.",
+        )
 
 
 def _validate_order_result(

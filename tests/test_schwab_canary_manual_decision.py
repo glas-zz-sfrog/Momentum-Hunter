@@ -11,6 +11,12 @@ import tempfile
 import unittest
 
 import momentum_hunter.schwab_canary_manual_decision as decision_module
+from momentum_hunter.schwab_canary_credential_remediation import (
+    SECRET_ROTATED,
+    CanaryCredentialRemediationObservation,
+    CanaryCredentialRemediationPolicy,
+    evaluate_canary_credential_remediation,
+)
 from momentum_hunter.schwab_canary_evidence import CanaryPositionEvidenceStore
 from momentum_hunter.schwab_canary_funding import (
     RESTRICTIONS_CLEAR,
@@ -57,11 +63,12 @@ from momentum_hunter.schwab_readonly import SchwabAccountBinding
 UTC = timezone.utc
 POSITION_AT = datetime(2026, 7, 27, 17, 0, tzinfo=UTC)
 FUNDING_AT = POSITION_AT + timedelta(seconds=2)
-ORDER_AT = POSITION_AT + timedelta(seconds=3)
-STOP_AT = POSITION_AT + timedelta(seconds=4)
-PREFLIGHT_AT = POSITION_AT + timedelta(seconds=5)
-RECEIPT_AT = POSITION_AT + timedelta(seconds=6)
-DECISION_AT = POSITION_AT + timedelta(seconds=7)
+CREDENTIAL_AT = POSITION_AT + timedelta(seconds=3)
+ORDER_AT = POSITION_AT + timedelta(seconds=4)
+STOP_AT = POSITION_AT + timedelta(seconds=5)
+PREFLIGHT_AT = POSITION_AT + timedelta(seconds=6)
+RECEIPT_AT = POSITION_AT + timedelta(seconds=7)
+DECISION_AT = POSITION_AT + timedelta(seconds=8)
 ACCOUNT_ENDING = "9001"
 ACCOUNT_TYPE = "INDIVIDUAL_CASH"
 ACCOUNT_HASH = "synthetic-manual-decision-account-hash"
@@ -71,6 +78,10 @@ INTENT_ID = "canary-intent-decision-test"
 SEQUENCE_ID = "canary-sequence-decision-test"
 REQUIREMENT_ID = "canary-funding-decision-test"
 STOP_LATCH_SHA256 = "d" * 64
+CREDENTIAL_INCIDENT_ID = "SCHWAB-CLIENT-SECRET-2026-07-26"
+APPLICATION_COMMITMENT_SHA256 = "e" * 64
+CREDENTIAL_EVIDENCE_SHA256 = "f" * 64
+CREDENTIAL_INCIDENT_AT = POSITION_AT - timedelta(days=1)
 
 
 class CanaryManualDecisionTests(unittest.TestCase):
@@ -135,6 +146,30 @@ class CanaryManualDecisionTests(unittest.TestCase):
             restriction_codes=(),
             findings=(),
         )
+        self.credential_result = evaluate_canary_credential_remediation(
+            observation=CanaryCredentialRemediationObservation(
+                incident_id=CREDENTIAL_INCIDENT_ID,
+                application_commitment_sha256=(
+                    APPLICATION_COMMITMENT_SHA256
+                ),
+                remediation_state=SECRET_ROTATED,
+                evidence_source="SCHWAB_DEVELOPER_PORTAL",
+                evidence_artifact_sha256=CREDENTIAL_EVIDENCE_SHA256,
+                observed_at=(POSITION_AT - timedelta(hours=1)).isoformat(),
+                old_credential_invalidated=True,
+            ),
+            evaluated_at=CREDENTIAL_AT,
+            policy=CanaryCredentialRemediationPolicy(
+                expected_incident_id=CREDENTIAL_INCIDENT_ID,
+                expected_application_commitment_sha256=(
+                    APPLICATION_COMMITMENT_SHA256
+                ),
+                expected_evidence_artifact_sha256=(
+                    CREDENTIAL_EVIDENCE_SHA256
+                ),
+                incident_recorded_at=CREDENTIAL_INCIDENT_AT,
+            ),
+        )
         self.order_account_commitment = create_account_binding_commitment(
             account_hash=ACCOUNT_HASH,
             salt=ACCOUNT_SALT,
@@ -178,6 +213,13 @@ class CanaryManualDecisionTests(unittest.TestCase):
             expected_canary_intent_id=INTENT_ID,
             expected_sequence_id=SEQUENCE_ID,
             expected_funding_requirement_id=REQUIREMENT_ID,
+            expected_credential_incident_id=CREDENTIAL_INCIDENT_ID,
+            expected_application_commitment_sha256=(
+                APPLICATION_COMMITMENT_SHA256
+            ),
+            expected_credential_evidence_sha256=(
+                CREDENTIAL_EVIDENCE_SHA256
+            ),
             expected_order_command_id=self.order_intent.command_id,
             expected_stop_latch_sha256=STOP_LATCH_SHA256,
             max_evidence_age_seconds=30,
@@ -190,6 +232,7 @@ class CanaryManualDecisionTests(unittest.TestCase):
             evidence_store=self.position_store,
             position_result=self.position_result,
             funding_result=self.funding_result,
+            credential_result=self.credential_result,
             order_result=self.order_result,
             stop_result=self.stop_result,
             preflight_evaluated_at=PREFLIGHT_AT,

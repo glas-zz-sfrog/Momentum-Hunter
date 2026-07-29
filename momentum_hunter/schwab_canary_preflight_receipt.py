@@ -12,6 +12,12 @@ from pathlib import Path
 import re
 from typing import Final
 
+from momentum_hunter.schwab_canary_credential_remediation import (
+    CANARY_CREDENTIAL_REMEDIATION_SCHEMA_VERSION,
+    CREDENTIAL_REMEDIATION_PASS,
+    CREDENTIAL_REMEDIATION_PROVEN,
+    CanaryCredentialRemediationResult,
+)
 from momentum_hunter.schwab_canary_evidence import (
     PRE_CANARY_VERIFIED,
     CanaryPositionEvidenceError,
@@ -46,8 +52,11 @@ from momentum_hunter.schwab_canary_stop_evidence import (
 )
 
 
-CANARY_PREFLIGHT_RECEIPT_SCHEMA_VERSION: Final = (
+CANARY_PREFLIGHT_RECEIPT_SCHEMA_VERSION_V1: Final = (
     "SCHWAB_CANARY_PREFLIGHT_RECEIPT_V1"
+)
+CANARY_PREFLIGHT_RECEIPT_SCHEMA_VERSION: Final = (
+    "SCHWAB_CANARY_PREFLIGHT_RECEIPT_V2"
 )
 RECEIPT_AWAITING_DECISION: Final = "AWAITING_STEVEN_DECISION"
 RECEIPT_EXPIRED: Final = "EXPIRED"
@@ -60,6 +69,7 @@ _EVIDENCE_KEYS: Final = frozenset(
     {
         "positionInvariant",
         "fundingGate",
+        "credentialRemediation",
         "orderReconciliation",
         "independentStopDrill",
         "preflight",
@@ -129,6 +139,7 @@ class CanaryPreflightReceipt:
     position_chain_sha256: str
     position_result: CanaryPositionInvariantResult
     funding_result: CanaryFundingResult
+    credential_result: CanaryCredentialRemediationResult
     order_result: CanaryOrderReconciliationResult
     stop_result: CanaryStopDrillResult
     preflight_result: CanaryPreflightResult
@@ -138,6 +149,7 @@ class CanaryPreflightReceipt:
         return {
             "positionInvariant": self.position_result.to_dict(),
             "fundingGate": self.funding_result.to_dict(),
+            "credentialRemediation": self.credential_result.to_dict(),
             "orderReconciliation": self.order_result.to_dict(),
             "independentStopDrill": self.stop_result.to_dict(),
             "preflight": self.preflight_result.to_dict(),
@@ -316,6 +328,7 @@ def build_canary_preflight_receipt(
     evidence_store: CanaryPositionEvidenceStore,
     position_result: CanaryPositionInvariantResult,
     funding_result: CanaryFundingResult,
+    credential_result: CanaryCredentialRemediationResult,
     order_result: CanaryOrderReconciliationResult,
     stop_result: CanaryStopDrillResult,
     preflight_evaluated_at: datetime,
@@ -337,6 +350,7 @@ def build_canary_preflight_receipt(
         evidence_store=evidence_store,
         position_result=position_result,
         funding_result=funding_result,
+        credential_result=credential_result,
         order_result=order_result,
         stop_result=stop_result,
         evaluated_at=normalized_preflight_at,
@@ -388,6 +402,7 @@ def build_canary_preflight_receipt(
         position_chain_sha256=chain_sha256,
         position_result=position_result,
         funding_result=funding_result,
+        credential_result=credential_result,
         order_result=order_result,
         stop_result=stop_result,
         preflight_result=preflight_result,
@@ -577,12 +592,14 @@ def _validate_receipt_payload(payload: dict[str, object]) -> None:
 def _validate_evidence_semantics(evidence: dict[str, dict[str, object]]) -> None:
     position = evidence["positionInvariant"]
     funding = evidence["fundingGate"]
+    credential = evidence["credentialRemediation"]
     order = evidence["orderReconciliation"]
     stop = evidence["independentStopDrill"]
     preflight = evidence["preflight"]
     expected_schemas = (
         (position, POSITION_INVARIANT_SCHEMA_VERSION),
         (funding, CANARY_FUNDING_SCHEMA_VERSION),
+        (credential, CANARY_CREDENTIAL_REMEDIATION_SCHEMA_VERSION),
         (order, CANARY_ORDER_RECONCILIATION_SCHEMA_VERSION),
         (stop, CANARY_STOP_SCHEMA_VERSION),
         (preflight, CANARY_PREFLIGHT_SCHEMA_VERSION),
@@ -609,6 +626,16 @@ def _validate_evidence_semantics(evidence: dict[str, dict[str, object]]) -> None
     ):
         raise CanaryPreflightReceiptError(
             "Receipt funding evidence is not a clean settled-cash result."
+        )
+    if (
+        credential.get("status") != CREDENTIAL_REMEDIATION_PASS
+        or credential.get("conclusion") != CREDENTIAL_REMEDIATION_PROVEN
+        or credential.get("oldCredentialInvalidated") is not True
+        or credential.get("remediationProven") is not True
+        or credential.get("findings") != []
+    ):
+        raise CanaryPreflightReceiptError(
+            "Receipt credential-remediation evidence is not proven."
         )
     if (
         order.get("status") != "BLOCK"
@@ -643,6 +670,7 @@ def _validate_evidence_semantics(evidence: dict[str, dict[str, object]]) -> None
             "positionInvariant": "PASS",
             "positionEvidenceChain": "PASS",
             "fundingGate": "PASS",
+            "credentialRemediation": "PASS",
             "orderReconciliation": "PASS",
             "independentStopDrill": "PASS",
         }
@@ -663,6 +691,12 @@ def _validate_evidence_semantics(evidence: dict[str, dict[str, object]]) -> None
         or stop.get("latchClearSupported") is not False
         or stop.get("credentialMutationPerformed") is not False
         or stop.get("processMutationPerformed") is not False
+        or credential.get("credentialAccessed") is not False
+        or credential.get("credentialMutationPerformed") is not False
+        or credential.get("providerContactPerformed") is not False
+        or credential.get("executionPermit") is not False
+        or credential.get("brokerActionAllowed") is not False
+        or credential.get("retryAllowed") is not False
         or preflight.get("executionPermit") is not False
         or preflight.get("realOrderApproval") is not False
         or preflight.get("retryAllowed") is not False
@@ -689,6 +723,18 @@ def _validate_evidence_semantics(evidence: dict[str, dict[str, object]]) -> None
         (
             funding.get("requirementId"),
             preflight.get("fundingRequirementId"),
+        ),
+        (
+            credential.get("incidentId"),
+            preflight.get("credentialIncidentId"),
+        ),
+        (
+            credential.get("applicationCommitmentSha256"),
+            preflight.get("applicationCommitmentSha256"),
+        ),
+        (
+            credential.get("evidenceArtifactSha256"),
+            preflight.get("credentialEvidenceSha256"),
         ),
         (
             order.get("commandId"),

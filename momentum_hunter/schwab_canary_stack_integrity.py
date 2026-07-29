@@ -18,8 +18,11 @@ CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V1: Final = (
 CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V2: Final = (
     "SCHWAB_CANARY_STACK_INTEGRITY_V2"
 )
-CANARY_STACK_INTEGRITY_SCHEMA_VERSION: Final = (
+CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V3: Final = (
     "SCHWAB_CANARY_STACK_INTEGRITY_V3"
+)
+CANARY_STACK_INTEGRITY_SCHEMA_VERSION: Final = (
+    "SCHWAB_CANARY_STACK_INTEGRITY_V4"
 )
 CANARY_STACK_INTEGRITY_MANIFEST_TYPE: Final = (
     "NONAUTHORIZING_CANARY_STACK_INTEGRATION_MANIFEST"
@@ -191,7 +194,7 @@ CANARY_STACK_COMPONENTS_V2: Final = CANARY_STACK_COMPONENTS_V1 + (
         relative_path="momentum_hunter/schwab_canary_process_evidence.py",
     ),
 )
-CANARY_STACK_COMPONENTS: Final = CANARY_STACK_COMPONENTS_V2 + (
+CANARY_STACK_COMPONENTS_V3: Final = CANARY_STACK_COMPONENTS_V2 + (
     CanaryStackComponent(
         name="CANARY-015",
         role="broker-worker identity binding",
@@ -214,6 +217,15 @@ CANARY_STACK_COMPONENTS: Final = CANARY_STACK_COMPONENTS_V2 + (
         role="read-only worker-lifecycle package verification",
         relative_path=(
             "momentum_hunter/schwab_canary_worker_lifecycle_evidence.py"
+        ),
+    ),
+)
+CANARY_STACK_COMPONENTS: Final = CANARY_STACK_COMPONENTS_V3 + (
+    CanaryStackComponent(
+        name="CANARY-022",
+        role="credential-remediation evidence gate",
+        relative_path=(
+            "momentum_hunter/schwab_canary_credential_remediation.py"
         ),
     ),
 )
@@ -638,6 +650,7 @@ def _require_component_contract(
     if items not in {
         CANARY_STACK_COMPONENTS_V1,
         CANARY_STACK_COMPONENTS_V2,
+        CANARY_STACK_COMPONENTS_V3,
         CANARY_STACK_COMPONENTS,
     }:
         raise CanaryStackIntegrityError(
@@ -653,6 +666,8 @@ def _schema_version_for_components(
         return CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V1
     if tuple(components) == CANARY_STACK_COMPONENTS_V2:
         return CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V2
+    if tuple(components) == CANARY_STACK_COMPONENTS_V3:
+        return CANARY_STACK_INTEGRITY_SCHEMA_VERSION_V3
     return CANARY_STACK_INTEGRITY_SCHEMA_VERSION
 
 

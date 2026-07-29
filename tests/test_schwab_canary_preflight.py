@@ -10,6 +10,14 @@ import tempfile
 import unittest
 
 import momentum_hunter.schwab_canary_preflight as preflight_module
+from momentum_hunter.schwab_canary_credential_remediation import (
+    CREDENTIAL_REMEDIATION_BLOCK,
+    CREDENTIAL_REMEDIATION_REQUIRED,
+    SECRET_ROTATED,
+    CanaryCredentialRemediationObservation,
+    CanaryCredentialRemediationPolicy,
+    evaluate_canary_credential_remediation,
+)
 from momentum_hunter.schwab_canary_evidence import CanaryPositionEvidenceStore
 from momentum_hunter.schwab_canary_funding import (
     RESTRICTIONS_CLEAR,
@@ -42,9 +50,10 @@ from momentum_hunter.schwab_readonly import SchwabAccountBinding
 UTC = timezone.utc
 POSITION_AT = datetime(2026, 7, 27, 15, 0, tzinfo=UTC)
 FUNDING_AT = POSITION_AT + timedelta(seconds=2)
-ORDER_AT = POSITION_AT + timedelta(seconds=3)
-STOP_AT = POSITION_AT + timedelta(seconds=4)
-PREFLIGHT_AT = POSITION_AT + timedelta(seconds=5)
+CREDENTIAL_AT = POSITION_AT + timedelta(seconds=3)
+ORDER_AT = POSITION_AT + timedelta(seconds=4)
+STOP_AT = POSITION_AT + timedelta(seconds=5)
+PREFLIGHT_AT = POSITION_AT + timedelta(seconds=6)
 ACCOUNT_ENDING = "9001"
 ACCOUNT_TYPE = "INDIVIDUAL_CASH"
 ACCOUNT_HASH = "synthetic-canary-account-hash"
@@ -53,6 +62,10 @@ SEQUENCE_ID = "canary-sequence-test-001"
 REQUIREMENT_ID = "canary-funding-test-001"
 COMMAND_ID = "canary-order-test-001"
 STOP_LATCH_SHA256 = "a" * 64
+CREDENTIAL_INCIDENT_ID = "SCHWAB-CLIENT-SECRET-2026-07-26"
+APPLICATION_COMMITMENT_SHA256 = "b" * 64
+CREDENTIAL_EVIDENCE_SHA256 = "c" * 64
+CREDENTIAL_INCIDENT_AT = POSITION_AT - timedelta(days=1)
 
 
 class CanaryPreflightTests(unittest.TestCase):
@@ -116,6 +129,30 @@ class CanaryPreflightTests(unittest.TestCase):
             restriction_codes=(),
             findings=(),
         )
+        self.credential_result = evaluate_canary_credential_remediation(
+            observation=CanaryCredentialRemediationObservation(
+                incident_id=CREDENTIAL_INCIDENT_ID,
+                application_commitment_sha256=(
+                    APPLICATION_COMMITMENT_SHA256
+                ),
+                remediation_state=SECRET_ROTATED,
+                evidence_source="SCHWAB_DEVELOPER_PORTAL",
+                evidence_artifact_sha256=CREDENTIAL_EVIDENCE_SHA256,
+                observed_at=(POSITION_AT - timedelta(hours=1)).isoformat(),
+                old_credential_invalidated=True,
+            ),
+            evaluated_at=CREDENTIAL_AT,
+            policy=CanaryCredentialRemediationPolicy(
+                expected_incident_id=CREDENTIAL_INCIDENT_ID,
+                expected_application_commitment_sha256=(
+                    APPLICATION_COMMITMENT_SHA256
+                ),
+                expected_evidence_artifact_sha256=(
+                    CREDENTIAL_EVIDENCE_SHA256
+                ),
+                incident_recorded_at=CREDENTIAL_INCIDENT_AT,
+            ),
+        )
         self.order_result = CanaryOrderReconciliationResult(
             status="BLOCK",
             conclusion="NO_PRIOR_SUBMISSION_EVIDENCE",
@@ -145,6 +182,13 @@ class CanaryPreflightTests(unittest.TestCase):
             expected_canary_intent_id=INTENT_ID,
             expected_sequence_id=SEQUENCE_ID,
             expected_funding_requirement_id=REQUIREMENT_ID,
+            expected_credential_incident_id=CREDENTIAL_INCIDENT_ID,
+            expected_application_commitment_sha256=(
+                APPLICATION_COMMITMENT_SHA256
+            ),
+            expected_credential_evidence_sha256=(
+                CREDENTIAL_EVIDENCE_SHA256
+            ),
             expected_order_command_id=COMMAND_ID,
             expected_stop_latch_sha256=STOP_LATCH_SHA256,
             max_evidence_age_seconds=30,
@@ -162,6 +206,7 @@ class CanaryPreflightTests(unittest.TestCase):
                 "positionInvariant": "PASS",
                 "positionEvidenceChain": "PASS",
                 "fundingGate": "PASS",
+                "credentialRemediation": "PASS",
                 "orderReconciliation": "PASS",
                 "independentStopDrill": "PASS",
             },
@@ -256,6 +301,33 @@ class CanaryPreflightTests(unittest.TestCase):
                 "FUNDING_REQUIREMENT_MISMATCH",
             ),
             (
+                {
+                    "credential_result": replace(
+                        self.credential_result,
+                        incident_id="OTHER-INCIDENT",
+                    )
+                },
+                "CREDENTIAL_INCIDENT_MISMATCH",
+            ),
+            (
+                {
+                    "credential_result": replace(
+                        self.credential_result,
+                        application_commitment_sha256="d" * 64,
+                    )
+                },
+                "CREDENTIAL_APPLICATION_MISMATCH",
+            ),
+            (
+                {
+                    "credential_result": replace(
+                        self.credential_result,
+                        evidence_artifact_sha256="e" * 64,
+                    )
+                },
+                "CREDENTIAL_EVIDENCE_MISMATCH",
+            ),
+            (
                 {"order_result": replace(self.order_result, command_id="other-command")},
                 "ORDER_COMMAND_MISMATCH",
             ),
@@ -277,6 +349,22 @@ class CanaryPreflightTests(unittest.TestCase):
             with self.subTest(code=code):
                 result = self.evaluate(**changes)
                 self.assertIn(code, finding_codes(result))
+
+    def test_credential_remediation_must_be_independently_proven(self) -> None:
+        blocked = replace(
+            self.credential_result,
+            status=CREDENTIAL_REMEDIATION_BLOCK,
+            conclusion=CREDENTIAL_REMEDIATION_REQUIRED,
+            old_credential_invalidated=False,
+        )
+
+        result = self.evaluate(credential_result=blocked)
+
+        self.assertFalse(result.ready_for_manual_decision)
+        self.assertIn(
+            "CREDENTIAL_REMEDIATION_NOT_PROVEN",
+            finding_codes(result),
+        )
 
     def test_order_state_must_be_no_attempt_and_no_match(self) -> None:
         cases = (
@@ -341,6 +429,16 @@ class CanaryPreflightTests(unittest.TestCase):
                 "EVIDENCE_STALE",
             ),
             (
+                {
+                    "credential_result": replace(
+                        self.credential_result,
+                        evaluated_at=stale,
+                    )
+                },
+                "credentialRemediation",
+                "EVIDENCE_STALE",
+            ),
+            (
                 {"order_result": replace(self.order_result, evaluated_at=future)},
                 "orderReconciliation",
                 "EVIDENCE_FROM_FUTURE",
@@ -382,6 +480,9 @@ class CanaryPreflightTests(unittest.TestCase):
         for changes in (
             {"expected_canary_intent_id": ""},
             {"expected_order_command_id": "bad command"},
+            {"expected_credential_incident_id": "bad incident"},
+            {"expected_application_commitment_sha256": "not-a-sha"},
+            {"expected_credential_evidence_sha256": "not-a-sha"},
             {"expected_account_ending": "12345"},
             {"expected_stop_latch_sha256": "not-a-sha"},
             {"max_evidence_age_seconds": 0},
@@ -476,6 +577,7 @@ class CanaryPreflightTests(unittest.TestCase):
             "evidence_store": self.store,
             "position_result": self.position_result,
             "funding_result": self.funding_result,
+            "credential_result": self.credential_result,
             "order_result": self.order_result,
             "stop_result": self.stop_result,
             "evaluated_at": PREFLIGHT_AT,

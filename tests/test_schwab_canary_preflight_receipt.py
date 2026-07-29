@@ -11,6 +11,12 @@ import tempfile
 import unittest
 
 import momentum_hunter.schwab_canary_preflight_receipt as receipt_module
+from momentum_hunter.schwab_canary_credential_remediation import (
+    SECRET_ROTATED,
+    CanaryCredentialRemediationObservation,
+    CanaryCredentialRemediationPolicy,
+    evaluate_canary_credential_remediation,
+)
 from momentum_hunter.schwab_canary_evidence import CanaryPositionEvidenceStore
 from momentum_hunter.schwab_canary_funding import (
     RESTRICTIONS_CLEAR,
@@ -50,9 +56,10 @@ from momentum_hunter.schwab_readonly import SchwabAccountBinding
 UTC = timezone.utc
 POSITION_AT = datetime(2026, 7, 27, 16, 0, tzinfo=UTC)
 FUNDING_AT = POSITION_AT + timedelta(seconds=2)
-ORDER_AT = POSITION_AT + timedelta(seconds=3)
-STOP_AT = POSITION_AT + timedelta(seconds=4)
-PREFLIGHT_AT = POSITION_AT + timedelta(seconds=5)
+CREDENTIAL_AT = POSITION_AT + timedelta(seconds=3)
+ORDER_AT = POSITION_AT + timedelta(seconds=4)
+STOP_AT = POSITION_AT + timedelta(seconds=5)
+PREFLIGHT_AT = POSITION_AT + timedelta(seconds=6)
 RECORDED_AT = PREFLIGHT_AT + timedelta(seconds=1)
 ACCOUNT_ENDING = "9001"
 ACCOUNT_TYPE = "INDIVIDUAL_CASH"
@@ -62,6 +69,10 @@ SEQUENCE_ID = "canary-sequence-receipt-test"
 REQUIREMENT_ID = "canary-funding-receipt-test"
 COMMAND_ID = "canary-order-receipt-test"
 STOP_LATCH_SHA256 = "c" * 64
+CREDENTIAL_INCIDENT_ID = "SCHWAB-CLIENT-SECRET-2026-07-26"
+APPLICATION_COMMITMENT_SHA256 = "d" * 64
+CREDENTIAL_EVIDENCE_SHA256 = "e" * 64
+CREDENTIAL_INCIDENT_AT = POSITION_AT - timedelta(days=1)
 
 
 class CanaryPreflightReceiptTests(unittest.TestCase):
@@ -125,6 +136,30 @@ class CanaryPreflightReceiptTests(unittest.TestCase):
             restriction_codes=(),
             findings=(),
         )
+        self.credential_result = evaluate_canary_credential_remediation(
+            observation=CanaryCredentialRemediationObservation(
+                incident_id=CREDENTIAL_INCIDENT_ID,
+                application_commitment_sha256=(
+                    APPLICATION_COMMITMENT_SHA256
+                ),
+                remediation_state=SECRET_ROTATED,
+                evidence_source="SCHWAB_DEVELOPER_PORTAL",
+                evidence_artifact_sha256=CREDENTIAL_EVIDENCE_SHA256,
+                observed_at=(POSITION_AT - timedelta(hours=1)).isoformat(),
+                old_credential_invalidated=True,
+            ),
+            evaluated_at=CREDENTIAL_AT,
+            policy=CanaryCredentialRemediationPolicy(
+                expected_incident_id=CREDENTIAL_INCIDENT_ID,
+                expected_application_commitment_sha256=(
+                    APPLICATION_COMMITMENT_SHA256
+                ),
+                expected_evidence_artifact_sha256=(
+                    CREDENTIAL_EVIDENCE_SHA256
+                ),
+                incident_recorded_at=CREDENTIAL_INCIDENT_AT,
+            ),
+        )
         self.order_result = CanaryOrderReconciliationResult(
             status="BLOCK",
             conclusion="NO_PRIOR_SUBMISSION_EVIDENCE",
@@ -154,6 +189,13 @@ class CanaryPreflightReceiptTests(unittest.TestCase):
             expected_canary_intent_id=INTENT_ID,
             expected_sequence_id=SEQUENCE_ID,
             expected_funding_requirement_id=REQUIREMENT_ID,
+            expected_credential_incident_id=CREDENTIAL_INCIDENT_ID,
+            expected_application_commitment_sha256=(
+                APPLICATION_COMMITMENT_SHA256
+            ),
+            expected_credential_evidence_sha256=(
+                CREDENTIAL_EVIDENCE_SHA256
+            ),
             expected_order_command_id=COMMAND_ID,
             expected_stop_latch_sha256=STOP_LATCH_SHA256,
             max_evidence_age_seconds=30,
@@ -247,6 +289,10 @@ class CanaryPreflightReceiptTests(unittest.TestCase):
                 False,
             ),
             (
+                ("credentialRemediation", "oldCredentialInvalidated"),
+                False,
+            ),
+            (
                 ("orderReconciliation", "attemptRecorded"),
                 True,
             ),
@@ -326,6 +372,19 @@ class CanaryPreflightReceiptTests(unittest.TestCase):
 
         with self.assertRaises(CanaryPreflightReceiptError):
             self.build(funding_result=unavailable)
+
+        self.assertFalse(self.receipt_path.exists())
+
+    def test_unremediated_credential_cannot_create_receipt(self) -> None:
+        unresolved = replace(
+            self.credential_result,
+            status="BLOCK",
+            conclusion="CREDENTIAL_REMEDIATION_REQUIRED",
+            old_credential_invalidated=False,
+        )
+
+        with self.assertRaises(CanaryPreflightReceiptError):
+            self.build(credential_result=unresolved)
 
         self.assertFalse(self.receipt_path.exists())
 
@@ -502,6 +561,7 @@ class CanaryPreflightReceiptTests(unittest.TestCase):
             "evidence_store": self.position_store,
             "position_result": self.position_result,
             "funding_result": self.funding_result,
+            "credential_result": self.credential_result,
             "order_result": self.order_result,
             "stop_result": self.stop_result,
             "preflight_evaluated_at": PREFLIGHT_AT,

@@ -131,12 +131,12 @@ def evaluate_final_canary_stack_release(
             )
         except (CanaryStackIntegrityError, OSError, TypeError, ValueError):
             findings.append(
-                "The V3 canary stack manifest could not be built safely."
+                "The current canary stack manifest could not be built safely."
             )
             stack_manifest = None
         else:
             findings.extend(
-                f"V3 stack manifest: {finding}"
+                f"Current stack manifest: {finding}"
                 for finding in stack_findings
             )
             if not stack_findings:
