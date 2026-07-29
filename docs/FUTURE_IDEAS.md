@@ -2,6 +2,70 @@
 
 This file tracks deferred ideas. Do not remove items without explicit justification.
 
+## High-Priority Parked Ideas
+
+### Global Overnight Market Intelligence
+
+- Priority: `HIGH`
+- Status: `PARKED`; promote to a bounded Builder task after the current
+  R035/R036/R037 and Shadow-opening integration sequence releases an implementation
+  lane.
+- Problem:
+  - Momentum Hunter should not first discover at the 8:35 AM Central Shadow opening
+    that Asia, Europe, or overnight U.S. markets already established a major
+    risk-on/risk-off move.
+  - The current 8:35 task is a proof-gated Shadow opening ceremony, not the beginning
+    of market intelligence.
+- Proposed market scopes:
+  - `ASIA_OPEN`
+  - `ASIA_CLOSE_EUROPE_OPEN`
+  - `US_PREMARKET_FORMATION`
+  - `PREOPEN_RISK_BRIEF`
+  - `OPENING_DECISION`
+  - `INTRADAY_MOMENTUM`
+  - `CLOSING_AND_AFTER_HOURS`
+  - Resolve schedules from exchange calendars and time zones rather than hardcoding
+    Central clock times.
+- Initial monitoring behavior:
+  - Evaluate a small sentinel universe every five minutes where licensed,
+    provider-timestamped data is available.
+  - Track Asian semiconductor evidence such as SK Hynix, Samsung Electronics,
+    Taiwan/TSMC, and relevant indices when a reliable source exists.
+  - Track U.S. semiconductor and broad-risk proxies such as `SMH`, `SOXX`, `NVDA`,
+    `MU`, `TSM`, `ASML`, `AMD`, `QQQ`, and `SPY`.
+  - Add futures, volatility, rates, currency, sector, and headline context only when
+    each source has explicit freshness, session, calendar, and licensing semantics.
+- Example research classification:
+  - A large SK Hynix decline alone is `UNCONFIRMED`.
+  - Fresh SK Hynix weakness plus Korean semiconductor participation, a credible
+    catalyst, and confirming weakness in U.S. semiconductor proxies may become
+    `GLOBAL_SEMICONDUCTOR_SHOCK`.
+  - Missing direct-market evidence must remain `INSUFFICIENT_DATA`; do not infer a
+    global shock from one stale quote or headline.
+- Evidence and outputs:
+  - Preserve timestamped overnight observations and a preopen risk brief.
+  - Measure the subsequent U.S. gap, first 5/15/30/60-minute returns, recovery or
+    failure, and full-day outcome.
+  - Record counterfactuals such as whether an overnight risk gate would have withheld
+    an opening Shadow entry.
+  - Treat global/overnight context as one independent evidence family rather than
+    inflating raw indicator-confluence counts.
+- Provider finding:
+  - thinkorswim visibly supports eligible 24/5 instruments, but the current automated
+    Schwab `/marketdata/v1/quotes` boundary did not expose matching overnight updates
+    in a bounded 2026-07-28 check. `QQQ`, `SMH`, and `NVDA` were real-time-labeled but
+    `Closed`, with provider timestamps ending around the extended-hours close.
+  - Do not scrape or automate the thinkorswim desktop interface.
+  - Before implementation, prove a documented read-only source for U.S. overnight
+    and required international markets, or report those inputs unavailable.
+- Guardrails:
+  - Start as research and risk context only.
+  - Do not change Candidate Score, readiness, alerts, selection policy, TradePlan,
+    Risk Governor, Shadow eligibility, or execution behavior.
+  - Do not create automatic overnight orders.
+  - Promotion into a real risk gate requires prospective evidence, data-quality
+    proof, and a separately authorized protected-behavior task.
+
 ## Research Engine
 
 - Opportunity Score
