@@ -65,6 +65,52 @@ class ShadowTradeExperimentWrite:
     source_state_unchanged: bool
 
 
+def load_shadow_trade_experiment(path: Path) -> dict[str, Any]:
+    """Load and validate one canonical immutable experiment artifact."""
+
+    resolved = path.expanduser().resolve()
+    source = _read_bounded_source(
+        resolved,
+        maximum_bytes=MAX_EXPERIMENT_BYTES,
+        label="Shadow trade experiment",
+        required=True,
+    )
+    assert source is not None
+    try:
+        envelope = json.loads(source.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ShadowTradeExperimentError(
+            "Shadow experiment artifact is not valid UTF-8 JSON."
+        ) from exc
+    if (
+        not isinstance(envelope, dict)
+        or envelope.get("schema_version")
+        != SHADOW_TRADE_EXPERIMENT_SCHEMA_VERSION
+        or not isinstance(envelope.get("experiment"), dict)
+    ):
+        raise ShadowTradeExperimentError(
+            "Shadow experiment artifact has an unsupported envelope."
+        )
+    experiment = dict(envelope["experiment"])
+    _validate_experiment(experiment)
+    expected_hash = hashlib.sha256(
+        canonical_json(experiment).encode("utf-8")
+    ).hexdigest()
+    if envelope.get("experiment_sha256") != expected_hash:
+        raise ShadowTradeExperimentError(
+            "Shadow experiment envelope hash does not match its content."
+        )
+    expected_name = (
+        f"{experiment['identity']['shadow_trade_id']}-"
+        f"{experiment['experiment_id']}.json"
+    )
+    if resolved.name != expected_name:
+        raise ShadowTradeExperimentError(
+            "Shadow experiment filename does not match its immutable identity."
+        )
+    return experiment
+
+
 def generate_shadow_trade_experiment(
     *,
     shadow_trade_id: str,
