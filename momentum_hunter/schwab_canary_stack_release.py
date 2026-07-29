@@ -27,23 +27,29 @@ from momentum_hunter.schwab_canary_stack_integrity import (
 FINAL_CANARY_STACK_RELEASE_SCHEMA_V1: Final = (
     "FINAL_CANARY_STACK_RELEASE_V1"
 )
-FINAL_CANARY_STACK_RELEASE_SCHEMA: Final = (
+FINAL_CANARY_STACK_RELEASE_SCHEMA_V2: Final = (
     "FINAL_CANARY_STACK_RELEASE_V2"
+)
+FINAL_CANARY_STACK_RELEASE_SCHEMA: Final = (
+    "FINAL_CANARY_STACK_RELEASE_V3"
 )
 HISTORICAL_CANARY_STACK_SOURCE_COMMIT: Final = (
     "b17fa6549ea239e9d807632e1c4c77abe474ab67"
 )
-REVIEWED_CANARY_STACK_SOURCE_COMMIT: Final = (
+CANARY_021_REVIEWED_SOURCE_COMMIT: Final = (
     "249b2e8f4a6bf667a4900a5b97d98c2c6cf1d8db"
 )
+REVIEWED_CANARY_STACK_SOURCE_COMMIT: Final = (
+    "732e3ff0184831daeffb1870354f4f5a58ee1dbc"
+)
 CURRENT_CANARY_STACK_RELEASE_BRANCH: Final = (
-    "codex/ARGUS-CANARY-021-current-baseline-reconciliation"
+    "codex/ARGUS-CANARY-022-credential-remediation-gate"
 )
 CURRENT_CANARY_STACK_BASELINE_COMMIT: Final = (
-    "b54a13789b29737a957a29478ed9198ae6e3a39e"
+    "1874e451dc48a7fc164bf87a7f435cec1b38ae68"
 )
 CURRENT_CANARY_STACK_BASELINE_REMOTE_REF: Final = (
-    "origin/codex/ARGUS-SHADOW-022-restart-lifecycle-integrity"
+    "origin/codex/ARGUS-CANARY-021-current-baseline-reconciliation"
 )
 _COMMIT_PATTERN: Final = re.compile(r"[0-9a-f]{40}")
 _OWNED_PATHS: Final = (

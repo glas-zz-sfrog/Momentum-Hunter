@@ -21,6 +21,7 @@ from momentum_hunter.schwab_canary_stack_integrity import (
     CANARY_STACK_INTEGRITY_SCHEMA_VERSION,
 )
 from momentum_hunter.schwab_canary_stack_release import (
+    CANARY_021_REVIEWED_SOURCE_COMMIT,
     CURRENT_CANARY_STACK_BASELINE_COMMIT,
     CURRENT_CANARY_STACK_BASELINE_REMOTE_REF,
     CURRENT_CANARY_STACK_RELEASE_BRANCH,
@@ -257,6 +258,10 @@ class FinalCanaryStackReleaseTests(unittest.TestCase):
         self.assertEqual(
             "b17fa6549ea239e9d807632e1c4c77abe474ab67",
             HISTORICAL_CANARY_STACK_SOURCE_COMMIT,
+        )
+        self.assertEqual(
+            "249b2e8f4a6bf667a4900a5b97d98c2c6cf1d8db",
+            CANARY_021_REVIEWED_SOURCE_COMMIT,
         )
         self.assertEqual(
             CURRENT_CANARY_STACK_RELEASE_BRANCH,
