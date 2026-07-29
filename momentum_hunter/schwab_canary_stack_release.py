@@ -39,6 +39,12 @@ REVIEWED_CANARY_STACK_SOURCE_COMMIT: Final = (
 CURRENT_CANARY_STACK_RELEASE_BRANCH: Final = (
     "codex/ARGUS-CANARY-021-current-baseline-reconciliation"
 )
+CURRENT_CANARY_STACK_BASELINE_COMMIT: Final = (
+    "b54a13789b29737a957a29478ed9198ae6e3a39e"
+)
+CURRENT_CANARY_STACK_BASELINE_REMOTE_REF: Final = (
+    "origin/codex/ARGUS-SHADOW-022-restart-lifecycle-integrity"
+)
 _COMMIT_PATTERN: Final = re.compile(r"[0-9a-f]{40}")
 _OWNED_PATHS: Final = (
     "momentum_hunter/schwab_canary_stack_release.py",
@@ -48,8 +54,8 @@ _OWNED_PATHS: Final = (
 
 DEFAULT_FINAL_CANARY_STACK_POLICY: Final = (
     PendingFoundationReleasePolicy(
-        base_ref="master",
-        remote_base_ref="origin/master",
+        base_ref=CURRENT_CANARY_STACK_BASELINE_COMMIT,
+        remote_base_ref=CURRENT_CANARY_STACK_BASELINE_REMOTE_REF,
         allowed_branch_prefix=CURRENT_CANARY_STACK_RELEASE_BRANCH,
         source_commits=(
             SourceCommitPolicy(
