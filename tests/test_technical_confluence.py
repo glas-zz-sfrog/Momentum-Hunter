@@ -1601,7 +1601,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             bars=daily_bars("AAA", [10.0] * 5),
         )
 
-        self.assertEqual(2, summary.schema_version)
+        self.assertEqual(3, summary.schema_version)
         self.assertEqual(
             len(summary.indicator_states),
             summary.raw_total_checks,
@@ -1966,7 +1966,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             + row["raw_insufficient_data_checks"]
         )
 
-        self.assertEqual(2, payload["schema_version"])
+        self.assertEqual(3, payload["schema_version"])
         self.assertIn(
             "| Raw Green | Raw Yellow | Raw Red | Missing |",
             rendered,
@@ -2095,6 +2095,33 @@ class TechnicalConfluenceTests(unittest.TestCase):
         )
         self.assertFalse(payload["summary"]["aggregate_outcomes_released"])
         self.assertEqual(29, payload["summary"]["completed_rows_to_minimum"])
+        confluence = row["confluence_summary"]
+        raw_bucket = (
+            f"{confluence['raw_green_checks']}/"
+            f"{confluence['raw_total_checks']}"
+        )
+        family_bucket = (
+            f"{confluence['independent_green_families']}/"
+            f"{confluence['independent_total_families']}"
+        )
+        self.assertEqual(
+            {},
+            payload["aggregate_outcomes_by_raw_green_checks"],
+        )
+        self.assertEqual(
+            {},
+            payload[
+                "aggregate_outcomes_by_independent_green_families"
+            ],
+        )
+        self.assertEqual(
+            [raw_bucket],
+            payload["withheld_raw_green_check_buckets"],
+        )
+        self.assertEqual(
+            [family_bucket],
+            payload["withheld_independent_green_family_buckets"],
+        )
 
     def test_study_confluence_uses_only_event_date_history(self) -> None:
         historical = daily_bars(
@@ -2218,6 +2245,149 @@ class TechnicalConfluenceTests(unittest.TestCase):
         )
         self.assertEqual(30, aggregate["sample_count"])
         self.assertEqual(100.0, aggregate["positive_forward_return_rate_pct"]["10d"])
+        raw_aggregates = payload[
+            "aggregate_outcomes_by_raw_green_checks"
+        ]
+        family_aggregates = payload[
+            "aggregate_outcomes_by_independent_green_families"
+        ]
+        self.assertEqual(1, len(raw_aggregates))
+        self.assertEqual(1, len(family_aggregates))
+        self.assertEqual(
+            30,
+            next(iter(raw_aggregates.values()))["sample_count"],
+        )
+        self.assertEqual(
+            30,
+            next(iter(family_aggregates.values()))["sample_count"],
+        )
+
+    def test_study_stratifies_outcomes_by_exact_confluence_counts(self) -> None:
+        groups: dict[str, list[TechnicalPriceBar]] = {}
+        events: list[BreakoutEvent] = []
+        for offset in range(30):
+            symbol = f"C{offset:02d}"
+            history = (
+                [10.0 + step * 0.1 for step in range(61)]
+                if offset < 9
+                else [10.0] * 61
+            )
+            groups[symbol] = daily_bars(
+                symbol,
+                history
+                + [
+                    history[-1] + 0.1 + step * 0.1
+                    for step in range(10)
+                ],
+                volume=200,
+            )
+            events.append(
+                breakout_event(
+                    symbol,
+                    BREAKOUT_PRESENT,
+                    event_id=f"{symbol}-event",
+                    event_timestamp=groups[symbol][60].timestamp,
+                )
+            )
+        studies = study_breakout_events(
+            events,
+            daily_bars_by_symbol=groups,
+        )
+
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol=groups,
+            breakout_events=events,
+            breakout_studies=studies,
+            source_paths={},
+        )
+
+        expected_raw: dict[str, int] = {}
+        expected_families: dict[str, int] = {}
+        for row in payload["rows"]:
+            summary = row["confluence_summary"]
+            raw_bucket = (
+                f"{summary['raw_green_checks']}/"
+                f"{summary['raw_total_checks']}"
+            )
+            family_bucket = (
+                f"{summary['independent_green_families']}/"
+                f"{summary['independent_total_families']}"
+            )
+            expected_raw[raw_bucket] = expected_raw.get(raw_bucket, 0) + 1
+            expected_families[family_bucket] = (
+                expected_families.get(family_bucket, 0) + 1
+            )
+
+        self.assertEqual(2, len(expected_raw))
+        self.assertEqual(2, len(expected_families))
+        self.assertEqual(
+            {9, 21},
+            set(expected_raw.values()),
+        )
+        self.assertEqual(
+            {9, 21},
+            set(expected_families.values()),
+        )
+        released_raw = {
+            key: count
+            for key, count in expected_raw.items()
+            if count >= 10
+        }
+        released_families = {
+            key: count
+            for key, count in expected_families.items()
+            if count >= 10
+        }
+        self.assertEqual(
+            released_raw,
+            {
+                key: aggregate["sample_count"]
+                for key, aggregate in payload[
+                    "aggregate_outcomes_by_raw_green_checks"
+                ].items()
+            },
+        )
+        self.assertEqual(
+            released_families,
+            {
+                key: aggregate["sample_count"]
+                for key, aggregate in payload[
+                    "aggregate_outcomes_by_independent_green_families"
+                ].items()
+            },
+        )
+        self.assertEqual(
+            sorted(
+                key
+                for key, count in expected_raw.items()
+                if count < 10
+            ),
+            payload["withheld_raw_green_check_buckets"],
+        )
+        self.assertEqual(
+            sorted(
+                key
+                for key, count in expected_families.items()
+                if count < 10
+            ),
+            payload["withheld_independent_green_family_buckets"],
+        )
+        rendered = render_technical_confluence_study_markdown(payload)
+        self.assertIn("### By Raw Green Checks", rendered)
+        self.assertIn("### By Independent Green Families", rendered)
+        for bucket in released_raw:
+            self.assertIn(f"| {bucket} |", rendered)
+        for bucket in released_families:
+            self.assertIn(f"| {bucket} |", rendered)
+        self.assertIn(
+            "SMALL_RAW_GREEN_CHECK_BUCKETS_WITHHELD:",
+            rendered,
+        )
+        self.assertIn(
+            "SMALL_INDEPENDENT_GREEN_FAMILY_BUCKETS_WITHHELD:",
+            rendered,
+        )
 
     def test_study_excludes_duplicate_event_ids_and_marks_missing_bars(self) -> None:
         duplicate = breakout_event(

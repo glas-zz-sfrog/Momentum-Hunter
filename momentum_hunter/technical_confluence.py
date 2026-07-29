@@ -31,8 +31,8 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v10"
-TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 2
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v11"
+TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 3
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
 )
@@ -1020,15 +1020,59 @@ def build_technical_confluence_study_payload(
         aggregate_outcomes, withheld_conclusions = (
             _aggregate_confluence_study_rows(complete_rows)
         )
+        (
+            aggregate_outcomes_by_raw_green_checks,
+            withheld_raw_green_check_buckets,
+        ) = _aggregate_confluence_study_rows_by_count(
+            complete_rows,
+            numerator_field="raw_green_checks",
+            denominator_field="raw_total_checks",
+        )
+        (
+            aggregate_outcomes_by_independent_green_families,
+            withheld_independent_green_family_buckets,
+        ) = _aggregate_confluence_study_rows_by_count(
+            complete_rows,
+            numerator_field="independent_green_families",
+            denominator_field="independent_total_families",
+        )
     else:
         aggregate_outcomes = {}
+        aggregate_outcomes_by_raw_green_checks = {}
+        aggregate_outcomes_by_independent_green_families = {}
         withheld_conclusions = sorted(
             {
                 row.confluence_summary.conclusion
                 for row in complete_rows
             }
         )
-    aggregate_released = bool(aggregate_outcomes)
+        withheld_raw_green_check_buckets = sorted(
+            {
+                _confluence_count_bucket(
+                    row,
+                    numerator_field="raw_green_checks",
+                    denominator_field="raw_total_checks",
+                )
+                for row in complete_rows
+            }
+        )
+        withheld_independent_green_family_buckets = sorted(
+            {
+                _confluence_count_bucket(
+                    row,
+                    numerator_field="independent_green_families",
+                    denominator_field="independent_total_families",
+                )
+                for row in complete_rows
+            }
+        )
+    aggregate_released = any(
+        (
+            aggregate_outcomes,
+            aggregate_outcomes_by_raw_green_checks,
+            aggregate_outcomes_by_independent_green_families,
+        )
+    )
     if (
         len(complete_rows)
         < CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
@@ -1040,6 +1084,24 @@ def build_technical_confluence_study_payload(
         warnings.append(
             "SMALL_CONCLUSION_BUCKETS_WITHHELD:"
             + ",".join(withheld_conclusions)
+        )
+    if (
+        len(complete_rows)
+        >= CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+        and withheld_raw_green_check_buckets
+    ):
+        warnings.append(
+            "SMALL_RAW_GREEN_CHECK_BUCKETS_WITHHELD:"
+            + ",".join(withheld_raw_green_check_buckets)
+        )
+    if (
+        len(complete_rows)
+        >= CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+        and withheld_independent_green_family_buckets
+    ):
+        warnings.append(
+            "SMALL_INDEPENDENT_GREEN_FAMILY_BUCKETS_WITHHELD:"
+            + ",".join(withheld_independent_green_family_buckets)
         )
     return {
         "artifact_type": TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE,
@@ -1057,6 +1119,9 @@ def build_technical_confluence_study_payload(
             CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
         ),
         "minimum_conclusion_bucket_rows": (
+            CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS
+        ),
+        "minimum_count_bucket_rows": (
             CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS
         ),
         "outcome_methodology": {
@@ -1085,7 +1150,19 @@ def build_technical_confluence_study_payload(
         "rows": [row.to_dict() for row in rows],
         "unavailable_event_groups": unavailable_groups,
         "aggregate_outcomes_by_conclusion": aggregate_outcomes,
+        "aggregate_outcomes_by_raw_green_checks": (
+            aggregate_outcomes_by_raw_green_checks
+        ),
+        "aggregate_outcomes_by_independent_green_families": (
+            aggregate_outcomes_by_independent_green_families
+        ),
         "withheld_conclusions": withheld_conclusions,
+        "withheld_raw_green_check_buckets": (
+            withheld_raw_green_check_buckets
+        ),
+        "withheld_independent_green_family_buckets": (
+            withheld_independent_green_family_buckets
+        ),
         "warnings": warnings,
     }
 
@@ -1187,12 +1264,60 @@ def _aggregate_confluence_study_rows(
             row.confluence_summary.conclusion,
             [],
         ).append(row)
+    return _aggregate_confluence_study_groups(grouped)
+
+
+def _aggregate_confluence_study_rows_by_count(
+    rows: list[TechnicalConfluenceStudyRow],
+    *,
+    numerator_field: str,
+    denominator_field: str,
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    grouped: dict[str, list[TechnicalConfluenceStudyRow]] = {}
+    for row in rows:
+        grouped.setdefault(
+            _confluence_count_bucket(
+                row,
+                numerator_field=numerator_field,
+                denominator_field=denominator_field,
+            ),
+            [],
+        ).append(row)
+    return _aggregate_confluence_study_groups(grouped)
+
+
+def _confluence_count_bucket(
+    row: TechnicalConfluenceStudyRow,
+    *,
+    numerator_field: str,
+    denominator_field: str,
+) -> str:
+    numerator = getattr(row.confluence_summary, numerator_field)
+    denominator = getattr(row.confluence_summary, denominator_field)
+    if (
+        isinstance(numerator, bool)
+        or not isinstance(numerator, int)
+        or isinstance(denominator, bool)
+        or not isinstance(denominator, int)
+        or numerator < 0
+        or denominator <= 0
+        or numerator > denominator
+    ):
+        raise TechnicalConfluenceError(
+            "Confluence count bucket requires a valid numerator and denominator."
+        )
+    return f"{numerator}/{denominator}"
+
+
+def _aggregate_confluence_study_groups(
+    grouped: dict[str, list[TechnicalConfluenceStudyRow]],
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
 
     aggregates: dict[str, dict[str, Any]] = {}
     withheld: list[str] = []
-    for conclusion, bucket in sorted(grouped.items()):
+    for bucket_name, bucket in sorted(grouped.items()):
         if len(bucket) < CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS:
-            withheld.append(conclusion)
+            withheld.append(bucket_name)
             continue
         mean_returns: dict[str, float] = {}
         positive_rates: dict[str, float] = {}
@@ -1224,7 +1349,7 @@ def _aggregate_confluence_study_rows(
             for row in bucket
             if row.max_adverse_excursion_pct is not None
         ]
-        aggregates[conclusion] = {
+        aggregates[bucket_name] = {
             "sample_count": len(bucket),
             "mean_forward_returns_pct": mean_returns,
             "positive_forward_return_rate_pct": positive_rates,
@@ -1472,40 +1597,26 @@ def render_technical_confluence_study_markdown(
         lines.append("- No eligible daily breakout samples were available.")
 
     lines.extend(["", "## Aggregate Outcomes", ""])
-    aggregates = payload["aggregate_outcomes_by_conclusion"]
-    if not aggregates:
-        lines.append(
-            "- Withheld until the minimum complete sample requirements pass."
-        )
-    else:
-        lines.extend(
-            [
-                (
-                    "| Conclusion | Samples | Mean 1d | Mean 2d | "
-                    "Mean 5d | Mean 10d | Positive 10d | Mean MFE | "
-                    "Mean MAE |"
-                ),
-                (
-                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | "
-                    "---: | ---: |"
-                ),
-            ]
-        )
-        for conclusion, aggregate in sorted(aggregates.items()):
-            mean_returns = aggregate["mean_forward_returns_pct"]
-            positive_rates = aggregate[
-                "positive_forward_return_rate_pct"
-            ]
-            lines.append(
-                f"| {conclusion} | {aggregate['sample_count']} | "
-                f"{_display_pct(mean_returns['1d'])} | "
-                f"{_display_pct(mean_returns['2d'])} | "
-                f"{_display_pct(mean_returns['5d'])} | "
-                f"{_display_pct(mean_returns['10d'])} | "
-                f"{_display_pct(positive_rates['10d'])} | "
-                f"{_display_pct(aggregate['mean_max_favorable_excursion_pct'])} | "
-                f"{_display_pct(aggregate['mean_max_adverse_excursion_pct'])} |"
-            )
+    _append_confluence_study_aggregate_table(
+        lines,
+        title="By Conclusion",
+        bucket_label="Conclusion",
+        aggregates=payload["aggregate_outcomes_by_conclusion"],
+    )
+    _append_confluence_study_aggregate_table(
+        lines,
+        title="By Raw Green Checks",
+        bucket_label="Raw Green / Configured Checks",
+        aggregates=payload["aggregate_outcomes_by_raw_green_checks"],
+    )
+    _append_confluence_study_aggregate_table(
+        lines,
+        title="By Independent Green Families",
+        bucket_label="Green Families / Configured Families",
+        aggregates=payload[
+            "aggregate_outcomes_by_independent_green_families"
+        ],
+    )
 
     lines.extend(["", "## Unavailable Event Groups", ""])
     unavailable = payload["unavailable_event_groups"][:_REPORT_ROW_LIMIT]
@@ -1526,6 +1637,56 @@ def render_technical_confluence_study_markdown(
         lines.append("- None.")
     lines.append("")
     return "\n".join(lines)
+
+
+def _append_confluence_study_aggregate_table(
+    lines: list[str],
+    *,
+    title: str,
+    bucket_label: str,
+    aggregates: dict[str, dict[str, Any]],
+) -> None:
+    lines.extend([f"### {title}", ""])
+    if not aggregates:
+        lines.extend(
+            [
+                (
+                    "- Withheld until the minimum complete sample "
+                    "requirements pass."
+                ),
+                "",
+            ]
+        )
+        return
+    lines.extend(
+        [
+            (
+                f"| {bucket_label} | Samples | Mean 1d | Mean 2d | "
+                "Mean 5d | Mean 10d | Positive 10d | Mean MFE | "
+                "Mean MAE |"
+            ),
+            (
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | "
+                "---: | ---: |"
+            ),
+        ]
+    )
+    for bucket_name, aggregate in sorted(aggregates.items()):
+        mean_returns = aggregate["mean_forward_returns_pct"]
+        positive_rates = aggregate[
+            "positive_forward_return_rate_pct"
+        ]
+        lines.append(
+            f"| {bucket_name} | {aggregate['sample_count']} | "
+            f"{_display_pct(mean_returns['1d'])} | "
+            f"{_display_pct(mean_returns['2d'])} | "
+            f"{_display_pct(mean_returns['5d'])} | "
+            f"{_display_pct(mean_returns['10d'])} | "
+            f"{_display_pct(positive_rates['10d'])} | "
+            f"{_display_pct(aggregate['mean_max_favorable_excursion_pct'])} | "
+            f"{_display_pct(aggregate['mean_max_adverse_excursion_pct'])} |"
+        )
+    lines.append("")
 
 
 def ema_stack_state(
