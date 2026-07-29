@@ -21,20 +21,25 @@ from momentum_hunter.technical_confluence import (
     BLOCKED,
     CAUTION,
     CLEAR,
+    FAMILY_MARKET_REGIME,
     FAMILY_MOMENTUM,
     FAMILY_RELATIVE_STRENGTH,
     FAMILY_TREND,
     FAMILY_VOLUME,
     GREEN,
+    HOSTILE,
     INSUFFICIENT_DATA,
+    MIXED,
     RED,
     STRONG_CONFLUENCE,
+    SUPPORTIVE,
     TechnicalConfluenceOptions,
     TechnicalConfluenceError,
     accumulation_distribution_state,
     adx_trend_strength_state,
     anchored_vwap_state,
     atr_extension_risk_state,
+    benchmark_sma_regime_state,
     build_technical_confluence_report_payload,
     build_technical_confluence_study_payload,
     chaikin_money_flow_state,
@@ -96,6 +101,122 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertTrue(full_state.details["long_window_available"])
         self.assertTrue(full_state.details["full_bullish"])
         self.assertEqual(RED, bearish_state.state)
+
+    def test_benchmark_sma_regime_preserves_partial_qqq_context(self) -> None:
+        stock = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.2 for offset in range(70)],
+        )
+        benchmark = daily_bars(
+            "QQQ",
+            [100.0 + offset * 0.2 for offset in range(70)],
+        )
+
+        state = benchmark_sma_regime_state(
+            benchmark,
+            as_of=benchmark[-1].timestamp,
+        )
+        summary = evaluate_wave1_confluence(
+            symbol="AAA",
+            bars=stock,
+            benchmark_bars=benchmark,
+        )
+
+        self.assertEqual(GREEN, state.state)
+        self.assertEqual("QQQ", state.details["benchmark_symbol"])
+        self.assertFalse(state.details["long_window_available"])
+        self.assertEqual(
+            SUPPORTIVE,
+            summary.family_states[FAMILY_MARKET_REGIME].state,
+        )
+
+    def test_benchmark_sma_regime_projects_mixed_and_hostile_context(self) -> None:
+        mixed_benchmark = daily_bars("QQQ", [100.0] * 70)
+        hostile_benchmark = daily_bars(
+            "QQQ",
+            [300.0 - offset for offset in range(220)],
+        )
+        partial_stock = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.2 for offset in range(70)],
+        )
+        full_stock = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.2 for offset in range(220)],
+        )
+
+        mixed = evaluate_wave1_confluence(
+            symbol="AAA",
+            bars=partial_stock,
+            benchmark_bars=mixed_benchmark,
+        )
+        hostile = evaluate_wave1_confluence(
+            symbol="AAA",
+            bars=full_stock,
+            benchmark_bars=hostile_benchmark,
+        )
+
+        self.assertEqual(
+            MIXED,
+            mixed.family_states[FAMILY_MARKET_REGIME].state,
+        )
+        self.assertEqual(
+            HOSTILE,
+            hostile.family_states[FAMILY_MARKET_REGIME].state,
+        )
+        self.assertLessEqual(hostile.independent_total_families, 5)
+        self.assertEqual(
+            hostile.major_red_flags,
+            sum(
+                1
+                for family, state in hostile.family_states.items()
+                if family != FAMILY_MARKET_REGIME
+                and state.state
+                in {
+                    RED,
+                    BLOCKED,
+                    technical_confluence.FAIL,
+                }
+            ),
+        )
+
+    def test_benchmark_sma_regime_aligns_as_of_and_ignores_future_bars(self) -> None:
+        benchmark = daily_bars(
+            "QQQ",
+            [100.0 + offset * 0.2 for offset in range(220)],
+        )
+        source_before = fingerprint_bars(benchmark)
+        as_of = benchmark[69].timestamp
+        before = asdict(
+            benchmark_sma_regime_state(
+                benchmark,
+                as_of=as_of,
+            )
+        )
+
+        benchmark[219] = replace(
+            benchmark[219],
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.0,
+        )
+        mutated_source = fingerprint_bars(benchmark)
+        after = asdict(
+            benchmark_sma_regime_state(
+                benchmark,
+                as_of=as_of,
+            )
+        )
+        missing_date = benchmark_sma_regime_state(
+            benchmark,
+            as_of="2027-12-31",
+        )
+
+        self.assertEqual(before, after)
+        self.assertEqual(INSUFFICIENT_DATA, missing_date.state)
+        self.assertEqual(mutated_source, fingerprint_bars(benchmark))
+        self.assertNotEqual(source_before, fingerprint_bars(benchmark))
 
     def test_adx_marks_directional_trend_strength_green(self) -> None:
         bars = [
@@ -1139,6 +1260,35 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertEqual(2, payload["summary"]["symbols_evaluated"])
         self.assertNotIn("BENCHMARK_BARS_UNAVAILABLE:QQQ", payload["warnings"])
 
+    def test_report_payload_preserves_spy_benchmark_regime_identity(self) -> None:
+        payload = build_technical_confluence_report_payload(
+            generated_at="2026-03-15T16:00:00-05:00",
+            daily_bars_by_symbol={
+                "AAA": daily_bars(
+                    "AAA",
+                    [10.0 + offset * 0.2 for offset in range(70)],
+                ),
+                "SPY": daily_bars(
+                    "SPY",
+                    [100.0 + offset * 0.2 for offset in range(70)],
+                ),
+            },
+            breakout_events=[],
+            source_paths={"daily_ohlc_path": "daily.json"},
+            benchmark_symbol="SPY",
+        )
+
+        market_regime = next(
+            indicator
+            for indicator in payload["symbols"][0]["indicator_states"]
+            if indicator["name"] == "benchmark_sma_regime"
+        )
+
+        self.assertEqual("SPY", payload["benchmark_symbol"])
+        self.assertEqual(["AAA"], [row["symbol"] for row in payload["symbols"]])
+        self.assertEqual("SPY", market_regime["details"]["benchmark_symbol"])
+        self.assertEqual(GREEN, market_regime["state"])
+
     def test_report_payload_marks_event_symbol_without_daily_bars_unavailable(self) -> None:
         payload = build_technical_confluence_report_payload(
             generated_at="2026-03-01T16:00:00-05:00",
@@ -1186,7 +1336,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             payload["unavailable_symbols"],
         )
 
-    def test_invalid_benchmark_degrades_relative_strength_only(self) -> None:
+    def test_invalid_benchmark_degrades_benchmark_derived_context_only(self) -> None:
         invalid_benchmark = daily_bars("QQQ", [100.0] * 60)
         invalid_benchmark[-1] = replace(
             invalid_benchmark[-1],
@@ -1204,13 +1354,17 @@ class TechnicalConfluenceTests(unittest.TestCase):
         )
 
         self.assertEqual(1, payload["summary"]["symbols_evaluated"])
+        states_by_name = {
+            indicator["name"]: indicator["state"]
+            for indicator in payload["symbols"][0]["indicator_states"]
+        }
         self.assertEqual(
             "UNAVAILABLE",
-            next(
-                indicator
-                for indicator in payload["symbols"][0]["indicator_states"]
-                if indicator["name"] == "relative_strength_vs_benchmark"
-            )["state"],
+            states_by_name["relative_strength_vs_benchmark"],
+        )
+        self.assertEqual(
+            "UNAVAILABLE",
+            states_by_name["benchmark_sma_regime"],
         )
         self.assertIn(
             "BENCHMARK_BAR_INPUT_REJECTED:QQQ",

@@ -31,7 +31,7 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v4"
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v5"
 TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 1
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
@@ -66,6 +66,9 @@ CAUTION = "CAUTION"
 BLOCKED = "BLOCKED"
 UNAVAILABLE = "UNAVAILABLE"
 CLEAR = "CLEAR"
+SUPPORTIVE = "SUPPORTIVE"
+MIXED = "MIXED"
+HOSTILE = "HOSTILE"
 PASS = "PASS"
 PARTIAL = "PARTIAL"
 FAIL = "FAIL"
@@ -80,6 +83,7 @@ FAMILY_MOMENTUM = "Momentum"
 FAMILY_VOLATILITY = "Volatility / Compression"
 FAMILY_VOLUME = "Volume / Participation"
 FAMILY_RELATIVE_STRENGTH = "Relative Strength"
+FAMILY_MARKET_REGIME = "Market Regime"
 FAMILY_RISK = "Overextension / Risk"
 FAMILY_DATA_QUALITY = "Data Quality"
 
@@ -418,6 +422,11 @@ def evaluate_wave1_confluence(
             ordered_bars,
             benchmark_bars or [],
             index,
+            options=options,
+        ),
+        benchmark_sma_regime_state(
+            benchmark_bars or [],
+            as_of=timestamp,
             options=options,
         ),
         atr_extension_risk_state(ordered_bars, index, options=options),
@@ -1532,6 +1541,90 @@ def sma_position_state(
     )
 
 
+def benchmark_sma_regime_state(
+    benchmark_bars: list[TechnicalPriceBar],
+    *,
+    as_of: str | datetime | None,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    benchmark_bars = sorted_bars(benchmark_bars)
+    if not benchmark_bars:
+        return indicator(
+            "benchmark_sma_regime",
+            FAMILY_MARKET_REGIME,
+            UNAVAILABLE,
+            "market context",
+            None,
+            "No benchmark bars supplied.",
+        )
+    symbols = {
+        str(bar.symbol).upper().strip()
+        for bar in benchmark_bars
+        if str(bar.symbol).strip()
+    }
+    if len(symbols) != 1:
+        return indicator(
+            "benchmark_sma_regime",
+            FAMILY_MARKET_REGIME,
+            UNAVAILABLE,
+            "market context",
+            None,
+            "Benchmark bars do not identify exactly one symbol.",
+        )
+    parsed_as_of = parse_datetime(str(as_of)) if as_of is not None else None
+    if parsed_as_of is None:
+        return indicator(
+            "benchmark_sma_regime",
+            FAMILY_MARKET_REGIME,
+            INSUFFICIENT_DATA,
+            "market context",
+            None,
+            "Benchmark regime requires an explicit valid as-of timestamp.",
+        )
+    benchmark_index = matching_daily_index(
+        benchmark_bars,
+        parsed_as_of,
+    )
+    if benchmark_index is None:
+        return indicator(
+            "benchmark_sma_regime",
+            FAMILY_MARKET_REGIME,
+            INSUFFICIENT_DATA,
+            "market context",
+            None,
+            "Benchmark has no bar aligned to the research as-of date.",
+        )
+    position = sma_position_state(
+        benchmark_bars,
+        benchmark_index,
+        options=options,
+    )
+    symbol = next(iter(symbols))
+    if position.state in {UNAVAILABLE, INSUFFICIENT_DATA}:
+        return indicator(
+            "benchmark_sma_regime",
+            FAMILY_MARKET_REGIME,
+            position.state,
+            "market context",
+            None,
+            f"{symbol} benchmark regime is unavailable: {position.reason}",
+        )
+    return indicator(
+        "benchmark_sma_regime",
+        FAMILY_MARKET_REGIME,
+        position.state,
+        "market context",
+        position.value,
+        f"{symbol} benchmark context: {position.reason}",
+        details={
+            "benchmark_symbol": symbol,
+            "as_of": benchmark_bars[benchmark_index].timestamp,
+            **position.details,
+        },
+    )
+
+
 def adx_trend_strength_state(
     bars: list[TechnicalPriceBar],
     index: int,
@@ -2640,6 +2733,9 @@ def build_family_states(indicators: list[IndicatorState]) -> dict[str, Confluenc
         FAMILY_RELATIVE_STRENGTH: summarize_signal_family(
             FAMILY_RELATIVE_STRENGTH, grouped.get(FAMILY_RELATIVE_STRENGTH, [])
         ),
+        FAMILY_MARKET_REGIME: summarize_market_regime(
+            grouped.get(FAMILY_MARKET_REGIME, [])
+        ),
         FAMILY_RISK: summarize_risk_family(grouped.get(FAMILY_RISK, [])),
         FAMILY_DATA_QUALITY: summarize_data_quality(indicators),
     }
@@ -2686,6 +2782,50 @@ def summarize_signal_family(family: str, indicators: list[IndicatorState]) -> Co
         family,
         YELLOW,
         "Usable family indicators are mixed or early.",
+        names,
+    )
+
+
+def summarize_market_regime(
+    indicators: list[IndicatorState],
+) -> ConfluenceFamilyState:
+    names = [item.name for item in indicators]
+    usable = [
+        item
+        for item in indicators
+        if item.state not in {UNAVAILABLE, INSUFFICIENT_DATA}
+    ]
+    if not usable:
+        state = (
+            INSUFFICIENT_DATA
+            if any(item.state == INSUFFICIENT_DATA for item in indicators)
+            else UNAVAILABLE
+        )
+        return ConfluenceFamilyState(
+            FAMILY_MARKET_REGIME,
+            state,
+            "No usable benchmark market-regime evidence.",
+            names,
+        )
+    states = {item.state for item in usable}
+    if states == {GREEN}:
+        return ConfluenceFamilyState(
+            FAMILY_MARKET_REGIME,
+            SUPPORTIVE,
+            "Benchmark SMA context is supportive.",
+            names,
+        )
+    if states == {RED}:
+        return ConfluenceFamilyState(
+            FAMILY_MARKET_REGIME,
+            HOSTILE,
+            "Benchmark SMA context is hostile.",
+            names,
+        )
+    return ConfluenceFamilyState(
+        FAMILY_MARKET_REGIME,
+        MIXED,
+        "Benchmark SMA context is mixed.",
         names,
     )
 
