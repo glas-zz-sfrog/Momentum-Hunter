@@ -1603,7 +1603,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             bars=daily_bars("AAA", [10.0] * 5),
         )
 
-        self.assertEqual(6, summary.schema_version)
+        self.assertEqual(7, summary.schema_version)
         self.assertEqual(
             len(summary.indicator_states),
             summary.raw_total_checks,
@@ -1968,7 +1968,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             + row["raw_insufficient_data_checks"]
         )
 
-        self.assertEqual(6, payload["schema_version"])
+        self.assertEqual(7, payload["schema_version"])
         self.assertIn(
             "| Raw Green | Raw Yellow | Raw Red | Missing |",
             rendered,
@@ -2091,6 +2091,21 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertEqual(10.0, row["forward_returns_pct"]["2d"])
         self.assertEqual(15.0, row["forward_returns_pct"]["5d"])
         self.assertEqual(20.0, row["forward_returns_pct"]["10d"])
+        self.assertEqual("QQQ", row["benchmark_symbol"])
+        self.assertEqual(106.0, row["benchmark_start_price"])
+        self.assertEqual(
+            0.9434,
+            row["benchmark_forward_returns_pct"]["10d"],
+        )
+        self.assertEqual(
+            19.0566,
+            row["benchmark_relative_forward_returns_pct"]["10d"],
+        )
+        self.assertEqual(
+            "COMPLETE",
+            row["benchmark_relative_outcome_status"],
+        )
+        self.assertIsNone(row["benchmark_relative_reason"])
         self.assertEqual(20.0, row["max_favorable_excursion_pct"])
         self.assertEqual(-2.0, row["max_adverse_excursion_pct"])
         self.assertTrue(
@@ -2101,6 +2116,14 @@ class TechnicalConfluenceTests(unittest.TestCase):
         )
         self.assertFalse(payload["summary"]["aggregate_outcomes_released"])
         self.assertEqual(29, payload["summary"]["completed_rows_to_minimum"])
+        self.assertEqual(
+            1,
+            payload["summary"]["benchmark_relative_complete_rows"],
+        )
+        self.assertEqual(
+            29,
+            payload["summary"]["benchmark_relative_rows_to_minimum"],
+        )
         confluence = row["confluence_summary"]
         raw_bucket = (
             f"{confluence['raw_green_checks']}/"
@@ -2146,6 +2169,181 @@ class TechnicalConfluenceTests(unittest.TestCase):
             "MINIMUM_COMPLETE_SAMPLE_NOT_MET",
             payload["temporal_stability"]["reason"],
         )
+
+    def test_study_does_not_substitute_missing_benchmark_target_date(
+        self,
+    ) -> None:
+        bars = daily_bars(
+            "AAA",
+            [10.0] * 61
+            + [10.1 + step * 0.1 for step in range(10)],
+        )
+        benchmark = daily_bars("QQQ", [100.0] * 70)
+        event = breakout_event(
+            "AAA",
+            BREAKOUT_PRESENT,
+            event_id="AAA-event",
+            event_timestamp=bars[60].timestamp,
+        )
+        studies = study_breakout_events(
+            [event],
+            daily_bars_by_symbol={"AAA": bars},
+        )
+        benchmark_before = fingerprint_bars(benchmark)
+
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol={
+                "AAA": bars,
+                "QQQ": benchmark,
+            },
+            breakout_events=[event],
+            breakout_studies=studies,
+            source_paths={},
+        )
+
+        row = payload["rows"][0]
+        self.assertEqual("COMPLETE", row["outcome_status"])
+        self.assertEqual(
+            "PARTIAL",
+            row["benchmark_relative_outcome_status"],
+        )
+        self.assertEqual(
+            "BENCHMARK_TARGET_SESSION_UNAVAILABLE",
+            row["benchmark_relative_reason"],
+        )
+        self.assertIsNotNone(
+            row["benchmark_relative_forward_returns_pct"]["5d"]
+        )
+        self.assertIsNone(
+            row["benchmark_relative_forward_returns_pct"]["10d"]
+        )
+        self.assertEqual(
+            0,
+            payload["summary"]["benchmark_relative_complete_rows"],
+        )
+        self.assertEqual(
+            1,
+            payload["summary"]["benchmark_relative_partial_rows"],
+        )
+        self.assertEqual(
+            0,
+            payload["summary"][
+                "benchmark_relative_insufficient_rows"
+            ],
+        )
+        self.assertEqual(benchmark_before, fingerprint_bars(benchmark))
+
+    def test_study_separates_market_drift_from_excess_return(
+        self,
+    ) -> None:
+        benchmark = daily_bars(
+            "QQQ",
+            [100.0] * 61
+            + [101.0 + step for step in range(10)],
+            volume=200,
+        )
+        groups: dict[str, list[TechnicalPriceBar]] = {
+            "QQQ": benchmark,
+        }
+        events: list[BreakoutEvent] = []
+        for offset in range(30):
+            symbol = f"X{offset:02d}"
+            groups[symbol] = daily_bars(
+                symbol,
+                [10.0] * 61
+                + [10.1 + step * 0.1 for step in range(10)],
+                volume=200,
+            )
+            events.append(
+                breakout_event(
+                    symbol,
+                    BREAKOUT_PRESENT,
+                    event_id=f"{symbol}-event",
+                    event_timestamp=groups[symbol][60].timestamp,
+                )
+            )
+        studies = study_breakout_events(
+            events,
+            daily_bars_by_symbol=groups,
+        )
+
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol=groups,
+            breakout_events=events,
+            breakout_studies=studies,
+            source_paths={},
+        )
+
+        self.assertEqual(
+            30,
+            payload["summary"]["benchmark_relative_complete_rows"],
+        )
+        self.assertTrue(
+            payload["summary"][
+                "benchmark_relative_aggregates_released"
+            ]
+        )
+        json.dumps(payload, allow_nan=False)
+        aggregate = next(
+            iter(
+                payload[
+                    "benchmark_relative_outcomes_by_conclusion"
+                ].values()
+            )
+        )
+        self.assertEqual(30, aggregate["sample_count"])
+        self.assertEqual(
+            0.0,
+            aggregate["mean_excess_forward_returns_pct"]["10d"],
+        )
+        self.assertEqual(
+            0.0,
+            aggregate["median_excess_forward_returns_pct"]["10d"],
+        )
+        self.assertEqual(
+            {"p25": 0.0, "p75": 0.0},
+            aggregate[
+                "interquartile_excess_forward_returns_pct"
+            ]["10d"],
+        )
+        self.assertEqual(
+            0.0,
+            aggregate["positive_excess_return_rate_pct"]["10d"],
+        )
+        self.assertEqual(
+            30,
+            next(
+                iter(
+                    payload[
+                        "benchmark_relative_outcomes_by_raw_green_checks"
+                    ].values()
+                )
+            )["sample_count"],
+        )
+        self.assertEqual(
+            30,
+            next(
+                iter(
+                    payload[
+                        "benchmark_relative_outcomes_by_"
+                        "independent_green_families"
+                    ].values()
+                )
+            )["sample_count"],
+        )
+        self.assertEqual(
+            30,
+            payload["benchmark_relative_outcomes_by_market_regime"][
+                MIXED
+            ]["sample_count"],
+        )
+        rendered = render_technical_confluence_study_markdown(payload)
+        self.assertIn("## Benchmark-Relative Outcomes", rendered)
+        self.assertIn("Mean Excess 10d", rendered)
+        self.assertIn("Positive Excess 10d", rendered)
+        self.assertIn("Benchmark Outcome", rendered)
 
     def test_study_confluence_uses_only_event_date_history(self) -> None:
         historical = daily_bars(
@@ -2268,6 +2466,22 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
         self.assertEqual(30, payload["summary"]["complete_rows"])
         self.assertTrue(payload["summary"]["aggregate_outcomes_released"])
+        self.assertEqual(
+            INSUFFICIENT_DATA,
+            payload["rows"][0][
+                "benchmark_relative_outcome_status"
+            ],
+        )
+        self.assertEqual(
+            "BENCHMARK_BARS_UNAVAILABLE",
+            payload["rows"][0]["benchmark_relative_reason"],
+        )
+        self.assertEqual(
+            30,
+            payload["summary"][
+                "benchmark_relative_insufficient_rows"
+            ],
+        )
         self.assertEqual(
             "median_and_inclusive_interquartile_range",
             payload["outcome_methodology"]["distribution_statistics"],
@@ -2600,7 +2814,9 @@ class TechnicalConfluenceTests(unittest.TestCase):
         )
 
     def test_study_releases_contiguous_temporal_stability_periods(self) -> None:
-        groups: dict[str, list[TechnicalPriceBar]] = {}
+        groups: dict[str, list[TechnicalPriceBar]] = {
+            "QQQ": daily_bars("QQQ", [100.0] * 101, volume=200),
+        }
         events: list[BreakoutEvent] = []
         for offset in range(30):
             symbol = f"T{offset:02d}"
@@ -2710,6 +2926,25 @@ class TechnicalConfluenceTests(unittest.TestCase):
             {"p25": -10.0, "p75": -10.0},
             temporal["periods"]["LATER"][
                 "interquartile_forward_returns_pct"
+            ]["10d"],
+        )
+        relative_temporal = payload[
+            "benchmark_relative_temporal_stability"
+        ]
+        self.assertEqual(
+            TEMPORAL_STABILITY_RELEASED,
+            relative_temporal["status"],
+        )
+        self.assertEqual(
+            10.0,
+            relative_temporal["periods"]["EARLIER"][
+                "mean_excess_forward_returns_pct"
+            ]["10d"],
+        )
+        self.assertEqual(
+            -10.0,
+            relative_temporal["periods"]["LATER"][
+                "mean_excess_forward_returns_pct"
             ]["10d"],
         )
         rendered = render_technical_confluence_study_markdown(payload)

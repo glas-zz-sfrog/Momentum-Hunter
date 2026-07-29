@@ -31,8 +31,8 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v14"
-TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 6
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v15"
+TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 7
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
 )
@@ -395,6 +395,12 @@ class TechnicalConfluenceStudyRow:
     event_count: int
     start_price: float
     forward_returns_pct: dict[str, float | None]
+    benchmark_symbol: str
+    benchmark_start_price: float | None
+    benchmark_forward_returns_pct: dict[str, float | None]
+    benchmark_relative_forward_returns_pct: dict[str, float | None]
+    benchmark_relative_outcome_status: str
+    benchmark_relative_reason: str | None
     max_favorable_excursion_pct: float | None
     max_adverse_excursion_pct: float | None
     outcome_status: str
@@ -410,6 +416,18 @@ class TechnicalConfluenceStudyRow:
             "event_count": self.event_count,
             "start_price": self.start_price,
             "forward_returns_pct": dict(self.forward_returns_pct),
+            "benchmark_symbol": self.benchmark_symbol,
+            "benchmark_start_price": self.benchmark_start_price,
+            "benchmark_forward_returns_pct": dict(
+                self.benchmark_forward_returns_pct
+            ),
+            "benchmark_relative_forward_returns_pct": dict(
+                self.benchmark_relative_forward_returns_pct
+            ),
+            "benchmark_relative_outcome_status": (
+                self.benchmark_relative_outcome_status
+            ),
+            "benchmark_relative_reason": self.benchmark_relative_reason,
             "max_favorable_excursion_pct": (
                 self.max_favorable_excursion_pct
             ),
@@ -779,6 +797,7 @@ def build_technical_confluence_study_payload(
         warnings.append(f"DUPLICATE_DAILY_BAR_GROUP:{symbol}")
 
     benchmark_bars = groups.get(normalized_benchmark, [])
+    benchmark_unavailable_reason: str | None = None
     if benchmark_bars:
         try:
             _validate_price_bars(
@@ -788,13 +807,20 @@ def build_technical_confluence_study_payload(
             )
         except TechnicalConfluenceError:
             benchmark_bars = []
+            benchmark_unavailable_reason = (
+                "BENCHMARK_BAR_INPUT_REJECTED"
+            )
             warnings.append(
                 f"BENCHMARK_BAR_INPUT_REJECTED:{normalized_benchmark}"
             )
     else:
+        benchmark_unavailable_reason = "BENCHMARK_BARS_UNAVAILABLE"
         warnings.append(
             f"BENCHMARK_BARS_UNAVAILABLE:{normalized_benchmark}"
         )
+    ordered_benchmark = (
+        sorted_bars(benchmark_bars) if benchmark_bars else []
+    )
 
     eligible_events: list[BreakoutEvent] = []
     events_by_id: dict[str, list[BreakoutEvent]] = {}
@@ -901,8 +927,7 @@ def build_technical_confluence_study_payload(
 
         historical_bars = ordered_bars[: event_index + 1]
         historical_benchmark: list[TechnicalPriceBar] = []
-        if benchmark_bars and event_time is not None:
-            ordered_benchmark = sorted_bars(benchmark_bars)
+        if ordered_benchmark and event_time is not None:
             benchmark_index = matching_daily_index(
                 ordered_benchmark,
                 event_time,
@@ -938,6 +963,15 @@ def build_technical_confluence_study_payload(
                 if target_index < len(ordered_bars)
                 else None
             )
+        benchmark_outcomes = _benchmark_relative_row_outcomes(
+            symbol_bars=ordered_bars,
+            event_index=event_index,
+            symbol_forward_returns=returns,
+            benchmark_bars=ordered_benchmark,
+            benchmark_unavailable_reason=(
+                benchmark_unavailable_reason
+            ),
+        )
         future_bars = ordered_bars[
             event_index + 1 : min(
                 len(ordered_bars),
@@ -1007,6 +1041,20 @@ def build_technical_confluence_study_payload(
                 event_count=len(sorted_events),
                 start_price=start_price,
                 forward_returns_pct=returns,
+                benchmark_symbol=normalized_benchmark,
+                benchmark_start_price=benchmark_outcomes["start_price"],
+                benchmark_forward_returns_pct=benchmark_outcomes[
+                    "benchmark_forward_returns_pct"
+                ],
+                benchmark_relative_forward_returns_pct=(
+                    benchmark_outcomes[
+                        "benchmark_relative_forward_returns_pct"
+                    ]
+                ),
+                benchmark_relative_outcome_status=benchmark_outcomes[
+                    "status"
+                ],
+                benchmark_relative_reason=benchmark_outcomes["reason"],
                 max_favorable_excursion_pct=max_favorable,
                 max_adverse_excursion_pct=max_adverse,
                 outcome_status=outcome_status,
@@ -1092,7 +1140,108 @@ def build_technical_confluence_study_payload(
                 if (bucket := _market_regime_bucket(row)) is not None
             }
         )
+
+    benchmark_relative_rows = [
+        row
+        for row in complete_rows
+        if row.benchmark_relative_outcome_status == STUDY_COMPLETE
+    ]
+    if (
+        len(benchmark_relative_rows)
+        >= CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+    ):
+        (
+            benchmark_relative_outcomes_by_conclusion,
+            withheld_benchmark_relative_conclusions,
+        ) = _aggregate_confluence_study_rows(
+            benchmark_relative_rows,
+            benchmark_relative=True,
+        )
+        (
+            benchmark_relative_outcomes_by_raw_green_checks,
+            withheld_benchmark_relative_raw_green_check_buckets,
+        ) = _aggregate_confluence_study_rows_by_count(
+            benchmark_relative_rows,
+            numerator_field="raw_green_checks",
+            denominator_field="raw_total_checks",
+            benchmark_relative=True,
+        )
+        (
+            benchmark_relative_outcomes_by_independent_green_families,
+            withheld_benchmark_relative_independent_green_family_buckets,
+        ) = _aggregate_confluence_study_rows_by_count(
+            benchmark_relative_rows,
+            numerator_field="independent_green_families",
+            denominator_field="independent_total_families",
+            benchmark_relative=True,
+        )
+    else:
+        benchmark_relative_outcomes_by_conclusion = {}
+        benchmark_relative_outcomes_by_raw_green_checks = {}
+        (
+            benchmark_relative_outcomes_by_independent_green_families
+        ) = {}
+        withheld_benchmark_relative_conclusions = sorted(
+            {
+                row.confluence_summary.conclusion
+                for row in benchmark_relative_rows
+            }
+        )
+        withheld_benchmark_relative_raw_green_check_buckets = sorted(
+            {
+                _confluence_count_bucket(
+                    row,
+                    numerator_field="raw_green_checks",
+                    denominator_field="raw_total_checks",
+                )
+                for row in benchmark_relative_rows
+            }
+        )
+        (
+            withheld_benchmark_relative_independent_green_family_buckets
+        ) = sorted(
+            {
+                _confluence_count_bucket(
+                    row,
+                    numerator_field="independent_green_families",
+                    denominator_field="independent_total_families",
+                )
+                for row in benchmark_relative_rows
+            }
+        )
+    benchmark_relative_market_regime_rows = [
+        row
+        for row in benchmark_relative_rows
+        if _market_regime_bucket(row) is not None
+    ]
+    if (
+        len(benchmark_relative_market_regime_rows)
+        >= CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+    ):
+        (
+            benchmark_relative_outcomes_by_market_regime,
+            withheld_benchmark_relative_market_regime_buckets,
+        ) = _aggregate_confluence_study_rows_by_market_regime(
+            benchmark_relative_market_regime_rows,
+            benchmark_relative=True,
+        )
+    else:
+        benchmark_relative_outcomes_by_market_regime = {}
+        withheld_benchmark_relative_market_regime_buckets = sorted(
+            {
+                bucket
+                for row in benchmark_relative_market_regime_rows
+                if (bucket := _market_regime_bucket(row)) is not None
+            }
+        )
+
     temporal_stability = _build_temporal_stability_study(complete_rows)
+    benchmark_relative_temporal_stability = (
+        _build_temporal_stability_study(
+            benchmark_relative_rows,
+            benchmark_relative=True,
+        )
+    )
     aggregate_released = any(
         (
             aggregate_outcomes,
@@ -1100,6 +1249,18 @@ def build_technical_confluence_study_payload(
             aggregate_outcomes_by_independent_green_families,
             aggregate_outcomes_by_market_regime,
             temporal_stability["status"]
+            == TEMPORAL_STABILITY_RELEASED,
+        )
+    )
+    benchmark_relative_aggregate_released = any(
+        (
+            benchmark_relative_outcomes_by_conclusion,
+            benchmark_relative_outcomes_by_raw_green_checks,
+            (
+                benchmark_relative_outcomes_by_independent_green_families
+            ),
+            benchmark_relative_outcomes_by_market_regime,
+            benchmark_relative_temporal_stability["status"]
             == TEMPORAL_STABILITY_RELEASED,
         )
     )
@@ -1154,6 +1315,68 @@ def build_technical_confluence_study_payload(
                 "TEMPORAL_STABILITY_WITHHELD:"
                 + str(temporal_stability["reason"])
             )
+        if (
+            len(benchmark_relative_rows)
+            < CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+        ):
+            warnings.append(
+                "BENCHMARK_RELATIVE_AGGREGATES_WITHHELD_MINIMUM_SAMPLE"
+            )
+    if (
+        len(benchmark_relative_rows)
+        >= CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+    ):
+        if withheld_benchmark_relative_conclusions:
+            warnings.append(
+                "SMALL_BENCHMARK_RELATIVE_CONCLUSION_BUCKETS_WITHHELD:"
+                + ",".join(
+                    withheld_benchmark_relative_conclusions
+                )
+            )
+        if withheld_benchmark_relative_raw_green_check_buckets:
+            warnings.append(
+                "SMALL_BENCHMARK_RELATIVE_RAW_GREEN_BUCKETS_WITHHELD:"
+                + ",".join(
+                    withheld_benchmark_relative_raw_green_check_buckets
+                )
+            )
+        if (
+            withheld_benchmark_relative_independent_green_family_buckets
+        ):
+            warnings.append(
+                "SMALL_BENCHMARK_RELATIVE_FAMILY_BUCKETS_WITHHELD:"
+                + ",".join(
+                    (
+                        withheld_benchmark_relative_independent_green_family_buckets
+                    )
+                )
+            )
+        if (
+            len(benchmark_relative_market_regime_rows)
+            < CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+        ):
+            warnings.append(
+                "BENCHMARK_RELATIVE_MARKET_REGIME_AGGREGATES_"
+                "WITHHELD_MINIMUM_SAMPLE"
+            )
+        elif withheld_benchmark_relative_market_regime_buckets:
+            warnings.append(
+                "SMALL_BENCHMARK_RELATIVE_MARKET_REGIME_BUCKETS_"
+                "WITHHELD:"
+                + ",".join(
+                    withheld_benchmark_relative_market_regime_buckets
+                )
+            )
+        if (
+            benchmark_relative_temporal_stability["status"]
+            == TEMPORAL_STABILITY_WITHHELD
+        ):
+            warnings.append(
+                "BENCHMARK_RELATIVE_TEMPORAL_STABILITY_WITHHELD:"
+                + str(
+                    benchmark_relative_temporal_stability["reason"]
+                )
+            )
     return {
         "artifact_type": TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE,
         "schema_version": TECHNICAL_CONFLUENCE_SCHEMA_VERSION,
@@ -1186,6 +1409,12 @@ def build_technical_confluence_study_payload(
             "distribution_statistics": (
                 "median_and_inclusive_interquartile_range"
             ),
+            "benchmark_relative_method": (
+                "symbol_return_minus_same_session_benchmark_return"
+            ),
+            "benchmark_alignment": (
+                "exact_event_and_target_session_dates"
+            ),
             "temporal_stability_method": (
                 "contiguous_chronological_halves_without_splitting_event_dates"
             ),
@@ -1206,6 +1435,26 @@ def build_technical_confluence_study_payload(
                 - len(complete_rows),
             ),
             "aggregate_outcomes_released": aggregate_released,
+            "benchmark_relative_complete_rows": len(
+                benchmark_relative_rows
+            ),
+            "benchmark_relative_partial_rows": sum(
+                row.benchmark_relative_outcome_status == STUDY_PARTIAL
+                for row in complete_rows
+            ),
+            "benchmark_relative_insufficient_rows": sum(
+                row.benchmark_relative_outcome_status
+                == INSUFFICIENT_DATA
+                for row in complete_rows
+            ),
+            "benchmark_relative_rows_to_minimum": max(
+                0,
+                CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+                - len(benchmark_relative_rows),
+            ),
+            "benchmark_relative_aggregates_released": (
+                benchmark_relative_aggregate_released
+            ),
             "market_regime_eligible_rows": len(market_regime_rows),
             "market_regime_unavailable_rows": (
                 len(complete_rows) - len(market_regime_rows)
@@ -1232,6 +1481,18 @@ def build_technical_confluence_study_payload(
         "aggregate_outcomes_by_market_regime": (
             aggregate_outcomes_by_market_regime
         ),
+        "benchmark_relative_outcomes_by_conclusion": (
+            benchmark_relative_outcomes_by_conclusion
+        ),
+        "benchmark_relative_outcomes_by_raw_green_checks": (
+            benchmark_relative_outcomes_by_raw_green_checks
+        ),
+        "benchmark_relative_outcomes_by_independent_green_families": (
+            benchmark_relative_outcomes_by_independent_green_families
+        ),
+        "benchmark_relative_outcomes_by_market_regime": (
+            benchmark_relative_outcomes_by_market_regime
+        ),
         "withheld_conclusions": withheld_conclusions,
         "withheld_raw_green_check_buckets": (
             withheld_raw_green_check_buckets
@@ -1242,8 +1503,127 @@ def build_technical_confluence_study_payload(
         "withheld_market_regime_buckets": (
             withheld_market_regime_buckets
         ),
+        "withheld_benchmark_relative_conclusions": (
+            withheld_benchmark_relative_conclusions
+        ),
+        "withheld_benchmark_relative_raw_green_check_buckets": (
+            withheld_benchmark_relative_raw_green_check_buckets
+        ),
+        "withheld_benchmark_relative_independent_green_family_buckets": (
+            withheld_benchmark_relative_independent_green_family_buckets
+        ),
+        "withheld_benchmark_relative_market_regime_buckets": (
+            withheld_benchmark_relative_market_regime_buckets
+        ),
         "temporal_stability": temporal_stability,
+        "benchmark_relative_temporal_stability": (
+            benchmark_relative_temporal_stability
+        ),
         "warnings": warnings,
+    }
+
+
+def _benchmark_relative_row_outcomes(
+    *,
+    symbol_bars: list[TechnicalPriceBar],
+    event_index: int,
+    symbol_forward_returns: dict[str, float | None],
+    benchmark_bars: list[TechnicalPriceBar],
+    benchmark_unavailable_reason: str | None,
+) -> dict[str, Any]:
+    benchmark_returns = {
+        f"{horizon}d": None
+        for horizon in CONFLUENCE_STUDY_HORIZONS
+    }
+    relative_returns = dict(benchmark_returns)
+    base = {
+        "start_price": None,
+        "benchmark_forward_returns_pct": benchmark_returns,
+        "benchmark_relative_forward_returns_pct": relative_returns,
+    }
+    if not benchmark_bars:
+        return {
+            **base,
+            "status": INSUFFICIENT_DATA,
+            "reason": (
+                benchmark_unavailable_reason
+                or "BENCHMARK_BARS_UNAVAILABLE"
+            ),
+        }
+    event_time = parse_datetime(symbol_bars[event_index].timestamp)
+    benchmark_event_index = (
+        matching_daily_index(benchmark_bars, event_time)
+        if event_time is not None
+        else None
+    )
+    if benchmark_event_index is None:
+        return {
+            **base,
+            "status": INSUFFICIENT_DATA,
+            "reason": "BENCHMARK_EVENT_DATE_BAR_UNAVAILABLE",
+        }
+
+    benchmark_start_price = benchmark_bars[
+        benchmark_event_index
+    ].close
+    missing_symbol_target = False
+    missing_benchmark_target = False
+    for horizon in CONFLUENCE_STUDY_HORIZONS:
+        label = f"{horizon}d"
+        target_index = event_index + horizon
+        symbol_return = symbol_forward_returns[label]
+        if (
+            target_index >= len(symbol_bars)
+            or symbol_return is None
+        ):
+            missing_symbol_target = True
+            continue
+        target_time = parse_datetime(
+            symbol_bars[target_index].timestamp
+        )
+        benchmark_target_index = (
+            matching_daily_index(benchmark_bars, target_time)
+            if target_time is not None
+            else None
+        )
+        if benchmark_target_index is None:
+            missing_benchmark_target = True
+            continue
+        benchmark_return = return_pct(
+            benchmark_start_price,
+            benchmark_bars[benchmark_target_index].close,
+        )
+        benchmark_returns[label] = benchmark_return
+        relative_returns[label] = round(
+            float(symbol_return) - benchmark_return,
+            4,
+        )
+
+    available = sum(
+        value is not None for value in relative_returns.values()
+    )
+    if available == len(CONFLUENCE_STUDY_HORIZONS):
+        status = STUDY_COMPLETE
+        reason = None
+    elif available:
+        status = STUDY_PARTIAL
+        reason = (
+            "SYMBOL_TARGET_SESSION_UNAVAILABLE"
+            if missing_symbol_target
+            else "BENCHMARK_TARGET_SESSION_UNAVAILABLE"
+        )
+    else:
+        status = INSUFFICIENT_DATA
+        reason = (
+            "SYMBOL_TARGET_SESSION_UNAVAILABLE"
+            if missing_symbol_target
+            else "BENCHMARK_TARGET_SESSION_UNAVAILABLE"
+        )
+    return {
+        **base,
+        "start_price": benchmark_start_price,
+        "status": status,
+        "reason": reason,
     }
 
 
@@ -1337,6 +1717,8 @@ def _breakout_study_context(
 
 def _aggregate_confluence_study_rows(
     rows: list[TechnicalConfluenceStudyRow],
+    *,
+    benchmark_relative: bool = False,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     grouped: dict[str, list[TechnicalConfluenceStudyRow]] = {}
     for row in rows:
@@ -1344,7 +1726,10 @@ def _aggregate_confluence_study_rows(
             row.confluence_summary.conclusion,
             [],
         ).append(row)
-    return _aggregate_confluence_study_groups(grouped)
+    return _aggregate_confluence_study_groups(
+        grouped,
+        benchmark_relative=benchmark_relative,
+    )
 
 
 def _aggregate_confluence_study_rows_by_count(
@@ -1352,6 +1737,7 @@ def _aggregate_confluence_study_rows_by_count(
     *,
     numerator_field: str,
     denominator_field: str,
+    benchmark_relative: bool = False,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     grouped: dict[str, list[TechnicalConfluenceStudyRow]] = {}
     for row in rows:
@@ -1363,7 +1749,10 @@ def _aggregate_confluence_study_rows_by_count(
             ),
             [],
         ).append(row)
-    return _aggregate_confluence_study_groups(grouped)
+    return _aggregate_confluence_study_groups(
+        grouped,
+        benchmark_relative=benchmark_relative,
+    )
 
 
 def _confluence_count_bucket(
@@ -1391,6 +1780,8 @@ def _confluence_count_bucket(
 
 def _aggregate_confluence_study_rows_by_market_regime(
     rows: list[TechnicalConfluenceStudyRow],
+    *,
+    benchmark_relative: bool = False,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     grouped: dict[str, list[TechnicalConfluenceStudyRow]] = {}
     for row in rows:
@@ -1400,7 +1791,10 @@ def _aggregate_confluence_study_rows_by_market_regime(
                 "Market-regime aggregation requires classified rows."
             )
         grouped.setdefault(bucket, []).append(row)
-    return _aggregate_confluence_study_groups(grouped)
+    return _aggregate_confluence_study_groups(
+        grouped,
+        benchmark_relative=benchmark_relative,
+    )
 
 
 def _market_regime_bucket(
@@ -1420,6 +1814,8 @@ def _market_regime_bucket(
 
 def _build_temporal_stability_study(
     rows: list[TechnicalConfluenceStudyRow],
+    *,
+    benchmark_relative: bool = False,
 ) -> dict[str, Any]:
     rows_by_date: dict[str, list[TechnicalConfluenceStudyRow]] = {}
     for row in rows:
@@ -1433,6 +1829,11 @@ def _build_temporal_stability_study(
         "status": TEMPORAL_STABILITY_WITHHELD,
         "method": (
             "contiguous_chronological_halves_without_splitting_event_dates"
+        ),
+        "outcome_basis": (
+            "benchmark_relative"
+            if benchmark_relative
+            else "absolute"
         ),
         "minimum_complete_rows": (
             CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
@@ -1499,7 +1900,8 @@ def _build_temporal_stability_study(
         ],
     }
     aggregates, withheld = _aggregate_confluence_study_groups(
-        period_rows
+        period_rows,
+        benchmark_relative=benchmark_relative,
     )
     if withheld:
         raise TechnicalConfluenceError(
@@ -1527,7 +1929,12 @@ def _build_temporal_stability_study(
 
 def _aggregate_confluence_study_groups(
     grouped: dict[str, list[TechnicalConfluenceStudyRow]],
+    *,
+    benchmark_relative: bool = False,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
+
+    if benchmark_relative:
+        return _aggregate_benchmark_relative_study_groups(grouped)
 
     aggregates: dict[str, dict[str, Any]] = {}
     withheld: list[str] = []
@@ -1601,6 +2008,56 @@ def _aggregate_confluence_study_groups(
                 if adverse
                 else {"p25": None, "p75": None}
             ),
+        }
+    return aggregates, withheld
+
+
+def _aggregate_benchmark_relative_study_groups(
+    grouped: dict[str, list[TechnicalConfluenceStudyRow]],
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    aggregates: dict[str, dict[str, Any]] = {}
+    withheld: list[str] = []
+    for bucket_name, bucket in sorted(grouped.items()):
+        if len(bucket) < CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS:
+            withheld.append(bucket_name)
+            continue
+        mean_returns: dict[str, float] = {}
+        median_returns: dict[str, float] = {}
+        return_interquartile_ranges: dict[str, dict[str, float]] = {}
+        positive_rates: dict[str, float] = {}
+        for horizon in CONFLUENCE_STUDY_HORIZONS:
+            label = f"{horizon}d"
+            values = [
+                float(
+                    row.benchmark_relative_forward_returns_pct[label]
+                )
+                for row in bucket
+                if row.benchmark_relative_forward_returns_pct[label]
+                is not None
+            ]
+            if len(values) != len(bucket):
+                raise TechnicalConfluenceError(
+                    "Benchmark-relative rows require every study horizon."
+                )
+            mean_returns[label] = round(mean(values), 4)
+            median_returns[label] = round(median(values), 4)
+            return_interquartile_ranges[label] = (
+                _inclusive_interquartile_range(values)
+            )
+            positive_rates[label] = round(
+                100.0
+                * sum(value > 0 for value in values)
+                / len(values),
+                4,
+            )
+        aggregates[bucket_name] = {
+            "sample_count": len(bucket),
+            "mean_excess_forward_returns_pct": mean_returns,
+            "median_excess_forward_returns_pct": median_returns,
+            "interquartile_excess_forward_returns_pct": (
+                return_interquartile_ranges
+            ),
+            "positive_excess_return_rate_pct": positive_rates,
         }
     return aggregates, withheld
 
@@ -1819,6 +2276,26 @@ def render_technical_confluence_study_markdown(
             f"{summary['aggregate_outcomes_released']}"
         ),
         (
+            "- Benchmark-relative complete samples: "
+            f"{summary['benchmark_relative_complete_rows']}"
+        ),
+        (
+            "- Benchmark-relative partial samples: "
+            f"{summary['benchmark_relative_partial_rows']}"
+        ),
+        (
+            "- Benchmark-relative insufficient samples: "
+            f"{summary['benchmark_relative_insufficient_rows']}"
+        ),
+        (
+            "- Benchmark-relative samples still required: "
+            f"{summary['benchmark_relative_rows_to_minimum']}"
+        ),
+        (
+            "- Benchmark-relative outcomes released: "
+            f"{summary['benchmark_relative_aggregates_released']}"
+        ),
+        (
             "- Market-regime-classified samples: "
             f"{summary['market_regime_eligible_rows']}"
         ),
@@ -1844,17 +2321,26 @@ def render_technical_confluence_study_markdown(
             [
                 (
                     "| Symbol | Date | Conclusion | Green Families | "
-                    "Events | Outcome | 1d | 2d | 5d | 10d | MFE | MAE |"
+                    "Events | Outcome | 1d | 2d | 5d | 10d | "
+                    "Benchmark Outcome | Benchmark 10d | Excess 10d | "
+                    "MFE | MAE |"
                 ),
                 (
                     "| --- | --- | --- | ---: | ---: | --- | ---: | "
-                    "---: | ---: | ---: | ---: | ---: |"
+                    "---: | ---: | ---: | --- | ---: | ---: | ---: | "
+                    "---: |"
                 ),
             ]
         )
         for row in rows:
             confluence = row["confluence_summary"]
             returns = row["forward_returns_pct"]
+            benchmark_returns = row[
+                "benchmark_forward_returns_pct"
+            ]
+            relative_returns = row[
+                "benchmark_relative_forward_returns_pct"
+            ]
             lines.append(
                 f"| {row['symbol']} | {row['event_date']} | "
                 f"{confluence['conclusion']} | "
@@ -1865,6 +2351,9 @@ def render_technical_confluence_study_markdown(
                 f"{_display_pct(returns['2d'])} | "
                 f"{_display_pct(returns['5d'])} | "
                 f"{_display_pct(returns['10d'])} | "
+                f"{row['benchmark_relative_outcome_status']} | "
+                f"{_display_pct(benchmark_returns['10d'])} | "
+                f"{_display_pct(relative_returns['10d'])} | "
                 f"{_display_pct(row['max_favorable_excursion_pct'])} | "
                 f"{_display_pct(row['max_adverse_excursion_pct'])} |"
             )
@@ -1901,6 +2390,43 @@ def render_technical_confluence_study_markdown(
     _append_temporal_stability_table(
         lines,
         payload["temporal_stability"],
+    )
+    lines.extend(["", "## Benchmark-Relative Outcomes", ""])
+    _append_benchmark_relative_aggregate_table(
+        lines,
+        title="By Conclusion",
+        bucket_label="Conclusion",
+        aggregates=payload[
+            "benchmark_relative_outcomes_by_conclusion"
+        ],
+    )
+    _append_benchmark_relative_aggregate_table(
+        lines,
+        title="By Raw Green Checks",
+        bucket_label="Raw Green / Configured Checks",
+        aggregates=payload[
+            "benchmark_relative_outcomes_by_raw_green_checks"
+        ],
+    )
+    _append_benchmark_relative_aggregate_table(
+        lines,
+        title="By Independent Green Families",
+        bucket_label="Green Families / Configured Families",
+        aggregates=payload[
+            "benchmark_relative_outcomes_by_independent_green_families"
+        ],
+    )
+    _append_benchmark_relative_aggregate_table(
+        lines,
+        title="By Market Regime",
+        bucket_label="Market Regime",
+        aggregates=payload[
+            "benchmark_relative_outcomes_by_market_regime"
+        ],
+    )
+    _append_benchmark_relative_temporal_stability_table(
+        lines,
+        payload["benchmark_relative_temporal_stability"],
     )
 
     lines.extend(["", "## Unavailable Event Groups", ""])
@@ -2091,6 +2617,122 @@ def _append_temporal_stability_table(
             f"{_display_iqr(period['interquartile_max_favorable_excursion_pct'])} | "
             f"{_display_pct(period['median_max_adverse_excursion_pct'])} | "
             f"{_display_iqr(period['interquartile_max_adverse_excursion_pct'])} |"
+        )
+    lines.append("")
+
+
+def _append_benchmark_relative_aggregate_table(
+    lines: list[str],
+    *,
+    title: str,
+    bucket_label: str,
+    aggregates: dict[str, dict[str, Any]],
+) -> None:
+    lines.extend([f"### {title}", ""])
+    if not aggregates:
+        lines.extend(
+            [
+                (
+                    "- Withheld until exact-date benchmark alignment "
+                    "and minimum sample requirements pass."
+                ),
+                "",
+            ]
+        )
+        return
+    lines.extend(
+        [
+            (
+                f"| {bucket_label} | Samples | Mean Excess 1d | "
+                "Mean Excess 2d | Mean Excess 5d | Mean Excess 10d | "
+                "Median Excess 10d | Excess 10d IQR | "
+                "Positive Excess 10d |"
+            ),
+            (
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | "
+                "---: | ---: |"
+            ),
+        ]
+    )
+    for bucket_name, aggregate in sorted(aggregates.items()):
+        mean_returns = aggregate[
+            "mean_excess_forward_returns_pct"
+        ]
+        median_returns = aggregate[
+            "median_excess_forward_returns_pct"
+        ]
+        return_ranges = aggregate[
+            "interquartile_excess_forward_returns_pct"
+        ]
+        positive_rates = aggregate[
+            "positive_excess_return_rate_pct"
+        ]
+        lines.append(
+            f"| {bucket_name} | {aggregate['sample_count']} | "
+            f"{_display_pct(mean_returns['1d'])} | "
+            f"{_display_pct(mean_returns['2d'])} | "
+            f"{_display_pct(mean_returns['5d'])} | "
+            f"{_display_pct(mean_returns['10d'])} | "
+            f"{_display_pct(median_returns['10d'])} | "
+            f"{_display_iqr(return_ranges['10d'])} | "
+            f"{_display_pct(positive_rates['10d'])} |"
+        )
+    lines.append("")
+
+
+def _append_benchmark_relative_temporal_stability_table(
+    lines: list[str],
+    temporal_stability: dict[str, Any],
+) -> None:
+    lines.extend(["### Temporal Stability", ""])
+    if temporal_stability["status"] != TEMPORAL_STABILITY_RELEASED:
+        lines.extend(
+            [
+                f"- Status: {temporal_stability['status']}",
+                f"- Reason: {temporal_stability['reason']}",
+                "",
+            ]
+        )
+        return
+    lines.extend(
+        [
+            f"- Status: {temporal_stability['status']}",
+            (
+                "- Split after event date: "
+                f"{temporal_stability['split_after_date']}"
+            ),
+            "",
+            (
+                "| Period | Date Range | Samples | Mean Excess 10d | "
+                "Median Excess 10d | Excess 10d IQR | "
+                "Positive Excess 10d |"
+            ),
+            (
+                "| --- | --- | ---: | ---: | ---: | ---: | ---: |"
+            ),
+        ]
+    )
+    for period_name in ("EARLIER", "LATER"):
+        period = temporal_stability["periods"][period_name]
+        mean_returns = period[
+            "mean_excess_forward_returns_pct"
+        ]
+        median_returns = period[
+            "median_excess_forward_returns_pct"
+        ]
+        return_ranges = period[
+            "interquartile_excess_forward_returns_pct"
+        ]
+        positive_rates = period[
+            "positive_excess_return_rate_pct"
+        ]
+        lines.append(
+            f"| {period_name} | {period['start_date']} to "
+            f"{period['end_date']} | {period['sample_count']} | "
+            f"{_display_pct(mean_returns['10d'])} | "
+            f"{_display_pct(median_returns['10d'])} | "
+            f"{_display_iqr(return_ranges['10d'])} | "
+            f"{_display_pct(positive_rates['10d'])} |"
         )
     lines.append("")
 
