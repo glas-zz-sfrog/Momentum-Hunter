@@ -236,15 +236,30 @@ class ShadowExperimentStudyTests(unittest.TestCase):
             study["collection"]["eligible_completed_count"],
         )
 
-    def test_multiple_final_snapshots_for_one_trade_fail_closed(
+    def test_equivalent_final_snapshots_are_safely_superseded(
         self,
     ) -> None:
         first = _experiment(1, snapshot_suffix="first")
         second = _experiment(1, snapshot_suffix="second")
 
+        study = _build([first, second])
+
+        self.assertEqual(1, study["collection"]["unique_trade_count"])
+        self.assertEqual(
+            1,
+            study["collection"]["superseded_snapshot_count"],
+        )
+
+    def test_conflicting_final_snapshots_for_one_trade_fail_closed(
+        self,
+    ) -> None:
+        first = _experiment(1, snapshot_suffix="first")
+        second = _experiment(1, snapshot_suffix="second")
+        second["outcome"]["executable_pnl"] = 999.0
+
         with self.assertRaisesRegex(
             ShadowExperimentStudyError,
-            "multiple final experiment",
+            "conflicting final experiment",
         ):
             _build([first, second])
 

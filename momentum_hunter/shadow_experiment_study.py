@@ -468,12 +468,11 @@ def _resolve_trade_snapshots(
             for item in snapshots
             if item["artifact_status"] == "COMPLETE"
         ]
-        if len(completed) > 1:
-            raise ShadowExperimentStudyError(
-                f"Shadow Trade {trade_id} has multiple final experiment artifacts."
-            )
         if completed:
-            chosen = completed[0]
+            chosen = _resolve_completed_snapshots(
+                trade_id,
+                completed,
+            )
         else:
             ranked = sorted(
                 snapshots,
@@ -507,6 +506,120 @@ def _resolve_trade_snapshots(
         ),
         superseded,
     )
+
+
+def _resolve_completed_snapshots(
+    trade_id: str,
+    snapshots: list[dict[str, Any]],
+) -> dict[str, Any]:
+    immutable_fingerprints = {
+        hashlib.sha256(
+            canonical_json(_completed_immutable_evidence(item)).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        for item in snapshots
+    }
+    if len(immutable_fingerprints) != 1:
+        raise ShadowExperimentStudyError(
+            f"Shadow Trade {trade_id} has conflicting final experiment evidence."
+        )
+    ranked = sorted(
+        snapshots,
+        key=lambda item: (
+            _completed_enrichment_rank(item),
+            str(item["experiment_id"]),
+        ),
+        reverse=True,
+    )
+    top_rank = _completed_enrichment_rank(ranked[0])
+    tied = [
+        item
+        for item in ranked
+        if _completed_enrichment_rank(item) == top_rank
+    ]
+    if len(tied) > 1:
+        enrichment_fingerprints = {
+            hashlib.sha256(
+                canonical_json(
+                    {
+                        "selection_experiment": item[
+                            "selection_experiment"
+                        ],
+                        "paper_money_reconciliation": item[
+                            "paper_money_reconciliation"
+                        ],
+                    }
+                ).encode("utf-8")
+            ).hexdigest()
+            for item in tied
+        }
+        if len(enrichment_fingerprints) != 1:
+            raise ShadowExperimentStudyError(
+                f"Shadow Trade {trade_id} has ambiguous final enrichment evidence."
+            )
+    return ranked[0]
+
+
+def _completed_immutable_evidence(
+    experiment: dict[str, Any],
+) -> dict[str, Any]:
+    source = experiment.get("source_evidence")
+    source = source if isinstance(source, dict) else {}
+    return {
+        "identity": experiment["identity"],
+        "frozen_source_evidence": {
+            name: source.get(name)
+            for name in (
+                "frozen_source_path",
+                "frozen_source_sha256",
+                "frozen_source_generated_at",
+                "frozen_capture_path",
+                "frozen_capture_time",
+            )
+        },
+        "sample_definition": experiment["sample_definition"],
+        "candidate": experiment["candidate"],
+        "trade_plan": experiment.get("trade_plan"),
+        "risk_governor": experiment.get("risk_governor"),
+        "execution": experiment.get("execution"),
+        "outcome": experiment.get("outcome"),
+        "review_projection": experiment["review_projection"],
+    }
+
+
+def _completed_enrichment_rank(
+    experiment: dict[str, Any],
+) -> tuple[int, int, int, float]:
+    selection = experiment["selection_experiment"]
+    paper = experiment.get("paper_money_reconciliation")
+    paper = paper if isinstance(paper, dict) else {}
+    marks = selection.get("counterfactual_marks")
+    available_marks = sum(
+        item.get("available") is True
+        for item in marks
+        if isinstance(item, dict)
+    ) if isinstance(marks, list) else 0
+    return (
+        int(
+            selection.get("counterfactual_status")
+            == "FINALIZED_TO_SELECTED_TRADE_EXIT"
+        ),
+        int(paper.get("evidence_status") == "PASS"),
+        available_marks,
+        _optional_timestamp(paper.get("recorded_at")),
+    )
+
+
+def _optional_timestamp(value: Any) -> float:
+    parsed = parse_datetime(str(value or ""))
+    if (
+        parsed is None
+        or parsed.tzinfo is None
+        or parsed.utcoffset() is None
+    ):
+        return 0.0
+    return parsed.timestamp()
 
 
 def _eligible_for_official_study(experiment: dict[str, Any]) -> bool:
