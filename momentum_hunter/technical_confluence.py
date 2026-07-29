@@ -30,7 +30,7 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v2"
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v3"
 TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 1
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
@@ -116,6 +116,13 @@ class TechnicalConfluenceOptions:
     obv_long_window: int = 50
     mfi_window: int = 14
     cmf_window: int = 20
+    roc_short_window: int = 10
+    roc_mid_window: int = 20
+    roc_long_window: int = 60
+    accumulation_distribution_minimum_bars: int = 50
+    accumulation_distribution_slope_window: int = 20
+    up_down_volume_short_window: int = 10
+    up_down_volume_long_window: int = 20
 
     def __post_init__(self) -> None:
         windows = {
@@ -137,6 +144,17 @@ class TechnicalConfluenceOptions:
             "OBV long window": self.obv_long_window,
             "MFI window": self.mfi_window,
             "CMF window": self.cmf_window,
+            "ROC short window": self.roc_short_window,
+            "ROC mid window": self.roc_mid_window,
+            "ROC long window": self.roc_long_window,
+            "A/D minimum bars": (
+                self.accumulation_distribution_minimum_bars
+            ),
+            "A/D slope window": self.accumulation_distribution_slope_window,
+            "Up/down-volume short window": (
+                self.up_down_volume_short_window
+            ),
+            "Up/down-volume long window": self.up_down_volume_long_window,
         }
         for label, value in windows.items():
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
@@ -158,6 +176,28 @@ class TechnicalConfluenceOptions:
         if self.obv_short_window >= self.obv_long_window:
             raise TechnicalConfluenceError(
                 "OBV short window must be below its long window."
+            )
+        if not (
+            self.roc_short_window
+            < self.roc_mid_window
+            < self.roc_long_window
+        ):
+            raise TechnicalConfluenceError(
+                "ROC windows must be ordered short < mid < long."
+            )
+        if (
+            self.accumulation_distribution_slope_window
+            >= self.accumulation_distribution_minimum_bars
+        ):
+            raise TechnicalConfluenceError(
+                "A/D slope window must be below its minimum bar count."
+            )
+        if (
+            self.up_down_volume_short_window
+            >= self.up_down_volume_long_window
+        ):
+            raise TechnicalConfluenceError(
+                "Up/down-volume short window must be below its long window."
             )
         numeric_options = {
             "ADX green threshold": self.adx_green_threshold,
@@ -317,11 +357,18 @@ def evaluate_wave1_confluence(
         rsi_regime_state(ordered_bars, index, options=options),
         macd_momentum_state(ordered_bars, index, options=options),
         ppo_momentum_state(ordered_bars, index, options=options),
+        rate_of_change_state(ordered_bars, index, options=options),
         squeeze_release_state(ordered_bars, index, options=options),
         volume_confirmation_state(ordered_bars, index, options=options),
         obv_new_high_state(ordered_bars, index, options=options),
         money_flow_index_state(ordered_bars, index, options=options),
         chaikin_money_flow_state(ordered_bars, index, options=options),
+        accumulation_distribution_state(
+            ordered_bars,
+            index,
+            options=options,
+        ),
+        up_down_volume_state(ordered_bars, index, options=options),
         relative_strength_state(ordered_bars, benchmark_bars or [], index, options=options),
         atr_extension_risk_state(ordered_bars, index, options=options),
         failed_breakout_state(
@@ -1599,6 +1646,78 @@ def _macd_like_momentum_state(
     )
 
 
+def rate_of_change_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    windows = (
+        options.roc_short_window,
+        options.roc_mid_window,
+        options.roc_long_window,
+    )
+    minimum_bars = options.roc_long_window + 1
+    if index < minimum_bars - 1 or index >= len(bars):
+        return indicator(
+            "rate_of_change",
+            FAMILY_MOMENTUM,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            (
+                f"Need at least {minimum_bars} completed bars for "
+                f"{'/'.join(str(window) for window in windows)}-window ROC."
+            ),
+        )
+    values = {
+        str(window): return_pct(
+            bars[index - window].close,
+            bars[index].close,
+        )
+        for window in windows
+    }
+    if any(value is None for value in values.values()):
+        return indicator(
+            "rate_of_change",
+            FAMILY_MOMENTUM,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            "ROC requires positive finite prices at every configured window.",
+        )
+    numeric_values = [
+        float(value) for value in values.values() if value is not None
+    ]
+    if all(value > 0 for value in numeric_values):
+        state = GREEN
+        reason = "ROC is positive across all configured research windows."
+    elif all(value < 0 for value in numeric_values):
+        state = RED
+        reason = "ROC is negative across all configured research windows."
+    else:
+        state = YELLOW
+        reason = "ROC is mixed or neutral across configured research windows."
+    rounded_values = {
+        window: round_value(value)
+        for window, value in values.items()
+    }
+    return indicator(
+        "rate_of_change",
+        FAMILY_MOMENTUM,
+        state,
+        "confirmation signal",
+        rounded_values[str(options.roc_mid_window)],
+        reason,
+        details={
+            "windows": list(windows),
+            "returns_pct": rounded_values,
+        },
+    )
+
+
 def squeeze_release_state(
     bars: list[TechnicalPriceBar],
     index: int,
@@ -1826,6 +1945,147 @@ def chaikin_money_flow_state(
         "confirmation signal",
         round_value(value),
         reason,
+    )
+
+
+def accumulation_distribution_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    minimum_bars = options.accumulation_distribution_minimum_bars
+    values = accumulation_distribution_values(bars, index)
+    prior_index = index - options.accumulation_distribution_slope_window
+    if (
+        index < minimum_bars - 1
+        or prior_index < 0
+        or values is None
+    ):
+        return indicator(
+            "accumulation_distribution_trend",
+            FAMILY_VOLUME,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            (
+                f"Need at least {minimum_bars} completed OHLCV bars "
+                "for A/D trend."
+            ),
+        )
+    current = values[index]
+    prior = values[prior_index]
+    delta = current - prior
+    if delta > 0:
+        state = GREEN
+        reason = "The A/D line has a positive research-window slope."
+    elif delta < 0:
+        state = RED
+        reason = "The A/D line has a negative research-window slope."
+    else:
+        state = YELLOW
+        reason = "The A/D line is flat across the research window."
+    return indicator(
+        "accumulation_distribution_trend",
+        FAMILY_VOLUME,
+        state,
+        "confirmation signal",
+        round_value(delta),
+        reason,
+        details={
+            "slope_window": options.accumulation_distribution_slope_window,
+            "current_line": round_value(current),
+            "prior_line": round_value(prior),
+            "delta": round_value(delta),
+        },
+    )
+
+
+def up_down_volume_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    windows = (
+        options.up_down_volume_short_window,
+        options.up_down_volume_long_window,
+    )
+    minimum_bars = options.up_down_volume_long_window + 1
+    values = {
+        str(window): up_down_volume_totals(bars, index, window)
+        for window in windows
+    }
+    if (
+        index < minimum_bars - 1
+        or index >= len(bars)
+        or any(value is None for value in values.values())
+    ):
+        return indicator(
+            "up_down_volume",
+            FAMILY_VOLUME,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            (
+                f"Need at least {minimum_bars} completed bars with volume "
+                "for up/down-volume comparison."
+            ),
+        )
+    totals = {
+        window: value
+        for window, value in values.items()
+        if value is not None
+    }
+    comparisons = [
+        up_volume - down_volume
+        for up_volume, down_volume in totals.values()
+    ]
+    if all(comparison > 0 for comparison in comparisons):
+        state = GREEN
+        reason = "Up-volume exceeds down-volume in both research windows."
+    elif all(comparison < 0 for comparison in comparisons):
+        state = RED
+        reason = "Down-volume exceeds up-volume in both research windows."
+    else:
+        state = YELLOW
+        reason = "Up/down-volume participation is mixed or neutral."
+    details: dict[str, Any] = {"windows": list(windows), "totals": {}}
+    for window, (up_volume, down_volume) in totals.items():
+        ratio = (
+            up_volume / down_volume
+            if down_volume > 0
+            else None
+        )
+        details["totals"][window] = {
+            "up_volume": up_volume,
+            "down_volume": down_volume,
+            "ratio": round_value(ratio),
+            "ratio_state": (
+                "UP_ONLY"
+                if up_volume > 0 and down_volume == 0
+                else "NO_DIRECTIONAL_VOLUME"
+                if up_volume == 0 and down_volume == 0
+                else "FINITE"
+            ),
+        }
+    mid_window = str(options.up_down_volume_long_window)
+    mid_totals = details["totals"][mid_window]
+    value: float | str | None = mid_totals["ratio"]
+    if value is None:
+        value = mid_totals["ratio_state"]
+    return indicator(
+        "up_down_volume",
+        FAMILY_VOLUME,
+        state,
+        "confirmation signal",
+        value,
+        reason,
+        details=details,
     )
 
 
@@ -2344,6 +2604,58 @@ def chaikin_money_flow_value(
         )
         money_flow_volume += multiplier * volume
     return money_flow_volume / total_volume
+
+
+def accumulation_distribution_values(
+    bars: list[TechnicalPriceBar],
+    index: int,
+) -> list[float] | None:
+    bars = sorted_bars(bars)
+    if index < 0 or index >= len(bars):
+        return None
+    selected = bars[: index + 1]
+    if any(bar.volume is None for bar in selected):
+        return None
+    values: list[float] = []
+    current = 0.0
+    for bar in selected:
+        volume = bar.volume
+        assert volume is not None
+        spread = bar.high - bar.low
+        multiplier = (
+            0.0
+            if spread == 0
+            else (
+                (bar.close - bar.low) - (bar.high - bar.close)
+            )
+            / spread
+        )
+        current += multiplier * volume
+        values.append(current)
+    return values
+
+
+def up_down_volume_totals(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    window: int,
+) -> tuple[int, int] | None:
+    bars = sorted_bars(bars)
+    if index < window or index >= len(bars):
+        return None
+    selected = bars[index - window : index + 1]
+    if any(bar.volume is None for bar in selected[1:]):
+        return None
+    up_volume = 0
+    down_volume = 0
+    for offset in range(1, len(selected)):
+        volume = selected[offset].volume
+        assert volume is not None
+        if selected[offset].close > selected[offset - 1].close:
+            up_volume += volume
+        elif selected[offset].close < selected[offset - 1].close:
+            down_volume += volume
+    return up_volume, down_volume
 
 
 def adx_value(bars: list[TechnicalPriceBar], index: int, window: int) -> float | None:

@@ -22,12 +22,14 @@ from momentum_hunter.technical_confluence import (
     CAUTION,
     CLEAR,
     FAMILY_MOMENTUM,
+    FAMILY_VOLUME,
     GREEN,
     INSUFFICIENT_DATA,
     RED,
     STRONG_CONFLUENCE,
     TechnicalConfluenceOptions,
     TechnicalConfluenceError,
+    accumulation_distribution_state,
     adx_trend_strength_state,
     anchored_vwap_state,
     atr_extension_risk_state,
@@ -40,11 +42,13 @@ from momentum_hunter.technical_confluence import (
     money_flow_index_state,
     obv_new_high_state,
     ppo_momentum_state,
+    rate_of_change_state,
     relative_strength_state,
     render_technical_confluence_markdown,
     render_technical_confluence_study_markdown,
     rsi_regime_state,
     squeeze_release_state,
+    up_down_volume_state,
     volume_confirmation_state,
     write_technical_confluence_reports,
     write_technical_confluence_study_reports,
@@ -199,6 +203,120 @@ class TechnicalConfluenceTests(unittest.TestCase):
             chaikin_money_flow_state(flat, 20).state,
         )
 
+    def test_rate_of_change_reports_fixed_10_20_60_window_values(self) -> None:
+        bars = daily_bars(
+            "AAA",
+            [10.0 + offset for offset in range(61)],
+        )
+
+        state = rate_of_change_state(bars, 60)
+
+        self.assertEqual(GREEN, state.state)
+        self.assertEqual([10, 20, 60], state.details["windows"])
+        self.assertAlmostEqual(
+            (70.0 / 50.0 - 1.0) * 100.0,
+            state.details["returns_pct"]["20"],
+            places=4,
+        )
+        self.assertEqual(state.details["returns_pct"]["20"], state.value)
+
+    def test_rate_of_change_distinguishes_negative_and_mixed_windows(self) -> None:
+        negative = daily_bars(
+            "AAA",
+            [100.0 - offset for offset in range(61)],
+        )
+        mixed_closes = [10.0] * 61
+        mixed_closes[0] = 8.0
+        mixed_closes[40] = 12.0
+        mixed_closes[50] = 9.0
+        mixed_closes[60] = 10.0
+        mixed = daily_bars("AAA", mixed_closes)
+
+        self.assertEqual(RED, rate_of_change_state(negative, 60).state)
+        self.assertEqual(
+            "YELLOW",
+            rate_of_change_state(mixed, 60).state,
+        )
+
+    def test_accumulation_distribution_tracks_positive_and_negative_flow(self) -> None:
+        positive = [
+            daily_bar(
+                "AAA",
+                offset,
+                close=10.9 + offset * 0.1,
+                high=11.0 + offset * 0.1,
+                low=10.0 + offset * 0.1,
+                volume=100,
+            )
+            for offset in range(55)
+        ]
+        negative = [
+            daily_bar(
+                "AAA",
+                offset,
+                close=10.1 + offset * 0.1,
+                high=11.0 + offset * 0.1,
+                low=10.0 + offset * 0.1,
+                volume=100,
+            )
+            for offset in range(55)
+        ]
+        neutral = daily_bars("AAA", [10.0] * 55, volume=100)
+
+        positive_state = accumulation_distribution_state(positive, 54)
+        negative_state = accumulation_distribution_state(negative, 54)
+        neutral_state = accumulation_distribution_state(neutral, 54)
+
+        self.assertEqual(GREEN, positive_state.state)
+        self.assertGreater(float(positive_state.details["delta"]), 0.0)
+        self.assertEqual(RED, negative_state.state)
+        self.assertLess(float(negative_state.details["delta"]), 0.0)
+        self.assertEqual("YELLOW", neutral_state.state)
+        self.assertEqual(0.0, neutral_state.details["delta"])
+
+    def test_up_down_volume_uses_both_10_and_20_bar_windows(self) -> None:
+        bars = [
+            daily_bar(
+                "AAA",
+                0,
+                close=10.0,
+                high=10.0,
+                low=10.0,
+                volume=100,
+            )
+        ]
+        close = 10.0
+        for offset in range(1, 25):
+            advancing = offset % 2 == 1
+            close += 1.0 if advancing else -0.5
+            volume = 200 if advancing else 50
+            bars.append(
+                daily_bar(
+                    "AAA",
+                    offset,
+                    close=close,
+                    high=close,
+                    low=close,
+                    volume=volume,
+                )
+            )
+
+        state = up_down_volume_state(bars, 24)
+
+        self.assertEqual(GREEN, state.state)
+        self.assertEqual([10, 20], state.details["windows"])
+        self.assertEqual(4.0, state.details["totals"]["10"]["ratio"])
+        self.assertEqual(4.0, state.details["totals"]["20"]["ratio"])
+
+    def test_up_down_volume_reports_no_directional_volume_without_division(self) -> None:
+        bars = daily_bars("AAA", [10.0] * 21, volume=100)
+
+        state = up_down_volume_state(bars, 20)
+
+        self.assertEqual("YELLOW", state.state)
+        self.assertEqual("NO_DIRECTIONAL_VOLUME", state.value)
+        self.assertIsNone(state.details["totals"]["20"]["ratio"])
+
     def test_wave2_indicators_mark_missing_history_or_volume_honestly(self) -> None:
         short = daily_bars("AAA", [10.0] * 10)
         missing_volume = daily_bars(
@@ -214,9 +332,14 @@ class TechnicalConfluenceTests(unittest.TestCase):
             obv_new_high_state(short, 9),
             money_flow_index_state(short, 9),
             chaikin_money_flow_state(short, 9),
+            rate_of_change_state(short, 9),
+            accumulation_distribution_state(short, 9),
+            up_down_volume_state(short, 9),
             obv_new_high_state(missing_volume, 54),
             money_flow_index_state(missing_volume, 54),
             chaikin_money_flow_state(missing_volume, 54),
+            accumulation_distribution_state(missing_volume, 54),
+            up_down_volume_state(missing_volume, 54),
         ):
             with self.subTest(indicator=state.name):
                 self.assertEqual(INSUFFICIENT_DATA, state.state)
@@ -234,12 +357,15 @@ class TechnicalConfluenceTests(unittest.TestCase):
         states_before = [
             asdict(state)
             for state in (
-                rsi_regime_state(bars, 59),
-                macd_momentum_state(bars, 59),
-                ppo_momentum_state(bars, 59),
-                obv_new_high_state(bars, 59),
-                money_flow_index_state(bars, 59),
-                chaikin_money_flow_state(bars, 59),
+                rsi_regime_state(bars, 61),
+                macd_momentum_state(bars, 61),
+                ppo_momentum_state(bars, 61),
+                rate_of_change_state(bars, 61),
+                obv_new_high_state(bars, 61),
+                money_flow_index_state(bars, 61),
+                chaikin_money_flow_state(bars, 61),
+                accumulation_distribution_state(bars, 61),
+                up_down_volume_state(bars, 61),
             )
         ]
         after_evaluation_hash = fingerprint_bars(bars)
@@ -254,12 +380,15 @@ class TechnicalConfluenceTests(unittest.TestCase):
         states_after = [
             asdict(state)
             for state in (
-                rsi_regime_state(bars, 59),
-                macd_momentum_state(bars, 59),
-                ppo_momentum_state(bars, 59),
-                obv_new_high_state(bars, 59),
-                money_flow_index_state(bars, 59),
-                chaikin_money_flow_state(bars, 59),
+                rsi_regime_state(bars, 61),
+                macd_momentum_state(bars, 61),
+                ppo_momentum_state(bars, 61),
+                rate_of_change_state(bars, 61),
+                obv_new_high_state(bars, 61),
+                money_flow_index_state(bars, 61),
+                chaikin_money_flow_state(bars, 61),
+                accumulation_distribution_state(bars, 61),
+                up_down_volume_state(bars, 61),
             )
         ]
 
@@ -272,7 +401,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             "AAA",
             [
                 10.0 + (offset % 3) * 0.1 + offset * 0.01
-                for offset in range(60)
+                for offset in range(70)
             ],
             volume=100,
         )
@@ -284,8 +413,43 @@ class TechnicalConfluenceTests(unittest.TestCase):
             if state.family == FAMILY_MOMENTUM
         ]
 
-        self.assertEqual(3, len(momentum_indicators))
+        self.assertEqual(4, len(momentum_indicators))
+        self.assertIn(
+            "rate_of_change",
+            {state.name for state in momentum_indicators},
+        )
         self.assertIn(FAMILY_MOMENTUM, summary.family_states)
+        self.assertLessEqual(summary.independent_total_families, 5)
+
+    def test_redundant_volume_checks_count_as_one_family(self) -> None:
+        bars = [
+            daily_bar(
+                "AAA",
+                offset,
+                close=10.9 + offset * 0.1,
+                high=11.0 + offset * 0.1,
+                low=10.0 + offset * 0.1,
+                volume=100 + offset,
+            )
+            for offset in range(70)
+        ]
+
+        summary = evaluate_wave1_confluence(symbol="AAA", bars=bars)
+        volume_indicators = [
+            state
+            for state in summary.indicator_states
+            if state.family == FAMILY_VOLUME
+        ]
+
+        self.assertEqual(6, len(volume_indicators))
+        self.assertIn(
+            "accumulation_distribution_trend",
+            {state.name for state in volume_indicators},
+        )
+        self.assertIn(
+            "up_down_volume",
+            {state.name for state in volume_indicators},
+        )
         self.assertLessEqual(summary.independent_total_families, 5)
 
     def test_green_plus_yellow_family_is_confirming_but_red_conflict_is_not(self) -> None:
@@ -631,6 +795,15 @@ class TechnicalConfluenceTests(unittest.TestCase):
             {"obv_short_window": 50, "obv_long_window": 20},
             {"mfi_window": 0},
             {"cmf_window": 0},
+            {"roc_short_window": 20, "roc_mid_window": 10},
+            {
+                "accumulation_distribution_minimum_bars": 20,
+                "accumulation_distribution_slope_window": 20,
+            },
+            {
+                "up_down_volume_short_window": 20,
+                "up_down_volume_long_window": 10,
+            },
         )
 
         for values in invalid_options:
