@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from math import isfinite
 from statistics import mean, pstdev
 from typing import Any
 
@@ -16,7 +18,6 @@ from momentum_hunter.technical_breakouts import (
     prior_keltner_upper,
     relative_volume,
     return_pct,
-    rolling_sma,
     sorted_bars,
     true_range,
 )
@@ -49,6 +50,10 @@ FAMILY_RISK = "Overextension / Risk"
 FAMILY_DATA_QUALITY = "Data Quality"
 
 
+class TechnicalConfluenceError(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class TechnicalConfluenceOptions:
     ema_fast_window: int = 8
@@ -67,6 +72,64 @@ class TechnicalConfluenceOptions:
     atr_extension_window: int = 14
     atr_extension_multiple: float = 2.5
     anchored_vwap_anchor_index: int = 0
+
+    def __post_init__(self) -> None:
+        windows = {
+            "EMA fast window": self.ema_fast_window,
+            "EMA mid window": self.ema_mid_window,
+            "EMA slow window": self.ema_slow_window,
+            "ADX window": self.adx_window,
+            "Bollinger window": self.bollinger_window,
+            "Keltner ATR window": self.keltner_atr_window,
+            "Volume average window": self.volume_average_window,
+            "Relative-strength window": self.relative_strength_window,
+            "ATR extension window": self.atr_extension_window,
+        }
+        for label, value in windows.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise TechnicalConfluenceError(
+                    f"{label} must be a positive integer."
+                )
+        if not (
+            self.ema_fast_window
+            < self.ema_mid_window
+            < self.ema_slow_window
+        ):
+            raise TechnicalConfluenceError(
+                "EMA windows must be ordered fast < mid < slow."
+            )
+        numeric_options = {
+            "ADX green threshold": self.adx_green_threshold,
+            "ADX yellow threshold": self.adx_yellow_threshold,
+            "Bollinger standard-deviation multiple": self.bollinger_stddevs,
+            "Keltner ATR multiple": self.keltner_atr_multiple,
+            "Volume confirmation multiple": (
+                self.volume_confirmation_multiple
+            ),
+            "ATR extension multiple": self.atr_extension_multiple,
+        }
+        for label, value in numeric_options.items():
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not isfinite(float(value))
+                or float(value) <= 0
+            ):
+                raise TechnicalConfluenceError(
+                    f"{label} must be finite and greater than zero."
+                )
+        if self.adx_green_threshold < self.adx_yellow_threshold:
+            raise TechnicalConfluenceError(
+                "ADX green threshold cannot be below the yellow threshold."
+            )
+        if (
+            isinstance(self.anchored_vwap_anchor_index, bool)
+            or not isinstance(self.anchored_vwap_anchor_index, int)
+            or self.anchored_vwap_anchor_index < 0
+        ):
+            raise TechnicalConfluenceError(
+                "Anchored VWAP index must be a non-negative integer."
+            )
 
 
 @dataclass(frozen=True)
@@ -120,6 +183,20 @@ def evaluate_wave1_confluence(
     options: TechnicalConfluenceOptions | None = None,
 ) -> TechnicalConfluenceSummary:
     options = options or TechnicalConfluenceOptions()
+    normalized_symbol = str(symbol).upper().strip()
+    if not normalized_symbol:
+        raise TechnicalConfluenceError("Confluence symbol is required.")
+    _validate_price_bars(
+        bars,
+        expected_symbol=normalized_symbol,
+        source_label="symbol",
+    )
+    if benchmark_bars:
+        _validate_price_bars(
+            benchmark_bars,
+            expected_symbol=None,
+            source_label="benchmark",
+        )
     ordered_bars = sorted_bars(bars)
     index = len(ordered_bars) - 1 if index is None else index
     timestamp = ordered_bars[index].timestamp if 0 <= index < len(ordered_bars) else None
@@ -132,7 +209,11 @@ def evaluate_wave1_confluence(
         volume_confirmation_state(ordered_bars, index, options=options),
         relative_strength_state(ordered_bars, benchmark_bars or [], index, options=options),
         atr_extension_risk_state(ordered_bars, index, options=options),
-        failed_breakout_state(symbol=symbol, breakout_events=breakout_events or []),
+        failed_breakout_state(
+            symbol=normalized_symbol,
+            breakout_events=breakout_events or [],
+            as_of=timestamp,
+        ),
     ]
     family_states = build_family_states(indicators)
     raw_total = sum(1 for indicator in indicators if indicator.state not in {UNAVAILABLE, INSUFFICIENT_DATA})
@@ -150,7 +231,7 @@ def evaluate_wave1_confluence(
         data_quality_state=family_states[FAMILY_DATA_QUALITY].state,
     )
     return TechnicalConfluenceSummary(
-        symbol=symbol.upper().strip(),
+        symbol=normalized_symbol,
         timestamp=timestamp,
         research_only=True,
         schema_version=TECHNICAL_CONFLUENCE_SCHEMA_VERSION,
@@ -291,7 +372,7 @@ def squeeze_release_state(
         )
     previous_bollinger = bollinger_bands_through_index(bars, index - 1, options)
     previous_keltner = keltner_bands_through_index(bars, index - 1, options)
-    trigger_upper = min_or_none(
+    trigger_upper = max_or_none(
         prior_bollinger_upper_confluence(bars, index, options),
         prior_keltner_upper_confluence(bars, index, options),
     )
@@ -407,8 +488,22 @@ def relative_strength_state(
             None,
             "Benchmark bars are not aligned with stock bars.",
         )
-    stock_return = return_pct(bars[index - options.relative_strength_window].close, bars[index].close)
-    benchmark_return = return_pct(benchmark_bars[benchmark_start].close, benchmark_bars[benchmark_current].close)
+    stock_start_close = bars[index - options.relative_strength_window].close
+    benchmark_start_close = benchmark_bars[benchmark_start].close
+    if stock_start_close <= 0 or benchmark_start_close <= 0:
+        return indicator(
+            "relative_strength_vs_benchmark",
+            FAMILY_RELATIVE_STRENGTH,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            "Relative-strength starting prices must be positive.",
+        )
+    stock_return = return_pct(stock_start_close, bars[index].close)
+    benchmark_return = return_pct(
+        benchmark_start_close,
+        benchmark_bars[benchmark_current].close,
+    )
     spread = round_value(stock_return - benchmark_return)
     state = GREEN if stock_return > benchmark_return else RED
     reason = "Stock outperformed benchmark over the research window." if state == GREEN else "Stock did not outperform benchmark."
@@ -452,9 +547,46 @@ def atr_extension_risk_state(
     return indicator("atr_extension_risk", FAMILY_RISK, state, "warning signal", round_value(extension), reason)
 
 
-def failed_breakout_state(*, symbol: str, breakout_events: list[BreakoutEvent]) -> IndicatorState:
-    matching_events = [event for event in breakout_events if event.symbol.upper() == symbol.upper()]
-    if any(event.status == BREAKOUT_FAILED for event in matching_events):
+def failed_breakout_state(
+    *,
+    symbol: str,
+    breakout_events: list[BreakoutEvent],
+    as_of: str | None = None,
+) -> IndicatorState:
+    as_of_time = parse_datetime(as_of)
+    matching_events: list[tuple[tuple[int, int, int, int, int], BreakoutEvent]] = []
+    for event in breakout_events:
+        if event.symbol.upper() != symbol.upper():
+            continue
+        event_time = parse_datetime(event.event_timestamp)
+        if event_time is None:
+            continue
+        event_key = _datetime_sort_key(event_time)
+        if (
+            as_of_time is not None
+            and event_key > _datetime_sort_key(as_of_time)
+        ):
+            continue
+        matching_events.append((event_key, event))
+    matching_events.sort(key=lambda item: item[0])
+    latest = matching_events[-1][1] if matching_events else None
+    if matching_events:
+        latest_key = matching_events[-1][0]
+        latest_statuses = {
+            event.status
+            for event_key, event in matching_events
+            if event_key == latest_key
+        }
+        if len(latest_statuses) > 1:
+            return indicator(
+                "failed_breakout",
+                FAMILY_RISK,
+                UNAVAILABLE,
+                "blocker / gate",
+                None,
+                "Latest breakout context contains conflicting statuses.",
+            )
+    if latest is not None and latest.status == BREAKOUT_FAILED:
         return indicator(
             "failed_breakout",
             FAMILY_RISK,
@@ -463,7 +595,7 @@ def failed_breakout_state(*, symbol: str, breakout_events: list[BreakoutEvent]) 
             True,
             "A breakout event failed back below its trigger.",
         )
-    if any(event.status == BREAKOUT_PRESENT for event in matching_events):
+    if latest is not None and latest.status == BREAKOUT_PRESENT:
         return indicator(
             "failed_breakout",
             FAMILY_RISK,
@@ -478,7 +610,11 @@ def failed_breakout_state(*, symbol: str, breakout_events: list[BreakoutEvent]) 
         UNAVAILABLE,
         "blocker / gate",
         None,
-        "No breakout context supplied.",
+        (
+            "Latest breakout context is not a present or failed signal."
+            if latest is not None
+            else "No usable breakout context supplied."
+        ),
     )
 
 
@@ -513,16 +649,28 @@ def build_family_states(indicators: list[IndicatorState]) -> dict[str, Confluenc
 
 def summarize_signal_family(family: str, indicators: list[IndicatorState]) -> ConfluenceFamilyState:
     names = [item.name for item in indicators]
-    states = [item.state for item in indicators]
-    if not indicators or all(state in {UNAVAILABLE, INSUFFICIENT_DATA} for state in states):
+    states = [
+        item.state
+        for item in indicators
+        if item.state not in {UNAVAILABLE, INSUFFICIENT_DATA}
+    ]
+    if not states:
         return ConfluenceFamilyState(family, INSUFFICIENT_DATA, "No sufficient indicators in family.", names)
-    if GREEN in states:
-        return ConfluenceFamilyState(family, GREEN, "At least one family indicator is green.", names)
-    if YELLOW in states:
-        return ConfluenceFamilyState(family, YELLOW, "Family indicators are mixed or early.", names)
-    if RED in states:
+    if all(state == GREEN for state in states):
+        return ConfluenceFamilyState(
+            family,
+            GREEN,
+            "All usable family indicators are green.",
+            names,
+        )
+    if all(state == RED for state in states):
         return ConfluenceFamilyState(family, RED, "Family indicators do not confirm.", names)
-    return ConfluenceFamilyState(family, UNAVAILABLE, "Family state unavailable.", names)
+    return ConfluenceFamilyState(
+        family,
+        YELLOW,
+        "Usable family indicators are mixed or early.",
+        names,
+    )
 
 
 def summarize_risk_family(indicators: list[IndicatorState]) -> ConfluenceFamilyState:
@@ -532,7 +680,31 @@ def summarize_risk_family(indicators: list[IndicatorState]) -> ConfluenceFamilyS
         return ConfluenceFamilyState(FAMILY_RISK, BLOCKED, "At least one risk gate is blocked.", names)
     if CAUTION in states:
         return ConfluenceFamilyState(FAMILY_RISK, CAUTION, "At least one risk warning is present.", names)
-    return ConfluenceFamilyState(FAMILY_RISK, CLEAR, "No supplied risk indicator is blocked or cautionary.", names)
+    usable = [
+        state
+        for state in states
+        if state not in {UNAVAILABLE, INSUFFICIENT_DATA}
+    ]
+    if not usable:
+        return ConfluenceFamilyState(
+            FAMILY_RISK,
+            UNAVAILABLE,
+            "No usable risk indicators were supplied.",
+            names,
+        )
+    if any(state in {UNAVAILABLE, INSUFFICIENT_DATA} for state in states):
+        return ConfluenceFamilyState(
+            FAMILY_RISK,
+            PARTIAL,
+            "Available risk indicators are clear, but some risk data is unavailable.",
+            names,
+        )
+    return ConfluenceFamilyState(
+        FAMILY_RISK,
+        CLEAR,
+        "All supplied risk indicators are clear.",
+        names,
+    )
 
 
 def summarize_data_quality(indicators: list[IndicatorState]) -> ConfluenceFamilyState:
@@ -692,11 +864,6 @@ def max_or_none(*values: float | None) -> float | None:
     return max(present) if present else None
 
 
-def min_or_none(*values: float | None) -> float | None:
-    present = [value for value in values if value is not None]
-    return min(present) if present else None
-
-
 def indicator(
     name: str,
     family: str,
@@ -709,7 +876,11 @@ def indicator(
     details: dict[str, Any] | None = None,
 ) -> IndicatorState:
     if data_sufficiency is None:
-        data_sufficiency = INSUFFICIENT_DATA if state == INSUFFICIENT_DATA else "Sufficient"
+        data_sufficiency = (
+            state
+            if state in {UNAVAILABLE, INSUFFICIENT_DATA}
+            else "Sufficient"
+        )
     return IndicatorState(
         name=name,
         family=family,
@@ -724,3 +895,84 @@ def indicator(
 
 def round_value(value: float | None) -> float | None:
     return None if value is None else round(value, 4)
+
+
+def _validate_price_bars(
+    bars: list[TechnicalPriceBar],
+    *,
+    expected_symbol: str | None,
+    source_label: str,
+) -> None:
+    seen_timestamps: set[str] = set()
+    observed_symbols: set[str] = set()
+    for bar in bars:
+        symbol = str(bar.symbol).upper().strip()
+        if not symbol:
+            raise TechnicalConfluenceError(
+                f"{source_label.capitalize()} bars require a symbol."
+            )
+        observed_symbols.add(symbol)
+        if expected_symbol is not None and symbol != expected_symbol:
+            raise TechnicalConfluenceError(
+                f"{source_label.capitalize()} bars contain a different symbol."
+            )
+        parsed_timestamp = parse_datetime(bar.timestamp)
+        if parsed_timestamp is None:
+            raise TechnicalConfluenceError(
+                f"{source_label.capitalize()} bars contain an invalid timestamp."
+            )
+        timestamp_identity = _timestamp_identity(parsed_timestamp)
+        if timestamp_identity in seen_timestamps:
+            raise TechnicalConfluenceError(
+                f"{source_label.capitalize()} bars contain duplicate timestamps."
+            )
+        seen_timestamps.add(timestamp_identity)
+        prices = (bar.open, bar.high, bar.low, bar.close)
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not isfinite(float(value))
+            or float(value) <= 0
+            for value in prices
+        ):
+            raise TechnicalConfluenceError(
+                f"{source_label.capitalize()} bars contain invalid prices."
+            )
+        if bar.high < max(bar.open, bar.close) or bar.low > min(
+            bar.open,
+            bar.close,
+        ) or bar.high < bar.low:
+            raise TechnicalConfluenceError(
+                f"{source_label.capitalize()} bars contain invalid OHLC geometry."
+            )
+        if (
+            bar.volume is not None
+            and (
+                isinstance(bar.volume, bool)
+                or not isinstance(bar.volume, int)
+                or bar.volume < 0
+            )
+        ):
+            raise TechnicalConfluenceError(
+                f"{source_label.capitalize()} bars contain invalid volume."
+            )
+    if len(observed_symbols) > 1:
+        raise TechnicalConfluenceError(
+            f"{source_label.capitalize()} bars contain multiple symbols."
+        )
+
+
+def _timestamp_identity(value: datetime) -> str:
+    if value.tzinfo is not None and value.utcoffset() is not None:
+        value = value.astimezone(timezone.utc)
+    return value.replace(tzinfo=None).isoformat()
+
+
+def _datetime_sort_key(value: datetime) -> tuple[int, int, int, int, int]:
+    return (
+        value.date().toordinal(),
+        value.hour,
+        value.minute,
+        value.second,
+        value.microsecond,
+    )
