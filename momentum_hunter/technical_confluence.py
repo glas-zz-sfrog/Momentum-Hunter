@@ -7,7 +7,7 @@ from math import isfinite
 import os
 from pathlib import Path
 import re
-from statistics import mean, pstdev
+from statistics import mean, median, pstdev, quantiles
 from typing import Any
 from uuid import uuid4
 
@@ -31,8 +31,8 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v13"
-TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 5
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v14"
+TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 6
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
 )
@@ -1183,6 +1183,9 @@ def build_technical_confluence_study_payload(
             "return_baseline": "event_date_close",
             "forward_sessions": list(CONFLUENCE_STUDY_HORIZONS),
             "complete_requires_breakout_hold_failure_evidence": True,
+            "distribution_statistics": (
+                "median_and_inclusive_interquartile_range"
+            ),
             "temporal_stability_method": (
                 "contiguous_chronological_halves_without_splitting_event_dates"
             ),
@@ -1533,6 +1536,8 @@ def _aggregate_confluence_study_groups(
             withheld.append(bucket_name)
             continue
         mean_returns: dict[str, float] = {}
+        median_returns: dict[str, float] = {}
+        return_interquartile_ranges: dict[str, dict[str, float]] = {}
         positive_rates: dict[str, float] = {}
         for horizon in CONFLUENCE_STUDY_HORIZONS:
             label = f"{horizon}d"
@@ -1546,6 +1551,10 @@ def _aggregate_confluence_study_groups(
                     "Complete confluence rows require every study horizon."
                 )
             mean_returns[label] = round(mean(values), 4)
+            median_returns[label] = round(median(values), 4)
+            return_interquartile_ranges[label] = (
+                _inclusive_interquartile_range(values)
+            )
             positive_rates[label] = round(
                 100.0
                 * sum(value > 0 for value in values)
@@ -1565,15 +1574,52 @@ def _aggregate_confluence_study_groups(
         aggregates[bucket_name] = {
             "sample_count": len(bucket),
             "mean_forward_returns_pct": mean_returns,
+            "median_forward_returns_pct": median_returns,
+            "interquartile_forward_returns_pct": (
+                return_interquartile_ranges
+            ),
             "positive_forward_return_rate_pct": positive_rates,
             "mean_max_favorable_excursion_pct": (
                 round(mean(favorable), 4) if favorable else None
             ),
+            "median_max_favorable_excursion_pct": (
+                round(median(favorable), 4) if favorable else None
+            ),
+            "interquartile_max_favorable_excursion_pct": (
+                _inclusive_interquartile_range(favorable)
+                if favorable
+                else {"p25": None, "p75": None}
+            ),
             "mean_max_adverse_excursion_pct": (
                 round(mean(adverse), 4) if adverse else None
             ),
+            "median_max_adverse_excursion_pct": (
+                round(median(adverse), 4) if adverse else None
+            ),
+            "interquartile_max_adverse_excursion_pct": (
+                _inclusive_interquartile_range(adverse)
+                if adverse
+                else {"p25": None, "p75": None}
+            ),
         }
     return aggregates, withheld
+
+
+def _inclusive_interquartile_range(
+    values: list[float],
+) -> dict[str, float]:
+    if not values:
+        raise TechnicalConfluenceError(
+            "Interquartile range requires at least one value."
+        )
+    if len(values) == 1:
+        p25 = p75 = values[0]
+    else:
+        p25, _, p75 = quantiles(values, n=4, method="inclusive")
+    return {
+        "p25": round(p25, 4),
+        "p75": round(p75, 4),
+    }
 
 
 def write_technical_confluence_reports(
@@ -1925,6 +1971,39 @@ def _append_confluence_study_aggregate_table(
             f"{_display_pct(aggregate['mean_max_favorable_excursion_pct'])} | "
             f"{_display_pct(aggregate['mean_max_adverse_excursion_pct'])} |"
         )
+    lines.extend(
+        [
+            "",
+            "#### Median And Interquartile Range",
+            "",
+            (
+                f"| {bucket_label} | Median 1d | Median 2d | "
+                "Median 5d | Median 10d | 10d IQR | Median MFE | "
+                "MFE IQR | Median MAE | MAE IQR |"
+            ),
+            (
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | "
+                "---: | ---: | ---: |"
+            ),
+        ]
+    )
+    for bucket_name, aggregate in sorted(aggregates.items()):
+        median_returns = aggregate["median_forward_returns_pct"]
+        return_ranges = aggregate[
+            "interquartile_forward_returns_pct"
+        ]
+        lines.append(
+            f"| {bucket_name} | "
+            f"{_display_pct(median_returns['1d'])} | "
+            f"{_display_pct(median_returns['2d'])} | "
+            f"{_display_pct(median_returns['5d'])} | "
+            f"{_display_pct(median_returns['10d'])} | "
+            f"{_display_iqr(return_ranges['10d'])} | "
+            f"{_display_pct(aggregate['median_max_favorable_excursion_pct'])} | "
+            f"{_display_iqr(aggregate['interquartile_max_favorable_excursion_pct'])} | "
+            f"{_display_pct(aggregate['median_max_adverse_excursion_pct'])} | "
+            f"{_display_iqr(aggregate['interquartile_max_adverse_excursion_pct'])} |"
+        )
     lines.append("")
 
 
@@ -1977,6 +2056,41 @@ def _append_temporal_stability_table(
             f"{_display_pct(positive_rates['10d'])} | "
             f"{_display_pct(period['mean_max_favorable_excursion_pct'])} | "
             f"{_display_pct(period['mean_max_adverse_excursion_pct'])} |"
+        )
+    lines.extend(
+        [
+            "",
+            "### Median And Interquartile Range",
+            "",
+            (
+                "| Period | Date Range | Median 1d | Median 2d | "
+                "Median 5d | Median 10d | 10d IQR | Median MFE | "
+                "MFE IQR | Median MAE | MAE IQR |"
+            ),
+            (
+                "| --- | --- | ---: | ---: | ---: | ---: | ---: | "
+                "---: | ---: | ---: | ---: |"
+            ),
+        ]
+    )
+    for period_name in ("EARLIER", "LATER"):
+        period = temporal_stability["periods"][period_name]
+        median_returns = period["median_forward_returns_pct"]
+        return_ranges = period[
+            "interquartile_forward_returns_pct"
+        ]
+        lines.append(
+            f"| {period_name} | {period['start_date']} to "
+            f"{period['end_date']} | "
+            f"{_display_pct(median_returns['1d'])} | "
+            f"{_display_pct(median_returns['2d'])} | "
+            f"{_display_pct(median_returns['5d'])} | "
+            f"{_display_pct(median_returns['10d'])} | "
+            f"{_display_iqr(return_ranges['10d'])} | "
+            f"{_display_pct(period['median_max_favorable_excursion_pct'])} | "
+            f"{_display_iqr(period['interquartile_max_favorable_excursion_pct'])} | "
+            f"{_display_pct(period['median_max_adverse_excursion_pct'])} | "
+            f"{_display_iqr(period['interquartile_max_adverse_excursion_pct'])} |"
         )
     lines.append("")
 
@@ -4453,6 +4567,16 @@ def _same_optional_number(left: Any, right: Any) -> bool:
 def _display_pct(value: Any) -> str:
     number = _finite_number_or_none(value)
     return "N/A" if number is None else f"{number:.4f}%"
+
+
+def _display_iqr(value: Any) -> str:
+    if not isinstance(value, dict):
+        return "N/A"
+    p25 = _finite_number_or_none(value.get("p25"))
+    p75 = _finite_number_or_none(value.get("p75"))
+    if p25 is None or p75 is None:
+        return "N/A"
+    return f"{p25:.4f}% to {p75:.4f}%"
 
 
 def _validate_price_bars(

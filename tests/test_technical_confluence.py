@@ -1603,7 +1603,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             bars=daily_bars("AAA", [10.0] * 5),
         )
 
-        self.assertEqual(5, summary.schema_version)
+        self.assertEqual(6, summary.schema_version)
         self.assertEqual(
             len(summary.indicator_states),
             summary.raw_total_checks,
@@ -1968,7 +1968,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             + row["raw_insufficient_data_checks"]
         )
 
-        self.assertEqual(5, payload["schema_version"])
+        self.assertEqual(6, payload["schema_version"])
         self.assertIn(
             "| Raw Green | Raw Yellow | Raw Red | Missing |",
             rendered,
@@ -2235,9 +2235,14 @@ class TechnicalConfluenceTests(unittest.TestCase):
         events: list[BreakoutEvent] = []
         for offset in range(30):
             symbol = f"S{offset:02d}"
+            future = (
+                [10.1 + step * 0.1 for step in range(9)] + [110.0]
+                if offset == 29
+                else [10.1 + step * 0.1 for step in range(10)]
+            )
             groups[symbol] = daily_bars(
                 symbol,
-                [10.0] * 61 + [10.1 + step * 0.1 for step in range(10)],
+                [10.0] * 61 + future,
                 volume=200,
             )
             events.append(
@@ -2263,12 +2268,43 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
         self.assertEqual(30, payload["summary"]["complete_rows"])
         self.assertTrue(payload["summary"]["aggregate_outcomes_released"])
+        self.assertEqual(
+            "median_and_inclusive_interquartile_range",
+            payload["outcome_methodology"]["distribution_statistics"],
+        )
+        json.dumps(payload, allow_nan=False)
         self.assertEqual(1, len(payload["aggregate_outcomes_by_conclusion"]))
         aggregate = next(
             iter(payload["aggregate_outcomes_by_conclusion"].values())
         )
         self.assertEqual(30, aggregate["sample_count"])
         self.assertEqual(100.0, aggregate["positive_forward_return_rate_pct"]["10d"])
+        self.assertEqual(43.0, aggregate["mean_forward_returns_pct"]["10d"])
+        self.assertEqual(10.0, aggregate["median_forward_returns_pct"]["10d"])
+        self.assertEqual(
+            {"p25": 10.0, "p75": 10.0},
+            aggregate["interquartile_forward_returns_pct"]["10d"],
+        )
+        self.assertEqual(
+            43.0,
+            aggregate["mean_max_favorable_excursion_pct"],
+        )
+        self.assertEqual(
+            10.0,
+            aggregate["median_max_favorable_excursion_pct"],
+        )
+        self.assertEqual(
+            {"p25": 10.0, "p75": 10.0},
+            aggregate["interquartile_max_favorable_excursion_pct"],
+        )
+        self.assertEqual(
+            1.0,
+            aggregate["median_max_adverse_excursion_pct"],
+        )
+        self.assertEqual(
+            {"p25": 1.0, "p75": 1.0},
+            aggregate["interquartile_max_adverse_excursion_pct"],
+        )
         raw_aggregates = payload[
             "aggregate_outcomes_by_raw_green_checks"
         ]
@@ -2280,6 +2316,18 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertEqual(
             30,
             next(iter(raw_aggregates.values()))["sample_count"],
+        )
+        self.assertEqual(
+            aggregate["median_forward_returns_pct"],
+            next(iter(raw_aggregates.values()))[
+                "median_forward_returns_pct"
+            ],
+        )
+        self.assertEqual(
+            aggregate["interquartile_forward_returns_pct"],
+            next(iter(raw_aggregates.values()))[
+                "interquartile_forward_returns_pct"
+            ],
         )
         self.assertEqual(
             30,
@@ -2316,6 +2364,10 @@ class TechnicalConfluenceTests(unittest.TestCase):
             ),
             payload["warnings"],
         )
+        rendered = render_technical_confluence_study_markdown(payload)
+        self.assertIn("#### Median And Interquartile Range", rendered)
+        self.assertIn("10d IQR", rendered)
+        self.assertIn("10.0000% to 10.0000%", rendered)
 
     def test_study_stratifies_outcomes_by_exact_confluence_counts(self) -> None:
         groups: dict[str, list[TechnicalPriceBar]] = {}
@@ -2636,8 +2688,33 @@ class TechnicalConfluenceTests(unittest.TestCase):
                 "positive_forward_return_rate_pct"
             ]["10d"],
         )
+        self.assertEqual(
+            10.0,
+            temporal["periods"]["EARLIER"][
+                "median_forward_returns_pct"
+            ]["10d"],
+        )
+        self.assertEqual(
+            -10.0,
+            temporal["periods"]["LATER"][
+                "median_forward_returns_pct"
+            ]["10d"],
+        )
+        self.assertEqual(
+            {"p25": 10.0, "p75": 10.0},
+            temporal["periods"]["EARLIER"][
+                "interquartile_forward_returns_pct"
+            ]["10d"],
+        )
+        self.assertEqual(
+            {"p25": -10.0, "p75": -10.0},
+            temporal["periods"]["LATER"][
+                "interquartile_forward_returns_pct"
+            ]["10d"],
+        )
         rendered = render_technical_confluence_study_markdown(payload)
         self.assertIn("## Temporal Stability", rendered)
+        self.assertIn("### Median And Interquartile Range", rendered)
         self.assertIn(f"- Split after event date: {early_date}", rendered)
         self.assertIn(f"| EARLIER | {early_date} to {early_date} | 15 |", rendered)
         self.assertIn(f"| LATER | {late_date} to {late_date} | 15 |", rendered)
