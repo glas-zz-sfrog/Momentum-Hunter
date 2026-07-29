@@ -1163,10 +1163,35 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
             self.report_path,
             decision_at=self.decision_at,
         )
-        state = self.service.store.load()
-        original = state.trades[0]
-        completed = replace(original, status="completed")
-        self.service.store.save(replace(state, trades=(completed,)))
+        self.service.process_quote(
+            ShadowQuote(
+                symbol="TEST",
+                timestamp="2026-07-23T10:00:05-05:00",
+                bid=9.94,
+                ask=9.95,
+                last=9.94,
+                high=9.96,
+                low=9.93,
+                source="synthetic-read-only-quote",
+            ),
+            received_at=at("2026-07-23T10:00:05-05:00"),
+        )
+        self.service.process_quote(
+            ShadowQuote(
+                symbol="TEST",
+                timestamp="2026-07-23T10:00:10-05:00",
+                bid=10.55,
+                ask=10.56,
+                last=10.55,
+                high=10.57,
+                low=10.50,
+                source="synthetic-read-only-quote",
+            ),
+            received_at=at("2026-07-23T10:00:10-05:00"),
+        )
+        completed = self.service.store.load().trades[0]
+        self.assertEqual("completed", completed.status)
+        self.assertIsNotNone(completed.outcome)
 
         payload = report_payload()
         payload["metadata"]["source_capture_path"] = "synthetic/later-capture.json"

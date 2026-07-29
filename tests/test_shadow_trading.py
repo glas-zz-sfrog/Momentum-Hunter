@@ -31,6 +31,7 @@ from momentum_hunter.shadow_trading import (
     ShadowOutcome,
     ShadowOrder,
     ShadowQuote,
+    ShadowStateError,
     ShadowStateStore,
     ShadowTradingService,
     ProspectiveFakeBroker,
@@ -500,6 +501,175 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         self.state_path.write_text('{"schema_version":999,"trades":[]}', encoding="utf-8")
         with self.assertRaisesRegex(Exception, "unsupported"):
             self.service().snapshot()
+
+    def test_valid_lifecycle_survives_restart_at_every_state(self) -> None:
+        self.start()
+        self.assertEqual(
+            "pending_entry",
+            self.service().snapshot()["trades"][0]["status"],
+        )
+
+        self.service().process_quote(
+            quote(
+                "2026-07-23T10:01:00-05:00",
+                bid=9.94,
+                ask=9.95,
+                available_size=1,
+            ),
+            received_at=at("2026-07-23T10:01:00-05:00"),
+        )
+        self.assertEqual(
+            "partially_filled",
+            self.service().snapshot()["trades"][0]["status"],
+        )
+
+        self.service().process_quote(
+            quote(
+                "2026-07-23T10:02:00-05:00",
+                bid=9.93,
+                ask=9.94,
+                available_size=1,
+            ),
+            received_at=at("2026-07-23T10:02:00-05:00"),
+        )
+        self.assertEqual(
+            "open",
+            self.service().snapshot()["trades"][0]["status"],
+        )
+
+        self.service().process_quote(
+            quote(
+                "2026-07-23T10:03:00-05:00",
+                bid=10.55,
+                ask=10.56,
+                high=10.57,
+                low=10.50,
+            ),
+            received_at=at("2026-07-23T10:03:00-05:00"),
+        )
+        completed = self.service().snapshot()["trades"][0]
+        self.assertEqual("completed", completed["status"])
+        self.assertEqual("COMPLETED", completed["outcome"]["status"])
+
+    def test_impossible_persisted_lifecycles_fail_without_rewrite(
+        self,
+    ) -> None:
+        self.start()
+        valid_state = self.service().store.load()
+        state_before = self.state_path.read_bytes()
+        invalid_state = replace(
+            valid_state,
+            trades=(replace(valid_state.trades[0], status="open"),),
+        )
+        with self.assertRaisesRegex(
+            ShadowStateError,
+            "open trade requires",
+        ):
+            self.service().store.save(invalid_state)
+        self.assertEqual(state_before, self.state_path.read_bytes())
+
+        base = json.loads(self.state_path.read_text(encoding="utf-8"))
+
+        def set_status(payload, value):
+            payload["trades"][0]["status"] = value
+
+        def remove_order(payload):
+            payload["trades"][0]["status"] = "open"
+            payload["trades"][0]["order"] = None
+
+        def remove_outcome(payload):
+            payload["trades"][0]["status"] = "completed"
+            payload["trades"][0]["outcome"] = None
+
+        def retain_blocked_order(payload):
+            payload["trades"][0]["status"] = "blocked"
+
+        def corrupt_quantity(payload):
+            payload["trades"][0]["order"]["remaining_quantity"] -= 1
+
+        def corrupt_order_identity(payload):
+            payload["trades"][0]["order"]["order_id"] = "wrong-order"
+
+        def duplicate_observation(payload):
+            payload["trades"][0]["processed_observation_ids"] = [
+                "duplicate-observation",
+                "duplicate-observation",
+            ]
+
+        def duplicate_ledger_event(payload):
+            payload["trades"][0]["ledger_events"].append(
+                dict(payload["trades"][0]["ledger_events"][0])
+            )
+
+        def conflict_order_status(payload):
+            payload["trades"][0]["order"]["status"] = "filled"
+
+        cases = (
+            ("unknown-status", lambda payload: set_status(payload, "mystery"), "unknown trade status"),
+            ("open-without-position", remove_order, "open trade requires"),
+            ("completed-without-outcome", remove_outcome, "completed trade requires"),
+            ("blocked-with-order", retain_blocked_order, "blocked trade cannot retain"),
+            ("quantity-mismatch", corrupt_quantity, "quantities are inconsistent"),
+            ("order-identity", corrupt_order_identity, "order identity"),
+            ("duplicate-observation", duplicate_observation, "observation identifiers must be unique"),
+            ("duplicate-ledger", duplicate_ledger_event, "ledger event identifiers must be unique"),
+            ("order-status-conflict", conflict_order_status, "conflicts with order status"),
+        )
+        for index, (name, mutate, expected) in enumerate(cases):
+            with self.subTest(name=name):
+                payload = json.loads(json.dumps(base))
+                mutate(payload)
+                path = self.root / f"corrupt-{index}.json"
+                path.write_text(
+                    json.dumps(payload, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+                before = path.read_bytes()
+
+                with self.assertRaisesRegex(ShadowStateError, expected):
+                    ShadowStateStore(path).load()
+
+                self.assertEqual(before, path.read_bytes())
+
+        self.service().process_quote(
+            quote(
+                "2026-07-23T10:01:00-05:00",
+                bid=9.94,
+                ask=9.95,
+            ),
+            received_at=at("2026-07-23T10:01:00-05:00"),
+        )
+        self.service().process_quote(
+            quote(
+                "2026-07-23T10:02:00-05:00",
+                bid=10.55,
+                ask=10.56,
+                high=10.57,
+                low=10.50,
+            ),
+            received_at=at("2026-07-23T10:02:00-05:00"),
+        )
+        official = json.loads(
+            self.state_path.read_text(encoding="utf-8")
+        )
+        official["trades"][0]["sample_metadata"][
+            "official_sample_authorized"
+        ] = True
+        official["trades"][0]["position"] = None
+        official_path = self.root / "corrupt-official-completed.json"
+        official_path.write_text(
+            json.dumps(official, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        official_before = official_path.read_bytes()
+
+        with self.assertRaisesRegex(
+            ShadowStateError,
+            "official completed trade requires",
+        ):
+            ShadowStateStore(official_path).load()
+
+        self.assertEqual(official_before, official_path.read_bytes())
 
     def test_duplicate_and_missing_persisted_identifiers_fail_closed(self) -> None:
         self.start()
