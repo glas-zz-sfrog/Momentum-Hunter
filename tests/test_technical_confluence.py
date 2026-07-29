@@ -34,6 +34,8 @@ from momentum_hunter.technical_confluence import (
     RED,
     STRONG_CONFLUENCE,
     SUPPORTIVE,
+    TEMPORAL_STABILITY_RELEASED,
+    TEMPORAL_STABILITY_WITHHELD,
     TechnicalConfluenceOptions,
     TechnicalConfluenceError,
     accumulation_distribution_state,
@@ -1601,7 +1603,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             bars=daily_bars("AAA", [10.0] * 5),
         )
 
-        self.assertEqual(4, summary.schema_version)
+        self.assertEqual(5, summary.schema_version)
         self.assertEqual(
             len(summary.indicator_states),
             summary.raw_total_checks,
@@ -1966,7 +1968,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             + row["raw_insufficient_data_checks"]
         )
 
-        self.assertEqual(4, payload["schema_version"])
+        self.assertEqual(5, payload["schema_version"])
         self.assertIn(
             "| Raw Green | Raw Yellow | Raw Red | Missing |",
             rendered,
@@ -2136,6 +2138,14 @@ class TechnicalConfluenceTests(unittest.TestCase):
                 for warning in payload["warnings"]
             )
         )
+        self.assertEqual(
+            TEMPORAL_STABILITY_WITHHELD,
+            payload["temporal_stability"]["status"],
+        )
+        self.assertEqual(
+            "MINIMUM_COMPLETE_SAMPLE_NOT_MET",
+            payload["temporal_stability"]["reason"],
+        )
 
     def test_study_confluence_uses_only_event_date_history(self) -> None:
         historical = daily_bars(
@@ -2289,6 +2299,21 @@ class TechnicalConfluenceTests(unittest.TestCase):
         )
         self.assertIn(
             "MARKET_REGIME_AGGREGATES_WITHHELD_MINIMUM_SAMPLE",
+            payload["warnings"],
+        )
+        self.assertEqual(
+            TEMPORAL_STABILITY_WITHHELD,
+            payload["temporal_stability"]["status"],
+        )
+        self.assertEqual(
+            "INSUFFICIENT_DISTINCT_EVENT_DATES",
+            payload["temporal_stability"]["reason"],
+        )
+        self.assertIn(
+            (
+                "TEMPORAL_STABILITY_WITHHELD:"
+                "INSUFFICIENT_DISTINCT_EVENT_DATES"
+            ),
             payload["warnings"],
         )
 
@@ -2511,6 +2536,111 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertIn("- Market-regime samples still required: 0", rendered)
         self.assertIn(f"| {HOSTILE} | 21 |", rendered)
         self.assertNotIn(f"| {SUPPORTIVE} | 9 |", rendered)
+        self.assertEqual(
+            TEMPORAL_STABILITY_WITHHELD,
+            payload["temporal_stability"]["status"],
+        )
+        self.assertEqual(
+            (
+                "NO_VALID_DATE_BOUNDARY_WITH_MINIMUM_PERIOD_SAMPLES"
+            ),
+            payload["temporal_stability"]["reason"],
+        )
+
+    def test_study_releases_contiguous_temporal_stability_periods(self) -> None:
+        groups: dict[str, list[TechnicalPriceBar]] = {}
+        events: list[BreakoutEvent] = []
+        for offset in range(30):
+            symbol = f"T{offset:02d}"
+            event_index = 60 if offset < 15 else 90
+            future = (
+                [10.1 + step * 0.1 for step in range(10)]
+                if offset < 15
+                else [9.9 - step * 0.1 for step in range(10)]
+            )
+            groups[symbol] = daily_bars(
+                symbol,
+                [10.0] * (event_index + 1) + future,
+                volume=200,
+            )
+            events.append(
+                breakout_event(
+                    symbol,
+                    BREAKOUT_PRESENT,
+                    event_id=f"{symbol}-event",
+                    event_timestamp=groups[symbol][event_index].timestamp,
+                )
+            )
+        studies = study_breakout_events(
+            events,
+            daily_bars_by_symbol=groups,
+        )
+
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-06-01T16:00:00-05:00",
+            daily_bars_by_symbol=groups,
+            breakout_events=events,
+            breakout_studies=studies,
+            source_paths={},
+        )
+
+        temporal = payload["temporal_stability"]
+        early_date = groups["T00"][60].timestamp
+        late_date = groups["T15"][90].timestamp
+        self.assertEqual(TEMPORAL_STABILITY_RELEASED, temporal["status"])
+        self.assertEqual(early_date, temporal["split_after_date"])
+        self.assertEqual(2, temporal["distinct_event_dates"])
+        self.assertEqual(
+            {
+                "start_date": early_date,
+                "end_date": early_date,
+                "sample_count": 15,
+            },
+            {
+                key: temporal["periods"]["EARLIER"][key]
+                for key in ("start_date", "end_date", "sample_count")
+            },
+        )
+        self.assertEqual(
+            {
+                "start_date": late_date,
+                "end_date": late_date,
+                "sample_count": 15,
+            },
+            {
+                key: temporal["periods"]["LATER"][key]
+                for key in ("start_date", "end_date", "sample_count")
+            },
+        )
+        self.assertEqual(
+            10.0,
+            temporal["periods"]["EARLIER"][
+                "mean_forward_returns_pct"
+            ]["10d"],
+        )
+        self.assertEqual(
+            -10.0,
+            temporal["periods"]["LATER"][
+                "mean_forward_returns_pct"
+            ]["10d"],
+        )
+        self.assertEqual(
+            100.0,
+            temporal["periods"]["EARLIER"][
+                "positive_forward_return_rate_pct"
+            ]["10d"],
+        )
+        self.assertEqual(
+            0.0,
+            temporal["periods"]["LATER"][
+                "positive_forward_return_rate_pct"
+            ]["10d"],
+        )
+        rendered = render_technical_confluence_study_markdown(payload)
+        self.assertIn("## Temporal Stability", rendered)
+        self.assertIn(f"- Split after event date: {early_date}", rendered)
+        self.assertIn(f"| EARLIER | {early_date} to {early_date} | 15 |", rendered)
+        self.assertIn(f"| LATER | {late_date} to {late_date} | 15 |", rendered)
 
     def test_study_excludes_duplicate_event_ids_and_marks_missing_bars(self) -> None:
         duplicate = breakout_event(

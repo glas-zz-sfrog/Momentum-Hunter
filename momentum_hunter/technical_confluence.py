@@ -31,8 +31,8 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v12"
-TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 4
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v13"
+TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 5
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
 )
@@ -56,6 +56,8 @@ CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS = 30
 CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS = 10
 STUDY_COMPLETE = "COMPLETE"
 STUDY_PARTIAL = "PARTIAL"
+TEMPORAL_STABILITY_RELEASED = "RELEASED"
+TEMPORAL_STABILITY_WITHHELD = "WITHHELD"
 _REPORT_ROW_LIMIT = 200
 _SYMBOL_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,15}$")
 
@@ -1090,12 +1092,15 @@ def build_technical_confluence_study_payload(
                 if (bucket := _market_regime_bucket(row)) is not None
             }
         )
+    temporal_stability = _build_temporal_stability_study(complete_rows)
     aggregate_released = any(
         (
             aggregate_outcomes,
             aggregate_outcomes_by_raw_green_checks,
             aggregate_outcomes_by_independent_green_families,
             aggregate_outcomes_by_market_regime,
+            temporal_stability["status"]
+            == TEMPORAL_STABILITY_RELEASED,
         )
     )
     if (
@@ -1141,6 +1146,14 @@ def build_technical_confluence_study_payload(
                 "SMALL_MARKET_REGIME_BUCKETS_WITHHELD:"
                 + ",".join(withheld_market_regime_buckets)
             )
+        if (
+            temporal_stability["status"]
+            == TEMPORAL_STABILITY_WITHHELD
+        ):
+            warnings.append(
+                "TEMPORAL_STABILITY_WITHHELD:"
+                + str(temporal_stability["reason"])
+            )
     return {
         "artifact_type": TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE,
         "schema_version": TECHNICAL_CONFLUENCE_SCHEMA_VERSION,
@@ -1170,6 +1183,9 @@ def build_technical_confluence_study_payload(
             "return_baseline": "event_date_close",
             "forward_sessions": list(CONFLUENCE_STUDY_HORIZONS),
             "complete_requires_breakout_hold_failure_evidence": True,
+            "temporal_stability_method": (
+                "contiguous_chronological_halves_without_splitting_event_dates"
+            ),
         },
         "summary": {
             "unique_symbol_date_rows": len(rows),
@@ -1196,6 +1212,10 @@ def build_technical_confluence_study_payload(
                 CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
                 - len(market_regime_rows),
             ),
+            "temporal_stability_status": temporal_stability["status"],
+            "temporal_distinct_event_dates": temporal_stability[
+                "distinct_event_dates"
+            ],
         },
         "rows": [row.to_dict() for row in rows],
         "unavailable_event_groups": unavailable_groups,
@@ -1219,6 +1239,7 @@ def build_technical_confluence_study_payload(
         "withheld_market_regime_buckets": (
             withheld_market_regime_buckets
         ),
+        "temporal_stability": temporal_stability,
         "warnings": warnings,
     }
 
@@ -1392,6 +1413,113 @@ def _market_regime_bucket(
     }:
         return None
     return state.state
+
+
+def _build_temporal_stability_study(
+    rows: list[TechnicalConfluenceStudyRow],
+) -> dict[str, Any]:
+    rows_by_date: dict[str, list[TechnicalConfluenceStudyRow]] = {}
+    for row in rows:
+        if parse_datetime(row.event_date) is None:
+            raise TechnicalConfluenceError(
+                "Temporal stability requires valid event dates."
+            )
+        rows_by_date.setdefault(row.event_date, []).append(row)
+    event_dates = sorted(rows_by_date)
+    base = {
+        "status": TEMPORAL_STABILITY_WITHHELD,
+        "method": (
+            "contiguous_chronological_halves_without_splitting_event_dates"
+        ),
+        "minimum_complete_rows": (
+            CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+        ),
+        "minimum_rows_per_period": (
+            CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS
+        ),
+        "distinct_event_dates": len(event_dates),
+        "split_after_date": None,
+        "periods": {},
+    }
+    if len(rows) < CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS:
+        return {
+            **base,
+            "reason": "MINIMUM_COMPLETE_SAMPLE_NOT_MET",
+        }
+    if len(event_dates) < 2:
+        return {
+            **base,
+            "reason": "INSUFFICIENT_DISTINCT_EVENT_DATES",
+        }
+
+    candidates: list[tuple[int, str]] = []
+    earlier_count = 0
+    for event_date in event_dates[:-1]:
+        earlier_count += len(rows_by_date[event_date])
+        later_count = len(rows) - earlier_count
+        if (
+            earlier_count >= CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS
+            and later_count >= CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS
+        ):
+            candidates.append(
+                (abs(earlier_count - later_count), event_date)
+            )
+    if not candidates:
+        return {
+            **base,
+            "reason": (
+                "NO_VALID_DATE_BOUNDARY_WITH_MINIMUM_PERIOD_SAMPLES"
+            ),
+        }
+
+    _, split_after_date = min(candidates)
+    earlier_dates = [
+        event_date
+        for event_date in event_dates
+        if event_date <= split_after_date
+    ]
+    later_dates = [
+        event_date
+        for event_date in event_dates
+        if event_date > split_after_date
+    ]
+    period_rows = {
+        "EARLIER": [
+            row
+            for event_date in earlier_dates
+            for row in rows_by_date[event_date]
+        ],
+        "LATER": [
+            row
+            for event_date in later_dates
+            for row in rows_by_date[event_date]
+        ],
+    }
+    aggregates, withheld = _aggregate_confluence_study_groups(
+        period_rows
+    )
+    if withheld:
+        raise TechnicalConfluenceError(
+            "Temporal stability selected an undersized period."
+        )
+    return {
+        **base,
+        "status": TEMPORAL_STABILITY_RELEASED,
+        "split_after_date": split_after_date,
+        "periods": {
+            "EARLIER": {
+                "start_date": earlier_dates[0],
+                "end_date": earlier_dates[-1],
+                **aggregates["EARLIER"],
+            },
+            "LATER": {
+                "start_date": later_dates[0],
+                "end_date": later_dates[-1],
+                **aggregates["LATER"],
+            },
+        },
+        "reason": None,
+    }
 
 
 def _aggregate_confluence_study_groups(
@@ -1652,6 +1780,14 @@ def render_technical_confluence_study_markdown(
             "- Market-regime samples still required: "
             f"{summary['market_regime_rows_to_minimum']}"
         ),
+        (
+            "- Temporal stability: "
+            f"{summary['temporal_stability_status']}"
+        ),
+        (
+            "- Distinct complete event dates: "
+            f"{summary['temporal_distinct_event_dates']}"
+        ),
         "",
         "## Event Samples",
         "",
@@ -1715,6 +1851,10 @@ def render_technical_confluence_study_markdown(
         title="By Market Regime",
         bucket_label="Market Regime",
         aggregates=payload["aggregate_outcomes_by_market_regime"],
+    )
+    _append_temporal_stability_table(
+        lines,
+        payload["temporal_stability"],
     )
 
     lines.extend(["", "## Unavailable Event Groups", ""])
@@ -1784,6 +1924,59 @@ def _append_confluence_study_aggregate_table(
             f"{_display_pct(positive_rates['10d'])} | "
             f"{_display_pct(aggregate['mean_max_favorable_excursion_pct'])} | "
             f"{_display_pct(aggregate['mean_max_adverse_excursion_pct'])} |"
+        )
+    lines.append("")
+
+
+def _append_temporal_stability_table(
+    lines: list[str],
+    temporal_stability: dict[str, Any],
+) -> None:
+    lines.extend(["## Temporal Stability", ""])
+    if temporal_stability["status"] != TEMPORAL_STABILITY_RELEASED:
+        lines.extend(
+            [
+                f"- Status: {temporal_stability['status']}",
+                f"- Reason: {temporal_stability['reason']}",
+                "",
+            ]
+        )
+        return
+    lines.extend(
+        [
+            f"- Status: {temporal_stability['status']}",
+            (
+                "- Split after event date: "
+                f"{temporal_stability['split_after_date']}"
+            ),
+            "",
+            (
+                "| Period | Date Range | Samples | Mean 1d | Mean 2d | "
+                "Mean 5d | Mean 10d | Positive 10d | Mean MFE | "
+                "Mean MAE |"
+            ),
+            (
+                "| --- | --- | ---: | ---: | ---: | ---: | ---: | "
+                "---: | ---: | ---: |"
+            ),
+        ]
+    )
+    for period_name in ("EARLIER", "LATER"):
+        period = temporal_stability["periods"][period_name]
+        mean_returns = period["mean_forward_returns_pct"]
+        positive_rates = period[
+            "positive_forward_return_rate_pct"
+        ]
+        lines.append(
+            f"| {period_name} | {period['start_date']} to "
+            f"{period['end_date']} | {period['sample_count']} | "
+            f"{_display_pct(mean_returns['1d'])} | "
+            f"{_display_pct(mean_returns['2d'])} | "
+            f"{_display_pct(mean_returns['5d'])} | "
+            f"{_display_pct(mean_returns['10d'])} | "
+            f"{_display_pct(positive_rates['10d'])} | "
+            f"{_display_pct(period['mean_max_favorable_excursion_pct'])} | "
+            f"{_display_pct(period['mean_max_adverse_excursion_pct'])} |"
         )
     lines.append("")
 
