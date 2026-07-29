@@ -42,6 +42,7 @@ from momentum_hunter.technical_confluence import (
     atr_expansion_state,
     average_daily_range_expansion_state,
     benchmark_sma_regime_state,
+    bollinger_bandwidth_state,
     build_technical_confluence_report_payload,
     build_technical_confluence_study_payload,
     chaikin_money_flow_state,
@@ -253,6 +254,95 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertTrue(state.details["was_compressed"])
         self.assertTrue(state.details["released"])
 
+    def test_bollinger_bandwidth_detects_lowest_percentile_squeeze(self) -> None:
+        bars = daily_bars(
+            "AAA",
+            [
+                8.0 if offset % 2 == 0 else 12.0
+                for offset in range(120)
+            ]
+            + [10.0] * 20,
+        )
+
+        state = bollinger_bandwidth_state(bars, 139)
+
+        self.assertEqual(GREEN, state.state)
+        self.assertLessEqual(
+            state.details["percentile_rank"],
+            state.details["squeeze_percentile"],
+        )
+        self.assertEqual(120, state.details["prior_readings"])
+        self.assertEqual("midrank", state.details["tie_method"])
+
+    def test_bollinger_bandwidth_rejects_high_percentile_expansion(self) -> None:
+        bars = daily_bars(
+            "AAA",
+            [10.0] * 120
+            + [
+                8.0 if offset % 2 == 0 else 12.0
+                for offset in range(20)
+            ],
+        )
+
+        state = bollinger_bandwidth_state(bars, 139)
+
+        self.assertEqual(RED, state.state)
+        self.assertGreater(
+            state.details["percentile_rank"],
+            state.details["squeeze_percentile"],
+        )
+
+    def test_bollinger_bandwidth_midrank_avoids_false_tied_squeeze(self) -> None:
+        state = bollinger_bandwidth_state(
+            daily_bars("AAA", [10.0] * 140),
+            139,
+        )
+
+        self.assertEqual(RED, state.state)
+        self.assertEqual(50.0, state.details["percentile_rank"])
+
+    def test_bollinger_bandwidth_requires_full_percentile_history(self) -> None:
+        state = bollinger_bandwidth_state(
+            daily_bars("AAA", [10.0] * 139),
+            138,
+        )
+
+        self.assertEqual(INSUFFICIENT_DATA, state.state)
+        self.assertEqual(140, state.details["minimum_bars"])
+        self.assertEqual(
+            "NOT_CONFIGURED",
+            state.details["short_history_fallback"],
+        )
+
+    def test_bollinger_bandwidth_ignores_future_bars_without_mutation(
+        self,
+    ) -> None:
+        bars = daily_bars(
+            "AAA",
+            [
+                8.0 if offset % 2 == 0 else 12.0
+                for offset in range(120)
+            ]
+            + [10.0] * 50,
+        )
+        source_before = fingerprint_bars(bars)
+        state_before = asdict(bollinger_bandwidth_state(bars, 139))
+        self.assertEqual(source_before, fingerprint_bars(bars))
+
+        bars[169] = replace(
+            bars[169],
+            open=25.0,
+            high=25.0,
+            low=25.0,
+            close=25.0,
+        )
+        manually_mutated = fingerprint_bars(bars)
+        state_after = asdict(bollinger_bandwidth_state(bars, 139))
+
+        self.assertEqual(state_before, state_after)
+        self.assertEqual(manually_mutated, fingerprint_bars(bars))
+        self.assertNotEqual(source_before, fingerprint_bars(bars))
+
     def test_atr_expansion_requires_upside_direction_for_green(self) -> None:
         rising = [
             daily_bar(
@@ -425,6 +515,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
         self.assertEqual(
             {
+                "bollinger_bandwidth_percentile",
                 "bollinger_keltner_squeeze_release",
                 "atr_expansion",
                 "average_daily_range_expansion",
@@ -1335,6 +1426,10 @@ class TechnicalConfluenceTests(unittest.TestCase):
             {"sma_short_window": 50, "sma_mid_window": 20},
             {"adx_green_threshold": 10.0, "adx_yellow_threshold": 15.0},
             {"volume_confirmation_multiple": float("nan")},
+            {"bollinger_bandwidth_percentile_window": 0},
+            {"bollinger_bandwidth_squeeze_percentile": 0.0},
+            {"bollinger_bandwidth_squeeze_percentile": 101.0},
+            {"bollinger_bandwidth_squeeze_percentile": float("nan")},
             {"anchored_vwap_anchor_index": -1},
             {"rsi_window": 0},
             {"rsi_floor": 60.0, "rsi_reach": 60.0},

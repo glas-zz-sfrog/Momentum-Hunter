@@ -31,7 +31,7 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v6"
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v7"
 TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 1
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
@@ -105,6 +105,8 @@ class TechnicalConfluenceOptions:
     adx_yellow_threshold: float = 15.0
     bollinger_window: int = 20
     bollinger_stddevs: float = 2.0
+    bollinger_bandwidth_percentile_window: int = 120
+    bollinger_bandwidth_squeeze_percentile: float = 20.0
     keltner_atr_window: int = 20
     keltner_atr_multiple: float = 1.5
     volume_average_window: int = 20
@@ -150,6 +152,9 @@ class TechnicalConfluenceOptions:
             "SMA long window": self.sma_long_window,
             "ADX window": self.adx_window,
             "Bollinger window": self.bollinger_window,
+            "Bollinger Bandwidth percentile window": (
+                self.bollinger_bandwidth_percentile_window
+            ),
             "Keltner ATR window": self.keltner_atr_window,
             "Volume average window": self.volume_average_window,
             "Relative-strength window": self.relative_strength_window,
@@ -261,6 +266,9 @@ class TechnicalConfluenceOptions:
             "ADX green threshold": self.adx_green_threshold,
             "ADX yellow threshold": self.adx_yellow_threshold,
             "Bollinger standard-deviation multiple": self.bollinger_stddevs,
+            "Bollinger Bandwidth squeeze percentile": (
+                self.bollinger_bandwidth_squeeze_percentile
+            ),
             "Keltner ATR multiple": self.keltner_atr_multiple,
             "Volume confirmation multiple": (
                 self.volume_confirmation_multiple
@@ -286,6 +294,15 @@ class TechnicalConfluenceOptions:
         if self.adx_green_threshold < self.adx_yellow_threshold:
             raise TechnicalConfluenceError(
                 "ADX green threshold cannot be below the yellow threshold."
+            )
+        if not (
+            0.0
+            < self.bollinger_bandwidth_squeeze_percentile
+            <= 100.0
+        ):
+            raise TechnicalConfluenceError(
+                "Bollinger Bandwidth squeeze percentile must satisfy "
+                "0 < percentile <= 100."
             )
         if not (
             0.0 < self.rsi_floor < self.rsi_reach <= 100.0
@@ -421,6 +438,7 @@ def evaluate_wave1_confluence(
         macd_momentum_state(ordered_bars, index, options=options),
         ppo_momentum_state(ordered_bars, index, options=options),
         rate_of_change_state(ordered_bars, index, options=options),
+        bollinger_bandwidth_state(ordered_bars, index, options=options),
         squeeze_release_state(ordered_bars, index, options=options),
         atr_expansion_state(ordered_bars, index, options=options),
         average_daily_range_expansion_state(
@@ -1982,6 +2000,115 @@ def rate_of_change_state(
     )
 
 
+def bollinger_bandwidth_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    minimum_index = (
+        options.bollinger_window
+        - 1
+        + options.bollinger_bandwidth_percentile_window
+    )
+    if index < minimum_index or index >= len(bars):
+        return indicator(
+            "bollinger_bandwidth_percentile",
+            FAMILY_VOLATILITY,
+            INSUFFICIENT_DATA,
+            "primary signal",
+            None,
+            (
+                "Need the current Bollinger Bandwidth and exactly "
+                f"{options.bollinger_bandwidth_percentile_window} "
+                "prior completed readings."
+            ),
+            details={
+                "minimum_bars": minimum_index + 1,
+                "short_history_fallback": "NOT_CONFIGURED",
+            },
+        )
+    readings = [
+        bollinger_bandwidth_through_index(
+            bars,
+            position,
+            options=options,
+        )
+        for position in range(
+            index - options.bollinger_bandwidth_percentile_window,
+            index + 1,
+        )
+    ]
+    if any(value is None for value in readings):
+        return indicator(
+            "bollinger_bandwidth_percentile",
+            FAMILY_VOLATILITY,
+            INSUFFICIENT_DATA,
+            "primary signal",
+            None,
+            "Bollinger Bandwidth readings are unavailable.",
+        )
+    current_bandwidth = readings[-1]
+    prior_bandwidths = readings[:-1]
+    assert current_bandwidth is not None
+    percentile_rank = midrank_percentile_rank(
+        current_bandwidth,
+        [
+            float(value)
+            for value in prior_bandwidths
+            if value is not None
+        ],
+    )
+    if percentile_rank is None:
+        return indicator(
+            "bollinger_bandwidth_percentile",
+            FAMILY_VOLATILITY,
+            INSUFFICIENT_DATA,
+            "primary signal",
+            None,
+            "Prior Bollinger Bandwidth distribution is unavailable.",
+        )
+    if (
+        percentile_rank
+        <= options.bollinger_bandwidth_squeeze_percentile
+    ):
+        state = GREEN
+        reason = (
+            "Bollinger Bandwidth is in the configured lowest-percentile "
+            "compression range."
+        )
+    else:
+        state = RED
+        reason = (
+            "Bollinger Bandwidth is above the configured compression "
+            "percentile."
+        )
+    return indicator(
+        "bollinger_bandwidth_percentile",
+        FAMILY_VOLATILITY,
+        state,
+        "primary signal",
+        round_value(percentile_rank),
+        reason,
+        details={
+            "bandwidth": round_value(current_bandwidth),
+            "bollinger_window": options.bollinger_window,
+            "standard_deviations": options.bollinger_stddevs,
+            "prior_readings": (
+                options.bollinger_bandwidth_percentile_window
+            ),
+            "percentile_rank": round_value(percentile_rank),
+            "squeeze_percentile": (
+                options.bollinger_bandwidth_squeeze_percentile
+            ),
+            "tie_method": "midrank",
+            "short_history_fallback": "NOT_CONFIGURED",
+        },
+    )
+
+
 def squeeze_release_state(
     bars: list[TechnicalPriceBar],
     index: int,
@@ -3460,6 +3587,28 @@ def bollinger_bands_through_index(
     return center - spread, center + spread
 
 
+def bollinger_bandwidth_through_index(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions,
+) -> float | None:
+    bands = bollinger_bands_through_index(bars, index, options)
+    if bands is None:
+        return None
+    closes = [
+        bar.close
+        for bar in bars[
+            index - options.bollinger_window + 1 : index + 1
+        ]
+    ]
+    center = mean(closes)
+    if center <= 0:
+        return None
+    lower, upper = bands
+    return (upper - lower) / center
+
+
 def keltner_bands_through_index(
     bars: list[TechnicalPriceBar],
     index: int,
@@ -3512,6 +3661,17 @@ def _breakout_options_from_confluence(options: TechnicalConfluenceOptions) -> An
 def max_or_none(*values: float | None) -> float | None:
     present = [value for value in values if value is not None]
     return max(present) if present else None
+
+
+def midrank_percentile_rank(
+    value: float,
+    prior_values: list[float],
+) -> float | None:
+    if not prior_values:
+        return None
+    below = sum(1 for prior in prior_values if prior < value)
+    equal = sum(1 for prior in prior_values if prior == value)
+    return (below + 0.5 * equal) / len(prior_values) * 100.0
 
 
 def average_true_range_through_index(
