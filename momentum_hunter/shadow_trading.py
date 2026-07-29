@@ -847,6 +847,7 @@ class ShadowStateStore:
         return shadow_state_from_dict(payload)
 
     def save(self, state: ShadowTradingState) -> Path:
+        validate_shadow_state(state)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = shadow_state_to_dict(replace(state, updated_at=now_central().isoformat()))
         temporary = self.path.with_name(f"{self.path.name}.{uuid.uuid4().hex}.tmp")
@@ -3556,11 +3557,280 @@ def validate_shadow_state(state: ShadowTradingState) -> None:
     if len(command_ids) != len(set(command_ids)):
         raise ShadowStateError("Shadow state contains duplicate simulation command identifiers.")
     known_trade_ids = set(trade_ids)
+    for trade in state.trades:
+        validate_shadow_trade_lifecycle(trade)
     for receipt in state.command_receipts:
         if not receipt.request_fingerprint:
             raise ShadowStateError("Shadow state contains a command receipt with a missing request fingerprint.")
         if receipt.shadow_trade_id not in known_trade_ids:
             raise ShadowStateError("Shadow state contains a command receipt for an unknown Shadow Trade.")
+
+
+def validate_shadow_trade_lifecycle(trade: ShadowTrade) -> None:
+    allowed_statuses = ACTIVE_TRADE_STATES | TERMINAL_TRADE_STATES
+    if trade.status not in allowed_statuses:
+        _raise_shadow_lifecycle_error(
+            trade,
+            f"unknown trade status '{trade.status or 'missing'}'.",
+        )
+
+    if trade.status == "blocked":
+        if trade.order is not None or trade.position is not None or trade.outcome is not None:
+            _raise_shadow_lifecycle_error(
+                trade,
+                "a blocked trade cannot retain an order, position, or outcome.",
+            )
+    elif trade.status == "pending_entry":
+        if trade.order is None or trade.position is not None or trade.outcome is not None:
+            _raise_shadow_lifecycle_error(
+                trade,
+                "a pending entry requires an order and cannot have a position or outcome.",
+            )
+    elif trade.status == "partially_filled":
+        if trade.order is None or trade.position is None or trade.outcome is not None:
+            _raise_shadow_lifecycle_error(
+                trade,
+                "a partial fill requires an order and position without an outcome.",
+            )
+    elif trade.status == "open":
+        if trade.order is None or trade.position is None or trade.outcome is not None:
+            _raise_shadow_lifecycle_error(
+                trade,
+                "an open trade requires an order and position without an outcome.",
+            )
+    elif trade.status == "entry_rejected":
+        if trade.order is None or trade.position is not None or trade.outcome is not None:
+            _raise_shadow_lifecycle_error(
+                trade,
+                "an entry rejection requires its rejected order and cannot have a position or outcome.",
+            )
+    elif trade.status == "cancelled":
+        if trade.order is None or trade.position is not None or trade.outcome is not None:
+            _raise_shadow_lifecycle_error(
+                trade,
+                "a cancelled entry requires its order and cannot have a position or outcome.",
+            )
+    elif trade.status == "ambiguous_exit":
+        if trade.order is None or trade.position is None or trade.outcome is not None:
+            _raise_shadow_lifecycle_error(
+                trade,
+                "an ambiguous exit requires the filled position and cannot contain an outcome.",
+            )
+    elif trade.status == "completed":
+        if trade.outcome is None:
+            _raise_shadow_lifecycle_error(
+                trade,
+                "a completed trade requires an outcome.",
+            )
+        if trade.sample_metadata.official_sample_authorized and (
+            trade.order is None or trade.position is None
+        ):
+            _raise_shadow_lifecycle_error(
+                trade,
+                "an official completed trade requires its order and position evidence.",
+            )
+
+    if trade.order is not None:
+        _validate_persisted_shadow_order(trade)
+    if trade.position is not None:
+        _validate_persisted_shadow_position(trade)
+    if trade.outcome is not None:
+        _validate_persisted_shadow_outcome(trade)
+
+    observation_ids = trade.processed_observation_ids
+    if any(not observation_id for observation_id in observation_ids):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "processed observation identifiers cannot be empty.",
+        )
+    if len(observation_ids) != len(set(observation_ids)):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "processed observation identifiers must be unique.",
+        )
+    ledger_ids = [event.event_id for event in trade.ledger_events]
+    if any(not event_id for event_id in ledger_ids):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "ledger event identifiers cannot be empty.",
+        )
+    if len(ledger_ids) != len(set(ledger_ids)):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "ledger event identifiers must be unique.",
+        )
+
+
+def _validate_persisted_shadow_order(trade: ShadowTrade) -> None:
+    assert trade.order is not None
+    order = trade.order
+    if (
+        order.order_id != stable_id("shadow-order", trade.shadow_trade_id)
+        or order.shadow_trade_id != trade.shadow_trade_id
+        or order.symbol != trade.symbol
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "order identity does not match its Shadow Trade.",
+        )
+    if (
+        order.quantity <= 0
+        or order.filled_quantity < 0
+        or order.remaining_quantity < 0
+        or order.filled_quantity + order.remaining_quantity != order.quantity
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "order filled and remaining quantities are inconsistent.",
+        )
+    if not math.isfinite(order.limit_price) or order.limit_price <= 0:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "order limit price must be finite and positive.",
+        )
+    if order.filled_quantity == 0 and order.average_fill_price is not None:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "an unfilled order cannot have an average fill price.",
+        )
+    if order.filled_quantity > 0 and (
+        order.average_fill_price is None
+        or not math.isfinite(order.average_fill_price)
+        or order.average_fill_price <= 0
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "a filled order requires a finite positive average fill price.",
+        )
+
+    expected_statuses = {
+        "pending_entry": {"accepted"},
+        "partially_filled": {"partially_filled"},
+        "open": {"filled"},
+        "entry_rejected": {"rejected"},
+        "cancelled": {"cancelled"},
+        "ambiguous_exit": {"filled", "cancelled"},
+    }
+    if trade.sample_metadata.official_sample_authorized:
+        expected_statuses["completed"] = {"filled", "cancelled"}
+    expected = expected_statuses.get(trade.status)
+    if expected is not None and order.status not in expected:
+        _raise_shadow_lifecycle_error(
+            trade,
+            f"trade status '{trade.status}' conflicts with order status '{order.status}'.",
+        )
+    if order.status == "accepted" and (
+        order.filled_quantity != 0
+        or order.remaining_quantity != order.quantity
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "an accepted order must remain completely unfilled.",
+        )
+    if order.status == "partially_filled" and not (
+        0 < order.filled_quantity < order.quantity
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "a partially filled order requires a bounded partial quantity.",
+        )
+    if order.status == "filled" and (
+        order.filled_quantity != order.quantity
+        or order.remaining_quantity != 0
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "a filled order must have no remaining quantity.",
+        )
+
+
+def _validate_persisted_shadow_position(trade: ShadowTrade) -> None:
+    assert trade.position is not None
+    position = trade.position
+    if (
+        position.position_id
+        != stable_id("shadow-position", trade.shadow_trade_id)
+        or position.shadow_trade_id != trade.shadow_trade_id
+        or position.symbol != trade.symbol
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "position identity does not match its Shadow Trade.",
+        )
+    if position.quantity <= 0:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "position quantity must be positive.",
+        )
+    if trade.order is not None and position.quantity != trade.order.filled_quantity:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "position quantity does not match the filled order quantity.",
+        )
+    prices = (
+        position.average_entry_price,
+        position.stop_price,
+        position.target_price,
+        position.highest_price,
+        position.lowest_price,
+    )
+    if any(not math.isfinite(value) or value <= 0 for value in prices):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "position prices must be finite and positive.",
+        )
+    if (
+        position.lowest_price > position.average_entry_price
+        or position.highest_price < position.average_entry_price
+        or position.lowest_price > position.highest_price
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "position excursion prices are inconsistent.",
+        )
+
+
+def _validate_persisted_shadow_outcome(trade: ShadowTrade) -> None:
+    assert trade.outcome is not None
+    outcome = trade.outcome
+    if (
+        outcome.outcome_id != trade.outcome_id
+        or outcome.shadow_trade_id != trade.shadow_trade_id
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "outcome identity does not match its Shadow Trade.",
+        )
+    if outcome.status != "COMPLETED":
+        _raise_shadow_lifecycle_error(
+            trade,
+            "persisted outcome status must be COMPLETED.",
+        )
+    if outcome.classification not in {"WIN", "LOSS", "FLAT"}:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "persisted outcome classification is invalid.",
+        )
+    if (
+        not math.isfinite(outcome.exit_price)
+        or outcome.exit_price <= 0
+        or outcome.duration_seconds < 0
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "persisted outcome price or duration is invalid.",
+        )
+
+
+def _raise_shadow_lifecycle_error(
+    trade: ShadowTrade,
+    detail: str,
+) -> None:
+    raise ShadowStateError(
+        "Shadow Trade "
+        f"{trade.shadow_trade_id or 'unknown'} has an invalid persisted "
+        f"lifecycle: {detail}"
+    )
 
 
 def make_ledger_event(
