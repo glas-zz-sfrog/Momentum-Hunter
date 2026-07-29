@@ -30,7 +30,7 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v1"
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v2"
 TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 1
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
@@ -75,6 +75,7 @@ WEAK_CONFLUENCE = "WEAK_CONFLUENCE"
 CONFLICTED_CONFLUENCE = "CONFLICTED_CONFLUENCE"
 
 FAMILY_TREND = "Trend / Structure"
+FAMILY_MOMENTUM = "Momentum"
 FAMILY_VOLATILITY = "Volatility / Compression"
 FAMILY_VOLUME = "Volume / Participation"
 FAMILY_RELATIVE_STRENGTH = "Relative Strength"
@@ -104,6 +105,17 @@ class TechnicalConfluenceOptions:
     atr_extension_window: int = 14
     atr_extension_multiple: float = 2.5
     anchored_vwap_anchor_index: int | None = None
+    rsi_window: int = 14
+    rsi_hold_bars: int = 5
+    rsi_floor: float = 50.0
+    rsi_reach: float = 60.0
+    macd_fast_window: int = 12
+    macd_slow_window: int = 26
+    macd_signal_window: int = 9
+    obv_short_window: int = 20
+    obv_long_window: int = 50
+    mfi_window: int = 14
+    cmf_window: int = 20
 
     def __post_init__(self) -> None:
         windows = {
@@ -116,6 +128,15 @@ class TechnicalConfluenceOptions:
             "Volume average window": self.volume_average_window,
             "Relative-strength window": self.relative_strength_window,
             "ATR extension window": self.atr_extension_window,
+            "RSI window": self.rsi_window,
+            "RSI hold bars": self.rsi_hold_bars,
+            "MACD fast window": self.macd_fast_window,
+            "MACD slow window": self.macd_slow_window,
+            "MACD signal window": self.macd_signal_window,
+            "OBV short window": self.obv_short_window,
+            "OBV long window": self.obv_long_window,
+            "MFI window": self.mfi_window,
+            "CMF window": self.cmf_window,
         }
         for label, value in windows.items():
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
@@ -130,6 +151,14 @@ class TechnicalConfluenceOptions:
             raise TechnicalConfluenceError(
                 "EMA windows must be ordered fast < mid < slow."
             )
+        if self.macd_fast_window >= self.macd_slow_window:
+            raise TechnicalConfluenceError(
+                "MACD fast window must be below its slow window."
+            )
+        if self.obv_short_window >= self.obv_long_window:
+            raise TechnicalConfluenceError(
+                "OBV short window must be below its long window."
+            )
         numeric_options = {
             "ADX green threshold": self.adx_green_threshold,
             "ADX yellow threshold": self.adx_yellow_threshold,
@@ -139,6 +168,8 @@ class TechnicalConfluenceOptions:
                 self.volume_confirmation_multiple
             ),
             "ATR extension multiple": self.atr_extension_multiple,
+            "RSI floor": self.rsi_floor,
+            "RSI reach": self.rsi_reach,
         }
         for label, value in numeric_options.items():
             if (
@@ -153,6 +184,12 @@ class TechnicalConfluenceOptions:
         if self.adx_green_threshold < self.adx_yellow_threshold:
             raise TechnicalConfluenceError(
                 "ADX green threshold cannot be below the yellow threshold."
+            )
+        if not (
+            0.0 < self.rsi_floor < self.rsi_reach <= 100.0
+        ):
+            raise TechnicalConfluenceError(
+                "RSI thresholds must satisfy 0 < floor < reach <= 100."
             )
         if self.anchored_vwap_anchor_index is not None and (
             isinstance(self.anchored_vwap_anchor_index, bool)
@@ -277,8 +314,14 @@ def evaluate_wave1_confluence(
         ema_stack_state(ordered_bars, index, options=options),
         adx_trend_strength_state(ordered_bars, index, options=options),
         anchored_vwap_state(ordered_bars, index, options=options),
+        rsi_regime_state(ordered_bars, index, options=options),
+        macd_momentum_state(ordered_bars, index, options=options),
+        ppo_momentum_state(ordered_bars, index, options=options),
         squeeze_release_state(ordered_bars, index, options=options),
         volume_confirmation_state(ordered_bars, index, options=options),
+        obv_new_high_state(ordered_bars, index, options=options),
+        money_flow_index_state(ordered_bars, index, options=options),
+        chaikin_money_flow_state(ordered_bars, index, options=options),
         relative_strength_state(ordered_bars, benchmark_bars or [], index, options=options),
         atr_extension_risk_state(ordered_bars, index, options=options),
         failed_breakout_state(
@@ -290,7 +333,13 @@ def evaluate_wave1_confluence(
     family_states = build_family_states(indicators)
     raw_total = sum(1 for indicator in indicators if indicator.state not in {UNAVAILABLE, INSUFFICIENT_DATA})
     raw_green = sum(1 for indicator in indicators if indicator.state == GREEN)
-    signal_families = [FAMILY_TREND, FAMILY_VOLATILITY, FAMILY_VOLUME, FAMILY_RELATIVE_STRENGTH]
+    signal_families = [
+        FAMILY_TREND,
+        FAMILY_MOMENTUM,
+        FAMILY_VOLATILITY,
+        FAMILY_VOLUME,
+        FAMILY_RELATIVE_STRENGTH,
+    ]
     independent_green = sum(1 for family in signal_families if family_states[family].state == GREEN)
     independent_total = sum(1 for family in signal_families if family_states[family].state not in {UNAVAILABLE, INSUFFICIENT_DATA})
     major_red_flags = sum(1 for state in family_states.values() if state.state in {RED, BLOCKED, FAIL})
@@ -1377,6 +1426,179 @@ def anchored_vwap_state(
     )
 
 
+def rsi_regime_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    minimum_bars = max(
+        20,
+        options.rsi_window + options.rsi_hold_bars + 1,
+    )
+    if index < minimum_bars - 1 or index >= len(bars):
+        return indicator(
+            "rsi_regime",
+            FAMILY_MOMENTUM,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            f"Need at least {minimum_bars} completed bars for RSI regime.",
+        )
+    recent_values = [
+        rsi_value(bars, offset, options.rsi_window)
+        for offset in range(
+            index - options.rsi_hold_bars + 1,
+            index + 1,
+        )
+    ]
+    if any(value is None for value in recent_values):
+        return indicator(
+            "rsi_regime",
+            FAMILY_MOMENTUM,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            "RSI regime values are incomplete.",
+        )
+    values = [float(value) for value in recent_values if value is not None]
+    held_floor = all(value > options.rsi_floor for value in values)
+    reached_strength = max(values) >= options.rsi_reach
+    if held_floor and reached_strength:
+        state = GREEN
+        reason = (
+            "RSI held above the constructive floor and reached the "
+            "research strength level."
+        )
+    elif held_floor:
+        state = YELLOW
+        reason = (
+            "RSI held above the constructive floor but has not reached "
+            "the research strength level."
+        )
+    else:
+        state = RED
+        reason = "RSI did not sustain the constructive momentum regime."
+    return indicator(
+        "rsi_regime",
+        FAMILY_MOMENTUM,
+        state,
+        "confirmation signal",
+        round_value(values[-1]),
+        reason,
+        details={
+            "held_above_floor": held_floor,
+            "reached_strength": reached_strength,
+            "recent_values": [round_value(value) for value in values],
+        },
+    )
+
+
+def macd_momentum_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    return _macd_like_momentum_state(
+        bars,
+        index,
+        options=options or TechnicalConfluenceOptions(),
+        percentage=False,
+    )
+
+
+def ppo_momentum_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    return _macd_like_momentum_state(
+        bars,
+        index,
+        options=options or TechnicalConfluenceOptions(),
+        percentage=True,
+    )
+
+
+def _macd_like_momentum_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions,
+    percentage: bool,
+) -> IndicatorState:
+    name = "ppo_momentum" if percentage else "macd_momentum"
+    minimum_bars = (
+        options.macd_slow_window + options.macd_signal_window
+    )
+    current = macd_components(
+        bars,
+        index,
+        options=options,
+        percentage=percentage,
+    )
+    previous = macd_components(
+        bars,
+        index - 1,
+        options=options,
+        percentage=percentage,
+    )
+    if (
+        index < minimum_bars - 1
+        or current is None
+        or previous is None
+    ):
+        return indicator(
+            name,
+            FAMILY_MOMENTUM,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            f"Need at least {minimum_bars} completed bars for {name}.",
+        )
+    current_line, current_signal, current_histogram = current
+    previous_line, previous_signal, previous_histogram = previous
+    crossed_above = (
+        previous_line <= previous_signal
+        and current_line > current_signal
+    )
+    histogram_expanding = (
+        current_histogram > previous_histogram > 0
+    )
+    if crossed_above or histogram_expanding:
+        state = GREEN
+        reason = (
+            f"{name} crossed above its signal or its positive histogram "
+            "expanded for two completed bars."
+        )
+    elif current_line > current_signal or current_histogram > 0:
+        state = YELLOW
+        reason = f"{name} is positive but lacks a fresh acceleration event."
+    else:
+        state = RED
+        reason = f"{name} does not confirm constructive momentum."
+    return indicator(
+        name,
+        FAMILY_MOMENTUM,
+        state,
+        "confirmation signal",
+        round_value(current_histogram),
+        reason,
+        details={
+            "line": round_value(current_line),
+            "signal": round_value(current_signal),
+            "histogram": round_value(current_histogram),
+            "crossed_above": crossed_above,
+            "histogram_expanding": histogram_expanding,
+            "percentage_based": percentage,
+        },
+    )
+
+
 def squeeze_release_state(
     bars: list[TechnicalPriceBar],
     index: int,
@@ -1460,6 +1682,151 @@ def volume_confirmation_state(
         state = RED
         reason = "Volume does not confirm participation."
     return indicator("relative_volume", FAMILY_VOLUME, state, "confirmation signal", value, reason)
+
+
+def obv_new_high_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    minimum_bars = options.obv_long_window + 1
+    values = obv_values(bars, index)
+    if (
+        index < minimum_bars - 1
+        or index >= len(bars)
+        or values is None
+    ):
+        return indicator(
+            "obv_new_high",
+            FAMILY_VOLUME,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            f"Need {minimum_bars} completed OHLCV bars for OBV new highs.",
+        )
+    current = values[index]
+    prior_short = values[index - options.obv_short_window : index]
+    prior_long = values[index - options.obv_long_window : index]
+    short_high = current > max(prior_short)
+    long_high = current > max(prior_long)
+    if long_high:
+        state = GREEN
+        reason = "OBV reached a new long-window high."
+    elif short_high:
+        state = YELLOW
+        reason = "OBV reached a new short-window high only."
+    else:
+        state = RED
+        reason = "OBV did not reach a new participation high."
+    return indicator(
+        "obv_new_high",
+        FAMILY_VOLUME,
+        state,
+        "confirmation signal",
+        float(current),
+        reason,
+        details={
+            "short_window_new_high": short_high,
+            "long_window_new_high": long_high,
+        },
+    )
+
+
+def money_flow_index_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    minimum_bars = max(20, options.mfi_window + 2)
+    current = money_flow_index_value(bars, index, options.mfi_window)
+    previous = money_flow_index_value(
+        bars,
+        index - 1,
+        options.mfi_window,
+    )
+    if (
+        index < minimum_bars - 1
+        or current is None
+        or previous is None
+    ):
+        return indicator(
+            "money_flow_index",
+            FAMILY_VOLUME,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            f"Need at least {minimum_bars} completed OHLCV bars for MFI.",
+        )
+    improving = current > previous
+    if current > 50.0 and improving:
+        state = GREEN
+        reason = "MFI is improving above its constructive midpoint."
+    elif current > 50.0 or improving:
+        state = YELLOW
+        reason = "MFI has only one constructive condition."
+    else:
+        state = RED
+        reason = "MFI is not improving above its constructive midpoint."
+    return indicator(
+        "money_flow_index",
+        FAMILY_VOLUME,
+        state,
+        "confirmation signal",
+        round_value(current),
+        reason,
+        details={
+            "previous": round_value(previous),
+            "improving": improving,
+        },
+    )
+
+
+def chaikin_money_flow_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    minimum_bars = options.cmf_window + 1
+    value = chaikin_money_flow_value(
+        bars,
+        index,
+        options.cmf_window,
+    )
+    if index < minimum_bars - 1 or value is None:
+        return indicator(
+            "chaikin_money_flow",
+            FAMILY_VOLUME,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            f"Need {minimum_bars} completed OHLCV bars for CMF.",
+        )
+    if value > 0:
+        state = GREEN
+        reason = "CMF is positive."
+    elif value < 0:
+        state = RED
+        reason = "CMF is negative."
+    else:
+        state = YELLOW
+        reason = "CMF is neutral."
+    return indicator(
+        "chaikin_money_flow",
+        FAMILY_VOLUME,
+        state,
+        "confirmation signal",
+        round_value(value),
+        reason,
+    )
 
 
 def relative_strength_state(
@@ -1648,6 +2015,10 @@ def build_family_states(indicators: list[IndicatorState]) -> dict[str, Confluenc
         grouped.setdefault(item.family, []).append(item)
     family_states = {
         FAMILY_TREND: summarize_signal_family(FAMILY_TREND, grouped.get(FAMILY_TREND, [])),
+        FAMILY_MOMENTUM: summarize_signal_family(
+            FAMILY_MOMENTUM,
+            grouped.get(FAMILY_MOMENTUM, []),
+        ),
         FAMILY_VOLATILITY: summarize_signal_family(FAMILY_VOLATILITY, grouped.get(FAMILY_VOLATILITY, [])),
         FAMILY_VOLUME: summarize_signal_family(FAMILY_VOLUME, grouped.get(FAMILY_VOLUME, [])),
         FAMILY_RELATIVE_STRENGTH: summarize_signal_family(
@@ -1658,7 +2029,13 @@ def build_family_states(indicators: list[IndicatorState]) -> dict[str, Confluenc
     }
     usable_signal_families = sum(
         1
-        for family in (FAMILY_TREND, FAMILY_VOLATILITY, FAMILY_VOLUME, FAMILY_RELATIVE_STRENGTH)
+        for family in (
+            FAMILY_TREND,
+            FAMILY_MOMENTUM,
+            FAMILY_VOLATILITY,
+            FAMILY_VOLUME,
+            FAMILY_RELATIVE_STRENGTH,
+        )
         if family_states[family].state not in {UNAVAILABLE, INSUFFICIENT_DATA}
     )
     if usable_signal_families < 2:
@@ -1680,11 +2057,11 @@ def summarize_signal_family(family: str, indicators: list[IndicatorState]) -> Co
     ]
     if not states:
         return ConfluenceFamilyState(family, INSUFFICIENT_DATA, "No sufficient indicators in family.", names)
-    if all(state == GREEN for state in states):
+    if GREEN in states and RED not in states:
         return ConfluenceFamilyState(
             family,
             GREEN,
-            "All usable family indicators are green.",
+            "At least one family indicator confirms and none contradict.",
             names,
         )
     if all(state == RED for state in states):
@@ -1770,6 +2147,203 @@ def ema_at_index(bars: list[TechnicalPriceBar], index: int, window: int) -> floa
     for close in closes[1:]:
         value = close * multiplier + value * (1.0 - multiplier)
     return value
+
+
+def rsi_value(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    window: int,
+) -> float | None:
+    bars = sorted_bars(bars)
+    if index < window or index >= len(bars):
+        return None
+    changes = [
+        bars[offset].close - bars[offset - 1].close
+        for offset in range(1, index + 1)
+    ]
+    initial = changes[:window]
+    average_gain = sum(max(change, 0.0) for change in initial) / window
+    average_loss = sum(max(-change, 0.0) for change in initial) / window
+    for change in changes[window:]:
+        average_gain = (
+            average_gain * (window - 1) + max(change, 0.0)
+        ) / window
+        average_loss = (
+            average_loss * (window - 1) + max(-change, 0.0)
+        ) / window
+    if average_gain == 0 and average_loss == 0:
+        return 50.0
+    if average_loss == 0:
+        return 100.0
+    if average_gain == 0:
+        return 0.0
+    relative_strength = average_gain / average_loss
+    return 100.0 - (100.0 / (1.0 + relative_strength))
+
+
+def macd_components(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions,
+    percentage: bool,
+) -> tuple[float, float, float] | None:
+    bars = sorted_bars(bars)
+    if index < 0 or index >= len(bars):
+        return None
+    closes = [bar.close for bar in bars[: index + 1]]
+    fast_values = exponential_moving_average_values(
+        closes,
+        options.macd_fast_window,
+    )
+    slow_values = exponential_moving_average_values(
+        closes,
+        options.macd_slow_window,
+    )
+    oscillator_values: list[float] = []
+    oscillator_indexes: list[int] = []
+    for offset, (fast, slow) in enumerate(
+        zip(fast_values, slow_values)
+    ):
+        if fast is None or slow is None:
+            continue
+        if percentage:
+            if slow <= 0:
+                return None
+            oscillator = (fast - slow) / slow * 100.0
+        else:
+            oscillator = fast - slow
+        oscillator_values.append(oscillator)
+        oscillator_indexes.append(offset)
+    signal_values = exponential_moving_average_values(
+        oscillator_values,
+        options.macd_signal_window,
+    )
+    by_index = {
+        original_index: (oscillator, signal)
+        for original_index, oscillator, signal in zip(
+            oscillator_indexes,
+            oscillator_values,
+            signal_values,
+        )
+        if signal is not None
+    }
+    current = by_index.get(index)
+    if current is None:
+        return None
+    oscillator, signal = current
+    return oscillator, signal, oscillator - signal
+
+
+def exponential_moving_average_values(
+    values: list[float],
+    window: int,
+) -> list[float | None]:
+    if not values:
+        return []
+    multiplier = 2.0 / (window + 1)
+    current = float(values[0])
+    results: list[float | None] = []
+    for offset, value in enumerate(values):
+        if offset:
+            current = float(value) * multiplier + current * (
+                1.0 - multiplier
+            )
+        results.append(current if offset >= window - 1 else None)
+    return results
+
+
+def obv_values(
+    bars: list[TechnicalPriceBar],
+    index: int,
+) -> list[int] | None:
+    bars = sorted_bars(bars)
+    if index < 0 or index >= len(bars):
+        return None
+    selected = bars[: index + 1]
+    if any(bar.volume is None for bar in selected):
+        return None
+    values = [0]
+    for offset in range(1, len(selected)):
+        volume = selected[offset].volume
+        assert volume is not None
+        current = values[-1]
+        if selected[offset].close > selected[offset - 1].close:
+            current += volume
+        elif selected[offset].close < selected[offset - 1].close:
+            current -= volume
+        values.append(current)
+    return values
+
+
+def money_flow_index_value(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    window: int,
+) -> float | None:
+    bars = sorted_bars(bars)
+    if index < window or index >= len(bars):
+        return None
+    selected = bars[index - window : index + 1]
+    if any(bar.volume is None for bar in selected):
+        return None
+    typical_prices = [
+        (bar.high + bar.low + bar.close) / 3.0
+        for bar in selected
+    ]
+    positive_flow = 0.0
+    negative_flow = 0.0
+    for offset in range(1, len(selected)):
+        volume = selected[offset].volume
+        assert volume is not None
+        raw_flow = typical_prices[offset] * volume
+        if typical_prices[offset] > typical_prices[offset - 1]:
+            positive_flow += raw_flow
+        elif typical_prices[offset] < typical_prices[offset - 1]:
+            negative_flow += raw_flow
+    if positive_flow == 0 and negative_flow == 0:
+        return 50.0
+    if negative_flow == 0:
+        return 100.0
+    if positive_flow == 0:
+        return 0.0
+    ratio = positive_flow / negative_flow
+    return 100.0 - (100.0 / (1.0 + ratio))
+
+
+def chaikin_money_flow_value(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    window: int,
+) -> float | None:
+    bars = sorted_bars(bars)
+    if index < window - 1 or index >= len(bars):
+        return None
+    selected = bars[index - window + 1 : index + 1]
+    if any(bar.volume is None for bar in selected):
+        return None
+    total_volume = sum(
+        int(bar.volume)
+        for bar in selected
+        if bar.volume is not None
+    )
+    if total_volume <= 0:
+        return None
+    money_flow_volume = 0.0
+    for bar in selected:
+        volume = bar.volume
+        assert volume is not None
+        spread = bar.high - bar.low
+        multiplier = (
+            0.0
+            if spread == 0
+            else (
+                (bar.close - bar.low) - (bar.high - bar.close)
+            )
+            / spread
+        )
+        money_flow_volume += multiplier * volume
+    return money_flow_volume / total_volume
 
 
 def adx_value(bars: list[TechnicalPriceBar], index: int, window: int) -> float | None:

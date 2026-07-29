@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 import hashlib
 import inspect
 import json
@@ -21,6 +21,7 @@ from momentum_hunter.technical_confluence import (
     BLOCKED,
     CAUTION,
     CLEAR,
+    FAMILY_MOMENTUM,
     GREEN,
     INSUFFICIENT_DATA,
     RED,
@@ -32,11 +33,17 @@ from momentum_hunter.technical_confluence import (
     atr_extension_risk_state,
     build_technical_confluence_report_payload,
     build_technical_confluence_study_payload,
+    chaikin_money_flow_state,
     ema_stack_state,
     evaluate_wave1_confluence,
+    macd_momentum_state,
+    money_flow_index_state,
+    obv_new_high_state,
+    ppo_momentum_state,
     relative_strength_state,
     render_technical_confluence_markdown,
     render_technical_confluence_study_markdown,
+    rsi_regime_state,
     squeeze_release_state,
     volume_confirmation_state,
     write_technical_confluence_reports,
@@ -95,6 +102,229 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
         self.assertEqual(GREEN, state.state)
         self.assertEqual(2.0, state.value)
+
+    def test_rsi_regime_requires_sustained_strength(self) -> None:
+        constructive = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.1 for offset in range(30)],
+        )
+        one_bar_spike = daily_bars("AAA", [10.0] * 29 + [12.0])
+
+        constructive_state = rsi_regime_state(
+            constructive,
+            len(constructive) - 1,
+        )
+        spike_state = rsi_regime_state(
+            one_bar_spike,
+            len(one_bar_spike) - 1,
+        )
+
+        self.assertEqual(GREEN, constructive_state.state)
+        self.assertTrue(constructive_state.details["held_above_floor"])
+        self.assertEqual(RED, spike_state.state)
+        self.assertFalse(spike_state.details["held_above_floor"])
+
+    def test_macd_and_ppo_detect_bullish_inflection(self) -> None:
+        bars = daily_bars("AAA", [10.0] * 34 + [12.0])
+
+        macd = macd_momentum_state(bars, len(bars) - 1)
+        ppo = ppo_momentum_state(bars, len(bars) - 1)
+
+        self.assertEqual(GREEN, macd.state)
+        self.assertTrue(macd.details["crossed_above"])
+        self.assertEqual(GREEN, ppo.state)
+        self.assertTrue(ppo.details["percentage_based"])
+
+    def test_obv_new_high_uses_prior_completed_windows(self) -> None:
+        bars = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.1 for offset in range(51)],
+            volume=100,
+        )
+
+        state = obv_new_high_state(bars, len(bars) - 1)
+
+        self.assertEqual(GREEN, state.state)
+        self.assertTrue(state.details["short_window_new_high"])
+        self.assertTrue(state.details["long_window_new_high"])
+
+    def test_money_flow_index_requires_improvement_above_midpoint(self) -> None:
+        closes = [
+            10.0 + (offset % 3) * 0.1 + offset * 0.01
+            for offset in range(60)
+        ]
+        bars = daily_bars("AAA", closes, volume=100)
+
+        state = money_flow_index_state(bars, len(bars) - 1)
+
+        self.assertEqual(GREEN, state.state)
+        self.assertGreater(float(state.value or 0), 50.0)
+        self.assertTrue(state.details["improving"])
+
+    def test_chaikin_money_flow_handles_positive_negative_and_flat_ranges(self) -> None:
+        positive = [
+            daily_bar(
+                "AAA",
+                offset,
+                close=10.0 + offset * 0.1,
+                high=10.0 + offset * 0.1,
+                low=9.0 + offset * 0.1,
+                volume=100,
+            )
+            for offset in range(21)
+        ]
+        negative = [
+            daily_bar(
+                "AAA",
+                offset,
+                close=9.0 + offset * 0.1,
+                high=10.0 + offset * 0.1,
+                low=9.0 + offset * 0.1,
+                volume=100,
+            )
+            for offset in range(21)
+        ]
+        flat = daily_bars("AAA", [10.0] * 21, volume=100)
+
+        self.assertEqual(
+            GREEN,
+            chaikin_money_flow_state(positive, 20).state,
+        )
+        self.assertEqual(
+            RED,
+            chaikin_money_flow_state(negative, 20).state,
+        )
+        self.assertEqual(
+            "YELLOW",
+            chaikin_money_flow_state(flat, 20).state,
+        )
+
+    def test_wave2_indicators_mark_missing_history_or_volume_honestly(self) -> None:
+        short = daily_bars("AAA", [10.0] * 10)
+        missing_volume = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.1 for offset in range(55)],
+        )
+        missing_volume[-1] = replace(missing_volume[-1], volume=None)
+
+        for state in (
+            rsi_regime_state(short, 9),
+            macd_momentum_state(short, 9),
+            ppo_momentum_state(short, 9),
+            obv_new_high_state(short, 9),
+            money_flow_index_state(short, 9),
+            chaikin_money_flow_state(short, 9),
+            obv_new_high_state(missing_volume, 54),
+            money_flow_index_state(missing_volume, 54),
+            chaikin_money_flow_state(missing_volume, 54),
+        ):
+            with self.subTest(indicator=state.name):
+                self.assertEqual(INSUFFICIENT_DATA, state.state)
+
+    def test_wave2_indicators_do_not_read_future_bars_or_mutate_sources(self) -> None:
+        bars = daily_bars(
+            "AAA",
+            [
+                10.0 + (offset % 3) * 0.1 + offset * 0.01
+                for offset in range(70)
+            ],
+            volume=100,
+        )
+        before_hash = fingerprint_bars(bars)
+        states_before = [
+            asdict(state)
+            for state in (
+                rsi_regime_state(bars, 59),
+                macd_momentum_state(bars, 59),
+                ppo_momentum_state(bars, 59),
+                obv_new_high_state(bars, 59),
+                money_flow_index_state(bars, 59),
+                chaikin_money_flow_state(bars, 59),
+            )
+        ]
+        after_evaluation_hash = fingerprint_bars(bars)
+        bars[69] = replace(
+            bars[69],
+            open=100.0,
+            high=101.0,
+            low=99.0,
+            close=100.0,
+            volume=10000,
+        )
+        states_after = [
+            asdict(state)
+            for state in (
+                rsi_regime_state(bars, 59),
+                macd_momentum_state(bars, 59),
+                ppo_momentum_state(bars, 59),
+                obv_new_high_state(bars, 59),
+                money_flow_index_state(bars, 59),
+                chaikin_money_flow_state(bars, 59),
+            )
+        ]
+
+        self.assertEqual(states_before, states_after)
+        self.assertEqual(before_hash, after_evaluation_hash)
+        self.assertNotEqual(before_hash, fingerprint_bars(bars))
+
+    def test_redundant_momentum_checks_count_as_one_family(self) -> None:
+        bars = daily_bars(
+            "AAA",
+            [
+                10.0 + (offset % 3) * 0.1 + offset * 0.01
+                for offset in range(60)
+            ],
+            volume=100,
+        )
+
+        summary = evaluate_wave1_confluence(symbol="AAA", bars=bars)
+        momentum_indicators = [
+            state
+            for state in summary.indicator_states
+            if state.family == FAMILY_MOMENTUM
+        ]
+
+        self.assertEqual(3, len(momentum_indicators))
+        self.assertIn(FAMILY_MOMENTUM, summary.family_states)
+        self.assertLessEqual(summary.independent_total_families, 5)
+
+    def test_green_plus_yellow_family_is_confirming_but_red_conflict_is_not(self) -> None:
+        green = technical_confluence.indicator(
+            "green",
+            FAMILY_MOMENTUM,
+            GREEN,
+            "confirmation signal",
+            1.0,
+            "green",
+        )
+        yellow = technical_confluence.indicator(
+            "yellow",
+            FAMILY_MOMENTUM,
+            "YELLOW",
+            "confirmation signal",
+            0.0,
+            "yellow",
+        )
+        red = technical_confluence.indicator(
+            "red",
+            FAMILY_MOMENTUM,
+            RED,
+            "confirmation signal",
+            -1.0,
+            "red",
+        )
+
+        confirming = technical_confluence.summarize_signal_family(
+            FAMILY_MOMENTUM,
+            [green, yellow],
+        )
+        conflicted = technical_confluence.summarize_signal_family(
+            FAMILY_MOMENTUM,
+            [green, red],
+        )
+
+        self.assertEqual(GREEN, confirming.state)
+        self.assertEqual("YELLOW", conflicted.state)
 
     def test_relative_strength_outperforms_benchmark(self) -> None:
         stock = daily_bars("AAA", [10.0] * 20 + [12.0])
@@ -394,6 +624,13 @@ class TechnicalConfluenceTests(unittest.TestCase):
             {"adx_green_threshold": 10.0, "adx_yellow_threshold": 15.0},
             {"volume_confirmation_multiple": float("nan")},
             {"anchored_vwap_anchor_index": -1},
+            {"rsi_window": 0},
+            {"rsi_floor": 60.0, "rsi_reach": 60.0},
+            {"rsi_reach": 101.0},
+            {"macd_fast_window": 26, "macd_slow_window": 12},
+            {"obv_short_window": 50, "obv_long_window": 20},
+            {"mfi_window": 0},
+            {"cmf_window": 0},
         )
 
         for values in invalid_options:
