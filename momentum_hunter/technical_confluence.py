@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import json
-from math import isfinite
+from math import isfinite, sqrt
 import os
 from pathlib import Path
 import re
-from statistics import mean, median, pstdev, quantiles
+from statistics import mean, median, pstdev, quantiles, stdev
 from typing import Any
 from uuid import uuid4
 
@@ -31,8 +31,8 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v15"
-TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 7
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v16"
+TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 8
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
 )
@@ -54,6 +54,7 @@ TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE = (
 CONFLUENCE_STUDY_HORIZONS = (1, 2, 5, 10)
 CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS = 30
 CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS = 10
+CONFLUENCE_STUDY_CONFIDENCE_Z = 1.96
 STUDY_COMPLETE = "COMPLETE"
 STUDY_PARTIAL = "PARTIAL"
 TEMPORAL_STABILITY_RELEASED = "RELEASED"
@@ -1377,6 +1378,13 @@ def build_technical_confluence_study_payload(
                     benchmark_relative_temporal_stability["reason"]
                 )
             )
+    if aggregate_released or benchmark_relative_aggregate_released:
+        warnings.append(
+            "CONFIDENCE_INTERVALS_ARE_DESCRIPTIVE_NOT_EDGE_PROOF"
+        )
+        warnings.append(
+            "CONFIDENCE_INTERVALS_ARE_NOT_CLUSTER_ROBUST"
+        )
     return {
         "artifact_type": TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE,
         "schema_version": TECHNICAL_CONFLUENCE_SCHEMA_VERSION,
@@ -1409,6 +1417,17 @@ def build_technical_confluence_study_payload(
             "distribution_statistics": (
                 "median_and_inclusive_interquartile_range"
             ),
+            "uncertainty_intervals": (
+                "normal_mean_95pct_and_wilson_positive_rate_95pct"
+            ),
+            "uncertainty_confidence_level_pct": 95.0,
+            "uncertainty_normal_z": CONFLUENCE_STUDY_CONFIDENCE_Z,
+            "uncertainty_dispersion": (
+                "sample_standard_deviation"
+            ),
+            "uncertainty_intervals_are_descriptive": True,
+            "uncertainty_independence_assumption_proven": False,
+            "uncertainty_cluster_robust": False,
             "benchmark_relative_method": (
                 "symbol_return_minus_same_session_benchmark_return"
             ),
@@ -1946,6 +1965,7 @@ def _aggregate_confluence_study_groups(
         median_returns: dict[str, float] = {}
         return_interquartile_ranges: dict[str, dict[str, float]] = {}
         positive_rates: dict[str, float] = {}
+        return_uncertainty: dict[str, dict[str, Any]] = {}
         for horizon in CONFLUENCE_STUDY_HORIZONS:
             label = f"{horizon}d"
             values = [
@@ -1968,6 +1988,9 @@ def _aggregate_confluence_study_groups(
                 / len(values),
                 4,
             )
+            return_uncertainty[label] = (
+                _distribution_uncertainty(values)
+            )
         favorable = [
             float(row.max_favorable_excursion_pct)
             for row in bucket
@@ -1986,6 +2009,7 @@ def _aggregate_confluence_study_groups(
                 return_interquartile_ranges
             ),
             "positive_forward_return_rate_pct": positive_rates,
+            "forward_return_uncertainty": return_uncertainty,
             "mean_max_favorable_excursion_pct": (
                 round(mean(favorable), 4) if favorable else None
             ),
@@ -2025,6 +2049,7 @@ def _aggregate_benchmark_relative_study_groups(
         median_returns: dict[str, float] = {}
         return_interquartile_ranges: dict[str, dict[str, float]] = {}
         positive_rates: dict[str, float] = {}
+        return_uncertainty: dict[str, dict[str, Any]] = {}
         for horizon in CONFLUENCE_STUDY_HORIZONS:
             label = f"{horizon}d"
             values = [
@@ -2050,6 +2075,9 @@ def _aggregate_benchmark_relative_study_groups(
                 / len(values),
                 4,
             )
+            return_uncertainty[label] = (
+                _distribution_uncertainty(values)
+            )
         aggregates[bucket_name] = {
             "sample_count": len(bucket),
             "mean_excess_forward_returns_pct": mean_returns,
@@ -2058,8 +2086,73 @@ def _aggregate_benchmark_relative_study_groups(
                 return_interquartile_ranges
             ),
             "positive_excess_return_rate_pct": positive_rates,
+            "excess_forward_return_uncertainty": (
+                return_uncertainty
+            ),
         }
     return aggregates, withheld
+
+
+def _distribution_uncertainty(
+    values: list[float],
+) -> dict[str, Any]:
+    if not values:
+        raise TechnicalConfluenceError(
+            "Distribution uncertainty requires at least one value."
+        )
+    sample_count = len(values)
+    sample_deviation = stdev(values) if sample_count > 1 else 0.0
+    standard_error = sample_deviation / sqrt(sample_count)
+    mean_value = mean(values)
+    mean_margin = CONFLUENCE_STUDY_CONFIDENCE_Z * standard_error
+    mean_lower = mean_value - mean_margin
+    mean_upper = mean_value + mean_margin
+    if mean_lower > 0:
+        relation = "ABOVE_ZERO"
+    elif mean_upper < 0:
+        relation = "BELOW_ZERO"
+    else:
+        relation = "INCLUDES_ZERO"
+
+    positive_count = sum(value > 0 for value in values)
+    positive_rate = positive_count / sample_count
+    z_squared = CONFLUENCE_STUDY_CONFIDENCE_Z**2
+    denominator = 1.0 + z_squared / sample_count
+    center = (
+        positive_rate + z_squared / (2.0 * sample_count)
+    ) / denominator
+    margin = (
+        CONFLUENCE_STUDY_CONFIDENCE_Z
+        * sqrt(
+            (
+                positive_rate * (1.0 - positive_rate)
+                + z_squared / (4.0 * sample_count)
+            )
+            / sample_count
+        )
+        / denominator
+    )
+    return {
+        "sample_count": sample_count,
+        "sample_standard_deviation_pct": round(
+            sample_deviation,
+            4,
+        ),
+        "mean_standard_error_pct": round(standard_error, 4),
+        "mean_95pct_confidence_interval_pct": {
+            "lower": round(mean_lower, 4),
+            "upper": round(mean_upper, 4),
+        },
+        "mean_interval_relation_to_zero": relation,
+        "positive_count": positive_count,
+        "positive_rate_95pct_confidence_interval_pct": {
+            "lower": round(max(0.0, center - margin) * 100.0, 4),
+            "upper": round(min(1.0, center + margin) * 100.0, 4),
+        },
+        "method": (
+            "normal_mean_interval_and_wilson_positive_rate_interval"
+        ),
+    }
 
 
 def _inclusive_interquartile_range(
@@ -2531,6 +2624,13 @@ def _append_confluence_study_aggregate_table(
             f"{_display_iqr(aggregate['interquartile_max_adverse_excursion_pct'])} |"
         )
     lines.append("")
+    _append_uncertainty_table(
+        lines,
+        bucket_label=bucket_label,
+        aggregates=aggregates,
+        benchmark_relative=False,
+        heading_level=4,
+    )
 
 
 def _append_temporal_stability_table(
@@ -2619,6 +2719,12 @@ def _append_temporal_stability_table(
             f"{_display_iqr(period['interquartile_max_adverse_excursion_pct'])} |"
         )
     lines.append("")
+    _append_temporal_uncertainty_table(
+        lines,
+        temporal_stability=temporal_stability,
+        benchmark_relative=False,
+        heading_level=3,
+    )
 
 
 def _append_benchmark_relative_aggregate_table(
@@ -2678,6 +2784,13 @@ def _append_benchmark_relative_aggregate_table(
             f"{_display_pct(positive_rates['10d'])} |"
         )
     lines.append("")
+    _append_uncertainty_table(
+        lines,
+        bucket_label=bucket_label,
+        aggregates=aggregates,
+        benchmark_relative=True,
+        heading_level=4,
+    )
 
 
 def _append_benchmark_relative_temporal_stability_table(
@@ -2733,6 +2846,89 @@ def _append_benchmark_relative_temporal_stability_table(
             f"{_display_pct(median_returns['10d'])} | "
             f"{_display_iqr(return_ranges['10d'])} | "
             f"{_display_pct(positive_rates['10d'])} |"
+        )
+    lines.append("")
+    _append_temporal_uncertainty_table(
+        lines,
+        temporal_stability=temporal_stability,
+        benchmark_relative=True,
+        heading_level=4,
+    )
+
+
+def _append_uncertainty_table(
+    lines: list[str],
+    *,
+    bucket_label: str,
+    aggregates: dict[str, dict[str, Any]],
+    benchmark_relative: bool,
+    heading_level: int,
+) -> None:
+    heading = "#" * heading_level
+    lines.extend(
+        [
+            f"{heading} Statistical Uncertainty",
+            "",
+            (
+                f"| {bucket_label} | 10d Sample StdDev | "
+                "Mean 10d 95% Interval | Interval vs Zero | "
+                "Positive 10d 95% Interval |"
+            ),
+            "| --- | ---: | ---: | --- | ---: |",
+        ]
+    )
+    uncertainty_key = (
+        "excess_forward_return_uncertainty"
+        if benchmark_relative
+        else "forward_return_uncertainty"
+    )
+    for bucket_name, aggregate in sorted(aggregates.items()):
+        uncertainty = aggregate[uncertainty_key]["10d"]
+        lines.append(
+            f"| {bucket_name} | "
+            f"{_display_pct(uncertainty['sample_standard_deviation_pct'])} | "
+            f"{_display_interval(uncertainty['mean_95pct_confidence_interval_pct'])} | "
+            f"{uncertainty['mean_interval_relation_to_zero']} | "
+            f"{_display_interval(uncertainty['positive_rate_95pct_confidence_interval_pct'])} |"
+        )
+    lines.append("")
+
+
+def _append_temporal_uncertainty_table(
+    lines: list[str],
+    *,
+    temporal_stability: dict[str, Any],
+    benchmark_relative: bool,
+    heading_level: int,
+) -> None:
+    heading = "#" * heading_level
+    lines.extend(
+        [
+            f"{heading} Statistical Uncertainty",
+            "",
+            (
+                "| Period | Date Range | 10d Sample StdDev | "
+                "Mean 10d 95% Interval | Interval vs Zero | "
+                "Positive 10d 95% Interval |"
+            ),
+            "| --- | --- | ---: | ---: | --- | ---: |",
+        ]
+    )
+    uncertainty_key = (
+        "excess_forward_return_uncertainty"
+        if benchmark_relative
+        else "forward_return_uncertainty"
+    )
+    for period_name in ("EARLIER", "LATER"):
+        period = temporal_stability["periods"][period_name]
+        uncertainty = period[uncertainty_key]["10d"]
+        lines.append(
+            f"| {period_name} | {period['start_date']} to "
+            f"{period['end_date']} | "
+            f"{_display_pct(uncertainty['sample_standard_deviation_pct'])} | "
+            f"{_display_interval(uncertainty['mean_95pct_confidence_interval_pct'])} | "
+            f"{uncertainty['mean_interval_relation_to_zero']} | "
+            f"{_display_interval(uncertainty['positive_rate_95pct_confidence_interval_pct'])} |"
         )
     lines.append("")
 
@@ -5219,6 +5415,16 @@ def _display_iqr(value: Any) -> str:
     if p25 is None or p75 is None:
         return "N/A"
     return f"{p25:.4f}% to {p75:.4f}%"
+
+
+def _display_interval(value: Any) -> str:
+    if not isinstance(value, dict):
+        return "N/A"
+    lower = _finite_number_or_none(value.get("lower"))
+    upper = _finite_number_or_none(value.get("upper"))
+    if lower is None or upper is None:
+        return "N/A"
+    return f"{lower:.4f}% to {upper:.4f}%"
 
 
 def _validate_price_bars(

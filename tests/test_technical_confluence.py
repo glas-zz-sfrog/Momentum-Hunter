@@ -1603,7 +1603,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             bars=daily_bars("AAA", [10.0] * 5),
         )
 
-        self.assertEqual(7, summary.schema_version)
+        self.assertEqual(8, summary.schema_version)
         self.assertEqual(
             len(summary.indicator_states),
             summary.raw_total_checks,
@@ -1968,7 +1968,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             + row["raw_insufficient_data_checks"]
         )
 
-        self.assertEqual(7, payload["schema_version"])
+        self.assertEqual(8, payload["schema_version"])
         self.assertIn(
             "| Raw Green | Raw Yellow | Raw Red | Missing |",
             rendered,
@@ -2312,6 +2312,32 @@ class TechnicalConfluenceTests(unittest.TestCase):
             0.0,
             aggregate["positive_excess_return_rate_pct"]["10d"],
         )
+        uncertainty = aggregate[
+            "excess_forward_return_uncertainty"
+        ]["10d"]
+        self.assertEqual(
+            {
+                "lower": 0.0,
+                "upper": 0.0,
+            },
+            uncertainty["mean_95pct_confidence_interval_pct"],
+        )
+        self.assertEqual(
+            "INCLUDES_ZERO",
+            uncertainty["mean_interval_relation_to_zero"],
+        )
+        self.assertEqual(
+            0.0,
+            uncertainty[
+                "positive_rate_95pct_confidence_interval_pct"
+            ]["lower"],
+        )
+        self.assertGreater(
+            uncertainty[
+                "positive_rate_95pct_confidence_interval_pct"
+            ]["upper"],
+            0.0,
+        )
         self.assertEqual(
             30,
             next(
@@ -2343,6 +2369,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertIn("## Benchmark-Relative Outcomes", rendered)
         self.assertIn("Mean Excess 10d", rendered)
         self.assertIn("Positive Excess 10d", rendered)
+        self.assertIn("Positive 10d 95% Interval", rendered)
         self.assertIn("Benchmark Outcome", rendered)
 
     def test_study_confluence_uses_only_event_date_history(self) -> None:
@@ -2499,6 +2526,39 @@ class TechnicalConfluenceTests(unittest.TestCase):
             {"p25": 10.0, "p75": 10.0},
             aggregate["interquartile_forward_returns_pct"]["10d"],
         )
+        uncertainty = aggregate[
+            "forward_return_uncertainty"
+        ]["10d"]
+        self.assertGreater(
+            uncertainty["sample_standard_deviation_pct"],
+            0.0,
+        )
+        self.assertLess(
+            uncertainty["mean_95pct_confidence_interval_pct"][
+                "lower"
+            ],
+            0.0,
+        )
+        self.assertGreater(
+            uncertainty["mean_95pct_confidence_interval_pct"][
+                "upper"
+            ],
+            0.0,
+        )
+        self.assertEqual(
+            "INCLUDES_ZERO",
+            uncertainty["mean_interval_relation_to_zero"],
+        )
+        self.assertLess(
+            uncertainty[
+                "positive_rate_95pct_confidence_interval_pct"
+            ]["lower"],
+            100.0,
+        )
+        self.assertEqual(
+            "normal_mean_95pct_and_wilson_positive_rate_95pct",
+            payload["outcome_methodology"]["uncertainty_intervals"],
+        )
         self.assertEqual(
             43.0,
             aggregate["mean_max_favorable_excursion_pct"],
@@ -2580,8 +2640,23 @@ class TechnicalConfluenceTests(unittest.TestCase):
         )
         rendered = render_technical_confluence_study_markdown(payload)
         self.assertIn("#### Median And Interquartile Range", rendered)
+        self.assertIn("#### Statistical Uncertainty", rendered)
+        self.assertIn("Mean 10d 95% Interval", rendered)
         self.assertIn("10d IQR", rendered)
         self.assertIn("10.0000% to 10.0000%", rendered)
+        self.assertIn(
+            "CONFIDENCE_INTERVALS_ARE_DESCRIPTIVE_NOT_EDGE_PROOF",
+            rendered,
+        )
+        self.assertIn(
+            "CONFIDENCE_INTERVALS_ARE_NOT_CLUSTER_ROBUST",
+            rendered,
+        )
+        self.assertFalse(
+            payload["outcome_methodology"][
+                "uncertainty_cluster_robust"
+            ]
+        )
 
     def test_study_stratifies_outcomes_by_exact_confluence_counts(self) -> None:
         groups: dict[str, list[TechnicalPriceBar]] = {}
@@ -2947,9 +3022,34 @@ class TechnicalConfluenceTests(unittest.TestCase):
                 "mean_excess_forward_returns_pct"
             ]["10d"],
         )
+        self.assertEqual(
+            "ABOVE_ZERO",
+            temporal["periods"]["EARLIER"][
+                "forward_return_uncertainty"
+            ]["10d"]["mean_interval_relation_to_zero"],
+        )
+        self.assertEqual(
+            "BELOW_ZERO",
+            temporal["periods"]["LATER"][
+                "forward_return_uncertainty"
+            ]["10d"]["mean_interval_relation_to_zero"],
+        )
+        self.assertEqual(
+            "ABOVE_ZERO",
+            relative_temporal["periods"]["EARLIER"][
+                "excess_forward_return_uncertainty"
+            ]["10d"]["mean_interval_relation_to_zero"],
+        )
+        self.assertEqual(
+            "BELOW_ZERO",
+            relative_temporal["periods"]["LATER"][
+                "excess_forward_return_uncertainty"
+            ]["10d"]["mean_interval_relation_to_zero"],
+        )
         rendered = render_technical_confluence_study_markdown(payload)
         self.assertIn("## Temporal Stability", rendered)
         self.assertIn("### Median And Interquartile Range", rendered)
+        self.assertIn("### Statistical Uncertainty", rendered)
         self.assertIn(f"- Split after event date: {early_date}", rendered)
         self.assertIn(f"| EARLIER | {early_date} to {early_date} | 15 |", rendered)
         self.assertIn(f"| LATER | {late_date} to {late_date} | 15 |", rendered)
