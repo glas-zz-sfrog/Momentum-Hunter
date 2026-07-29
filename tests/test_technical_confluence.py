@@ -119,12 +119,27 @@ class TechnicalConfluenceTests(unittest.TestCase):
             daily_bar("AAA", 1, close=11.0, high=11.2, low=10.8, volume=200),
         ]
 
-        state = anchored_vwap_state(bars, 1)
+        state = anchored_vwap_state(
+            bars,
+            1,
+            options=TechnicalConfluenceOptions(
+                anchored_vwap_anchor_index=0
+            ),
+        )
 
         self.assertEqual(GREEN, state.state)
         self.assertLess(float(state.value or 0), 11.0)
         self.assertEqual("2026-01-01", state.details["anchor_timestamp"])
         self.assertIn("2026-01-01", state.reason)
+
+    def test_anchored_vwap_is_unavailable_without_explicit_anchor(self) -> None:
+        state = anchored_vwap_state(
+            daily_bars("AAA", [10.0, 11.0]),
+            1,
+        )
+
+        self.assertEqual("UNAVAILABLE", state.state)
+        self.assertIn("no anchor event", state.reason)
 
     def test_atr_extension_marks_caution_when_price_is_stretched(self) -> None:
         bars = [
@@ -337,7 +352,10 @@ class TechnicalConfluenceTests(unittest.TestCase):
         )
         benchmark = daily_bars("QQQ", [100.0] * 61)
         event = breakout_event("AAA", BREAKOUT_PRESENT)
-        options = TechnicalConfluenceOptions(atr_extension_multiple=10.0)
+        options = TechnicalConfluenceOptions(
+            atr_extension_multiple=10.0,
+            anchored_vwap_anchor_index=0,
+        )
 
         summary = evaluate_wave1_confluence(
             symbol="AAA",

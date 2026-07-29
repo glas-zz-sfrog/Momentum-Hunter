@@ -88,7 +88,7 @@ class TechnicalConfluenceOptions:
     relative_strength_window: int = 20
     atr_extension_window: int = 14
     atr_extension_multiple: float = 2.5
-    anchored_vwap_anchor_index: int = 0
+    anchored_vwap_anchor_index: int | None = None
 
     def __post_init__(self) -> None:
         windows = {
@@ -139,7 +139,7 @@ class TechnicalConfluenceOptions:
             raise TechnicalConfluenceError(
                 "ADX green threshold cannot be below the yellow threshold."
             )
-        if (
+        if self.anchored_vwap_anchor_index is not None and (
             isinstance(self.anchored_vwap_anchor_index, bool)
             or not isinstance(self.anchored_vwap_anchor_index, int)
             or self.anchored_vwap_anchor_index < 0
@@ -602,7 +602,17 @@ def anchored_vwap_state(
     options: TechnicalConfluenceOptions | None = None,
 ) -> IndicatorState:
     options = options or TechnicalConfluenceOptions()
-    value = anchored_vwap(bars, options.anchored_vwap_anchor_index, index)
+    anchor_index = options.anchored_vwap_anchor_index
+    if anchor_index is None:
+        return indicator(
+            "anchored_vwap",
+            FAMILY_TREND,
+            UNAVAILABLE,
+            "primary signal",
+            None,
+            "Anchored VWAP unavailable because no anchor event is defined.",
+        )
+    value = anchored_vwap(bars, anchor_index, index)
     if value is None:
         return indicator(
             "anchored_vwap",
@@ -614,9 +624,7 @@ def anchored_vwap_state(
         )
     ordered_bars = sorted_bars(bars)
     close = ordered_bars[index].close
-    anchor_timestamp = ordered_bars[
-        options.anchored_vwap_anchor_index
-    ].timestamp
+    anchor_timestamp = ordered_bars[anchor_index].timestamp
     state = GREEN if close > value else RED
     reason = (
         f"Close is above anchored VWAP from {anchor_timestamp}."
@@ -631,7 +639,7 @@ def anchored_vwap_state(
         round_value(value),
         reason,
         details={
-            "anchor_index": options.anchored_vwap_anchor_index,
+            "anchor_index": anchor_index,
             "anchor_timestamp": anchor_timestamp,
         },
     )
