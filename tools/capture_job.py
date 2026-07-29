@@ -74,6 +74,8 @@ def main() -> int:
                 and not shadow_handoff_is_complete(report_path)
             )
             if needs_handoff:
+                if not getattr(args, "shadow_opening_proof_only", False):
+                    ensure_shadow_engine_host_ready()
                 if report_path is None or not report_path.is_file():
                     raise RuntimeError(
                         "Shadow selector handoff requires the canonical JSON report."
@@ -571,6 +573,19 @@ def require_frozen_shadow_arguments(args: argparse.Namespace) -> None:
             + ", ".join(missing)
             + "."
         )
+
+
+def ensure_shadow_engine_host_ready() -> None:
+    from momentum_hunter.engine_host_client import ensure_engine_host
+    from momentum_hunter.shadow_market_validity import (
+        SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+    )
+
+    ensure_engine_host()
+    print(
+        "Engine Host runtime preflight: "
+        f"CURRENT / selector-arm schema {SHADOW_SELECTOR_ARM_SCHEMA_VERSION}"
+    )
 
 
 def shadow_error_is_retryable(

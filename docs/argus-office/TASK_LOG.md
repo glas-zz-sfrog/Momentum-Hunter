@@ -107,3 +107,14 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Live read-only SPY/IWM proof passed with quote age below two seconds and uncertainty-inclusive HTTPS clock skew of `1.596` seconds. A separate NTP diagnostic showed approximately `0.939` seconds offset; Windows Time service remains stopped because elevation is required.
 - This governance checkpoint precedes final bundle/task generation. After integration and backup, regenerate artifacts at the resulting canonical head and schedule one proof-only run for 2026-07-28 at 8:35 AM Central plus a finite 8:50 read-only audit.
 - Final closeout records that schedule before generating the artifacts so the resulting bundle and task definition bind to the synchronized commit containing this statement. The task is one-time, has no scheduler retry or arm switch, and must leave the sample at `0 / 30`.
+
+## 2026-07-29 - ARGUS-SHADOW-017 Opening Runtime Preflight Repair
+
+- The armed 8:35 AM CT v1 opening ran and captured real market/proof evidence, but exited `1` before selection because the still-running Engine Host had loaded selector-arm schema 2 on 2026-07-27 and rejected the valid schema-3 arm.
+- A second runner defect converted native stderr into a terminating PowerShell `NativeCommandError`, preventing the intended retry/result-finalization loop from recording attempts after the first failure.
+- Preserved v1 activation, policy, arm, capture, report, proof, task, and logs. Decision-cycle, Shadow state, handoff, and Trade 1 remain `NOT_CREATED`; v1 closes at `0 / 30` and may be studied only as failed-run/counterfactual evidence.
+- Added frozen host build/schema identity, guarded idle-stale-host replacement before armed ceremonies, active-cycle refusal, and robust native exit-code/stderr handling.
+- Moved the next prospective run to isolated `official-shadow-v2` paths. Tests prove v2 activation cannot alter preserved v1 files.
+- Ran a real disposable Windows Task Scheduler canary during full Python discovery. It exited `0`, started `2.345` seconds after schedule, and accessed no market data or runtime state while all 922 tests passed.
+- Verification: compileall and PowerShell parse pass; 185 focused tests pass; 923/923 Python tests pass; 216/216 .NET tests pass; isolated Release build passes with zero warnings/errors; protected-path review finds no scoring, readiness, alert, broker/order, credential, schema, or UI change.
+- Next: integrate and back up the repair, activate v2, prepare a final-head static bundle, install one armed FakeBroker-only opening for 2026-07-30 at 8:35 AM CT, and attach one finite read-only observer.

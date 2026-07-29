@@ -24,9 +24,14 @@ from momentum_hunter.shadow_opening import build_https_clock_skew_proof
 from momentum_hunter.shadow_trading import (
     DEFAULT_SHADOW_SAMPLE_VERSION,
     OFFICIAL_SHADOW_SAMPLE_VERSION,
+    SHADOW_DECISION_CYCLES_PATH,
     SHADOW_EVIDENCE_SCHEMA_VERSION,
     SHADOW_FILL_MODEL_VERSION,
     SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
+    SHADOW_SAMPLE_ACTIVATION_PATH,
+    SHADOW_SELECTION_POLICY_PATH,
+    SHADOW_SELECTOR_ARM_PATH,
+    SHADOW_STATE_PATH,
     ShadowExecutionPolicy,
     ShadowSampleActivationStore,
     ShadowStateError,
@@ -449,6 +454,53 @@ class ShadowSampleReadinessTests(unittest.TestCase):
             {path.name for path in self.root.iterdir()},
         )
 
+    def test_official_v2_namespace_preserves_failed_v1_evidence(self) -> None:
+        v1_files = {
+            self.root / "shadow-trading-state.json": b"v1-state\n",
+            self.root / "shadow-sample-activation.json": b"v1-activation\n",
+            self.root / "shadow-selection-policy.json": b"v1-policy\n",
+            self.root / "shadow-selector-arm.json": b"v1-arm\n",
+            self.root / "shadow-decision-cycles.json": b"v1-cycles\n",
+        }
+        for path, content in v1_files.items():
+            path.write_bytes(content)
+        v2_state_path = self.root / SHADOW_STATE_PATH.name
+        service = ShadowTradingService(
+            store=ShadowStateStore(v2_state_path),
+            policy=self.policy,
+        )
+
+        activation = self.activate(service)
+
+        self.assertEqual(
+            "official-shadow-v2",
+            activation.sample_metadata.sample_version,
+        )
+        self.assertFalse(v2_state_path.exists())
+        self.assertTrue(
+            v2_state_path.with_name(
+                f"{v2_state_path.stem}-sample-activation.json"
+            ).exists()
+        )
+        for path, content in v1_files.items():
+            self.assertEqual(content, path.read_bytes())
+        self.assertEqual(
+            {
+                "official-shadow-v2-state.json",
+                "official-shadow-v2-sample-activation.json",
+                "official-shadow-v2-selection-policy.json",
+                "official-shadow-v2-selector-arm.json",
+                "official-shadow-v2-decision-cycles.json",
+            },
+            {
+                SHADOW_STATE_PATH.name,
+                SHADOW_SAMPLE_ACTIVATION_PATH.name,
+                SHADOW_SELECTION_POLICY_PATH.name,
+                SHADOW_SELECTOR_ARM_PATH.name,
+                SHADOW_DECISION_CYCLES_PATH.name,
+            },
+        )
+
     def test_persisted_activation_loads_automatically_across_restart(self) -> None:
         service = self.service()
         expected = self.activate(
@@ -502,7 +554,7 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         with self.assertRaisesRegex(ShadowStateError, "different immutable definition"):
             service.activate_official_sample(
                 confirmation=SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
-                sample_version="official-shadow-v2",
+                sample_version="official-shadow-v3",
             )
         self.assertEqual(before, self.activation_path.read_bytes())
 

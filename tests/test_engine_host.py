@@ -34,9 +34,26 @@ from momentum_hunter.engine_host import (
     read_json,
 )
 from momentum_hunter.providers import ProviderUnavailableError
+from momentum_hunter.shadow_market_validity import (
+    SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+    runtime_build_hash,
+)
 
 
 class EngineHostRuntimeTests(unittest.TestCase):
+    def test_snapshot_freezes_loaded_runtime_and_selector_schema_identity(self) -> None:
+        runtime = EngineHostRuntime(
+            cycle_runner=lambda: SimpleNamespace(target_count=0),
+        )
+
+        identity = runtime.snapshot()["identity"]
+
+        self.assertEqual(runtime_build_hash(), identity["runtimeBuildHash"])
+        self.assertEqual(
+            SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+            identity["selectorArmSchemaVersion"],
+        )
+
     def test_host_lease_allows_one_owner_and_releases_cleanly(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             lock_path = Path(directory) / HOST_LOCK_FILENAME

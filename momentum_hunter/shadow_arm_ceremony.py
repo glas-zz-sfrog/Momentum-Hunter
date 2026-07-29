@@ -27,6 +27,7 @@ from momentum_hunter.shadow_proof_bundle import (
     verify_canonical_git_still_matches,
 )
 from momentum_hunter.shadow_trading import (
+    OFFICIAL_SHADOW_SAMPLE_VERSION,
     SHADOW_SELECTOR_ARM_CONFIRMATION,
     SHADOW_STATE_PATH,
     ShadowStateError,
@@ -185,7 +186,8 @@ def complete_shadow_selector_arm(
     checked_at = require_offset_aware(clock_value=active_clock())
 
     output_path = quote_proof_path or default_quote_proof_path(
-        checked_at=checked_at
+        checked_at=checked_at,
+        sample_version=active_service.sample_definition.sample_version,
     )
     if output_path.exists():
         raise ShadowArmCeremonyError(
@@ -252,12 +254,16 @@ def verify_shadow_opening_proof(
     )
 
 
-def default_quote_proof_path(*, checked_at: datetime) -> Path:
+def default_quote_proof_path(
+    *,
+    checked_at: datetime,
+    sample_version: str = OFFICIAL_SHADOW_SAMPLE_VERSION,
+) -> Path:
     stamp = checked_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     return (
         DATA_DIR
         / "reports"
-        / f"official-shadow-v1-live-quote-proof-{stamp}.json"
+        / f"{sample_version}-live-quote-proof-{stamp}.json"
     )
 
 

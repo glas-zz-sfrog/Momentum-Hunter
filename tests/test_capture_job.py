@@ -371,6 +371,10 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 "run_capture_with_result",
                 return_value=run_result,
             ),
+            patch.object(
+                capture_job,
+                "ensure_shadow_engine_host_ready",
+            ) as preflight,
             patch(
                 "momentum_hunter.engine_host_client.run_immediate_collection_cycle",
                 return_value=cycle,
@@ -392,6 +396,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             exit_code = capture_job.main()
 
         self.assertEqual(0, exit_code)
+        preflight.assert_called_once_with()
         run_cycle.assert_called_once_with(
             command_id=f"shadow-opening-capture-{report_hash}",
         )
@@ -475,6 +480,11 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 "run_capture_with_result",
                 return_value=run_result,
             ),
+            patch.object(
+                capture_job,
+                "ensure_shadow_engine_host_ready",
+                side_effect=lambda: calls.append("preflight"),
+            ),
             patch(
                 "momentum_hunter.shadow_arm_ceremony."
                 "complete_shadow_selector_arm",
@@ -502,7 +512,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             exit_code = capture_job.main()
 
         self.assertEqual(0, exit_code)
-        self.assertEqual(["arm", "cycle"], calls)
+        self.assertEqual(["preflight", "arm", "cycle"], calls)
         arm_selector.assert_called_once_with(
             bundle,
             report_path,
@@ -534,6 +544,10 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 "run_capture_with_result",
                 return_value=run_result,
             ),
+            patch.object(
+                capture_job,
+                "ensure_shadow_engine_host_ready",
+            ) as preflight,
             patch(
                 "momentum_hunter.shadow_arm_ceremony."
                 "verify_shadow_opening_proof",
@@ -563,6 +577,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             expected_scanner="Institutional Momentum",
         )
         arm_selector.assert_not_called()
+        preflight.assert_not_called()
         run_cycle.assert_not_called()
         write_receipt.assert_not_called()
 
@@ -601,6 +616,10 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 "shadow_handoff_is_complete",
                 return_value=False,
             ),
+            patch.object(
+                capture_job,
+                "ensure_shadow_engine_host_ready",
+            ) as preflight,
             patch(
                 "momentum_hunter.shadow_arm_ceremony."
                 "complete_shadow_selector_arm",
@@ -622,6 +641,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             exit_code = capture_job.main()
 
         self.assertEqual(0, exit_code)
+        preflight.assert_called_once_with()
         run_cycle.assert_called_once()
         write_receipt.assert_called_once()
 
@@ -1082,6 +1102,49 @@ class ShadowOpeningRunnerTests(unittest.TestCase):
             "no opening retry will occur",
             logs[0].read_text(encoding="utf-16"),
         )
+
+    def test_retryable_stderr_is_logged_without_bypassing_retries(self) -> None:
+        (self.tools_dir / "capture_job.py").write_text(
+            "\n".join(
+                (
+                    "import sys",
+                    "from pathlib import Path",
+                    "root = Path(__file__).resolve().parents[1]",
+                    "counter = root / 'opening-attempts.txt'",
+                    "attempt = int(counter.read_text() or '0') + 1 if counter.exists() else 1",
+                    "counter.write_text(str(attempt))",
+                    "if attempt <= 3:",
+                    "    print('temporary provider failure', file=sys.stderr)",
+                    "    raise SystemExit(75)",
+                    "raise SystemExit(0)",
+                    "",
+                )
+            ),
+            encoding="utf-8",
+        )
+        (self.tools_dir / "update_outcomes.py").write_text(
+            "raise SystemExit(0)\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_runner()
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(
+            "4",
+            (self.root / "opening-attempts.txt").read_text(encoding="utf-8"),
+        )
+        logs = tuple(
+            (self.root / "MomentumHunterData" / "logs").glob(
+                "capture-shadow-*.log"
+            )
+        )
+        self.assertEqual(1, len(logs))
+        text = logs[0].read_text(encoding="utf-16")
+        self.assertEqual(3, text.count("OpeningAttemptExitCode: 75"))
+        self.assertIn("OpeningAttemptExitCode: 0", text)
+        self.assertIn("ExitCode: 0", text)
+        self.assertNotIn("NativeCommandError", text)
 
     def run_runner(self) -> subprocess.CompletedProcess[str]:
         return subprocess.run(

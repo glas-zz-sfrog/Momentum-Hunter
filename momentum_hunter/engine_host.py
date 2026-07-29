@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 from momentum_hunter.config import DATA_DIR
+from momentum_hunter.shadow_market_validity import (
+    SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+    runtime_build_hash,
+)
 
 
 PROTOCOL_VERSION = "1.0"
@@ -135,6 +139,8 @@ class EngineHostEndpoint:
     address: str
     port: int
     access_token: str
+    runtime_build_hash: str = ""
+    selector_arm_schema_version: int = 0
 
     def to_wire(self) -> dict[str, Any]:
         return {
@@ -146,6 +152,8 @@ class EngineHostEndpoint:
             "address": self.address,
             "port": self.port,
             "accessToken": self.access_token,
+            "runtimeBuildHash": self.runtime_build_hash,
+            "selectorArmSchemaVersion": self.selector_arm_schema_version,
         }
 
 
@@ -263,9 +271,17 @@ class EngineHostRuntime:
         daily_workflow_snapshot_loader: Callable[[], dict[str, Any]] | None = None,
         candidate_story_loader: Callable[[str], dict[str, Any]] | None = None,
         research_maturity_loader: Callable[[], dict[str, Any]] | None = None,
+        runtime_build_identity: str | None = None,
+        selector_arm_schema_version: int | None = None,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
+        self.runtime_build_hash = runtime_build_identity or runtime_build_hash()
+        self.selector_arm_schema_version = (
+            SHADOW_SELECTOR_ARM_SCHEMA_VERSION
+            if selector_arm_schema_version is None
+            else int(selector_arm_schema_version)
+        )
         self.collection_interval_seconds = max(1, int(collection_interval_seconds))
         self._cycle_runner = cycle_runner or self._run_canonical_monitor_cycle
         self._external_monitor_running = external_monitor_running or self._is_legacy_monitor_runner_active
@@ -430,6 +446,8 @@ class EngineHostRuntime:
                     "processId": os.getpid(),
                     "startedAtUtc": self.started_at_utc,
                     "transport": "loopback-tcp",
+                    "runtimeBuildHash": self.runtime_build_hash,
+                    "selectorArmSchemaVersion": self.selector_arm_schema_version,
                 },
                 "health": {
                     "state": self._state,
@@ -1005,6 +1023,8 @@ def run_host(*, state_directory: Path, collection_interval_seconds: int = DEFAUL
             address=str(address),
             port=int(port),
             access_token=access_token,
+            runtime_build_hash=runtime.runtime_build_hash,
+            selector_arm_schema_version=runtime.selector_arm_schema_version,
         )
         atomic_write_json(descriptor, endpoint.to_wire())
         runtime.start_collection_loop()

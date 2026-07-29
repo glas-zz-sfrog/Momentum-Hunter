@@ -60,23 +60,25 @@ SHADOW_STRATEGY_CONTRACT_VERSION = "tradeplan-risk-shadow-v1"
 SHADOW_FILL_MODEL_VERSION = "prospective-fakebroker-v1"
 SHADOW_EVIDENCE_SCHEMA_VERSION = 1
 DEFAULT_SHADOW_SAMPLE_VERSION = "engineering-preflight-v1"
-OFFICIAL_SHADOW_SAMPLE_VERSION = "official-shadow-v1"
+OFFICIAL_SHADOW_SAMPLE_VERSION = "official-shadow-v2"
 SHADOW_SAMPLE_ACTIVATION_SCHEMA_VERSION = 1
 SHADOW_SAMPLE_ACTIVATION_CONFIRMATION = "START OFFICIAL SHADOW SAMPLE"
 SHADOW_SELECTION_POLICY_SCHEMA_VERSION = 1
 SHADOW_SELECTION_POLICY_VERSION = "official-shadow-deterministic-market-validity-v1"
-SHADOW_STATE_PATH = DATA_DIR / "shadow-trading" / "shadow-trading-state.json"
+SHADOW_STATE_PATH = (
+    DATA_DIR / "shadow-trading" / "official-shadow-v2-state.json"
+)
 SHADOW_SAMPLE_ACTIVATION_PATH = (
-    DATA_DIR / "shadow-trading" / "shadow-sample-activation.json"
+    DATA_DIR / "shadow-trading" / "official-shadow-v2-sample-activation.json"
 )
 SHADOW_SELECTION_POLICY_PATH = (
-    DATA_DIR / "shadow-trading" / "shadow-selection-policy.json"
+    DATA_DIR / "shadow-trading" / "official-shadow-v2-selection-policy.json"
 )
 SHADOW_SELECTOR_ARM_PATH = (
-    DATA_DIR / "shadow-trading" / "shadow-selector-arm.json"
+    DATA_DIR / "shadow-trading" / "official-shadow-v2-selector-arm.json"
 )
 SHADOW_DECISION_CYCLES_PATH = (
-    DATA_DIR / "shadow-trading" / "shadow-decision-cycles.json"
+    DATA_DIR / "shadow-trading" / "official-shadow-v2-decision-cycles.json"
 )
 SHADOW_REPORTS_DIR = DATA_DIR / "reports"
 MIN_MEANINGFUL_SAMPLE_SIZE = 30

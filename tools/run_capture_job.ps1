@@ -69,8 +69,17 @@ try {
     $exitCode = 1
     for ($attempt = 1; $attempt -le $maximumAttempts; $attempt++) {
         "OpeningAttempt: $attempt / $maximumAttempts" | Tee-Object -FilePath $logPath -Append
-        & $PythonExe @captureArguments 2>&1 | Tee-Object -FilePath $logPath -Append
-        $exitCode = $LASTEXITCODE
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            & $PythonExe @captureArguments 2>&1 |
+                ForEach-Object { $_.ToString() } |
+                Tee-Object -FilePath $logPath -Append
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
         "OpeningAttemptExitCode: $exitCode" | Tee-Object -FilePath $logPath -Append
         if ($exitCode -ne $retryableInfrastructureExit) {
             break
@@ -82,8 +91,17 @@ try {
     }
     if ($exitCode -eq 0) {
         "Updating outcomes independently: $(Get-Date -Format o)" | Tee-Object -FilePath $outcomeLogPath
-        & $PythonExe $outcomePath 2>&1 | Tee-Object -FilePath $outcomeLogPath -Append
-        $outcomeExitCode = $LASTEXITCODE
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            & $PythonExe $outcomePath 2>&1 |
+                ForEach-Object { $_.ToString() } |
+                Tee-Object -FilePath $outcomeLogPath -Append
+            $outcomeExitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
         @{
             schemaVersion = 1
             session = $Session

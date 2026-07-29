@@ -15,17 +15,23 @@ from typing import Any, Callable, Mapping
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.engine_host import (
     COMMAND_RUN_CYCLE,
+    COMMAND_SHUTDOWN,
     COMMAND_SNAPSHOT,
     ENDPOINT_FILENAME,
     MAX_REQUEST_BYTES,
     PROTOCOL_VERSION,
     process_is_running,
 )
+from momentum_hunter.shadow_market_validity import (
+    SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+    runtime_build_hash,
+)
 
 
 DEFAULT_CONNECT_TIMEOUT_SECONDS = 5.0
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 120.0
 DEFAULT_START_TIMEOUT_SECONDS = 20.0
+DEFAULT_STALE_HOST_SHUTDOWN_TIMEOUT_SECONDS = 10.0
 
 
 class EngineHostClientError(RuntimeError):
@@ -58,6 +64,8 @@ class EngineHostClientEndpoint:
     address: str
     port: int
     access_token: str
+    runtime_build_hash: str = ""
+    selector_arm_schema_version: int = 0
 
 
 HostLauncher = Callable[[Path], None]
@@ -91,6 +99,10 @@ def read_engine_host_endpoint(
             address=str(payload.get("address", "")),
             port=int(payload.get("port", 0)),
             access_token=str(payload.get("accessToken", "")),
+            runtime_build_hash=str(payload.get("runtimeBuildHash", "")),
+            selector_arm_schema_version=int(
+                payload.get("selectorArmSchemaVersion", 0)
+            ),
         )
     except (TypeError, ValueError):
         return None
@@ -175,6 +187,9 @@ def ensure_engine_host(
     process_checker: ProcessChecker = process_is_running,
     start_timeout_seconds: float = DEFAULT_START_TIMEOUT_SECONDS,
     poll_interval_seconds: float = 0.1,
+    stale_host_shutdown_timeout_seconds: float = (
+        DEFAULT_STALE_HOST_SHUTDOWN_TIMEOUT_SECONDS
+    ),
 ) -> EngineHostClientEndpoint:
     state_directory = state_directory or default_state_directory()
     endpoint = read_engine_host_endpoint(
@@ -188,10 +203,23 @@ def ensure_engine_host(
                 COMMAND_SNAPSHOT,
                 timeout_seconds=DEFAULT_CONNECT_TIMEOUT_SECONDS,
             )
-            if snapshot.accepted:
+            if snapshot.accepted and engine_host_identity_matches(snapshot):
                 return endpoint
+            if snapshot.accepted:
+                replace_stale_engine_host(
+                    endpoint,
+                    snapshot=snapshot,
+                    process_checker=process_checker,
+                    shutdown_timeout_seconds=stale_host_shutdown_timeout_seconds,
+                    poll_interval_seconds=poll_interval_seconds,
+                )
+            else:
+                raise EngineHostRetryableError(
+                    "The running Python Engine Host rejected the runtime-identity "
+                    "preflight; a second host will not be launched."
+                )
         except EngineHostClientError:
-            pass
+            raise
 
     (launcher or launch_engine_host)(state_directory)
     deadline = time.monotonic() + max(0.1, start_timeout_seconds)
@@ -208,13 +236,58 @@ def ensure_engine_host(
                     COMMAND_SNAPSHOT,
                     timeout_seconds=DEFAULT_CONNECT_TIMEOUT_SECONDS,
                 )
-                if snapshot.accepted:
+                if snapshot.accepted and engine_host_identity_matches(snapshot):
                     return last_endpoint
             except EngineHostClientError:
                 pass
         time.sleep(max(0.01, poll_interval_seconds))
     raise EngineHostRetryableError(
         "The local Python Engine Host did not become ready in time."
+    )
+
+
+def engine_host_identity_matches(result: EngineHostClientResult) -> bool:
+    identity = result.snapshot.get("identity")
+    if not isinstance(identity, Mapping):
+        return False
+    return (
+        identity.get("runtimeBuildHash") == runtime_build_hash()
+        and identity.get("selectorArmSchemaVersion")
+        == SHADOW_SELECTOR_ARM_SCHEMA_VERSION
+    )
+
+
+def replace_stale_engine_host(
+    endpoint: EngineHostClientEndpoint,
+    *,
+    snapshot: EngineHostClientResult,
+    process_checker: ProcessChecker = process_is_running,
+    shutdown_timeout_seconds: float = DEFAULT_STALE_HOST_SHUTDOWN_TIMEOUT_SECONDS,
+    poll_interval_seconds: float = 0.1,
+) -> None:
+    collection = snapshot.snapshot.get("collection")
+    if isinstance(collection, Mapping) and collection.get("cycleInProgress") is True:
+        raise EngineHostRetryableError(
+            "The stale Python Engine Host is finishing a collection cycle; "
+            "replacement is deferred."
+        )
+    stopped = send_engine_host_command(
+        endpoint,
+        COMMAND_SHUTDOWN,
+        timeout_seconds=DEFAULT_CONNECT_TIMEOUT_SECONDS,
+        command_id=f"replace-stale-engine-host-{runtime_build_hash()}",
+    )
+    if not stopped.accepted or stopped.code != "SHUTDOWN_REQUESTED":
+        raise EngineHostRetryableError(
+            "The stale Python Engine Host did not accept a guarded shutdown."
+        )
+    deadline = time.monotonic() + max(0.1, shutdown_timeout_seconds)
+    while time.monotonic() < deadline:
+        if not process_checker(endpoint.process_id):
+            return
+        time.sleep(max(0.01, poll_interval_seconds))
+    raise EngineHostRetryableError(
+        "The stale Python Engine Host did not stop before the replacement timeout."
     )
 
 

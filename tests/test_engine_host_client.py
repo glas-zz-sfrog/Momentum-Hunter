@@ -7,8 +7,11 @@ import threading
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 from momentum_hunter.engine_host import (
+    COMMAND_SHUTDOWN,
+    COMMAND_SNAPSHOT,
     ENDPOINT_FILENAME,
     EngineHostEndpoint,
     EngineHostRuntime,
@@ -17,6 +20,7 @@ from momentum_hunter.engine_host import (
 )
 from momentum_hunter.engine_host_client import (
     EngineHostClientError,
+    EngineHostClientResult,
     EngineHostRetryableError,
     EngineHostTerminalError,
     ensure_engine_host,
@@ -24,6 +28,10 @@ from momentum_hunter.engine_host_client import (
     run_immediate_collection_cycle,
 )
 from momentum_hunter.providers import ProviderUnavailableError
+from momentum_hunter.shadow_market_validity import (
+    SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+    runtime_build_hash,
+)
 
 
 class EngineHostClientTests(unittest.TestCase):
@@ -148,6 +156,143 @@ class EngineHostClientTests(unittest.TestCase):
 
         self.assertTrue(issubclass(EngineHostRetryableError, EngineHostClientError))
 
+    def test_authenticated_idle_stale_host_is_replaced_before_use(self) -> None:
+        stale_pid = 101
+        current_pid = 202
+        alive = {stale_pid: True, current_pid: True}
+        calls: list[tuple[int, str]] = []
+        self.write_descriptor(
+            process_id=stale_pid,
+            runtime_build_identity="0" * 64,
+            selector_arm_schema_version=2,
+        )
+
+        stale_snapshot = host_result(
+            runtime_build_identity="0" * 64,
+            selector_arm_schema_version=2,
+        )
+        current_snapshot = host_result(
+            runtime_build_identity=runtime_build_hash(),
+            selector_arm_schema_version=SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+        )
+
+        def sender(endpoint, command, **_kwargs):
+            calls.append((endpoint.process_id, command))
+            if endpoint.process_id == stale_pid and command == COMMAND_SNAPSHOT:
+                return stale_snapshot
+            if endpoint.process_id == stale_pid and command == COMMAND_SHUTDOWN:
+                alive[stale_pid] = False
+                return EngineHostClientResult(
+                    accepted=True,
+                    code="SHUTDOWN_REQUESTED",
+                    summary="stopping",
+                    snapshot=stale_snapshot.snapshot,
+                    payload=None,
+                )
+            if endpoint.process_id == current_pid and command == COMMAND_SNAPSHOT:
+                return current_snapshot
+            raise AssertionError((endpoint.process_id, command))
+
+        def launcher(_path: Path) -> None:
+            self.write_descriptor(
+                process_id=current_pid,
+                runtime_build_identity=runtime_build_hash(),
+                selector_arm_schema_version=(
+                    SHADOW_SELECTOR_ARM_SCHEMA_VERSION
+                ),
+            )
+
+        with patch(
+            "momentum_hunter.engine_host_client.send_engine_host_command",
+            side_effect=sender,
+        ):
+            endpoint = ensure_engine_host(
+                state_directory=self.root,
+                launcher=launcher,
+                process_checker=lambda process_id: alive.get(process_id, False),
+                start_timeout_seconds=1,
+                poll_interval_seconds=0.01,
+            )
+
+        self.assertEqual(current_pid, endpoint.process_id)
+        self.assertEqual(
+            [
+                (stale_pid, COMMAND_SNAPSHOT),
+                (stale_pid, COMMAND_SHUTDOWN),
+                (current_pid, COMMAND_SNAPSHOT),
+            ],
+            calls,
+        )
+
+    def test_stale_host_in_active_cycle_is_not_stopped(self) -> None:
+        stale_pid = 303
+        self.write_descriptor(
+            process_id=stale_pid,
+            runtime_build_identity="0" * 64,
+            selector_arm_schema_version=2,
+        )
+        stale_snapshot = host_result(
+            runtime_build_identity="0" * 64,
+            selector_arm_schema_version=2,
+            cycle_in_progress=True,
+        )
+        calls: list[str] = []
+
+        def sender(_endpoint, command, **_kwargs):
+            calls.append(command)
+            return stale_snapshot
+
+        with (
+            patch(
+                "momentum_hunter.engine_host_client.send_engine_host_command",
+                side_effect=sender,
+            ),
+            self.assertRaisesRegex(
+                EngineHostRetryableError,
+                "finishing a collection cycle",
+            ),
+        ):
+            ensure_engine_host(
+                state_directory=self.root,
+                launcher=lambda _path: self.fail("launcher must not run"),
+                process_checker=lambda process_id: process_id == stale_pid,
+                start_timeout_seconds=0.1,
+                poll_interval_seconds=0.01,
+            )
+
+        self.assertEqual([COMMAND_SNAPSHOT], calls)
+
+    def test_rejected_identity_snapshot_never_launches_second_host(self) -> None:
+        host_pid = 404
+        self.write_descriptor(
+            process_id=host_pid,
+            runtime_build_identity=runtime_build_hash(),
+            selector_arm_schema_version=SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+        )
+        rejected = EngineHostClientResult(
+            accepted=False,
+            code="HOST_STOPPING",
+            summary="stopping",
+            snapshot={},
+            payload=None,
+        )
+
+        with (
+            patch(
+                "momentum_hunter.engine_host_client.send_engine_host_command",
+                return_value=rejected,
+            ),
+            self.assertRaisesRegex(
+                EngineHostRetryableError,
+                "second host will not be launched",
+            ),
+        ):
+            ensure_engine_host(
+                state_directory=self.root,
+                launcher=lambda _path: self.fail("launcher must not run"),
+                process_checker=lambda process_id: process_id == host_pid,
+            )
+
     def _record_cycle(self):
         self.cycles.append("cycle")
         return type("Report", (), {"target_count": 3})()
@@ -175,6 +320,50 @@ class EngineHostClientTests(unittest.TestCase):
             json.dumps(endpoint.to_wire()),
             encoding="utf-8",
         )
+
+    def write_descriptor(
+        self,
+        *,
+        process_id: int,
+        runtime_build_identity: str,
+        selector_arm_schema_version: int,
+    ) -> None:
+        endpoint = EngineHostEndpoint(
+            protocol_version=PROTOCOL_VERSION,
+            host_instance_id=f"host-{process_id}",
+            process_id=process_id,
+            started_at_utc="2026-07-29T13:00:00Z",
+            address="127.0.0.1",
+            port=32000 + process_id,
+            access_token="local-test-token",
+            runtime_build_hash=runtime_build_identity,
+            selector_arm_schema_version=selector_arm_schema_version,
+        )
+        (self.root / ENDPOINT_FILENAME).write_text(
+            json.dumps(endpoint.to_wire()),
+            encoding="utf-8",
+        )
+
+
+def host_result(
+    *,
+    runtime_build_identity: str,
+    selector_arm_schema_version: int,
+    cycle_in_progress: bool = False,
+) -> EngineHostClientResult:
+    return EngineHostClientResult(
+        accepted=True,
+        code="SNAPSHOT",
+        summary="snapshot",
+        snapshot={
+            "identity": {
+                "runtimeBuildHash": runtime_build_identity,
+                "selectorArmSchemaVersion": selector_arm_schema_version,
+            },
+            "collection": {"cycleInProgress": cycle_in_progress},
+        },
+        payload=None,
+    )
 
 
 if __name__ == "__main__":

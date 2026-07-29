@@ -62,7 +62,7 @@ if (-not $SelectorProofBundle) {
     if ($LASTEXITCODE -ne 0 -or -not $head) {
         throw "Cannot derive the canonical Git HEAD for the Shadow proof bundle."
     }
-    $SelectorProofBundle = Join-Path $ProjectRoot "MomentumHunterData\data\reports\official-shadow-v1-selector-proof-bundle-$head"
+    $SelectorProofBundle = Join-Path $ProjectRoot "MomentumHunterData\data\reports\official-shadow-v2-selector-proof-bundle-$head"
 }
 if (-not (Test-Path -LiteralPath $SelectorProofBundle -PathType Container)) {
     throw "Shadow selector proof bundle is missing: $SelectorProofBundle"

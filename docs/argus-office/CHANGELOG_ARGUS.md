@@ -1,6 +1,10 @@
 # Argus Changelog
 
 ## Unreleased
+- Repaired the failed 2026-07-29 armed Shadow opening without rewriting its evidence. The real v1 capture/report/quote/clock/bundle/arm/policy artifacts remain preserved, but no retrospective Trade 1 is fabricated because the stale Engine Host rejected the arm before decision-cycle or handoff creation.
+- Added frozen Engine Host runtime-build and selector-schema identity, guarded graceful replacement of authenticated idle stale hosts, active-cycle replacement refusal, armed-job runtime preflight, and PowerShell stderr handling that preserves finite one-plus-three retries.
+- Isolated the next prospective sample as `official-shadow-v2` with distinct state, activation, policy, arm, and decision-cycle paths. Regression proof preserves every synthetic v1 byte while activating v2.
+- Proved Windows Task Scheduler independence with a disposable non-market canary that fired successfully within `2.345` seconds while all 922 Python tests ran. Final verification after the narrow self-review fix passes 185 focused tests, all 923 Python tests, all 216 .NET tests, compile/parse checks, and a zero-warning isolated Release build.
 - Hardened SHADOW-016 scheduling for the first armed FakeBroker-only opening: armed installation now requires one future Shadow-only task at exactly 8:35 AM Central, explicit enablement, no late start, no Task Scheduler retry, and a fresh final-head proof bundle. The default daily installer remains unarmed and disabled for Shadow.
 - Added a nonmutating scheduler plan mode and executable negative coverage for recurring, broad, disabled, past, late, and wrong-time arm shapes. PowerShell parsing, 3 focused scheduling tests, 130 affected Shadow/Engine Host tests, all 917 Python tests, and all 216 .NET tests pass.
 - Prepared and scheduled SHADOW-014 for a one-time unarmed opening proof: preserved the first disabled-task heartbeat as a safe `FAILED` audit, revalidated the sole `2573` cash binding through the guarded read-only refresh path, proved live SPY/IWM quote and HTTPS clock behavior, and bound the 2026-07-28 task/bundle/heartbeat to the final synchronized governance commit.
