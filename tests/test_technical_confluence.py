@@ -10,7 +10,13 @@ import unittest
 from datetime import datetime, timedelta
 
 from momentum_hunter import technical_confluence
-from momentum_hunter.technical_breakouts import BREAKOUT_FAILED, BREAKOUT_PRESENT, BreakoutEvent, TechnicalPriceBar
+from momentum_hunter.technical_breakouts import (
+    BREAKOUT_FAILED,
+    BREAKOUT_PRESENT,
+    BreakoutEvent,
+    TechnicalPriceBar,
+    study_breakout_events,
+)
 from momentum_hunter.technical_confluence import (
     BLOCKED,
     CAUTION,
@@ -25,13 +31,16 @@ from momentum_hunter.technical_confluence import (
     anchored_vwap_state,
     atr_extension_risk_state,
     build_technical_confluence_report_payload,
+    build_technical_confluence_study_payload,
     ema_stack_state,
     evaluate_wave1_confluence,
     relative_strength_state,
     render_technical_confluence_markdown,
+    render_technical_confluence_study_markdown,
     squeeze_release_state,
     volume_confirmation_state,
     write_technical_confluence_reports,
+    write_technical_confluence_study_reports,
 )
 
 
@@ -635,10 +644,292 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
         self.assertEqual(second["generated_at"], persisted["generated_at"])
 
+    def test_study_groups_same_day_events_and_measures_close_outcomes(self) -> None:
+        bars = daily_bars("AAA", [10.0] * 61 + [10.5, 11.0, 10.8, 11.2, 11.5, 11.4, 11.6, 11.7, 11.8, 12.0])
+        bars[63] = replace(bars[63], low=9.8)
+        event_date = bars[60].timestamp
+        events = [
+            breakout_event(
+                "AAA",
+                BREAKOUT_PRESENT,
+                event_id="AAA-donchian",
+                event_type="donchian_20_day_breakout",
+                event_timestamp=event_date,
+            ),
+            breakout_event(
+                "AAA",
+                BREAKOUT_PRESENT,
+                event_id="AAA-bollinger",
+                event_type="bollinger_upper_band_breakout",
+                event_timestamp=event_date,
+            ),
+        ]
+        studies = study_breakout_events(
+            events,
+            daily_bars_by_symbol={"AAA": bars},
+        )
+
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol={"AAA": bars},
+            breakout_events=events,
+            breakout_studies=studies,
+            source_paths={"daily_ohlc_path": "daily.json"},
+        )
+
+        self.assertEqual(1, payload["summary"]["unique_symbol_date_rows"])
+        row = payload["rows"][0]
+        self.assertEqual(2, row["event_count"])
+        self.assertEqual(["bollinger_upper_band_breakout", "donchian_20_day_breakout"], row["event_types"])
+        self.assertEqual(5.0, row["forward_returns_pct"]["1d"])
+        self.assertEqual(10.0, row["forward_returns_pct"]["2d"])
+        self.assertEqual(15.0, row["forward_returns_pct"]["5d"])
+        self.assertEqual(20.0, row["forward_returns_pct"]["10d"])
+        self.assertEqual(20.0, row["max_favorable_excursion_pct"])
+        self.assertEqual(-2.0, row["max_adverse_excursion_pct"])
+        self.assertTrue(
+            all(
+                context["failed_back_below_breakout_level"]
+                for context in row["breakout_contexts"]
+            )
+        )
+        self.assertFalse(payload["summary"]["aggregate_outcomes_released"])
+        self.assertEqual(29, payload["summary"]["completed_rows_to_minimum"])
+
+    def test_study_confluence_uses_only_event_date_history(self) -> None:
+        historical = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.05 for offset in range(61)],
+            volume=200,
+        )
+        event = breakout_event(
+            "AAA",
+            BREAKOUT_PRESENT,
+            event_id="AAA-event",
+            event_timestamp=historical[-1].timestamp,
+        )
+        rising = historical + daily_bars_from_index(
+            "AAA",
+            61,
+            [13.5 + offset * 0.2 for offset in range(10)],
+        )
+        falling = historical + daily_bars_from_index(
+            "AAA",
+            61,
+            [12.5 - offset * 0.2 for offset in range(10)],
+        )
+
+        rising_payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol={"AAA": rising},
+            breakout_events=[event],
+            breakout_studies=[],
+            source_paths={},
+        )
+        falling_payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol={"AAA": falling},
+            breakout_events=[event],
+            breakout_studies=[],
+            source_paths={},
+        )
+
+        self.assertEqual(
+            rising_payload["rows"][0]["confluence_summary"],
+            falling_payload["rows"][0]["confluence_summary"],
+        )
+        self.assertNotEqual(
+            rising_payload["rows"][0]["forward_returns_pct"],
+            falling_payload["rows"][0]["forward_returns_pct"],
+        )
+
+    def test_study_requires_consistent_hold_failure_evidence(self) -> None:
+        bars = daily_bars(
+            "AAA",
+            [10.0] * 61 + [10.1 + step * 0.1 for step in range(10)],
+        )
+        event = breakout_event(
+            "AAA",
+            BREAKOUT_PRESENT,
+            event_id="AAA-event",
+            event_timestamp=bars[60].timestamp,
+        )
+        study = study_breakout_events(
+            [event],
+            daily_bars_by_symbol={"AAA": bars},
+        )[0]
+        invalid_study = replace(
+            study,
+            held_above_breakout_level=True,
+            failed_back_below_breakout_level=True,
+        )
+
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol={"AAA": bars},
+            breakout_events=[event],
+            breakout_studies=[invalid_study],
+            source_paths={},
+        )
+
+        self.assertEqual("PARTIAL", payload["rows"][0]["outcome_status"])
+        self.assertEqual(
+            "BREAKOUT_STUDY_EVIDENCE_INVALID",
+            payload["rows"][0]["breakout_contexts"][0]["reason"],
+        )
+        self.assertEqual(0, payload["summary"]["complete_rows"])
+
+    def test_study_releases_only_sufficient_conclusion_buckets(self) -> None:
+        groups: dict[str, list[TechnicalPriceBar]] = {}
+        events: list[BreakoutEvent] = []
+        for offset in range(30):
+            symbol = f"S{offset:02d}"
+            groups[symbol] = daily_bars(
+                symbol,
+                [10.0] * 61 + [10.1 + step * 0.1 for step in range(10)],
+                volume=200,
+            )
+            events.append(
+                breakout_event(
+                    symbol,
+                    BREAKOUT_PRESENT,
+                    event_id=f"{symbol}-event",
+                    event_timestamp=groups[symbol][60].timestamp,
+                )
+            )
+        studies = study_breakout_events(
+            events,
+            daily_bars_by_symbol=groups,
+        )
+
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol=groups,
+            breakout_events=events,
+            breakout_studies=studies,
+            source_paths={},
+        )
+
+        self.assertEqual(30, payload["summary"]["complete_rows"])
+        self.assertTrue(payload["summary"]["aggregate_outcomes_released"])
+        self.assertEqual(1, len(payload["aggregate_outcomes_by_conclusion"]))
+        aggregate = next(
+            iter(payload["aggregate_outcomes_by_conclusion"].values())
+        )
+        self.assertEqual(30, aggregate["sample_count"])
+        self.assertEqual(100.0, aggregate["positive_forward_return_rate_pct"]["10d"])
+
+    def test_study_excludes_duplicate_event_ids_and_marks_missing_bars(self) -> None:
+        duplicate = breakout_event(
+            "AAA",
+            BREAKOUT_PRESENT,
+            event_id="duplicate",
+            event_timestamp="2026-03-01",
+        )
+        missing = breakout_event(
+            "BBB",
+            BREAKOUT_PRESENT,
+            event_id="missing-bars",
+            event_timestamp="2026-03-01",
+        )
+
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol={},
+            breakout_events=[duplicate, replace(duplicate), missing],
+            breakout_studies=[],
+            source_paths={},
+        )
+
+        self.assertEqual([], payload["rows"])
+        self.assertIn("DUPLICATE_BREAKOUT_EVENT_IDS:1", payload["warnings"])
+        self.assertEqual(
+            [
+                {
+                    "symbol": "BBB",
+                    "event_date": "2026-03-01",
+                    "reason": "DAILY_BARS_UNAVAILABLE",
+                }
+            ],
+            payload["unavailable_event_groups"],
+        )
+
+    def test_study_markdown_is_research_only_and_avoids_execution_language(self) -> None:
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol={},
+            breakout_events=[],
+            breakout_studies=[],
+            source_paths={},
+        )
+
+        rendered = render_technical_confluence_study_markdown(payload)
+        lowered = rendered.lower()
+
+        self.assertIn("research-only evidence", lowered)
+        self.assertNotIn("buy", lowered)
+        self.assertNotIn("sell", lowered)
+        self.assertNotIn("guaranteed edge", lowered)
+        self.assertNotIn("strategy should change", lowered)
+
+    def test_study_writer_refuses_user_authored_target(self) -> None:
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol={},
+            breakout_events=[],
+            breakout_studies=[],
+            source_paths={},
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            output_dir = Path(temporary)
+            target = output_dir / "technical-confluence-study-latest.json"
+            original = "Steven's research notes\n"
+            target.write_text(original, encoding="utf-8")
+
+            with self.assertRaises(TechnicalConfluenceError):
+                write_technical_confluence_study_reports(
+                    payload,
+                    output_dir=output_dir,
+                )
+
+            self.assertEqual(original, target.read_text(encoding="utf-8"))
+
+    def test_study_writer_rejects_wrong_payload_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(TechnicalConfluenceError):
+                write_technical_confluence_study_reports(
+                    {
+                        "artifact_type": "NOT_A_STUDY",
+                        "research_only": True,
+                        "generated_at": "2026-04-01T16:00:00-05:00",
+                    },
+                    output_dir=Path(temporary),
+                )
+
 
 def daily_bars(symbol: str, closes: list[float], *, volume: int = 100) -> list[TechnicalPriceBar]:
     return [
         daily_bar(symbol, offset, close=close, high=close, low=close, volume=volume)
+        for offset, close in enumerate(closes)
+    ]
+
+
+def daily_bars_from_index(
+    symbol: str,
+    start_index: int,
+    closes: list[float],
+    *,
+    volume: int = 100,
+) -> list[TechnicalPriceBar]:
+    return [
+        daily_bar(
+            symbol,
+            start_index + offset,
+            close=close,
+            high=close,
+            low=close,
+            volume=volume,
+        )
         for offset, close in enumerate(closes)
     ]
 
@@ -669,13 +960,15 @@ def breakout_event(
     symbol: str,
     status: str,
     *,
+    event_id: str | None = None,
+    event_type: str = "donchian_20_day_breakout",
     event_timestamp: str = "2026-03-01",
 ) -> BreakoutEvent:
     return BreakoutEvent(
-        event_id=f"{symbol}-{status}",
+        event_id=event_id or f"{symbol}-{status}",
         symbol=symbol,
         event_timestamp=event_timestamp,
-        event_type="donchian_20_day_breakout",
+        event_type=event_type,
         timeframe="daily",
         trigger_price=10.0,
         reference_label="prior_20_day_high",

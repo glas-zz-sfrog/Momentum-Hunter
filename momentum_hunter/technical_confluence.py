@@ -17,6 +17,7 @@ from momentum_hunter.technical_breakouts import (
     BREAKOUT_PRESENT,
     INSUFFICIENT_DATA,
     BreakoutEvent,
+    BreakoutStudyResult,
     TechnicalPriceBar,
     matching_daily_index,
     parse_datetime,
@@ -40,6 +41,20 @@ TECHNICAL_CONFLUENCE_LATEST_JSON = (
 TECHNICAL_CONFLUENCE_LATEST_MD = (
     DATA_DIR / "reports" / "technical-confluence-latest.md"
 )
+TECHNICAL_CONFLUENCE_STUDY_LATEST_JSON = (
+    DATA_DIR / "reports" / "technical-confluence-study-latest.json"
+)
+TECHNICAL_CONFLUENCE_STUDY_LATEST_MD = (
+    DATA_DIR / "reports" / "technical-confluence-study-latest.md"
+)
+TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE = (
+    "TECHNICAL_CONFLUENCE_EVENT_STUDY"
+)
+CONFLUENCE_STUDY_HORIZONS = (1, 2, 5, 10)
+CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS = 30
+CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS = 10
+STUDY_COMPLETE = "COMPLETE"
+STUDY_PARTIAL = "PARTIAL"
 _REPORT_ROW_LIMIT = 200
 _SYMBOL_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,15}$")
 
@@ -188,6 +203,44 @@ class TechnicalConfluenceSummary:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class TechnicalConfluenceStudyRow:
+    symbol: str
+    event_date: str
+    event_ids: tuple[str, ...]
+    event_types: tuple[str, ...]
+    event_count: int
+    start_price: float
+    forward_returns_pct: dict[str, float | None]
+    max_favorable_excursion_pct: float | None
+    max_adverse_excursion_pct: float | None
+    outcome_status: str
+    confluence_summary: TechnicalConfluenceSummary
+    breakout_contexts: tuple[dict[str, Any], ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "event_date": self.event_date,
+            "event_ids": list(self.event_ids),
+            "event_types": list(self.event_types),
+            "event_count": self.event_count,
+            "start_price": self.start_price,
+            "forward_returns_pct": dict(self.forward_returns_pct),
+            "max_favorable_excursion_pct": (
+                self.max_favorable_excursion_pct
+            ),
+            "max_adverse_excursion_pct": (
+                self.max_adverse_excursion_pct
+            ),
+            "outcome_status": self.outcome_status,
+            "confluence_summary": self.confluence_summary.to_dict(),
+            "breakout_contexts": [
+                dict(context) for context in self.breakout_contexts
+            ],
+        }
 
 
 def evaluate_wave1_confluence(
@@ -413,16 +466,529 @@ def build_technical_confluence_report_payload(
     }
 
 
+def build_technical_confluence_study_payload(
+    *,
+    generated_at: str,
+    daily_bars_by_symbol: dict[str, list[TechnicalPriceBar]],
+    breakout_events: list[BreakoutEvent],
+    breakout_studies: list[BreakoutStudyResult],
+    source_paths: dict[str, str | None],
+    benchmark_symbol: str = "QQQ",
+    options: TechnicalConfluenceOptions | None = None,
+) -> dict[str, Any]:
+    if parse_datetime(generated_at) is None:
+        raise TechnicalConfluenceError(
+            "Confluence study timestamp must be valid ISO 8601."
+        )
+    options = options or TechnicalConfluenceOptions()
+    normalized_benchmark = str(benchmark_symbol).upper().strip()
+    if not _SYMBOL_PATTERN.fullmatch(normalized_benchmark):
+        raise TechnicalConfluenceError(
+            "Benchmark symbol must use the bounded market-symbol format."
+        )
+
+    groups: dict[str, list[TechnicalPriceBar]] = {}
+    duplicate_groups: set[str] = set()
+    warnings: list[str] = []
+    for raw_symbol, bars in daily_bars_by_symbol.items():
+        symbol = str(raw_symbol).upper().strip()
+        if not _SYMBOL_PATTERN.fullmatch(symbol):
+            warnings.append("INVALID_DAILY_BAR_GROUP_NAME")
+            continue
+        if symbol in groups:
+            duplicate_groups.add(symbol)
+            continue
+        groups[symbol] = list(bars)
+    for symbol in duplicate_groups:
+        groups.pop(symbol, None)
+        warnings.append(f"DUPLICATE_DAILY_BAR_GROUP:{symbol}")
+
+    benchmark_bars = groups.get(normalized_benchmark, [])
+    if benchmark_bars:
+        try:
+            _validate_price_bars(
+                benchmark_bars,
+                expected_symbol=normalized_benchmark,
+                source_label="benchmark",
+            )
+        except TechnicalConfluenceError:
+            benchmark_bars = []
+            warnings.append(
+                f"BENCHMARK_BAR_INPUT_REJECTED:{normalized_benchmark}"
+            )
+    else:
+        warnings.append(
+            f"BENCHMARK_BARS_UNAVAILABLE:{normalized_benchmark}"
+        )
+
+    eligible_events: list[BreakoutEvent] = []
+    events_by_id: dict[str, list[BreakoutEvent]] = {}
+    ignored_event_count = 0
+    for event in breakout_events:
+        symbol = str(event.symbol).upper().strip()
+        event_time = parse_datetime(event.event_timestamp)
+        if (
+            event.status != BREAKOUT_PRESENT
+            or event.timeframe != "daily"
+            or event_time is None
+            or not _SYMBOL_PATTERN.fullmatch(symbol)
+            or symbol == normalized_benchmark
+        ):
+            ignored_event_count += 1
+            continue
+        events_by_id.setdefault(event.event_id, []).append(event)
+    duplicate_event_ids = {
+        event_id
+        for event_id, matching_events in events_by_id.items()
+        if len(matching_events) != 1
+    }
+    if duplicate_event_ids:
+        warnings.append(
+            f"DUPLICATE_BREAKOUT_EVENT_IDS:{len(duplicate_event_ids)}"
+        )
+    for event_id, matching_events in events_by_id.items():
+        if event_id not in duplicate_event_ids:
+            eligible_events.append(matching_events[0])
+
+    event_groups: dict[tuple[str, str], list[BreakoutEvent]] = {}
+    for event in eligible_events:
+        event_time = parse_datetime(event.event_timestamp)
+        assert event_time is not None
+        event_groups.setdefault(
+            (str(event.symbol).upper().strip(), event_time.date().isoformat()),
+            [],
+        ).append(event)
+
+    studies_by_event_id: dict[str, BreakoutStudyResult] = {}
+    duplicate_study_ids: set[str] = set()
+    for study in breakout_studies:
+        if study.event_id in studies_by_event_id:
+            duplicate_study_ids.add(study.event_id)
+            continue
+        studies_by_event_id[study.event_id] = study
+    for event_id in duplicate_study_ids:
+        studies_by_event_id.pop(event_id, None)
+    if duplicate_study_ids:
+        warnings.append(
+            f"DUPLICATE_BREAKOUT_STUDY_IDS:{len(duplicate_study_ids)}"
+        )
+    if ignored_event_count:
+        warnings.append(
+            f"NON_DAILY_OR_NON_PRESENT_EVENTS_IGNORED:{ignored_event_count}"
+        )
+
+    rows: list[TechnicalConfluenceStudyRow] = []
+    unavailable_groups: list[dict[str, str]] = []
+    for (symbol, event_date), grouped_events in sorted(
+        event_groups.items()
+    ):
+        bars = groups.get(symbol, [])
+        if not bars:
+            unavailable_groups.append(
+                {
+                    "symbol": symbol,
+                    "event_date": event_date,
+                    "reason": "DAILY_BARS_UNAVAILABLE",
+                }
+            )
+            continue
+        try:
+            _validate_price_bars(
+                bars,
+                expected_symbol=symbol,
+                source_label="study symbol",
+            )
+        except TechnicalConfluenceError:
+            unavailable_groups.append(
+                {
+                    "symbol": symbol,
+                    "event_date": event_date,
+                    "reason": "DAILY_BAR_INPUT_REJECTED",
+                }
+            )
+            continue
+        ordered_bars = sorted_bars(bars)
+        event_time = parse_datetime(event_date)
+        event_index = (
+            matching_daily_index(ordered_bars, event_time)
+            if event_time is not None
+            else None
+        )
+        if event_index is None:
+            unavailable_groups.append(
+                {
+                    "symbol": symbol,
+                    "event_date": event_date,
+                    "reason": "EVENT_DATE_BAR_UNAVAILABLE",
+                }
+            )
+            continue
+
+        historical_bars = ordered_bars[: event_index + 1]
+        historical_benchmark: list[TechnicalPriceBar] = []
+        if benchmark_bars and event_time is not None:
+            ordered_benchmark = sorted_bars(benchmark_bars)
+            benchmark_index = matching_daily_index(
+                ordered_benchmark,
+                event_time,
+            )
+            if benchmark_index is not None:
+                historical_benchmark = ordered_benchmark[: benchmark_index + 1]
+        try:
+            confluence = evaluate_wave1_confluence(
+                symbol=symbol,
+                bars=historical_bars,
+                benchmark_bars=historical_benchmark,
+                breakout_events=breakout_events,
+                options=options,
+            )
+        except TechnicalConfluenceError:
+            unavailable_groups.append(
+                {
+                    "symbol": symbol,
+                    "event_date": event_date,
+                    "reason": "CONFLUENCE_INPUT_REJECTED",
+                }
+            )
+            continue
+        start_price = ordered_bars[event_index].close
+        returns: dict[str, float | None] = {}
+        for horizon in CONFLUENCE_STUDY_HORIZONS:
+            target_index = event_index + horizon
+            returns[f"{horizon}d"] = (
+                return_pct(
+                    start_price,
+                    ordered_bars[target_index].close,
+                )
+                if target_index < len(ordered_bars)
+                else None
+            )
+        future_bars = ordered_bars[
+            event_index + 1 : min(
+                len(ordered_bars),
+                event_index + max(CONFLUENCE_STUDY_HORIZONS) + 1,
+            )
+        ]
+        max_favorable = (
+            round(
+                max(
+                    return_pct(start_price, bar.high)
+                    for bar in future_bars
+                ),
+                4,
+            )
+            if future_bars
+            else None
+        )
+        max_adverse = (
+            round(
+                min(
+                    return_pct(start_price, bar.low)
+                    for bar in future_bars
+                ),
+                4,
+            )
+            if future_bars
+            else None
+        )
+        sorted_events = sorted(
+            grouped_events,
+            key=lambda event: (event.event_type, event.event_id),
+        )
+        contexts = tuple(
+            _breakout_study_context(
+                event,
+                studies_by_event_id.get(event.event_id),
+            )
+            for event in sorted_events
+        )
+        available_returns = sum(
+            value is not None for value in returns.values()
+        )
+        complete_breakout_context = all(
+            context["reason"] is None
+            and context["held_above_breakout_level"] is not None
+            and context["failed_back_below_breakout_level"] is not None
+            for context in contexts
+        )
+        outcome_status = (
+            STUDY_COMPLETE
+            if (
+                available_returns == len(CONFLUENCE_STUDY_HORIZONS)
+                and complete_breakout_context
+            )
+            else STUDY_PARTIAL
+            if available_returns or contexts
+            else INSUFFICIENT_DATA
+        )
+        rows.append(
+            TechnicalConfluenceStudyRow(
+                symbol=symbol,
+                event_date=event_date,
+                event_ids=tuple(event.event_id for event in sorted_events),
+                event_types=tuple(
+                    event.event_type for event in sorted_events
+                ),
+                event_count=len(sorted_events),
+                start_price=start_price,
+                forward_returns_pct=returns,
+                max_favorable_excursion_pct=max_favorable,
+                max_adverse_excursion_pct=max_adverse,
+                outcome_status=outcome_status,
+                confluence_summary=confluence,
+                breakout_contexts=contexts,
+            )
+        )
+
+    complete_rows = [
+        row for row in rows if row.outcome_status == STUDY_COMPLETE
+    ]
+    if len(complete_rows) >= CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS:
+        aggregate_outcomes, withheld_conclusions = (
+            _aggregate_confluence_study_rows(complete_rows)
+        )
+    else:
+        aggregate_outcomes = {}
+        withheld_conclusions = sorted(
+            {
+                row.confluence_summary.conclusion
+                for row in complete_rows
+            }
+        )
+    aggregate_released = bool(aggregate_outcomes)
+    if (
+        len(complete_rows)
+        < CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+    ):
+        warnings.append(
+            "AGGREGATE_OUTCOMES_WITHHELD_MINIMUM_SAMPLE"
+        )
+    elif withheld_conclusions:
+        warnings.append(
+            "SMALL_CONCLUSION_BUCKETS_WITHHELD:"
+            + ",".join(withheld_conclusions)
+        )
+    return {
+        "artifact_type": TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE,
+        "schema_version": TECHNICAL_CONFLUENCE_SCHEMA_VERSION,
+        "engine_version": TECHNICAL_CONFLUENCE_ENGINE_VERSION,
+        "generated_at": generated_at,
+        "research_only": True,
+        "trade_recommendation": False,
+        "production_score_changed": False,
+        "alert_logic_changed": False,
+        "broker_action_allowed": False,
+        "benchmark_symbol": normalized_benchmark,
+        "source_paths": dict(sorted(source_paths.items())),
+        "minimum_completed_rows": (
+            CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+        ),
+        "minimum_conclusion_bucket_rows": (
+            CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS
+        ),
+        "outcome_methodology": {
+            "sample_identity": "one_per_symbol_event_date",
+            "return_baseline": "event_date_close",
+            "forward_sessions": list(CONFLUENCE_STUDY_HORIZONS),
+            "complete_requires_breakout_hold_failure_evidence": True,
+        },
+        "summary": {
+            "unique_symbol_date_rows": len(rows),
+            "complete_rows": len(complete_rows),
+            "partial_rows": sum(
+                row.outcome_status == STUDY_PARTIAL for row in rows
+            ),
+            "insufficient_rows": sum(
+                row.outcome_status == INSUFFICIENT_DATA for row in rows
+            ),
+            "unavailable_event_groups": len(unavailable_groups),
+            "completed_rows_to_minimum": max(
+                0,
+                CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+                - len(complete_rows),
+            ),
+            "aggregate_outcomes_released": aggregate_released,
+        },
+        "rows": [row.to_dict() for row in rows],
+        "unavailable_event_groups": unavailable_groups,
+        "aggregate_outcomes_by_conclusion": aggregate_outcomes,
+        "withheld_conclusions": withheld_conclusions,
+        "warnings": warnings,
+    }
+
+
+def _breakout_study_context(
+    event: BreakoutEvent,
+    study: BreakoutStudyResult | None,
+) -> dict[str, Any]:
+    base = {
+        "event_id": event.event_id,
+        "event_type": event.event_type,
+        "trigger_price": _finite_number_or_none(event.trigger_price),
+        "volume_confirmed": event.volume_confirmed,
+    }
+    if study is None:
+        return {
+            **base,
+            "study_status": INSUFFICIENT_DATA,
+            "data_sufficiency": INSUFFICIENT_DATA,
+            "held_above_breakout_level": None,
+            "failed_back_below_breakout_level": None,
+            "became_extended": None,
+            "forward_returns_pct": {},
+            "reason": "BREAKOUT_STUDY_NOT_AVAILABLE",
+        }
+    event_time = parse_datetime(event.event_timestamp)
+    study_time = parse_datetime(study.event_timestamp)
+    identity_matches = (
+        study.symbol.upper().strip() == event.symbol.upper().strip()
+        and study.event_type == event.event_type
+        and study.timeframe == event.timeframe
+        and event_time is not None
+        and study_time is not None
+        and event_time.date() == study_time.date()
+        and _same_optional_number(study.trigger_price, event.trigger_price)
+    )
+    if not identity_matches:
+        return {
+            **base,
+            "study_status": INSUFFICIENT_DATA,
+            "data_sufficiency": INSUFFICIENT_DATA,
+            "held_above_breakout_level": None,
+            "failed_back_below_breakout_level": None,
+            "became_extended": None,
+            "forward_returns_pct": {},
+            "reason": "BREAKOUT_STUDY_IDENTITY_MISMATCH",
+        }
+    evidence_is_consistent = (
+        isinstance(study.held_above_breakout_level, bool)
+        and isinstance(study.failed_back_below_breakout_level, bool)
+        and study.held_above_breakout_level
+        is not study.failed_back_below_breakout_level
+        and (
+            (
+                study.failed_back_below_breakout_level
+                and study.status == BREAKOUT_FAILED
+            )
+            or (
+                study.held_above_breakout_level
+                and study.status == BREAKOUT_PRESENT
+            )
+        )
+        and study.data_sufficiency != INSUFFICIENT_DATA
+    )
+    if not evidence_is_consistent:
+        return {
+            **base,
+            "study_status": INSUFFICIENT_DATA,
+            "data_sufficiency": INSUFFICIENT_DATA,
+            "held_above_breakout_level": None,
+            "failed_back_below_breakout_level": None,
+            "became_extended": None,
+            "forward_returns_pct": {},
+            "reason": "BREAKOUT_STUDY_EVIDENCE_INVALID",
+        }
+    return {
+        **base,
+        "study_status": study.status,
+        "data_sufficiency": study.data_sufficiency,
+        "held_above_breakout_level": study.held_above_breakout_level,
+        "failed_back_below_breakout_level": (
+            study.failed_back_below_breakout_level
+        ),
+        "became_extended": study.became_extended,
+        "forward_returns_pct": {
+            str(horizon): _finite_number_or_none(value)
+            for horizon, value in sorted(study.forward_returns_pct.items())
+        },
+        "reason": None,
+    }
+
+
+def _aggregate_confluence_study_rows(
+    rows: list[TechnicalConfluenceStudyRow],
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    grouped: dict[str, list[TechnicalConfluenceStudyRow]] = {}
+    for row in rows:
+        grouped.setdefault(
+            row.confluence_summary.conclusion,
+            [],
+        ).append(row)
+
+    aggregates: dict[str, dict[str, Any]] = {}
+    withheld: list[str] = []
+    for conclusion, bucket in sorted(grouped.items()):
+        if len(bucket) < CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS:
+            withheld.append(conclusion)
+            continue
+        mean_returns: dict[str, float] = {}
+        positive_rates: dict[str, float] = {}
+        for horizon in CONFLUENCE_STUDY_HORIZONS:
+            label = f"{horizon}d"
+            values = [
+                float(row.forward_returns_pct[label])
+                for row in bucket
+                if row.forward_returns_pct[label] is not None
+            ]
+            if len(values) != len(bucket):
+                raise TechnicalConfluenceError(
+                    "Complete confluence rows require every study horizon."
+                )
+            mean_returns[label] = round(mean(values), 4)
+            positive_rates[label] = round(
+                100.0
+                * sum(value > 0 for value in values)
+                / len(values),
+                4,
+            )
+        favorable = [
+            float(row.max_favorable_excursion_pct)
+            for row in bucket
+            if row.max_favorable_excursion_pct is not None
+        ]
+        adverse = [
+            float(row.max_adverse_excursion_pct)
+            for row in bucket
+            if row.max_adverse_excursion_pct is not None
+        ]
+        aggregates[conclusion] = {
+            "sample_count": len(bucket),
+            "mean_forward_returns_pct": mean_returns,
+            "positive_forward_return_rate_pct": positive_rates,
+            "mean_max_favorable_excursion_pct": (
+                round(mean(favorable), 4) if favorable else None
+            ),
+            "mean_max_adverse_excursion_pct": (
+                round(mean(adverse), 4) if adverse else None
+            ),
+        }
+    return aggregates, withheld
+
+
 def write_technical_confluence_reports(
     payload: dict[str, Any],
     *,
     output_dir: Path,
 ) -> dict[str, Path]:
+    _validate_output_payload(
+        payload,
+        artifact_type=TECHNICAL_CONFLUENCE_ARTIFACT_TYPE,
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / TECHNICAL_CONFLUENCE_LATEST_JSON.name
     markdown_path = output_dir / TECHNICAL_CONFLUENCE_LATEST_MD.name
-    _validate_report_target(json_path, format_name="json")
-    _validate_report_target(markdown_path, format_name="markdown")
+    _validate_report_target(
+        json_path,
+        format_name="json",
+        artifact_type=TECHNICAL_CONFLUENCE_ARTIFACT_TYPE,
+        markdown_heading="# Technical Confluence Research - ",
+    )
+    _validate_report_target(
+        markdown_path,
+        format_name="markdown",
+        artifact_type=TECHNICAL_CONFLUENCE_ARTIFACT_TYPE,
+        markdown_heading="# Technical Confluence Research - ",
+    )
     _write_report_text(
         json_path,
         json.dumps(
@@ -437,6 +1003,48 @@ def write_technical_confluence_reports(
     _write_report_text(
         markdown_path,
         render_technical_confluence_markdown(payload),
+    )
+    return {"json": json_path, "markdown": markdown_path}
+
+
+def write_technical_confluence_study_reports(
+    payload: dict[str, Any],
+    *,
+    output_dir: Path,
+) -> dict[str, Path]:
+    _validate_output_payload(
+        payload,
+        artifact_type=TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE,
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / TECHNICAL_CONFLUENCE_STUDY_LATEST_JSON.name
+    markdown_path = output_dir / TECHNICAL_CONFLUENCE_STUDY_LATEST_MD.name
+    _validate_report_target(
+        json_path,
+        format_name="json",
+        artifact_type=TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE,
+        markdown_heading="# Technical Confluence Event Study - ",
+    )
+    _validate_report_target(
+        markdown_path,
+        format_name="markdown",
+        artifact_type=TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE,
+        markdown_heading="# Technical Confluence Event Study - ",
+    )
+    _write_report_text(
+        json_path,
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+        + "\n",
+    )
+    _write_report_text(
+        markdown_path,
+        render_technical_confluence_study_markdown(payload),
     )
     return {"json": json_path, "markdown": markdown_path}
 
@@ -500,6 +1108,130 @@ def render_technical_confluence_markdown(
     if unavailable:
         lines.extend(
             f"- {item['symbol']}: {item['reason']}"
+            for item in unavailable
+        )
+    else:
+        lines.append("- None.")
+    lines.extend(["", "## Warnings", ""])
+    if payload["warnings"]:
+        lines.extend(f"- {warning}" for warning in payload["warnings"])
+    else:
+        lines.append("- None.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_technical_confluence_study_markdown(
+    payload: dict[str, Any],
+) -> str:
+    summary = payload["summary"]
+    lines = [
+        f"# Technical Confluence Event Study - {payload['generated_at']}",
+        "",
+        (
+            "Research-only evidence. This report measures historical outcomes "
+            "and does not change production scoring, alerts, readiness, trade "
+            "planning, UI behavior, or broker behavior."
+        ),
+        "",
+        "## Sample Status",
+        "",
+        (
+            "- Unique symbol/date samples: "
+            f"{summary['unique_symbol_date_rows']}"
+        ),
+        f"- Complete samples: {summary['complete_rows']}",
+        f"- Partial samples: {summary['partial_rows']}",
+        f"- Insufficient samples: {summary['insufficient_rows']}",
+        (
+            "- Samples still required for aggregate release: "
+            f"{summary['completed_rows_to_minimum']}"
+        ),
+        (
+            "- Aggregate outcomes released: "
+            f"{summary['aggregate_outcomes_released']}"
+        ),
+        "",
+        "## Event Samples",
+        "",
+    ]
+    rows = payload["rows"][:_REPORT_ROW_LIMIT]
+    if rows:
+        lines.extend(
+            [
+                (
+                    "| Symbol | Date | Conclusion | Green Families | "
+                    "Events | Outcome | 1d | 2d | 5d | 10d | MFE | MAE |"
+                ),
+                (
+                    "| --- | --- | --- | ---: | ---: | --- | ---: | "
+                    "---: | ---: | ---: | ---: | ---: |"
+                ),
+            ]
+        )
+        for row in rows:
+            confluence = row["confluence_summary"]
+            returns = row["forward_returns_pct"]
+            lines.append(
+                f"| {row['symbol']} | {row['event_date']} | "
+                f"{confluence['conclusion']} | "
+                f"{confluence['independent_green_families']} / "
+                f"{confluence['independent_total_families']} | "
+                f"{row['event_count']} | {row['outcome_status']} | "
+                f"{_display_pct(returns['1d'])} | "
+                f"{_display_pct(returns['2d'])} | "
+                f"{_display_pct(returns['5d'])} | "
+                f"{_display_pct(returns['10d'])} | "
+                f"{_display_pct(row['max_favorable_excursion_pct'])} | "
+                f"{_display_pct(row['max_adverse_excursion_pct'])} |"
+            )
+    else:
+        lines.append("- No eligible daily breakout samples were available.")
+
+    lines.extend(["", "## Aggregate Outcomes", ""])
+    aggregates = payload["aggregate_outcomes_by_conclusion"]
+    if not aggregates:
+        lines.append(
+            "- Withheld until the minimum complete sample requirements pass."
+        )
+    else:
+        lines.extend(
+            [
+                (
+                    "| Conclusion | Samples | Mean 1d | Mean 2d | "
+                    "Mean 5d | Mean 10d | Positive 10d | Mean MFE | "
+                    "Mean MAE |"
+                ),
+                (
+                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | "
+                    "---: | ---: |"
+                ),
+            ]
+        )
+        for conclusion, aggregate in sorted(aggregates.items()):
+            mean_returns = aggregate["mean_forward_returns_pct"]
+            positive_rates = aggregate[
+                "positive_forward_return_rate_pct"
+            ]
+            lines.append(
+                f"| {conclusion} | {aggregate['sample_count']} | "
+                f"{_display_pct(mean_returns['1d'])} | "
+                f"{_display_pct(mean_returns['2d'])} | "
+                f"{_display_pct(mean_returns['5d'])} | "
+                f"{_display_pct(mean_returns['10d'])} | "
+                f"{_display_pct(positive_rates['10d'])} | "
+                f"{_display_pct(aggregate['mean_max_favorable_excursion_pct'])} | "
+                f"{_display_pct(aggregate['mean_max_adverse_excursion_pct'])} |"
+            )
+
+    lines.extend(["", "## Unavailable Event Groups", ""])
+    unavailable = payload["unavailable_event_groups"][:_REPORT_ROW_LIMIT]
+    if unavailable:
+        lines.extend(
+            (
+                f"- {item['symbol']} {item['event_date']}: "
+                f"{item['reason']}"
+            )
             for item in unavailable
         )
     else:
@@ -1189,6 +1921,29 @@ def round_value(value: float | None) -> float | None:
     return None if value is None else round(value, 4)
 
 
+def _finite_number_or_none(value: Any) -> float | None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not isfinite(float(value))
+    ):
+        return None
+    return round(float(value), 4)
+
+
+def _same_optional_number(left: Any, right: Any) -> bool:
+    left_number = _finite_number_or_none(left)
+    right_number = _finite_number_or_none(right)
+    if left_number is None or right_number is None:
+        return left_number is None and right_number is None
+    return left_number == right_number
+
+
+def _display_pct(value: Any) -> str:
+    number = _finite_number_or_none(value)
+    return "N/A" if number is None else f"{number:.4f}%"
+
+
 def _validate_price_bars(
     bars: list[TechnicalPriceBar],
     *,
@@ -1285,7 +2040,13 @@ def _write_report_text(path: Path, content: str) -> None:
             temporary.unlink()
 
 
-def _validate_report_target(path: Path, *, format_name: str) -> None:
+def _validate_report_target(
+    path: Path,
+    *,
+    format_name: str,
+    artifact_type: str,
+    markdown_heading: str,
+) -> None:
     if path.is_symlink():
         raise TechnicalConfluenceError(
             "Confluence report target cannot be a symbolic link."
@@ -1312,14 +2073,34 @@ def _validate_report_target(path: Path, *, format_name: str) -> None:
         if (
             not isinstance(payload, dict)
             or payload.get("artifact_type")
-            != TECHNICAL_CONFLUENCE_ARTIFACT_TYPE
+            != artifact_type
             or payload.get("research_only") is not True
         ):
             raise TechnicalConfluenceError(
                 "Existing JSON target is not a generated confluence report."
             )
         return
-    if not current.startswith("# Technical Confluence Research - "):
+    if format_name != "markdown":
+        raise TechnicalConfluenceError(
+            "Confluence report format must be JSON or Markdown."
+        )
+    if not current.startswith(markdown_heading):
         raise TechnicalConfluenceError(
             "Existing Markdown target is not a generated confluence report."
+        )
+
+
+def _validate_output_payload(
+    payload: dict[str, Any],
+    *,
+    artifact_type: str,
+) -> None:
+    if (
+        not isinstance(payload, dict)
+        or payload.get("artifact_type") != artifact_type
+        or payload.get("research_only") is not True
+        or parse_datetime(str(payload.get("generated_at", ""))) is None
+    ):
+        raise TechnicalConfluenceError(
+            "Confluence output payload identity is invalid."
         )

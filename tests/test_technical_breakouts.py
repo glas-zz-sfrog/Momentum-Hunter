@@ -246,6 +246,8 @@ class TechnicalBreakoutTests(unittest.TestCase):
         self.assertTrue(paths["study_markdown"].exists())
         self.assertTrue(paths["confluence_json"].exists())
         self.assertTrue(paths["confluence_markdown"].exists())
+        self.assertTrue(paths["confluence_study_json"].exists())
+        self.assertTrue(paths["confluence_study_markdown"].exists())
 
     def test_report_builder_consumes_normalized_daily_ohlc(self) -> None:
         daily_path = self.root / "daily-ohlc-bars.json"
@@ -279,6 +281,15 @@ class TechnicalBreakoutTests(unittest.TestCase):
         self.assertEqual(1, confluence["summary"]["symbols_evaluated"])
         self.assertEqual("AAA", confluence["symbols"][0]["symbol"])
         self.assertFalse(confluence["trade_recommendation"])
+        confluence_study = json.loads(
+            paths["confluence_study_json"].read_text(encoding="utf-8")
+        )
+        self.assertTrue(confluence_study["research_only"])
+        self.assertFalse(confluence_study["trade_recommendation"])
+        self.assertGreaterEqual(
+            confluence_study["summary"]["unique_symbol_date_rows"],
+            1,
+        )
 
     def test_module_stays_research_only_by_import_boundary(self) -> None:
         source = inspect.getsource(technical_breakouts)

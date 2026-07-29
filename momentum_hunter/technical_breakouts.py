@@ -193,13 +193,22 @@ def build_technical_breakout_reports(
     )
     from momentum_hunter.technical_confluence import (
         build_technical_confluence_report_payload,
+        build_technical_confluence_study_payload,
         write_technical_confluence_reports,
+        write_technical_confluence_study_reports,
     )
 
     confluence_payload = build_technical_confluence_report_payload(
         generated_at=generated_at,
         daily_bars_by_symbol=daily_bars_by_symbol,
         breakout_events=events,
+        source_paths=source_paths,
+    )
+    confluence_study_payload = build_technical_confluence_study_payload(
+        generated_at=generated_at,
+        daily_bars_by_symbol=daily_bars_by_symbol,
+        breakout_events=events,
+        breakout_studies=studies,
         source_paths=source_paths,
     )
 
@@ -223,6 +232,14 @@ def build_technical_breakout_reports(
     )
     paths["confluence_json"] = confluence_paths["json"]
     paths["confluence_markdown"] = confluence_paths["markdown"]
+    confluence_study_paths = write_technical_confluence_study_reports(
+        confluence_study_payload,
+        output_dir=output_dir,
+    )
+    paths["confluence_study_json"] = confluence_study_paths["json"]
+    paths["confluence_study_markdown"] = (
+        confluence_study_paths["markdown"]
+    )
     if daily_ohlc_result is not None:
         coverage_report = build_daily_ohlc_coverage_report(daily_ohlc_result, requested_symbols=requested_symbols)
         coverage_paths = write_daily_ohlc_coverage_report(
