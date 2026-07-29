@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import replace
 import hashlib
 import inspect
+import json
+from pathlib import Path
+import tempfile
 import unittest
 from datetime import datetime, timedelta
 
@@ -21,11 +24,14 @@ from momentum_hunter.technical_confluence import (
     adx_trend_strength_state,
     anchored_vwap_state,
     atr_extension_risk_state,
+    build_technical_confluence_report_payload,
     ema_stack_state,
     evaluate_wave1_confluence,
     relative_strength_state,
+    render_technical_confluence_markdown,
     squeeze_release_state,
     volume_confirmation_state,
+    write_technical_confluence_reports,
 )
 
 
@@ -117,6 +123,8 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
         self.assertEqual(GREEN, state.state)
         self.assertLess(float(state.value or 0), 11.0)
+        self.assertEqual("2026-01-01", state.details["anchor_timestamp"])
+        self.assertIn("2026-01-01", state.reason)
 
     def test_atr_extension_marks_caution_when_price_is_stretched(self) -> None:
         bars = [
@@ -432,6 +440,182 @@ class TechnicalConfluenceTests(unittest.TestCase):
         ]
         for forbidden in forbidden_imports:
             self.assertNotIn(forbidden, source)
+
+    def test_report_payload_evaluates_symbols_and_uses_qqq_benchmark(self) -> None:
+        bars = {
+            "BBB": daily_bars("BBB", [20 + offset * 0.1 for offset in range(60)]),
+            "QQQ": daily_bars("QQQ", [100 + offset * 0.05 for offset in range(60)]),
+            "AAA": daily_bars("AAA", [10 + offset * 0.2 for offset in range(60)]),
+        }
+
+        payload = build_technical_confluence_report_payload(
+            generated_at="2026-03-01T16:00:00-05:00",
+            daily_bars_by_symbol=bars,
+            breakout_events=[],
+            source_paths={"daily_ohlc_path": "daily.json"},
+        )
+
+        self.assertTrue(payload["research_only"])
+        self.assertFalse(payload["trade_recommendation"])
+        self.assertEqual("QQQ", payload["benchmark_symbol"])
+        self.assertEqual(["AAA", "BBB"], [row["symbol"] for row in payload["symbols"]])
+        self.assertEqual(2, payload["summary"]["symbols_evaluated"])
+        self.assertNotIn("BENCHMARK_BARS_UNAVAILABLE:QQQ", payload["warnings"])
+
+    def test_report_payload_marks_event_symbol_without_daily_bars_unavailable(self) -> None:
+        payload = build_technical_confluence_report_payload(
+            generated_at="2026-03-01T16:00:00-05:00",
+            daily_bars_by_symbol={},
+            breakout_events=[breakout_event("AAA", BREAKOUT_PRESENT)],
+            source_paths={},
+        )
+
+        self.assertEqual(
+            [{"symbol": "AAA", "reason": "DAILY_BARS_UNAVAILABLE"}],
+            payload["unavailable_symbols"],
+        )
+        self.assertEqual(0, payload["summary"]["symbols_evaluated"])
+
+    def test_case_duplicate_symbol_groups_are_not_selected_by_input_order(self) -> None:
+        payload = build_technical_confluence_report_payload(
+            generated_at="2026-03-01T16:00:00-05:00",
+            daily_bars_by_symbol={
+                "AAA": daily_bars("AAA", [10.0] * 60),
+                "aaa": daily_bars("AAA", [20.0] * 60),
+            },
+            breakout_events=[breakout_event("AAA", BREAKOUT_PRESENT)],
+            source_paths={},
+        )
+
+        self.assertEqual([], payload["symbols"])
+        self.assertEqual(
+            [{"symbol": "AAA", "reason": "DAILY_BARS_UNAVAILABLE"}],
+            payload["unavailable_symbols"],
+        )
+        self.assertIn("DUPLICATE_DAILY_BAR_GROUP:AAA", payload["warnings"])
+
+    def test_report_payload_rejects_invalid_group_without_exposing_details(self) -> None:
+        payload = build_technical_confluence_report_payload(
+            generated_at="2026-03-01T16:00:00-05:00",
+            daily_bars_by_symbol={
+                "AAA": [daily_bar("AAA", 0, close=10.0, high=9.0, low=10.0)]
+            },
+            breakout_events=[],
+            source_paths={},
+        )
+
+        self.assertEqual(
+            [{"symbol": "AAA", "reason": "DAILY_BAR_INPUT_REJECTED"}],
+            payload["unavailable_symbols"],
+        )
+
+    def test_invalid_benchmark_degrades_relative_strength_only(self) -> None:
+        invalid_benchmark = daily_bars("QQQ", [100.0] * 60)
+        invalid_benchmark[-1] = replace(
+            invalid_benchmark[-1],
+            high=90.0,
+        )
+
+        payload = build_technical_confluence_report_payload(
+            generated_at="2026-03-01T16:00:00-05:00",
+            daily_bars_by_symbol={
+                "AAA": daily_bars("AAA", [10 + offset * 0.1 for offset in range(60)]),
+                "QQQ": invalid_benchmark,
+            },
+            breakout_events=[],
+            source_paths={},
+        )
+
+        self.assertEqual(1, payload["summary"]["symbols_evaluated"])
+        self.assertEqual(
+            "UNAVAILABLE",
+            next(
+                indicator
+                for indicator in payload["symbols"][0]["indicator_states"]
+                if indicator["name"] == "relative_strength_vs_benchmark"
+            )["state"],
+        )
+        self.assertIn(
+            "BENCHMARK_BAR_INPUT_REJECTED:QQQ",
+            payload["warnings"],
+        )
+
+    def test_markdown_is_research_only_and_avoids_execution_language(self) -> None:
+        payload = build_technical_confluence_report_payload(
+            generated_at="2026-03-01T16:00:00-05:00",
+            daily_bars_by_symbol={},
+            breakout_events=[],
+            source_paths={},
+        )
+
+        rendered = render_technical_confluence_markdown(payload)
+        lowered = rendered.lower()
+
+        self.assertIn("research-only evidence", lowered)
+        self.assertNotIn("buy", lowered)
+        self.assertNotIn("sell", lowered)
+        self.assertNotIn("guaranteed edge", lowered)
+        self.assertNotIn("strategy should change", lowered)
+
+    def test_invalid_report_identity_fails_closed(self) -> None:
+        with self.assertRaises(TechnicalConfluenceError):
+            build_technical_confluence_report_payload(
+                generated_at="not-a-time",
+                daily_bars_by_symbol={},
+                breakout_events=[],
+                source_paths={},
+            )
+        with self.assertRaises(TechnicalConfluenceError):
+            evaluate_wave1_confluence(
+                symbol="AAA|BAD",
+                bars=daily_bars("AAA|BAD", [10.0] * 60),
+            )
+
+    def test_writer_refuses_to_overwrite_user_authored_target(self) -> None:
+        payload = build_technical_confluence_report_payload(
+            generated_at="2026-03-01T16:00:00-05:00",
+            daily_bars_by_symbol={},
+            breakout_events=[],
+            source_paths={},
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            output_dir = Path(temporary)
+            target = output_dir / "technical-confluence-latest.json"
+            original = "Steven's research notes\n"
+            target.write_text(original, encoding="utf-8")
+
+            with self.assertRaises(TechnicalConfluenceError):
+                write_technical_confluence_reports(
+                    payload,
+                    output_dir=output_dir,
+                )
+
+            self.assertEqual(original, target.read_text(encoding="utf-8"))
+
+    def test_writer_replaces_only_verified_generated_reports(self) -> None:
+        first = build_technical_confluence_report_payload(
+            generated_at="2026-03-01T16:00:00-05:00",
+            daily_bars_by_symbol={},
+            breakout_events=[],
+            source_paths={},
+        )
+        second = build_technical_confluence_report_payload(
+            generated_at="2026-03-02T16:00:00-05:00",
+            daily_bars_by_symbol={},
+            breakout_events=[],
+            source_paths={},
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            output_dir = Path(temporary)
+            write_technical_confluence_reports(first, output_dir=output_dir)
+            paths = write_technical_confluence_reports(
+                second,
+                output_dir=output_dir,
+            )
+
+            persisted = json.loads(paths["json"].read_text(encoding="utf-8"))
+
+        self.assertEqual(second["generated_at"], persisted["generated_at"])
 
 
 def daily_bars(symbol: str, closes: list[float], *, volume: int = 100) -> list[TechnicalPriceBar]:

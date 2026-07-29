@@ -244,6 +244,8 @@ class TechnicalBreakoutTests(unittest.TestCase):
         self.assertTrue(paths["events_markdown"].exists())
         self.assertTrue(paths["study_json"].exists())
         self.assertTrue(paths["study_markdown"].exists())
+        self.assertTrue(paths["confluence_json"].exists())
+        self.assertTrue(paths["confluence_markdown"].exists())
 
     def test_report_builder_consumes_normalized_daily_ohlc(self) -> None:
         daily_path = self.root / "daily-ohlc-bars.json"
@@ -253,6 +255,7 @@ class TechnicalBreakoutTests(unittest.TestCase):
         ]
         records.append(daily_ohlc_record("AAA", 21, close=11.0, high=11.0, volume=300))
         daily_path.write_text(json.dumps({"records": [record.__dict__ for record in records]}, indent=2), encoding="utf-8")
+        daily_before = sha256(daily_path)
 
         paths = build_technical_breakout_reports(
             captures_path=self.root / "missing-captures.csv",
@@ -267,8 +270,15 @@ class TechnicalBreakoutTests(unittest.TestCase):
         event_types = {event["event_type"] for event in payload["events"]}
 
         self.assertIn("donchian_20_day_breakout", event_types)
+        self.assertEqual(daily_before, sha256(daily_path))
         self.assertTrue(paths["daily_ohlc_coverage_json"].exists())
         self.assertEqual(22, payload["source_counts"]["daily_ohlc_valid_records"])
+        confluence = json.loads(
+            paths["confluence_json"].read_text(encoding="utf-8")
+        )
+        self.assertEqual(1, confluence["summary"]["symbols_evaluated"])
+        self.assertEqual("AAA", confluence["symbols"][0]["symbol"])
+        self.assertFalse(confluence["trade_recommendation"])
 
     def test_module_stays_research_only_by_import_boundary(self) -> None:
         source = inspect.getsource(technical_breakouts)

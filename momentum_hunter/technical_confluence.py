@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+import json
 from math import isfinite
+import os
+from pathlib import Path
+import re
 from statistics import mean, pstdev
 from typing import Any
+from uuid import uuid4
 
+from momentum_hunter.config import DATA_DIR
 from momentum_hunter.technical_breakouts import (
     BREAKOUT_FAILED,
     BREAKOUT_PRESENT,
@@ -25,6 +31,17 @@ from momentum_hunter.technical_breakouts import (
 
 TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v1"
 TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 1
+TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
+    "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
+)
+TECHNICAL_CONFLUENCE_LATEST_JSON = (
+    DATA_DIR / "reports" / "technical-confluence-latest.json"
+)
+TECHNICAL_CONFLUENCE_LATEST_MD = (
+    DATA_DIR / "reports" / "technical-confluence-latest.md"
+)
+_REPORT_ROW_LIMIT = 200
+_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,15}$")
 
 GREEN = "GREEN"
 YELLOW = "YELLOW"
@@ -184,8 +201,10 @@ def evaluate_wave1_confluence(
 ) -> TechnicalConfluenceSummary:
     options = options or TechnicalConfluenceOptions()
     normalized_symbol = str(symbol).upper().strip()
-    if not normalized_symbol:
-        raise TechnicalConfluenceError("Confluence symbol is required.")
+    if not _SYMBOL_PATTERN.fullmatch(normalized_symbol):
+        raise TechnicalConfluenceError(
+            "Confluence symbol must use the bounded market-symbol format."
+        )
     _validate_price_bars(
         bars,
         expected_symbol=normalized_symbol,
@@ -246,6 +265,252 @@ def evaluate_wave1_confluence(
         indicator_states=indicators,
         family_states=family_states,
     )
+
+
+def build_technical_confluence_report_payload(
+    *,
+    generated_at: str,
+    daily_bars_by_symbol: dict[str, list[TechnicalPriceBar]],
+    breakout_events: list[BreakoutEvent],
+    source_paths: dict[str, str | None],
+    benchmark_symbol: str = "QQQ",
+    options: TechnicalConfluenceOptions | None = None,
+) -> dict[str, Any]:
+    if parse_datetime(generated_at) is None:
+        raise TechnicalConfluenceError(
+            "Confluence report timestamp must be valid ISO 8601."
+        )
+    options = options or TechnicalConfluenceOptions()
+    normalized_benchmark = str(benchmark_symbol).upper().strip()
+    if not _SYMBOL_PATTERN.fullmatch(normalized_benchmark):
+        raise TechnicalConfluenceError(
+            "Benchmark symbol must use the bounded market-symbol format."
+        )
+
+    groups: dict[str, list[TechnicalPriceBar]] = {}
+    duplicate_groups: set[str] = set()
+    invalid_group_names = 0
+    for raw_symbol, bars in daily_bars_by_symbol.items():
+        symbol = str(raw_symbol).upper().strip()
+        if not _SYMBOL_PATTERN.fullmatch(symbol):
+            invalid_group_names += 1
+            continue
+        if symbol in groups:
+            duplicate_groups.add(symbol)
+            continue
+        groups[symbol] = list(bars)
+    for symbol in duplicate_groups:
+        groups.pop(symbol, None)
+
+    event_symbols = {
+        str(event.symbol).upper().strip()
+        for event in breakout_events
+        if _SYMBOL_PATTERN.fullmatch(str(event.symbol).upper().strip())
+    }
+    symbols = sorted(
+        (set(groups) | event_symbols) - {normalized_benchmark}
+    )
+    benchmark_bars = groups.get(normalized_benchmark, [])
+    summaries: list[TechnicalConfluenceSummary] = []
+    unavailable_symbols: list[dict[str, str]] = []
+    warnings: list[str] = []
+    if invalid_group_names:
+        warnings.append(
+            f"INVALID_DAILY_BAR_GROUP_NAMES:{invalid_group_names}"
+        )
+    if duplicate_groups:
+        warnings.extend(
+            f"DUPLICATE_DAILY_BAR_GROUP:{symbol}"
+            for symbol in sorted(duplicate_groups)
+        )
+    if benchmark_bars:
+        try:
+            _validate_price_bars(
+                benchmark_bars,
+                expected_symbol=normalized_benchmark,
+                source_label="benchmark",
+            )
+        except TechnicalConfluenceError:
+            benchmark_bars = []
+            warnings.append(
+                f"BENCHMARK_BAR_INPUT_REJECTED:{normalized_benchmark}"
+            )
+    if (
+        not benchmark_bars
+        and f"BENCHMARK_BAR_INPUT_REJECTED:{normalized_benchmark}"
+        not in warnings
+    ):
+        warnings.append(
+            f"BENCHMARK_BARS_UNAVAILABLE:{normalized_benchmark}"
+        )
+    if not symbols:
+        warnings.append("NO_RESEARCH_SYMBOLS_AVAILABLE")
+
+    for symbol in symbols:
+        bars = groups.get(symbol, [])
+        if not bars:
+            unavailable_symbols.append(
+                {
+                    "symbol": symbol,
+                    "reason": "DAILY_BARS_UNAVAILABLE",
+                }
+            )
+            continue
+        try:
+            summaries.append(
+                evaluate_wave1_confluence(
+                    symbol=symbol,
+                    bars=bars,
+                    benchmark_bars=benchmark_bars,
+                    breakout_events=breakout_events,
+                    options=options,
+                )
+            )
+        except TechnicalConfluenceError:
+            unavailable_symbols.append(
+                {
+                    "symbol": symbol,
+                    "reason": "DAILY_BAR_INPUT_REJECTED",
+                }
+            )
+
+    conclusion_counts: dict[str, int] = {}
+    for summary in summaries:
+        conclusion_counts[summary.conclusion] = (
+            conclusion_counts.get(summary.conclusion, 0) + 1
+        )
+    partial_data_symbols = sum(
+        1
+        for summary in summaries
+        if summary.family_states[FAMILY_DATA_QUALITY].state != PASS
+    )
+    red_flag_symbols = sum(
+        1 for summary in summaries if summary.major_red_flags > 0
+    )
+    return {
+        "artifact_type": TECHNICAL_CONFLUENCE_ARTIFACT_TYPE,
+        "schema_version": TECHNICAL_CONFLUENCE_SCHEMA_VERSION,
+        "engine_version": TECHNICAL_CONFLUENCE_ENGINE_VERSION,
+        "generated_at": generated_at,
+        "research_only": True,
+        "trade_recommendation": False,
+        "production_score_changed": False,
+        "alert_logic_changed": False,
+        "broker_action_allowed": False,
+        "benchmark_symbol": normalized_benchmark,
+        "source_paths": dict(sorted(source_paths.items())),
+        "summary": {
+            "symbols_considered": len(symbols),
+            "symbols_evaluated": len(summaries),
+            "symbols_unavailable": len(unavailable_symbols),
+            "symbols_with_partial_data": partial_data_symbols,
+            "symbols_with_major_red_flags": red_flag_symbols,
+            "conclusion_counts": dict(sorted(conclusion_counts.items())),
+        },
+        "symbols": [summary.to_dict() for summary in summaries],
+        "unavailable_symbols": unavailable_symbols,
+        "warnings": warnings,
+    }
+
+
+def write_technical_confluence_reports(
+    payload: dict[str, Any],
+    *,
+    output_dir: Path,
+) -> dict[str, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / TECHNICAL_CONFLUENCE_LATEST_JSON.name
+    markdown_path = output_dir / TECHNICAL_CONFLUENCE_LATEST_MD.name
+    _validate_report_target(json_path, format_name="json")
+    _validate_report_target(markdown_path, format_name="markdown")
+    _write_report_text(
+        json_path,
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+        + "\n",
+    )
+    _write_report_text(
+        markdown_path,
+        render_technical_confluence_markdown(payload),
+    )
+    return {"json": json_path, "markdown": markdown_path}
+
+
+def render_technical_confluence_markdown(
+    payload: dict[str, Any],
+) -> str:
+    summary = payload["summary"]
+    lines = [
+        f"# Technical Confluence Research - {payload['generated_at']}",
+        "",
+        (
+            "Research-only evidence. This report does not change production "
+            "scoring, alerts, readiness, trade planning, or broker behavior."
+        ),
+        "",
+        "## Summary",
+        "",
+        f"- Symbols considered: {summary['symbols_considered']}",
+        f"- Symbols evaluated: {summary['symbols_evaluated']}",
+        f"- Symbols unavailable: {summary['symbols_unavailable']}",
+        (
+            "- Symbols with partial data: "
+            f"{summary['symbols_with_partial_data']}"
+        ),
+        (
+            "- Symbols with major red flags: "
+            f"{summary['symbols_with_major_red_flags']}"
+        ),
+        f"- Benchmark: {payload['benchmark_symbol']}",
+        "",
+        "## Symbol Evidence",
+        "",
+    ]
+    symbols = payload["symbols"][:_REPORT_ROW_LIMIT]
+    if not symbols:
+        lines.append("- No symbols had sufficient valid daily bars.")
+    else:
+        lines.extend(
+            [
+                (
+                    "| Symbol | Conclusion | Raw Green | Green Families | "
+                    "Red Flags | Risk | Data Quality |"
+                ),
+                "| --- | --- | ---: | ---: | ---: | --- | --- |",
+            ]
+        )
+        for item in symbols:
+            family_states = item["family_states"]
+            risk = family_states[FAMILY_RISK]["state"]
+            quality = family_states[FAMILY_DATA_QUALITY]["state"]
+            lines.append(
+                f"| {item['symbol']} | {item['conclusion']} | "
+                f"{item['raw_green_checks']} / {item['raw_total_checks']} | "
+                f"{item['independent_green_families']} / "
+                f"{item['independent_total_families']} | "
+                f"{item['major_red_flags']} | {risk} | {quality} |"
+            )
+    lines.extend(["", "## Unavailable Symbols", ""])
+    unavailable = payload["unavailable_symbols"][:_REPORT_ROW_LIMIT]
+    if unavailable:
+        lines.extend(
+            f"- {item['symbol']}: {item['reason']}"
+            for item in unavailable
+        )
+    else:
+        lines.append("- None.")
+    lines.extend(["", "## Warnings", ""])
+    if payload["warnings"]:
+        lines.extend(f"- {warning}" for warning in payload["warnings"])
+    else:
+        lines.append("- None.")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def ema_stack_state(
@@ -347,10 +612,29 @@ def anchored_vwap_state(
             None,
             "Anchored VWAP unavailable because volume or anchor window is missing.",
         )
-    close = sorted_bars(bars)[index].close
+    ordered_bars = sorted_bars(bars)
+    close = ordered_bars[index].close
+    anchor_timestamp = ordered_bars[
+        options.anchored_vwap_anchor_index
+    ].timestamp
     state = GREEN if close > value else RED
-    reason = "Close is above anchored VWAP." if state == GREEN else "Close is not above anchored VWAP."
-    return indicator("anchored_vwap", FAMILY_TREND, state, "primary signal", round_value(value), reason)
+    reason = (
+        f"Close is above anchored VWAP from {anchor_timestamp}."
+        if state == GREEN
+        else f"Close is not above anchored VWAP from {anchor_timestamp}."
+    )
+    return indicator(
+        "anchored_vwap",
+        FAMILY_TREND,
+        state,
+        "primary signal",
+        round_value(value),
+        reason,
+        details={
+            "anchor_index": options.anchored_vwap_anchor_index,
+            "anchor_timestamp": anchor_timestamp,
+        },
+    )
 
 
 def squeeze_release_state(
@@ -976,3 +1260,58 @@ def _datetime_sort_key(value: datetime) -> tuple[int, int, int, int, int]:
         value.second,
         value.microsecond,
     )
+
+
+def _write_report_text(path: Path, content: str) -> None:
+    temporary = path.with_name(
+        f".{path.name}.{uuid4().hex}.tmp"
+    )
+    try:
+        with temporary.open("x", encoding="utf-8", newline="\n") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _validate_report_target(path: Path, *, format_name: str) -> None:
+    if path.is_symlink():
+        raise TechnicalConfluenceError(
+            "Confluence report target cannot be a symbolic link."
+        )
+    if not path.exists():
+        return
+    if not path.is_file():
+        raise TechnicalConfluenceError(
+            "Confluence report target must be a regular file."
+        )
+    try:
+        current = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise TechnicalConfluenceError(
+            "Existing confluence report target cannot be verified."
+        ) from exc
+    if format_name == "json":
+        try:
+            payload = json.loads(current)
+        except json.JSONDecodeError as exc:
+            raise TechnicalConfluenceError(
+                "Existing JSON target is not a generated confluence report."
+            ) from exc
+        if (
+            not isinstance(payload, dict)
+            or payload.get("artifact_type")
+            != TECHNICAL_CONFLUENCE_ARTIFACT_TYPE
+            or payload.get("research_only") is not True
+        ):
+            raise TechnicalConfluenceError(
+                "Existing JSON target is not a generated confluence report."
+            )
+        return
+    if not current.startswith("# Technical Confluence Research - "):
+        raise TechnicalConfluenceError(
+            "Existing Markdown target is not a generated confluence report."
+        )
