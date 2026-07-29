@@ -31,8 +31,8 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v16"
-TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 8
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v17"
+TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 9
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
 )
@@ -54,6 +54,7 @@ TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE = (
 CONFLUENCE_STUDY_HORIZONS = (1, 2, 5, 10)
 CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS = 30
 CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS = 10
+CONFLUENCE_STUDY_MINIMUM_CLUSTER_DATES = 10
 CONFLUENCE_STUDY_CONFIDENCE_Z = 1.96
 STUDY_COMPLETE = "COMPLETE"
 STUDY_PARTIAL = "PARTIAL"
@@ -1383,7 +1384,10 @@ def build_technical_confluence_study_payload(
             "CONFIDENCE_INTERVALS_ARE_DESCRIPTIVE_NOT_EDGE_PROOF"
         )
         warnings.append(
-            "CONFIDENCE_INTERVALS_ARE_NOT_CLUSTER_ROBUST"
+            "ROW_LEVEL_CONFIDENCE_INTERVALS_ARE_NOT_CLUSTER_ROBUST"
+        )
+        warnings.append(
+            "DATE_CLUSTER_INTERVALS_REMAIN_DESCRIPTIVE_NOT_EDGE_PROOF"
         )
     return {
         "artifact_type": TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE,
@@ -1427,7 +1431,17 @@ def build_technical_confluence_study_payload(
             ),
             "uncertainty_intervals_are_descriptive": True,
             "uncertainty_independence_assumption_proven": False,
-            "uncertainty_cluster_robust": False,
+            "row_level_uncertainty_cluster_robust": False,
+            "date_clustered_uncertainty": (
+                "equal_weighted_event_date_means"
+            ),
+            "date_clustered_minimum_distinct_event_dates": (
+                CONFLUENCE_STUDY_MINIMUM_CLUSTER_DATES
+            ),
+            "date_clustered_positive_rate": (
+                "positive_event_date_mean_rate_with_wilson_95pct"
+            ),
+            "date_clustered_serial_independence_proven": False,
             "benchmark_relative_method": (
                 "symbol_return_minus_same_session_benchmark_return"
             ),
@@ -1966,13 +1980,18 @@ def _aggregate_confluence_study_groups(
         return_interquartile_ranges: dict[str, dict[str, float]] = {}
         positive_rates: dict[str, float] = {}
         return_uncertainty: dict[str, dict[str, Any]] = {}
+        clustered_uncertainty: dict[str, dict[str, Any]] = {}
         for horizon in CONFLUENCE_STUDY_HORIZONS:
             label = f"{horizon}d"
-            values = [
-                float(row.forward_returns_pct[label])
+            observations = [
+                (
+                    row.event_date,
+                    float(row.forward_returns_pct[label]),
+                )
                 for row in bucket
                 if row.forward_returns_pct[label] is not None
             ]
+            values = [value for _, value in observations]
             if len(values) != len(bucket):
                 raise TechnicalConfluenceError(
                     "Complete confluence rows require every study horizon."
@@ -1990,6 +2009,9 @@ def _aggregate_confluence_study_groups(
             )
             return_uncertainty[label] = (
                 _distribution_uncertainty(values)
+            )
+            clustered_uncertainty[label] = (
+                _date_clustered_uncertainty(observations)
             )
         favorable = [
             float(row.max_favorable_excursion_pct)
@@ -2010,6 +2032,9 @@ def _aggregate_confluence_study_groups(
             ),
             "positive_forward_return_rate_pct": positive_rates,
             "forward_return_uncertainty": return_uncertainty,
+            "date_clustered_forward_return_uncertainty": (
+                clustered_uncertainty
+            ),
             "mean_max_favorable_excursion_pct": (
                 round(mean(favorable), 4) if favorable else None
             ),
@@ -2050,16 +2075,23 @@ def _aggregate_benchmark_relative_study_groups(
         return_interquartile_ranges: dict[str, dict[str, float]] = {}
         positive_rates: dict[str, float] = {}
         return_uncertainty: dict[str, dict[str, Any]] = {}
+        clustered_uncertainty: dict[str, dict[str, Any]] = {}
         for horizon in CONFLUENCE_STUDY_HORIZONS:
             label = f"{horizon}d"
-            values = [
-                float(
-                    row.benchmark_relative_forward_returns_pct[label]
+            observations = [
+                (
+                    row.event_date,
+                    float(
+                        row.benchmark_relative_forward_returns_pct[
+                            label
+                        ]
+                    ),
                 )
                 for row in bucket
                 if row.benchmark_relative_forward_returns_pct[label]
                 is not None
             ]
+            values = [value for _, value in observations]
             if len(values) != len(bucket):
                 raise TechnicalConfluenceError(
                     "Benchmark-relative rows require every study horizon."
@@ -2078,6 +2110,9 @@ def _aggregate_benchmark_relative_study_groups(
             return_uncertainty[label] = (
                 _distribution_uncertainty(values)
             )
+            clustered_uncertainty[label] = (
+                _date_clustered_uncertainty(observations)
+            )
         aggregates[bucket_name] = {
             "sample_count": len(bucket),
             "mean_excess_forward_returns_pct": mean_returns,
@@ -2089,8 +2124,69 @@ def _aggregate_benchmark_relative_study_groups(
             "excess_forward_return_uncertainty": (
                 return_uncertainty
             ),
+            "date_clustered_excess_forward_return_uncertainty": (
+                clustered_uncertainty
+            ),
         }
     return aggregates, withheld
+
+
+def _date_clustered_uncertainty(
+    observations: list[tuple[str, float]],
+) -> dict[str, Any]:
+    if not observations:
+        raise TechnicalConfluenceError(
+            "Date-clustered uncertainty requires observations."
+        )
+    values_by_date: dict[str, list[float]] = {}
+    for event_date, value in observations:
+        parsed_date = parse_datetime(event_date)
+        if parsed_date is None:
+            raise TechnicalConfluenceError(
+                "Date-clustered uncertainty requires valid event dates."
+            )
+        values_by_date.setdefault(
+            parsed_date.date().isoformat(),
+            [],
+        ).append(value)
+    date_means = [
+        mean(values_by_date[event_date])
+        for event_date in sorted(values_by_date)
+    ]
+    row_counts = [
+        len(values_by_date[event_date])
+        for event_date in sorted(values_by_date)
+    ]
+    base = {
+        "status": TEMPORAL_STABILITY_WITHHELD,
+        "reason": "MINIMUM_DISTINCT_EVENT_DATES_NOT_MET",
+        "distinct_event_dates": len(date_means),
+        "minimum_distinct_event_dates": (
+            CONFLUENCE_STUDY_MINIMUM_CLUSTER_DATES
+        ),
+        "minimum_rows_per_date": min(row_counts),
+        "maximum_rows_per_date": max(row_counts),
+        "equal_weighted_date_mean_pct": None,
+        "date_mean_uncertainty": None,
+        "method": "equal_weighted_event_date_means",
+    }
+    if (
+        len(date_means)
+        < CONFLUENCE_STUDY_MINIMUM_CLUSTER_DATES
+    ):
+        return base
+    return {
+        **base,
+        "status": TEMPORAL_STABILITY_RELEASED,
+        "reason": None,
+        "equal_weighted_date_mean_pct": round(
+            mean(date_means),
+            4,
+        ),
+        "date_mean_uncertainty": (
+            _distribution_uncertainty(date_means)
+        ),
+    }
 
 
 def _distribution_uncertainty(
@@ -2892,6 +2988,13 @@ def _append_uncertainty_table(
             f"{_display_interval(uncertainty['positive_rate_95pct_confidence_interval_pct'])} |"
         )
     lines.append("")
+    _append_date_clustered_uncertainty_table(
+        lines,
+        bucket_label=bucket_label,
+        aggregates=aggregates,
+        benchmark_relative=benchmark_relative,
+        heading_level=heading_level + 1,
+    )
 
 
 def _append_temporal_uncertainty_table(
@@ -2929,6 +3032,92 @@ def _append_temporal_uncertainty_table(
             f"{_display_interval(uncertainty['mean_95pct_confidence_interval_pct'])} | "
             f"{uncertainty['mean_interval_relation_to_zero']} | "
             f"{_display_interval(uncertainty['positive_rate_95pct_confidence_interval_pct'])} |"
+        )
+    lines.append("")
+    _append_date_clustered_temporal_uncertainty_table(
+        lines,
+        temporal_stability=temporal_stability,
+        benchmark_relative=benchmark_relative,
+        heading_level=heading_level + 1,
+    )
+
+
+def _append_date_clustered_uncertainty_table(
+    lines: list[str],
+    *,
+    bucket_label: str,
+    aggregates: dict[str, dict[str, Any]],
+    benchmark_relative: bool,
+    heading_level: int,
+) -> None:
+    heading = "#" * heading_level
+    lines.extend(
+        [
+            f"{heading} Date-Clustered Uncertainty",
+            "",
+            (
+                f"| {bucket_label} | Dates | Status | "
+                "Equal-Weighted Date Mean | Mean 95% Interval | "
+                "Interval vs Zero | Positive-Date 95% Interval | Reason |"
+            ),
+            "| --- | ---: | --- | ---: | ---: | --- | ---: | --- |",
+        ]
+    )
+    cluster_key = (
+        "date_clustered_excess_forward_return_uncertainty"
+        if benchmark_relative
+        else "date_clustered_forward_return_uncertainty"
+    )
+    for bucket_name, aggregate in sorted(aggregates.items()):
+        cluster = aggregate[cluster_key]["10d"]
+        uncertainty = cluster["date_mean_uncertainty"] or {}
+        lines.append(
+            f"| {bucket_name} | {cluster['distinct_event_dates']} | "
+            f"{cluster['status']} | "
+            f"{_display_pct(cluster['equal_weighted_date_mean_pct'])} | "
+            f"{_display_interval(uncertainty.get('mean_95pct_confidence_interval_pct'))} | "
+            f"{uncertainty.get('mean_interval_relation_to_zero', 'N/A')} | "
+            f"{_display_interval(uncertainty.get('positive_rate_95pct_confidence_interval_pct'))} | "
+            f"{cluster['reason'] or 'None'} |"
+        )
+    lines.append("")
+
+
+def _append_date_clustered_temporal_uncertainty_table(
+    lines: list[str],
+    *,
+    temporal_stability: dict[str, Any],
+    benchmark_relative: bool,
+    heading_level: int,
+) -> None:
+    heading = "#" * heading_level
+    lines.extend(
+        [
+            f"{heading} Date-Clustered Uncertainty",
+            "",
+            (
+                "| Period | Date Range | Dates | Status | "
+                "Mean 95% Interval | Interval vs Zero | Reason |"
+            ),
+            "| --- | --- | ---: | --- | ---: | --- | --- |",
+        ]
+    )
+    cluster_key = (
+        "date_clustered_excess_forward_return_uncertainty"
+        if benchmark_relative
+        else "date_clustered_forward_return_uncertainty"
+    )
+    for period_name in ("EARLIER", "LATER"):
+        period = temporal_stability["periods"][period_name]
+        cluster = period[cluster_key]["10d"]
+        uncertainty = cluster["date_mean_uncertainty"] or {}
+        lines.append(
+            f"| {period_name} | {period['start_date']} to "
+            f"{period['end_date']} | "
+            f"{cluster['distinct_event_dates']} | {cluster['status']} | "
+            f"{_display_interval(uncertainty.get('mean_95pct_confidence_interval_pct'))} | "
+            f"{uncertainty.get('mean_interval_relation_to_zero', 'N/A')} | "
+            f"{cluster['reason'] or 'None'} |"
         )
     lines.append("")
 

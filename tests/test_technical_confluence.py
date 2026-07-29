@@ -1603,7 +1603,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             bars=daily_bars("AAA", [10.0] * 5),
         )
 
-        self.assertEqual(8, summary.schema_version)
+        self.assertEqual(9, summary.schema_version)
         self.assertEqual(
             len(summary.indicator_states),
             summary.raw_total_checks,
@@ -1968,7 +1968,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             + row["raw_insufficient_data_checks"]
         )
 
-        self.assertEqual(8, payload["schema_version"])
+        self.assertEqual(9, payload["schema_version"])
         self.assertIn(
             "| Raw Green | Raw Yellow | Raw Red | Missing |",
             rendered,
@@ -2372,6 +2372,100 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertIn("Positive 10d 95% Interval", rendered)
         self.assertIn("Benchmark Outcome", rendered)
 
+    def test_study_releases_equal_weighted_date_cluster_uncertainty(
+        self,
+    ) -> None:
+        groups: dict[str, list[TechnicalPriceBar]] = {
+            "QQQ": daily_bars(
+                "QQQ",
+                [100.0] * 80,
+                volume=200,
+            ),
+        }
+        events: list[BreakoutEvent] = []
+        for date_offset in range(10):
+            event_index = 60 + date_offset
+            future = (
+                [10.1 + step * 0.1 for step in range(10)]
+                if date_offset < 5
+                else [9.9 - step * 0.1 for step in range(10)]
+            )
+            for symbol_offset in range(3):
+                symbol = f"D{date_offset}{symbol_offset}"
+                groups[symbol] = daily_bars(
+                    symbol,
+                    [10.0] * (event_index + 1) + future,
+                    volume=200,
+                )
+                events.append(
+                    breakout_event(
+                        symbol,
+                        BREAKOUT_PRESENT,
+                        event_id=f"{symbol}-event",
+                        event_timestamp=groups[symbol][
+                            event_index
+                        ].timestamp,
+                    )
+                )
+        studies = study_breakout_events(
+            events,
+            daily_bars_by_symbol=groups,
+        )
+
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-04-01T16:00:00-05:00",
+            daily_bars_by_symbol=groups,
+            breakout_events=events,
+            breakout_studies=studies,
+            source_paths={},
+        )
+        json.dumps(payload, allow_nan=False)
+
+        absolute_aggregate = next(
+            iter(payload["aggregate_outcomes_by_conclusion"].values())
+        )
+        relative_aggregate = next(
+            iter(
+                payload[
+                    "benchmark_relative_outcomes_by_conclusion"
+                ].values()
+            )
+        )
+        absolute_cluster = absolute_aggregate[
+            "date_clustered_forward_return_uncertainty"
+        ]["10d"]
+        relative_cluster = relative_aggregate[
+            "date_clustered_excess_forward_return_uncertainty"
+        ]["10d"]
+        for cluster in (absolute_cluster, relative_cluster):
+            self.assertEqual(
+                TEMPORAL_STABILITY_RELEASED,
+                cluster["status"],
+            )
+            self.assertEqual(10, cluster["distinct_event_dates"])
+            self.assertEqual(3, cluster["minimum_rows_per_date"])
+            self.assertEqual(3, cluster["maximum_rows_per_date"])
+            self.assertEqual(
+                0.0,
+                cluster["equal_weighted_date_mean_pct"],
+            )
+            self.assertEqual(
+                "INCLUDES_ZERO",
+                cluster["date_mean_uncertainty"][
+                    "mean_interval_relation_to_zero"
+                ],
+            )
+            self.assertEqual(
+                5,
+                cluster["date_mean_uncertainty"][
+                    "positive_count"
+                ],
+            )
+        rendered = render_technical_confluence_study_markdown(payload)
+        self.assertIn("Date-Clustered Uncertainty", rendered)
+        self.assertIn("Equal-Weighted Date Mean", rendered)
+        self.assertIn("| 10 | RELEASED |", rendered)
+
     def test_study_confluence_uses_only_event_date_history(self) -> None:
         historical = daily_bars(
             "AAA",
@@ -2559,6 +2653,25 @@ class TechnicalConfluenceTests(unittest.TestCase):
             "normal_mean_95pct_and_wilson_positive_rate_95pct",
             payload["outcome_methodology"]["uncertainty_intervals"],
         )
+        clustered = aggregate[
+            "date_clustered_forward_return_uncertainty"
+        ]["10d"]
+        self.assertEqual(
+            TEMPORAL_STABILITY_WITHHELD,
+            clustered["status"],
+        )
+        self.assertEqual(1, clustered["distinct_event_dates"])
+        self.assertEqual(
+            "MINIMUM_DISTINCT_EVENT_DATES_NOT_MET",
+            clustered["reason"],
+        )
+        self.assertIsNone(clustered["date_mean_uncertainty"])
+        self.assertEqual(
+            10,
+            payload["outcome_methodology"][
+                "date_clustered_minimum_distinct_event_dates"
+            ],
+        )
         self.assertEqual(
             43.0,
             aggregate["mean_max_favorable_excursion_pct"],
@@ -2641,6 +2754,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
         rendered = render_technical_confluence_study_markdown(payload)
         self.assertIn("#### Median And Interquartile Range", rendered)
         self.assertIn("#### Statistical Uncertainty", rendered)
+        self.assertIn("##### Date-Clustered Uncertainty", rendered)
         self.assertIn("Mean 10d 95% Interval", rendered)
         self.assertIn("10d IQR", rendered)
         self.assertIn("10.0000% to 10.0000%", rendered)
@@ -2649,12 +2763,16 @@ class TechnicalConfluenceTests(unittest.TestCase):
             rendered,
         )
         self.assertIn(
-            "CONFIDENCE_INTERVALS_ARE_NOT_CLUSTER_ROBUST",
+            "ROW_LEVEL_CONFIDENCE_INTERVALS_ARE_NOT_CLUSTER_ROBUST",
+            rendered,
+        )
+        self.assertIn(
+            "DATE_CLUSTER_INTERVALS_REMAIN_DESCRIPTIVE_NOT_EDGE_PROOF",
             rendered,
         )
         self.assertFalse(
             payload["outcome_methodology"][
-                "uncertainty_cluster_robust"
+                "row_level_uncertainty_cluster_robust"
             ]
         )
 
@@ -3045,6 +3163,18 @@ class TechnicalConfluenceTests(unittest.TestCase):
             relative_temporal["periods"]["LATER"][
                 "excess_forward_return_uncertainty"
             ]["10d"]["mean_interval_relation_to_zero"],
+        )
+        self.assertEqual(
+            TEMPORAL_STABILITY_WITHHELD,
+            temporal["periods"]["EARLIER"][
+                "date_clustered_forward_return_uncertainty"
+            ]["10d"]["status"],
+        )
+        self.assertEqual(
+            TEMPORAL_STABILITY_WITHHELD,
+            relative_temporal["periods"]["LATER"][
+                "date_clustered_excess_forward_return_uncertainty"
+            ]["10d"]["status"],
         )
         rendered = render_technical_confluence_study_markdown(payload)
         self.assertIn("## Temporal Stability", rendered)
