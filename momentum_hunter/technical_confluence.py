@@ -31,8 +31,8 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v11"
-TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 3
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v12"
+TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 4
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
 )
@@ -1066,11 +1066,36 @@ def build_technical_confluence_study_payload(
                 for row in complete_rows
             }
         )
+    market_regime_rows = [
+        row
+        for row in complete_rows
+        if _market_regime_bucket(row) is not None
+    ]
+    if (
+        len(market_regime_rows)
+        >= CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+    ):
+        (
+            aggregate_outcomes_by_market_regime,
+            withheld_market_regime_buckets,
+        ) = _aggregate_confluence_study_rows_by_market_regime(
+            market_regime_rows
+        )
+    else:
+        aggregate_outcomes_by_market_regime = {}
+        withheld_market_regime_buckets = sorted(
+            {
+                bucket
+                for row in market_regime_rows
+                if (bucket := _market_regime_bucket(row)) is not None
+            }
+        )
     aggregate_released = any(
         (
             aggregate_outcomes,
             aggregate_outcomes_by_raw_green_checks,
             aggregate_outcomes_by_independent_green_families,
+            aggregate_outcomes_by_market_regime,
         )
     )
     if (
@@ -1103,6 +1128,19 @@ def build_technical_confluence_study_payload(
             "SMALL_INDEPENDENT_GREEN_FAMILY_BUCKETS_WITHHELD:"
             + ",".join(withheld_independent_green_family_buckets)
         )
+    if len(complete_rows) >= CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS:
+        if (
+            len(market_regime_rows)
+            < CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+        ):
+            warnings.append(
+                "MARKET_REGIME_AGGREGATES_WITHHELD_MINIMUM_SAMPLE"
+            )
+        elif withheld_market_regime_buckets:
+            warnings.append(
+                "SMALL_MARKET_REGIME_BUCKETS_WITHHELD:"
+                + ",".join(withheld_market_regime_buckets)
+            )
     return {
         "artifact_type": TECHNICAL_CONFLUENCE_STUDY_ARTIFACT_TYPE,
         "schema_version": TECHNICAL_CONFLUENCE_SCHEMA_VERSION,
@@ -1123,6 +1161,9 @@ def build_technical_confluence_study_payload(
         ),
         "minimum_count_bucket_rows": (
             CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS
+        ),
+        "minimum_market_regime_rows": (
+            CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
         ),
         "outcome_methodology": {
             "sample_identity": "one_per_symbol_event_date",
@@ -1146,6 +1187,15 @@ def build_technical_confluence_study_payload(
                 - len(complete_rows),
             ),
             "aggregate_outcomes_released": aggregate_released,
+            "market_regime_eligible_rows": len(market_regime_rows),
+            "market_regime_unavailable_rows": (
+                len(complete_rows) - len(market_regime_rows)
+            ),
+            "market_regime_rows_to_minimum": max(
+                0,
+                CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+                - len(market_regime_rows),
+            ),
         },
         "rows": [row.to_dict() for row in rows],
         "unavailable_event_groups": unavailable_groups,
@@ -1156,12 +1206,18 @@ def build_technical_confluence_study_payload(
         "aggregate_outcomes_by_independent_green_families": (
             aggregate_outcomes_by_independent_green_families
         ),
+        "aggregate_outcomes_by_market_regime": (
+            aggregate_outcomes_by_market_regime
+        ),
         "withheld_conclusions": withheld_conclusions,
         "withheld_raw_green_check_buckets": (
             withheld_raw_green_check_buckets
         ),
         "withheld_independent_green_family_buckets": (
             withheld_independent_green_family_buckets
+        ),
+        "withheld_market_regime_buckets": (
+            withheld_market_regime_buckets
         ),
         "warnings": warnings,
     }
@@ -1307,6 +1363,35 @@ def _confluence_count_bucket(
             "Confluence count bucket requires a valid numerator and denominator."
         )
     return f"{numerator}/{denominator}"
+
+
+def _aggregate_confluence_study_rows_by_market_regime(
+    rows: list[TechnicalConfluenceStudyRow],
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    grouped: dict[str, list[TechnicalConfluenceStudyRow]] = {}
+    for row in rows:
+        bucket = _market_regime_bucket(row)
+        if bucket is None:
+            raise TechnicalConfluenceError(
+                "Market-regime aggregation requires classified rows."
+            )
+        grouped.setdefault(bucket, []).append(row)
+    return _aggregate_confluence_study_groups(grouped)
+
+
+def _market_regime_bucket(
+    row: TechnicalConfluenceStudyRow,
+) -> str | None:
+    state = row.confluence_summary.family_states.get(
+        FAMILY_MARKET_REGIME
+    )
+    if state is None or state.state not in {
+        SUPPORTIVE,
+        MIXED,
+        HOSTILE,
+    }:
+        return None
+    return state.state
 
 
 def _aggregate_confluence_study_groups(
@@ -1559,6 +1644,14 @@ def render_technical_confluence_study_markdown(
             "- Aggregate outcomes released: "
             f"{summary['aggregate_outcomes_released']}"
         ),
+        (
+            "- Market-regime-classified samples: "
+            f"{summary['market_regime_eligible_rows']}"
+        ),
+        (
+            "- Market-regime samples still required: "
+            f"{summary['market_regime_rows_to_minimum']}"
+        ),
         "",
         "## Event Samples",
         "",
@@ -1616,6 +1709,12 @@ def render_technical_confluence_study_markdown(
         aggregates=payload[
             "aggregate_outcomes_by_independent_green_families"
         ],
+    )
+    _append_confluence_study_aggregate_table(
+        lines,
+        title="By Market Regime",
+        bucket_label="Market Regime",
+        aggregates=payload["aggregate_outcomes_by_market_regime"],
     )
 
     lines.extend(["", "## Unavailable Event Groups", ""])

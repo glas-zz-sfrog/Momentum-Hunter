@@ -1601,7 +1601,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             bars=daily_bars("AAA", [10.0] * 5),
         )
 
-        self.assertEqual(3, summary.schema_version)
+        self.assertEqual(4, summary.schema_version)
         self.assertEqual(
             len(summary.indicator_states),
             summary.raw_total_checks,
@@ -1966,7 +1966,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             + row["raw_insufficient_data_checks"]
         )
 
-        self.assertEqual(3, payload["schema_version"])
+        self.assertEqual(4, payload["schema_version"])
         self.assertIn(
             "| Raw Green | Raw Yellow | Raw Red | Missing |",
             rendered,
@@ -2046,6 +2046,10 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
     def test_study_groups_same_day_events_and_measures_close_outcomes(self) -> None:
         bars = daily_bars("AAA", [10.0] * 61 + [10.5, 11.0, 10.8, 11.2, 11.5, 11.4, 11.6, 11.7, 11.8, 12.0])
+        benchmark = daily_bars(
+            "QQQ",
+            [100.0 + offset * 0.1 for offset in range(len(bars))],
+        )
         bars[63] = replace(bars[63], low=9.8)
         event_date = bars[60].timestamp
         events = [
@@ -2071,7 +2075,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
         payload = build_technical_confluence_study_payload(
             generated_at="2026-04-01T16:00:00-05:00",
-            daily_bars_by_symbol={"AAA": bars},
+            daily_bars_by_symbol={"AAA": bars, "QQQ": benchmark},
             breakout_events=events,
             breakout_studies=studies,
             source_paths={"daily_ohlc_path": "daily.json"},
@@ -2121,6 +2125,16 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertEqual(
             [family_bucket],
             payload["withheld_independent_green_family_buckets"],
+        )
+        self.assertEqual(
+            [SUPPORTIVE],
+            payload["withheld_market_regime_buckets"],
+        )
+        self.assertFalse(
+            any(
+                warning.startswith("SMALL_MARKET_REGIME_BUCKETS_WITHHELD")
+                for warning in payload["warnings"]
+            )
         )
 
     def test_study_confluence_uses_only_event_date_history(self) -> None:
@@ -2261,6 +2275,22 @@ class TechnicalConfluenceTests(unittest.TestCase):
             30,
             next(iter(family_aggregates.values()))["sample_count"],
         )
+        self.assertEqual(
+            0,
+            payload["summary"]["market_regime_eligible_rows"],
+        )
+        self.assertEqual(
+            30,
+            payload["summary"]["market_regime_unavailable_rows"],
+        )
+        self.assertEqual(
+            {},
+            payload["aggregate_outcomes_by_market_regime"],
+        )
+        self.assertIn(
+            "MARKET_REGIME_AGGREGATES_WITHHELD_MINIMUM_SAMPLE",
+            payload["warnings"],
+        )
 
     def test_study_stratifies_outcomes_by_exact_confluence_counts(self) -> None:
         groups: dict[str, list[TechnicalPriceBar]] = {}
@@ -2388,6 +2418,99 @@ class TechnicalConfluenceTests(unittest.TestCase):
             "SMALL_INDEPENDENT_GREEN_FAMILY_BUCKETS_WITHHELD:",
             rendered,
         )
+
+    def test_study_stratifies_by_historical_market_regime(self) -> None:
+        benchmark = daily_bars(
+            "QQQ",
+            [100.0 + step * 0.2 for step in range(250)]
+            + [149.8 - step * 0.3 for step in range(250)],
+            volume=200,
+        )
+        early_event_index = 219
+        late_event_index = 449
+        groups: dict[str, list[TechnicalPriceBar]] = {
+            "QQQ": benchmark,
+        }
+        events: list[BreakoutEvent] = []
+        for offset in range(30):
+            symbol = f"R{offset:02d}"
+            event_index = (
+                early_event_index if offset < 9 else late_event_index
+            )
+            groups[symbol] = daily_bars(
+                symbol,
+                [10.0] * (event_index + 1)
+                + [10.1 + step * 0.1 for step in range(10)],
+                volume=200,
+            )
+            events.append(
+                breakout_event(
+                    symbol,
+                    BREAKOUT_PRESENT,
+                    event_id=f"{symbol}-event",
+                    event_timestamp=groups[symbol][event_index].timestamp,
+                )
+            )
+        studies = study_breakout_events(
+            events,
+            daily_bars_by_symbol=groups,
+        )
+
+        payload = build_technical_confluence_study_payload(
+            generated_at="2026-06-01T16:00:00-05:00",
+            daily_bars_by_symbol=groups,
+            breakout_events=events,
+            breakout_studies=studies,
+            source_paths={},
+        )
+
+        regime_counts: dict[str, int] = {}
+        for row in payload["rows"]:
+            regime = row["confluence_summary"]["family_states"][
+                FAMILY_MARKET_REGIME
+            ]["state"]
+            regime_counts[regime] = regime_counts.get(regime, 0) + 1
+
+        self.assertEqual(
+            {
+                SUPPORTIVE: 9,
+                HOSTILE: 21,
+            },
+            regime_counts,
+        )
+        self.assertEqual(
+            30,
+            payload["summary"]["market_regime_eligible_rows"],
+        )
+        self.assertEqual(
+            0,
+            payload["summary"]["market_regime_unavailable_rows"],
+        )
+        self.assertEqual(
+            {
+                HOSTILE: 21,
+            },
+            {
+                regime: aggregate["sample_count"]
+                for regime, aggregate in payload[
+                    "aggregate_outcomes_by_market_regime"
+                ].items()
+            },
+        )
+        self.assertEqual(
+            [SUPPORTIVE],
+            payload["withheld_market_regime_buckets"],
+        )
+        self.assertIn(
+            "SMALL_MARKET_REGIME_BUCKETS_WITHHELD:SUPPORTIVE",
+            payload["warnings"],
+        )
+        rendered = render_technical_confluence_study_markdown(payload)
+        self.assertIn("### By Market Regime", rendered)
+        self.assertIn("- Market-regime-classified samples: 30", rendered)
+        self.assertIn("- Market-regime samples still required: 0", rendered)
+        self.assertIn(f"| {HOSTILE} | 21 |", rendered)
+        self.assertNotIn(f"| {SUPPORTIVE} | 9 |", rendered)
 
     def test_study_excludes_duplicate_event_ids_and_marks_missing_bars(self) -> None:
         duplicate = breakout_event(
