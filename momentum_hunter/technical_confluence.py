@@ -31,7 +31,7 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v5"
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v6"
 TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 1
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
@@ -112,6 +112,12 @@ class TechnicalConfluenceOptions:
     relative_strength_window: int = 20
     relative_strength_mid_window: int = 50
     relative_strength_long_window: int = 60
+    atr_expansion_window: int = 14
+    atr_expansion_baseline_window: int = 20
+    atr_expansion_multiple: float = 1.25
+    average_daily_range_window: int = 20
+    average_daily_range_minimum_bars: int = 25
+    average_daily_range_expansion_multiple: float = 1.5
     atr_extension_window: int = 14
     atr_extension_multiple: float = 2.5
     anchored_vwap_anchor_index: int | None = None
@@ -152,6 +158,16 @@ class TechnicalConfluenceOptions:
             ),
             "Relative-strength long window": (
                 self.relative_strength_long_window
+            ),
+            "ATR expansion window": self.atr_expansion_window,
+            "ATR expansion baseline window": (
+                self.atr_expansion_baseline_window
+            ),
+            "Average daily range window": (
+                self.average_daily_range_window
+            ),
+            "Average daily range minimum bars": (
+                self.average_daily_range_minimum_bars
             ),
             "ATR extension window": self.atr_extension_window,
             "RSI window": self.rsi_window,
@@ -208,6 +224,13 @@ class TechnicalConfluenceOptions:
             raise TechnicalConfluenceError(
                 "MACD fast window must be below its slow window."
             )
+        if (
+            self.average_daily_range_minimum_bars
+            <= self.average_daily_range_window
+        ):
+            raise TechnicalConfluenceError(
+                "Average daily range minimum bars must exceed its window."
+            )
         if self.obv_short_window >= self.obv_long_window:
             raise TechnicalConfluenceError(
                 "OBV short window must be below its long window."
@@ -241,6 +264,10 @@ class TechnicalConfluenceOptions:
             "Keltner ATR multiple": self.keltner_atr_multiple,
             "Volume confirmation multiple": (
                 self.volume_confirmation_multiple
+            ),
+            "ATR expansion multiple": self.atr_expansion_multiple,
+            "Average daily range expansion multiple": (
+                self.average_daily_range_expansion_multiple
             ),
             "ATR extension multiple": self.atr_extension_multiple,
             "RSI floor": self.rsi_floor,
@@ -395,6 +422,12 @@ def evaluate_wave1_confluence(
         ppo_momentum_state(ordered_bars, index, options=options),
         rate_of_change_state(ordered_bars, index, options=options),
         squeeze_release_state(ordered_bars, index, options=options),
+        atr_expansion_state(ordered_bars, index, options=options),
+        average_daily_range_expansion_state(
+            ordered_bars,
+            index,
+            options=options,
+        ),
         volume_confirmation_state(ordered_bars, index, options=options),
         obv_new_high_state(ordered_bars, index, options=options),
         money_flow_index_state(ordered_bars, index, options=options),
@@ -2005,6 +2038,185 @@ def squeeze_release_state(
     )
 
 
+def atr_expansion_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    minimum_index = (
+        options.atr_expansion_window
+        + options.atr_expansion_baseline_window
+    )
+    if index < minimum_index or index >= len(bars):
+        return indicator(
+            "atr_expansion",
+            FAMILY_VOLATILITY,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            (
+                "Need current ATR plus the complete prior ATR "
+                "baseline window."
+            ),
+        )
+    atr_values = [
+        average_true_range_through_index(
+            bars,
+            position,
+            options.atr_expansion_window,
+        )
+        for position in range(
+            index - options.atr_expansion_baseline_window,
+            index + 1,
+        )
+    ]
+    if any(value is None for value in atr_values):
+        return indicator(
+            "atr_expansion",
+            FAMILY_VOLATILITY,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            "ATR expansion values are unavailable.",
+        )
+    current_atr = atr_values[-1]
+    prior_atrs = atr_values[:-1]
+    assert current_atr is not None
+    baseline_atr = mean(
+        float(value)
+        for value in prior_atrs
+        if value is not None
+    )
+    if baseline_atr <= 0:
+        return indicator(
+            "atr_expansion",
+            FAMILY_VOLATILITY,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            "Prior ATR baseline must be positive.",
+        )
+    ratio = current_atr / baseline_atr
+    upside_direction = bars[index].close > bars[index - 1].close
+    if ratio >= options.atr_expansion_multiple and upside_direction:
+        state = GREEN
+        reason = (
+            "ATR expanded above its prior baseline and price direction "
+            "confirmed."
+        )
+    elif ratio >= options.atr_expansion_multiple:
+        state = YELLOW
+        reason = (
+            "ATR expanded above its prior baseline without upside price "
+            "confirmation."
+        )
+    else:
+        state = RED
+        reason = "ATR did not reach the expansion threshold."
+    return indicator(
+        "atr_expansion",
+        FAMILY_VOLATILITY,
+        state,
+        "confirmation signal",
+        round_value(ratio),
+        reason,
+        details={
+            "atr_window": options.atr_expansion_window,
+            "baseline_window": options.atr_expansion_baseline_window,
+            "current_atr": round_value(current_atr),
+            "baseline_atr": round_value(baseline_atr),
+            "expansion_ratio": round_value(ratio),
+            "expansion_threshold": options.atr_expansion_multiple,
+            "upside_direction": upside_direction,
+        },
+    )
+
+
+def average_daily_range_expansion_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    if (
+        index + 1 < options.average_daily_range_minimum_bars
+        or index < options.average_daily_range_window
+        or index >= len(bars)
+    ):
+        return indicator(
+            "average_daily_range_expansion",
+            FAMILY_VOLATILITY,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            "Need the complete prior ADR window and minimum bar history.",
+        )
+    prior_ranges = [
+        bar.high - bar.low
+        for bar in bars[
+            index - options.average_daily_range_window : index
+        ]
+    ]
+    baseline_range = mean(prior_ranges)
+    if baseline_range <= 0:
+        return indicator(
+            "average_daily_range_expansion",
+            FAMILY_VOLATILITY,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            "Prior average daily range must be positive.",
+        )
+    current_range = bars[index].high - bars[index].low
+    ratio = current_range / baseline_range
+    upside_direction = bars[index].close > bars[index - 1].close
+    if (
+        ratio >= options.average_daily_range_expansion_multiple
+        and upside_direction
+    ):
+        state = GREEN
+        reason = (
+            "Daily range expanded above ADR20 with upside price "
+            "confirmation."
+        )
+    elif ratio >= options.average_daily_range_expansion_multiple:
+        state = YELLOW
+        reason = (
+            "Daily range expanded above ADR20 without upside price "
+            "confirmation."
+        )
+    else:
+        state = RED
+        reason = "Daily range did not reach the ADR expansion threshold."
+    return indicator(
+        "average_daily_range_expansion",
+        FAMILY_VOLATILITY,
+        state,
+        "confirmation signal",
+        round_value(ratio),
+        reason,
+        details={
+            "range_basis": "absolute_high_low",
+            "window": options.average_daily_range_window,
+            "minimum_bars": (
+                options.average_daily_range_minimum_bars
+            ),
+            "current_range": round_value(current_range),
+            "baseline_range": round_value(baseline_range),
+            "expansion_ratio": round_value(ratio),
+            "expansion_threshold": (
+                options.average_daily_range_expansion_multiple
+            ),
+            "upside_direction": upside_direction,
+        },
+    )
+
+
 def volume_confirmation_state(
     bars: list[TechnicalPriceBar],
     index: int,
@@ -3300,6 +3512,20 @@ def _breakout_options_from_confluence(options: TechnicalConfluenceOptions) -> An
 def max_or_none(*values: float | None) -> float | None:
     present = [value for value in values if value is not None]
     return max(present) if present else None
+
+
+def average_true_range_through_index(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    window: int,
+) -> float | None:
+    if index < window or index >= len(bars):
+        return None
+    ranges = [
+        true_range(bars[position], bars[position - 1])
+        for position in range(index - window + 1, index + 1)
+    ]
+    return mean(ranges) if len(ranges) == window else None
 
 
 def indicator(

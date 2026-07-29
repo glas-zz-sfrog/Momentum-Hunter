@@ -39,6 +39,8 @@ from momentum_hunter.technical_confluence import (
     adx_trend_strength_state,
     anchored_vwap_state,
     atr_extension_risk_state,
+    atr_expansion_state,
+    average_daily_range_expansion_state,
     benchmark_sma_regime_state,
     build_technical_confluence_report_payload,
     build_technical_confluence_study_payload,
@@ -250,6 +252,186 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertEqual(GREEN, state.state)
         self.assertTrue(state.details["was_compressed"])
         self.assertTrue(state.details["released"])
+
+    def test_atr_expansion_requires_upside_direction_for_green(self) -> None:
+        rising = [
+            daily_bar(
+                "AAA",
+                offset,
+                close=10.0 + offset * 0.1,
+                high=10.1 + offset * 0.1,
+                low=9.9 + offset * 0.1,
+                volume=100,
+            )
+            for offset in range(34)
+        ]
+        falling = list(rising)
+        rising.append(
+            daily_bar(
+                "AAA",
+                34,
+                close=16.0,
+                high=18.0,
+                low=15.0,
+                volume=100,
+            )
+        )
+        falling.append(
+            daily_bar(
+                "AAA",
+                34,
+                close=10.0,
+                high=13.5,
+                low=9.0,
+                volume=100,
+            )
+        )
+
+        confirming = atr_expansion_state(rising, 34)
+        unconfirmed = atr_expansion_state(falling, 34)
+
+        self.assertEqual(GREEN, confirming.state)
+        self.assertGreaterEqual(
+            confirming.details["expansion_ratio"],
+            confirming.details["expansion_threshold"],
+        )
+        self.assertTrue(confirming.details["upside_direction"])
+        self.assertEqual("YELLOW", unconfirmed.state)
+        self.assertFalse(unconfirmed.details["upside_direction"])
+
+    def test_average_daily_range_expansion_uses_prior_adr20(self) -> None:
+        confirming = [
+            daily_bar(
+                "AAA",
+                offset,
+                close=10.0 + offset * 0.1,
+                high=10.1 + offset * 0.1,
+                low=9.9 + offset * 0.1,
+                volume=100,
+            )
+            for offset in range(24)
+        ]
+        unconfirmed = list(confirming)
+        confirming.append(
+            daily_bar(
+                "AAA",
+                24,
+                close=14.0,
+                high=15.0,
+                low=12.0,
+                volume=100,
+            )
+        )
+        unconfirmed.append(
+            daily_bar(
+                "AAA",
+                24,
+                close=9.0,
+                high=12.5,
+                low=8.0,
+                volume=100,
+            )
+        )
+
+        expansion = average_daily_range_expansion_state(confirming, 24)
+        downside = average_daily_range_expansion_state(unconfirmed, 24)
+
+        self.assertEqual(GREEN, expansion.state)
+        self.assertEqual("absolute_high_low", expansion.details["range_basis"])
+        self.assertEqual(20, expansion.details["window"])
+        self.assertEqual(1.5, expansion.details["expansion_threshold"])
+        self.assertEqual("YELLOW", downside.state)
+        self.assertFalse(downside.details["upside_direction"])
+
+    def test_volatility_expansion_marks_short_history_insufficient(self) -> None:
+        bars = [
+            daily_bar(
+                "AAA",
+                offset,
+                close=10.0,
+                high=10.1,
+                low=9.9,
+                volume=100,
+            )
+            for offset in range(24)
+        ]
+
+        self.assertEqual(
+            INSUFFICIENT_DATA,
+            atr_expansion_state(bars, 23).state,
+        )
+        self.assertEqual(
+            INSUFFICIENT_DATA,
+            average_daily_range_expansion_state(bars, 23).state,
+        )
+
+    def test_volatility_expansion_ignores_future_bars_and_source_mutation(
+        self,
+    ) -> None:
+        bars = [
+            daily_bar(
+                "AAA",
+                offset,
+                close=10.0 + offset * 0.1,
+                high=10.1 + offset * 0.1,
+                low=9.9 + offset * 0.1,
+                volume=100,
+            )
+            for offset in range(60)
+        ]
+        source_before = fingerprint_bars(bars)
+        states_before = [
+            asdict(atr_expansion_state(bars, 34)),
+            asdict(average_daily_range_expansion_state(bars, 34)),
+        ]
+        self.assertEqual(source_before, fingerprint_bars(bars))
+
+        bars[59] = replace(
+            bars[59],
+            open=1.0,
+            high=2.0,
+            low=0.5,
+            close=1.0,
+        )
+        manually_mutated = fingerprint_bars(bars)
+        states_after = [
+            asdict(atr_expansion_state(bars, 34)),
+            asdict(average_daily_range_expansion_state(bars, 34)),
+        ]
+
+        self.assertEqual(states_before, states_after)
+        self.assertEqual(manually_mutated, fingerprint_bars(bars))
+        self.assertNotEqual(source_before, fingerprint_bars(bars))
+
+    def test_volatility_expansion_checks_remain_one_family(self) -> None:
+        bars = [
+            daily_bar(
+                "AAA",
+                offset,
+                close=10.0 + offset * 0.1,
+                high=10.1 + offset * 0.1,
+                low=9.9 + offset * 0.1,
+                volume=100,
+            )
+            for offset in range(60)
+        ]
+
+        summary = evaluate_wave1_confluence(symbol="AAA", bars=bars)
+        volatility_names = {
+            state.name
+            for state in summary.indicator_states
+            if state.family == technical_confluence.FAMILY_VOLATILITY
+        }
+
+        self.assertEqual(
+            {
+                "bollinger_keltner_squeeze_release",
+                "atr_expansion",
+                "average_daily_range_expansion",
+            },
+            volatility_names,
+        )
+        self.assertLessEqual(summary.independent_total_families, 5)
 
     def test_volume_confirmation_uses_prior_average(self) -> None:
         bars = daily_bars("AAA", [10.0] * 21, volume=100)
@@ -1125,8 +1307,17 @@ class TechnicalConfluenceTests(unittest.TestCase):
         )
 
         self.assertTrue(summary.research_only)
-        self.assertEqual(STRONG_CONFLUENCE, summary.conclusion)
-        self.assertGreaterEqual(summary.independent_green_families, 4)
+        self.assertEqual(
+            technical_confluence.MODERATE_CONFLUENCE,
+            summary.conclusion,
+        )
+        self.assertEqual(
+            "YELLOW",
+            summary.family_states[
+                technical_confluence.FAMILY_VOLATILITY
+            ].state,
+        )
+        self.assertGreaterEqual(summary.independent_green_families, 3)
         self.assertEqual(CLEAR, summary.family_states["Overextension / Risk"].state)
 
     def test_insufficient_data_is_explicit(self) -> None:
@@ -1164,6 +1355,15 @@ class TechnicalConfluenceTests(unittest.TestCase):
             {
                 "up_down_volume_short_window": 20,
                 "up_down_volume_long_window": 10,
+            },
+            {"atr_expansion_baseline_window": 0},
+            {"atr_expansion_multiple": float("nan")},
+            {
+                "average_daily_range_window": 25,
+                "average_daily_range_minimum_bars": 25,
+            },
+            {
+                "average_daily_range_expansion_multiple": 0.0,
             },
         )
 
