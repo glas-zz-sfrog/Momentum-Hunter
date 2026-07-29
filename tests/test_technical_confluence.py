@@ -62,6 +62,7 @@ from momentum_hunter.technical_confluence import (
     rsi_regime_state,
     sma_position_state,
     squeeze_release_state,
+    supertrend_state,
     up_down_volume_state,
     volume_confirmation_state,
     write_technical_confluence_reports,
@@ -104,6 +105,83 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertTrue(full_state.details["long_window_available"])
         self.assertTrue(full_state.details["full_bullish"])
         self.assertEqual(RED, bearish_state.state)
+
+    def test_supertrend_marks_sustained_uptrend_green(self) -> None:
+        state = supertrend_state(
+            daily_bars("AAA", [10.0 + offset for offset in range(30)]),
+            29,
+        )
+
+        self.assertEqual(GREEN, state.state)
+        self.assertEqual("BULLISH", state.details["direction"])
+        self.assertGreater(
+            state.details["close"],
+            state.details["active_line"],
+        )
+        self.assertEqual(10, state.details["atr_window"])
+        self.assertEqual(3.0, state.details["atr_multiple"])
+        self.assertEqual("UPPER_BAND", state.details["initialization"])
+
+    def test_supertrend_marks_sustained_downtrend_red(self) -> None:
+        state = supertrend_state(
+            daily_bars("AAA", [40.0 - offset for offset in range(30)]),
+            29,
+        )
+
+        self.assertEqual(RED, state.state)
+        self.assertEqual("BEARISH", state.details["direction"])
+        self.assertLess(
+            state.details["close"],
+            state.details["active_line"],
+        )
+
+    def test_supertrend_flips_after_price_crosses_active_band(self) -> None:
+        closes = (
+            [10.0 + offset for offset in range(40)]
+            + [49.0 - 2.0 * offset for offset in range(20)]
+        )
+        bars = daily_bars("AAA", closes)
+
+        before_reversal = supertrend_state(bars, 39)
+        after_reversal = supertrend_state(bars, 59)
+
+        self.assertEqual(GREEN, before_reversal.state)
+        self.assertEqual(RED, after_reversal.state)
+        self.assertEqual("BEARISH", after_reversal.details["direction"])
+
+    def test_supertrend_requires_registry_minimum_history(self) -> None:
+        state = supertrend_state(
+            daily_bars("AAA", [10.0 + offset for offset in range(29)]),
+            28,
+        )
+
+        self.assertEqual(INSUFFICIENT_DATA, state.state)
+        self.assertEqual(30, state.details["minimum_bars"])
+
+    def test_supertrend_ignores_future_bars_without_source_mutation(
+        self,
+    ) -> None:
+        bars = daily_bars(
+            "AAA",
+            [10.0 + offset for offset in range(60)],
+        )
+        source_before = fingerprint_bars(bars)
+        state_before = asdict(supertrend_state(bars, 29))
+        self.assertEqual(source_before, fingerprint_bars(bars))
+
+        bars[59] = replace(
+            bars[59],
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.0,
+        )
+        manually_mutated = fingerprint_bars(bars)
+        state_after = asdict(supertrend_state(bars, 29))
+
+        self.assertEqual(state_before, state_after)
+        self.assertEqual(manually_mutated, fingerprint_bars(bars))
+        self.assertNotEqual(source_before, fingerprint_bars(bars))
 
     def test_benchmark_sma_regime_preserves_partial_qqq_context(self) -> None:
         stock = daily_bars(
@@ -902,6 +980,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
         }
 
         self.assertIn("sma_position", trend_names)
+        self.assertIn("supertrend", trend_names)
         self.assertEqual(
             {
                 "relative_strength_vs_benchmark",
@@ -1424,6 +1503,12 @@ class TechnicalConfluenceTests(unittest.TestCase):
             {"ema_fast_window": 0},
             {"ema_fast_window": 20, "ema_mid_window": 8},
             {"sma_short_window": 50, "sma_mid_window": 20},
+            {"supertrend_atr_window": 0},
+            {
+                "supertrend_atr_window": 30,
+                "supertrend_minimum_bars": 30,
+            },
+            {"supertrend_atr_multiple": float("nan")},
             {"adx_green_threshold": 10.0, "adx_yellow_threshold": 15.0},
             {"volume_confirmation_multiple": float("nan")},
             {"bollinger_bandwidth_percentile_window": 0},

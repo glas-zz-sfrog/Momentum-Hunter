@@ -31,7 +31,7 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v7"
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v8"
 TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 1
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
@@ -100,6 +100,9 @@ class TechnicalConfluenceOptions:
     sma_short_window: int = 20
     sma_mid_window: int = 50
     sma_long_window: int = 200
+    supertrend_atr_window: int = 10
+    supertrend_atr_multiple: float = 3.0
+    supertrend_minimum_bars: int = 30
     adx_window: int = 14
     adx_green_threshold: float = 20.0
     adx_yellow_threshold: float = 15.0
@@ -150,6 +153,8 @@ class TechnicalConfluenceOptions:
             "SMA short window": self.sma_short_window,
             "SMA mid window": self.sma_mid_window,
             "SMA long window": self.sma_long_window,
+            "Supertrend ATR window": self.supertrend_atr_window,
+            "Supertrend minimum bars": self.supertrend_minimum_bars,
             "ADX window": self.adx_window,
             "Bollinger window": self.bollinger_window,
             "Bollinger Bandwidth percentile window": (
@@ -225,6 +230,10 @@ class TechnicalConfluenceOptions:
             raise TechnicalConfluenceError(
                 "Relative-strength windows must be ordered short < mid < long."
             )
+        if self.supertrend_minimum_bars <= self.supertrend_atr_window:
+            raise TechnicalConfluenceError(
+                "Supertrend minimum bars must exceed its ATR window."
+            )
         if self.macd_fast_window >= self.macd_slow_window:
             raise TechnicalConfluenceError(
                 "MACD fast window must be below its slow window."
@@ -265,6 +274,7 @@ class TechnicalConfluenceOptions:
         numeric_options = {
             "ADX green threshold": self.adx_green_threshold,
             "ADX yellow threshold": self.adx_yellow_threshold,
+            "Supertrend ATR multiple": self.supertrend_atr_multiple,
             "Bollinger standard-deviation multiple": self.bollinger_stddevs,
             "Bollinger Bandwidth squeeze percentile": (
                 self.bollinger_bandwidth_squeeze_percentile
@@ -432,6 +442,7 @@ def evaluate_wave1_confluence(
     indicators = [
         ema_stack_state(ordered_bars, index, options=options),
         sma_position_state(ordered_bars, index, options=options),
+        supertrend_state(ordered_bars, index, options=options),
         adx_trend_strength_state(ordered_bars, index, options=options),
         anchored_vwap_state(ordered_bars, index, options=options),
         rsi_regime_state(ordered_bars, index, options=options),
@@ -1588,6 +1599,80 @@ def sma_position_state(
             "long_window_available": full_history,
             "short_mid_bullish": short_mid_bullish,
             "full_bullish": full_bullish and full_history,
+        },
+    )
+
+
+def supertrend_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    if (
+        index + 1 < options.supertrend_minimum_bars
+        or index >= len(bars)
+    ):
+        return indicator(
+            "supertrend",
+            FAMILY_TREND,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            (
+                "Need the configured minimum completed bars for "
+                "Supertrend."
+            ),
+            details={
+                "minimum_bars": options.supertrend_minimum_bars,
+                "atr_window": options.supertrend_atr_window,
+                "atr_multiple": options.supertrend_atr_multiple,
+            },
+        )
+    components = supertrend_components(
+        bars,
+        index,
+        options=options,
+    )
+    if components is None:
+        return indicator(
+            "supertrend",
+            FAMILY_TREND,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            "Supertrend ATR bands are unavailable.",
+        )
+    line, bullish, final_upper, final_lower = components
+    close = bars[index].close
+    if bullish and close > line:
+        state = GREEN
+        reason = "Close remains above the active Supertrend line."
+    elif not bullish and close < line:
+        state = RED
+        reason = "Close remains below the active Supertrend line."
+    else:
+        state = YELLOW
+        reason = "Close is touching the active Supertrend line."
+    return indicator(
+        "supertrend",
+        FAMILY_TREND,
+        state,
+        "confirmation signal",
+        round_value(line),
+        reason,
+        details={
+            "direction": "BULLISH" if bullish else "BEARISH",
+            "close": round_value(close),
+            "active_line": round_value(line),
+            "final_upper_band": round_value(final_upper),
+            "final_lower_band": round_value(final_lower),
+            "atr_window": options.supertrend_atr_window,
+            "atr_multiple": options.supertrend_atr_multiple,
+            "minimum_bars": options.supertrend_minimum_bars,
+            "initialization": "UPPER_BAND",
         },
     )
 
@@ -3672,6 +3757,56 @@ def midrank_percentile_rank(
     below = sum(1 for prior in prior_values if prior < value)
     equal = sum(1 for prior in prior_values if prior == value)
     return (below + 0.5 * equal) / len(prior_values) * 100.0
+
+
+def supertrend_components(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions,
+) -> tuple[float, bool, float, float] | None:
+    if index < options.supertrend_atr_window or index >= len(bars):
+        return None
+    final_upper: float | None = None
+    final_lower: float | None = None
+    line: float | None = None
+    bullish = False
+    for position in range(options.supertrend_atr_window, index + 1):
+        atr = average_true_range_through_index(
+            bars,
+            position,
+            options.supertrend_atr_window,
+        )
+        if atr is None:
+            return None
+        midpoint = (bars[position].high + bars[position].low) / 2.0
+        basic_upper = midpoint + options.supertrend_atr_multiple * atr
+        basic_lower = midpoint - options.supertrend_atr_multiple * atr
+        if final_upper is None or final_lower is None:
+            final_upper = basic_upper
+            final_lower = basic_lower
+            line = final_upper
+            bullish = False
+            continue
+        previous_close = bars[position - 1].close
+        if basic_upper < final_upper or previous_close > final_upper:
+            final_upper = basic_upper
+        if basic_lower > final_lower or previous_close < final_lower:
+            final_lower = basic_lower
+        if bullish:
+            if bars[position].close < final_lower:
+                bullish = False
+                line = final_upper
+            else:
+                line = final_lower
+        elif bars[position].close > final_upper:
+            bullish = True
+            line = final_lower
+        else:
+            line = final_upper
+    if line is None or final_upper is None or final_lower is None:
+        return None
+    return line, bullish, final_upper, final_lower
 
 
 def average_true_range_through_index(
