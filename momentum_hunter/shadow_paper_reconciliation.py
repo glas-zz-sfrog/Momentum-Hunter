@@ -890,7 +890,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Record write-once manual thinkorswim paperMoney evidence without "
-            "contacting a broker or changing Shadow Trading state."
+            "contacting a broker or changing Shadow Trading state, then refresh "
+            "read-only experiment evidence."
         )
     )
     parser.add_argument("--state-path", type=Path, default=SHADOW_STATE_PATH)
@@ -899,6 +900,10 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=PAPER_RECONCILIATIONS_DIR,
     )
+    parser.add_argument("--decision-cycles-path", type=Path)
+    parser.add_argument("--experiments-dir", type=Path)
+    parser.add_argument("--studies-dir", type=Path)
+    parser.add_argument("--automation-receipts-dir", type=Path)
     parser.add_argument("--trade-id", required=True)
     parser.add_argument("--exact-ticket-entered", required=True)
     parser.add_argument("--result", required=True, choices=sorted(PAPER_RESULTS))
@@ -911,9 +916,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--notes", default="")
     args = parser.parse_args(argv)
 
-    result = record_paper_money_reconciliation(
+    from momentum_hunter.shadow_paper_reconciliation_workflow import (
+        record_and_refresh_paper_money_evidence,
+    )
+
+    workflow = record_and_refresh_paper_money_evidence(
         state_path=args.state_path,
         output_dir=args.output_dir,
+        decision_cycles_path=args.decision_cycles_path,
+        experiments_dir=args.experiments_dir,
+        studies_dir=args.studies_dir,
+        automation_receipts_dir=args.automation_receipts_dir,
         shadow_trade_id=args.trade_id,
         exact_ticket_entered=args.exact_ticket_entered,
         paper_money_result=args.result,
@@ -925,6 +938,7 @@ def main(argv: list[str] | None = None) -> int:
         paper_money_outcome=args.paper_money_outcome,
         reconciliation_notes=args.notes,
     )
+    result = workflow.reconciliation
     print(
         json.dumps(
             {
@@ -935,6 +949,9 @@ def main(argv: list[str] | None = None) -> int:
                 "brokerRequestPerformed": result.record.broker_request_performed,
                 "orderActionPerformed": result.record.order_action_performed,
                 "reconciliation": result.record.to_dict(),
+                "experimentEvidence": (
+                    workflow.experiment_evidence.to_dict()
+                ),
             },
             indent=2,
         )

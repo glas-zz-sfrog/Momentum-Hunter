@@ -119,6 +119,7 @@ def automate_shadow_experiment_evidence(
     *,
     state_path: Path = SHADOW_STATE_PATH,
     decision_cycles_path: Path | None = None,
+    paper_reconciliations_dir: Path | None = None,
     experiments_dir: Path,
     studies_dir: Path,
     receipts_dir: Path = SHADOW_EXPERIMENT_AUTOMATION_RECEIPTS_DIR,
@@ -130,7 +131,11 @@ def automate_shadow_experiment_evidence(
         source_state_path,
         decision_cycles_path,
     )
-    terminal = _terminal_evidence(source_state_path, cycle_path)
+    terminal = _terminal_evidence(
+        source_state_path,
+        cycle_path,
+        paper_reconciliations_dir,
+    )
     if not terminal.terminal_trade_ids:
         _verify_source_snapshots(terminal.source_snapshots)
         return _result(
@@ -167,6 +172,7 @@ def automate_shadow_experiment_evidence(
     pipeline = run_shadow_experiment_pipeline(
         state_path=source_state_path,
         decision_cycles_path=cycle_path,
+        paper_reconciliations_dir=paper_reconciliations_dir,
         experiments_dir=experiments_dir,
         studies_dir=studies_dir,
     )
@@ -175,7 +181,11 @@ def automate_shadow_experiment_evidence(
         terminal.terminal_trade_ids,
     )
     _verify_source_snapshots(terminal.source_snapshots)
-    current_terminal = _terminal_evidence(source_state_path, cycle_path)
+    current_terminal = _terminal_evidence(
+        source_state_path,
+        cycle_path,
+        paper_reconciliations_dir,
+    )
     if (
         current_terminal.fingerprint != terminal.fingerprint
         or current_terminal.terminal_trade_ids
@@ -263,6 +273,7 @@ def load_shadow_experiment_automation_receipt(
 def _terminal_evidence(
     state_path: Path,
     decision_cycles_path: Path,
+    paper_reconciliations_dir: Path | None = None,
 ) -> _TerminalEvidence:
     state_source = _read_bounded_source(
         state_path,
@@ -329,6 +340,7 @@ def _terminal_evidence(
         reconciliation_path = _reconciliation_path(
             state_path,
             trade.shadow_trade_id,
+            paper_reconciliations_dir,
         )
         reconciliation_source = _read_bounded_source(
             reconciliation_path,
@@ -844,11 +856,16 @@ def _decision_cycles_path(
 def _reconciliation_path(
     state_path: Path,
     shadow_trade_id: str,
+    supplied_dir: Path | None = None,
 ) -> Path:
     directory = (
-        PAPER_RECONCILIATIONS_DIR
-        if state_path == SHADOW_STATE_PATH.expanduser().resolve()
-        else state_path.parent / "paper-reconciliations"
+        supplied_dir.expanduser().resolve()
+        if supplied_dir is not None
+        else (
+            PAPER_RECONCILIATIONS_DIR
+            if state_path == SHADOW_STATE_PATH.expanduser().resolve()
+            else state_path.parent / "paper-reconciliations"
+        )
     )
     return (
         directory

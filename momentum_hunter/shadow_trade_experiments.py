@@ -117,6 +117,7 @@ def generate_shadow_trade_experiment(
     state_path: Path = SHADOW_STATE_PATH,
     decision_cycles_path: Path | None = None,
     paper_reconciliation_path: Path | None = None,
+    paper_reconciliations_dir: Path | None = None,
     output_dir: Path = SHADOW_TRADE_EXPERIMENTS_DIR,
 ) -> ShadowTradeExperimentWrite:
     """Build and persist one immutable read-only Shadow experiment snapshot."""
@@ -171,6 +172,7 @@ def generate_shadow_trade_experiment(
         trade,
         state_path=source_state_path,
         supplied=paper_reconciliation_path,
+        supplied_dir=paper_reconciliations_dir,
     )
     reconciliation = (
         load_paper_money_reconciliation(reconciliation_path)
@@ -770,12 +772,21 @@ def _reconciliation_source(
     *,
     state_path: Path,
     supplied: Path | None,
+    supplied_dir: Path | None = None,
 ) -> tuple[Path, bytes | None]:
+    if supplied is not None and supplied_dir is not None:
+        raise ShadowTradeExperimentError(
+            "Supply a reconciliation file or directory, not both."
+        )
     explicit = supplied is not None
     default_directory = (
-        PAPER_RECONCILIATIONS_DIR
-        if state_path == SHADOW_STATE_PATH.expanduser().resolve()
-        else state_path.parent / "paper-reconciliations"
+        supplied_dir.expanduser().resolve()
+        if supplied_dir is not None
+        else (
+            PAPER_RECONCILIATIONS_DIR
+            if state_path == SHADOW_STATE_PATH.expanduser().resolve()
+            else state_path.parent / "paper-reconciliations"
+        )
     )
     path = (
         supplied.expanduser().resolve()

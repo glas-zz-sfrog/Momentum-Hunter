@@ -100,6 +100,7 @@ def run_shadow_experiment_pipeline(
     *,
     state_path: Path = SHADOW_STATE_PATH,
     decision_cycles_path: Path | None = None,
+    paper_reconciliations_dir: Path | None = None,
     experiments_dir: Path = SHADOW_TRADE_EXPERIMENTS_DIR,
     studies_dir: Path = SHADOW_EXPERIMENT_STUDIES_DIR,
 ) -> ShadowExperimentPipelineResult:
@@ -156,6 +157,7 @@ def run_shadow_experiment_pipeline(
         reconciliation_path = _reconciliation_path(
             source_state_path,
             trade.shadow_trade_id,
+            paper_reconciliations_dir,
         )
         source_snapshots[reconciliation_path] = _read_optional_source(
             reconciliation_path,
@@ -181,6 +183,7 @@ def run_shadow_experiment_pipeline(
                 shadow_trade_id=trade.shadow_trade_id,
                 state_path=source_state_path,
                 decision_cycles_path=cycle_path,
+                paper_reconciliations_dir=paper_reconciliations_dir,
                 output_dir=experiment_output,
             )
         )
@@ -265,11 +268,16 @@ def _decision_cycles_path(
 def _reconciliation_path(
     state_path: Path,
     shadow_trade_id: str,
+    supplied_dir: Path | None = None,
 ) -> Path:
     directory = (
-        PAPER_RECONCILIATIONS_DIR.expanduser().resolve()
-        if state_path == SHADOW_STATE_PATH.expanduser().resolve()
-        else state_path.parent / "paper-reconciliations"
+        supplied_dir.expanduser().resolve()
+        if supplied_dir is not None
+        else (
+            PAPER_RECONCILIATIONS_DIR.expanduser().resolve()
+            if state_path == SHADOW_STATE_PATH.expanduser().resolve()
+            else state_path.parent / "paper-reconciliations"
+        )
     )
     return directory / f"paper-reconciliation-{shadow_trade_id}.json"
 
@@ -326,6 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--state-path", type=Path, default=SHADOW_STATE_PATH)
     parser.add_argument("--decision-cycles-path", type=Path)
+    parser.add_argument("--paper-reconciliations-dir", type=Path)
     parser.add_argument(
         "--experiments-dir",
         type=Path,
@@ -340,6 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     result = run_shadow_experiment_pipeline(
         state_path=args.state_path,
         decision_cycles_path=args.decision_cycles_path,
+        paper_reconciliations_dir=args.paper_reconciliations_dir,
         experiments_dir=args.experiments_dir,
         studies_dir=args.studies_dir,
     )
