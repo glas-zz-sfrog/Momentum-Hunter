@@ -1603,7 +1603,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             bars=daily_bars("AAA", [10.0] * 5),
         )
 
-        self.assertEqual(9, summary.schema_version)
+        self.assertEqual(10, summary.schema_version)
         self.assertEqual(
             len(summary.indicator_states),
             summary.raw_total_checks,
@@ -1968,7 +1968,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             + row["raw_insufficient_data_checks"]
         )
 
-        self.assertEqual(9, payload["schema_version"])
+        self.assertEqual(10, payload["schema_version"])
         self.assertIn(
             "| Raw Green | Raw Yellow | Raw Red | Missing |",
             rendered,
@@ -2902,6 +2902,220 @@ class TechnicalConfluenceTests(unittest.TestCase):
             "SMALL_INDEPENDENT_GREEN_FAMILY_BUCKETS_WITHHELD:",
             rendered,
         )
+        monotonicity = payload["confluence_monotonicity"]
+        self.assertEqual(
+            technical_confluence.MONOTONICITY_WITHHELD,
+            monotonicity["independent_green_families"][
+                "absolute_return"
+            ]["status"],
+        )
+        self.assertEqual(
+            "MINIMUM_RELEASED_ORDERED_BUCKETS_NOT_MET",
+            monotonicity["independent_green_families"][
+                "absolute_return"
+            ]["reason"],
+        )
+        self.assertIn("## Confluence Monotonicity", rendered)
+        self.assertIn(
+            "| Independent Green Families | Absolute Return | WITHHELD |",
+            rendered,
+        )
+
+    def test_monotonicity_releases_increasing_same_denominator_buckets(
+        self,
+    ) -> None:
+        aggregates = monotonicity_aggregates(
+            {
+                "2/7": (-1.0, -0.5),
+                "3/7": (1.0, 1.5),
+                "4/7": (3.0, 3.5),
+            },
+            cluster_status=TEMPORAL_STABILITY_RELEASED,
+        )
+        before = json.dumps(aggregates, sort_keys=True, allow_nan=False)
+
+        result = technical_confluence._build_count_monotonicity_study(
+            aggregates
+        )
+
+        self.assertEqual(
+            technical_confluence.MONOTONICITY_RELEASED,
+            result["status"],
+        )
+        self.assertIsNone(result["reason"])
+        self.assertEqual(7, result["denominator"])
+        self.assertEqual(
+            ["2/7", "3/7", "4/7"],
+            [row["bucket"] for row in result["ordered_buckets"]],
+        )
+        self.assertEqual(
+            [-1.0, 1.0, 3.0],
+            result["median_10d_pct_sequence"],
+        )
+        self.assertEqual(
+            "STRICTLY_INCREASING",
+            result["median_direction"],
+        )
+        self.assertEqual(
+            "STRICTLY_INCREASING",
+            result["mean_direction"],
+        )
+        self.assertEqual(
+            1.0,
+            result["median_spearman_rank_correlation"],
+        )
+        self.assertEqual(
+            technical_confluence.MONOTONICITY_RELEASED,
+            result["date_cluster_support_status"],
+        )
+        self.assertTrue(result["descriptive_only"])
+        self.assertFalse(result["causal_relationship_proven"])
+        self.assertFalse(result["production_behavior_changed"])
+        self.assertEqual(
+            "equal_weight_per_released_count_bucket",
+            result["bucket_weighting"],
+        )
+        self.assertFalse(result["statistical_significance_tested"])
+        self.assertFalse(result["confidence_interval_separation_tested"])
+        self.assertEqual(
+            before,
+            json.dumps(aggregates, sort_keys=True, allow_nan=False),
+        )
+        json.dumps(result, allow_nan=False)
+
+    def test_monotonicity_reports_mixed_direction_and_withheld_clusters(
+        self,
+    ) -> None:
+        aggregates = monotonicity_aggregates(
+            {
+                "3/7": (3.0, 4.0),
+                "4/7": (1.0, 2.0),
+                "5/7": (2.0, 1.0),
+            },
+            cluster_status=TEMPORAL_STABILITY_WITHHELD,
+        )
+
+        result = technical_confluence._build_count_monotonicity_study(
+            aggregates
+        )
+
+        self.assertEqual(
+            technical_confluence.MONOTONICITY_RELEASED,
+            result["status"],
+        )
+        self.assertEqual("MIXED", result["median_direction"])
+        self.assertEqual("STRICTLY_DECREASING", result["mean_direction"])
+        self.assertEqual(
+            -0.5,
+            result["median_spearman_rank_correlation"],
+        )
+        self.assertEqual(
+            -1.0,
+            result["mean_spearman_rank_correlation"],
+        )
+        self.assertEqual(
+            technical_confluence.MONOTONICITY_WITHHELD,
+            result["date_cluster_support_status"],
+        )
+        self.assertEqual(
+            "ONE_OR_MORE_BUCKETS_LACK_DATE_CLUSTER_RELEASE",
+            result["date_cluster_support_reason"],
+        )
+        tied = technical_confluence._build_count_monotonicity_study(
+            monotonicity_aggregates(
+                {
+                    "2/7": (1.0, 1.0),
+                    "3/7": (1.0, 1.0),
+                    "4/7": (2.0, 1.0),
+                }
+            )
+        )
+        self.assertEqual("NON_DECREASING", tied["median_direction"])
+        self.assertEqual(
+            0.866,
+            tied["median_spearman_rank_correlation"],
+        )
+        self.assertEqual("FLAT", tied["mean_direction"])
+        self.assertIsNone(tied["mean_spearman_rank_correlation"])
+        json.dumps(tied, allow_nan=False)
+
+    def test_monotonicity_withholds_too_few_or_mixed_denominator_buckets(
+        self,
+    ) -> None:
+        too_few = technical_confluence._build_count_monotonicity_study(
+            monotonicity_aggregates(
+                {
+                    "3/7": (1.0, 1.0),
+                    "4/7": (2.0, 2.0),
+                }
+            )
+        )
+        mixed_denominators = (
+            technical_confluence._build_count_monotonicity_study(
+                monotonicity_aggregates(
+                    {
+                        "2/7": (1.0, 1.0),
+                        "3/7": (2.0, 2.0),
+                        "4/8": (3.0, 3.0),
+                    }
+                )
+            )
+        )
+        no_benchmark = technical_confluence._build_count_monotonicity_study(
+            {},
+            benchmark_relative=True,
+            empty_reason="BENCHMARK_RELATIVE_AGGREGATES_UNAVAILABLE",
+        )
+
+        self.assertEqual(
+            "MINIMUM_RELEASED_ORDERED_BUCKETS_NOT_MET",
+            too_few["reason"],
+        )
+        self.assertEqual(
+            "MIXED_BUCKET_DENOMINATORS",
+            mixed_denominators["reason"],
+        )
+        self.assertEqual(
+            "BENCHMARK_RELATIVE_AGGREGATES_UNAVAILABLE",
+            no_benchmark["reason"],
+        )
+        self.assertEqual(
+            technical_confluence.MONOTONICITY_WITHHELD,
+            no_benchmark["status"],
+        )
+
+    def test_monotonicity_uses_benchmark_relative_outcomes(self) -> None:
+        aggregates = monotonicity_aggregates(
+            {
+                "2/7": (-2.0, -1.5),
+                "3/7": (0.0, 0.5),
+                "4/7": (2.0, 2.5),
+            },
+            benchmark_relative=True,
+            cluster_status=TEMPORAL_STABILITY_RELEASED,
+        )
+
+        result = technical_confluence._build_count_monotonicity_study(
+            aggregates,
+            benchmark_relative=True,
+        )
+
+        self.assertEqual(
+            "BENCHMARK_RELATIVE_RETURN",
+            result["outcome_basis"],
+        )
+        self.assertEqual(
+            [-2.0, 0.0, 2.0],
+            result["median_10d_pct_sequence"],
+        )
+        self.assertEqual(
+            "STRICTLY_INCREASING",
+            result["median_direction"],
+        )
+        self.assertEqual(
+            1.0,
+            result["median_spearman_rank_correlation"],
+        )
 
     def test_study_stratifies_by_historical_market_regime(self) -> None:
         benchmark = daily_bars(
@@ -3355,6 +3569,42 @@ def fingerprint_bars(bars: list[TechnicalPriceBar]) -> str:
     for bar in bars:
         digest.update(repr(bar).encode("utf-8"))
     return digest.hexdigest()
+
+
+def monotonicity_aggregates(
+    bucket_values: dict[str, tuple[float, float]],
+    *,
+    benchmark_relative: bool = False,
+    cluster_status: str = TEMPORAL_STABILITY_WITHHELD,
+) -> dict[str, dict[str, object]]:
+    mean_field = (
+        "mean_excess_forward_returns_pct"
+        if benchmark_relative
+        else "mean_forward_returns_pct"
+    )
+    median_field = (
+        "median_excess_forward_returns_pct"
+        if benchmark_relative
+        else "median_forward_returns_pct"
+    )
+    cluster_field = (
+        "date_clustered_excess_forward_return_uncertainty"
+        if benchmark_relative
+        else "date_clustered_forward_return_uncertainty"
+    )
+    return {
+        bucket: {
+            "sample_count": 10,
+            median_field: {"10d": median_value},
+            mean_field: {"10d": mean_value},
+            cluster_field: {
+                "10d": {
+                    "status": cluster_status,
+                }
+            },
+        }
+        for bucket, (median_value, mean_value) in bucket_values.items()
+    }
 
 
 if __name__ == "__main__":

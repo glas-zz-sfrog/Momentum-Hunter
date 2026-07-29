@@ -31,8 +31,8 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v17"
-TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 9
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v18"
+TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 10
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
 )
@@ -55,11 +55,14 @@ CONFLUENCE_STUDY_HORIZONS = (1, 2, 5, 10)
 CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS = 30
 CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS = 10
 CONFLUENCE_STUDY_MINIMUM_CLUSTER_DATES = 10
+CONFLUENCE_MONOTONICITY_MINIMUM_BUCKETS = 3
 CONFLUENCE_STUDY_CONFIDENCE_Z = 1.96
 STUDY_COMPLETE = "COMPLETE"
 STUDY_PARTIAL = "PARTIAL"
 TEMPORAL_STABILITY_RELEASED = "RELEASED"
 TEMPORAL_STABILITY_WITHHELD = "WITHHELD"
+MONOTONICITY_RELEASED = "RELEASED"
+MONOTONICITY_WITHHELD = "WITHHELD"
 _REPORT_ROW_LIMIT = 200
 _SYMBOL_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,15}$")
 
@@ -1244,6 +1247,43 @@ def build_technical_confluence_study_payload(
             benchmark_relative=True,
         )
     )
+    confluence_monotonicity = {
+        "descriptive_only": True,
+        "causal_relationship_proven": False,
+        "production_behavior_changed": False,
+        "horizon": "10d",
+        "minimum_released_ordered_buckets": (
+            CONFLUENCE_MONOTONICITY_MINIMUM_BUCKETS
+        ),
+        "independent_green_families": {
+            "absolute_return": _build_count_monotonicity_study(
+                aggregate_outcomes_by_independent_green_families,
+            ),
+            "benchmark_relative_return": _build_count_monotonicity_study(
+                benchmark_relative_outcomes_by_independent_green_families,
+                benchmark_relative=True,
+                empty_reason=(
+                    "BENCHMARK_RELATIVE_AGGREGATES_UNAVAILABLE"
+                    if not benchmark_relative_rows
+                    else None
+                ),
+            ),
+        },
+        "raw_green_checks": {
+            "absolute_return": _build_count_monotonicity_study(
+                aggregate_outcomes_by_raw_green_checks,
+            ),
+            "benchmark_relative_return": _build_count_monotonicity_study(
+                benchmark_relative_outcomes_by_raw_green_checks,
+                benchmark_relative=True,
+                empty_reason=(
+                    "BENCHMARK_RELATIVE_AGGREGATES_UNAVAILABLE"
+                    if not benchmark_relative_rows
+                    else None
+                ),
+            ),
+        },
+    }
     aggregate_released = any(
         (
             aggregate_outcomes,
@@ -1266,6 +1306,51 @@ def build_technical_confluence_study_payload(
             == TEMPORAL_STABILITY_RELEASED,
         )
     )
+    monotonicity_results = (
+        (
+            "INDEPENDENT_GREEN_FAMILIES:ABSOLUTE_RETURN",
+            confluence_monotonicity["independent_green_families"][
+                "absolute_return"
+            ],
+        ),
+        (
+            "INDEPENDENT_GREEN_FAMILIES:BENCHMARK_RELATIVE_RETURN",
+            confluence_monotonicity["independent_green_families"][
+                "benchmark_relative_return"
+            ],
+        ),
+        (
+            "RAW_GREEN_CHECKS:ABSOLUTE_RETURN",
+            confluence_monotonicity["raw_green_checks"]["absolute_return"],
+        ),
+        (
+            "RAW_GREEN_CHECKS:BENCHMARK_RELATIVE_RETURN",
+            confluence_monotonicity["raw_green_checks"][
+                "benchmark_relative_return"
+            ],
+        ),
+    )
+    if len(complete_rows) >= CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS:
+        for label, result in monotonicity_results:
+            if result["status"] == MONOTONICITY_WITHHELD:
+                warnings.append(
+                    f"MONOTONICITY_WITHHELD:{label}:{result['reason']}"
+                )
+            elif (
+                result["released_bucket_count"]
+                < CONFLUENCE_MONOTONICITY_MINIMUM_BUCKETS + 2
+            ):
+                warnings.append(
+                    "MONOTONICITY_BUCKET_COUNT_SMALL:"
+                    f"{label}:{result['released_bucket_count']}"
+                )
+    if any(
+        result["status"] == MONOTONICITY_RELEASED
+        for _, result in monotonicity_results
+    ):
+        warnings.append(
+            "CONFLUENCE_MONOTONICITY_IS_DESCRIPTIVE_NOT_CAUSAL"
+        )
     if (
         len(complete_rows)
         < CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
@@ -1451,6 +1536,23 @@ def build_technical_confluence_study_payload(
             "temporal_stability_method": (
                 "contiguous_chronological_halves_without_splitting_event_dates"
             ),
+            "monotonicity_method": (
+                "ordered_same_denominator_released_count_buckets"
+            ),
+            "monotonicity_primary_statistic": "median_10d_return",
+            "monotonicity_secondary_statistic": "mean_10d_return",
+            "monotonicity_association": (
+                "spearman_rank_correlation_across_bucket_summaries"
+            ),
+            "monotonicity_bucket_weighting": (
+                "equal_weight_per_released_count_bucket"
+            ),
+            "monotonicity_statistical_significance_tested": False,
+            "monotonicity_confidence_interval_separation_tested": False,
+            "monotonicity_minimum_released_buckets": (
+                CONFLUENCE_MONOTONICITY_MINIMUM_BUCKETS
+            ),
+            "monotonicity_is_descriptive_not_causal": True,
         },
         "summary": {
             "unique_symbol_date_rows": len(rows),
@@ -1501,6 +1603,26 @@ def build_technical_confluence_study_payload(
             "temporal_distinct_event_dates": temporal_stability[
                 "distinct_event_dates"
             ],
+            "independent_family_monotonicity_status": (
+                confluence_monotonicity["independent_green_families"][
+                    "absolute_return"
+                ]["status"]
+            ),
+            "benchmark_relative_independent_family_monotonicity_status": (
+                confluence_monotonicity["independent_green_families"][
+                    "benchmark_relative_return"
+                ]["status"]
+            ),
+            "raw_green_check_monotonicity_status": (
+                confluence_monotonicity["raw_green_checks"][
+                    "absolute_return"
+                ]["status"]
+            ),
+            "benchmark_relative_raw_green_check_monotonicity_status": (
+                confluence_monotonicity["raw_green_checks"][
+                    "benchmark_relative_return"
+                ]["status"]
+            ),
         },
         "rows": [row.to_dict() for row in rows],
         "unavailable_event_groups": unavailable_groups,
@@ -1552,6 +1674,7 @@ def build_technical_confluence_study_payload(
         "benchmark_relative_temporal_stability": (
             benchmark_relative_temporal_stability
         ),
+        "confluence_monotonicity": confluence_monotonicity,
         "warnings": warnings,
     }
 
@@ -1809,6 +1932,251 @@ def _confluence_count_bucket(
             "Confluence count bucket requires a valid numerator and denominator."
         )
     return f"{numerator}/{denominator}"
+
+
+def _build_count_monotonicity_study(
+    aggregates: dict[str, dict[str, Any]],
+    *,
+    benchmark_relative: bool = False,
+    empty_reason: str | None = None,
+) -> dict[str, Any]:
+    outcome_basis = (
+        "BENCHMARK_RELATIVE_RETURN"
+        if benchmark_relative
+        else "ABSOLUTE_RETURN"
+    )
+    base = {
+        "status": MONOTONICITY_WITHHELD,
+        "reason": (
+            empty_reason
+            if not aggregates and empty_reason is not None
+            else "MINIMUM_RELEASED_ORDERED_BUCKETS_NOT_MET"
+        ),
+        "outcome_basis": outcome_basis,
+        "horizon": "10d",
+        "minimum_released_ordered_buckets": (
+            CONFLUENCE_MONOTONICITY_MINIMUM_BUCKETS
+        ),
+        "released_bucket_count": len(aggregates),
+        "denominator": None,
+        "ordered_buckets": [],
+        "median_10d_pct_sequence": [],
+        "mean_10d_pct_sequence": [],
+        "median_direction": None,
+        "mean_direction": None,
+        "median_spearman_rank_correlation": None,
+        "mean_spearman_rank_correlation": None,
+        "date_cluster_support_status": MONOTONICITY_WITHHELD,
+        "date_cluster_support_reason": (
+            "MONOTONICITY_NOT_RELEASED"
+        ),
+        "bucket_weighting": "equal_weight_per_released_count_bucket",
+        "statistical_significance_tested": False,
+        "confidence_interval_separation_tested": False,
+        "descriptive_only": True,
+        "causal_relationship_proven": False,
+        "production_behavior_changed": False,
+    }
+    if len(aggregates) < CONFLUENCE_MONOTONICITY_MINIMUM_BUCKETS:
+        return base
+
+    parsed: list[tuple[int, int, str, dict[str, Any]]] = []
+    for bucket_name, aggregate in aggregates.items():
+        count_pair = _parse_confluence_count_bucket(bucket_name)
+        if count_pair is None:
+            return {
+                **base,
+                "reason": "INVALID_COUNT_BUCKET",
+            }
+        parsed.append((*count_pair, bucket_name, aggregate))
+
+    denominators = {denominator for _, denominator, _, _ in parsed}
+    if len(denominators) != 1:
+        return {
+            **base,
+            "reason": "MIXED_BUCKET_DENOMINATORS",
+        }
+    numerators = [numerator for numerator, _, _, _ in parsed]
+    if len(set(numerators)) != len(numerators):
+        return {
+            **base,
+            "reason": "DUPLICATE_COUNT_NUMERATOR",
+        }
+
+    mean_field = (
+        "mean_excess_forward_returns_pct"
+        if benchmark_relative
+        else "mean_forward_returns_pct"
+    )
+    median_field = (
+        "median_excess_forward_returns_pct"
+        if benchmark_relative
+        else "median_forward_returns_pct"
+    )
+    clustered_field = (
+        "date_clustered_excess_forward_return_uncertainty"
+        if benchmark_relative
+        else "date_clustered_forward_return_uncertainty"
+    )
+    ordered_rows: list[dict[str, Any]] = []
+    for numerator, denominator, bucket_name, aggregate in sorted(parsed):
+        mean_value = _finite_number_or_none(
+            aggregate.get(mean_field, {}).get("10d")
+        )
+        median_value = _finite_number_or_none(
+            aggregate.get(median_field, {}).get("10d")
+        )
+        sample_count = aggregate.get("sample_count")
+        if (
+            mean_value is None
+            or median_value is None
+            or isinstance(sample_count, bool)
+            or not isinstance(sample_count, int)
+            or sample_count < CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS
+        ):
+            return {
+                **base,
+                "reason": "REQUIRED_RELEASED_BUCKET_EVIDENCE_UNAVAILABLE",
+            }
+        cluster_status = (
+            aggregate.get(clustered_field, {})
+            .get("10d", {})
+            .get("status")
+        )
+        ordered_rows.append(
+            {
+                "bucket": bucket_name,
+                "green_count": numerator,
+                "configured_count": denominator,
+                "sample_count": sample_count,
+                "median_10d_pct": round(median_value, 4),
+                "mean_10d_pct": round(mean_value, 4),
+                "date_cluster_status": (
+                    cluster_status
+                    if cluster_status
+                    in {
+                        TEMPORAL_STABILITY_RELEASED,
+                        TEMPORAL_STABILITY_WITHHELD,
+                    }
+                    else TEMPORAL_STABILITY_WITHHELD
+                ),
+            }
+        )
+
+    ordered_numerators = [row["green_count"] for row in ordered_rows]
+    median_values = [row["median_10d_pct"] for row in ordered_rows]
+    mean_values = [row["mean_10d_pct"] for row in ordered_rows]
+    cluster_released = all(
+        row["date_cluster_status"] == TEMPORAL_STABILITY_RELEASED
+        for row in ordered_rows
+    )
+    return {
+        **base,
+        "status": MONOTONICITY_RELEASED,
+        "reason": None,
+        "denominator": next(iter(denominators)),
+        "ordered_buckets": ordered_rows,
+        "median_10d_pct_sequence": median_values,
+        "mean_10d_pct_sequence": mean_values,
+        "median_direction": _monotonic_direction(median_values),
+        "mean_direction": _monotonic_direction(mean_values),
+        "median_spearman_rank_correlation": (
+            _spearman_rank_correlation(
+                ordered_numerators,
+                median_values,
+            )
+        ),
+        "mean_spearman_rank_correlation": (
+            _spearman_rank_correlation(
+                ordered_numerators,
+                mean_values,
+            )
+        ),
+        "date_cluster_support_status": (
+            MONOTONICITY_RELEASED
+            if cluster_released
+            else MONOTONICITY_WITHHELD
+        ),
+        "date_cluster_support_reason": (
+            None
+            if cluster_released
+            else "ONE_OR_MORE_BUCKETS_LACK_DATE_CLUSTER_RELEASE"
+        ),
+    }
+
+
+def _parse_confluence_count_bucket(
+    bucket_name: str,
+) -> tuple[int, int] | None:
+    match = re.fullmatch(r"(0|[1-9]\d*)/([1-9]\d*)", str(bucket_name))
+    if match is None:
+        return None
+    numerator = int(match.group(1))
+    denominator = int(match.group(2))
+    if numerator > denominator:
+        return None
+    return numerator, denominator
+
+
+def _monotonic_direction(values: list[float]) -> str:
+    differences = [
+        current - previous
+        for previous, current in zip(values, values[1:])
+    ]
+    if all(difference == 0 for difference in differences):
+        return "FLAT"
+    if all(difference > 0 for difference in differences):
+        return "STRICTLY_INCREASING"
+    if all(difference >= 0 for difference in differences):
+        return "NON_DECREASING"
+    if all(difference < 0 for difference in differences):
+        return "STRICTLY_DECREASING"
+    if all(difference <= 0 for difference in differences):
+        return "NON_INCREASING"
+    return "MIXED"
+
+
+def _spearman_rank_correlation(
+    left: list[int | float],
+    right: list[int | float],
+) -> float | None:
+    if len(left) != len(right) or len(left) < 2:
+        return None
+    left_ranks = _average_ranks([float(value) for value in left])
+    right_ranks = _average_ranks([float(value) for value in right])
+    left_mean = mean(left_ranks)
+    right_mean = mean(right_ranks)
+    numerator = sum(
+        (left_value - left_mean) * (right_value - right_mean)
+        for left_value, right_value in zip(left_ranks, right_ranks)
+    )
+    left_variance = sum(
+        (value - left_mean) ** 2 for value in left_ranks
+    )
+    right_variance = sum(
+        (value - right_mean) ** 2 for value in right_ranks
+    )
+    if left_variance == 0 or right_variance == 0:
+        return None
+    return round(
+        numerator / sqrt(left_variance * right_variance),
+        4,
+    )
+
+
+def _average_ranks(values: list[float]) -> list[float]:
+    ranked = sorted(enumerate(values), key=lambda item: item[1])
+    result = [0.0] * len(values)
+    start = 0
+    while start < len(ranked):
+        end = start + 1
+        while end < len(ranked) and ranked[end][1] == ranked[start][1]:
+            end += 1
+        average_rank = (start + 1 + end) / 2.0
+        for index, _ in ranked[start:end]:
+            result[index] = average_rank
+        start = end
+    return result
 
 
 def _aggregate_confluence_study_rows_by_market_regime(
@@ -2617,6 +2985,10 @@ def render_technical_confluence_study_markdown(
         lines,
         payload["benchmark_relative_temporal_stability"],
     )
+    _append_confluence_monotonicity_table(
+        lines,
+        payload["confluence_monotonicity"],
+    )
 
     lines.extend(["", "## Unavailable Event Groups", ""])
     unavailable = payload["unavailable_event_groups"][:_REPORT_ROW_LIMIT]
@@ -2637,6 +3009,77 @@ def render_technical_confluence_study_markdown(
         lines.append("- None.")
     lines.append("")
     return "\n".join(lines)
+
+
+def _append_confluence_monotonicity_table(
+    lines: list[str],
+    monotonicity: dict[str, Any],
+) -> None:
+    lines.extend(
+        [
+            "",
+            "## Confluence Monotonicity",
+            "",
+            (
+                "Descriptive research only. These bucket summaries do not "
+                "establish causality, create a score or ranking, or change "
+                "production behavior."
+            ),
+            "",
+            (
+                "| Count Basis | Outcome Basis | Status | Ordered Buckets | "
+                "Median 10d Sequence | Median Direction | Median Spearman | "
+                "Mean Direction | Date-Cluster Support |"
+            ),
+            (
+                "| --- | --- | --- | --- | --- | --- | ---: | --- | --- |"
+            ),
+        ]
+    )
+    views = (
+        (
+            "Independent Green Families",
+            monotonicity["independent_green_families"],
+        ),
+        (
+            "Raw Green Checks",
+            monotonicity["raw_green_checks"],
+        ),
+    )
+    for count_label, outcomes in views:
+        for outcome_key, outcome_label in (
+            ("absolute_return", "Absolute Return"),
+            ("benchmark_relative_return", "Benchmark-Relative Return"),
+        ):
+            result = outcomes[outcome_key]
+            if result["status"] == MONOTONICITY_RELEASED:
+                buckets = " -> ".join(
+                    row["bucket"] for row in result["ordered_buckets"]
+                )
+                median_sequence = " -> ".join(
+                    _display_pct(value)
+                    for value in result["median_10d_pct_sequence"]
+                )
+                median_direction = result["median_direction"]
+                median_correlation = _display_number(
+                    result["median_spearman_rank_correlation"]
+                )
+                mean_direction = result["mean_direction"]
+                cluster_status = result["date_cluster_support_status"]
+            else:
+                buckets = "-"
+                median_sequence = "-"
+                median_direction = f"WITHHELD: {result['reason']}"
+                median_correlation = "-"
+                mean_direction = "-"
+                cluster_status = "-"
+            lines.append(
+                f"| {count_label} | {outcome_label} | "
+                f"{result['status']} | {buckets} | {median_sequence} | "
+                f"{median_direction} | {median_correlation} | "
+                f"{mean_direction} | {cluster_status} |"
+            )
+    lines.append("")
 
 
 def _append_confluence_study_aggregate_table(
@@ -5594,6 +6037,11 @@ def _same_optional_number(left: Any, right: Any) -> bool:
 def _display_pct(value: Any) -> str:
     number = _finite_number_or_none(value)
     return "N/A" if number is None else f"{number:.4f}%"
+
+
+def _display_number(value: Any) -> str:
+    number = _finite_number_or_none(value)
+    return "N/A" if number is None else f"{number:.4f}"
 
 
 def _display_iqr(value: Any) -> str:
