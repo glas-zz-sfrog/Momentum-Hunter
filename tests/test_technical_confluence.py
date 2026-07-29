@@ -1490,6 +1490,80 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertGreaterEqual(summary.independent_green_families, 3)
         self.assertEqual(CLEAR, summary.family_states["Overextension / Risk"].state)
 
+    def test_raw_denominator_preserves_every_configured_check(self) -> None:
+        summary = evaluate_wave1_confluence(
+            symbol="AAA",
+            bars=daily_bars("AAA", [10.0] * 5),
+        )
+
+        self.assertEqual(2, summary.schema_version)
+        self.assertEqual(
+            len(summary.indicator_states),
+            summary.raw_total_checks,
+        )
+        self.assertEqual(26, summary.raw_total_checks)
+        self.assertEqual(
+            summary.raw_total_checks,
+            (
+                summary.raw_available_checks
+                + summary.raw_unavailable_checks
+                + summary.raw_insufficient_data_checks
+            ),
+        )
+        self.assertEqual(
+            summary.raw_total_checks,
+            sum(summary.raw_state_counts.values()),
+        )
+        self.assertEqual(5, summary.independent_total_families)
+        self.assertEqual(
+            summary.independent_total_families,
+            (
+                summary.independent_available_families
+                + summary.independent_unavailable_families
+                + summary.independent_insufficient_data_families
+            ),
+        )
+        self.assertEqual(
+            summary.raw_green_checks,
+            summary.raw_state_counts.get(GREEN, 0),
+        )
+        self.assertGreater(
+            (
+                summary.raw_unavailable_checks
+                + summary.raw_insufficient_data_checks
+            ),
+            0,
+        )
+
+    def test_raw_state_counts_match_explicit_state_fields(self) -> None:
+        summary = evaluate_wave1_confluence(
+            symbol="AAA",
+            bars=daily_bars(
+                "AAA",
+                [10.0 + offset * 0.2 for offset in range(70)],
+            ),
+        )
+        expected = {
+            GREEN: summary.raw_green_checks,
+            "YELLOW": summary.raw_yellow_checks,
+            RED: summary.raw_red_checks,
+            CAUTION: summary.raw_caution_checks,
+            BLOCKED: summary.raw_blocked_checks,
+            CLEAR: summary.raw_clear_checks,
+            "UNAVAILABLE": summary.raw_unavailable_checks,
+            INSUFFICIENT_DATA: summary.raw_insufficient_data_checks,
+        }
+
+        for state, count in expected.items():
+            self.assertEqual(
+                count,
+                summary.raw_state_counts.get(state, 0),
+            )
+        self.assertGreater(
+            summary.raw_total_checks,
+            summary.raw_available_checks,
+        )
+
     def test_insufficient_data_is_explicit(self) -> None:
         bars = daily_bars("AAA", [10.0] * 5)
 
@@ -1767,6 +1841,43 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertNotIn("sell", lowered)
         self.assertNotIn("guaranteed edge", lowered)
         self.assertNotIn("strategy should change", lowered)
+
+    def test_markdown_exposes_complete_raw_state_denominators(self) -> None:
+        payload = build_technical_confluence_report_payload(
+            generated_at="2026-03-01T16:00:00-05:00",
+            daily_bars_by_symbol={
+                "AAA": daily_bars(
+                    "AAA",
+                    [10.0 + offset * 0.2 for offset in range(70)],
+                )
+            },
+            breakout_events=[],
+            source_paths={},
+        )
+        rendered = render_technical_confluence_markdown(payload)
+        row = payload["symbols"][0]
+        missing = (
+            row["raw_unavailable_checks"]
+            + row["raw_insufficient_data_checks"]
+        )
+
+        self.assertEqual(2, payload["schema_version"])
+        self.assertIn(
+            "| Raw Green | Raw Yellow | Raw Red | Missing |",
+            rendered,
+        )
+        self.assertIn(
+            f"{row['raw_green_checks']} / {row['raw_total_checks']}",
+            rendered,
+        )
+        self.assertIn(
+            f"{missing} / {row['raw_total_checks']}",
+            rendered,
+        )
+        self.assertGreater(
+            row["raw_total_checks"],
+            row["raw_available_checks"],
+        )
 
     def test_invalid_report_identity_fails_closed(self) -> None:
         with self.assertRaises(TechnicalConfluenceError):

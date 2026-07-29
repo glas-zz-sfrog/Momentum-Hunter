@@ -31,8 +31,8 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v8"
-TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 1
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v9"
+TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 2
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
 )
@@ -358,8 +358,20 @@ class TechnicalConfluenceSummary:
     schema_version: int
     engine_version: str
     raw_green_checks: int
+    raw_yellow_checks: int
+    raw_red_checks: int
+    raw_caution_checks: int
+    raw_blocked_checks: int
+    raw_clear_checks: int
+    raw_unavailable_checks: int
+    raw_insufficient_data_checks: int
+    raw_available_checks: int
     raw_total_checks: int
+    raw_state_counts: dict[str, int]
     independent_green_families: int
+    independent_available_families: int
+    independent_unavailable_families: int
+    independent_insufficient_data_families: int
     independent_total_families: int
     major_red_flags: int
     warning_flags: int
@@ -499,8 +511,15 @@ def evaluate_wave1_confluence(
         ),
     ]
     family_states = build_family_states(indicators)
-    raw_total = sum(1 for indicator in indicators if indicator.state not in {UNAVAILABLE, INSUFFICIENT_DATA})
-    raw_green = sum(1 for indicator in indicators if indicator.state == GREEN)
+    raw_state_counts: dict[str, int] = {}
+    for item in indicators:
+        raw_state_counts[item.state] = (
+            raw_state_counts.get(item.state, 0) + 1
+        )
+    raw_total = len(indicators)
+    raw_unavailable = raw_state_counts.get(UNAVAILABLE, 0)
+    raw_insufficient = raw_state_counts.get(INSUFFICIENT_DATA, 0)
+    raw_available = raw_total - raw_unavailable - raw_insufficient
     signal_families = [
         FAMILY_TREND,
         FAMILY_MOMENTUM,
@@ -509,12 +528,28 @@ def evaluate_wave1_confluence(
         FAMILY_RELATIVE_STRENGTH,
     ]
     independent_green = sum(1 for family in signal_families if family_states[family].state == GREEN)
-    independent_total = sum(1 for family in signal_families if family_states[family].state not in {UNAVAILABLE, INSUFFICIENT_DATA})
+    independent_available = sum(
+        1
+        for family in signal_families
+        if family_states[family].state
+        not in {UNAVAILABLE, INSUFFICIENT_DATA}
+    )
+    independent_unavailable = sum(
+        1
+        for family in signal_families
+        if family_states[family].state == UNAVAILABLE
+    )
+    independent_insufficient = sum(
+        1
+        for family in signal_families
+        if family_states[family].state == INSUFFICIENT_DATA
+    )
+    independent_total = len(signal_families)
     major_red_flags = sum(1 for state in family_states.values() if state.state in {RED, BLOCKED, FAIL})
     warning_flags = sum(1 for state in family_states.values() if state.state in {YELLOW, CAUTION, PARTIAL})
     conclusion = confluence_conclusion(
         independent_green_families=independent_green,
-        independent_total_families=independent_total,
+        independent_total_families=independent_available,
         major_red_flags=major_red_flags,
         warning_flags=warning_flags,
         data_quality_state=family_states[FAMILY_DATA_QUALITY].state,
@@ -525,9 +560,23 @@ def evaluate_wave1_confluence(
         research_only=True,
         schema_version=TECHNICAL_CONFLUENCE_SCHEMA_VERSION,
         engine_version=TECHNICAL_CONFLUENCE_ENGINE_VERSION,
-        raw_green_checks=raw_green,
+        raw_green_checks=raw_state_counts.get(GREEN, 0),
+        raw_yellow_checks=raw_state_counts.get(YELLOW, 0),
+        raw_red_checks=raw_state_counts.get(RED, 0),
+        raw_caution_checks=raw_state_counts.get(CAUTION, 0),
+        raw_blocked_checks=raw_state_counts.get(BLOCKED, 0),
+        raw_clear_checks=raw_state_counts.get(CLEAR, 0),
+        raw_unavailable_checks=raw_unavailable,
+        raw_insufficient_data_checks=raw_insufficient,
+        raw_available_checks=raw_available,
         raw_total_checks=raw_total,
+        raw_state_counts=dict(sorted(raw_state_counts.items())),
         independent_green_families=independent_green,
+        independent_available_families=independent_available,
+        independent_unavailable_families=independent_unavailable,
+        independent_insufficient_data_families=(
+            independent_insufficient
+        ),
         independent_total_families=independent_total,
         major_red_flags=major_red_flags,
         warning_flags=warning_flags,
@@ -1303,10 +1352,14 @@ def render_technical_confluence_markdown(
         lines.extend(
             [
                 (
-                    "| Symbol | Conclusion | Raw Green | Green Families | "
-                    "Red Flags | Risk | Data Quality |"
+                    "| Symbol | Conclusion | Raw Green | Raw Yellow | "
+                    "Raw Red | Missing | Green Families | Red Flags | "
+                    "Risk | Data Quality |"
                 ),
-                "| --- | --- | ---: | ---: | ---: | --- | --- |",
+                (
+                    "| --- | --- | ---: | ---: | ---: | ---: | ---: | "
+                    "---: | --- | --- |"
+                ),
             ]
         )
         for item in symbols:
@@ -1316,6 +1369,12 @@ def render_technical_confluence_markdown(
             lines.append(
                 f"| {item['symbol']} | {item['conclusion']} | "
                 f"{item['raw_green_checks']} / {item['raw_total_checks']} | "
+                f"{item['raw_yellow_checks']} / "
+                f"{item['raw_total_checks']} | "
+                f"{item['raw_red_checks']} / "
+                f"{item['raw_total_checks']} | "
+                f"{item['raw_unavailable_checks'] + item['raw_insufficient_data_checks']} / "
+                f"{item['raw_total_checks']} | "
                 f"{item['independent_green_families']} / "
                 f"{item['independent_total_families']} | "
                 f"{item['major_red_flags']} | {risk} | {quality} |"
