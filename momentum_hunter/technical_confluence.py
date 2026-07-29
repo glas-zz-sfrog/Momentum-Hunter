@@ -25,12 +25,13 @@ from momentum_hunter.technical_breakouts import (
     prior_keltner_upper,
     relative_volume,
     return_pct,
+    rolling_sma,
     sorted_bars,
     true_range,
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v3"
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v4"
 TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 1
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
@@ -92,6 +93,9 @@ class TechnicalConfluenceOptions:
     ema_fast_window: int = 8
     ema_mid_window: int = 20
     ema_slow_window: int = 50
+    sma_short_window: int = 20
+    sma_mid_window: int = 50
+    sma_long_window: int = 200
     adx_window: int = 14
     adx_green_threshold: float = 20.0
     adx_yellow_threshold: float = 15.0
@@ -102,6 +106,8 @@ class TechnicalConfluenceOptions:
     volume_average_window: int = 20
     volume_confirmation_multiple: float = 1.5
     relative_strength_window: int = 20
+    relative_strength_mid_window: int = 50
+    relative_strength_long_window: int = 60
     atr_extension_window: int = 14
     atr_extension_multiple: float = 2.5
     anchored_vwap_anchor_index: int | None = None
@@ -129,11 +135,20 @@ class TechnicalConfluenceOptions:
             "EMA fast window": self.ema_fast_window,
             "EMA mid window": self.ema_mid_window,
             "EMA slow window": self.ema_slow_window,
+            "SMA short window": self.sma_short_window,
+            "SMA mid window": self.sma_mid_window,
+            "SMA long window": self.sma_long_window,
             "ADX window": self.adx_window,
             "Bollinger window": self.bollinger_window,
             "Keltner ATR window": self.keltner_atr_window,
             "Volume average window": self.volume_average_window,
             "Relative-strength window": self.relative_strength_window,
+            "Relative-strength mid window": (
+                self.relative_strength_mid_window
+            ),
+            "Relative-strength long window": (
+                self.relative_strength_long_window
+            ),
             "ATR extension window": self.atr_extension_window,
             "RSI window": self.rsi_window,
             "RSI hold bars": self.rsi_hold_bars,
@@ -168,6 +183,22 @@ class TechnicalConfluenceOptions:
         ):
             raise TechnicalConfluenceError(
                 "EMA windows must be ordered fast < mid < slow."
+            )
+        if not (
+            self.sma_short_window
+            < self.sma_mid_window
+            < self.sma_long_window
+        ):
+            raise TechnicalConfluenceError(
+                "SMA windows must be ordered short < mid < long."
+            )
+        if not (
+            self.relative_strength_window
+            < self.relative_strength_mid_window
+            < self.relative_strength_long_window
+        ):
+            raise TechnicalConfluenceError(
+                "Relative-strength windows must be ordered short < mid < long."
             )
         if self.macd_fast_window >= self.macd_slow_window:
             raise TechnicalConfluenceError(
@@ -352,6 +383,7 @@ def evaluate_wave1_confluence(
 
     indicators = [
         ema_stack_state(ordered_bars, index, options=options),
+        sma_position_state(ordered_bars, index, options=options),
         adx_trend_strength_state(ordered_bars, index, options=options),
         anchored_vwap_state(ordered_bars, index, options=options),
         rsi_regime_state(ordered_bars, index, options=options),
@@ -370,6 +402,24 @@ def evaluate_wave1_confluence(
         ),
         up_down_volume_state(ordered_bars, index, options=options),
         relative_strength_state(ordered_bars, benchmark_bars or [], index, options=options),
+        relative_strength_short_slope_state(
+            ordered_bars,
+            benchmark_bars or [],
+            index,
+            options=options,
+        ),
+        relative_strength_long_slope_state(
+            ordered_bars,
+            benchmark_bars or [],
+            index,
+            options=options,
+        ),
+        relative_strength_new_high_state(
+            ordered_bars,
+            benchmark_bars or [],
+            index,
+            options=options,
+        ),
         atr_extension_risk_state(ordered_bars, index, options=options),
         failed_breakout_state(
             symbol=normalized_symbol,
@@ -1394,6 +1444,94 @@ def ema_stack_state(
     )
 
 
+def sma_position_state(
+    bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    minimum_bars = options.sma_mid_window
+    if index < minimum_bars - 1 or index >= len(bars):
+        return indicator(
+            "sma_position",
+            FAMILY_TREND,
+            INSUFFICIENT_DATA,
+            "primary signal",
+            None,
+            (
+                f"Need at least {minimum_bars} completed bars for "
+                "short/mid SMA structure."
+            ),
+        )
+    short = rolling_sma(bars, index, options.sma_short_window)
+    mid = rolling_sma(bars, index, options.sma_mid_window)
+    long = rolling_sma(bars, index, options.sma_long_window)
+    if short is None or mid is None:
+        return indicator(
+            "sma_position",
+            FAMILY_TREND,
+            INSUFFICIENT_DATA,
+            "primary signal",
+            None,
+            "Short/mid SMA values are unavailable.",
+        )
+    close = bars[index].close
+    short_mid_bullish = close > short > mid
+    short_mid_bearish = close < short < mid
+    full_history = long is not None
+    full_bullish = short_mid_bullish and (
+        long is None or mid > long
+    )
+    full_bearish = short_mid_bearish and (
+        long is None or mid < long
+    )
+    if full_bullish:
+        state = GREEN
+        reason = (
+            "Close and available SMA windows are bullishly aligned."
+            if full_history
+            else (
+                "Close/SMA20/SMA50 are bullishly aligned; SMA200 is "
+                "not yet available."
+            )
+        )
+    elif full_bearish:
+        state = RED
+        reason = (
+            "Close and available SMA windows are bearishly aligned."
+            if full_history
+            else (
+                "Close/SMA20/SMA50 are bearishly aligned; SMA200 is "
+                "not yet available."
+            )
+        )
+    else:
+        state = YELLOW
+        reason = "Available SMA windows are not fully aligned."
+    return indicator(
+        "sma_position",
+        FAMILY_TREND,
+        state,
+        "primary signal",
+        round_value(close - short),
+        reason,
+        details={
+            "close": round_value(close),
+            "sma_short": round_value(short),
+            "sma_mid": round_value(mid),
+            "sma_long": round_value(long),
+            "short_window": options.sma_short_window,
+            "mid_window": options.sma_mid_window,
+            "long_window": options.sma_long_window,
+            "long_window_available": full_history,
+            "short_mid_bullish": short_mid_bullish,
+            "full_bullish": full_bullish and full_history,
+        },
+    )
+
+
 def adx_trend_strength_state(
     bars: list[TechnicalPriceBar],
     index: int,
@@ -2169,6 +2307,224 @@ def relative_strength_state(
     )
 
 
+def relative_strength_short_slope_state(
+    bars: list[TechnicalPriceBar],
+    benchmark_bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    return _relative_strength_slope_state(
+        bars,
+        benchmark_bars,
+        index,
+        window=options.relative_strength_window,
+        minimum_aligned_bars=max(
+            25,
+            options.relative_strength_window + 1,
+        ),
+        name="relative_strength_short_slope",
+    )
+
+
+def relative_strength_long_slope_state(
+    bars: list[TechnicalPriceBar],
+    benchmark_bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    return _relative_strength_slope_state(
+        bars,
+        benchmark_bars,
+        index,
+        window=options.relative_strength_long_window,
+        minimum_aligned_bars=max(
+            65,
+            options.relative_strength_long_window + 1,
+        ),
+        name="relative_strength_long_slope",
+    )
+
+
+def _relative_strength_slope_state(
+    bars: list[TechnicalPriceBar],
+    benchmark_bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    window: int,
+    minimum_aligned_bars: int,
+    name: str,
+) -> IndicatorState:
+    bars = sorted_bars(bars)
+    benchmark_bars = sorted_bars(benchmark_bars)
+    if not benchmark_bars:
+        return indicator(
+            name,
+            FAMILY_RELATIVE_STRENGTH,
+            UNAVAILABLE,
+            "confirmation signal",
+            None,
+            "No benchmark bars supplied.",
+        )
+    if index < minimum_aligned_bars - 1 or index >= len(bars):
+        return indicator(
+            name,
+            FAMILY_RELATIVE_STRENGTH,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            (
+                f"Need at least {minimum_aligned_bars} aligned bars "
+                f"for {window}-session relative-strength slope."
+            ),
+        )
+    start_index = index - minimum_aligned_bars + 1
+    ratios = relative_strength_ratio_series(
+        bars,
+        benchmark_bars,
+        start_index,
+        index,
+    )
+    if ratios is None:
+        return indicator(
+            name,
+            FAMILY_RELATIVE_STRENGTH,
+            INSUFFICIENT_DATA,
+            "confirmation signal",
+            None,
+            "Benchmark bars are not completely aligned with stock bars.",
+        )
+    start_ratio = ratios[-(window + 1)]
+    current_ratio = ratios[-1]
+    change = return_pct(start_ratio, current_ratio)
+    if change > 0:
+        state = GREEN
+        reason = (
+            f"Relative-strength ratio has a positive {window}-session slope."
+        )
+    elif change < 0:
+        state = RED
+        reason = (
+            f"Relative-strength ratio has a negative {window}-session slope."
+        )
+    else:
+        state = YELLOW
+        reason = (
+            f"Relative-strength ratio is flat over {window} sessions."
+        )
+    return indicator(
+        name,
+        FAMILY_RELATIVE_STRENGTH,
+        state,
+        "confirmation signal",
+        round_value(change),
+        reason,
+        details={
+            "window": window,
+            "aligned_bars": len(ratios),
+            "start_ratio": round_value(start_ratio),
+            "current_ratio": round_value(current_ratio),
+            "ratio_change_pct": round_value(change),
+        },
+    )
+
+
+def relative_strength_new_high_state(
+    bars: list[TechnicalPriceBar],
+    benchmark_bars: list[TechnicalPriceBar],
+    index: int,
+    *,
+    options: TechnicalConfluenceOptions | None = None,
+) -> IndicatorState:
+    options = options or TechnicalConfluenceOptions()
+    bars = sorted_bars(bars)
+    benchmark_bars = sorted_bars(benchmark_bars)
+    if not benchmark_bars:
+        return indicator(
+            "relative_strength_new_high",
+            FAMILY_RELATIVE_STRENGTH,
+            UNAVAILABLE,
+            "primary confirmation",
+            None,
+            "No benchmark bars supplied.",
+        )
+    minimum_bars = max(25, options.relative_strength_window + 1)
+    if index < minimum_bars - 1 or index >= len(bars):
+        return indicator(
+            "relative_strength_new_high",
+            FAMILY_RELATIVE_STRENGTH,
+            INSUFFICIENT_DATA,
+            "primary confirmation",
+            None,
+            (
+                f"Need at least {minimum_bars} aligned bars for "
+                "relative-strength new-high research."
+            ),
+        )
+    windows = (
+        options.relative_strength_window,
+        options.relative_strength_mid_window,
+        options.relative_strength_long_window,
+    )
+    new_highs: dict[str, bool | None] = {}
+    current_ratio: float | None = None
+    for window in windows:
+        if index < window:
+            new_highs[str(window)] = None
+            continue
+        ratios = relative_strength_ratio_series(
+            bars,
+            benchmark_bars,
+            index - window,
+            index,
+        )
+        if ratios is None:
+            return indicator(
+                "relative_strength_new_high",
+                FAMILY_RELATIVE_STRENGTH,
+                INSUFFICIENT_DATA,
+                "primary confirmation",
+                None,
+                "Benchmark bars are not completely aligned with stock bars.",
+            )
+        current_ratio = ratios[-1]
+        new_highs[str(window)] = current_ratio > max(ratios[:-1])
+    available = [
+        value for value in new_highs.values() if value is not None
+    ]
+    if not available or current_ratio is None:
+        return indicator(
+            "relative_strength_new_high",
+            FAMILY_RELATIVE_STRENGTH,
+            INSUFFICIENT_DATA,
+            "primary confirmation",
+            None,
+            "No configured relative-strength high window is available.",
+        )
+    if any(available):
+        state = GREEN
+        reason = "Relative-strength ratio reached a new configured-window high."
+    else:
+        state = RED
+        reason = "Relative-strength ratio did not reach a new configured-window high."
+    return indicator(
+        "relative_strength_new_high",
+        FAMILY_RELATIVE_STRENGTH,
+        state,
+        "primary confirmation",
+        round_value(current_ratio),
+        reason,
+        details={
+            "windows": list(windows),
+            "new_highs": new_highs,
+            "current_ratio": round_value(current_ratio),
+        },
+    )
+
+
 def atr_extension_risk_state(
     bars: list[TechnicalPriceBar],
     index: int,
@@ -2407,6 +2763,38 @@ def ema_at_index(bars: list[TechnicalPriceBar], index: int, window: int) -> floa
     for close in closes[1:]:
         value = close * multiplier + value * (1.0 - multiplier)
     return value
+
+
+def relative_strength_ratio_series(
+    bars: list[TechnicalPriceBar],
+    benchmark_bars: list[TechnicalPriceBar],
+    start_index: int,
+    end_index: int,
+) -> list[float] | None:
+    bars = sorted_bars(bars)
+    benchmark_bars = sorted_bars(benchmark_bars)
+    if (
+        start_index < 0
+        or end_index < start_index
+        or end_index >= len(bars)
+    ):
+        return None
+    ratios: list[float] = []
+    for stock_bar in bars[start_index : end_index + 1]:
+        stock_time = parse_datetime(stock_bar.timestamp)
+        if stock_time is None or stock_bar.close <= 0:
+            return None
+        benchmark_index = matching_daily_index(
+            benchmark_bars,
+            stock_time,
+        )
+        if benchmark_index is None:
+            return None
+        benchmark_close = benchmark_bars[benchmark_index].close
+        if benchmark_close <= 0:
+            return None
+        ratios.append(stock_bar.close / benchmark_close)
+    return ratios
 
 
 def rsi_value(

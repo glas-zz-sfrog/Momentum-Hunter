@@ -22,6 +22,8 @@ from momentum_hunter.technical_confluence import (
     CAUTION,
     CLEAR,
     FAMILY_MOMENTUM,
+    FAMILY_RELATIVE_STRENGTH,
+    FAMILY_TREND,
     FAMILY_VOLUME,
     GREEN,
     INSUFFICIENT_DATA,
@@ -43,10 +45,14 @@ from momentum_hunter.technical_confluence import (
     obv_new_high_state,
     ppo_momentum_state,
     rate_of_change_state,
+    relative_strength_long_slope_state,
+    relative_strength_new_high_state,
+    relative_strength_short_slope_state,
     relative_strength_state,
     render_technical_confluence_markdown,
     render_technical_confluence_study_markdown,
     rsi_regime_state,
+    sma_position_state,
     squeeze_release_state,
     up_down_volume_state,
     volume_confirmation_state,
@@ -64,6 +70,32 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
         self.assertEqual(GREEN, state.state)
         self.assertEqual(before, fingerprint_bars(bars))
+
+    def test_sma_position_preserves_partial_20_50_and_full_200_state(self) -> None:
+        partial = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.2 for offset in range(70)],
+        )
+        full = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.2 for offset in range(220)],
+        )
+        bearish = daily_bars(
+            "AAA",
+            [300.0 - offset for offset in range(220)],
+        )
+
+        partial_state = sma_position_state(partial, 69)
+        full_state = sma_position_state(full, 219)
+        bearish_state = sma_position_state(bearish, 219)
+
+        self.assertEqual(GREEN, partial_state.state)
+        self.assertFalse(partial_state.details["long_window_available"])
+        self.assertFalse(partial_state.details["full_bullish"])
+        self.assertEqual(GREEN, full_state.state)
+        self.assertTrue(full_state.details["long_window_available"])
+        self.assertTrue(full_state.details["full_bullish"])
+        self.assertEqual(RED, bearish_state.state)
 
     def test_adx_marks_directional_trend_strength_green(self) -> None:
         bars = [
@@ -452,6 +484,41 @@ class TechnicalConfluenceTests(unittest.TestCase):
         )
         self.assertLessEqual(summary.independent_total_families, 5)
 
+    def test_redundant_sma_and_relative_strength_checks_stay_family_capped(self) -> None:
+        stock = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.2 for offset in range(220)],
+        )
+        benchmark = daily_bars("QQQ", [100.0] * 220)
+
+        summary = evaluate_wave1_confluence(
+            symbol="AAA",
+            bars=stock,
+            benchmark_bars=benchmark,
+        )
+        trend_names = {
+            state.name
+            for state in summary.indicator_states
+            if state.family == FAMILY_TREND
+        }
+        relative_names = {
+            state.name
+            for state in summary.indicator_states
+            if state.family == FAMILY_RELATIVE_STRENGTH
+        }
+
+        self.assertIn("sma_position", trend_names)
+        self.assertEqual(
+            {
+                "relative_strength_vs_benchmark",
+                "relative_strength_short_slope",
+                "relative_strength_long_slope",
+                "relative_strength_new_high",
+            },
+            relative_names,
+        )
+        self.assertLessEqual(summary.independent_total_families, 5)
+
     def test_green_plus_yellow_family_is_confirming_but_red_conflict_is_not(self) -> None:
         green = technical_confluence.indicator(
             "green",
@@ -498,6 +565,174 @@ class TechnicalConfluenceTests(unittest.TestCase):
 
         self.assertEqual(GREEN, state.state)
         self.assertEqual(15.0, state.value)
+
+    def test_relative_strength_slopes_and_new_high_use_aligned_ratios(self) -> None:
+        stock = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.2 for offset in range(70)],
+        )
+        benchmark = daily_bars("QQQ", [100.0] * 70)
+
+        short = relative_strength_short_slope_state(
+            stock,
+            benchmark,
+            69,
+        )
+        long = relative_strength_long_slope_state(
+            stock,
+            benchmark,
+            69,
+        )
+        new_high = relative_strength_new_high_state(
+            stock,
+            benchmark,
+            69,
+        )
+
+        self.assertEqual(GREEN, short.state)
+        self.assertEqual(20, short.details["window"])
+        self.assertEqual(25, short.details["aligned_bars"])
+        self.assertEqual(GREEN, long.state)
+        self.assertEqual(60, long.details["window"])
+        self.assertEqual(65, long.details["aligned_bars"])
+        self.assertEqual(GREEN, new_high.state)
+        self.assertEqual(
+            {"20": True, "50": True, "60": True},
+            new_high.details["new_highs"],
+        )
+
+    def test_relative_strength_partial_history_keeps_short_evidence_only(self) -> None:
+        stock = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.2 for offset in range(25)],
+        )
+        benchmark = daily_bars("QQQ", [100.0] * 25)
+
+        short = relative_strength_short_slope_state(
+            stock,
+            benchmark,
+            24,
+        )
+        long = relative_strength_long_slope_state(
+            stock,
+            benchmark,
+            24,
+        )
+        new_high = relative_strength_new_high_state(
+            stock,
+            benchmark,
+            24,
+        )
+
+        self.assertEqual(GREEN, short.state)
+        self.assertEqual(INSUFFICIENT_DATA, long.state)
+        self.assertEqual(GREEN, new_high.state)
+        self.assertEqual(
+            {"20": True, "50": None, "60": None},
+            new_high.details["new_highs"],
+        )
+
+    def test_relative_strength_alignment_gap_fails_closed(self) -> None:
+        stock = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.2 for offset in range(30)],
+        )
+        benchmark = daily_bars("QQQ", [100.0] * 30)
+        benchmark.pop(15)
+
+        self.assertEqual(
+            INSUFFICIENT_DATA,
+            relative_strength_short_slope_state(
+                stock,
+                benchmark,
+                29,
+            ).state,
+        )
+        self.assertEqual(
+            INSUFFICIENT_DATA,
+            relative_strength_new_high_state(
+                stock,
+                benchmark,
+                29,
+            ).state,
+        )
+
+    def test_sma_and_relative_strength_ignore_future_bars_without_mutation(self) -> None:
+        stock = daily_bars(
+            "AAA",
+            [10.0 + offset * 0.2 for offset in range(220)],
+        )
+        benchmark = daily_bars("QQQ", [100.0] * 220)
+        stock_before = fingerprint_bars(stock)
+        benchmark_before = fingerprint_bars(benchmark)
+        states_before = [
+            asdict(sma_position_state(stock, 69)),
+            asdict(
+                relative_strength_short_slope_state(
+                    stock,
+                    benchmark,
+                    69,
+                )
+            ),
+            asdict(
+                relative_strength_long_slope_state(
+                    stock,
+                    benchmark,
+                    69,
+                )
+            ),
+            asdict(
+                relative_strength_new_high_state(
+                    stock,
+                    benchmark,
+                    69,
+                )
+            ),
+        ]
+        self.assertEqual(stock_before, fingerprint_bars(stock))
+        self.assertEqual(benchmark_before, fingerprint_bars(benchmark))
+        stock[219] = replace(
+            stock[219],
+            open=500.0,
+            high=501.0,
+            low=499.0,
+            close=500.0,
+        )
+        benchmark[219] = replace(
+            benchmark[219],
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.0,
+        )
+        states_after = [
+            asdict(sma_position_state(stock, 69)),
+            asdict(
+                relative_strength_short_slope_state(
+                    stock,
+                    benchmark,
+                    69,
+                )
+            ),
+            asdict(
+                relative_strength_long_slope_state(
+                    stock,
+                    benchmark,
+                    69,
+                )
+            ),
+            asdict(
+                relative_strength_new_high_state(
+                    stock,
+                    benchmark,
+                    69,
+                )
+            ),
+        ]
+
+        self.assertEqual(states_before, states_after)
+        self.assertNotEqual(stock_before, fingerprint_bars(stock))
+        self.assertNotEqual(benchmark_before, fingerprint_bars(benchmark))
 
     def test_relative_strength_unavailable_without_benchmark(self) -> None:
         stock = daily_bars("AAA", [10.0] * 21)
@@ -785,6 +1020,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
         invalid_options = (
             {"ema_fast_window": 0},
             {"ema_fast_window": 20, "ema_mid_window": 8},
+            {"sma_short_window": 50, "sma_mid_window": 20},
             {"adx_green_threshold": 10.0, "adx_yellow_threshold": 15.0},
             {"volume_confirmation_multiple": float("nan")},
             {"anchored_vwap_anchor_index": -1},
@@ -795,6 +1031,10 @@ class TechnicalConfluenceTests(unittest.TestCase):
             {"obv_short_window": 50, "obv_long_window": 20},
             {"mfi_window": 0},
             {"cmf_window": 0},
+            {
+                "relative_strength_window": 60,
+                "relative_strength_mid_window": 50,
+            },
             {"roc_short_window": 20, "roc_mid_window": 10},
             {
                 "accumulation_distribution_minimum_bars": 20,
