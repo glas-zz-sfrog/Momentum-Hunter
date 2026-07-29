@@ -24,11 +24,20 @@ from momentum_hunter.schwab_canary_stack_integrity import (
 )
 
 
-FINAL_CANARY_STACK_RELEASE_SCHEMA: Final = (
+FINAL_CANARY_STACK_RELEASE_SCHEMA_V1: Final = (
     "FINAL_CANARY_STACK_RELEASE_V1"
 )
-REVIEWED_CANARY_STACK_SOURCE_COMMIT: Final = (
+FINAL_CANARY_STACK_RELEASE_SCHEMA: Final = (
+    "FINAL_CANARY_STACK_RELEASE_V2"
+)
+HISTORICAL_CANARY_STACK_SOURCE_COMMIT: Final = (
     "b17fa6549ea239e9d807632e1c4c77abe474ab67"
+)
+REVIEWED_CANARY_STACK_SOURCE_COMMIT: Final = (
+    "249b2e8f4a6bf667a4900a5b97d98c2c6cf1d8db"
+)
+CURRENT_CANARY_STACK_RELEASE_BRANCH: Final = (
+    "codex/ARGUS-CANARY-021-current-baseline-reconciliation"
 )
 _COMMIT_PATTERN: Final = re.compile(r"[0-9a-f]{40}")
 _OWNED_PATHS: Final = (
@@ -41,9 +50,7 @@ DEFAULT_FINAL_CANARY_STACK_POLICY: Final = (
     PendingFoundationReleasePolicy(
         base_ref="master",
         remote_base_ref="origin/master",
-        allowed_branch_prefix=(
-            "codex/ARGUS-SCHWAB-004-account-shape-evidence"
-        ),
+        allowed_branch_prefix=CURRENT_CANARY_STACK_RELEASE_BRANCH,
         source_commits=(
             SourceCommitPolicy(
                 ref=REVIEWED_CANARY_STACK_SOURCE_COMMIT,

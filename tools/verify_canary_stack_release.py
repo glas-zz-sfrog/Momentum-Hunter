@@ -18,8 +18,8 @@ from momentum_hunter.schwab_canary_stack_release import (  # noqa: E402
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Verify the clean backed-up canary stack and emit its V3 "
-            "manifest without changing Git or runtime state."
+            "Verify the clean backed-up current-baseline canary stack "
+            "and emit its V3 manifest without changing Git or runtime state."
         )
     )
     parser.add_argument(

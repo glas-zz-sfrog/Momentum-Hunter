@@ -21,8 +21,10 @@ from momentum_hunter.schwab_canary_stack_integrity import (
     CANARY_STACK_INTEGRITY_SCHEMA_VERSION,
 )
 from momentum_hunter.schwab_canary_stack_release import (
+    CURRENT_CANARY_STACK_RELEASE_BRANCH,
     DEFAULT_FINAL_CANARY_STACK_POLICY,
     FINAL_CANARY_STACK_RELEASE_SCHEMA,
+    HISTORICAL_CANARY_STACK_SOURCE_COMMIT,
     REVIEWED_CANARY_STACK_SOURCE_COMMIT,
     evaluate_final_canary_stack_release,
     render_final_canary_stack_release,
@@ -251,6 +253,14 @@ class FinalCanaryStackReleaseTests(unittest.TestCase):
         self,
     ) -> None:
         self.assertEqual(
+            "b17fa6549ea239e9d807632e1c4c77abe474ab67",
+            HISTORICAL_CANARY_STACK_SOURCE_COMMIT,
+        )
+        self.assertEqual(
+            CURRENT_CANARY_STACK_RELEASE_BRANCH,
+            DEFAULT_FINAL_CANARY_STACK_POLICY.allowed_branch_prefix,
+        )
+        self.assertEqual(
             REVIEWED_CANARY_STACK_SOURCE_COMMIT,
             DEFAULT_FINAL_CANARY_STACK_POLICY.source_commits[0].ref,
         )
@@ -301,7 +311,7 @@ class FinalCanaryStackReleaseTests(unittest.TestCase):
 
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertIn(
-            "Verify the clean backed-up canary stack",
+            "Verify the clean backed-up current-baseline canary stack",
             completed.stdout,
         )
 
