@@ -69,6 +69,62 @@ class ShadowExperimentStudyWrite:
     source_artifacts_unchanged: bool
 
 
+def load_shadow_experiment_study(path: Path) -> dict[str, Any]:
+    """Load and verify one content-addressed Shadow experiment study."""
+
+    resolved = path.expanduser().resolve()
+    try:
+        if (
+            resolved.is_symlink()
+            or not resolved.is_file()
+            or resolved.stat().st_size > MAX_STUDY_BYTES
+        ):
+            raise ShadowExperimentStudyError(
+                "Shadow experiment study is not a bounded regular file."
+            )
+        source = resolved.read_bytes()
+    except OSError as exc:
+        raise ShadowExperimentStudyError(
+            "Shadow experiment study cannot be read."
+        ) from exc
+    try:
+        envelope = json.loads(source.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ShadowExperimentStudyError(
+            "Shadow experiment study is not valid UTF-8 JSON."
+        ) from exc
+    if (
+        not isinstance(envelope, dict)
+        or envelope.get("schema_version")
+        != SHADOW_EXPERIMENT_STUDY_SCHEMA_VERSION
+        or not isinstance(envelope.get("study"), dict)
+    ):
+        raise ShadowExperimentStudyError(
+            "Shadow experiment study has an invalid envelope."
+        )
+    study = dict(envelope["study"])
+    _validate_study(study)
+    expected_hash = hashlib.sha256(
+        canonical_json(study).encode("utf-8")
+    ).hexdigest()
+    if envelope.get("study_sha256") != expected_hash:
+        raise ShadowExperimentStudyError(
+            "Shadow experiment study hash is invalid."
+        )
+    sample_label = _filename_label(
+        str(study.get("sample_version") or "no-eligible-sample")
+    )
+    expected_name = (
+        f"shadow-experiment-study-{sample_label}-"
+        f"{study['study_id']}.json"
+    )
+    if resolved.name != expected_name:
+        raise ShadowExperimentStudyError(
+            "Shadow experiment study filename is invalid."
+        )
+    return study
+
+
 def generate_shadow_experiment_study(
     *,
     experiments_dir: Path,

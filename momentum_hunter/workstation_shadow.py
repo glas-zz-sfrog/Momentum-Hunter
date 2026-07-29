@@ -15,6 +15,9 @@ from momentum_hunter.shadow_evidence_checkpoints import (
     SHADOW_CHECKPOINT_THRESHOLDS,
     generate_shadow_evidence_checkpoints,
 )
+from momentum_hunter.shadow_experiment_automation import (
+    automate_shadow_experiment_evidence,
+)
 from momentum_hunter.shadow_trading import (
     SHADOW_MODE,
     SHADOW_STATE_PATH,
@@ -82,6 +85,9 @@ class ShadowWorkspaceService:
         evidence_checkpoint_generator: (
             Callable[[datetime], dict[str, Any]] | None
         ) = None,
+        experiment_evidence_automator: (
+            Callable[[], dict[str, Any]] | None
+        ) = None,
     ) -> None:
         production_defaults = paths is None and service is None
         self.paths = paths or ShadowWorkspacePaths.from_data_dir()
@@ -109,6 +115,29 @@ class ShadowWorkspaceService:
                     ),
                     generated_at=generated_at,
                 )
+            )
+        )
+        self._experiment_evidence_automator = (
+            experiment_evidence_automator
+            or (
+                lambda: automate_shadow_experiment_evidence(
+                    state_path=self.service.store.path,
+                    decision_cycles_path=(
+                        self.service.decision_cycle_store.path
+                    ),
+                    experiments_dir=(
+                        self.paths.reports_dir
+                        / "shadow-trade-experiments"
+                    ),
+                    studies_dir=(
+                        self.paths.reports_dir
+                        / "shadow-experiment-studies"
+                    ),
+                    receipts_dir=(
+                        self.paths.reports_dir
+                        / "shadow-experiment-automation-receipts"
+                    ),
+                ).to_dict()
             )
         )
 
@@ -385,6 +414,7 @@ class ShadowWorkspaceService:
             )
             else self._evidence_checkpoint_generator(received_at)
         )
+        experiment_evidence = self._experiment_evidence_automator()
         return {
             "mode": SHADOW_MODE,
             "observationsSeen": len(observations),
@@ -398,6 +428,7 @@ class ShadowWorkspaceService:
             ),
             "completedTradeCount": snapshot["metrics"]["completedTradeCount"],
             "evidenceCheckpoints": evidence_checkpoints,
+            "experimentEvidence": experiment_evidence,
             "snapshot": snapshot,
         }
 
@@ -482,6 +513,7 @@ class ShadowWorkspaceService:
             )
             else self._evidence_checkpoint_generator(received_at)
         )
+        experiment_evidence = self._experiment_evidence_automator()
         return {
             "mode": SHADOW_MODE,
             "observationsSeen": len(normalized),
@@ -496,6 +528,7 @@ class ShadowWorkspaceService:
             ),
             "completedTradeCount": snapshot["metrics"]["completedTradeCount"],
             "evidenceCheckpoints": evidence_checkpoints,
+            "experimentEvidence": experiment_evidence,
             "snapshot": snapshot,
         }
 
