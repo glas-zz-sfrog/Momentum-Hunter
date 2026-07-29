@@ -118,3 +118,12 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Ran a real disposable Windows Task Scheduler canary during full Python discovery. It exited `0`, started `2.345` seconds after schedule, and accessed no market data or runtime state while all 922 tests passed.
 - Verification: compileall and PowerShell parse pass; 185 focused tests pass; 923/923 Python tests pass; 216/216 .NET tests pass; isolated Release build passes with zero warnings/errors; protected-path review finds no scoring, readiness, alert, broker/order, credential, schema, or UI change.
 - Next: integrate and back up the repair, activate v2, prepare a final-head static bundle, install one armed FakeBroker-only opening for 2026-07-30 at 8:35 AM CT, and attach one finite read-only observer.
+
+## 2026-07-29 - ARGUS-SHADOW-017 V2 Opening Closeout
+
+- Fast-forwarded implementation `2213299` into local `master` and completed an ordinary non-force backup to `origin/master`.
+- Activated only `official-shadow-v2` at `2026-07-29T14:31:33.495182-05:00`; the activation hash is `930543A24D147C776A2A6C959E719460EB8BC61D7420D098317527884B007B9F`.
+- Verified v2 is `ACTIVE`, `NOT_ARMED`, `0 / 30`, and transmission `UNAVAILABLE`; no v2 policy, arm, cycle, state, handoff, order, or trade exists.
+- Reverified the v1 activation, policy, and arm hashes byte-for-byte; v1 decision-cycle, state, handoff, and Trade 1 remain absent.
+- Installed one enabled, one-time, limited-interactive FakeBroker-only task for 2026-07-30 at 8:35 AM CT with no recurrence, late start, or Task Scheduler retry; the action has exactly one arm switch and no proof-only switch.
+- Updated the existing one-use 8:50 observer with the final v2 activation, Git, task, bundle, host-replacement, account-invariant, and classification requirements.
