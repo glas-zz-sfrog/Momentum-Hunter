@@ -6,6 +6,7 @@ import inspect
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from datetime import datetime, timedelta
 
@@ -1603,7 +1604,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             bars=daily_bars("AAA", [10.0] * 5),
         )
 
-        self.assertEqual(10, summary.schema_version)
+        self.assertEqual(11, summary.schema_version)
         self.assertEqual(
             len(summary.indicator_states),
             summary.raw_total_checks,
@@ -1968,7 +1969,7 @@ class TechnicalConfluenceTests(unittest.TestCase):
             + row["raw_insufficient_data_checks"]
         )
 
-        self.assertEqual(10, payload["schema_version"])
+        self.assertEqual(11, payload["schema_version"])
         self.assertIn(
             "| Raw Green | Raw Yellow | Raw Red | Missing |",
             rendered,
@@ -2920,6 +2921,11 @@ class TechnicalConfluenceTests(unittest.TestCase):
             "| Independent Green Families | Absolute Return | WITHHELD |",
             rendered,
         )
+        self.assertIn("family_outcome_contrasts", payload)
+        self.assertIn("## Family Outcome Contrasts", rendered)
+        self.assertIn("### Absolute Return", rendered)
+        self.assertIn("### Benchmark-Relative Return", rendered)
+        self.assertIn("MINIMUM_CONTRAST_ARM_ROWS_NOT_MET", rendered)
 
     def test_monotonicity_releases_increasing_same_denominator_buckets(
         self,
@@ -3115,6 +3121,171 @@ class TechnicalConfluenceTests(unittest.TestCase):
         self.assertEqual(
             1.0,
             result["median_spearman_rank_correlation"],
+        )
+
+    def test_family_contrasts_release_unadjusted_and_count_matched_views(
+        self,
+    ) -> None:
+        rows = family_contrast_rows(
+            FAMILY_TREND,
+            rows_per_arm_per_stratum=10,
+            unavailable_rows=2,
+        )
+        rows.append(
+            family_contrast_row(
+                family=FAMILY_TREND,
+                state="MALFORMED_STATE",
+                other_green_count=1,
+                return_value=99.0,
+                row_number=999,
+            )
+        )
+        invalid_count_row = family_contrast_row(
+            family=FAMILY_TREND,
+            state=GREEN,
+            other_green_count=1,
+            return_value=6.0,
+            row_number=1000,
+        )
+        invalid_count_row.confluence_summary.independent_green_families = (
+            "invalid"
+        )
+        rows.append(invalid_count_row)
+        before = repr(rows)
+
+        contrasts = technical_confluence._build_family_outcome_contrasts(
+            rows
+        )
+
+        result = contrasts[FAMILY_TREND]
+        self.assertEqual(44, result["input_rows"])
+        self.assertEqual(41, result["eligible_rows"])
+        self.assertEqual(3, result["excluded_unavailable_or_missing_rows"])
+        self.assertEqual(21, result["green_rows"])
+        self.assertEqual(20, result["available_not_green_rows"])
+        unadjusted = result["unadjusted"]
+        self.assertEqual(
+            technical_confluence.FAMILY_CONTRAST_RELEASED,
+            unadjusted["status"],
+        )
+        self.assertEqual(
+            4.5,
+            unadjusted[
+                "differences_green_minus_available_not_green"
+            ]["median_forward_return_delta_pct"]["10d"],
+        )
+        self.assertEqual(
+            technical_confluence.FAMILY_CONTRAST_RELEASED,
+            unadjusted["date_cluster_arm_support"]["10d"],
+        )
+        matched = result["other_family_count_matched"]
+        self.assertEqual(
+            technical_confluence.FAMILY_CONTRAST_RELEASED,
+            matched["status"],
+        )
+        self.assertEqual(2, matched["released_matched_strata"])
+        self.assertEqual(1, matched["invalid_other_family_count_rows"])
+        self.assertEqual({"1", "2"}, set(matched["matched_strata"]))
+        self.assertEqual(
+            4.5,
+            matched["equal_weighted_stratum_differences"][
+                "median_forward_return_delta_pct"
+            ]["10d"],
+        )
+        self.assertFalse(result["independent_contribution_proven"])
+        self.assertFalse(
+            matched["independent_contribution_proven"]
+        )
+        self.assertFalse(matched["matching_controls_family_composition"])
+        self.assertEqual(before, repr(rows))
+        json.dumps(contrasts, allow_nan=False)
+
+    def test_family_contrasts_keep_benchmark_relative_outcomes_separate(
+        self,
+    ) -> None:
+        rows = family_contrast_rows(
+            FAMILY_VOLUME,
+            rows_per_arm_per_stratum=10,
+        )
+
+        contrasts = technical_confluence._build_family_outcome_contrasts(
+            rows,
+            benchmark_relative=True,
+        )
+
+        result = contrasts[FAMILY_VOLUME]
+        self.assertEqual(
+            "BENCHMARK_RELATIVE_RETURN",
+            result["outcome_basis"],
+        )
+        self.assertEqual(
+            4.5,
+            result["unadjusted"][
+                "differences_green_minus_available_not_green"
+            ]["mean_forward_return_delta_pct"]["10d"],
+        )
+        self.assertEqual(
+            4.5,
+            result["other_family_count_matched"][
+                "equal_weighted_stratum_differences"
+            ]["mean_forward_return_delta_pct"]["10d"],
+        )
+        green_aggregate = result["unadjusted"]["arm_aggregates"][
+            "GREEN"
+        ]
+        self.assertIn(
+            "mean_excess_forward_returns_pct",
+            green_aggregate,
+        )
+        self.assertNotIn("mean_forward_returns_pct", green_aggregate)
+
+    def test_family_count_matched_contrast_withholds_sparse_strata(
+        self,
+    ) -> None:
+        rows = family_contrast_rows(
+            FAMILY_MOMENTUM,
+            rows_per_arm_per_stratum=8,
+        )
+
+        result = technical_confluence._build_family_outcome_contrasts(
+            rows
+        )[FAMILY_MOMENTUM]
+
+        self.assertEqual(
+            technical_confluence.FAMILY_CONTRAST_RELEASED,
+            result["unadjusted"]["status"],
+        )
+        matched = result["other_family_count_matched"]
+        self.assertEqual(
+            technical_confluence.FAMILY_CONTRAST_WITHHELD,
+            matched["status"],
+        )
+        self.assertEqual(
+            "MINIMUM_MATCHED_OTHER_FAMILY_COUNT_STRATA_NOT_MET",
+            matched["reason"],
+        )
+        self.assertEqual(0, matched["released_matched_strata"])
+        self.assertTrue(
+            all(
+                not stratum["release_eligible"]
+                for stratum in matched["candidate_strata"].values()
+            )
+        )
+        global_small = (
+            technical_confluence._build_family_outcome_contrasts(
+                family_contrast_rows(
+                    FAMILY_MOMENTUM,
+                    rows_per_arm_per_stratum=5,
+                )
+            )[FAMILY_MOMENTUM]
+        )
+        self.assertEqual(
+            technical_confluence.FAMILY_CONTRAST_WITHHELD,
+            global_small["unadjusted"]["status"],
+        )
+        self.assertEqual(
+            "MINIMUM_COMPLETE_SAMPLE_NOT_MET",
+            global_small["unadjusted"]["reason"],
         )
 
     def test_study_stratifies_by_historical_market_regime(self) -> None:
@@ -3605,6 +3776,90 @@ def monotonicity_aggregates(
         }
         for bucket, (median_value, mean_value) in bucket_values.items()
     }
+
+
+def family_contrast_rows(
+    family: str,
+    *,
+    rows_per_arm_per_stratum: int,
+    unavailable_rows: int = 0,
+) -> list[SimpleNamespace]:
+    rows: list[SimpleNamespace] = []
+    row_number = 0
+    for other_green_count, green_return, comparison_return in (
+        (1, 5.0, 1.0),
+        (2, 7.0, 2.0),
+    ):
+        for state, return_value in (
+            (GREEN, green_return),
+            (technical_confluence.YELLOW, comparison_return),
+        ):
+            for _ in range(rows_per_arm_per_stratum):
+                rows.append(
+                    family_contrast_row(
+                        family=family,
+                        state=state,
+                        other_green_count=other_green_count,
+                        return_value=return_value,
+                        row_number=row_number,
+                    )
+                )
+                row_number += 1
+    for _ in range(unavailable_rows):
+        rows.append(
+            family_contrast_row(
+                family=family,
+                state=INSUFFICIENT_DATA,
+                other_green_count=1,
+                return_value=99.0,
+                row_number=row_number,
+            )
+        )
+        row_number += 1
+    return rows
+
+
+def family_contrast_row(
+    *,
+    family: str,
+    state: str,
+    other_green_count: int,
+    return_value: float,
+    row_number: int,
+) -> SimpleNamespace:
+    target_is_green = state == GREEN
+    summary = SimpleNamespace(
+        family_states={
+            family: technical_confluence.ConfluenceFamilyState(
+                family=family,
+                state=state,
+                reason="synthetic family contrast",
+            )
+        },
+        independent_green_families=(
+            other_green_count + int(target_is_green)
+        ),
+    )
+    returns = {
+        f"{horizon}d": return_value
+        for horizon in technical_confluence.CONFLUENCE_STUDY_HORIZONS
+    }
+    benchmark_relative_returns = {
+        label: value - 1.0 for label, value in returns.items()
+    }
+    return SimpleNamespace(
+        symbol=f"F{row_number:03d}",
+        event_date=(
+            datetime(2025, 1, 1) + timedelta(days=row_number)
+        ).date().isoformat(),
+        forward_returns_pct=returns,
+        benchmark_relative_forward_returns_pct=(
+            benchmark_relative_returns
+        ),
+        max_favorable_excursion_pct=return_value + 1.0,
+        max_adverse_excursion_pct=return_value - 2.0,
+        confluence_summary=summary,
+    )
 
 
 if __name__ == "__main__":

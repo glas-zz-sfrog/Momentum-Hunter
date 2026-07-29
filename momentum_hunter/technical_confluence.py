@@ -31,8 +31,8 @@ from momentum_hunter.technical_breakouts import (
 )
 
 
-TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v18"
-TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 10
+TECHNICAL_CONFLUENCE_ENGINE_VERSION = "technical_confluence_research_v19"
+TECHNICAL_CONFLUENCE_SCHEMA_VERSION = 11
 TECHNICAL_CONFLUENCE_ARTIFACT_TYPE = (
     "TECHNICAL_CONFLUENCE_RESEARCH_REPORT"
 )
@@ -56,6 +56,8 @@ CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS = 30
 CONFLUENCE_STUDY_MINIMUM_BUCKET_ROWS = 10
 CONFLUENCE_STUDY_MINIMUM_CLUSTER_DATES = 10
 CONFLUENCE_MONOTONICITY_MINIMUM_BUCKETS = 3
+CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS = 10
+CONFLUENCE_FAMILY_CONTRAST_MINIMUM_MATCHED_STRATA = 2
 CONFLUENCE_STUDY_CONFIDENCE_Z = 1.96
 STUDY_COMPLETE = "COMPLETE"
 STUDY_PARTIAL = "PARTIAL"
@@ -63,6 +65,8 @@ TEMPORAL_STABILITY_RELEASED = "RELEASED"
 TEMPORAL_STABILITY_WITHHELD = "WITHHELD"
 MONOTONICITY_RELEASED = "RELEASED"
 MONOTONICITY_WITHHELD = "WITHHELD"
+FAMILY_CONTRAST_RELEASED = "RELEASED"
+FAMILY_CONTRAST_WITHHELD = "WITHHELD"
 _REPORT_ROW_LIMIT = 200
 _SYMBOL_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,15}$")
 
@@ -94,6 +98,14 @@ FAMILY_RELATIVE_STRENGTH = "Relative Strength"
 FAMILY_MARKET_REGIME = "Market Regime"
 FAMILY_RISK = "Overextension / Risk"
 FAMILY_DATA_QUALITY = "Data Quality"
+CONFLUENCE_SIGNAL_FAMILIES = (
+    FAMILY_TREND,
+    FAMILY_BREAKOUT,
+    FAMILY_MOMENTUM,
+    FAMILY_VOLATILITY,
+    FAMILY_VOLUME,
+    FAMILY_RELATIVE_STRENGTH,
+)
 
 
 class TechnicalConfluenceError(ValueError):
@@ -551,14 +563,7 @@ def evaluate_wave1_confluence(
     raw_unavailable = raw_state_counts.get(UNAVAILABLE, 0)
     raw_insufficient = raw_state_counts.get(INSUFFICIENT_DATA, 0)
     raw_available = raw_total - raw_unavailable - raw_insufficient
-    signal_families = [
-        FAMILY_TREND,
-        FAMILY_BREAKOUT,
-        FAMILY_MOMENTUM,
-        FAMILY_VOLATILITY,
-        FAMILY_VOLUME,
-        FAMILY_RELATIVE_STRENGTH,
-    ]
+    signal_families = CONFLUENCE_SIGNAL_FAMILIES
     independent_green = sum(1 for family in signal_families if family_states[family].state == GREEN)
     independent_available = sum(
         1
@@ -1284,6 +1289,30 @@ def build_technical_confluence_study_payload(
             ),
         },
     }
+    family_outcome_contrasts = {
+        "descriptive_only": True,
+        "causal_relationship_proven": False,
+        "independent_contribution_proven": False,
+        "production_behavior_changed": False,
+        "comparison": "GREEN_VS_AVAILABLE_NOT_GREEN",
+        "unavailable_states_excluded": [
+            UNAVAILABLE,
+            INSUFFICIENT_DATA,
+        ],
+        "minimum_rows_per_arm": (
+            CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS
+        ),
+        "minimum_count_matched_strata": (
+            CONFLUENCE_FAMILY_CONTRAST_MINIMUM_MATCHED_STRATA
+        ),
+        "absolute_return": _build_family_outcome_contrasts(
+            complete_rows,
+        ),
+        "benchmark_relative_return": _build_family_outcome_contrasts(
+            benchmark_relative_rows,
+            benchmark_relative=True,
+        ),
+    }
     aggregate_released = any(
         (
             aggregate_outcomes,
@@ -1350,6 +1379,53 @@ def build_technical_confluence_study_payload(
     ):
         warnings.append(
             "CONFLUENCE_MONOTONICITY_IS_DESCRIPTIVE_NOT_CAUSAL"
+        )
+    absolute_family_results = family_outcome_contrasts["absolute_return"]
+    relative_family_results = family_outcome_contrasts[
+        "benchmark_relative_return"
+    ]
+    absolute_unadjusted_released = sum(
+        result["unadjusted"]["status"] == FAMILY_CONTRAST_RELEASED
+        for result in absolute_family_results.values()
+    )
+    relative_unadjusted_released = sum(
+        result["unadjusted"]["status"] == FAMILY_CONTRAST_RELEASED
+        for result in relative_family_results.values()
+    )
+    absolute_matched_released = sum(
+        result["other_family_count_matched"]["status"]
+        == FAMILY_CONTRAST_RELEASED
+        for result in absolute_family_results.values()
+    )
+    relative_matched_released = sum(
+        result["other_family_count_matched"]["status"]
+        == FAMILY_CONTRAST_RELEASED
+        for result in relative_family_results.values()
+    )
+    if any(
+        (
+            absolute_unadjusted_released,
+            relative_unadjusted_released,
+            absolute_matched_released,
+            relative_matched_released,
+        )
+    ):
+        warnings.append(
+            "FAMILY_OUTCOME_CONTRASTS_ARE_DESCRIPTIVE_NOT_CAUSAL"
+        )
+        warnings.append(
+            "FAMILY_OUTCOME_CONTRASTS_DO_NOT_PROVE_INDEPENDENT_CONTRIBUTION"
+        )
+    if absolute_unadjusted_released or relative_unadjusted_released:
+        warnings.append(
+            "UNADJUSTED_FAMILY_CONTRASTS_ARE_CONFOUNDED_BY_OTHER_SIGNALS"
+        )
+    if absolute_matched_released or relative_matched_released:
+        warnings.append(
+            "COUNT_MATCHED_FAMILY_CONTRASTS_DO_NOT_CONTROL_MARKET_REGIME"
+        )
+        warnings.append(
+            "FAMILY_CONTRASTS_ARE_NOT_MULTIPLE_COMPARISON_ADJUSTED"
         )
     if (
         len(complete_rows)
@@ -1553,6 +1629,27 @@ def build_technical_confluence_study_payload(
                 CONFLUENCE_MONOTONICITY_MINIMUM_BUCKETS
             ),
             "monotonicity_is_descriptive_not_causal": True,
+            "family_contrast_method": (
+                "green_vs_available_not_green_with_optional_"
+                "other_green_family_count_matching"
+            ),
+            "family_contrast_unavailable_states_excluded": [
+                UNAVAILABLE,
+                INSUFFICIENT_DATA,
+            ],
+            "family_contrast_minimum_rows_per_arm": (
+                CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS
+            ),
+            "family_contrast_minimum_matched_strata": (
+                CONFLUENCE_FAMILY_CONTRAST_MINIMUM_MATCHED_STRATA
+            ),
+            "family_contrast_market_regime_adjusted": False,
+            "family_contrast_matching_controls_family_composition": False,
+            "family_contrast_matched_stratum_weighting": (
+                "equal_weight_per_released_count_stratum"
+            ),
+            "family_contrast_multiple_comparison_adjusted": False,
+            "family_contrast_is_descriptive_not_causal": True,
         },
         "summary": {
             "unique_symbol_date_rows": len(rows),
@@ -1623,6 +1720,18 @@ def build_technical_confluence_study_payload(
                     "benchmark_relative_return"
                 ]["status"]
             ),
+            "absolute_family_contrasts_released": (
+                absolute_unadjusted_released
+            ),
+            "benchmark_relative_family_contrasts_released": (
+                relative_unadjusted_released
+            ),
+            "absolute_count_matched_family_contrasts_released": (
+                absolute_matched_released
+            ),
+            "benchmark_relative_count_matched_family_contrasts_released": (
+                relative_matched_released
+            ),
         },
         "rows": [row.to_dict() for row in rows],
         "unavailable_event_groups": unavailable_groups,
@@ -1675,6 +1784,7 @@ def build_technical_confluence_study_payload(
             benchmark_relative_temporal_stability
         ),
         "confluence_monotonicity": confluence_monotonicity,
+        "family_outcome_contrasts": family_outcome_contrasts,
         "warnings": warnings,
     }
 
@@ -2177,6 +2287,376 @@ def _average_ranks(values: list[float]) -> list[float]:
             result[index] = average_rank
         start = end
     return result
+
+
+def _build_family_outcome_contrasts(
+    rows: list[TechnicalConfluenceStudyRow],
+    *,
+    benchmark_relative: bool = False,
+) -> dict[str, dict[str, Any]]:
+    results: dict[str, dict[str, Any]] = {}
+    complete_sample_released = (
+        len(rows) >= CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+    )
+    for family in CONFLUENCE_SIGNAL_FAMILIES:
+        eligible_rows: list[TechnicalConfluenceStudyRow] = []
+        green_rows: list[TechnicalConfluenceStudyRow] = []
+        available_not_green_rows: list[TechnicalConfluenceStudyRow] = []
+        for row in rows:
+            state = _confluence_family_state(row, family)
+            if state in {None, UNAVAILABLE, INSUFFICIENT_DATA}:
+                continue
+            eligible_rows.append(row)
+            if state == GREEN:
+                green_rows.append(row)
+            else:
+                available_not_green_rows.append(row)
+        results[family] = {
+            "family": family,
+            "outcome_basis": (
+                "BENCHMARK_RELATIVE_RETURN"
+                if benchmark_relative
+                else "ABSOLUTE_RETURN"
+            ),
+            "input_rows": len(rows),
+            "minimum_complete_rows": (
+                CONFLUENCE_STUDY_MINIMUM_COMPLETED_ROWS
+            ),
+            "eligible_rows": len(eligible_rows),
+            "excluded_unavailable_or_missing_rows": (
+                len(rows) - len(eligible_rows)
+            ),
+            "green_rows": len(green_rows),
+            "available_not_green_rows": len(available_not_green_rows),
+            "unadjusted": _build_two_arm_family_contrast(
+                green_rows,
+                available_not_green_rows,
+                benchmark_relative=benchmark_relative,
+                release_allowed=complete_sample_released,
+            ),
+            "other_family_count_matched": (
+                _build_count_matched_family_contrast(
+                    family=family,
+                    green_rows=green_rows,
+                    available_not_green_rows=available_not_green_rows,
+                    benchmark_relative=benchmark_relative,
+                    release_allowed=complete_sample_released,
+                )
+            ),
+            "descriptive_only": True,
+            "causal_relationship_proven": False,
+            "independent_contribution_proven": False,
+            "production_behavior_changed": False,
+        }
+    return results
+
+
+def _confluence_family_state(
+    row: TechnicalConfluenceStudyRow,
+    family: str,
+) -> str | None:
+    state = row.confluence_summary.family_states.get(family)
+    if state is None:
+        return None
+    value = getattr(state, "state", None)
+    return (
+        str(value)
+        if value in {GREEN, YELLOW, RED, UNAVAILABLE, INSUFFICIENT_DATA}
+        else None
+    )
+
+
+def _build_two_arm_family_contrast(
+    green_rows: list[TechnicalConfluenceStudyRow],
+    available_not_green_rows: list[TechnicalConfluenceStudyRow],
+    *,
+    benchmark_relative: bool = False,
+    release_allowed: bool = True,
+) -> dict[str, Any]:
+    insufficient_arms = []
+    if len(green_rows) < CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS:
+        insufficient_arms.append("GREEN")
+    if (
+        len(available_not_green_rows)
+        < CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS
+    ):
+        insufficient_arms.append("AVAILABLE_NOT_GREEN")
+    reason = None
+    if not release_allowed:
+        reason = "MINIMUM_COMPLETE_SAMPLE_NOT_MET"
+    elif insufficient_arms:
+        reason = "MINIMUM_CONTRAST_ARM_ROWS_NOT_MET"
+    base = {
+        "status": FAMILY_CONTRAST_WITHHELD,
+        "reason": reason,
+        "minimum_rows_per_arm": (
+            CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS
+        ),
+        "green_rows": len(green_rows),
+        "available_not_green_rows": len(available_not_green_rows),
+        "insufficient_arms": insufficient_arms,
+        "arm_aggregates": {},
+        "differences_green_minus_available_not_green": {},
+        "date_cluster_arm_support": {},
+        "date_cluster_contrast_uncertainty_computed": False,
+        "statistical_significance_tested": False,
+        "market_regime_adjusted": False,
+        "multiple_comparison_adjusted": False,
+        "descriptive_only": True,
+        "causal_relationship_proven": False,
+    }
+    if not release_allowed or insufficient_arms:
+        return base
+
+    aggregates, withheld = _aggregate_confluence_study_groups(
+        {
+            "GREEN": green_rows,
+            "AVAILABLE_NOT_GREEN": available_not_green_rows,
+        },
+        benchmark_relative=benchmark_relative,
+    )
+    if withheld or set(aggregates) != {"GREEN", "AVAILABLE_NOT_GREEN"}:
+        return {
+            **base,
+            "reason": "CONTRAST_ARM_AGGREGATION_WITHHELD",
+        }
+    return {
+        **base,
+        "status": FAMILY_CONTRAST_RELEASED,
+        "reason": None,
+        "insufficient_arms": [],
+        "arm_aggregates": aggregates,
+        "differences_green_minus_available_not_green": (
+            _family_contrast_differences(
+                aggregates,
+                benchmark_relative=benchmark_relative,
+            )
+        ),
+        "date_cluster_arm_support": _family_contrast_cluster_support(
+            aggregates,
+            benchmark_relative=benchmark_relative,
+        ),
+    }
+
+
+def _family_contrast_differences(
+    aggregates: dict[str, dict[str, Any]],
+    *,
+    benchmark_relative: bool,
+) -> dict[str, dict[str, float]]:
+    green = aggregates["GREEN"]
+    comparison = aggregates["AVAILABLE_NOT_GREEN"]
+    mean_field = (
+        "mean_excess_forward_returns_pct"
+        if benchmark_relative
+        else "mean_forward_returns_pct"
+    )
+    median_field = (
+        "median_excess_forward_returns_pct"
+        if benchmark_relative
+        else "median_forward_returns_pct"
+    )
+    positive_field = (
+        "positive_excess_return_rate_pct"
+        if benchmark_relative
+        else "positive_forward_return_rate_pct"
+    )
+    return {
+        "mean_forward_return_delta_pct": {
+            f"{horizon}d": round(
+                float(green[mean_field][f"{horizon}d"])
+                - float(comparison[mean_field][f"{horizon}d"]),
+                4,
+            )
+            for horizon in CONFLUENCE_STUDY_HORIZONS
+        },
+        "median_forward_return_delta_pct": {
+            f"{horizon}d": round(
+                float(green[median_field][f"{horizon}d"])
+                - float(comparison[median_field][f"{horizon}d"]),
+                4,
+            )
+            for horizon in CONFLUENCE_STUDY_HORIZONS
+        },
+        "positive_return_rate_delta_percentage_points": {
+            f"{horizon}d": round(
+                float(green[positive_field][f"{horizon}d"])
+                - float(comparison[positive_field][f"{horizon}d"]),
+                4,
+            )
+            for horizon in CONFLUENCE_STUDY_HORIZONS
+        },
+    }
+
+
+def _family_contrast_cluster_support(
+    aggregates: dict[str, dict[str, Any]],
+    *,
+    benchmark_relative: bool,
+) -> dict[str, str]:
+    clustered_field = (
+        "date_clustered_excess_forward_return_uncertainty"
+        if benchmark_relative
+        else "date_clustered_forward_return_uncertainty"
+    )
+    return {
+        f"{horizon}d": (
+            FAMILY_CONTRAST_RELEASED
+            if all(
+                aggregates[arm][clustered_field][f"{horizon}d"]["status"]
+                == TEMPORAL_STABILITY_RELEASED
+                for arm in ("GREEN", "AVAILABLE_NOT_GREEN")
+            )
+            else FAMILY_CONTRAST_WITHHELD
+        )
+        for horizon in CONFLUENCE_STUDY_HORIZONS
+    }
+
+
+def _build_count_matched_family_contrast(
+    *,
+    family: str,
+    green_rows: list[TechnicalConfluenceStudyRow],
+    available_not_green_rows: list[TechnicalConfluenceStudyRow],
+    benchmark_relative: bool,
+    release_allowed: bool = True,
+) -> dict[str, Any]:
+    rows_by_count: dict[
+        int,
+        dict[str, list[TechnicalConfluenceStudyRow]],
+    ] = {}
+    invalid_count_rows = 0
+    for arm, arm_rows, target_is_green in (
+        ("GREEN", green_rows, True),
+        ("AVAILABLE_NOT_GREEN", available_not_green_rows, False),
+    ):
+        for row in arm_rows:
+            total_green = row.confluence_summary.independent_green_families
+            if (
+                isinstance(total_green, bool)
+                or not isinstance(total_green, int)
+            ):
+                invalid_count_rows += 1
+                continue
+            other_green_count = total_green - int(target_is_green)
+            if (
+                other_green_count < 0
+                or other_green_count >= len(CONFLUENCE_SIGNAL_FAMILIES)
+            ):
+                invalid_count_rows += 1
+                continue
+            rows_by_count.setdefault(
+                other_green_count,
+                {
+                    "GREEN": [],
+                    "AVAILABLE_NOT_GREEN": [],
+                },
+            )[arm].append(row)
+
+    candidate_strata = {
+        str(count): {
+            "green_rows": len(arms["GREEN"]),
+            "available_not_green_rows": len(
+                arms["AVAILABLE_NOT_GREEN"]
+            ),
+            "release_eligible": (
+                len(arms["GREEN"])
+                >= CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS
+                and len(arms["AVAILABLE_NOT_GREEN"])
+                >= CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS
+            ),
+        }
+        for count, arms in sorted(rows_by_count.items())
+    }
+    eligible_counts = [
+        count
+        for count, arms in sorted(rows_by_count.items())
+        if (
+            len(arms["GREEN"])
+            >= CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS
+            and len(arms["AVAILABLE_NOT_GREEN"])
+            >= CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS
+        )
+    ]
+    base = {
+        "status": FAMILY_CONTRAST_WITHHELD,
+        "reason": (
+            "MINIMUM_COMPLETE_SAMPLE_NOT_MET"
+            if not release_allowed
+            else "MINIMUM_MATCHED_OTHER_FAMILY_COUNT_STRATA_NOT_MET"
+        ),
+        "family": family,
+        "minimum_rows_per_arm_per_stratum": (
+            CONFLUENCE_FAMILY_CONTRAST_MINIMUM_ARM_ROWS
+        ),
+        "minimum_matched_strata": (
+            CONFLUENCE_FAMILY_CONTRAST_MINIMUM_MATCHED_STRATA
+        ),
+        "candidate_strata": candidate_strata,
+        "released_matched_strata": len(eligible_counts),
+        "invalid_other_family_count_rows": invalid_count_rows,
+        "matched_strata": {},
+        "equal_weighted_stratum_differences": {},
+        "matching_variable": "other_green_family_count",
+        "matching_controls_family_composition": False,
+        "stratum_weighting": "equal_weight_per_released_count_stratum",
+        "market_regime_adjusted": False,
+        "multiple_comparison_adjusted": False,
+        "statistical_significance_tested": False,
+        "descriptive_only": True,
+        "causal_relationship_proven": False,
+        "independent_contribution_proven": False,
+    }
+    if (
+        not release_allowed
+        or len(eligible_counts)
+        < CONFLUENCE_FAMILY_CONTRAST_MINIMUM_MATCHED_STRATA
+    ):
+        return base
+
+    matched_strata: dict[str, dict[str, Any]] = {}
+    for count in eligible_counts:
+        arms = rows_by_count[count]
+        contrast = _build_two_arm_family_contrast(
+            arms["GREEN"],
+            arms["AVAILABLE_NOT_GREEN"],
+            benchmark_relative=benchmark_relative,
+        )
+        if contrast["status"] != FAMILY_CONTRAST_RELEASED:
+            raise TechnicalConfluenceError(
+                "Release-eligible matched family stratum was withheld."
+            )
+        matched_strata[str(count)] = contrast
+
+    difference_fields = (
+        "mean_forward_return_delta_pct",
+        "median_forward_return_delta_pct",
+        "positive_return_rate_delta_percentage_points",
+    )
+    equal_weighted_differences = {
+        field: {
+            f"{horizon}d": round(
+                mean(
+                    matched_strata[str(count)][
+                        "differences_green_minus_available_not_green"
+                    ][field][f"{horizon}d"]
+                    for count in eligible_counts
+                ),
+                4,
+            )
+            for horizon in CONFLUENCE_STUDY_HORIZONS
+        }
+        for field in difference_fields
+    }
+    return {
+        **base,
+        "status": FAMILY_CONTRAST_RELEASED,
+        "reason": None,
+        "matched_strata": matched_strata,
+        "equal_weighted_stratum_differences": (
+            equal_weighted_differences
+        ),
+    }
 
 
 def _aggregate_confluence_study_rows_by_market_regime(
@@ -2989,6 +3469,10 @@ def render_technical_confluence_study_markdown(
         lines,
         payload["confluence_monotonicity"],
     )
+    _append_family_outcome_contrast_tables(
+        lines,
+        payload["family_outcome_contrasts"],
+    )
 
     lines.extend(["", "## Unavailable Event Groups", ""])
     unavailable = payload["unavailable_event_groups"][:_REPORT_ROW_LIMIT]
@@ -3080,6 +3564,88 @@ def _append_confluence_monotonicity_table(
                 f"{mean_direction} | {cluster_status} |"
             )
     lines.append("")
+
+
+def _append_family_outcome_contrast_tables(
+    lines: list[str],
+    family_contrasts: dict[str, Any],
+) -> None:
+    lines.extend(
+        [
+            "",
+            "## Family Outcome Contrasts",
+            "",
+            (
+                "Descriptive research only. Unavailable states are excluded. "
+                "Unadjusted contrasts can reflect other aligned signals; "
+                "count-matched contrasts hold the number of other green "
+                "families constant but do not control market regime or prove "
+                "independent contribution."
+            ),
+            "",
+        ]
+    )
+    for outcome_key, outcome_label in (
+        ("absolute_return", "Absolute Return"),
+        ("benchmark_relative_return", "Benchmark-Relative Return"),
+    ):
+        lines.extend(
+            [
+                f"### {outcome_label}",
+                "",
+                (
+                    "| Family | Unadjusted | Unadjusted Reason | Green | "
+                    "Available Not Green | Excluded | Median 10d Delta | "
+                    "Mean 10d Delta | Count-Matched | Matched Reason | "
+                    "Matched Strata | Matched Median 10d Delta |"
+                ),
+                (
+                    "| --- | --- | --- | ---: | ---: | ---: | ---: | "
+                    "---: | --- | --- | ---: | ---: |"
+                ),
+            ]
+        )
+        for family in CONFLUENCE_SIGNAL_FAMILIES:
+            result = family_contrasts[outcome_key][family]
+            unadjusted = result["unadjusted"]
+            matched = result["other_family_count_matched"]
+            if unadjusted["status"] == FAMILY_CONTRAST_RELEASED:
+                unadjusted_differences = unadjusted[
+                    "differences_green_minus_available_not_green"
+                ]
+                median_delta = _display_pct(
+                    unadjusted_differences[
+                        "median_forward_return_delta_pct"
+                    ]["10d"]
+                )
+                mean_delta = _display_pct(
+                    unadjusted_differences[
+                        "mean_forward_return_delta_pct"
+                    ]["10d"]
+                )
+            else:
+                median_delta = "N/A"
+                mean_delta = "N/A"
+            if matched["status"] == FAMILY_CONTRAST_RELEASED:
+                matched_median_delta = _display_pct(
+                    matched["equal_weighted_stratum_differences"][
+                        "median_forward_return_delta_pct"
+                    ]["10d"]
+                )
+            else:
+                matched_median_delta = "N/A"
+            lines.append(
+                f"| {family} | {unadjusted['status']} | "
+                f"{unadjusted['reason'] or '-'} | "
+                f"{result['green_rows']} | "
+                f"{result['available_not_green_rows']} | "
+                f"{result['excluded_unavailable_or_missing_rows']} | "
+                f"{median_delta} | {mean_delta} | {matched['status']} | "
+                f"{matched['reason'] or '-'} | "
+                f"{matched['released_matched_strata']} | "
+                f"{matched_median_delta} |"
+            )
+        lines.append("")
 
 
 def _append_confluence_study_aggregate_table(
@@ -5324,14 +5890,7 @@ def build_family_states(indicators: list[IndicatorState]) -> dict[str, Confluenc
     }
     usable_signal_families = sum(
         1
-        for family in (
-            FAMILY_TREND,
-            FAMILY_BREAKOUT,
-            FAMILY_MOMENTUM,
-            FAMILY_VOLATILITY,
-            FAMILY_VOLUME,
-            FAMILY_RELATIVE_STRENGTH,
-        )
+        for family in CONFLUENCE_SIGNAL_FAMILIES
         if family_states[family].state not in {UNAVAILABLE, INSUFFICIENT_DATA}
     )
     if usable_signal_families < 2:
