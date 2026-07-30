@@ -5,8 +5,8 @@ This file records durable product and operating goals that should survive indivi
 ## Shadow: Observe An Active FakeBroker Position Honestly
 
 Status: `ACTIVE`; implementation, automated proof, WPF visual acceptance,
-canonical integration, backup, and v3 activation pass. Corrected final-head
-proof/task rebinding remains active.
+canonical integration, backup, proof repair, v3 activation, and operational
+closeout pass. The scheduled live twelfth-proof ceremony remains.
 
 Goal:
 

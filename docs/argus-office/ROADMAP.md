@@ -28,9 +28,10 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-SHADOW-017 live position marking is `COMPLETE` on synchronized canonical
-`master`/`origin/master` through accepted implementation `94f5074`. The
-implementation adds a separate
+ARGUS-SHADOW-017 live position marking is `READY_FOR_2026-07-30_ARMED_RUN` on
+canonical `master`/`origin/master` through accepted implementation `94f5074`,
+proof-acceptance repair `40a26a0`, and the operational closeout containing this
+statement. The implementation adds a separate
 five-second active-order/position quote loop, a ten-second maximum active quote
 age, durable executable marks, restart validation, a versioned read-only Engine
 Host/WPF snapshot, and the Active Test Trade review. Python remains authoritative.
@@ -47,25 +48,27 @@ Long positions mark from bid and short positions mark from ask. A stale or halte
 quote preserves the last reliable mark, suppresses live P&L and lifecycle exits,
 and cannot appear as a live winner.
 
-The previously installed 2026-07-30 opening task is disabled and reports
-`Enabled=False`. Steven accepted all seven WPF proof checks on 2026-07-29, and
-Git Steward committed, fast-forwarded, and backed up the implementation without
-a merge commit. The task remains disabled until every task/proof/sample
-fingerprint is regenerated from the exact final canonical commit. No v3
-activation, policy, arm, cycle, state, handoff, trade, account request, or
-real-order capability has been created.
+Steven accepted all seven WPF proof checks on 2026-07-29, and Git Steward
+committed, fast-forwarded, and backed up the implementation and proof repair
+without a merge commit. After this closeout is integrated and synchronized, one
+enabled, one-time 2026-07-30 8:35 AM Central task is generated from that exact
+final canonical commit and its fresh 11-artifact static bundle. The selector
+remains unarmed until the task obtains and verifies the twelfth live
+candidate+SPY/IWM quote/clock artifact. V3 has only its activation; no policy,
+arm, cycle, state, handoff, trade, or real-order capability exists before the
+run.
 
 Automated proof currently includes Python compileall, 183 focused
-Shadow/Engine Host/Schwab read-only tests, the 940-test Python discovery, all
+Shadow/Engine Host/Schwab read-only tests, the 941-test Python discovery, all
 224 .NET tests with warnings treated as errors, and a real 1180x820 WPF render
 at `docs/argus-office/reports/releases/ARGUS-SHADOW-017-synthetic-live-marking-ui-proof.png`.
 The screenshot is synthetic, explicitly non-production, and changes no official
-state. Current classification is `OPERATIONAL_REBIND_PENDING`.
+state. Current classification is `READY_FOR_2026-07-30_ARMED_RUN`.
 
 Final-head self-review rejected the first `d87b53b` static bundle before use:
 its visual-acceptance collector still referenced the historical SHADOW-004 JPEG
 and wording instead of the accepted SHADOW-017 PNG and seven-check pass. The
-opening task was immediately disabled. The narrow release repair binds the proof
+opening task was immediately disabled. Integrated repair `40a26a0` binds the proof
 collector to SHADOW-017, rejects stale SHADOW-004 acceptance and invalid PNG
 evidence, and passes 87 focused/adjacent tests plus all 941 Python tests. The
 `d87b53b` bundle remains preserved as stale evidence and must not be armed.
@@ -103,13 +106,13 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Synchronized `master`/`origin/master` contains accepted ARGUS-SHADOW-017 implementation `94f5074`, the WPF workstation through R029, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active branch | `codex/ARGUS-SHADOW-017-proof-acceptance-binding` repairs the final proof's visual-acceptance identity; the task is disabled until this branch is integrated and all final-head artifacts are regenerated. |
+| Canonical baseline | Synchronized `master`/`origin/master` contains accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, this operational closeout, the WPF workstation through R029, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
+| Active branch | No implementation branch remains pending after this operational closeout is fast-forwarded. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | Visual acceptance, implementation integration, backup, and v3 activation passed. The narrow proof-acceptance repair must be integrated and backed up before task/proof regeneration; selector arming still requires the live twelfth gate. |
-| Scheduled operational proof | `DISABLED_PENDING_FINAL_HEAD_PROOF`; the existing Shadow opening task is disabled. No partial live-marking build will run. A new one-use task may be installed only from the synchronized final canonical commit and its regenerated proof bundle. |
-| Immediate operational work | Integrate the proof-acceptance repair, regenerate the static bundle and task identity from the resulting synchronized final head, and update the finite read-only observer. V3 is already activated-empty; selector arming remains conditional on every regenerated proof gate. |
+| Blocked by | No implementation or visual gate remains. Selector arming is intentionally deferred to the task's fresh live twelfth proof; any failed quote, clock, account, Git, host, or evidence invariant fails closed. |
+| Scheduled operational proof | `READY_FOR_2026-07-30_ARMED_RUN`; after this closeout is synchronized, one enabled one-time 8:35 AM Central task is bound to its exact final-head static bundle, and one finite 8:50 read-only observer is bound to the same identity. |
+| Immediate operational work | Preserve the final-head code, task, activation, and static bundle unchanged; allow the scheduled ceremony to attempt the twelfth proof and automatic FakeBroker-only selection, then inspect its evidence at 8:50. |
 | Broker state | Schwab OAuth is active after exact sole-account revalidation; the immutable `2573` `INDIVIDUAL_CASH` binding remains read-only. No preview or transmitting method exists. The previously surfaced, unrotated Client Secret is an explicit blocker for future transmitting code. |
 | Steven action | `MANUAL_PASS` on all seven ARGUS-SHADOW-017 WPF checks. No further visual action is pending; any brokerage anomaly or real-order proposal remains a separate interruption gate. |
 | Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
@@ -234,11 +237,11 @@ Status: `COMPLETE` on local and remote `master` through `a17eff8`
 
 Status: `ACTIVE`; the prior SHADOW-017 opening-runtime repair and Schwab
 read-only foundations are `COMPLETE` on synchronized `master`; the
-SHADOW-017 live-position-marking amendment is `COMPLETE /
-OPERATIONAL_REBIND_PENDING`;
+SHADOW-017 live-position-marking amendment is
+`READY_FOR_2026-07-30_ARMED_RUN`;
 v1 and activated-empty v2 are preserved at `0 / 30`, prospective v3 is
 activated-empty and unarmed at `0 / 30`, A017 is
-`BLOCKED_VENDOR_CAPABILITY`, and every real-order gate remains closed
+`BLOCKED_VENDOR_CAPABILITY`, and every real-order gate remains closed.
 
 #### 11A - Shadow Trading Evidence Program
 

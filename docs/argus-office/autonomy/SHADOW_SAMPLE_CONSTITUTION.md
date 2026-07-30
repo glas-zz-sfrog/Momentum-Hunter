@@ -30,8 +30,9 @@ Operator-selected simulations are exploratory and never count toward the officia
 
 Current state: v1 is preserved as a failed prospective ceremony at `0 / 30`;
 v2 is preserved `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`; prospective
-v3 is `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`. Its task remains
-disabled pending corrected final-head proof rebinding.
+v3 is `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`. After the operational
+closeout is synchronized, its one-time task and static bundle are generated
+from that exact final head; arming still requires the fresh twelfth proof.
 
 ## SHADOW-017 Active-Position Marking Amendment
 
