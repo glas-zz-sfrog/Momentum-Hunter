@@ -1,6 +1,6 @@
 # Shadow Sample Constitution
 
-Status: `AMENDED_IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE_NOT_AUTHORIZING`
+Status: `AMENDED_IMPLEMENTED_CANONICAL_NOT_AUTHORIZING`
 
 This document describes the implemented methodology for the first official prospective
 Momentum Hunter Shadow sample. It does not authorize Trade 1. The selector may become
@@ -30,7 +30,8 @@ Operator-selected simulations are exploratory and never count toward the officia
 
 Current state: v1 is preserved as a failed prospective ceremony at `0 / 30`;
 v2 is preserved `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`; prospective
-v3 is not activated or armed.
+v3 is `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`. Its task remains
+disabled pending corrected final-head proof rebinding.
 
 ## SHADOW-017 Active-Position Marking Amendment
 
@@ -75,9 +76,10 @@ closed.
 Because this faster loop can change fill, stop, target, MFE, MAE, and exit
 timing, it is a material fill-model change. v1 and activated-empty v2 remain
 immutable. New evidence may count only prospectively under
-`official-shadow-v3` and `prospective-fakebroker-live-mark-v2` after visual
-acceptance, canonical integration, remote backup, and exact final-head
-task/proof/arm regeneration.
+`official-shadow-v3` and `prospective-fakebroker-live-mark-v2`. V3 was activated
+empty only after visual acceptance, canonical integration, and remote backup;
+collection still requires exact corrected final-head task/proof/arm
+regeneration.
 
 ## Frozen Selection Rule
 

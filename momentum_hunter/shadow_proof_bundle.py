@@ -62,7 +62,7 @@ VISUAL_PROOF_PATH = (
     / "argus-office"
     / "reports"
     / "releases"
-    / "ARGUS-SHADOW-004-official-sample-active-proof.jpg"
+    / "ARGUS-SHADOW-017-synthetic-live-marking-ui-proof.png"
 )
 VERIFICATION_QUEUE_PATH = (
     Path("docs") / "argus-office" / "VERIFICATION_QUEUE.md"
@@ -299,7 +299,7 @@ def prepare_static_selector_proof_bundle(
         write_proof_artifact(
             temporary,
             "visual_acceptance",
-            "Steven's SHADOW-004 visual acceptance and retained UI proof are present.",
+            "Steven's SHADOW-017 visual acceptance and retained UI proof are present.",
             visual_paths,
             context=context,
             verified_at=timestamp,
@@ -802,21 +802,24 @@ def collect_visual_acceptance_evidence(
     )
     queue_text = queue_bytes.decode("utf-8")
     required_text = (
-        "ARGUS-SHADOW-004 Official Sample Activation",
-        "Status: `COMPLETE`; `AUTOMATED_PASS`; `MANUAL_PASS`",
-        "Steven completed and accepted these checks on 2026-07-26",
+        "ARGUS-SHADOW-017 live position marking",
+        "`MANUAL_PASS`; Steven passed all seven checks on 2026-07-29",
+        "Steven result: `MANUAL_PASS` on 2026-07-29",
+        "This acceptance does not arm the selector",
     )
     if any(value not in queue_text for value in required_text):
         raise SelectorProofBundleError(
-            "Verification Queue does not prove SHADOW-004 manual acceptance."
+            "Verification Queue does not prove SHADOW-017 manual acceptance."
         )
     if (
         len(screenshot_bytes) < 10_000
-        or not screenshot_bytes.startswith(b"\xff\xd8")
-        or not screenshot_bytes.endswith(b"\xff\xd9")
+        or not screenshot_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+        or not screenshot_bytes.endswith(
+            b"\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
     ):
         raise SelectorProofBundleError(
-            "SHADOW-004 visual proof is not a valid retained JPEG."
+            "SHADOW-017 visual proof is not a valid retained PNG."
         )
     copied_screenshot = evidence_root / screenshot_resolved.name
     copied_screenshot.write_bytes(screenshot_bytes)

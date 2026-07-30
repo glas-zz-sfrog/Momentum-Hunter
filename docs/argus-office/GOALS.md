@@ -4,8 +4,9 @@ This file records durable product and operating goals that should survive indivi
 
 ## Shadow: Observe An Active FakeBroker Position Honestly
 
-Status: `ACTIVE`; implementation and automated proof pass, WPF visual
-acceptance pending.
+Status: `ACTIVE`; implementation, automated proof, WPF visual acceptance,
+canonical integration, backup, and v3 activation pass. Corrected final-head
+proof/task rebinding remains active.
 
 Goal:
 
@@ -23,8 +24,9 @@ Success:
   not calculate official results or call a provider.
 - Open states use WORKING/AHEAD/BEHIND/FLAT/STALE/HALTED/EXIT_PENDING; only
   completed records use WINNER/LOSER/FLAT_EXIT.
-- v1 and activated-empty v2 remain immutable; prospective v3 begins only after
-  visual acceptance, integration, backup, and regenerated proof.
+- v1 and activated-empty v2 remain immutable. Prospective v3 is activated-empty
+  at `0 / 30` after visual acceptance, integration, and backup; collection may
+  begin only after corrected final-head proof and arming pass.
 - Aggregate claims remain withheld below the sample gate, and FakeBroker
   remains the only automated execution boundary.
 

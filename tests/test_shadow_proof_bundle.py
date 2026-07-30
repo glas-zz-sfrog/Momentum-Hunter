@@ -186,13 +186,14 @@ class ShadowProofBundleTests(unittest.TestCase):
             / "argus-office"
             / "VERIFICATION_QUEUE.md"
         )
-        queue.parent.mkdir(parents=True)
+        queue.parent.mkdir(parents=True, exist_ok=True)
         queue.write_text(
             "\n".join(
                 (
-                    "ARGUS-SHADOW-004 Official Sample Activation",
-                    "Status: `COMPLETE`; `AUTOMATED_PASS`; `MANUAL_PASS`",
-                    "Steven completed and accepted these checks on 2026-07-26",
+                    "ARGUS-SHADOW-017 live position marking",
+                    "`MANUAL_PASS`; Steven passed all seven checks on 2026-07-29",
+                    "Steven result: `MANUAL_PASS` on 2026-07-29",
+                    "This acceptance does not arm the selector",
                 )
             ),
             encoding="utf-8",
@@ -203,10 +204,15 @@ class ShadowProofBundleTests(unittest.TestCase):
             / "argus-office"
             / "reports"
             / "releases"
-            / "ARGUS-SHADOW-004-official-sample-active-proof.jpg"
+            / "ARGUS-SHADOW-017-synthetic-live-marking-ui-proof.png"
         )
-        screenshot.parent.mkdir(parents=True)
-        screenshot.write_bytes(b"\xff\xd8" + (b"proof" * 2_100) + b"\xff\xd9")
+        screenshot.parent.mkdir(parents=True, exist_ok=True)
+        screenshot.write_bytes(
+            b"\x89PNG\r\n\x1a\n"
+            + (b"proof" * 2_100)
+            + b"\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        self.visual_proof_path = screenshot
 
     def prepare(self, runner: FakeCommandRunner | None = None) -> dict[str, object]:
         return prepare_static_selector_proof_bundle(
@@ -347,6 +353,46 @@ class ShadowProofBundleTests(unittest.TestCase):
             (self.bundle / "fresh_quote_boundary.json").exists()
         )
         self.assertFalse(result["stateMutated"])
+        self.assert_production_state_untouched()
+
+    def test_static_preparation_requires_current_visual_acceptance_png(
+        self,
+    ) -> None:
+        queue = (
+            self.repo_root
+            / "docs"
+            / "argus-office"
+            / "VERIFICATION_QUEUE.md"
+        )
+        queue.write_text(
+            "\n".join(
+                (
+                    "ARGUS-SHADOW-004 Official Sample Activation",
+                    "Status: `COMPLETE`; `AUTOMATED_PASS`; `MANUAL_PASS`",
+                    "Steven completed and accepted these checks on 2026-07-26",
+                )
+            ),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(
+            SelectorProofBundleError,
+            "SHADOW-017 manual acceptance",
+        ):
+            self.prepare()
+        self.assertFalse(self.bundle.exists())
+
+        self.write_visual_evidence()
+        self.visual_proof_path.write_bytes(
+            b"\xff\xd8" + (b"old-proof" * 2_000) + b"\xff\xd9"
+        )
+        with self.assertRaisesRegex(
+            SelectorProofBundleError,
+            "valid retained PNG",
+        ):
+            self.prepare()
+
+        self.assertFalse(self.bundle.exists())
         self.assert_production_state_untouched()
 
     def test_dirty_git_or_failed_gate_leaves_no_partial_bundle(self) -> None:

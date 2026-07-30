@@ -2,13 +2,12 @@
 
 Date reconciled: 2026-07-29
 
-This document names the merged implementation paths on `master` through the
-prior SHADOW-017 opening-runtime repair. The Roadmap, not this file, decides
+This document names the merged implementation paths on `master` through
+accepted ARGUS-SHADOW-017 live marking. The Roadmap, not this file, decides
 priority and next work.
 
-ARGUS-SHADOW-017 live marking is currently branch-only and therefore not yet
-canonical. After Steven's visual acceptance and clean integration, its intended
-canonical path is:
+ARGUS-SHADOW-017 live marking is canonical after Steven's visual acceptance,
+clean fast-forward integration, and remote backup. Its paths are:
 
 - Python authority: `momentum_hunter/shadow_trading.py`,
   `momentum_hunter/workstation_shadow.py`,

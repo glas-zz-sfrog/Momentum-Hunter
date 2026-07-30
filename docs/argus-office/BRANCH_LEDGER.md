@@ -9,7 +9,16 @@ all seven WPF checks on 2026-07-29. Git Steward committed the implementation as
 `94f5074`, fast-forwarded it into local `master`, and non-force pushed canonical
 `master` with exact local/remote equality. The existing 2026-07-30 Shadow task
 remains disabled. Prior v1 evidence and the write-once v2 activation remain
-preserved; v3 has no activation, arm, policy, cycle, state, handoff, or trade.
+preserved. V3 has only its write-once activation at `0 / 30`; it has no arm,
+policy, cycle, state, handoff, or trade.
+
+`codex/ARGUS-SHADOW-017-proof-acceptance-binding` is the active narrow release
+repair from synchronized closeout `d87b53b`. Final audit found that the first
+static v3 bundle still used the historical SHADOW-004 visual-acceptance gate.
+The task was disabled before use. The repair binds the collector to the accepted
+SHADOW-017 PNG and queue result, rejects stale SHADOW-004 evidence, and passes
+87 focused/adjacent tests plus all 941 Python tests. The original bundle is
+preserved as stale and must not be armed.
 
 ## Current Truth
 
@@ -108,6 +117,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
 | `codex/ARGUS-SHADOW-017-live-position-marking` | `94f5074` | No; canonical `master` pushed | Yes | `MERGED_TO_LOCAL_MASTER / MANUAL_PASS` | Adds separate five-second active FakeBroker marking, ten-second staleness, persisted bid/ask marks, restart validation, versioned Engine Host snapshot, and WPF Active Test Trade review under prospective v3. | Preserve as accepted source history; regenerate v3/task/proof identities only from synchronized final canonical head. |
+| `codex/ARGUS-SHADOW-017-proof-acceptance-binding` | `d87b53b` plus narrow uncommitted proof repair | No | No | `ACTIVE / NEEDS_INTEGRATION` | Replaces the stale SHADOW-004 visual gate in the selector bundle with the accepted SHADOW-017 queue result and PNG validation. | Commit, fast-forward, back up, then regenerate a new write-once final-head bundle and task; never use the stale `d87b53b` bundle. |
 | `codex/ARGUS-SHADOW-013-opening-ceremony-hardening` | `58552da` | Via `master` | Yes | `MERGED_TO_LOCAL_MASTER` | Hardens semantic handoff completion, clock validity, frozen configuration, retry classification, proof-only opening rehearsal, outcome separation, and read-only heartbeat behavior. | Preserve branch; prepare the final-HEAD disabled proof-only task and real-session audit. |
 | `codex/ARGUS-SHADOW-012-scheduler-retry` | `c9c31f6` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Adds bounded one-minute Windows restarts to the idempotent Shadow opening task without changing other capture schedules. | Preserve as source history; use the regenerated SHADOW-012 final-HEAD bundle and inspect the first live run. |
 | `codex/ARGUS-SHADOW-011-proof-timestamp-ordering` | `3f8acb8` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Evaluates proof freshness after guarded OAuth/provider completion instead of against the pre-request clock, while preserving future-data rejection. | Preserve as source history; use only the regenerated SHADOW-011 final-HEAD bundle for the opening task. |
