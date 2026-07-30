@@ -147,6 +147,10 @@
 - Hardened the SHADOW-006 selector arm from format-only proof strings to v2 structured proof artifacts: exact activation/sample/constitution/build binding, hash-verified evidence references, canonical persisted paths, and runtime revalidation that fails closed after deletion, alteration, relocation, or context drift.
 - Added the supported SHADOW-006 proof-bundle ceremony: a nonmutating `selector-arm-check` command and a separate exact-phrase guarded `selector-arm` command that use the same 12 structured artifacts and expose no broker or order authority.
 - Added the SHADOW-006 pre-arm Schwab quote-proof CLI so a current candidate plus SPY/IWM can prove realtime regular-session bid/ask evidence inside the frozen 30-second boundary before arming; the redacted derived output rejects future, stale, delayed, closed, extended, incomplete, mismatched, crossed, or nonfinite evidence and contains no account or order capability.
+- Hardened Shadow quote and selector chronology to use independently validated same-response HTTPS clock bounds, preserving fail-closed five-second uncertainty and 30-second request gates.
+- Separated Engine Host request and response limits so a valid larger authenticated loopback result can complete its terminal handoff while oversized responses remain bounded and rejected.
+- Completed a late-session isolated rehearsal with 12/12 proof, one IREN FakeBroker decision/trade, one idempotent terminal handoff, no transmission capability, no production mutation, and no official-sample count.
+- Passed combined integration verification with ARGUS-SERVICE-001: Python compileall, all 976 Python tests, all 228 .NET tests, and a zero-warning Release build.
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

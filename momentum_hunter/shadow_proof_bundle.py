@@ -38,8 +38,10 @@ from momentum_hunter.shadow_market_validity import (
 )
 from momentum_hunter.shadow_selection import load_report_object
 from momentum_hunter.shadow_opening import (
+    ShadowOpeningSafetyError,
     canonical_json as opening_canonical_json,
     clock_skew_findings,
+    trusted_clock_bounds,
 )
 from momentum_hunter.shadow_trading import (
     SHADOW_EVIDENCE_SCHEMA_VERSION,
@@ -1229,6 +1231,21 @@ def read_and_validate_live_quote_proof(
         clock_proof,
         evaluated_at=finalized_at,
     )
+    proof_clock_bounds = None
+    final_clock_bounds = None
+    if not clock_findings and checked_at is not None:
+        try:
+            proof_clock_bounds = trusted_clock_bounds(
+                clock_proof,
+                evaluated_at=checked_at,
+            )
+            final_clock_bounds = trusted_clock_bounds(
+                clock_proof,
+                evaluated_at=finalized_at,
+            )
+        except ShadowOpeningSafetyError:
+            proof_clock_bounds = None
+            final_clock_bounds = None
     if (
         proof.get("schemaVersion")
         != REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION
@@ -1241,6 +1258,10 @@ def read_and_validate_live_quote_proof(
         or proof.get("clockSkewProofRequired") is not True
         or proof.get("clockSkewFindings") != []
         or clock_findings
+        or proof_clock_bounds is None
+        or final_clock_bounds is None
+        or proof.get("quoteTimeBasis")
+        != proof_clock_bounds.to_evidence()
         or proof.get("maximumQuoteAgeSeconds") != 30
         or requested_symbols != expected_symbols
         or checked_at is None
@@ -1264,8 +1285,22 @@ def read_and_validate_live_quote_proof(
     for symbol in expected_symbols:
         row = rows[symbol]
         timestamp = parse_datetime(str(row.get("timestamp", "")))
+        provider_timestamps = (
+            parse_datetime(str(row.get("providerQuoteTimestamp", ""))),
+            parse_datetime(str(row.get("providerBidTimestamp", ""))),
+            parse_datetime(str(row.get("providerAskTimestamp", ""))),
+        )
+        quote_age_seconds = finite_number(row.get("quoteAgeSeconds"))
         bid = finite_number(row.get("bid"))
         ask = finite_number(row.get("ask"))
+        expected_quote_age = (
+            (
+                proof_clock_bounds.latest_plausible_trusted_at
+                - timestamp
+            ).total_seconds()
+            if timestamp is not None
+            else None
+        )
         if (
             row.get("status") != "PASS"
             or row.get("findings") != []
@@ -1276,8 +1311,27 @@ def read_and_validate_live_quote_proof(
             not in {"open", "tradable"}
             or timestamp is None
             or timestamp.utcoffset() is None
-            or timestamp > finalized_at
-            or (finalized_at - timestamp).total_seconds() > 30
+            or any(value is None for value in provider_timestamps)
+            or timestamp
+            != min(
+                value
+                for value in provider_timestamps
+                if value is not None
+            )
+            or any(
+                value > proof_clock_bounds.latest_plausible_trusted_at
+                for value in provider_timestamps
+                if value is not None
+            )
+            or timestamp > final_clock_bounds.latest_plausible_trusted_at
+            or (
+                final_clock_bounds.latest_plausible_trusted_at - timestamp
+            ).total_seconds()
+            > 30
+            or expected_quote_age is None
+            or quote_age_seconds is None
+            or abs(quote_age_seconds - round(expected_quote_age, 6))
+            > 0.000001
             or bid is None
             or ask is None
             or bid <= 0

@@ -31,6 +31,7 @@ DEFAULT_ACTIVE_MARK_INTERVAL_SECONDS = (
 HOST_LOCK_FILENAME = "python-engine-host.lock"
 ENDPOINT_FILENAME = "python-engine-endpoint.json"
 MAX_REQUEST_BYTES = 64 * 1024
+MAX_RESPONSE_BYTES = 1024 * 1024
 
 COMMAND_SNAPSHOT = "get_host_snapshot"
 COMMAND_PAUSE = "pause_collection"

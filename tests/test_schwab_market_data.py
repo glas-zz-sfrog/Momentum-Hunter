@@ -157,8 +157,14 @@ class _FakeTransport:
 
 
 class _ProofQuoteSource:
-    def __init__(self, quotes: dict[str, dict[str, object]]) -> None:
+    def __init__(
+        self,
+        quotes: dict[str, dict[str, object]],
+        *,
+        trusted_remote_at: datetime | None = None,
+    ) -> None:
         self.values = quotes
+        self.trusted_remote_at = trusted_remote_at
         self.calls: list[tuple[tuple[str, ...], datetime | None]] = []
 
     def quotes(
@@ -186,7 +192,9 @@ class _ProofQuoteSource:
             clock_skew_proof=build_https_clock_skew_proof(
                 request_started_at=decision_at,
                 response_received_at=decision_at,
-                remote_date_header=format_datetime(decision_at),
+                remote_date_header=format_datetime(
+                    self.trusted_remote_at or decision_at
+                ),
                 source_identity="synthetic-test-https-date",
             ),
         )
@@ -688,6 +696,110 @@ class SchwabRegularMarketQuoteProofTests(unittest.TestCase):
             "PROVIDER_ASK_TIMESTAMP_IN_FUTURE",
             proof["quotes"][0]["findings"],
         )
+
+    def test_validated_clock_bound_accepts_provider_time_ahead_of_local_clock(
+        self,
+    ) -> None:
+        local_at = datetime(2026, 7, 27, 14, 0, tzinfo=timezone.utc)
+        trusted_remote_at = local_at + timedelta(seconds=2)
+        observed_at = local_at + timedelta(seconds=1.5)
+        source = _ProofQuoteSource(
+            {"CRWV": proof_quote("CRWV", observed_at)},
+            trusted_remote_at=trusted_remote_at,
+        )
+
+        proof = build_regular_market_quote_proof(
+            source,
+            ["CRWV"],
+            checked_at=local_at,
+            require_clock_proof=True,
+        )
+
+        self.assertEqual("PASS", proof["proofStatus"])
+        self.assertEqual([], proof["clockSkewFindings"])
+        self.assertEqual(
+            "VALIDATED_HTTPS_DATE_BOUND",
+            proof["quoteTimeBasis"]["basis"],
+        )
+        self.assertEqual(
+            (local_at + timedelta(seconds=3)).isoformat(),
+            proof["quoteTimeBasis"]["latestPlausibleTrustedAt"],
+        )
+        self.assertEqual(1.5, proof["quotes"][0]["quoteAgeSeconds"])
+        self.assertEqual([], proof["quotes"][0]["findings"])
+
+    def test_provider_time_beyond_validated_clock_bound_fails(self) -> None:
+        local_at = datetime(2026, 7, 27, 14, 0, tzinfo=timezone.utc)
+        source = _ProofQuoteSource(
+            {
+                "CRWV": proof_quote(
+                    "CRWV",
+                    local_at + timedelta(seconds=3.001),
+                )
+            },
+            trusted_remote_at=local_at + timedelta(seconds=2),
+        )
+
+        proof = build_regular_market_quote_proof(
+            source,
+            ["CRWV"],
+            checked_at=local_at,
+            require_clock_proof=True,
+        )
+
+        self.assertEqual("FAIL", proof["proofStatus"])
+        self.assertIn(
+            "QUOTE_IN_FUTURE",
+            proof["quotes"][0]["findings"],
+        )
+        self.assertIn(
+            "PROVIDER_QUOTE_TIMESTAMP_IN_FUTURE",
+            proof["quotes"][0]["findings"],
+        )
+
+    def test_invalid_clock_proof_never_grants_a_future_time_bound(self) -> None:
+        local_at = datetime(2026, 7, 27, 14, 0, tzinfo=timezone.utc)
+        source = _ProofQuoteSource(
+            {"CRWV": proof_quote("CRWV", local_at)},
+            trusted_remote_at=local_at + timedelta(seconds=5),
+        )
+
+        proof = build_regular_market_quote_proof(
+            source,
+            ["CRWV"],
+            checked_at=local_at,
+            require_clock_proof=True,
+        )
+
+        self.assertEqual("FAIL", proof["proofStatus"])
+        self.assertNotEqual([], proof["clockSkewFindings"])
+        self.assertEqual(
+            "LOCAL_EVALUATION_CLOCK",
+            proof["quoteTimeBasis"]["basis"],
+        )
+
+    def test_clock_uncertainty_uses_conservative_staleness_age(self) -> None:
+        local_at = datetime(2026, 7, 27, 14, 0, tzinfo=timezone.utc)
+        source = _ProofQuoteSource(
+            {
+                "CRWV": proof_quote(
+                    "CRWV",
+                    local_at - timedelta(seconds=28),
+                )
+            },
+            trusted_remote_at=local_at + timedelta(seconds=2),
+        )
+
+        proof = build_regular_market_quote_proof(
+            source,
+            ["CRWV"],
+            checked_at=local_at,
+            require_clock_proof=True,
+        )
+
+        self.assertEqual("FAIL", proof["proofStatus"])
+        self.assertEqual(31.0, proof["quotes"][0]["quoteAgeSeconds"])
+        self.assertIn("QUOTE_STALE", proof["quotes"][0]["findings"])
 
 
 def quote_payload() -> dict[str, object]:

@@ -28,6 +28,56 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SHADOW-023 is `IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-SHADOW-023-service-integration`, based on the proven
+ARGUS-SERVICE-001 commit `0ce70c2`. It repairs the clock chronology defects
+found during a protected late-session rehearsal and separates the local
+Engine Host request and response limits. Schwab quote proof now evaluates
+provider timestamps against independently validated bounds derived from the
+same exact-host HTTPS `Date` response. The selector evaluates its post-request
+clock proof after the request and uses the conservative trusted upper bound
+only for quote freshness; the frozen decision timestamp and strategy semantics
+remain unchanged. Invalid, stale, over-five-second, over-uncertainty, and
+over-30-second request chronologies still fail closed. Requests remain capped
+at 64 KiB; authenticated loopback responses have a separate bounded 1 MiB
+limit.
+
+The 2026-07-30 late-session clean-room rehearsal is
+`COMPLETED_REHEARSAL_ONLY`. Its disposable policy alone extended the entry
+window to 15:59 ET and report-to-selection limit to 300 seconds so the
+production path could be exercised after the normal 15:30 ET cutoff. The
+production policy remains 15:30 ET and 60 seconds. The rehearsal captured nine
+current candidates, completed a current Schwab candidate+SPY+IWM quote proof,
+finalized all 12 proof categories, armed one isolated selector, recorded one
+decision, selected IREN, created one Risk-Governor-approved
+`Simulation-only` FakeBroker order intent, and persisted terminal handoff
+`CYCLE_COMPLETED_TRADE_CREATED / TRADE_STARTED`. The order remained
+`PAPER SHADOW / NONTRANSMITTING`, with transmission `false` and
+`orderTransmission: UNAVAILABLE`. Idempotent replay produced no second
+decision or trade. Production Shadow evidence and the production worktree were
+unchanged, and the rehearsal does not count toward the official `0 / 30`
+sample.
+
+The rehearsal first exposed the local-clock quote comparison, then the
+selector's pre-request decision clock, and finally the client reusing the
+64 KiB request limit for a valid larger host response. Each failure stopped
+before the next boundary; no evidence was invented. The final sanitized
+25-file bundle is
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-SHADOW-023-isolated-rehearsal-20260730-150526.zip`,
+SHA-256
+`456B77A217AB212261200C32DC3B07ADC18B41980152403F6DAF299A1D5FE583`.
+It excludes raw captures, full state, accounts, secrets, tokens, credentials,
+and environment files.
+
+The same-response Schwab HTTPS clock remains the quote-chronology authority.
+Read-only NIST measurements independently corroborated that this workstation
+was approximately 2.35 seconds slow, consistent with the Schwab proof, but
+public NIST NTP is unauthenticated and is not a sole runtime authority. Windows
+Time is configured for NIST and Windows peers with automatic startup, but its
+service remains stopped; completing and proving that one-time machine setup is
+still required before another prospective opening. Tomorrow's runtime must
+not require UAC, an interactive PowerShell prompt, Codex, or a signed-in user.
+
 ARGUS-SERVICE-001 is `ACTIVE` on
 `codex/ARGUS-SERVICE-001-unattended-automation-host`. It replaces the
 interactive Task Scheduler launch dependency with a boot-starting Windows
@@ -56,11 +106,13 @@ machine supports S3 sleep. The wake task can resume sleep without signing in.
 It cannot power on a fully shut-down or unpowered machine; BIOS RTC wake and
 restore-on-AC-loss remain a separate physical configuration check.
 
-Automated proof currently passes Python compileall, 87 focused/adjacent
-service/Engine Host/capture tests, all 964 Python tests, a zero-warning
-solution build, and all 228 .NET tests. Protected-path review shows no scoring,
-readiness, replay, alert, database/schema, broker/order, production UI, raw
-capture, or generated-report change.
+Combined integration proof passes Python compileall, all 976 Python tests, a
+zero-warning solution build, and all 228 .NET tests. The service predecessor
+also passed its 87 focused/adjacent tests, installer dry-run nonmutation,
+PowerShell parsing, native headless Codex proof, and exact-response downstream
+probe tests. Protected-path review shows no scoring, readiness, replay, alert,
+database/schema, broker/order, production UI, raw capture, or generated-report
+change.
 
 Installation is the only current ARGUS-SERVICE-001 blocker. Two UAC launches
 were canceled or timed out before Windows created a service, so
@@ -183,12 +235,12 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Item | Current truth |
 | --- | --- |
 | Canonical baseline | Synchronized `master`/`origin/master` contains accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, this operational closeout, the WPF workstation through R029, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active branch | `codex/ARGUS-SERVICE-001-unattended-automation-host`; implementation and automated proof pass, Windows installation remains pending. |
+| Active branch | `codex/ARGUS-SHADOW-023-service-integration`; it contains proven ARGUS-SERVICE-001 predecessor `0ce70c2` plus the clock/selector/host-response repair. Combined compile, Python, .NET, and protected-path verification passes; commit and clean fast-forward integration remain pending. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | Windows has not installed `MomentumHunterAutomation` because the required UAC/password interaction did not complete. The service-account canary and later reboot-without-login proof must pass before another prospective opening. |
+| Blocked by | Windows has not installed `MomentumHunterAutomation`, and Windows Time is configured but not running. The service-account canary, machine-time proof, and later reboot-without-login proof must pass before another prospective opening. |
 | Scheduled operational proof | `FAILED_TASK_DID_NOT_RUN`; the task retained the correct `60d7c9a` action and static 11 / 12 bundle, but produced no July 30 runner attempt or runtime evidence. It has no next run and must not be started late. |
-| Immediate operational work | Complete the local Windows service installation, verify its nonmarket canary and Codex readiness, then run a separate reboot-without-login canary. Preserve failed-date evidence and do not prepare a new opening until those gates pass. |
+| Immediate operational work | Commit and cleanly integrate ARGUS-SHADOW-023, then complete the local Windows service and Windows Time setup, verify nonmarket canaries and Codex readiness, and run a separate reboot-without-login canary. Preserve failed-date evidence and do not prepare a new official opening until those gates pass. |
 | Broker state | Schwab OAuth remains authorized and the immutable `2573` `INDIVIDUAL_CASH` binding remains read-only; the access token was expired at the 08:50 inspection. No positions were requested and no preview or transmitting method exists. The previously surfaced, unrotated Client Secret is an explicit blocker for future transmitting code. |
 | Steven action | `MANUAL_PASS` on all seven ARGUS-SHADOW-017 WPF checks. No further visual action is pending; any brokerage anomaly or real-order proposal remains a separate interruption gate. |
 | Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |

@@ -19,6 +19,7 @@ from momentum_hunter.shadow_opening import (
     classify_opening_heartbeat,
     clock_skew_findings,
     shadow_handoff_findings,
+    trusted_clock_bounds,
 )
 
 
@@ -43,6 +44,36 @@ class ShadowOpeningClockTests(unittest.TestCase):
                 proof,
                 evaluated_at=remote + timedelta(milliseconds=200),
             ),
+        )
+
+    def test_trusted_bounds_translate_local_time_and_retain_uncertainty(
+        self,
+    ) -> None:
+        start = datetime(2026, 7, 27, 14, 0, tzinfo=UTC)
+        end = start + timedelta(milliseconds=200)
+        proof = build_https_clock_skew_proof(
+            request_started_at=start,
+            response_received_at=end,
+            remote_date_header=format_datetime(
+                start + timedelta(seconds=2)
+            ),
+            source_identity="synthetic-test-source",
+        )
+
+        bounds = trusted_clock_bounds(proof, evaluated_at=end)
+
+        self.assertEqual(end, bounds.local_evaluated_at)
+        self.assertEqual(
+            start + timedelta(seconds=2.1),
+            bounds.estimated_trusted_at,
+        )
+        self.assertEqual(
+            start + timedelta(seconds=3.3),
+            bounds.latest_plausible_trusted_at,
+        )
+        self.assertEqual(
+            "VALIDATED_HTTPS_DATE_BOUND",
+            bounds.to_evidence()["basis"],
         )
 
     def test_clock_proof_blocks_skew_over_five_seconds(self) -> None:

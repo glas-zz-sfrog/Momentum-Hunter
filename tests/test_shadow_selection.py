@@ -508,6 +508,82 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         self.assertFalse(self.service.decision_cycle_store.path.exists())
         self.assertFalse(self.state_path.exists())
 
+    def test_quote_request_uses_trusted_post_request_clock_bounds(self) -> None:
+        self.activate()
+        self.write_report()
+        completed_at = self.decision_at + timedelta(seconds=2)
+        trusted_remote = completed_at + timedelta(seconds=1)
+        source = BatchQuoteSource(
+            {
+                "TEST": quote_payload(
+                    "TEST",
+                    timestamp=(
+                        self.decision_at + timedelta(seconds=1)
+                    ).isoformat(),
+                ),
+                "SPY": quote_payload(
+                    "SPY",
+                    timestamp=(
+                        self.decision_at + timedelta(seconds=1)
+                    ).isoformat(),
+                    bid=625.00,
+                    ask=625.02,
+                ),
+                "IWM": quote_payload(
+                    "IWM",
+                    timestamp=(
+                        self.decision_at + timedelta(seconds=1)
+                    ).isoformat(),
+                    bid=225.00,
+                    ask=225.02,
+                ),
+            }
+        )
+        source.quotes_with_clock = lambda *_args, **_kwargs: SimpleNamespace(
+            quotes=copy.deepcopy(source.values),
+            clock_skew_proof=build_https_clock_skew_proof(
+                request_started_at=self.decision_at,
+                response_received_at=completed_at,
+                remote_date_header=format_datetime(trusted_remote),
+                source_identity="synthetic-test-https-date",
+            ),
+        )
+
+        result = AutomaticShadowSelector(
+            self.service,
+            quote_source=source,
+        ).select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertNotEqual(SELECTION_CLOCK_SKEW_BLOCKED, result.status)
+
+    def test_quote_clock_completion_outside_request_bound_fails_closed(
+        self,
+    ) -> None:
+        self.activate()
+        self.write_report()
+        completed_at = self.decision_at + timedelta(seconds=31)
+        source = BatchQuoteSource(self.quote_source.quotes)
+        source.quotes_with_clock = lambda *_args, **_kwargs: SimpleNamespace(
+            quotes=copy.deepcopy(source.values),
+            clock_skew_proof=synthetic_clock_proof(completed_at),
+        )
+
+        result = AutomaticShadowSelector(
+            self.service,
+            quote_source=source,
+        ).select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_CLOCK_SKEW_BLOCKED, result.status)
+        self.assertIn("bounded quote-request interval", result.reason)
+        self.assertFalse(self.service.decision_cycle_store.path.exists())
+        self.assertFalse(self.state_path.exists())
+
     def test_frozen_policy_and_build_hash_mismatch_fail_closed(self) -> None:
         self.activate()
         arm = self.service.selector_arm_record()
@@ -858,7 +934,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         self.assertEqual(60.0, cycle["clock_evidence"]["report_to_selection_seconds"])
         self.assertEqual("synthetic-test-provider", cycle["source_provider"])
         self.assertEqual("synthetic-read-only-quote", assessment["quote_source"])
-        self.assertEqual(15.0, assessment["quote_age_seconds"])
+        self.assertEqual(16.0, assessment["quote_age_seconds"])
 
         mismatch_root = self.root / "quote-mismatch"
         mismatch_root.mkdir()

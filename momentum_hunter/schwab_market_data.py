@@ -36,6 +36,7 @@ from momentum_hunter.shadow_market_validity import (
 from momentum_hunter.shadow_opening import (
     build_https_clock_skew_proof,
     clock_skew_findings,
+    trusted_clock_bounds,
 )
 
 
@@ -44,7 +45,7 @@ SCHWAB_QUOTE_SOURCE = "schwab_marketdata_v1_quotes:min_bid_ask_quote_time_v1"
 HTTP_TIMEOUT = (5.0, 30.0)
 MAX_QUOTE_RESPONSE_BYTES = 1024 * 1024
 MAX_QUOTE_SYMBOLS = 500
-REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION = 3
+REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION = 4
 LIVE_SCHWAB_QUOTE_PROOF_ORIGIN = "LIVE_SCHWAB_TRADER_API"
 INJECTED_QUOTE_PROOF_ORIGIN = "INJECTED_SOURCE"
 UNSPECIFIED_QUOTE_PROOF_ORIGIN = "UNSPECIFIED_SOURCE"
@@ -540,21 +541,45 @@ def build_regular_market_quote_proof(
             "Schwab market data proof received an invalid quote collection."
         )
 
-    policy = ShadowMarketValidityPolicy()
-    results = [
-        regular_market_quote_result(
-            symbol,
-            quotes.get(symbol),
-            checked_at=evaluated_at,
-            maximum_age_seconds=policy.quote_max_age_seconds,
-        )
-        for symbol in normalized
-    ]
     clock_findings = (
         clock_skew_findings(clock_proof, evaluated_at=evaluated_at)
         if require_clock_proof
         else ()
     )
+    trusted_bounds = (
+        trusted_clock_bounds(clock_proof, evaluated_at=evaluated_at)
+        if require_clock_proof and not clock_findings
+        else None
+    )
+    quote_evaluation_at = (
+        trusted_bounds.latest_plausible_trusted_at
+        if trusted_bounds is not None
+        else evaluated_at
+    )
+    quote_time_basis = (
+        trusted_bounds.to_evidence()
+        if trusted_bounds is not None
+        else {
+            "basis": "LOCAL_EVALUATION_CLOCK",
+            "source": "LOCAL_CLOCK",
+            "localEvaluatedAt": evaluated_at.isoformat(),
+            "estimatedTrustedAt": None,
+            "earliestPlausibleTrustedAt": None,
+            "latestPlausibleTrustedAt": evaluated_at.isoformat(),
+            "signedSkewMilliseconds": None,
+            "measurementUncertaintyMilliseconds": None,
+        }
+    )
+    policy = ShadowMarketValidityPolicy()
+    results = [
+        regular_market_quote_result(
+            symbol,
+            quotes.get(symbol),
+            checked_at=quote_evaluation_at,
+            maximum_age_seconds=policy.quote_max_age_seconds,
+        )
+        for symbol in normalized
+    ]
     passed = (
         all(result["status"] == "PASS" for result in results)
         and not clock_findings
@@ -573,6 +598,7 @@ def build_regular_market_quote_proof(
         ),
         "maximumQuoteAgeSeconds": policy.quote_max_age_seconds,
         "source": SCHWAB_QUOTE_SOURCE,
+        "quoteTimeBasis": quote_time_basis,
         "clockSkewProofRequired": require_clock_proof,
         "clockSkewProof": (
             dict(clock_proof)

@@ -29,7 +29,10 @@ from momentum_hunter.shadow_market_validity import (
     validate_report_clocks,
     validate_selection_quote,
 )
-from momentum_hunter.shadow_opening import clock_skew_findings
+from momentum_hunter.shadow_opening import (
+    ShadowOpeningSafetyError,
+    trusted_clock_bounds,
+)
 from momentum_hunter.trade_planning import REPORT_SCHEMA_VERSION, parse_datetime
 from momentum_hunter.shadow_trading import (
     SHADOW_MODE,
@@ -283,14 +286,39 @@ class AutomaticShadowSelector:
             quote_symbols,
             decision_at=decision_at,
         )
-        decision_clock_findings = clock_skew_findings(
-            decision_clock_proof,
-            evaluated_at=decision_at,
+        proof_checked_at = (
+            parse_datetime(str(decision_clock_proof.get("checkedAt", "")))
+            if isinstance(decision_clock_proof, Mapping)
+            else None
         )
-        if decision_clock_findings:
+        if (
+            proof_checked_at is None
+            or proof_checked_at < decision_at
+            or (
+                proof_checked_at - decision_at
+            ).total_seconds() > self.market_policy.quote_max_age_seconds
+        ):
+            decision_clock_error = (
+                "Clock-skew proof completion time is outside the bounded "
+                "quote-request interval."
+            )
+        else:
+            try:
+                clock_bounds = trusted_clock_bounds(
+                    decision_clock_proof,
+                    evaluated_at=proof_checked_at,
+                )
+            except ShadowOpeningSafetyError as exc:
+                decision_clock_error = str(exc)
+            else:
+                decision_clock_error = ""
+                quote_evaluated_at = (
+                    clock_bounds.latest_plausible_trusted_at
+                )
+        if decision_clock_error:
             return AutomaticShadowSelectionResult(
                 status=SELECTION_CLOCK_SKEW_BLOCKED,
-                reason=" | ".join(decision_clock_findings),
+                reason=decision_clock_error,
                 report_path=str(report_path),
                 report_sha256=source_sha256,
                 selector_arm_id=arm.arm_id,
@@ -307,6 +335,7 @@ class AutomaticShadowSelector:
                     report_path=report_path,
                     metadata=metadata,
                     decision_at=decision_at,
+                    quote_evaluated_at=quote_evaluated_at,
                     existing_trades=state.trades,
                     quote=cycle_quotes.get(symbol),
                 )
@@ -480,6 +509,7 @@ class AutomaticShadowSelector:
         report_path: Path,
         metadata: dict[str, Any],
         decision_at: datetime,
+        quote_evaluated_at: datetime,
         existing_trades: tuple[ShadowTrade, ...],
         quote: dict[str, Any] | None,
     ) -> dict[str, Any]:
@@ -544,7 +574,7 @@ class AutomaticShadowSelector:
                 reasons.extend(
                     validate_selection_quote(
                         quote,
-                        decision_at=decision_at,
+                        decision_at=quote_evaluated_at,
                         entry=entry,
                         stop=stop,
                         target=target,
@@ -588,7 +618,7 @@ class AutomaticShadowSelector:
                 else ""
             ),
             "quote_age_seconds": (
-                (decision_at - quote_at).total_seconds()
+                (quote_evaluated_at - quote_at).total_seconds()
                 if quote_at is not None
                 and quote_at.tzinfo is not None
                 and quote_at.utcoffset() is not None

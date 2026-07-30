@@ -1,10 +1,22 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-29
+Date reconciled: 2026-07-30
+
+## ARGUS-SHADOW-023 Service Integration
+
+`codex/ARGUS-SHADOW-023-service-integration` is `ACTIVE`. It is based on
+ARGUS-SERVICE-001 commit `0ce70c2` and contains the exact clock/selector/host
+response patch proven on `codex/ARGUS-SHADOW-023-clock-normalized-quote-validation`
+at `919b64d`. The source repair branch is clean and unpushed. The integration
+branch passes compileall, all 976 Python tests, all 228 .NET tests, and a
+zero-warning solution build. It is prepared for clean integration but is not
+yet merged or pushed. No production Shadow state, account state, or broker
+capability changed.
 
 ## ARGUS-SERVICE-001 Unattended Automation Host
 
-`codex/ARGUS-SERVICE-001-unattended-automation-host` is `ACTIVE`. It contains
+`codex/ARGUS-SERVICE-001-unattended-automation-host` is
+`IMPLEMENTED_PENDING_INTEGRATION`. It contains
 the boot-starting service supervisor, strict manifests, secure installer and
 status tooling, account-bound nonmarket canary, guarded one-time updater, and
 downstream-only headless Codex reviewer. Automated implementation proof passes;

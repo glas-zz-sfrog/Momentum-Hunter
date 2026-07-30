@@ -6,7 +6,10 @@ from datetime import datetime
 from email.utils import format_datetime
 from pathlib import Path
 
-from momentum_hunter.schwab_market_data import SCHWAB_QUOTE_SOURCE
+from momentum_hunter.schwab_market_data import (
+    REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION,
+    SCHWAB_QUOTE_SOURCE,
+)
 from momentum_hunter.shadow_market_validity import (
     SHADOW_SELECTOR_ARM_REQUIRED_PROOFS,
     canonical_json,
@@ -136,7 +139,7 @@ def write_fresh_quote_proof(
     quote_path.write_text(
         json.dumps(
             {
-                "schemaVersion": 3,
+                "schemaVersion": REGULAR_MARKET_QUOTE_PROOF_SCHEMA_VERSION,
                 "proofType": "SCHWAB_REGULAR_MARKET_QUOTE_BOUNDARY",
                 "clockSkewProof": clock_proof,
             },

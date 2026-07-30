@@ -19,6 +19,7 @@ from momentum_hunter.engine_host import (
     COMMAND_SNAPSHOT,
     ENDPOINT_FILENAME,
     MAX_REQUEST_BYTES,
+    MAX_RESPONSE_BYTES,
     PROTOCOL_VERSION,
     process_is_running,
 )
@@ -353,15 +354,20 @@ def launch_engine_host(state_directory: Path) -> None:
 
 def read_response_line(connection: socket.socket) -> bytes:
     response = bytearray()
-    while len(response) <= MAX_REQUEST_BYTES:
+    while len(response) <= MAX_RESPONSE_BYTES:
         chunk = connection.recv(4096)
         if not chunk:
             break
         response.extend(chunk)
         newline = response.find(b"\n")
         if newline >= 0:
+            if newline > MAX_RESPONSE_BYTES:
+                raise EngineHostTerminalError(
+                    "The local Python Engine Host response exceeded the "
+                    "protocol limit."
+                )
             return bytes(response[:newline])
-    if len(response) > MAX_REQUEST_BYTES:
+    if len(response) > MAX_RESPONSE_BYTES:
         raise EngineHostTerminalError(
             "The local Python Engine Host response exceeded the protocol limit."
         )

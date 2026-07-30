@@ -7,7 +7,7 @@ import threading
 import unittest
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from momentum_hunter.engine_host import (
     COMMAND_SHUTDOWN,
@@ -16,6 +16,8 @@ from momentum_hunter.engine_host import (
     EngineHostEndpoint,
     EngineHostRuntime,
     EngineHostServer,
+    MAX_REQUEST_BYTES,
+    MAX_RESPONSE_BYTES,
     PROTOCOL_VERSION,
 )
 from momentum_hunter.engine_host_client import (
@@ -24,6 +26,7 @@ from momentum_hunter.engine_host_client import (
     EngineHostRetryableError,
     EngineHostTerminalError,
     ensure_engine_host,
+    read_response_line,
     read_engine_host_endpoint,
     run_immediate_collection_cycle,
 )
@@ -75,6 +78,25 @@ class EngineHostClientTests(unittest.TestCase):
         self.assertEqual("COLLECTION_COMPLETED", result.code)
         self.assertEqual(["cycle"], self.cycles)
         self.assertEqual([], launches)
+
+    def test_response_limit_is_separate_from_request_limit(self) -> None:
+        payload = b"x" * (MAX_REQUEST_BYTES + 1024)
+        connection = Mock()
+        connection.recv.side_effect = (payload + b"\n",)
+
+        self.assertEqual(payload, read_response_line(connection))
+
+    def test_response_above_bounded_limit_fails_closed(self) -> None:
+        connection = Mock()
+        connection.recv.side_effect = (
+            b"x" * (MAX_RESPONSE_BYTES + 1) + b"\n",
+        )
+
+        with self.assertRaisesRegex(
+            EngineHostTerminalError,
+            "response exceeded the protocol limit",
+        ):
+            read_response_line(connection)
 
     def test_ensure_host_waits_for_launcher_to_publish_endpoint(self) -> None:
         launches: list[Path] = []

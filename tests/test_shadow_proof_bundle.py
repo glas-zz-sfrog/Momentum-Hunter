@@ -104,8 +104,14 @@ class FakeCommandRunner:
 
 
 class ProofQuoteSource:
-    def __init__(self, observed_at: datetime) -> None:
+    def __init__(
+        self,
+        observed_at: datetime,
+        *,
+        trusted_remote_at: datetime | None = None,
+    ) -> None:
         self.observed_at = observed_at
+        self.trusted_remote_at = trusted_remote_at
 
     def quotes(
         self,
@@ -131,7 +137,9 @@ class ProofQuoteSource:
             clock_skew_proof=build_https_clock_skew_proof(
                 request_started_at=decision_at,
                 response_received_at=decision_at,
-                remote_date_header=format_datetime(decision_at),
+                remote_date_header=format_datetime(
+                    self.trusted_remote_at or decision_at
+                ),
                 source_identity="synthetic-test-https-date",
             ),
         )
@@ -229,10 +237,14 @@ class ShadowProofBundleTests(unittest.TestCase):
         symbols: tuple[str, ...] = ("CRWV", "SPY", "IWM"),
         checked_at: datetime = QUOTED_AT,
         observed_at: datetime | None = None,
+        trusted_remote_at: datetime | None = None,
         evidence_origin: str = LIVE_SCHWAB_QUOTE_PROOF_ORIGIN,
     ) -> dict[str, object]:
         proof = build_regular_market_quote_proof(
-            ProofQuoteSource(observed_at or checked_at - timedelta(seconds=5)),
+            ProofQuoteSource(
+                observed_at or checked_at - timedelta(seconds=5),
+                trusted_remote_at=trusted_remote_at,
+            ),
             symbols,
             checked_at=checked_at,
             require_clock_proof=True,
@@ -455,6 +467,67 @@ class ShadowProofBundleTests(unittest.TestCase):
         )
         self.assertFalse(result["stateMutated"])
         self.assertFalse(result["transmitting"])
+        self.assert_production_state_untouched()
+
+    def test_clock_normalized_live_quote_finalizes_when_local_clock_lags(
+        self,
+    ) -> None:
+        self.prepare()
+        proof = self.write_quote_proof(
+            observed_at=QUOTED_AT + timedelta(seconds=1.5),
+            trusted_remote_at=QUOTED_AT + timedelta(seconds=2),
+        )
+
+        result = self.finalize(
+            finalized_at=QUOTED_AT + timedelta(seconds=0.5)
+        )
+
+        self.assertEqual("PASS", proof["proofStatus"])
+        self.assertEqual(
+            "VALIDATED_HTTPS_DATE_BOUND",
+            proof["quoteTimeBasis"]["basis"],
+        )
+        self.assertEqual("READY_TO_ARM", result["bundleState"])
+        self.assert_production_state_untouched()
+
+    def test_tampered_clock_basis_is_rejected(self) -> None:
+        self.prepare()
+        proof = self.write_quote_proof()
+        proof["quoteTimeBasis"]["latestPlausibleTrustedAt"] = (
+            QUOTED_AT + timedelta(seconds=10)
+        ).isoformat()
+        self.quote_proof_path.write_text(
+            json.dumps(proof, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(SelectorProofBundleError):
+            self.finalize()
+
+        self.assertFalse(
+            (self.bundle / "fresh_quote_boundary.json").exists()
+        )
+        self.assert_production_state_untouched()
+
+    def test_tampered_provider_timestamp_beyond_clock_bound_is_rejected(
+        self,
+    ) -> None:
+        self.prepare()
+        proof = self.write_quote_proof()
+        proof["quotes"][0]["providerAskTimestamp"] = (
+            QUOTED_AT + timedelta(seconds=10)
+        ).isoformat()
+        self.quote_proof_path.write_text(
+            json.dumps(proof, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(SelectorProofBundleError):
+            self.finalize()
+
+        self.assertFalse(
+            (self.bundle / "fresh_quote_boundary.json").exists()
+        )
         self.assert_production_state_untouched()
 
     def test_injected_quote_proof_is_rejected(self) -> None:

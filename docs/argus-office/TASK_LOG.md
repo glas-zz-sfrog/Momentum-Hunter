@@ -129,3 +129,13 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Reverified the v1 activation, policy, and arm hashes byte-for-byte; v1 decision-cycle, state, handoff, and Trade 1 remain absent.
 - Installed one enabled, one-time, limited-interactive FakeBroker-only task for 2026-07-30 at 8:35 AM CT with no recurrence, late start, or Task Scheduler retry; the action has exactly one arm switch and no proof-only switch.
 - Updated the existing one-use 8:50 observer with the final v2 activation, Git, task, bundle, host-replacement, account-invariant, and classification requirements.
+
+## 2026-07-30 - ARGUS-SHADOW-023 Trusted Clock Rehearsal
+
+- Reproduced the scheduled-opening quote failure in a disposable clean room and proved that the workstation clock was approximately 2.3 seconds slow while the five-second uncertainty-inclusive gate still passed.
+- Corrected quote-proof and selector chronology to use conservative bounds from the same-response Schwab HTTPS clock proof without changing the frozen decision timestamp or strategy policy.
+- Preserved the production 15:30 ET entry cutoff and 60-second handoff limit; widened them only in a committed disposable rehearsal build so the full path could run after cutoff.
+- Finalized 12/12 proof, recorded one IREN decision and one nontransmitting FakeBroker order intent, and completed one terminal idempotent handoff without changing production Shadow evidence or the official `0 / 30` sample.
+- Separated the 64 KiB Engine Host request cap from a bounded 1 MiB response cap and added direct oversized-line rejection tests.
+- Verification on the repair branch: compileall pass, 138 affected tests pass, all 953 Python tests pass, protected-path and secret scans pass, and sanitized rehearsal evidence is preserved outside the repository.
+- Combined integration verification with ARGUS-SERVICE-001: compileall pass, all 976 Python tests pass, all 228 .NET tests pass, and the Release solution builds with zero warnings or errors.

@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -52,6 +52,35 @@ SHADOW_OPENING_AUDIT_CATEGORIES = (
 
 class ShadowOpeningSafetyError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class TrustedClockBounds:
+    local_evaluated_at: datetime
+    estimated_trusted_at: datetime
+    earliest_plausible_trusted_at: datetime
+    latest_plausible_trusted_at: datetime
+    signed_skew_milliseconds: float
+    measurement_uncertainty_milliseconds: float
+    source: str
+
+    def to_evidence(self) -> dict[str, object]:
+        return {
+            "basis": "VALIDATED_HTTPS_DATE_BOUND",
+            "source": self.source,
+            "localEvaluatedAt": self.local_evaluated_at.isoformat(),
+            "estimatedTrustedAt": self.estimated_trusted_at.isoformat(),
+            "earliestPlausibleTrustedAt": (
+                self.earliest_plausible_trusted_at.isoformat()
+            ),
+            "latestPlausibleTrustedAt": (
+                self.latest_plausible_trusted_at.isoformat()
+            ),
+            "signedSkewMilliseconds": self.signed_skew_milliseconds,
+            "measurementUncertaintyMilliseconds": (
+                self.measurement_uncertainty_milliseconds
+            ),
+        }
 
 
 @dataclass(frozen=True)
@@ -344,6 +373,52 @@ def clock_skew_findings(
     ):
         findings.append("Clock-skew limit does not match frozen policy.")
     return tuple(dict.fromkeys(findings))
+
+
+def trusted_clock_bounds(
+    proof: object,
+    *,
+    evaluated_at: datetime,
+    maximum_age_seconds: int = MAX_CLOCK_PROOF_AGE_SECONDS,
+) -> TrustedClockBounds:
+    findings = clock_skew_findings(
+        proof,
+        evaluated_at=evaluated_at,
+        maximum_age_seconds=maximum_age_seconds,
+    )
+    if findings:
+        raise ShadowOpeningSafetyError(
+            "Clock-skew proof cannot establish trusted bounds: "
+            + " | ".join(findings)
+        )
+    assert isinstance(proof, Mapping)
+    signed_skew = finite_number(proof.get("signedSkewMilliseconds"))
+    uncertainty = finite_number(
+        proof.get("measurementUncertaintyMilliseconds")
+    )
+    assert signed_skew is not None
+    assert uncertainty is not None
+    local_evaluated_at = require_aware_datetime(
+        evaluated_at,
+        "Trusted-clock evaluation time",
+    )
+    estimated_trusted_at = local_evaluated_at - timedelta(
+        milliseconds=signed_skew
+    )
+    uncertainty_delta = timedelta(milliseconds=uncertainty)
+    return TrustedClockBounds(
+        local_evaluated_at=local_evaluated_at,
+        estimated_trusted_at=estimated_trusted_at,
+        earliest_plausible_trusted_at=(
+            estimated_trusted_at - uncertainty_delta
+        ),
+        latest_plausible_trusted_at=(
+            estimated_trusted_at + uncertainty_delta
+        ),
+        signed_skew_milliseconds=signed_skew,
+        measurement_uncertainty_milliseconds=uncertainty,
+        source=str(proof.get("source", "")).strip(),
+    )
 
 
 def terminal_selector_outcome(
