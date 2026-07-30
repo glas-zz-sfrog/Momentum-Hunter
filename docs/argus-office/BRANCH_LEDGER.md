@@ -2,6 +2,16 @@
 
 Date reconciled: 2026-07-29
 
+## ARGUS-SERVICE-001 Unattended Automation Host
+
+`codex/ARGUS-SERVICE-001-unattended-automation-host` is `ACTIVE`. It contains
+the boot-starting service supervisor, strict manifests, secure installer and
+status tooling, account-bound nonmarket canary, guarded one-time updater, and
+downstream-only headless Codex reviewer. Automated implementation proof passes;
+the Windows service is not installed because the UAC/password interaction did
+not complete. The branch is not merged or pushed. No Shadow job, selector arm,
+trade, broker order, or transmission capability was created.
+
 ## ARGUS-SHADOW-017 Live Position Marking
 
 `codex/ARGUS-SHADOW-017-live-position-marking` was accepted after Steven passed

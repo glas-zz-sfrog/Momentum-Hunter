@@ -25,6 +25,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MomentumHunter.Layout.Tests
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MomentumHunter.Integration.Tests", "tests-dotnet\MomentumHunter.Integration.Tests\MomentumHunter.Integration.Tests.csproj", "{0C5C98FD-B693-4CCA-88B1-56305C63401E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MomentumHunter.AutomationService", "src\MomentumHunter.AutomationService\MomentumHunter.AutomationService.csproj", "{108B99E9-2530-4CAF-8156-FC360586091A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -70,6 +72,10 @@ Global
 		{0C5C98FD-B693-4CCA-88B1-56305C63401E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0C5C98FD-B693-4CCA-88B1-56305C63401E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0C5C98FD-B693-4CCA-88B1-56305C63401E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{108B99E9-2530-4CAF-8156-FC360586091A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{108B99E9-2530-4CAF-8156-FC360586091A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{108B99E9-2530-4CAF-8156-FC360586091A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{108B99E9-2530-4CAF-8156-FC360586091A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{0D9E03A3-A3F3-457A-A3EB-A5563FF9B6FA} = {3E69C178-9A73-4486-A139-E9E4AFC3A9FE}
@@ -81,5 +87,6 @@ Global
 		{002B8F04-5BE4-4C3C-8584-613510FD2F2F} = {51ADBFD4-3057-41AC-9CC2-B5192027DBCD}
 		{01D59458-B745-4F36-83E0-E3A08C2DA5DF} = {51ADBFD4-3057-41AC-9CC2-B5192027DBCD}
 		{0C5C98FD-B693-4CCA-88B1-56305C63401E} = {51ADBFD4-3057-41AC-9CC2-B5192027DBCD}
+		{108B99E9-2530-4CAF-8156-FC360586091A} = {3E69C178-9A73-4486-A139-E9E4AFC3A9FE}
 	EndGlobalSection
 EndGlobal

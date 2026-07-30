@@ -1,0 +1,1 @@
+Return exactly CODEX_SERVICE_READY and nothing else. Do not use tools, inspect files, or perform any action.

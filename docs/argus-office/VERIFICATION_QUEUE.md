@@ -12,11 +12,13 @@ create a rubber-stamp Steven item.
 
 - `AUTOMATED_PASS`: Codex compile, tests, source review, and available proof passed.
 - `AUTOMATED_IN_PROGRESS`: the branch exists but its complete proof gate is still running.
+- `AUTOMATED_PENDING_INSTALL`: implementation proof passed, but a local privileged installation gate has not run.
 - `AUTOMATED_FAIL`: Codex found a defect.
 - `MANUAL_PENDING`: Steven can perform the listed operator check now.
 - `MANUAL_NOT_YET_AVAILABLE`: implementation exists below the current operator UI.
 - `MANUAL_PASS`: Steven completed and accepted every numbered check.
 - `MANUAL_FAIL`: Steven found a defect; record the failed step.
+- `USER_ACTION_REQUIRED`: Windows requires a local security interaction that Codex cannot and must not complete for Steven.
 - `NO_STEVEN_ACTION`: automated evidence is sufficient for this nonvisual item.
 - `STANDING_AUTHORIZED`: Codex should execute when documented invariants pass.
 - `ANOMALY_DECISION_PENDING`: unexpected state requires a concrete Steven decision.
@@ -29,6 +31,7 @@ create a rubber-stamp Steven item.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
+| ARGUS-SERVICE-001 unattended automation host | `AUTOMATED_PASS` for implementation: compileall, 87 focused/adjacent tests, 964 Python tests, 228 .NET tests, zero-warning build, installer dry run, native headless Codex proof, and exact-response service-probe tests pass; `AUTOMATED_PENDING_INSTALL` for the Windows service canaries | `USER_ACTION_REQUIRED`; approve one UAC prompt and enter the `BEASTCOMPUTER\steve` Windows password locally. Do not enter a PIN or Schwab credential. No technical rubber-stamp or visual judgment is requested. | Active branch; service is not installed because both elevation attempts ended before service creation | Only complete the Windows security dialogs. Codex will independently verify service status, immediate automatic startup, account identity, DPAPI access, Engine Host health, the exact `CODEX_SERVICE_READY` downstream response, zero Shadow jobs, and transmission unavailable. A later reboot-without-login canary is a separate physical proof gate. |
 | ARGUS-SHADOW-017 live position marking | `AUTOMATED_PASS` for implementation and `AUTOMATED_FAIL` for the 2026-07-30 opening because the one-time task did not launch; no current log, attempt, capture, twelfth proof, arm, cycle, handoff, or trade exists | `MANUAL_PASS`; Steven passed all seven visual checks on 2026-07-29; no new Steven visual action | Implementation `94f5074`, proof repair `40a26a0`, and release `60d7c9a` are integrated/backed up; v3 remains activated-empty, unarmed, and `0 / 30`; the failed date will not be retried or reconstructed | No manual verification is pending. Codex must harden scheduler observability and missed-trigger reliability with nonmarket canaries before proposing a new prospective opening date |
 | ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `NO_STEVEN_ACTION`; later WPF representation was visually accepted through R027 | Integrated into local `master` at `bb962be`; remotely backed up on its feature branch | Historical evidence only; no approval remains pending |
 | ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated and backed up through `origin/master` | The preserved checklist remains an audit reference; merge approval does not start the official sample |

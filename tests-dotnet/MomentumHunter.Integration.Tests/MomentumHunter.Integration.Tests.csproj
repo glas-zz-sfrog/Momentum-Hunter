@@ -27,6 +27,7 @@
     <ProjectReference Include="..\..\src\MomentumHunter.Contracts\MomentumHunter.Contracts.csproj" />
     <ProjectReference Include="..\..\src\MomentumHunter.EngineBridge\MomentumHunter.EngineBridge.csproj" />
     <ProjectReference Include="..\..\src\MomentumHunter.Infrastructure\MomentumHunter.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\MomentumHunter.AutomationService\MomentumHunter.AutomationService.csproj" />
   </ItemGroup>
 
 </Project>

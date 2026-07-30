@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "repositoryRoot": "C:\\Path\\To\\MomentumHunter",
+  "pythonExecutable": "C:\\Path\\To\\MomentumHunter\\.venv\\Scripts\\python.exe",
+  "powershellExecutable": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+  "codexExecutable": "",
+  "stateDirectory": "C:\\ProgramData\\MomentumHunter\\Automation\\state",
+  "engineHostStateDirectory": "C:\\Users\\User\\AppData\\Local\\MomentumHunter\\python-engine-host",
+  "expectedAccountEnding": "0000",
+  "expectedAccountType": "INDIVIDUAL_CASH",
+  "pollIntervalSeconds": 1,
+  "jobs": [
+    {
+      "jobId": "installation-canary",
+      "kind": "nonmarket_canary",
+      "scheduledAt": "2099-01-01T00:00:00-06:00",
+      "latestStartAt": "2099-01-01T00:05:00-06:00",
+      "enabled": false,
+      "timeoutSeconds": 60
+    }
+  ]
+}

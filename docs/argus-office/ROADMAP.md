@@ -28,6 +28,51 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SERVICE-001 is `ACTIVE` on
+`codex/ARGUS-SERVICE-001-unattended-automation-host`. It replaces the
+interactive Task Scheduler launch dependency with a boot-starting Windows
+Service architecture. The implemented supervisor persists restart-safe job
+receipts, records a missed market window instead of running late, starts or
+reconnects to the loopback Engine Host, and permits a headless Codex review
+only after a terminal runtime receipt. Runtime jobs cannot depend on Codex.
+
+The Windows service wrapper, strict manifest, nonmarket account/DPAPI canary,
+read-only status command, secure installer, and one-time manifest updater are
+implemented. The installer plans immediate `Automatic` startup, finite process
+recovery, a SYSTEM-owned 08:15 no-op wake task with `WakeToRun`, Steven's
+Windows service identity, ending `2573`, type
+`INDIVIDUAL_CASH`, one nonmarket canary, one downstream exact-response Codex
+service probe when the CLI is available, zero Shadow jobs, no interactive
+autologon, and order
+transmission `UNAVAILABLE`. OpenAI's user-local Codex CLI `0.146.0` is
+installed, its saved authentication is present without being read or copied,
+and both wrapper and native executable completed real ephemeral read-only
+headless probes. The installation probe must return exactly
+`CODEX_SERVICE_READY`; its failure cannot alter or block the terminal runtime
+canary receipt.
+
+The current High Performance power plan permits AC wake timers, and this
+machine supports S3 sleep. The wake task can resume sleep without signing in.
+It cannot power on a fully shut-down or unpowered machine; BIOS RTC wake and
+restore-on-AC-loss remain a separate physical configuration check.
+
+Automated proof currently passes Python compileall, 87 focused/adjacent
+service/Engine Host/capture tests, all 964 Python tests, a zero-warning
+solution build, and all 228 .NET tests. Protected-path review shows no scoring,
+readiness, replay, alert, database/schema, broker/order, production UI, raw
+capture, or generated-report change.
+
+Installation is the only current ARGUS-SERVICE-001 blocker. Two UAC launches
+were canceled or timed out before Windows created a service, so
+`MomentumHunterAutomation` is not installed and its service-account canary has
+not run. Steven must approve one UAC prompt and enter the
+`BEASTCOMPUTER\steve` Windows password locally; this is not a code or product
+approval and must never use a PIN or Schwab credential. Until that succeeds,
+the service is `IMPLEMENTED_PENDING_INSTALL`, the legacy one-time opening must
+not be treated as reliable, and no new prospective Shadow opening may be
+scheduled. A machine that is powered off through 08:35 still records a missed
+window after boot; neither the service nor Codex may backfill the market event.
+
 The 2026-07-30 ARGUS-SHADOW-017 opening is `FAILED_TASK_DID_NOT_RUN`. The
 one-time 8:35 AM Central task remained enabled with the correct final release
 action, but Task Scheduler still reports its last run as 2026-07-29 at
@@ -51,10 +96,11 @@ not prove a single root cause. Repeated ExpressVPN service failures also
 occurred around the opening window, but no causal relationship is established.
 
 Current classification is `FAILED_TASK_DID_NOT_RUN / PRESERVE_EVIDENCE /
-DO_NOT_RETRY_AFTER_FACT`. The next bounded work is scheduler-observability and
-missed-trigger hardening with nonmarket canaries before scheduling another
-market opening. A new market run must use a new prospective date and fresh
-proof identity; the July 30 opening must not be reconstructed.
+DO_NOT_RETRY_AFTER_FACT`. ARGUS-SERVICE-001 is the bounded reliability repair.
+Its service-account canary and a later reboot-without-login canary must pass
+before scheduling another market opening. A new market run must use a new
+prospective date and fresh proof identity; the July 30 opening must not be
+reconstructed.
 
 The accepted SHADOW-017 implementation remains complete on canonical
 `master`/`origin/master` through implementation `94f5074`, proof-acceptance
@@ -137,12 +183,12 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Item | Current truth |
 | --- | --- |
 | Canonical baseline | Synchronized `master`/`origin/master` contains accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, this operational closeout, the WPF workstation through R029, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active branch | No implementation branch remains pending after this operational closeout is fast-forwarded. |
+| Active branch | `codex/ARGUS-SERVICE-001-unattended-automation-host`; implementation and automated proof pass, Windows installation remains pending. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | The July 30 one-time task did not launch. Scheduler observability and missed-trigger reliability must be proven with nonmarket canaries before another prospective opening is scheduled. Selector, quote, clock, account, Git, host, and evidence gates remain fail-closed. |
+| Blocked by | Windows has not installed `MomentumHunterAutomation` because the required UAC/password interaction did not complete. The service-account canary and later reboot-without-login proof must pass before another prospective opening. |
 | Scheduled operational proof | `FAILED_TASK_DID_NOT_RUN`; the task retained the correct `60d7c9a` action and static 11 / 12 bundle, but produced no July 30 runner attempt or runtime evidence. It has no next run and must not be started late. |
-| Immediate operational work | Preserve the failed-date evidence unchanged. Add event-level scheduler observability and exercise wake/session/missed-trigger conditions with nonmarket canaries before preparing a new prospective task, bundle, and observer identity. |
+| Immediate operational work | Complete the local Windows service installation, verify its nonmarket canary and Codex readiness, then run a separate reboot-without-login canary. Preserve failed-date evidence and do not prepare a new opening until those gates pass. |
 | Broker state | Schwab OAuth remains authorized and the immutable `2573` `INDIVIDUAL_CASH` binding remains read-only; the access token was expired at the 08:50 inspection. No positions were requested and no preview or transmitting method exists. The previously surfaced, unrotated Client Secret is an explicit blocker for future transmitting code. |
 | Steven action | `MANUAL_PASS` on all seven ARGUS-SHADOW-017 WPF checks. No further visual action is pending; any brokerage anomaly or real-order proposal remains a separate interruption gate. |
 | Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
@@ -242,6 +288,10 @@ Status: `COMPLETE` on local and remote `master` through `a886c90`
 - The host has an atomic single-host lease, per-command idempotency, non-overlapping cycle guard, and a guard against the existing active-monitor runner starting a second collection loop.
 - The host core owns snapshot, pause, resume, one collection cycle, and graceful shutdown. Phase 9 adds one versioned persisted-evidence snapshot capability; TradePlan, Risk Governor, chart data, simulation, broker, Paper, and Live remain outside the boundary.
 - Focused Python process proof and .NET integration proof passed. The implementation fast-forwarded into local `master` and was later backed up through the approved R011 master push. See `reports/releases/ARGUS-R008-python-engine-contract-host.md`.
+- ARGUS-SERVICE-001 extends this boundary with a Windows Service wrapper and
+  restart-safe scheduler. It is implemented and automated-test clean but not
+  installed. Codex is an optional read-only downstream reviewer, not a runtime
+  authority and not an order path.
 
 ### Phase 9 - Read-Only Discovery, Research, Health, And Replay Integration
 
