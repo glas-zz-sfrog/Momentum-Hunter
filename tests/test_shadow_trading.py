@@ -147,7 +147,10 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         self.assertEqual(trade.evidence_snapshot_id, trade.evidence.evidence_snapshot_id)
         self.assertEqual("engineering-preflight-v1", trade.sample_metadata.sample_version)
         self.assertEqual(64, len(trade.sample_metadata.strategy_configuration_fingerprint))
-        self.assertEqual("prospective-fakebroker-v1", trade.sample_metadata.fill_model_version)
+        self.assertEqual(
+            "prospective-fakebroker-live-mark-v2",
+            trade.sample_metadata.fill_model_version,
+        )
         self.assertEqual(1, trade.sample_metadata.evidence_schema_version)
         self.assertFalse(trade.sample_metadata.official_sample_authorized)
         self.assertEqual(91, trade.evidence.candidate_payload()["scoring"]["composite_score"])
@@ -261,7 +264,7 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         )
         missing_service.process_missing_quote("TEST", observed_at=at("2026-07-23T10:01:00-05:00"))
         first_missing = missing_service.snapshot()["trades"][0]
-        missing_service.process_missing_quote("TEST", observed_at=at("2026-07-23T10:01:00-05:00"))
+        missing_service.process_missing_quote("TEST", observed_at=at("2026-07-23T10:01:05-05:00"))
         repeated_missing = missing_service.snapshot()["trades"][0]
         self.assertIn("No quote", first_missing["last_reason"])
         self.assertEqual(first_missing["ledger_events"], repeated_missing["ledger_events"])
@@ -362,8 +365,8 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         self.assertEqual("WIN", outcome["classification"])
         self.assertEqual(10.4895, outcome["exit_price"])
         self.assertEqual(1.06, outcome["executable_pnl"])
-        self.assertEqual(1.48, outcome["mfe_dollars"])
-        self.assertEqual(-0.32, outcome["mae_dollars"])
+        self.assertEqual(1.08, outcome["mfe_dollars"])
+        self.assertEqual(-0.04, outcome["mae_dollars"])
         self.assertIsNotNone(outcome["r_multiple"])
 
         reloaded = self.service().snapshot()
@@ -394,10 +397,17 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
             ),
             received_at=at("2026-07-23T10:02:00-05:00"),
         )
-        outcome = self.service().snapshot()["trades"][0]["outcome"]
+        trade = self.service().snapshot()["trades"][0]
+        outcome = trade["outcome"]
         self.assertEqual("stop", outcome["exit_reason"])
         self.assertEqual(8.9411, outcome["exit_price"])
         self.assertLess(outcome["executable_pnl"], outcome["gross_pnl"])
+        close_event = next(
+            event
+            for event in trade["ledger_events"]
+            if event["requested_action"] == "shadow_position_closed"
+        )
+        self.assertEqual(8.95, close_event["payload"]["executable_mark"])
 
     def test_ambiguous_same_observation_exit_is_unknown_not_optimistic(self) -> None:
         self.start()
@@ -461,6 +471,23 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
                 trade = service.snapshot()["trades"][0]
                 self.assertEqual("entry_rejected", trade["status"])
                 self.assertIn(expected, trade["last_reason"].lower())
+                transition = trade["ledger_events"][-1]["payload"]
+                self.assertEqual("pending_entry", transition["previous_state"])
+                self.assertEqual("entry_rejected", transition["new_state"])
+                self.assertEqual("synthetic_test", transition["quote_provider"])
+                self.assertEqual(
+                    "2026-07-23T10:01:00-05:00",
+                    transition["provider_timestamp"],
+                )
+                self.assertEqual(
+                    "2026-07-23T10:01:00-05:00",
+                    transition["receipt_timestamp"],
+                )
+                self.assertEqual(9.94, transition["executable_mark"])
+                self.assertEqual(
+                    trade["ledger_events"][-1]["event_id"],
+                    transition["ledger_event_id"],
+                )
 
     def test_daily_loss_limit_rejects_new_fakebroker_entry(self) -> None:
         broker = ProspectiveFakeBroker(ShadowExecutionPolicy(daily_loss_limit=25))

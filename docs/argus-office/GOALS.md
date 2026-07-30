@@ -2,6 +2,32 @@
 
 This file records durable product and operating goals that should survive individual task branches.
 
+## Shadow: Observe An Active FakeBroker Position Honestly
+
+Status: `ACTIVE`; implementation and automated proof pass, WPF visual
+acceptance pending.
+
+Goal:
+
+- Show a prospective official Shadow working order or active position near real
+  time without adding broker authority or fabricating executable performance.
+
+Success:
+
+- Python marks long positions from bid and short positions from ask.
+- A separate five-second active loop runs only for an official working
+  FakeBroker order or position; the five-minute candidate cycle is unchanged.
+- Quotes older than the frozen ten-second limit preserve the last reliable mark
+  but suppress live P&L, exits, and green/red state.
+- WPF consumes a cached versioned snapshot, refreshes once per second, and does
+  not calculate official results or call a provider.
+- Open states use WORKING/AHEAD/BEHIND/FLAT/STALE/HALTED/EXIT_PENDING; only
+  completed records use WINNER/LOSER/FLAT_EXIT.
+- v1 and activated-empty v2 remain immutable; prospective v3 begins only after
+  visual acceptance, integration, backup, and regenerated proof.
+- Aggregate claims remain withheld below the sample gate, and FakeBroker
+  remains the only automated execution boundary.
+
 ## Daily Workflow: Make The Next Light Click
 
 Status: Active

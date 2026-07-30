@@ -32,6 +32,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private WindowDisplayState _windowState;
     private SimulationWorkspaceSnapshot? _simulationWorkspaceSnapshot;
     private ShadowReviewSnapshot? _shadowReviewSnapshot;
+    private readonly SemaphoreSlim _shadowRefreshLock = new(1, 1);
     private long _candidateStoryRequestVersion;
 
     public ShellViewModel(IEngineClient engineClient)
@@ -377,6 +378,8 @@ public sealed partial class ShellViewModel : ObservableObject
         };
         Candles = [];
         ShadowTrades = [];
+        ShadowOfficialTrades = [];
+        ShadowUnfilledBlockedTrades = [];
         CommandPaletteResults = [];
         SavedWatchlistItems = [];
         WorkspaceOptions = Enum.GetValues<WorkspaceKind>();
@@ -419,6 +422,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public ObservableCollection<CandleSnapshot> Candles { get; }
 
     public ObservableCollection<ShadowTradeReviewSnapshot> ShadowTrades { get; }
+    public ObservableCollection<ShadowTradeReviewSnapshot> ShadowOfficialTrades { get; }
+    public ObservableCollection<ShadowTradeReviewSnapshot> ShadowUnfilledBlockedTrades { get; }
     public ObservableCollection<SavedWatchlistItemViewModel> SavedWatchlistItems { get; }
 
     public ObservableCollection<ChartPaneViewModel> SecondaryCharts { get; } = [];
@@ -522,13 +527,16 @@ public sealed partial class ShellViewModel : ObservableObject
     private ShadowTradeReviewSnapshot? _selectedShadowTrade;
 
     [ObservableProperty]
+    private ShadowTradeReviewSnapshot? _activeShadowTrade;
+
+    [ObservableProperty]
     private ShadowSampleStatus _shadowSample = new(
         30, 0, 0, 0, 0, 0, 0, 0, false,
         "Evidence collection in progress. Results are not yet sufficient for strategy conclusions.",
         new ShadowSampleDefinition(
             "engineering-preflight-v1",
             new string('0', 64),
-            "prospective-fakebroker-v1",
+            "prospective-fakebroker-live-mark-v2",
             1,
             false),
         "BLOCKED",
@@ -2150,11 +2158,26 @@ public sealed partial class ShellViewModel : ObservableObject
         try
         {
             _shadowReviewSnapshot = await _shadowReviewClient.GetSnapshotAsync(cancellationToken);
+            var selectedTradeId = SelectedShadowTrade?.ShadowTradeId;
             ShadowSample = _shadowReviewSnapshot.Sample;
             ShadowMetrics = _shadowReviewSnapshot.Metrics;
             ShadowReviewStatus = _shadowReviewSnapshot.Summary;
             UpdateShadowFilterOptions(_shadowReviewSnapshot.Trades);
             ApplyShadowFilters();
+            ActiveShadowTrade = _shadowReviewSnapshot.Trades.FirstOrDefault(
+                trade => IsCurrentOfficialShadowTrade(trade)
+                    && trade.ActiveMark.DisplayState is
+                    "WORKING" or "AHEAD" or "BEHIND" or "FLAT"
+                    or "STALE" or "HALTED" or "EXIT_PENDING");
+            if (Workspace == WorkspaceKind.Review)
+            {
+                SelectedShadowTrade = (
+                    selectedTradeId is not null
+                        ? ShadowTrades.FirstOrDefault(
+                            trade => trade.ShadowTradeId == selectedTradeId)
+                        : null
+                ) ?? ShadowTrades.FirstOrDefault();
+            }
             if (Workspace == WorkspaceKind.Review
                 && SelectedShadowTrade is null
                 && ShadowTrades.FirstOrDefault() is { } first)
@@ -2166,14 +2189,17 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             _shadowReviewSnapshot = null;
             ShadowTrades.Clear();
+            ShadowOfficialTrades.Clear();
+            ShadowUnfilledBlockedTrades.Clear();
             SelectedShadowTrade = null;
+            ActiveShadowTrade = null;
             ShadowSample = new ShadowSampleStatus(
                 30, 0, 0, 0, 0, 0, 0, 0, false,
                 "Evidence collection is unavailable. No sample records were counted.",
                 new ShadowSampleDefinition(
                     "engineering-preflight-v1",
                     new string('0', 64),
-                    "prospective-fakebroker-v1",
+                    "prospective-fakebroker-live-mark-v2",
                     1,
                     false),
                 "BLOCKED",
@@ -2183,6 +2209,25 @@ public sealed partial class ShellViewModel : ObservableObject
                 "UNAVAILABLE", null, null, null, null, null, null, null, null, null, null,
                 "Aggregate metrics are unavailable because the Shadow evidence snapshot failed closed.");
             ShadowReviewStatus = $"Shadow review unavailable: {exception.Message} No fallback evidence was created.";
+        }
+    }
+
+    public async Task RefreshShadowReviewDisplayAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (Workspace != WorkspaceKind.Review
+            || _shadowReviewClient is null
+            || !await _shadowRefreshLock.WaitAsync(0, cancellationToken))
+        {
+            return;
+        }
+        try
+        {
+            await RefreshShadowReviewAsync(cancellationToken);
+        }
+        finally
+        {
+            _shadowRefreshLock.Release();
         }
     }
 
@@ -2205,6 +2250,8 @@ public sealed partial class ShellViewModel : ObservableObject
         if (_shadowReviewSnapshot is null)
         {
             ShadowTrades.Clear();
+            ShadowOfficialTrades.Clear();
+            ShadowUnfilledBlockedTrades.Clear();
             return;
         }
 
@@ -2220,7 +2267,34 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             ShadowTrades.Add(trade);
         }
+        ShadowOfficialTrades.Clear();
+        foreach (var trade in filtered.Where(trade =>
+                     IsCurrentOfficialShadowTrade(trade)
+                     && trade.ActiveMark.DisplayState is
+                         "AHEAD" or "BEHIND" or "FLAT" or "STALE"
+                         or "HALTED" or "EXIT_PENDING" or "WINNER"
+                         or "LOSER" or "FLAT_EXIT"))
+        {
+            ShadowOfficialTrades.Add(trade);
+        }
+        ShadowUnfilledBlockedTrades.Clear();
+        foreach (var trade in filtered.Where(trade =>
+                     IsCurrentOfficialShadowTrade(trade)
+                     && trade.ActiveMark.DisplayState is
+                         "WORKING" or "UNFILLED" or "CANCELLED"
+                         or "INVALIDATED"))
+        {
+            ShadowUnfilledBlockedTrades.Add(trade);
+        }
     }
+
+    private bool IsCurrentOfficialShadowTrade(
+        ShadowTradeReviewSnapshot trade) =>
+        trade.SampleDefinition.OfficialSampleAuthorized
+        && string.Equals(
+            trade.SampleDefinition.SampleVersion,
+            ShadowSample.Definition.SampleVersion,
+            StringComparison.Ordinal);
 
     private static bool Matches(string filter, string value) =>
         string.Equals(filter, "All", StringComparison.Ordinal)

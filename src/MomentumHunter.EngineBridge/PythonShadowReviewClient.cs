@@ -28,6 +28,10 @@ public static class PythonShadowReviewSnapshotMapper
     public static ShadowReviewSnapshot Map(JsonElement root)
     {
         RequireReadOnlyShadowMode(root);
+        if (RequiredInteger(root, "schemaVersion") != 2)
+        {
+            throw new InvalidDataException("The Shadow review snapshot schema is unsupported.");
+        }
         var trades = Array(root, "reviewTrades").Select(Trade).ToArray();
         var sample = Sample(Object(root, "sample"));
         var metrics = Metrics(Object(root, "reviewMetrics"));
@@ -119,6 +123,29 @@ public static class PythonShadowReviewSnapshotMapper
         {
             throw new InvalidDataException("Shadow decision timestamp does not match the frozen evidence lock.");
         }
+        var activeMark = ActiveMark(Object(item, "activeMark"));
+        if (!string.Equals(
+                activeMark.LifecycleState,
+                lifecycleState,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("Shadow active-mark lifecycle does not match the trade lifecycle.");
+        }
+        if (activeMark.DisplayState is "WINNER" or "LOSER" or "FLAT_EXIT"
+            && !string.Equals(lifecycleState, "completed", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("An open Shadow trade cannot be labeled as a final result.");
+        }
+        if (activeMark.DisplayState is "AHEAD" or "BEHIND" or "FLAT"
+            && lifecycleState is not ("open" or "partially_filled"))
+        {
+            throw new InvalidDataException("Only an active filled Shadow position may expose an open P&L state.");
+        }
+        if (activeMark.DisplayState is "STALE" or "HALTED"
+            && (activeMark.UnrealizedPnl is not null || activeMark.UnrealizedR is not null))
+        {
+            throw new InvalidDataException("Stale or halted Shadow evidence cannot be painted as live P&L.");
+        }
 
         return new ShadowTradeReviewSnapshot(
             new ShadowTradeIdentity(
@@ -155,11 +182,68 @@ public static class PythonShadowReviewSnapshotMapper
                 Decimal(item, "mfeDollars"),
                 Decimal(item, "maeDollars"),
                 Integer(item, "durationSeconds")),
+            activeMark,
             evidenceLock,
             sampleDefinition,
             RequiredString(item, "dataQualityState"),
             eligible,
             countsTowardSample);
+    }
+
+    private static ShadowActiveMarkReview ActiveMark(JsonElement item)
+    {
+        var state = RequiredString(item, "displayState");
+        if (state is not (
+            "WORKING" or "AHEAD" or "BEHIND" or "FLAT" or "STALE"
+            or "HALTED" or "EXIT_PENDING" or "WINNER" or "LOSER"
+            or "FLAT_EXIT" or "UNFILLED" or "CANCELLED" or "INVALIDATED"))
+        {
+            throw new InvalidDataException("Shadow active-mark display state is unsupported.");
+        }
+        var direction = RequiredString(item, "direction");
+        if (direction is not ("LONG" or "SHORT"))
+        {
+            throw new InvalidDataException("Shadow active-mark direction is unsupported.");
+        }
+        var quantity = RequiredInteger(item, "quantity");
+        if (quantity < 0)
+        {
+            throw new InvalidDataException("Shadow active-mark quantity cannot be negative.");
+        }
+        var providerTimestamp = OptionalTimestamp(item, "providerQuoteTimestamp");
+        var receiptTimestamp = OptionalTimestamp(item, "localReceiptTimestamp");
+        if ((providerTimestamp is null) != (receiptTimestamp is null))
+        {
+            throw new InvalidDataException("Shadow quote provenance timestamps must be supplied together.");
+        }
+        var targets = NumberArray(item, "targets");
+        return new ShadowActiveMarkReview(
+            state,
+            direction,
+            quantity,
+            Decimal(item, "simulatedFill"),
+            Decimal(item, "currentExecutableMark"),
+            Decimal(item, "bid"),
+            Decimal(item, "ask"),
+            Decimal(item, "unrealizedPnl"),
+            Decimal(item, "unrealizedR"),
+            Decimal(item, "mfeDollars"),
+            Decimal(item, "maeDollars"),
+            Decimal(item, "stop"),
+            targets,
+            Decimal(item, "distanceToStop"),
+            Decimal(item, "distanceToNextTarget"),
+            String(item, "quoteProvider") ?? string.Empty,
+            providerTimestamp,
+            receiptTimestamp,
+            Decimal(item, "quoteAgeSeconds"),
+            Integer(item, "holdingDurationSeconds"),
+            RequiredString(item, "lifecycleState"),
+            RequiredString(item, "condition"),
+            String(item, "reason") ?? string.Empty,
+            Decimal(item, "finalExecutablePnl"),
+            Decimal(item, "finalR"),
+            String(item, "exitReason") ?? string.Empty);
     }
 
     private static ShadowSampleStatus Sample(JsonElement item)
@@ -346,6 +430,43 @@ public static class PythonShadowReviewSnapshotMapper
         DateTimeOffset.TryParse(String(item, name), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var value)
             ? value
             : throw new InvalidDataException($"Shadow review field '{name}' must be a timestamp.");
+
+    private static DateTimeOffset? OptionalTimestamp(JsonElement item, string name)
+    {
+        var text = String(item, name);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+        if (!HasExplicitOffset(text))
+        {
+            throw new InvalidDataException(
+                $"Shadow review field '{name}' must include an explicit UTC offset.");
+        }
+        return DateTimeOffset.TryParse(
+            text,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var value)
+            ? value
+            : throw new InvalidDataException($"Shadow review field '{name}' must be a timestamp when supplied.");
+    }
+
+    private static bool HasExplicitOffset(string text)
+    {
+        var value = text.Trim();
+        if (value.EndsWith("Z", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        return value.Length >= 6
+               && value[^3] == ':'
+               && value[^6] is '+' or '-'
+               && char.IsDigit(value[^5])
+               && char.IsDigit(value[^4])
+               && char.IsDigit(value[^2])
+               && char.IsDigit(value[^1]);
+    }
 
     private static bool Property(JsonElement item, string name, out JsonElement value)
     {

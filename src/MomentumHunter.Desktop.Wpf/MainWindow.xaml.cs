@@ -37,6 +37,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
     private readonly IApplicationLifetimeCoordinator _lifetime;
     private readonly Dictionary<string, object> _contentById = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _layoutCaptureTimer;
+    private readonly DispatcherTimer _shadowReviewTimer;
     private string? _builtInDockLayoutXml;
     private bool _isRestoringDockLayout;
     private bool _isInitialized;
@@ -57,6 +58,14 @@ public partial class MainWindow : Window, IWorkstationPresentation
             _layoutCaptureTimer.Stop();
             CaptureShellState();
         };
+        _shadowReviewTimer = new DispatcherTimer(
+            DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromSeconds(1),
+        };
+        _shadowReviewTimer.Tick += async (_, _) =>
+            await _viewModel.RefreshShadowReviewDisplayAsync();
+        Closed += (_, _) => _shadowReviewTimer.Stop();
         Closing += OnClosing;
         DockManager.LayoutUpdated += (_, _) => ScheduleShellStateCapture();
         DockManager.AnchorableClosing += (_, eventArgs) => HandlePaneClosing(eventArgs.Anchorable, eventArgs);
@@ -78,6 +87,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
         EnsureAdditionalChartDocuments();
         ApplyRegistryVisibility();
         _isInitialized = true;
+        _shadowReviewTimer.Start();
         CaptureShellState();
     }
 
@@ -453,6 +463,10 @@ public partial class MainWindow : Window, IWorkstationPresentation
         else if (pane.Kind == PaneKind.Research)
         {
             EnsureAnchorablePaneHeight(ResearchContentId, 390);
+        }
+        else if (pane.Kind == PaneKind.ShadowReview)
+        {
+            EnsureAnchorablePaneHeight(ShadowReviewContentId, 620);
         }
 
         EnsureEvidencePaneHeight(ContentIdForPane(pane));
@@ -882,6 +896,10 @@ public partial class MainWindow : Window, IWorkstationPresentation
             if (pane.IsVisible)
             {
                 EnsureEvidencePaneHeight(ContentIdForPane(pane));
+                if (pane.Kind == PaneKind.ShadowReview)
+                {
+                    EnsureAnchorablePaneHeight(ShadowReviewContentId, 620);
+                }
             }
         }
     }

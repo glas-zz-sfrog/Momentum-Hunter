@@ -1,9 +1,29 @@
 # Canonical Code Paths
 
-Date reconciled: 2026-07-27
+Date reconciled: 2026-07-29
 
-This document names the merged implementation paths on `master` through
-SHADOW-012. The Roadmap, not this file, decides priority and next work.
+This document names the merged implementation paths on `master` through the
+prior SHADOW-017 opening-runtime repair. The Roadmap, not this file, decides
+priority and next work.
+
+ARGUS-SHADOW-017 live marking is currently branch-only and therefore not yet
+canonical. After Steven's visual acceptance and clean integration, its intended
+canonical path is:
+
+- Python authority: `momentum_hunter/shadow_trading.py`,
+  `momentum_hunter/workstation_shadow.py`,
+  `momentum_hunter/engine_host.py`, and
+  `momentum_hunter/shadow_market_validity.py`.
+- Versioned WPF read-only contract/presentation:
+  `src/MomentumHunter.Contracts/WorkstationContracts.cs`,
+  `src/MomentumHunter.EngineBridge/PythonShadowReviewClient.cs`,
+  `src/MomentumHunter.Presentation/ShellViewModel.cs`, and
+  `src/MomentumHunter.Desktop.Wpf/MainWindow.xaml`.
+- The WPF path reads cached Python state only. It has no provider, broker,
+  calculation, lifecycle, or evidence-write authority.
+- The existing `momentum_hunter/autonomy/broker.py` FakeBroker boundary and the
+  Shadow `ProspectiveFakeBroker` remain simulation-only; no real broker adapter
+  or transmitting path is introduced.
 
 ## Canonical Paths
 

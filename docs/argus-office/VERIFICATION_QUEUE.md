@@ -29,6 +29,7 @@ create a rubber-stamp Steven item.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
+| ARGUS-SHADOW-017 live position marking | `AUTOMATED_PASS`; compileall, 183 focused Python tests, 940-test Python discovery, 224 .NET tests with warnings as errors, protected-boundary review, and 1180x820 WPF render pass | `MANUAL_PASS`; Steven passed all seven checks on 2026-07-29 | Integration authorized but not yet performed; v3 activation, task rebind, and arm remain separate proof gates; existing task disabled | No visual action remains; preserve the accepted proof and complete the clean integration/proof sequence |
 | ARGUS-SHADOW-001 prospective lifecycle | `AUTOMATED_PASS` | `NO_STEVEN_ACTION`; later WPF representation was visually accepted through R027 | Integrated into local `master` at `bb962be`; remotely backed up on its feature branch | Historical evidence only; no approval remains pending |
 | ARGUS-SHADOW-002 WPF Shadow Review | `AUTOMATED_PASS` | `MERGE_APPROVED` | Integrated and backed up through `origin/master` | The preserved checklist remains an audit reference; merge approval does not start the official sample |
 | ARGUS-SHADOW-003 sample readiness gate | `AUTOMATED_PASS` | `MERGE_APPROVED`; visual checklist remains available | Integrated and backed up through `origin/master` | Confirm the UI says prepared but locked, identifies the exact sample definition, withholds metrics, and exposes no start or broker action |
@@ -46,12 +47,44 @@ create a rubber-stamp Steven item.
 | ARGUS-SHADOW-012 bounded scheduler retry | `AUTOMATED_PASS`; compileall, 18 focused, 46 proof-gate, and 237 affected tests plus PowerShell parsing and direct scheduled-task settings construction pass | `NO_STEVEN_ACTION`; nonvisual operational reliability repair under standing delegation | `COMPLETE` and backed up through `master`; production remains unarmed and unchanged | No manual check. Confirm the installed task reports three one-minute retries and points only to the final SHADOW-012 bundle |
 | ARGUS-SHADOW-013/014 opening ceremony hardening and proof preparation | `AUTOMATED_PASS`; the 2026-07-28 proof-only task exited `0` on attempt 1, capture/report/task hashes match, candidate+SPY/IWM quote ages were below `0.6s`, HTTPS clock skew passed at `0.932s`, the finalized bundle passed 12/12 as of finalization, and Engine Host health remained `Healthy` | `NO_STEVEN_ACTION`; no visual acceptance, brokerage anomaly, or consequential action occurred | `COMPLETE_UNARMED_PROOF` at proof baseline `4c35181`; selector `NOT_ARMED`, sample `0 / 30`, and policy/cycle/state/handoff/trade are absent | No opening-proof check remains; SHADOW-015 now supplies the required synthetic negative-control evidence. |
 | ARGUS-SHADOW-015 opening negative controls | `AUTOMATED_PASS`; fixed three-scenario drill passed `3 / 3`, compileall, 6 focused, 127 adjacent, all 50 bounded modules, and all 914 Python tests pass; activation hash is unchanged and generated reports remain ignored | `NO_STEVEN_ACTION`; synthetic, nonvisual, nontransmitting evidence requires no CEO rubber stamp | `COMPLETE` after clean fast-forward integration from `codex/ARGUS-SHADOW-015-negative-control-drills`; no arm, policy, cycle, state, handoff, or trade exists | No manual check. Prepare a new final-head static bundle and explicit one-time arm ceremony; fresh quote/clock proof and every anomaly gate still apply. |
-| ARGUS-SHADOW-016 one-time arm scheduler | `AUTOMATED_PASS`; PowerShell parsing, 3 focused scheduling tests, 130 affected Shadow/Engine Host tests, all 917 Python tests, and all 216 .NET tests pass; unsafe recurring, broad, disabled, late, past, or wrong-time arm shapes are rejected before registration | `NO_STEVEN_ACTION`; this is nonvisual FakeBroker-only scheduling and creates no real-order capability | `SCHEDULED_PENDING_RUN` after clean fast-forward integration; the 2026-07-29 8:35 AM CT task is one-time, explicitly armed, starts only on time, has no scheduler retry, and references a fresh final-head bundle | No manual check. The finite read-only observer must classify the actual opening and interrupt Steven only for a brokerage anomaly or consequential action. |
-| ARGUS-SHADOW-017 opening runtime repair | `AUTOMATED_PASS`; v1 failure and absence of cycle/state/handoff/trade are proven; stale-idle replacement, active-cycle refusal, rejected-snapshot refusal, stderr retry continuation, v1 preservation/v2 isolation, compileall, PowerShell parse, 185 focused tests, 923 full Python tests, 216 .NET tests, isolated zero-warning Release build, and live scheduler-contention canary pass | `NO_STEVEN_ACTION`; nonvisual FakeBroker-only repair under standing delegation | `SCHEDULED_PENDING_RUN`; implementation `2213299` is integrated/backed up, v2 is activated at `0 / 30`, and the one-time final-head task is installed for 2026-07-30 8:35 AM CT | No manual check. Today remains valid failed-run/counterfactual evidence but not Trade 1. The observer interrupts only for an account anomaly, real-order capability, or unsafe Git/task identity. |
+| ARGUS-SHADOW-016 one-time arm scheduler | `AUTOMATED_PASS`; PowerShell parsing, 3 focused scheduling tests, 130 affected Shadow/Engine Host tests, all 917 Python tests, and all 216 .NET tests pass; unsafe recurring, broad, disabled, late, past, or wrong-time arm shapes are rejected before registration | `NO_STEVEN_ACTION`; this is historical nonvisual FakeBroker-only scheduling evidence | `HISTORICAL_COMPLETE`; the 2026-07-29 task ran and its evidence is preserved | No manual check. The resulting failed opening and successor repair are recorded in the Roadmap. |
+| ARGUS-SHADOW-017 opening runtime repair | `AUTOMATED_PASS`; v1 failure and absence of cycle/state/handoff/trade are proven; stale-idle replacement, active-cycle refusal, rejected-snapshot refusal, stderr retry continuation, v1 preservation/v2 isolation, compileall, PowerShell parse, 185 focused tests, 923 full Python tests, 216 .NET tests, isolated zero-warning Release build, and live scheduler-contention canary pass | `NO_STEVEN_ACTION`; nonvisual FakeBroker-only repair under standing delegation | `COMPLETE / OPERATIONALLY_SUPERSEDED`; implementation `2213299` is integrated/backed up and v2 remains activated-empty at `0 / 30`; its 2026-07-30 task is now disabled for the material live-marking change | No manual check. Preserve the repair and v2 activation as history; follow the separate live-marking visual item above. |
 | Schwab automated-paper capability | `BLOCKED_VENDOR_CAPABILITY` | No decision required now | Vendor answer is recorded; no adapter exists | Trader API cannot access paperMoney and has no sandbox; use FakeBroker plus manual paperMoney reconciliation only |
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted visual baseline; subsequent nonvisual roadmap work follows standing delegation |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | Destructive decision not yet due | Future market-data cutover task | Interrupt Steven immediately before deleting the exact legacy paths/rows; visual cutover proof remains manual |
+
+## ARGUS-SHADOW-017 - Live Position Marking
+
+Branch: `codex/ARGUS-SHADOW-017-live-position-marking`
+
+Proof:
+`docs/argus-office/reports/releases/ARGUS-SHADOW-017-synthetic-live-marking-ui-proof.png`
+
+Automated result: `AUTOMATED_PASS`
+
+Steven result: `MANUAL_PASS` on 2026-07-29
+
+Steven confirmed all seven checks and approved commit, integration, rebinding,
+and the remaining pre-run gates. This acceptance does not arm the selector and
+does not authorize a real broker order.
+
+Check only these seven items:
+
+1. At 1180x820, all text in Test Trade Review is readable.
+2. No labels, values, tabs, tables, or cards clip or overlap.
+3. The current state is obvious: WORKING/AHEAD/BEHIND/STALE for open records,
+   and WINNER/LOSER only for completed records.
+4. Quote source, quote age, provider timestamp, and receipt timestamp are visible
+   on the Active Test Trade card.
+5. The WORKING order has no fill, executable P&L, R, MFE, or MAE.
+6. Aggregate win rate, expectancy, profit factor, and drawdown remain withheld,
+   and Counterfactuals remain a separate tab.
+7. No Start, Submit, Replace, Cancel, Broker, Paper, Live, or other execution
+   control exists in Test Trade Review.
+
+Report `PASS` only when all seven pass. Otherwise report the failed number and
+what is clipped, ambiguous, mislabeled, or unexpectedly actionable.
 
 ## ARGUS-SHADOW-001 - Prospective Shadow Trading
 

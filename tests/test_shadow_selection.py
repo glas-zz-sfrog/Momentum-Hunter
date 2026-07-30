@@ -1025,6 +1025,95 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         self.assertEqual("forced_session_exit", trade.outcome.exit_reason)
         self.assertTrue(audit_shadow_trade(trade).passed)
 
+    def test_early_close_position_is_forced_flat_at_frozen_deadline(self) -> None:
+        decision_at = at("2026-11-27T11:00:00-06:00")
+        with patch(
+            "momentum_hunter.shadow_trading.now_central",
+            return_value=at("2026-11-27T10:57:00-06:00"),
+        ):
+            self.service.activate_official_sample(
+                confirmation=SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
+            )
+        self.service.arm_automatic_selector(
+            confirmation=SHADOW_SELECTOR_ARM_CONFIRMATION,
+            prerequisite_proof_paths=self.proof_artifacts(
+                "early-close",
+                verified_at=at("2026-11-27T10:57:20-06:00"),
+            ),
+            armed_at=at("2026-11-27T10:57:30-06:00"),
+        )
+        payload = report_payload()
+        payload["metadata"]["generated_at"] = "2026-11-27T10:59:00-06:00"
+        payload["metadata"]["source_capture_time"] = (
+            "2026-11-27T10:58:00-06:00"
+        )
+        report = self.write_report(
+            payload,
+            path=(
+                self.reports_dir
+                / "trade-plan-briefing-2026-11-27-morning.json"
+            ),
+        )
+        self.quote_source = DictQuoteSource(
+            {
+                "TEST": quote_payload(
+                    "TEST",
+                    timestamp="2026-11-27T10:59:45-06:00",
+                ),
+                "SPY": quote_payload(
+                    "SPY",
+                    timestamp="2026-11-27T10:59:45-06:00",
+                    bid=625.00,
+                    ask=625.02,
+                ),
+                "IWM": quote_payload(
+                    "IWM",
+                    timestamp="2026-11-27T10:59:45-06:00",
+                    bid=225.00,
+                    ask=225.02,
+                ),
+            }
+        )
+        result = self.selector().select(report, decision_at=decision_at)
+        self.assertEqual(SELECTION_STARTED, result.status)
+        self.service.process_quote(
+            ShadowQuote(
+                symbol="TEST",
+                timestamp="2026-11-27T11:00:05-06:00",
+                bid=9.94,
+                ask=9.95,
+                last=9.94,
+                session="regular",
+                trading_state="tradable",
+                source="synthetic-early-close-fill",
+            ),
+            received_at=at("2026-11-27T11:00:05-06:00"),
+        )
+        self.assertEqual("open", self.service.store.load().trades[0].status)
+
+        self.service.process_quote(
+            ShadowQuote(
+                symbol="TEST",
+                timestamp="2026-11-27T11:55:00-06:00",
+                bid=10.10,
+                ask=10.11,
+                last=10.10,
+                session="regular",
+                trading_state="tradable",
+                source="synthetic-early-close-exit",
+            ),
+            received_at=at("2026-11-27T11:55:00-06:00"),
+        )
+
+        trade = self.service.store.load().trades[0]
+        self.assertEqual("completed", trade.status)
+        self.assertEqual("forced_session_exit", trade.outcome.exit_reason)
+        self.assertEqual(
+            "2026-11-27T12:55:00-05:00",
+            forced_exit_deadline(decision_at).isoformat(),
+        )
+        self.assertTrue(audit_shadow_trade(trade).passed)
+
     def test_unfilled_official_entry_is_cancelled_after_entry_window(self) -> None:
         self.activate()
         self.write_report()
@@ -1051,8 +1140,21 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         self.assertEqual("cancelled", trade.status)
         self.assertEqual("cancelled", trade.order.status)
         self.assertIn("entry window", trade.last_reason)
+        transition = trade.ledger_events[-1].payload
+        self.assertEqual("pending_entry", transition["previous_state"])
+        self.assertEqual("cancelled", transition["new_state"])
+        self.assertEqual("synthetic-late-entry", transition["quote_provider"])
+        self.assertEqual(
+            "2026-07-23T14:31:00-05:00",
+            transition["provider_timestamp"],
+        )
+        self.assertEqual(10.01, transition["executable_mark"])
+        self.assertEqual(
+            trade.ledger_events[-1].event_id,
+            transition["ledger_event_id"],
+        )
 
-    def test_official_fill_observation_older_than_thirty_seconds_is_rejected(
+    def test_official_fill_observation_older_than_ten_seconds_is_rejected(
         self,
     ) -> None:
         self.activate()
@@ -1079,7 +1181,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         trade = self.service.store.load().trades[0]
         self.assertEqual("pending_entry", trade.status)
         self.assertIsNone(trade.position)
-        self.assertIn("30-second", trade.last_reason)
+        self.assertIn("10-second", trade.last_reason)
 
     def test_next_session_observation_forces_flat_instead_of_overnight_hold(
         self,

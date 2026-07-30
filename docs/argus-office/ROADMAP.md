@@ -28,13 +28,55 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SHADOW-017 live position marking is `IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-SHADOW-017-live-position-marking` at branch base `797fb59`, from
+canonical `master`/`origin/master` `496e227`. The branch adds a separate
+five-second active-order/position quote loop, a ten-second maximum active quote
+age, durable executable marks, restart validation, a versioned read-only Engine
+Host/WPF snapshot, and the Active Test Trade review. Python remains authoritative.
+WPF refreshes cached state once per second and never fetches a quote or calculates
+official P&L, R, MFE, MAE, stops, targets, or outcomes.
+
+This is a material fill-model change. The failed `official-shadow-v1` ceremony
+and activated-empty `official-shadow-v2` sample remain preserved at `0 / 30`
+without mutation or backfill. The new prospective identity is
+`official-shadow-v3` with fill model
+`prospective-fakebroker-live-mark-v2`; v3 is not activated, armed, or collecting.
+Long positions mark from bid and short positions mark from ask. A stale or halted
+quote preserves the last reliable mark, suppresses live P&L and lifecycle exits,
+and cannot appear as a live winner.
+
+The previously installed 2026-07-30 opening task is disabled and reports
+`Enabled=False`. Steven accepted all seven WPF proof checks on 2026-07-29. The
+task will remain disabled until the branch is committed and fast-forwarded,
+`master` is backed up, and every
+task/proof/sample fingerprint is regenerated from the exact final canonical
+commit. No v3 activation, policy, arm, cycle, state, handoff, trade, account
+request, or real-order capability has been created.
+
+Automated proof currently includes Python compileall, 183 focused
+Shadow/Engine Host/Schwab read-only tests, the 940-test Python discovery, all
+224 .NET tests with warnings treated as errors, and a real 1180x820 WPF render
+at `docs/argus-office/reports/releases/ARGUS-SHADOW-017-synthetic-live-marking-ui-proof.png`.
+The screenshot is synthetic, explicitly non-production, and changes no official
+state. Final pre-integration classification is `IMPLEMENTED_PENDING_MERGE`.
+
 Last reconciled: 2026-07-29 for the SHADOW-017 opening-runtime repair. The one-time armed opening did run at `08:35:01` CT and captured real prospective market evidence, but it exited `1` before completing a selector decision cycle. The task produced the immutable `shadow` capture, bound TradePlan report, current candidate+SPY/IWM quote/clock proof, finalized 12/12 bundle, and write-once `official-shadow-v1` selection-policy and arm records. Those facts make the opening useful as failed-run and counterfactual research evidence.
 
 The same run cannot count as Trade 1 or as a completed official decision-cycle denominator. The Python Engine Host had remained alive since 2026-07-27 on selector-arm schema 2 while the installed code and valid arm used schema 3. It rejected the new arm before selection, so no decision cycle, Shadow state, handoff, FakeBroker order, or trade was created. Constructing one after the fact would introduce hindsight/lookahead and is forbidden. `official-shadow-v1` therefore closes at `0 / 30`; its activation, policy, arm, capture, report, proof, task, and logs remain preserved without backfill.
 
 SHADOW-017 repairs both proven causes. Every Engine Host process now freezes and reports its loaded runtime-build hash and selector-arm schema. An authenticated idle host with stale identity receives the existing graceful loopback shutdown command and is replaced before an armed ceremony; a host in an active collection cycle is not stopped and instead returns a retryable result. The armed capture job runs this preflight before arming, while proof-only runs remain nonmutating. The PowerShell runner now preserves native stderr as plain log text, captures `$LASTEXITCODE`, and completes its finite one-plus-three retry/finalization logic instead of terminating on `NativeCommandError`.
 
-The next prospective namespace is `official-shadow-v2`. Its state, activation, policy, arm, and decision-cycle paths are distinct from v1, and regression proof shows v2 activation leaves every v1 byte unchanged. SHADOW-017 implementation `2213299` is integrated and backed up. V2 activated at `2026-07-29T14:31:33.495182-05:00` with activation SHA-256 `930543A24D147C776A2A6C959E719460EB8BC61D7420D098317527884B007B9F`; it remains `NOT_ARMED` at `0 / 30`, and no other v2 state exists. One armed FakeBroker-only task is installed for 2026-07-30 at 8:35 AM CT. The current stale host is intentionally not replaced during the 2026-07-29 entry window; tomorrow's scheduled preflight performs the guarded replacement before v2 can arm.
+Historical opening-repair state, superseded operationally by the live-marking
+status above: `official-shadow-v2` isolated its state, activation, policy, arm,
+and decision-cycle paths from v1. SHADOW-017 opening-repair implementation
+`2213299` is integrated and backed up. V2 activated at
+`2026-07-29T14:31:33.495182-05:00` with activation SHA-256
+`930543A24D147C776A2A6C959E719460EB8BC61D7420D098317527884B007B9F`
+and remains `NOT_ARMED` at `0 / 30`; no other v2 state exists. Its armed
+2026-07-30 task was installed, then intentionally disabled before the
+SHADOW-017 live-marking implementation began. It will not run under the old
+fill model.
 
 Scheduler independence is separately proven. A disposable non-market canary fired successfully with result `0` only `2.345` seconds after its requested time while all 922 Python tests ran continuously. The canary accessed no market data and changed no runtime state. This proves Codex activity does not block Windows Task Scheduler. Protected opening files must still remain frozen in the canonical task worktree; unrelated development may continue in another worktree rather than relying on a chat interruption.
 
@@ -52,15 +94,15 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Synchronized `master` contains the WPF workstation through R029, Python engine contracts, Shadow-001 through Shadow-017 implementation `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. The failed v1 opening evidence remains bound to `1af5b31`; the installed v2 task is rebound to the final synchronized closeout head and its fresh static bundle. |
-| Active branch | None. Implementation evidence remains on `codex/ARGUS-SHADOW-017-opening-runtime-preflight-repair`; no stacked implementation branch is active. |
-| Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; arm and policy exist, but cycle/state/handoff/trade do not. `official-shadow-v2` starts in separate write-once paths at `0 / 30`; order transmission is `UNAVAILABLE`. |
-| Active decision | Preserve 2026-07-29 as real failed-run/counterfactual evidence, never backfill it as Trade 1. Use deterministic automatic prospective selection on v2 after current-host identity, final-head proof, fresh quote/clock, and every existing semantic handoff gate pass. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | No product-development gate. The next official prospective sample is operationally time-gated until 2026-07-30 at 8:35 AM CT. It must fail closed on stale host identity, active stale-host collection, stale proof, Git mismatch, brokerage anomaly, or protected-state change. |
-| Scheduled operational proof | `SCHEDULED_PENDING_RUN`; one armed FakeBroker-only task is installed for 2026-07-30 8:35 AM CT with one trigger, no recurrence, no late start, zero Task Scheduler retries, limited interactive principal, and one exact arm switch. The runner retains only its finite one-plus-three recognized-infrastructure attempts. |
-| Immediate operational work | Preserve the frozen final-head task/bundle and inspect the one-time 2026-07-30 opening after its finite runner completes. Do not launch early, reconstruct v1 Trade 1, or replace the stale production host during today's entry window. Independent work may continue outside the frozen task worktree. |
+| Canonical baseline | Synchronized `master`/`origin/master` `496e227` contains the WPF workstation through R029, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. ARGUS-SHADOW-017 live marking is branch-only and not canonical until visual acceptance and clean integration. |
+| Active branch | `codex/ARGUS-SHADOW-017-live-position-marking` at `797fb59` plus the uncommitted live-marking implementation and proof. |
+| Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is not activated or armed. Order transmission is `UNAVAILABLE`. |
+| Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
+| Blocked by | Visual acceptance passed. Integration, backup, task rebinding, v3 activation, proof regeneration, and selector arming still require the final clean Git and proof gates. |
+| Scheduled operational proof | `DISABLED_PENDING_CANONICAL_INTEGRATION`; the existing Shadow opening task is disabled. No partial live-marking build will run. A new one-use task may be installed only from the accepted, synchronized final canonical commit and its regenerated proof bundle. |
+| Immediate operational work | Git Steward commits, fast-forwards, backs up, rebinds the task/proof/sample identities, activates v3 without carrying a trade, and prepares the finite read-only observer. Selector arming remains conditional on every regenerated proof gate. |
 | Broker state | Schwab OAuth is active after exact sole-account revalidation; the immutable `2573` `INDIVIDUAL_CASH` binding remains read-only. No preview or transmitting method exists. The previously surfaced, unrotated Client Secret is an explicit blocker for future transmitting code. |
-| Steven action | None for the remaining nonvisual proof work. Any brokerage anomaly or real-order proposal remains an interruption gate. |
+| Steven action | `MANUAL_PASS` on all seven ARGUS-SHADOW-017 WPF checks. No further visual action is pending; any brokerage anomaly or real-order proposal remains a separate interruption gate. |
 | Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
 
 ### Status Legend
@@ -181,10 +223,24 @@ Status: `COMPLETE` on local and remote `master` through `a17eff8`
 
 ### Phase 11 - Shadow Evidence, Schwab Capability, And Pre-Execution Hardening
 
-Status: `ACTIVE`; SHADOW-001 through SHADOW-017 and the Schwab read-only foundations are `COMPLETE` on synchronized `master`; v1 is preserved as a failed prospective ceremony at `0 / 30`, v2 is activated and `SCHEDULED_PENDING_RUN` at `0 / 30`, A017 is `BLOCKED_VENDOR_CAPABILITY`, and every real-order gate remains closed
+Status: `ACTIVE`; the prior SHADOW-017 opening-runtime repair and Schwab
+read-only foundations are `COMPLETE` on synchronized `master`; the
+SHADOW-017 live-position-marking amendment is `IMPLEMENTED_PENDING_MERGE`;
+v1 and activated-empty v2 are preserved at `0 / 30`, prospective v3 is not
+activated, A017 is `BLOCKED_VENDOR_CAPABILITY`, and every real-order gate
+remains closed
 
 #### 11A - Shadow Trading Evidence Program
 
+- ARGUS-SHADOW-017 live position marking adds a five-second quote loop only
+  while a current official FakeBroker order/position is active. The existing
+  five-minute candidate/decision cycle remains unchanged. Active quotes are
+  read-only, exact-symbol Schwab market-data requests with a frozen ten-second
+  age limit. Python persists bid/ask executable marks and lifecycle evidence;
+  WPF consumes the versioned cached snapshot only. The material cadence change
+  requires `official-shadow-v3` and
+  `prospective-fakebroker-live-mark-v2`; Steven accepted all seven WPF checks,
+  while final canonical integration and task/proof rebinding remain pending.
 - ARGUS-SHADOW-001 is integrated into local `master` at `bb962be`. It connects frozen current evidence to canonical TradePlan and Risk Governor decisions, conservative quote-driven FakeBroker orders/positions/exits, durable ledger/audit/outcomes, executable P&L/R/MFE/MAE, sample-gated metrics, and a nontransmitting manual paperMoney ticket.
 - ARGUS-SHADOW-002 is integrated into local `master` after Steven's explicit fast-forward approval. It adds a read-only WPF review surface over canonical Shadow/FakeBroker evidence; it creates no execution authority and cannot edit completed trades, plans, or risk decisions.
 - ARGUS-SHADOW-003 is integrated into local `master` after Steven's explicit fast-forward approval. Implementation `9002df0` freezes sample version, strategy/configuration fingerprint, fill-model version, evidence-schema version, and explicit sample authorization on new records; preserves legacy records without backfill; excludes unauthorized, obsolete, malformed, or mismatched records; gates every aggregate metric path; and exposes a read-only `SAMPLE START LOCKED` audit in WPF.

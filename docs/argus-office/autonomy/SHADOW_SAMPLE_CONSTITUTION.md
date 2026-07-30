@@ -1,6 +1,6 @@
 # Shadow Sample Constitution
 
-Status: `IMPLEMENTED_PENDING_INTEGRATION_NOT_AUTHORIZING`
+Status: `AMENDED_IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE_NOT_AUTHORIZING`
 
 This document describes the implemented methodology for the first official prospective
 Momentum Hunter Shadow sample. It does not authorize Trade 1. The selector may become
@@ -28,7 +28,56 @@ Operator-selected simulations are exploratory and never count toward the officia
 | `CLOSED` | Collection ended without rewriting prior evidence. |
 | `INVALIDATED` | A material defect prevents strategy conclusions. Evidence is preserved and a corrected methodology requires a new sample version. |
 
-Current state: `ACTIVATED`; `SELECTOR_NOT_ARMED`; `0` completed trades.
+Current state: v1 is preserved as a failed prospective ceremony at `0 / 30`;
+v2 is preserved `ACTIVATED`, `SELECTOR_NOT_ARMED`, and `0 / 30`; prospective
+v3 is not activated or armed.
+
+## SHADOW-017 Active-Position Marking Amendment
+
+The five-minute official candidate and decision-cycle schedule remains the
+sample denominator and selection authority. A separate active-marking loop may
+run once every five seconds only while a current official FakeBroker order is
+working or a FakeBroker position is active. It requests exactly the active
+symbol through the canonical read-only Schwab quote transport. It has no
+account, preview, submit, replace, cancel, or other order authority.
+
+The active quote must have exact symbol and canonical source identity, finite
+noncrossed bid/ask, offset-aware provider and receipt timestamps, a permitted
+market state, and age no greater than ten seconds. These cadence and freshness
+values are frozen in the strategy configuration and fill-model identity. WPF
+may refresh the latest cached Engine Host snapshot once per second; that refresh
+must not call the provider or calculate official lifecycle values.
+
+Executable marking is side-specific:
+
+- LONG current mark and exit evidence use bid.
+- SHORT current mark and exit evidence use ask.
+- A working order before a FakeBroker fill has no P&L or R.
+- Unrealized P&L, R, MFE, MAE, stop distance, and target distance are computed
+  and persisted by Python from the executable side.
+- Last price, midpoint, planned entry, and WPF-side calculation are forbidden
+  substitutes.
+
+When evidence becomes stale, halted, missing, invalid, or ambiguous, preserve
+the last reliable mark for provenance but suppress live P&L/R and exit
+advancement. The display must say STALE or HALTED and cannot continue painting
+the record as a live winner. Open records use WORKING, AHEAD, BEHIND, FLAT,
+STALE, HALTED, or EXIT_PENDING. Only terminal records use WINNER, LOSER,
+FLAT_EXIT, UNFILLED, CANCELLED, or INVALIDATED.
+
+Every active lifecycle transition persists previous/new state, quote identity,
+provider and receipt timestamps, executable mark, trigger reason, and ledger
+event identity. Restart must reload the same order/position/mark/excursions;
+duplicate or older quote identity cannot create another transition; completed
+records cannot reopen; malformed or bid/ask-inconsistent persisted marks fail
+closed.
+
+Because this faster loop can change fill, stop, target, MFE, MAE, and exit
+timing, it is a material fill-model change. v1 and activated-empty v2 remain
+immutable. New evidence may count only prospectively under
+`official-shadow-v3` and `prospective-fakebroker-live-mark-v2` after visual
+acceptance, canonical integration, remote backup, and exact final-head
+task/proof/arm regeneration.
 
 ## Frozen Selection Rule
 

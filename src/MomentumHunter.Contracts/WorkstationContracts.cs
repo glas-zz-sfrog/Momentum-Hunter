@@ -673,6 +673,61 @@ public sealed record ShadowOutcomeReview(
         : TimeSpan.FromSeconds(DurationSeconds.Value).ToString(@"hh\:mm\:ss");
 }
 
+public sealed record ShadowActiveMarkReview(
+    string DisplayState,
+    string Direction,
+    int Quantity,
+    decimal? SimulatedFill,
+    decimal? CurrentExecutableMark,
+    decimal? Bid,
+    decimal? Ask,
+    decimal? UnrealizedPnl,
+    decimal? UnrealizedR,
+    decimal? MfeDollars,
+    decimal? MaeDollars,
+    decimal? Stop,
+    IReadOnlyList<decimal> Targets,
+    decimal? DistanceToStop,
+    decimal? DistanceToNextTarget,
+    string QuoteProvider,
+    DateTimeOffset? ProviderQuoteTimestamp,
+    DateTimeOffset? LocalReceiptTimestamp,
+    decimal? QuoteAgeSeconds,
+    int? HoldingDurationSeconds,
+    string LifecycleState,
+    string Condition,
+    string Reason,
+    decimal? FinalExecutablePnl,
+    decimal? FinalR,
+    string ExitReason)
+{
+    public string QuantityDisplay => Quantity > 0 ? Quantity.ToString() : "No position";
+    public string SimulatedFillDisplay => SimulatedFill?.ToString("C4") ?? "No fill";
+    public string CurrentMarkDisplay => CurrentExecutableMark?.ToString("C4") ?? "Unavailable";
+    public string BidAskDisplay => Bid is null || Ask is null
+        ? "Unavailable"
+        : $"{Bid:C4} / {Ask:C4}";
+    public string UnrealizedPnlDisplay => UnrealizedPnl?.ToString("C2") ?? "Unavailable";
+    public string UnrealizedRDisplay => UnrealizedR is null ? "Unavailable" : $"{UnrealizedR:N2} R";
+    public string MfeDisplay => MfeDollars?.ToString("C2") ?? "Unavailable";
+    public string MaeDisplay => MaeDollars?.ToString("C2") ?? "Unavailable";
+    public string StopDisplay => Stop?.ToString("C4") ?? "Unavailable";
+    public string TargetsDisplay => Targets.Count == 0
+        ? "Unavailable"
+        : string.Join(" / ", Targets.Select(target => target.ToString("C4")));
+    public string DistanceToStopDisplay => DistanceToStop?.ToString("C4") ?? "Unavailable";
+    public string DistanceToTargetDisplay => DistanceToNextTarget?.ToString("C4") ?? "Unavailable";
+    public string QuoteAgeDisplay => QuoteAgeSeconds is null ? "Unavailable" : $"{QuoteAgeSeconds:N1}s";
+    public string ProviderTimestampDisplay => ProviderQuoteTimestamp?.ToString("HH:mm:ss.fff zzz") ?? "Unavailable";
+    public string ReceiptTimestampDisplay => LocalReceiptTimestamp?.ToString("HH:mm:ss.fff zzz") ?? "Unavailable";
+    public string HoldingDurationDisplay => HoldingDurationSeconds is null
+        ? "Not filled"
+        : TimeSpan.FromSeconds(HoldingDurationSeconds.Value).ToString(@"hh\:mm\:ss");
+    public string CurrentOrFinalRDisplay => FinalR is not null
+        ? $"{FinalR:N2} R"
+        : UnrealizedRDisplay;
+}
+
 public sealed record ShadowEvidenceLock(
     bool EvidenceFrozen,
     bool PlanFrozen,
@@ -706,6 +761,7 @@ public sealed record ShadowTradeReviewSnapshot(
     ShadowPlanReview Plan,
     ShadowExecutionReview Execution,
     ShadowOutcomeReview Outcome,
+    ShadowActiveMarkReview ActiveMark,
     ShadowEvidenceLock EvidenceLock,
     ShadowSampleDefinition SampleDefinition,
     string DataQualityState,
@@ -720,7 +776,7 @@ public sealed record ShadowTradeReviewSnapshot(
     public string Session => Identity.Session;
     public DateTimeOffset DecisionTimestamp => Identity.DecisionTimestamp;
     public string LifecycleState => Execution.LifecycleState;
-    public string OutcomeLabel => Outcome.Outcome;
+    public string OutcomeLabel => ActiveMark.DisplayState;
     public string EligibilityLabel => EvidenceEligible ? "ELIGIBLE" : "EXCLUDED";
     public string DateSessionLabel => $"{DecisionTimestamp:yyyy-MM-dd} / {Session}";
 }

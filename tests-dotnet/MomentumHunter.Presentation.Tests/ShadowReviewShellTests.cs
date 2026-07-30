@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using MomentumHunter.Application;
 using MomentumHunter.Contracts;
 using MomentumHunter.Presentation;
@@ -61,7 +62,7 @@ public sealed class ShadowReviewShellTests
         await viewModel.InitializeAsync();
 
         viewModel.ShadowSetupFilter = "Breakout";
-        viewModel.ShadowOutcomeFilter = "WIN";
+        viewModel.ShadowOutcomeFilter = "WINNER";
         viewModel.ShadowEligibilityFilter = "ELIGIBLE";
 
         var trade = Assert.Single(viewModel.ShadowTrades);
@@ -70,6 +71,143 @@ public sealed class ShadowReviewShellTests
         Assert.Equal("OFFICIAL SAMPLE \u2022 IN PROGRESS", viewModel.ShadowSample.ReadinessLabel);
         Assert.Contains("synthetic-official-v1", viewModel.ShadowSample.DefinitionLabel, StringComparison.Ordinal);
         Assert.Equal("Withheld", viewModel.ShadowMetrics.ExpectancyDisplay);
+    }
+
+    [Fact]
+    public async Task ActiveCardAndCompactListsUsePythonDisplayStates()
+    {
+        var viewModel = CreateViewModel(
+            new StaticShadowReviewClient(ShadowSnapshot()),
+            new RecordingChartClient());
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("EQX", viewModel.ActiveShadowTrade?.Symbol);
+        Assert.Equal("WORKING", viewModel.ActiveShadowTrade?.ActiveMark.DisplayState);
+        Assert.Equal("NVDA", Assert.Single(viewModel.ShadowOfficialTrades).Symbol);
+        Assert.Equal("EQX", Assert.Single(viewModel.ShadowUnfilledBlockedTrades).Symbol);
+        Assert.Equal(50m, viewModel.ActiveShadowTrade?.ActiveMark.Ask);
+        Assert.Null(viewModel.ActiveShadowTrade?.ActiveMark.UnrealizedPnl);
+        Assert.Null(viewModel.ActiveShadowTrade?.ActiveMark.UnrealizedR);
+    }
+
+    [Fact]
+    public async Task ActiveCardAndOfficialListsExcludePriorSampleRecords()
+    {
+        var snapshot = ShadowSnapshot();
+        var currentWorking = snapshot.Trades.Single(trade => trade.Symbol == "EQX");
+        var priorWorking = currentWorking with
+        {
+            Identity = currentWorking.Identity with
+            {
+                ShadowTradeId = "shadow-prior",
+                Symbol = "OLD",
+            },
+            SampleDefinition = new ShadowSampleDefinition(
+                "engineering-preflight-v1",
+                new string('b', 64),
+                "prospective-fakebroker-v1",
+                1,
+                false),
+        };
+        var mixedSnapshot = snapshot with
+        {
+            Trades = [priorWorking, .. snapshot.Trades],
+        };
+        var viewModel = CreateViewModel(
+            new StaticShadowReviewClient(mixedSnapshot),
+            new RecordingChartClient());
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("EQX", viewModel.ActiveShadowTrade?.Symbol);
+        Assert.DoesNotContain(
+            viewModel.ShadowOfficialTrades,
+            trade => trade.Symbol == "OLD");
+        Assert.DoesNotContain(
+            viewModel.ShadowUnfilledBlockedTrades,
+            trade => trade.Symbol == "OLD");
+    }
+
+    [Fact]
+    public void CompactReviewGridBindingsAreReadOnlyForImmutableSnapshots()
+    {
+        var root = FindRepositoryRoot();
+        var xaml = File.ReadAllText(
+            Path.Combine(
+                root,
+                "src",
+                "MomentumHunter.Desktop.Wpf",
+                "MainWindow.xaml"));
+
+        Assert.Contains(
+            "Text=\"{Binding Symbol, Mode=OneWay}\"",
+            xaml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Text=\"{Binding ActiveShadowTrade.Symbol, Mode=OneWay}\"",
+            xaml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Text=\"{Binding ActiveMark.DisplayState, Mode=OneWay}\"",
+            xaml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Text=\"{Binding ActiveMark.CurrentOrFinalRDisplay, Mode=OneWay}\"",
+            xaml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Text=\"{Binding ActiveMark.Reason, Mode=OneWay}\"",
+            xaml,
+            StringComparison.Ordinal);
+        var reviewGridStart = xaml.IndexOf(
+            "<TabItem Header=\"Official Trades\">",
+            StringComparison.Ordinal);
+        var reviewGridEnd = xaml.IndexOf(
+            "<TabItem Header=\"Counterfactuals\">",
+            reviewGridStart,
+            StringComparison.Ordinal);
+        var reviewGridXaml = xaml[reviewGridStart..reviewGridEnd];
+        Assert.DoesNotContain(
+            "DataGridTextColumn",
+            reviewGridXaml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "DataGridTemplateColumn",
+            reviewGridXaml,
+            StringComparison.Ordinal);
+        var shadowReviewStart = xaml.IndexOf(
+            "<TextBlock Text=\"Test Trade Review\"",
+            StringComparison.Ordinal);
+        var shadowReviewEnd = xaml.IndexOf(
+            "<avalon:LayoutAnchorable x:Name=\"ReviewOutcomesAnchor\"",
+            shadowReviewStart,
+            StringComparison.Ordinal);
+        var shadowReviewXaml = xaml[shadowReviewStart..shadowReviewEnd];
+        var inlineBindings = shadowReviewXaml
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => line.Contains("<Run Text=\"{Binding", StringComparison.Ordinal));
+        Assert.All(
+            inlineBindings,
+            line => Assert.Contains("Mode=OneWay", line, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ReviewPaneIsExpandedWhenShownOrRestored()
+    {
+        var root = FindRepositoryRoot();
+        var codeBehind = File.ReadAllText(
+            Path.Combine(
+                root,
+                "src",
+                "MomentumHunter.Desktop.Wpf",
+                "MainWindow.xaml.cs"));
+
+        Assert.True(
+            codeBehind.Split(
+                "EnsureAnchorablePaneHeight(ShadowReviewContentId, 620);",
+                StringSplitOptions.None).Length >= 3,
+            "Test Trade Review should expand both when reopened and when workspace visibility is restored.");
     }
 
     [Fact]
@@ -103,7 +241,7 @@ public sealed class ShadowReviewShellTests
         var nvda = Trade("shadow-nvda", "NVDA", "Breakout", "WIN", true, "completed", at);
         var eqx = Trade("shadow-eqx", "EQX", "Pullback", "ACTIVE", false, "pending_entry", at.AddMinutes(5));
         return new ShadowReviewSnapshot(
-            1,
+            2,
             "PAPER SHADOW / NONTRANSMITTING",
             "shadow_trading_v1",
             false,
@@ -167,6 +305,33 @@ public sealed class ShadowReviewShellTests
                 eligible ? 8.2m : null,
                 eligible ? -1.1m : null,
                 eligible ? 1800 : null),
+            new ShadowActiveMarkReview(
+                eligible ? "WINNER" : "WORKING",
+                "LONG",
+                2,
+                eligible ? 100.05m : null,
+                eligible ? 104m : null,
+                eligible ? 104m : 49.95m,
+                eligible ? 104.02m : 50m,
+                null,
+                null,
+                eligible ? 8.2m : null,
+                eligible ? -1.1m : null,
+                symbol == "NVDA" ? 98m : 48m,
+                symbol == "NVDA" ? [104m, 106m] : [53m, 55m],
+                null,
+                null,
+                "synthetic-ui-proof",
+                at.AddMinutes(30),
+                at.AddMinutes(30).AddMilliseconds(20),
+                0.02m,
+                eligible ? 1800 : null,
+                lifecycle,
+                "LIVE",
+                eligible ? "Synthetic completed fixture." : "Waiting for a later quote.",
+                eligible ? 7.9m : null,
+                eligible ? 1.9m : null,
+                eligible ? "target_1" : string.Empty),
             lockState,
             SampleDefinition(),
             eligible ? "COMPLETE" : "PARTIAL",
@@ -177,9 +342,40 @@ public sealed class ShadowReviewShellTests
     private static ShadowSampleDefinition SampleDefinition() => new(
         "synthetic-official-v1",
         new string('a', 64),
-        "prospective-fakebroker-v1",
+        "prospective-fakebroker-live-mark-v2",
         1,
         true);
+
+    private static string FindRepositoryRoot(
+        [CallerFilePath] string sourceFilePath = "")
+    {
+        foreach (var start in new[]
+                 {
+                     Path.GetDirectoryName(sourceFilePath) ?? string.Empty,
+                     Directory.GetCurrentDirectory(),
+                     AppContext.BaseDirectory,
+                 })
+        {
+            if (string.IsNullOrWhiteSpace(start))
+            {
+                continue;
+            }
+
+            var directory = new DirectoryInfo(start);
+            while (directory is not null)
+            {
+                if (File.Exists(Path.Combine(directory.FullName, "MomentumHunter.Workstation.sln")))
+                {
+                    return directory.FullName;
+                }
+
+                directory = directory.Parent;
+            }
+        }
+
+        throw new DirectoryNotFoundException(
+            "Could not locate the Momentum Hunter repository root.");
+    }
 
     private static SimulationWorkspaceSnapshot SimulationSnapshot()
     {

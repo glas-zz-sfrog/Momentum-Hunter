@@ -473,7 +473,7 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         activation = self.activate(service)
 
         self.assertEqual(
-            "official-shadow-v2",
+            "official-shadow-v3",
             activation.sample_metadata.sample_version,
         )
         self.assertFalse(v2_state_path.exists())
@@ -486,11 +486,11 @@ class ShadowSampleReadinessTests(unittest.TestCase):
             self.assertEqual(content, path.read_bytes())
         self.assertEqual(
             {
-                "official-shadow-v2-state.json",
-                "official-shadow-v2-sample-activation.json",
-                "official-shadow-v2-selection-policy.json",
-                "official-shadow-v2-selector-arm.json",
-                "official-shadow-v2-decision-cycles.json",
+                "official-shadow-v3-state.json",
+                "official-shadow-v3-sample-activation.json",
+                "official-shadow-v3-selection-policy.json",
+                "official-shadow-v3-selector-arm.json",
+                "official-shadow-v3-decision-cycles.json",
             },
             {
                 SHADOW_STATE_PATH.name,
@@ -554,7 +554,7 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         with self.assertRaisesRegex(ShadowStateError, "different immutable definition"):
             service.activate_official_sample(
                 confirmation=SHADOW_SAMPLE_ACTIVATION_CONFIRMATION,
-                sample_version="official-shadow-v3",
+                sample_version="official-shadow-v4",
             )
         self.assertEqual(before, self.activation_path.read_bytes())
 

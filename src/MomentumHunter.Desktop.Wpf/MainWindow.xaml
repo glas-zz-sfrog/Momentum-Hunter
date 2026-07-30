@@ -1804,6 +1804,7 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                         <RowDefinition Height="1*" />
                                     </Grid.RowDefinitions>
                                     <DockPanel>
@@ -1820,7 +1821,60 @@
                                         </StackPanel>
                                     </DockPanel>
 
-                                    <WrapPanel Grid.Row="1" Margin="0,10,0,8">
+                                    <Border Grid.Row="1"
+                                            Background="#121C24"
+                                            BorderBrush="{StaticResource PanelBorder}"
+                                            BorderThickness="1"
+                                            Padding="9"
+                                            Margin="0,9,0,8">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ActiveShadowTrade}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel>
+                                            <DockPanel Margin="0,0,0,7" LastChildFill="False">
+                                                <TextBlock DockPanel.Dock="Left" Text="Active Test Trade" FontSize="14" FontWeight="SemiBold" />
+                                                <TextBlock DockPanel.Dock="Right"
+                                                           Text="{Binding ActiveShadowTrade.ActiveMark.DisplayState}"
+                                                           FontSize="14"
+                                                           FontWeight="Bold">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding ActiveShadowTrade.ActiveMark.DisplayState}" Value="AHEAD"><Setter Property="Foreground" Value="{StaticResource Teal}" /></DataTrigger>
+                                                                <DataTrigger Binding="{Binding ActiveShadowTrade.ActiveMark.DisplayState}" Value="BEHIND"><Setter Property="Foreground" Value="#F2868D" /></DataTrigger>
+                                                                <DataTrigger Binding="{Binding ActiveShadowTrade.ActiveMark.DisplayState}" Value="STALE"><Setter Property="Foreground" Value="{StaticResource Amber}" /></DataTrigger>
+                                                                <DataTrigger Binding="{Binding ActiveShadowTrade.ActiveMark.DisplayState}" Value="HALTED"><Setter Property="Foreground" Value="{StaticResource Amber}" /></DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </DockPanel>
+                                            <UniformGrid Columns="6">
+                                                <StackPanel Margin="3"><TextBlock Text="SYMBOL / SIDE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock><Run Text="{Binding ActiveShadowTrade.Symbol, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding ActiveShadowTrade.ActiveMark.Direction, Mode=OneWay}" /></TextBlock></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="QUANTITY" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ActiveShadowTrade.ActiveMark.QuantityDisplay}" /></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="SIMULATED FILL" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ActiveShadowTrade.ActiveMark.SimulatedFillDisplay}" /></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="EXECUTABLE MARK" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ActiveShadowTrade.ActiveMark.CurrentMarkDisplay}" /></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="BID / ASK" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ActiveShadowTrade.ActiveMark.BidAskDisplay}" /></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="P&amp;L / R" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock><Run Text="{Binding ActiveShadowTrade.ActiveMark.UnrealizedPnlDisplay, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding ActiveShadowTrade.ActiveMark.UnrealizedRDisplay, Mode=OneWay}" /></TextBlock></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="MFE / MAE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock><Run Text="{Binding ActiveShadowTrade.ActiveMark.MfeDisplay, Mode=OneWay}" /><Run Text=" / " /><Run Text="{Binding ActiveShadowTrade.ActiveMark.MaeDisplay, Mode=OneWay}" /></TextBlock></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="STOP / TARGET" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock><Run Text="{Binding ActiveShadowTrade.ActiveMark.StopDisplay, Mode=OneWay}" /><Run Text=" / " /><Run Text="{Binding ActiveShadowTrade.ActiveMark.TargetsDisplay, Mode=OneWay}" /></TextBlock></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="DISTANCE STOP / TARGET" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock><Run Text="{Binding ActiveShadowTrade.ActiveMark.DistanceToStopDisplay, Mode=OneWay}" /><Run Text=" / " /><Run Text="{Binding ActiveShadowTrade.ActiveMark.DistanceToTargetDisplay, Mode=OneWay}" /></TextBlock></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="QUOTE SOURCE / AGE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ActiveShadowTrade.ActiveMark.QuoteProvider}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ActiveShadowTrade.ActiveMark.QuoteProvider}" /><TextBlock Text="{Binding ActiveShadowTrade.ActiveMark.QuoteAgeDisplay}" /></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="PROVIDER / RECEIPT" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ActiveShadowTrade.ActiveMark.ProviderTimestampDisplay}" /><TextBlock Text="{Binding ActiveShadowTrade.ActiveMark.ReceiptTimestampDisplay}" Foreground="{StaticResource TextMuted}" FontSize="10" /></StackPanel>
+                                                <StackPanel Margin="3"><TextBlock Text="HOLDING / LIFECYCLE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ActiveShadowTrade.ActiveMark.HoldingDurationDisplay}" /><TextBlock Text="{Binding ActiveShadowTrade.ActiveMark.LifecycleState}" Foreground="{StaticResource TextMuted}" FontSize="10" /></StackPanel>
+                                            </UniformGrid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <WrapPanel Grid.Row="2" Margin="0,0,0,8">
                                         <StackPanel Margin="0,0,8,0">
                                             <TextBlock Text="Date / session" Foreground="{StaticResource TextMuted}" FontSize="10" />
                                             <ComboBox Width="160" Style="{StaticResource ShadowFilterComboStyle}" ItemsSource="{Binding ShadowDateSessionOptions}" SelectedItem="{Binding ShadowDateSessionFilter}" />
@@ -1847,7 +1901,7 @@
                                         </StackPanel>
                                     </WrapPanel>
 
-                                    <Grid Grid.Row="2" Background="#121C24" Margin="0,0,0,8">
+                                    <Grid Grid.Row="3" Background="#121C24" Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="1.6*" />
                                             <ColumnDefinition Width="1*" />
@@ -1869,7 +1923,7 @@
                                         <StackPanel Grid.Column="6" Margin="8,6"><TextBlock Text="EXCLUDED" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowSample.Excluded}" FontSize="15" /></StackPanel>
                                     </Grid>
 
-                                    <UniformGrid Grid.Row="3" Columns="8" Margin="0,0,0,8">
+                                    <UniformGrid Grid.Row="4" Columns="8" Margin="0,0,0,8">
                                         <StackPanel Margin="5,2"><TextBlock Text="WIN RATE" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.WinRateDisplay}" /></StackPanel>
                                         <StackPanel Margin="5,2"><TextBlock Text="AVG WIN" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.AverageWinDisplay}" /></StackPanel>
                                         <StackPanel Margin="5,2"><TextBlock Text="AVG LOSS" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.AverageLossDisplay}" /></StackPanel>
@@ -1880,32 +1934,111 @@
                                         <StackPanel Margin="5,2"><TextBlock Text="IDEAL / EXEC GAP" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding ShadowMetrics.PerformanceGapDisplay}" /></StackPanel>
                                     </UniformGrid>
 
-                                    <Grid Grid.Row="4">
+                                    <Grid Grid.Row="5">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="5*" />
                                             <ColumnDefinition Width="7*" />
                                         </Grid.ColumnDefinitions>
-                                        <DataGrid x:Name="ShadowTradesGrid"
-                                                  ItemsSource="{Binding ShadowTrades}"
-                                                  SelectedItem="{Binding SelectedShadowTrade, Mode=OneWay}"
-                                                  SelectionChanged="ShadowTradesGrid_SelectionChanged"
-                                                  AutoGenerateColumns="False"
-                                                  IsReadOnly="True"
-                                                  CanUserAddRows="False"
-                                                  SelectionMode="Single"
-                                                  HeadersVisibility="Column"
-                                                  Background="#17212B"
-                                                  BorderBrush="{StaticResource PanelBorder}">
-                                            <DataGrid.Columns>
-                                                <DataGridTextColumn Header="Symbol" Binding="{Binding Symbol}" Width="70" />
-                                                <DataGridTextColumn Header="Setup" Binding="{Binding Setup}" Width="120" />
-                                                <DataGridTextColumn Header="Decision" Binding="{Binding DecisionTimestamp, StringFormat={}{0:MM-dd HH:mm}}" Width="105" />
-                                                <DataGridTextColumn Header="Lifecycle" Binding="{Binding LifecycleState}" Width="110" />
-                                                <DataGridTextColumn Header="Outcome" Binding="{Binding OutcomeLabel}" Width="90" />
-                                                <DataGridTextColumn Header="Evidence" Binding="{Binding EligibilityLabel}" Width="90" />
-                                                <DataGridTextColumn Header="Shadow Trade ID" Binding="{Binding ShadowTradeId}" Width="180" />
-                                            </DataGrid.Columns>
-                                        </DataGrid>
+                                        <TabControl Background="#17212B">
+                                            <TabItem Header="Official Trades">
+                                                <DataGrid x:Name="ShadowTradesGrid"
+                                                          ItemsSource="{Binding ShadowOfficialTrades}"
+                                                          SelectedItem="{Binding SelectedShadowTrade, Mode=OneWay}"
+                                                          SelectionChanged="ShadowTradesGrid_SelectionChanged"
+                                                          AutoGenerateColumns="False"
+                                                          IsReadOnly="True"
+                                                          CanUserAddRows="False"
+                                                          SelectionMode="Single"
+                                                          HeadersVisibility="Column"
+                                                          Background="#17212B"
+                                                          BorderBrush="{StaticResource PanelBorder}">
+                                                    <DataGrid.Columns>
+                                                        <DataGridTemplateColumn Header="Symbol" Width="70">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding Symbol, Mode=OneWay}" Margin="4,0" />
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+                                                        <DataGridTemplateColumn Header="Result / state" Width="105">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding ActiveMark.DisplayState, Mode=OneWay}" Margin="4,0">
+                                                                        <TextBlock.Style>
+                                                                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                                                                <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding ActiveMark.DisplayState}" Value="AHEAD"><Setter Property="Foreground" Value="{StaticResource Teal}" /></DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding ActiveMark.DisplayState}" Value="WINNER"><Setter Property="Foreground" Value="{StaticResource Teal}" /></DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding ActiveMark.DisplayState}" Value="BEHIND"><Setter Property="Foreground" Value="#F2868D" /></DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding ActiveMark.DisplayState}" Value="LOSER"><Setter Property="Foreground" Value="#F2868D" /></DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding ActiveMark.DisplayState}" Value="STALE"><Setter Property="Foreground" Value="{StaticResource Amber}" /></DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding ActiveMark.DisplayState}" Value="HALTED"><Setter Property="Foreground" Value="{StaticResource Amber}" /></DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBlock.Style>
+                                                                    </TextBlock>
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+                                                        <DataGridTemplateColumn Header="Current / final R" Width="110">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding ActiveMark.CurrentOrFinalRDisplay, Mode=OneWay}" Margin="4,0" />
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+                                                        <DataGridTemplateColumn Header="Exit reason" Width="*">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding ActiveMark.ExitReason, Mode=OneWay}" Margin="4,0" TextTrimming="CharacterEllipsis" />
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                            </TabItem>
+                                            <TabItem Header="Unfilled / Blocked">
+                                                <DataGrid ItemsSource="{Binding ShadowUnfilledBlockedTrades}"
+                                                          SelectedItem="{Binding SelectedShadowTrade, Mode=OneWay}"
+                                                          SelectionChanged="ShadowTradesGrid_SelectionChanged"
+                                                          AutoGenerateColumns="False"
+                                                          IsReadOnly="True"
+                                                          CanUserAddRows="False"
+                                                          SelectionMode="Single"
+                                                          Background="#17212B">
+                                                    <DataGrid.Columns>
+                                                        <DataGridTemplateColumn Header="Symbol" Width="70">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding Symbol, Mode=OneWay}" Margin="4,0" />
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+                                                        <DataGridTemplateColumn Header="State" Width="105">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding ActiveMark.DisplayState, Mode=OneWay}" Margin="4,0" />
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+                                                        <DataGridTemplateColumn Header="Reason" Width="*">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding ActiveMark.Reason, Mode=OneWay}" Margin="4,0" TextTrimming="CharacterEllipsis" />
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                            </TabItem>
+                                            <TabItem Header="Counterfactuals">
+                                                <TextBlock Text="Counterfactual candidates and SPY/IWM marks remain separate from official winners, losers, and sample counts."
+                                                           Foreground="{StaticResource TextMuted}"
+                                                           TextWrapping="Wrap"
+                                                           Margin="12" />
+                                            </TabItem>
+                                        </TabControl>
 
                                         <TabControl Grid.Column="1" Margin="10,0,0,0" Background="#17212B">
                                             <TabItem Header="Overview">
@@ -1927,9 +2060,9 @@
                                                                 <Border Background="#253440" Padding="7,3" Margin="0,0,5,3" CornerRadius="3"><TextBlock Text="{Binding SelectedShadowTrade.EvidenceLock.CorrectionLabel}" FontSize="10" /></Border>
                                                             </WrapPanel>
                                                             <TextBlock Foreground="{StaticResource TextMuted}" FontSize="10">
-                                                                <Run Text="{Binding SelectedShadowTrade.Identity.DecisionTimestamp, StringFormat=Decision {0:yyyy-MM-dd HH:mm:ss zzz}}" />
+                                                                <Run Text="{Binding SelectedShadowTrade.Identity.DecisionTimestamp, Mode=OneWay, StringFormat=Decision {0:yyyy-MM-dd HH:mm:ss zzz}}" />
                                                                 <Run Text="  |  " />
-                                                                <Run Text="{Binding SelectedShadowTrade.Identity.EvidenceSnapshotTimestamp, StringFormat=Evidence {0:yyyy-MM-dd HH:mm:ss zzz}}" />
+                                                                <Run Text="{Binding SelectedShadowTrade.Identity.EvidenceSnapshotTimestamp, Mode=OneWay, StringFormat=Evidence {0:yyyy-MM-dd HH:mm:ss zzz}}" />
                                                             </TextBlock>
                                                         </StackPanel>
                                                         <StackPanel Grid.Row="1" Grid.Column="0" Margin="3"><TextBlock Text="SHADOW TRADE ID" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding SelectedShadowTrade.Identity.ShadowTradeId}" TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedShadowTrade.Identity.ShadowTradeId}" /></StackPanel>

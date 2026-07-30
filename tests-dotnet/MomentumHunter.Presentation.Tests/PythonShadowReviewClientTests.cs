@@ -25,7 +25,7 @@ public sealed class PythonShadowReviewClientTests
         Assert.Equal("IN_PROGRESS", snapshot.Sample.ReadinessStatus);
         Assert.False(snapshot.Sample.CanStartOfficialSample);
         Assert.Equal("synthetic-official-v1", snapshot.Sample.Definition.SampleVersion);
-        Assert.Equal("prospective-fakebroker-v1", trade.SampleDefinition.FillModelVersion);
+        Assert.Equal("prospective-fakebroker-live-mark-v2", trade.SampleDefinition.FillModelVersion);
         Assert.Equal("Withheld", snapshot.Metrics.WinRateDisplay);
         Assert.Contains("entry slippage", trade.Execution.Quality.Summary, StringComparison.OrdinalIgnoreCase);
     }
@@ -89,6 +89,63 @@ public sealed class PythonShadowReviewClientTests
     }
 
     [Fact]
+    public void MapperRejectsOpenTradeLabeledAsFinal()
+    {
+        var payload = Payload().Replace(
+            "\"lifecycleState\": \"completed\"",
+            "\"lifecycleState\": \"open\"",
+            StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(payload);
+
+        Assert.Throws<InvalidDataException>(() => PythonShadowReviewSnapshotMapper.Map(document.RootElement));
+    }
+
+    [Fact]
+    public void MapperRejectsStaleMarkThatExposesLivePnl()
+    {
+        var payload = Payload()
+            .Replace("\"displayState\": \"WINNER\"", "\"displayState\": \"STALE\"", StringComparison.Ordinal)
+            .Replace("\"unrealizedPnl\": null", "\"unrealizedPnl\": 12.34", StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(payload);
+
+        Assert.Throws<InvalidDataException>(() => PythonShadowReviewSnapshotMapper.Map(document.RootElement));
+    }
+
+    [Fact]
+    public void MapperRejectsOffsetlessProviderTimestamp()
+    {
+        var payload = Payload().Replace(
+            "2026-07-23T10:30:00-05:00",
+            "2026-07-23T10:30:00",
+            StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(payload);
+
+        Assert.Throws<InvalidDataException>(
+            () => PythonShadowReviewSnapshotMapper.Map(document.RootElement));
+    }
+
+    [Fact]
+    public void MapperCarriesPythonMarkValuesWithoutRecalculation()
+    {
+        var payload = Payload()
+            .Replace("\"displayState\": \"WINNER\"", "\"displayState\": \"AHEAD\"", StringComparison.Ordinal)
+            .Replace("\"lifecycleState\": \"completed\"", "\"lifecycleState\": \"open\"", StringComparison.Ordinal)
+            .Replace("\"countsTowardSample\": true", "\"countsTowardSample\": false", StringComparison.Ordinal)
+            .Replace("\"eligibleCompleted\": 1", "\"eligibleCompleted\": 0", StringComparison.Ordinal)
+            .Replace("\"unrealizedPnl\": null", "\"unrealizedPnl\": 12.34", StringComparison.Ordinal)
+            .Replace("\"unrealizedR\": null", "\"unrealizedR\": 0.42", StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(payload);
+
+        var trade = Assert.Single(PythonShadowReviewSnapshotMapper.Map(document.RootElement).Trades);
+
+        Assert.Equal("AHEAD", trade.ActiveMark.DisplayState);
+        Assert.Equal(104.00m, trade.ActiveMark.CurrentExecutableMark);
+        Assert.Equal(12.34m, trade.ActiveMark.UnrealizedPnl);
+        Assert.Equal(0.42m, trade.ActiveMark.UnrealizedR);
+        Assert.Equal("synthetic-test-provider", trade.ActiveMark.QuoteProvider);
+    }
+
+    [Fact]
     public void ReviewClientContractExposesOnlySnapshotRead()
     {
         var methods = typeof(MomentumHunter.Application.IShadowReviewClient).GetMethods();
@@ -99,7 +156,7 @@ public sealed class PythonShadowReviewClientTests
 
     private static string Payload() => """
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "mode": "PAPER SHADOW / NONTRANSMITTING",
       "engineVersion": "shadow_trading_v1",
       "transmitting": false,
@@ -134,11 +191,43 @@ public sealed class PythonShadowReviewClientTests
           "durationSeconds": 1800,
           "outcome": "WIN",
           "lifecycleState": "completed",
+          "direction": "LONG",
+          "quantity": 2,
+          "displayState": "WINNER",
+          "activeMark": {
+            "schemaVersion": 1,
+            "displayState": "WINNER",
+            "direction": "LONG",
+            "quantity": 2,
+            "simulatedFill": 100.06,
+            "currentExecutableMark": 104.00,
+            "bid": 104.00,
+            "ask": 104.02,
+            "unrealizedPnl": null,
+            "unrealizedR": null,
+            "mfeDollars": 8.20,
+            "maeDollars": -1.10,
+            "stop": 98.00,
+            "targets": [104.00, 106.00],
+            "distanceToStop": null,
+            "distanceToNextTarget": null,
+            "quoteProvider": "synthetic-test-provider",
+            "providerQuoteTimestamp": "2026-07-23T10:30:00-05:00",
+            "localReceiptTimestamp": "2026-07-23T10:30:00.020-05:00",
+            "quoteAgeSeconds": 0.02,
+            "holdingDurationSeconds": 1800,
+            "lifecycleState": "completed",
+            "condition": "LIVE",
+            "reason": "Synthetic completed fixture.",
+            "finalExecutablePnl": 7.88,
+            "finalR": 1.91,
+            "exitReason": "target_1"
+          },
           "dataQualityState": "COMPLETE",
           "sampleMetadata": {
             "sampleVersion": "synthetic-official-v1",
             "strategyConfigurationFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "fillModelVersion": "prospective-fakebroker-v1",
+            "fillModelVersion": "prospective-fakebroker-live-mark-v2",
             "evidenceSchemaVersion": 1,
             "officialSampleAuthorized": true
           },
@@ -183,7 +272,7 @@ public sealed class PythonShadowReviewClientTests
         "gateSatisfied": false,
         "sampleVersion": "synthetic-official-v1",
         "strategyConfigurationFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "fillModelVersion": "prospective-fakebroker-v1",
+        "fillModelVersion": "prospective-fakebroker-live-mark-v2",
         "evidenceSchemaVersion": 1,
         "officialSampleAuthorized": true,
         "readinessStatus": "IN_PROGRESS",

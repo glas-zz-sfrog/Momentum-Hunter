@@ -23,7 +23,7 @@ from momentum_hunter.trade_planning import parse_datetime
 
 EASTERN_TZ = ZoneInfo("America/New_York")
 SHADOW_MARKET_POLICY_VERSION = "official-shadow-market-validity-v1"
-SHADOW_CONSTITUTION_VERSION = "official-shadow-constitution-v1"
+SHADOW_CONSTITUTION_VERSION = "official-shadow-constitution-v2"
 SHADOW_SELECTOR_ARM_SCHEMA_VERSION = 3
 SHADOW_DECISION_CYCLE_SCHEMA_VERSION = 1
 SHADOW_SELECTOR_ARM_CONFIRMATION = "ARM OFFICIAL SHADOW SELECTOR"
@@ -79,6 +79,8 @@ INFORMATIONAL_WARNING_PREFIXES = (
 class ShadowMarketValidityPolicy:
     version: str = SHADOW_MARKET_POLICY_VERSION
     quote_max_age_seconds: int = 30
+    active_position_quote_max_age_seconds: int = 10
+    active_position_poll_interval_seconds: int = 5
     capture_max_age_seconds: int = 600
     report_max_age_seconds: int = 300
     report_to_selection_max_seconds: int = 60
@@ -184,6 +186,17 @@ def shadow_constitution_definition(
             "one_symbol_trade_per_trading_day": True,
             "same_day_reentry": False,
             "primary_metric": active.primary_performance_metric,
+        },
+        "active_position_marking": {
+            "transport": "schwab_marketdata_v1_quotes",
+            "cadence_seconds": active.active_position_poll_interval_seconds,
+            "maximum_quote_age_seconds": (
+                active.active_position_quote_max_age_seconds
+            ),
+            "long_executable_side": "bid",
+            "short_executable_side": "ask",
+            "stale_behavior": "preserve_last_reliable_mark_and_block_exit",
+            "display_refresh_may_not_fetch_provider": True,
         },
         "accounting": {
             "record_every_attempted_cycle": True,

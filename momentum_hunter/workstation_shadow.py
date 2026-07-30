@@ -3,6 +3,7 @@ from __future__ import annotations
 """Engine-host bridge for prospective, nontransmitting Shadow Trading."""
 
 import math
+import threading
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -79,6 +80,7 @@ class ShadowWorkspaceService:
         production_defaults = paths is None and service is None
         self.paths = paths or ShadowWorkspacePaths.from_data_dir()
         self.service = service or ShadowTradingService(store=ShadowStateStore(self.paths.state_path))
+        self._lock = threading.RLock()
         if quote_source is not None:
             self.quote_source = quote_source
         elif production_defaults:
@@ -93,32 +95,35 @@ class ShadowWorkspaceService:
             )
 
     def snapshot(self) -> dict[str, Any]:
-        return self.service.snapshot()
+        with self._lock:
+            return self.service.snapshot()
 
     def start(self, symbol: str, simulation_command_id: str) -> dict[str, Any]:
-        report_path = latest_trade_report_path(self.paths.reports_dir)
-        if report_path is None:
-            raise ValueError("No persisted trade-planning report is available for Shadow Trading.")
-        trade = self.service.start_trade(
-            report_path,
-            symbol=symbol,
-            simulation_command_id=simulation_command_id,
-        )
-        return {
-            "mode": SHADOW_MODE,
-            "state": trade.status,
-            "summary": trade.last_reason,
-            "trade": shadow_trade_to_dict(trade),
-        }
+        with self._lock:
+            report_path = latest_trade_report_path(self.paths.reports_dir)
+            if report_path is None:
+                raise ValueError("No persisted trade-planning report is available for Shadow Trading.")
+            trade = self.service.start_trade(
+                report_path,
+                symbol=symbol,
+                simulation_command_id=simulation_command_id,
+            )
+            return {
+                "mode": SHADOW_MODE,
+                "state": trade.status,
+                "summary": trade.last_reason,
+                "trade": shadow_trade_to_dict(trade),
+            }
 
     def select_automatic(self) -> dict[str, Any]:
-        report_path = latest_scheduled_trade_report_path(self.paths.reports_dir)
-        if report_path is None:
-            return no_report_result().to_dict()
-        return AutomaticShadowSelector(
-            self.service,
-            quote_source=self.quote_source,
-        ).select(report_path).to_dict()
+        with self._lock:
+            report_path = latest_scheduled_trade_report_path(self.paths.reports_dir)
+            if report_path is None:
+                return no_report_result().to_dict()
+            return AutomaticShadowSelector(
+                self.service,
+                quote_source=self.quote_source,
+            ).select(report_path).to_dict()
 
     def record_collection_attempt(
         self,
@@ -249,6 +254,14 @@ class ShadowWorkspaceService:
         }
 
     def advance_observations(self, *, received_at: datetime | None = None) -> dict[str, Any]:
+        with self._lock:
+            return self._advance_observations_unlocked(received_at=received_at)
+
+    def _advance_observations_unlocked(
+        self,
+        *,
+        received_at: datetime | None = None,
+    ) -> dict[str, Any]:
         received_at = received_at or now_central()
         active_symbols = {
             trade["symbol"]
@@ -357,6 +370,142 @@ class ShadowWorkspaceService:
                 if trade["status"] in {"pending_entry", "partially_filled", "open"}
             ),
             "completedTradeCount": snapshot["metrics"]["completedTradeCount"],
+            "snapshot": snapshot,
+        }
+
+    def active_official_symbols(self) -> tuple[str, ...]:
+        with self._lock:
+            return self._active_official_symbols_unlocked()
+
+    def _active_official_symbols_unlocked(self) -> tuple[str, ...]:
+        state = self.service.store.load()
+        definition = self.service.sample_definition
+        return tuple(
+            sorted(
+                {
+                    trade.symbol
+                    for trade in state.trades
+                    if trade.status
+                    in {"pending_entry", "partially_filled", "open"}
+                    and trade.sample_metadata == definition
+                    and trade.sample_metadata.official_sample_authorized
+                    and trade.order is not None
+                }
+            )
+        )
+
+    def advance_active_marks(
+        self,
+        *,
+        received_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        request_at = received_at or now_central()
+        with self._lock:
+            active_symbols = self._active_official_symbols_unlocked()
+            if not active_symbols:
+                return {
+                    "mode": SHADOW_MODE,
+                    "polled": False,
+                    "providerRequestCount": 0,
+                    "requestedSymbols": [],
+                    "reason": (
+                        "No official working FakeBroker order or active "
+                        "position requires a quote."
+                    ),
+                    "snapshot": self.service.snapshot(),
+                }
+        batch_loader = getattr(self.quote_source, "quotes", None)
+        if not callable(batch_loader):
+            raise RuntimeError(
+                "Active Shadow marking requires the canonical batch "
+                "Schwab quote transport."
+            )
+        quotes = batch_loader(active_symbols, decision_at=request_at)
+        receipt_at = received_at or now_central()
+        with self._lock:
+            return self._advance_active_provider_quotes(
+                quotes,
+                received_at=receipt_at,
+                active_symbols=set(active_symbols),
+            )
+
+    def _advance_active_provider_quotes(
+        self,
+        quotes: dict[str, dict[str, Any]],
+        *,
+        received_at: datetime,
+        active_symbols: set[str],
+    ) -> dict[str, Any]:
+        from momentum_hunter.schwab_market_data import SCHWAB_QUOTE_SOURCE
+
+        normalized: dict[str, dict[str, Any]] = {}
+        invalid_symbols: list[str] = []
+        for symbol, quote in quotes.items():
+            normalized_symbol = str(symbol).strip().upper()
+            quote_timestamp = (
+                parse_datetime(str(quote.get("timestamp", "")))
+                if isinstance(quote, dict)
+                else None
+            )
+            if (
+                normalized_symbol not in active_symbols
+                or not isinstance(quote, dict)
+                or str(quote.get("symbol", "")).strip().upper()
+                != normalized_symbol
+                or str(quote.get("source", "")).strip()
+                != SCHWAB_QUOTE_SOURCE
+                or not is_offset_aware(quote_timestamp)
+                or quote.get("bid") is None
+                or quote.get("ask") is None
+                or not is_finite_optional_number(quote.get("bid"))
+                or not is_finite_optional_number(quote.get("ask"))
+            ):
+                if normalized_symbol:
+                    invalid_symbols.append(normalized_symbol)
+                continue
+            normalized[normalized_symbol] = dict(quote)
+
+        missing_symbols: list[str] = []
+        for symbol in sorted(active_symbols):
+            quote = normalized.get(symbol)
+            if quote is None:
+                missing_symbols.append(symbol)
+                self.service.process_missing_quote(
+                    symbol,
+                    observed_at=received_at,
+                )
+                continue
+            self.service.process_quote(
+                shadow_quote_from_mapping(quote),
+                received_at=received_at,
+            )
+
+        state = self.service.store.load()
+        for trade in state.trades:
+            if (
+                trade.status == "completed"
+                and trade.outcome is not None
+                and trade.decision_cycle_id
+            ):
+                self.service.decision_cycle_store.finalize_counterfactuals(
+                    trade.decision_cycle_id,
+                    horizon_at=trade.outcome.exit_timestamp,
+                )
+        snapshot = self.service.snapshot()
+        return {
+            "mode": SHADOW_MODE,
+            "polled": True,
+            "providerRequestCount": 1,
+            "requestedSymbols": sorted(active_symbols),
+            "validQuoteSymbols": sorted(normalized),
+            "missingQuoteSymbols": missing_symbols,
+            "invalidQuoteSymbols": sorted(set(invalid_symbols)),
+            "activeTradeCount": sum(
+                1
+                for trade in snapshot["trades"]
+                if trade["status"]
+                in {"pending_entry", "partially_filled", "open"}
+            ),
             "snapshot": snapshot,
         }
 
@@ -525,6 +674,21 @@ def shadow_quote_from_mapping(quote: dict[str, Any]) -> ShadowQuote:
         session=str(quote.get("session", "")),
         trading_state=str(quote.get("trading_state", "")),
         source=str(quote.get("source", "")),
+        provider_quote_timestamp=str(
+            quote.get("provider_quote_timestamp", "")
+        ),
+        provider_bid_timestamp=str(
+            quote.get("provider_bid_timestamp", "")
+        ),
+        provider_ask_timestamp=str(
+            quote.get("provider_ask_timestamp", "")
+        ),
+        realtime=(
+            quote.get("realtime")
+            if isinstance(quote.get("realtime"), bool)
+            else None
+        ),
+        security_status=str(quote.get("security_status", "")),
     )
 
 

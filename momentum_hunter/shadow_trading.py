@@ -54,31 +54,32 @@ from momentum_hunter.trade_planning import TradePlan, parse_datetime
 
 
 SHADOW_SCHEMA_VERSION = 1
+SHADOW_REVIEW_SCHEMA_VERSION = 2
 SHADOW_MODE = "PAPER SHADOW / NONTRANSMITTING"
 SHADOW_ENGINE_VERSION = "shadow_trading_v1"
 SHADOW_STRATEGY_CONTRACT_VERSION = "tradeplan-risk-shadow-v1"
-SHADOW_FILL_MODEL_VERSION = "prospective-fakebroker-v1"
+SHADOW_FILL_MODEL_VERSION = "prospective-fakebroker-live-mark-v2"
 SHADOW_EVIDENCE_SCHEMA_VERSION = 1
 DEFAULT_SHADOW_SAMPLE_VERSION = "engineering-preflight-v1"
-OFFICIAL_SHADOW_SAMPLE_VERSION = "official-shadow-v2"
+OFFICIAL_SHADOW_SAMPLE_VERSION = "official-shadow-v3"
 SHADOW_SAMPLE_ACTIVATION_SCHEMA_VERSION = 1
 SHADOW_SAMPLE_ACTIVATION_CONFIRMATION = "START OFFICIAL SHADOW SAMPLE"
 SHADOW_SELECTION_POLICY_SCHEMA_VERSION = 1
 SHADOW_SELECTION_POLICY_VERSION = "official-shadow-deterministic-market-validity-v1"
 SHADOW_STATE_PATH = (
-    DATA_DIR / "shadow-trading" / "official-shadow-v2-state.json"
+    DATA_DIR / "shadow-trading" / "official-shadow-v3-state.json"
 )
 SHADOW_SAMPLE_ACTIVATION_PATH = (
-    DATA_DIR / "shadow-trading" / "official-shadow-v2-sample-activation.json"
+    DATA_DIR / "shadow-trading" / "official-shadow-v3-sample-activation.json"
 )
 SHADOW_SELECTION_POLICY_PATH = (
-    DATA_DIR / "shadow-trading" / "official-shadow-v2-selection-policy.json"
+    DATA_DIR / "shadow-trading" / "official-shadow-v3-selection-policy.json"
 )
 SHADOW_SELECTOR_ARM_PATH = (
-    DATA_DIR / "shadow-trading" / "official-shadow-v2-selector-arm.json"
+    DATA_DIR / "shadow-trading" / "official-shadow-v3-selector-arm.json"
 )
 SHADOW_DECISION_CYCLES_PATH = (
-    DATA_DIR / "shadow-trading" / "official-shadow-v2-decision-cycles.json"
+    DATA_DIR / "shadow-trading" / "official-shadow-v3-decision-cycles.json"
 )
 SHADOW_REPORTS_DIR = DATA_DIR / "reports"
 MIN_MEANINGFUL_SAMPLE_SIZE = 30
@@ -92,6 +93,8 @@ SAMPLE_VERSION_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 class ShadowExecutionPolicy:
     slippage_bps: float = 5.0
     max_quote_age_seconds: int = 90
+    active_position_quote_max_age_seconds: int = 10
+    active_position_poll_interval_seconds: int = 5
     minimum_fill_delay_seconds: int = 1
     allow_extended_hours: bool = False
     max_spread_percent: float = 3.0
@@ -155,6 +158,11 @@ class ShadowQuote:
     session: str = "regular"
     trading_state: str = "tradable"
     source: str = "supplied_quote"
+    provider_quote_timestamp: str = ""
+    provider_bid_timestamp: str = ""
+    provider_ask_timestamp: str = ""
+    realtime: bool | None = None
+    security_status: str = ""
 
 
 @dataclass(frozen=True)
@@ -205,6 +213,28 @@ class ShadowPosition:
     target_price: float
     highest_price: float
     lowest_price: float
+    direction: str = "LONG"
+
+
+@dataclass(frozen=True)
+class ShadowExecutableMark:
+    schema_version: int = 1
+    direction: str = "LONG"
+    condition: str = "UNAVAILABLE"
+    quote_identity: str = ""
+    provider: str = ""
+    provider_timestamp: str = ""
+    receipt_timestamp: str = ""
+    bid: float | None = None
+    ask: float | None = None
+    executable_mark: float | None = None
+    unrealized_pnl: float | None = None
+    unrealized_r: float | None = None
+    mfe_dollars: float | None = None
+    mae_dollars: float | None = None
+    distance_to_stop: float | None = None
+    distance_to_next_target: float | None = None
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -300,6 +330,7 @@ class ShadowTrade:
     position: ShadowPosition | None = None
     outcome: ShadowOutcome | None = None
     ticket: ShadowOrderTicket | None = None
+    executable_mark: ShadowExecutableMark | None = None
     ledger_events: tuple[ExecutionLedgerEvent, ...] = ()
     processed_observation_ids: tuple[str, ...] = ()
     last_observation_timestamp: str = ""
@@ -879,7 +910,13 @@ class ProspectiveFakeBroker:
             return f"Session is not eligible for Shadow Trading: {quote.session or 'unknown'}."
         if quote.bid is None or quote.ask is None:
             return "Quote is missing bid or ask."
-        if quote.bid <= 0 or quote.ask <= 0 or quote.ask < quote.bid:
+        if (
+            not math.isfinite(quote.bid)
+            or not math.isfinite(quote.ask)
+            or quote.bid <= 0
+            or quote.ask <= 0
+            or quote.ask < quote.bid
+        ):
             return "Quote bid/ask values are invalid or crossed."
         spread_percent = (quote.ask - quote.bid) / quote.ask * 100
         if spread_percent > self.policy.max_spread_percent:
@@ -951,9 +988,21 @@ class ProspectiveFakeBroker:
         )
         return updated_order, position, ""
 
-    def executable_exit_price(self, quote: ShadowQuote, *, reason: str) -> float:
-        assert quote.bid is not None
-        return max(0.0, apply_basis_points(quote.bid, -self.policy.slippage_bps))
+    def executable_exit_price(
+        self,
+        quote: ShadowQuote,
+        *,
+        reason: str,
+        direction: str = "LONG",
+    ) -> float:
+        del reason
+        mark = executable_mark_for_direction(direction, quote)
+        slippage = (
+            -self.policy.slippage_bps
+            if direction.upper() == "LONG"
+            else self.policy.slippage_bps
+        )
+        return max(0.0, apply_basis_points(mark, slippage))
 
 
 class ShadowTradingService:
@@ -1908,6 +1957,7 @@ class ShadowTradingService:
         observed_at = observed_at or now_central()
         normalized_symbol = symbol.strip().upper()
         observation_id = stable_id("shadow-missing-observation", normalized_symbol, observed_at.isoformat())
+        reason = "No quote was available; Shadow Trading did not fill or exit."
         state = self.store.load()
         changed = False
         trades: list[ShadowTrade] = []
@@ -1919,15 +1969,42 @@ class ShadowTradingService:
             ):
                 trades.append(trade)
                 continue
+            condition = (
+                "STALE"
+                if (
+                    trade.executable_mark is not None
+                    and bool(trade.executable_mark.quote_identity)
+                    and trade.executable_mark.executable_mark is not None
+                )
+                else "UNAVAILABLE"
+            )
+            if (
+                trade.executable_mark is not None
+                and trade.executable_mark.condition == condition
+                and trade.executable_mark.reason == reason
+            ):
+                trades.append(trade)
+                continue
+            marked = preserve_reliable_mark(
+                replace(
+                    trade,
+                    processed_observation_ids=(
+                        *trade.processed_observation_ids,
+                        observation_id,
+                    ),
+                ),
+                condition=condition,
+                reason=reason,
+            )
             event = append_trade_event(
-                replace(trade, processed_observation_ids=(*trade.processed_observation_ids, observation_id)),
+                marked,
                 timestamp=observed_at.isoformat(),
                 event_type="quote_rejected",
                 requested_action="shadow_quote_rejected",
                 result="blocked",
-                reason="No quote was available; Shadow Trading did not fill or exit.",
+                reason=reason,
             )
-            trades.append(replace(event, last_reason="No quote was available; Shadow Trading did not fill or exit."))
+            trades.append(replace(event, last_reason=reason))
             changed = True
         if changed:
             self.store.save(replace(state, trades=tuple(trades)))
@@ -1955,7 +2032,7 @@ class ShadowTradingService:
             trades=state.trades,
         )
         return {
-            "schemaVersion": SHADOW_SCHEMA_VERSION,
+            "schemaVersion": SHADOW_REVIEW_SCHEMA_VERSION,
             "mode": SHADOW_MODE,
             "engineVersion": SHADOW_ENGINE_VERSION,
             "transmitting": False,
@@ -2207,13 +2284,19 @@ class ShadowTradingService:
         )
         if trade.sample_metadata.official_sample_authorized:
             quote_age = (received_at - quote_time).total_seconds()
-            if quote_age < 0 or quote_age > ShadowMarketValidityPolicy().quote_max_age_seconds:
+            active_quote_limit = active_quote_max_age_seconds_for_trade(trade)
+            if quote_age < 0 or quote_age > active_quote_limit:
                 reason = (
                     "Official Shadow observation is future-dated or older than "
-                    "the frozen 30-second quote boundary."
+                    f"the frozen {active_quote_limit}-second active-position "
+                    "quote boundary."
                 )
                 return append_trade_event(
-                    replace(processed_trade, last_reason=reason),
+                    preserve_reliable_mark(
+                        processed_trade,
+                        condition="STALE",
+                        reason=reason,
+                    ),
                     timestamp=received_at.isoformat(),
                     event_type="quote_rejected",
                     requested_action="shadow_quote_rejected",
@@ -2233,7 +2316,14 @@ class ShadowTradingService:
                 )
                 if validation_reason:
                     return append_trade_event(
-                        replace(processed_trade, last_reason=validation_reason),
+                        preserve_reliable_mark(
+                            processed_trade,
+                            condition=quote_failure_condition(
+                                quote,
+                                validation_reason,
+                            ),
+                            reason=validation_reason,
+                        ),
                         timestamp=quote.timestamp,
                         event_type="quote_rejected",
                         requested_action="shadow_quote_rejected",
@@ -2255,8 +2345,35 @@ class ShadowTradingService:
                         requested_action="fake_entry_remainder_cancelled",
                         result="cancelled",
                         reason=cancelled_order.reason,
+                        payload=lifecycle_transition_payload(
+                            previous_state=f"{trade.status}:{trade.order.status}",
+                            new_state=f"{trade.status}:cancelled",
+                            quote=quote,
+                            receipt_timestamp=received_at.isoformat(),
+                            executable_mark=executable_mark_for_direction(
+                                shadow_trade_direction(trade),
+                                quote,
+                            ),
+                            trigger_reason=cancelled_order.reason,
+                            extra={
+                                "order_id": cancelled_order.order_id,
+                                "cancelled_quantity": cancelled_order.remaining_quantity,
+                            },
+                        ),
                     )
                 position = update_position_excursions(trade.position, quote)
+                forced_trade = replace(
+                    forced_trade,
+                    position=position,
+                )
+                forced_trade = replace(
+                    forced_trade,
+                    executable_mark=build_executable_mark(
+                        forced_trade,
+                        quote,
+                        received_at=received_at,
+                    ),
+                )
                 return self._close_position(
                     forced_trade,
                     quote,
@@ -2288,12 +2405,34 @@ class ShadowTradingService:
                     requested_action="fake_entry_cancelled",
                     result="cancelled",
                     reason=cancelled_order.reason,
+                    payload=lifecycle_transition_payload(
+                        previous_state=trade.status,
+                        new_state="cancelled",
+                        quote=quote,
+                        receipt_timestamp=received_at.isoformat(),
+                        executable_mark=executable_mark_for_direction(
+                            shadow_trade_direction(trade),
+                            quote,
+                        ),
+                        trigger_reason=cancelled_order.reason,
+                        extra={
+                            "order_id": cancelled_order.order_id,
+                            "cancelled_quantity": cancelled_order.remaining_quantity,
+                        },
+                    ),
                 )
         if trade.status == "partially_filled" and trade.order is not None and trade.position is not None:
             validation_reason = self.fake_broker.validate_quote(quote, received_at=received_at)
             if validation_reason:
                 return append_trade_event(
-                    replace(processed_trade, last_reason=validation_reason),
+                    preserve_reliable_mark(
+                        processed_trade,
+                        condition=quote_failure_condition(
+                            quote,
+                            validation_reason,
+                        ),
+                        reason=validation_reason,
+                    ),
                     timestamp=quote.timestamp,
                     event_type="quote_rejected",
                     requested_action="shadow_quote_rejected",
@@ -2316,10 +2455,29 @@ class ShadowTradingService:
                     requested_action="fake_entry_remainder_cancelled",
                     result="cancelled",
                     reason=cancelled_order.reason,
-                    payload={
-                        "order_id": cancelled_order.order_id,
-                        "cancelled_quantity": cancelled_order.remaining_quantity,
-                    },
+                    payload=lifecycle_transition_payload(
+                        previous_state=f"{trade.status}:{trade.order.status}",
+                        new_state=f"{trade.status}:cancelled",
+                        quote=quote,
+                        receipt_timestamp=received_at.isoformat(),
+                        executable_mark=executable_mark_for_direction(
+                            shadow_trade_direction(trade),
+                            quote,
+                        ),
+                        trigger_reason=cancelled_order.reason,
+                        extra={
+                            "order_id": cancelled_order.order_id,
+                            "cancelled_quantity": cancelled_order.remaining_quantity,
+                        },
+                    ),
+                )
+                cancelled_trade = replace(
+                    cancelled_trade,
+                    executable_mark=build_executable_mark(
+                        cancelled_trade,
+                        quote,
+                        received_at=received_at,
+                    ),
                 )
                 return self._close_position(
                     cancelled_trade,
@@ -2329,6 +2487,14 @@ class ShadowTradingService:
                     target_executable=target_executable,
                 )
             processed_trade = replace(processed_trade, position=position)
+            processed_trade = replace(
+                processed_trade,
+                executable_mark=build_executable_mark(
+                    processed_trade,
+                    quote,
+                    received_at=received_at,
+                ),
+            )
         if trade.status in {"pending_entry", "partially_filled"} and trade.order is not None:
             committed = committed_notional(all_trades, excluding_trade_id=trade.shadow_trade_id)
             if trade.position is not None:
@@ -2361,10 +2527,33 @@ class ShadowTradingService:
                     requested_action="fake_order_rejected",
                     result="rejected",
                     reason=updated_order.reason,
-                    payload={"order_id": updated_order.order_id},
+                    payload=lifecycle_transition_payload(
+                        previous_state=trade.status,
+                        new_state="entry_rejected",
+                        quote=quote,
+                        receipt_timestamp=received_at.isoformat(),
+                        executable_mark=executable_mark_for_direction(
+                            shadow_trade_direction(trade),
+                            quote,
+                        ),
+                        trigger_reason=updated_order.reason,
+                        extra={"order_id": updated_order.order_id},
+                    ),
                 )
             if candidate_position is None:
-                waiting = replace(processed_trade, order=updated_order, last_reason=reason)
+                waiting = replace(
+                    processed_trade,
+                    order=updated_order,
+                    last_reason=reason,
+                )
+                waiting = replace(
+                    waiting,
+                    executable_mark=build_executable_mark(
+                        waiting,
+                        quote,
+                        received_at=received_at,
+                    ),
+                )
                 return append_trade_event(
                     waiting,
                     timestamp=quote.timestamp,
@@ -2389,6 +2578,7 @@ class ShadowTradingService:
                     quantity=updated_order.filled_quantity,
                     average_entry_price=float(updated_order.average_fill_price or previous_position.average_entry_price),
                 )
+            position = update_position_excursions(position, quote)
             fill_event_trade = replace(
                 processed_trade,
                 status="open" if updated_order.status == "filled" else "partially_filled",
@@ -2396,7 +2586,7 @@ class ShadowTradingService:
                 position=position,
                 last_reason=updated_order.reason,
             )
-            return append_trade_event(
+            filled_trade = append_trade_event(
                 fill_event_trade,
                 timestamp=quote.timestamp,
                 event_type="fake_order_filled",
@@ -2404,6 +2594,17 @@ class ShadowTradingService:
                 result=updated_order.status,
                 reason=updated_order.reason,
                 payload={
+                    **lifecycle_transition_payload(
+                        previous_state=trade.status,
+                        new_state=fill_event_trade.status,
+                        quote=quote,
+                        receipt_timestamp=received_at.isoformat(),
+                        executable_mark=executable_mark_for_direction(
+                            shadow_trade_direction(fill_event_trade),
+                            quote,
+                        ),
+                        trigger_reason=updated_order.reason,
+                    ),
                     "order_id": updated_order.order_id,
                     "filled_quantity": updated_order.filled_quantity,
                     "average_fill_price": updated_order.average_fill_price,
@@ -2411,12 +2612,27 @@ class ShadowTradingService:
                     "slippage_bps": self.policy.slippage_bps,
                 },
             )
+            return replace(
+                filled_trade,
+                executable_mark=build_executable_mark(
+                    filled_trade,
+                    quote,
+                    received_at=received_at,
+                ),
+            )
         if trade.position is None or trade.outcome is not None:
             return processed_trade
         validation_reason = self.fake_broker.validate_quote(quote, received_at=received_at)
         if validation_reason:
             return append_trade_event(
-                replace(processed_trade, last_reason=validation_reason),
+                preserve_reliable_mark(
+                    processed_trade,
+                    condition=quote_failure_condition(
+                        quote,
+                        validation_reason,
+                    ),
+                    reason=validation_reason,
+                ),
                 timestamp=quote.timestamp,
                 event_type="quote_rejected",
                 requested_action="shadow_quote_rejected",
@@ -2424,9 +2640,18 @@ class ShadowTradingService:
                 reason=validation_reason,
             )
         position = update_position_excursions(trade.position, quote)
+        processed_trade = replace(processed_trade, position=position)
+        processed_trade = replace(
+            processed_trade,
+            executable_mark=build_executable_mark(
+                processed_trade,
+                quote,
+                received_at=received_at,
+            ),
+        )
         stop_executable, target_executable = position_exit_flags(position, quote)
         if not stop_executable and not target_executable:
-            return replace(processed_trade, position=position, last_reason="Position remains open.")
+            return replace(processed_trade, last_reason="Position remains open.")
         return self._close_position(
             processed_trade,
             quote,
@@ -2460,12 +2685,32 @@ class ShadowTradingService:
                 requested_action="shadow_exit_ambiguous",
                 result="unknown",
                 reason=reason,
+                payload=lifecycle_transition_payload(
+                    previous_state=trade.status,
+                    new_state="ambiguous_exit",
+                    quote=quote,
+                    receipt_timestamp=(
+                        trade.executable_mark.receipt_timestamp
+                        if trade.executable_mark is not None
+                        else quote.timestamp
+                    ),
+                    executable_mark=(
+                        trade.executable_mark.executable_mark
+                        if trade.executable_mark is not None
+                        else None
+                    ),
+                    trigger_reason=reason,
+                ),
             )
         exit_reason = (
             exit_reason_override
             or ("stop" if stop_executable else "target_1")
         )
-        exit_price = self.fake_broker.executable_exit_price(quote, reason=exit_reason)
+        exit_price = self.fake_broker.executable_exit_price(
+            quote,
+            reason=exit_reason,
+            direction=position.direction,
+        )
         outcome = build_shadow_outcome(trade, position, quote.timestamp, exit_reason, exit_price)
         completed = replace(
             trade,
@@ -2481,7 +2726,25 @@ class ShadowTradingService:
             requested_action="shadow_position_closed",
             result=exit_reason,
             reason=completed.last_reason,
-            payload={"exit_price": exit_price, "quantity": position.quantity},
+            payload=lifecycle_transition_payload(
+                previous_state=trade.status,
+                new_state="completed",
+                quote=quote,
+                receipt_timestamp=(
+                    trade.executable_mark.receipt_timestamp
+                    if trade.executable_mark is not None
+                    else quote.timestamp
+                ),
+                executable_mark=executable_mark_for_direction(
+                    position.direction,
+                    quote,
+                ),
+                trigger_reason=completed.last_reason,
+                extra={
+                    "exit_price": exit_price,
+                    "quantity": position.quantity,
+                },
+            ),
         )
         return append_trade_event(
             completed,
@@ -2503,17 +2766,32 @@ def build_shadow_outcome(
 ) -> ShadowOutcome:
     plan = trade.trade_plan()
     quantity = position.quantity
-    executable_pnl = round((exit_price - position.average_entry_price) * quantity, 2)
+    direction = position.direction.upper()
+    executable_pnl = round(
+        (
+            exit_price - position.average_entry_price
+            if direction == "LONG"
+            else position.average_entry_price - exit_price
+        )
+        * quantity,
+        2,
+    )
     ideal_entry = float(plan.bullish_entry or position.average_entry_price)
     ideal_exit = float(plan.bullish_stop if exit_reason == "stop" else plan.bullish_target_1 or exit_price)
     gross_pnl = round((ideal_exit - ideal_entry) * quantity, 2)
-    risk_per_share = position.average_entry_price - position.stop_price
+    risk_per_share = abs(position.average_entry_price - position.stop_price)
     initial_risk = risk_per_share * quantity
     r_multiple = round(executable_pnl / initial_risk, 4) if initial_risk > 0 else None
-    mfe_dollars = round((position.highest_price - position.average_entry_price) * quantity, 2)
-    mae_dollars = round((position.lowest_price - position.average_entry_price) * quantity, 2)
-    mfe_percent = round((position.highest_price - position.average_entry_price) / position.average_entry_price * 100, 4)
-    mae_percent = round((position.lowest_price - position.average_entry_price) / position.average_entry_price * 100, 4)
+    if direction == "LONG":
+        favorable_move = position.highest_price - position.average_entry_price
+        adverse_move = position.lowest_price - position.average_entry_price
+    else:
+        favorable_move = position.average_entry_price - position.lowest_price
+        adverse_move = position.average_entry_price - position.highest_price
+    mfe_dollars = round(favorable_move * quantity, 2)
+    mae_dollars = round(adverse_move * quantity, 2)
+    mfe_percent = round(favorable_move / position.average_entry_price * 100, 4)
+    mae_percent = round(adverse_move / position.average_entry_price * 100, 4)
     opened_at = require_datetime(position.opened_at, "position open timestamp")
     exited_at = require_datetime(exit_timestamp, "exit timestamp")
     duration_seconds = max(0, int((exited_at - opened_at).total_seconds()))
@@ -2538,22 +2816,174 @@ def build_shadow_outcome(
 
 
 def update_position_excursions(position: ShadowPosition, quote: ShadowQuote) -> ShadowPosition:
-    high_candidates = [value for value in (quote.high, quote.bid, quote.last) if value is not None]
-    low_candidates = [value for value in (quote.low, quote.bid, quote.last) if value is not None]
+    executable_mark = executable_mark_for_direction(position.direction, quote)
     return replace(
         position,
-        highest_price=max([position.highest_price, *high_candidates]),
-        lowest_price=min([position.lowest_price, *low_candidates]),
+        highest_price=max(position.highest_price, executable_mark),
+        lowest_price=min(position.lowest_price, executable_mark),
     )
 
 
 def position_exit_flags(position: ShadowPosition, quote: ShadowQuote) -> tuple[bool, bool]:
-    assert quote.bid is not None
-    stop_executable = quote.bid <= position.stop_price or (
-        quote.open is not None and quote.open <= position.stop_price
-    )
-    target_executable = quote.bid >= position.target_price
+    executable_mark = executable_mark_for_direction(position.direction, quote)
+    if position.direction.upper() == "LONG":
+        stop_executable = executable_mark <= position.stop_price
+        target_executable = executable_mark >= position.target_price
+        if (
+            target_executable
+            and quote.open is not None
+            and quote.open <= position.stop_price
+        ):
+            stop_executable = True
+    else:
+        stop_executable = executable_mark >= position.stop_price
+        target_executable = executable_mark <= position.target_price
+        if (
+            target_executable
+            and quote.open is not None
+            and quote.open >= position.stop_price
+        ):
+            stop_executable = True
     return stop_executable, target_executable
+
+
+def executable_mark_for_direction(direction: str, quote: ShadowQuote) -> float:
+    normalized = direction.strip().upper()
+    if normalized == "LONG":
+        if quote.bid is None or not math.isfinite(quote.bid) or quote.bid <= 0:
+            raise ValueError("A long executable mark requires a finite positive bid.")
+        return float(quote.bid)
+    if normalized == "SHORT":
+        if quote.ask is None or not math.isfinite(quote.ask) or quote.ask <= 0:
+            raise ValueError("A short executable mark requires a finite positive ask.")
+        return float(quote.ask)
+    raise ValueError(f"Unsupported Shadow position direction: {direction or 'missing'}.")
+
+
+def shadow_trade_direction(trade: ShadowTrade) -> str:
+    if trade.position is not None:
+        return trade.position.direction.upper()
+    if trade.order is not None and trade.order.side.upper() in {"SELL", "SELL_SHORT"}:
+        return "SHORT"
+    return "LONG"
+
+
+def build_executable_mark(
+    trade: ShadowTrade,
+    quote: ShadowQuote,
+    *,
+    received_at: datetime,
+) -> ShadowExecutableMark:
+    direction = shadow_trade_direction(trade)
+    quote_identity = stable_id(
+        "shadow-quote",
+        quote.symbol,
+        quote.timestamp,
+        quote.source,
+        canonical_json(asdict(quote)),
+    )
+    if trade.position is None:
+        return ShadowExecutableMark(
+            direction=direction,
+            condition="LIVE",
+            quote_identity=quote_identity,
+            provider=quote.source,
+            provider_timestamp=quote.timestamp,
+            receipt_timestamp=received_at.isoformat(),
+            bid=quote.bid,
+            ask=quote.ask,
+            reason="Working FakeBroker entry has no position P&L before a fill.",
+        )
+
+    position = trade.position
+    executable_mark = executable_mark_for_direction(direction, quote)
+    if direction == "LONG":
+        pnl = (executable_mark - position.average_entry_price) * position.quantity
+        mfe = (position.highest_price - position.average_entry_price) * position.quantity
+        mae = (position.lowest_price - position.average_entry_price) * position.quantity
+        distance_to_stop = executable_mark - position.stop_price
+        distance_to_target = position.target_price - executable_mark
+    else:
+        pnl = (position.average_entry_price - executable_mark) * position.quantity
+        mfe = (position.average_entry_price - position.lowest_price) * position.quantity
+        mae = (position.average_entry_price - position.highest_price) * position.quantity
+        distance_to_stop = position.stop_price - executable_mark
+        distance_to_target = executable_mark - position.target_price
+    initial_risk = (
+        abs(position.average_entry_price - position.stop_price)
+        * position.quantity
+    )
+    return ShadowExecutableMark(
+        direction=direction,
+        condition="LIVE",
+        quote_identity=quote_identity,
+        provider=quote.source,
+        provider_timestamp=quote.timestamp,
+        receipt_timestamp=received_at.isoformat(),
+        bid=quote.bid,
+        ask=quote.ask,
+        executable_mark=round_price(executable_mark),
+        unrealized_pnl=round(pnl, 2),
+        unrealized_r=(round(pnl / initial_risk, 4) if initial_risk > 0 else None),
+        mfe_dollars=round(mfe, 2),
+        mae_dollars=round(mae, 2),
+        distance_to_stop=round(distance_to_stop, 4),
+        distance_to_next_target=round(distance_to_target, 4),
+        reason="Executable position mark uses bid for LONG and ask for SHORT.",
+    )
+
+
+def preserve_reliable_mark(
+    trade: ShadowTrade,
+    *,
+    condition: str,
+    reason: str,
+) -> ShadowTrade:
+    existing = trade.executable_mark
+    mark = (
+        replace(existing, condition=condition, reason=reason)
+        if existing is not None
+        else ShadowExecutableMark(
+            direction=shadow_trade_direction(trade),
+            condition=condition,
+            reason=reason,
+        )
+    )
+    return replace(trade, executable_mark=mark, last_reason=reason)
+
+
+def quote_failure_condition(quote: ShadowQuote, reason: str) -> str:
+    combined = f"{quote.trading_state} {quote.security_status} {reason}".lower()
+    return "HALTED" if "halt" in combined else "STALE"
+
+
+def lifecycle_transition_payload(
+    *,
+    previous_state: str,
+    new_state: str,
+    quote: ShadowQuote,
+    receipt_timestamp: str,
+    executable_mark: float | None,
+    trigger_reason: str,
+    extra: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    return {
+        "previous_state": previous_state,
+        "new_state": new_state,
+        "quote_identity": stable_id(
+            "shadow-quote",
+            quote.symbol,
+            quote.timestamp,
+            quote.source,
+            canonical_json(asdict(quote)),
+        ),
+        "quote_provider": quote.source,
+        "provider_timestamp": quote.timestamp,
+        "receipt_timestamp": receipt_timestamp,
+        "executable_mark": executable_mark,
+        "trigger_reason": trigger_reason,
+        **dict(extra or {}),
+    }
 
 
 def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
@@ -2897,6 +3327,7 @@ def build_shadow_review_snapshot(
     policy: ShadowExecutionPolicy | None = None,
 ) -> dict[str, Any]:
     items = list(trades)
+    observed_at = now_central()
     active_definition = sample_definition or (
         items[0].sample_metadata
         if items
@@ -2908,6 +3339,7 @@ def build_shadow_review_snapshot(
             trade,
             audit_by_id[trade.shadow_trade_id],
             sample_definition=active_definition,
+            observed_at=observed_at,
         )
         for trade in items
     ]
@@ -3047,7 +3479,9 @@ def shadow_review_trade_to_dict(
     audit: AuditReport,
     *,
     sample_definition: ShadowSampleMetadata,
+    observed_at: datetime | None = None,
 ) -> dict[str, Any]:
+    observed_at = observed_at or now_central()
     plan = trade.trade_plan()
     risk = trade.risk_result_payload()
     plan_frozen = not frozen_plan_findings(trade)
@@ -3119,6 +3553,10 @@ def shadow_review_trade_to_dict(
         slippage_bps=slippage_bps,
     )
     outcome = trade.outcome
+    active_mark = shadow_executable_mark_to_dict(
+        trade,
+        observed_at=observed_at,
+    )
     return {
         "shadowTradeId": trade.shadow_trade_id,
         "symbol": trade.symbol,
@@ -3136,6 +3574,10 @@ def shadow_review_trade_to_dict(
         "riskDecisionId": trade.risk_decision_id,
         "riskDecision": str(risk.get("status") or "Unavailable"),
         "riskReasons": [str(reason) for reason in risk.get("reasons", []) if str(reason).strip()],
+        "direction": active_mark["direction"],
+        "quantity": active_mark["quantity"],
+        "displayState": active_mark["displayState"],
+        "activeMark": active_mark,
         "proposedEntry": plan.bullish_entry,
         "simulatedFill": trade.order.average_fill_price if trade.order is not None else None,
         "spreadPercent": spread_percent,
@@ -3194,6 +3636,198 @@ def shadow_review_trade_to_dict(
             ],
         },
     }
+
+
+def shadow_executable_mark_to_dict(
+    trade: ShadowTrade,
+    *,
+    observed_at: datetime,
+) -> dict[str, Any]:
+    mark = trade.executable_mark
+    position = trade.position
+    outcome = trade.outcome
+    provider_at = (
+        parse_datetime(mark.provider_timestamp)
+        if mark is not None and mark.provider_timestamp
+        else None
+    )
+    quote_age = (
+        max(0.0, (observed_at - provider_at).total_seconds())
+        if provider_at is not None
+        else None
+    )
+    holding_start = (
+        parse_datetime(position.opened_at)
+        if position is not None
+        else None
+    )
+    holding_end = (
+        parse_datetime(outcome.exit_timestamp)
+        if outcome is not None
+        else observed_at
+    )
+    holding_seconds = (
+        max(0, int((holding_end - holding_start).total_seconds()))
+        if holding_start is not None and holding_end is not None
+        else None
+    )
+    display_state = shadow_trade_display_state(
+        trade,
+        quote_age_seconds=quote_age,
+    )
+    plan = trade.trade_plan()
+    quantity = (
+        position.quantity
+        if position is not None
+        else trade.order.quantity
+        if trade.order is not None
+        else 0
+    )
+    return {
+        "schemaVersion": 1,
+        "displayState": display_state,
+        "direction": shadow_trade_direction(trade),
+        "quantity": quantity,
+        "simulatedFill": (
+            position.average_entry_price
+            if position is not None
+            else trade.order.average_fill_price
+            if trade.order is not None
+            else None
+        ),
+        "currentExecutableMark": (
+            outcome.exit_price
+            if outcome is not None
+            else mark.executable_mark
+            if mark is not None
+            else None
+        ),
+        "bid": mark.bid if mark is not None else None,
+        "ask": mark.ask if mark is not None else None,
+        "unrealizedPnl": (
+            mark.unrealized_pnl
+            if mark is not None
+            and trade.status in {"partially_filled", "open"}
+            and display_state not in {"STALE", "HALTED"}
+            else None
+        ),
+        "unrealizedR": (
+            mark.unrealized_r
+            if mark is not None
+            and trade.status in {"partially_filled", "open"}
+            and display_state not in {"STALE", "HALTED"}
+            else None
+        ),
+        "mfeDollars": (
+            outcome.mfe_dollars
+            if outcome is not None
+            else mark.mfe_dollars
+            if mark is not None
+            else None
+        ),
+        "maeDollars": (
+            outcome.mae_dollars
+            if outcome is not None
+            else mark.mae_dollars
+            if mark is not None
+            else None
+        ),
+        "stop": position.stop_price if position is not None else plan.bullish_stop,
+        "targets": [
+            value
+            for value in (plan.bullish_target_1, plan.bullish_target_2)
+            if value is not None
+        ],
+        "distanceToStop": (
+            mark.distance_to_stop
+            if mark is not None and outcome is None
+            else None
+        ),
+        "distanceToNextTarget": (
+            mark.distance_to_next_target
+            if mark is not None and outcome is None
+            else None
+        ),
+        "quoteProvider": mark.provider if mark is not None else "",
+        "providerQuoteTimestamp": (
+            mark.provider_timestamp if mark is not None else ""
+        ),
+        "localReceiptTimestamp": (
+            mark.receipt_timestamp if mark is not None else ""
+        ),
+        "quoteAgeSeconds": round(quote_age, 3) if quote_age is not None else None,
+        "holdingDurationSeconds": holding_seconds,
+        "lifecycleState": trade.status,
+        "condition": mark.condition if mark is not None else "UNAVAILABLE",
+        "reason": mark.reason if mark is not None else trade.last_reason,
+        "finalExecutablePnl": (
+            outcome.executable_pnl if outcome is not None else None
+        ),
+        "finalR": outcome.r_multiple if outcome is not None else None,
+        "exitReason": outcome.exit_reason if outcome is not None else "",
+    }
+
+
+def shadow_trade_display_state(
+    trade: ShadowTrade,
+    *,
+    quote_age_seconds: float | None,
+) -> str:
+    if trade.status == "completed" and trade.outcome is not None:
+        return {
+            "WIN": "WINNER",
+            "LOSS": "LOSER",
+            "FLAT": "FLAT_EXIT",
+        }.get(trade.outcome.classification, "INVALIDATED")
+    if trade.status == "cancelled":
+        if trade.order is not None and trade.order.filled_quantity == 0:
+            return "UNFILLED"
+        return "CANCELLED"
+    if trade.status in {"blocked", "entry_rejected"}:
+        return "INVALIDATED"
+    if trade.status == "ambiguous_exit":
+        return "EXIT_PENDING"
+    mark = trade.executable_mark
+    if mark is not None and mark.condition == "HALTED":
+        return "HALTED"
+    active_quote_limit = active_quote_max_age_seconds_for_trade(trade)
+    if (
+        mark is not None
+        and (
+            mark.condition in {"STALE", "UNAVAILABLE"}
+            or quote_age_seconds is None
+            or quote_age_seconds > active_quote_limit
+        )
+    ):
+        return "STALE"
+    if trade.status == "pending_entry":
+        return "WORKING"
+    if trade.status in {"partially_filled", "open"}:
+        pnl = mark.unrealized_pnl if mark is not None else None
+        if pnl is None:
+            return "STALE"
+        return "AHEAD" if pnl > 0 else "BEHIND" if pnl < 0 else "FLAT"
+    return "INVALIDATED"
+
+
+def active_quote_max_age_seconds_for_trade(trade: ShadowTrade) -> int:
+    try:
+        configuration = json.loads(
+            trade.sample_metadata.strategy_configuration_json
+        )
+        execution_policy = configuration.get("execution_policy", {})
+        value = execution_policy.get(
+            "active_position_quote_max_age_seconds"
+        )
+        if (
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and value > 0
+        ):
+            return value
+    except (AttributeError, json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return ShadowMarketValidityPolicy().active_position_quote_max_age_seconds
 
 
 def shadow_execution_quality_explanation(
@@ -3464,6 +4098,7 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
     position_payload = payload.get("position")
     outcome_payload = payload.get("outcome")
     ticket_payload = payload.get("ticket")
+    mark_payload = payload.get("executable_mark")
     sample_payload = payload.get("sample_metadata")
     if sample_payload is None:
         sample_metadata = ShadowSampleMetadata()
@@ -3528,6 +4163,11 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
         position=ShadowPosition(**position_payload) if isinstance(position_payload, dict) else None,
         outcome=ShadowOutcome(**outcome_payload) if isinstance(outcome_payload, dict) else None,
         ticket=ShadowOrderTicket(**ticket_payload) if isinstance(ticket_payload, dict) else None,
+        executable_mark=(
+            ShadowExecutableMark(**mark_payload)
+            if isinstance(mark_payload, dict)
+            else None
+        ),
         ledger_events=tuple(
             ExecutionLedgerEvent.from_dict(item)
             for item in payload.get("ledger_events", [])
@@ -3638,6 +4278,8 @@ def validate_shadow_trade_lifecycle(trade: ShadowTrade) -> None:
         _validate_persisted_shadow_position(trade)
     if trade.outcome is not None:
         _validate_persisted_shadow_outcome(trade)
+    if trade.executable_mark is not None:
+        _validate_persisted_executable_mark(trade)
 
     observation_ids = trade.processed_observation_ids
     if any(not observation_id for observation_id in observation_ids):
@@ -3764,6 +4406,11 @@ def _validate_persisted_shadow_position(trade: ShadowTrade) -> None:
             trade,
             "position quantity must be positive.",
         )
+    if position.direction not in {"LONG", "SHORT"}:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "position direction must be LONG or SHORT.",
+        )
     if trade.order is not None and position.quantity != trade.order.filled_quantity:
         _raise_shadow_lifecycle_error(
             trade,
@@ -3821,6 +4468,103 @@ def _validate_persisted_shadow_outcome(trade: ShadowTrade) -> None:
         _raise_shadow_lifecycle_error(
             trade,
             "persisted outcome price or duration is invalid.",
+        )
+
+
+def _validate_persisted_executable_mark(trade: ShadowTrade) -> None:
+    assert trade.executable_mark is not None
+    mark = trade.executable_mark
+    if mark.schema_version != 1:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "executable mark schema is unsupported.",
+        )
+    if mark.direction not in {"LONG", "SHORT"}:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "executable mark direction must be LONG or SHORT.",
+        )
+    if mark.direction != shadow_trade_direction(trade):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "executable mark direction does not match its Shadow Trade.",
+        )
+    if mark.condition not in {"LIVE", "STALE", "HALTED", "UNAVAILABLE"}:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "executable mark condition is unsupported.",
+        )
+    optional_numbers = (
+        mark.bid,
+        mark.ask,
+        mark.executable_mark,
+        mark.unrealized_pnl,
+        mark.unrealized_r,
+        mark.mfe_dollars,
+        mark.mae_dollars,
+        mark.distance_to_stop,
+        mark.distance_to_next_target,
+    )
+    if any(value is not None and not math.isfinite(value) for value in optional_numbers):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "executable mark contains a non-finite value.",
+        )
+    has_quote_evidence = bool(mark.quote_identity)
+    if has_quote_evidence:
+        provider_timestamp = parse_datetime(mark.provider_timestamp)
+        receipt_timestamp = parse_datetime(mark.receipt_timestamp)
+        if (
+            not mark.provider
+            or provider_timestamp is None
+            or provider_timestamp.utcoffset() is None
+            or receipt_timestamp is None
+            or receipt_timestamp.utcoffset() is None
+            or mark.bid is None
+            or mark.ask is None
+            or mark.bid <= 0
+            or mark.ask <= 0
+            or mark.ask < mark.bid
+        ):
+            _raise_shadow_lifecycle_error(
+                trade,
+                "persisted quote evidence requires offset-aware provenance and "
+                "finite positive bid/ask values.",
+            )
+    if mark.executable_mark is not None and not has_quote_evidence:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "a reliable executable mark requires quote identity and timestamps.",
+        )
+    if trade.position is None:
+        if any(
+            value is not None
+            for value in (
+                mark.executable_mark,
+                mark.unrealized_pnl,
+                mark.unrealized_r,
+                mark.mfe_dollars,
+                mark.mae_dollars,
+                mark.distance_to_stop,
+                mark.distance_to_next_target,
+            )
+        ):
+            _raise_shadow_lifecycle_error(
+                trade,
+                "a trade without a position cannot retain position mark metrics.",
+            )
+        return
+    if mark.executable_mark is None:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "a persisted position requires its last reliable executable mark.",
+        )
+    expected_mark = mark.bid if mark.direction == "LONG" else mark.ask
+    assert expected_mark is not None
+    if mark.executable_mark != round_price(expected_mark):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "executable mark does not match the persisted bid/ask side.",
         )
 
 
@@ -3890,6 +4634,13 @@ def append_trade_event(
         result=result,
         reason=reason,
         payload=payload,
+    )
+    event = replace(
+        event,
+        payload={
+            **event.payload,
+            "ledger_event_id": event.event_id,
+        },
     )
     return replace(trade, ledger_events=(*trade.ledger_events, event), last_reason=reason)
 

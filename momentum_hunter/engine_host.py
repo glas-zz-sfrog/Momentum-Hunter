@@ -17,6 +17,7 @@ from typing import Any, Callable
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.shadow_market_validity import (
     SHADOW_SELECTOR_ARM_SCHEMA_VERSION,
+    ShadowMarketValidityPolicy,
     runtime_build_hash,
 )
 
@@ -24,6 +25,9 @@ from momentum_hunter.shadow_market_validity import (
 PROTOCOL_VERSION = "1.0"
 STATE_SCHEMA_VERSION = 1
 DEFAULT_COLLECTION_INTERVAL_SECONDS = 300
+DEFAULT_ACTIVE_MARK_INTERVAL_SECONDS = (
+    ShadowMarketValidityPolicy().active_position_poll_interval_seconds
+)
 HOST_LOCK_FILENAME = "python-engine-host.lock"
 ENDPOINT_FILENAME = "python-engine-endpoint.json"
 MAX_REQUEST_BYTES = 64 * 1024
@@ -259,6 +263,8 @@ class EngineHostRuntime:
         shadow_workspace_loader: Callable[[], dict[str, Any]] | None = None,
         shadow_starter: Callable[[str, str], dict[str, Any]] | None = None,
         shadow_observation_runner: Callable[[], dict[str, Any]] | None = None,
+        shadow_active_mark_runner: Callable[[], dict[str, Any]] | None = None,
+        active_mark_interval_seconds: int = DEFAULT_ACTIVE_MARK_INTERVAL_SECONDS,
         shadow_auto_selector: Callable[[], dict[str, Any]] | None = None,
         shadow_cycle_attempt_recorder: Callable[[], dict[str, Any]] | None = None,
         shadow_cycle_outcome_recorder: (
@@ -283,6 +289,10 @@ class EngineHostRuntime:
             else int(selector_arm_schema_version)
         )
         self.collection_interval_seconds = max(1, int(collection_interval_seconds))
+        self.active_mark_interval_seconds = max(
+            DEFAULT_ACTIVE_MARK_INTERVAL_SECONDS,
+            int(active_mark_interval_seconds),
+        )
         self._cycle_runner = cycle_runner or self._run_canonical_monitor_cycle
         self._external_monitor_running = external_monitor_running or self._is_legacy_monitor_runner_active
         self._workspace_snapshot_loader = workspace_snapshot_loader or self._load_read_only_workspace_snapshot
@@ -308,6 +318,15 @@ class EngineHostRuntime:
         self._shadow_workspace_loader = shadow_workspace_loader or self._shadow_workspace_service.snapshot
         self._shadow_starter = shadow_starter or self._shadow_workspace_service.start
         self._shadow_observation_runner = shadow_observation_runner or self._shadow_workspace_service.advance_observations
+        self._shadow_active_mark_runner = shadow_active_mark_runner or (
+            self._shadow_workspace_service.advance_active_marks
+            if self._shadow_workspace_service is not None
+            else lambda: {
+                "polled": False,
+                "providerRequestCount": 0,
+                "reason": "Active Shadow marking is not configured.",
+            }
+        )
         self._shadow_auto_selector = shadow_auto_selector or (
             self._shadow_workspace_service.select_automatic
             if self._shadow_workspace_service is not None
@@ -397,6 +416,7 @@ class EngineHostRuntime:
         self._stop_requested = threading.Event()
         self._schedule_changed = threading.Event()
         self._collection_thread: threading.Thread | None = None
+        self._active_mark_thread: threading.Thread | None = None
         self._command_receipts: dict[str, EngineHostCommandResult] = {}
         self._command_receipt_requests: dict[str, tuple[str, str]] = {}
         self._commands_in_progress: set[str] = set()
@@ -407,6 +427,13 @@ class EngineHostRuntime:
         self._monitored_symbol_count = 0
         self._last_completed_cycle_at_utc = ""
         self._next_scheduled_cycle_at_utc = ""
+        self._active_mark_state = "Idle"
+        self._active_mark_detail = (
+            "No official working FakeBroker order or active position requires a quote."
+        )
+        self._active_mark_cycle_count = 0
+        self._active_mark_provider_request_count = 0
+        self._active_mark_last_completed_at_utc = ""
         self._detail = "Python Engine Host is ready; collection is scheduled locally."
         self._state = "Healthy"
 
@@ -421,6 +448,12 @@ class EngineHostRuntime:
                 daemon=True,
             )
             self._collection_thread.start()
+            self._active_mark_thread = threading.Thread(
+                target=self._active_mark_loop,
+                name="momentum-hunter-active-shadow-marking",
+                daemon=True,
+            )
+            self._active_mark_thread.start()
 
     def request_shutdown(self) -> None:
         with self._state_lock:
@@ -435,6 +468,8 @@ class EngineHostRuntime:
         self.request_shutdown()
         if self._collection_thread and self._collection_thread.is_alive():
             self._collection_thread.join(timeout=5)
+        if self._active_mark_thread and self._active_mark_thread.is_alive():
+            self._active_mark_thread.join(timeout=5)
 
     def snapshot(self) -> dict[str, Any]:
         with self._state_lock:
@@ -463,6 +498,20 @@ class EngineHostRuntime:
                     "lastCompletedCycleAtUtc": self._last_completed_cycle_at_utc or None,
                     "nextScheduledCycleAtUtc": self._next_scheduled_cycle_at_utc or None,
                     "detail": self._detail,
+                },
+                "activePositionMarking": {
+                    "state": self._active_mark_state,
+                    "cadenceSeconds": self.active_mark_interval_seconds,
+                    "cycleCount": self._active_mark_cycle_count,
+                    "providerRequestCount": (
+                        self._active_mark_provider_request_count
+                    ),
+                    "lastCompletedAtUtc": (
+                        self._active_mark_last_completed_at_utc or None
+                    ),
+                    "detail": self._active_mark_detail,
+                    "transport": "read-only Schwab quote transport",
+                    "orderTransmission": "UNAVAILABLE",
                 },
                 "capabilities": sorted(SUPPORTED_COMMANDS),
             }
@@ -748,6 +797,45 @@ class EngineHostRuntime:
                 if self._paused or self._stopping:
                     continue
             self._run_collection_cycle()
+
+    def _active_mark_loop(self) -> None:
+        while not self._stop_requested.wait(
+            self.active_mark_interval_seconds
+        ):
+            try:
+                result = self._shadow_active_mark_runner()
+                polled = result.get("polled") is True
+                provider_requests = int(
+                    result.get("providerRequestCount") or 0
+                )
+                with self._state_lock:
+                    self._active_mark_state = (
+                        "Polling" if polled else "Idle"
+                    )
+                    self._active_mark_detail = str(
+                        result.get("reason")
+                        or (
+                            "Active official Shadow position mark refreshed."
+                            if polled
+                            else "No official working FakeBroker order or active "
+                            "position requires a quote."
+                        )
+                    )
+                    self._active_mark_cycle_count += 1
+                    self._active_mark_provider_request_count += max(
+                        0,
+                        provider_requests,
+                    )
+                    self._active_mark_last_completed_at_utc = utc_now()
+            except Exception as exc:
+                with self._state_lock:
+                    self._active_mark_state = "Blocked"
+                    self._active_mark_detail = (
+                        "Active Shadow marking failed closed: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                    self._active_mark_cycle_count += 1
+                    self._active_mark_last_completed_at_utc = utc_now()
 
     def _run_collection_cycle(self) -> EngineHostCommandResult:
         with self._state_lock:
