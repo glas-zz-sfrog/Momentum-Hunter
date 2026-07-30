@@ -4,25 +4,25 @@ Date reconciled: 2026-07-30
 
 ## ARGUS-SHADOW-023 Service Integration
 
-`codex/ARGUS-SHADOW-023-service-integration` is `ACTIVE`. It is based on
+`codex/ARGUS-SHADOW-023-service-integration` is `MERGED_TO_LOCAL_MASTER` and
+backed up through `origin/master` at `cc2b1e2`. It is based on
 ARGUS-SERVICE-001 commit `0ce70c2` and contains the exact clock/selector/host
 response patch proven on `codex/ARGUS-SHADOW-023-clock-normalized-quote-validation`
-at `919b64d`. The source repair branch is clean and unpushed. The integration
-branch passes compileall, all 976 Python tests, all 228 .NET tests, and a
-zero-warning solution build. It is prepared for clean integration but is not
-yet merged or pushed. No production Shadow state, account state, or broker
-capability changed.
+at `919b64d`. The source repair branch is clean and unpushed. The integrated
+stack passes compileall, all 976 Python tests, all 228 .NET tests, and a
+zero-warning solution build. No production Shadow state, account state, or
+broker capability changed.
 
 ## ARGUS-SERVICE-001 Unattended Automation Host
 
 `codex/ARGUS-SERVICE-001-unattended-automation-host` is
-`IMPLEMENTED_PENDING_INTEGRATION`. It contains
+`MERGED_TO_LOCAL_MASTER` through integration commit `cc2b1e2`. It contains
 the boot-starting service supervisor, strict manifests, secure installer and
 status tooling, account-bound nonmarket canary, guarded one-time updater, and
 downstream-only headless Codex reviewer. Automated implementation proof passes;
 the Windows service is not installed because the UAC/password interaction did
-not complete. The branch is not merged or pushed. No Shadow job, selector arm,
-trade, broker order, or transmission capability was created.
+not complete. The commit is backed up through `origin/master`. No Shadow job,
+selector arm, trade, broker order, or transmission capability was created.
 
 ## ARGUS-SHADOW-017 Live Position Marking
 

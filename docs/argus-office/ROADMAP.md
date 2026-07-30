@@ -28,9 +28,9 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-SHADOW-023 is `IMPLEMENTED_PENDING_MERGE` on
-`codex/ARGUS-SHADOW-023-service-integration`, based on the proven
-ARGUS-SERVICE-001 commit `0ce70c2`. It repairs the clock chronology defects
+ARGUS-SHADOW-023 is `COMPLETE_AND_BACKED_UP` on canonical `master` through
+integration commit `cc2b1e2`, with ARGUS-SERVICE-001 predecessor `0ce70c2`.
+It repairs the clock chronology defects
 found during a protected late-session rehearsal and separates the local
 Engine Host request and response limits. Schwab quote proof now evaluates
 provider timestamps against independently validated bounds derived from the
@@ -78,8 +78,8 @@ service remains stopped; completing and proving that one-time machine setup is
 still required before another prospective opening. Tomorrow's runtime must
 not require UAC, an interactive PowerShell prompt, Codex, or a signed-in user.
 
-ARGUS-SERVICE-001 is `ACTIVE` on
-`codex/ARGUS-SERVICE-001-unattended-automation-host`. It replaces the
+ARGUS-SERVICE-001 code is `COMPLETE_AND_BACKED_UP` through `0ce70c2` and
+`cc2b1e2`; its Windows installation is still pending. It replaces the
 interactive Task Scheduler launch dependency with a boot-starting Windows
 Service architecture. The implemented supervisor persists restart-safe job
 receipts, records a missed market window instead of running late, starts or
@@ -234,13 +234,13 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Synchronized `master`/`origin/master` contains accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, this operational closeout, the WPF workstation through R029, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active branch | `codex/ARGUS-SHADOW-023-service-integration`; it contains proven ARGUS-SERVICE-001 predecessor `0ce70c2` plus the clock/selector/host-response repair. Combined compile, Python, .NET, and protected-path verification passes; commit and clean fast-forward integration remain pending. |
+| Canonical baseline | Synchronized `master`/`origin/master` through `cc2b1e2` contains ARGUS-SERVICE-001, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R029, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
+| Active implementation | No runtime feature branch is pending merge. ARGUS-SERVICE-001 and ARGUS-SHADOW-023 are integrated and backed up; privileged Windows installation and physical canaries remain operational work, not code work. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | Windows has not installed `MomentumHunterAutomation`, and Windows Time is configured but not running. The service-account canary, machine-time proof, and later reboot-without-login proof must pass before another prospective opening. |
 | Scheduled operational proof | `FAILED_TASK_DID_NOT_RUN`; the task retained the correct `60d7c9a` action and static 11 / 12 bundle, but produced no July 30 runner attempt or runtime evidence. It has no next run and must not be started late. |
-| Immediate operational work | Commit and cleanly integrate ARGUS-SHADOW-023, then complete the local Windows service and Windows Time setup, verify nonmarket canaries and Codex readiness, and run a separate reboot-without-login canary. Preserve failed-date evidence and do not prepare a new official opening until those gates pass. |
+| Immediate operational work | Complete the local Windows service and Windows Time setup, verify nonmarket canaries and Codex readiness, and run a separate reboot-without-login canary. Preserve failed-date evidence and do not prepare a new official opening until those gates pass. |
 | Broker state | Schwab OAuth remains authorized and the immutable `2573` `INDIVIDUAL_CASH` binding remains read-only; the access token was expired at the 08:50 inspection. No positions were requested and no preview or transmitting method exists. The previously surfaced, unrotated Client Secret is an explicit blocker for future transmitting code. |
 | Steven action | `MANUAL_PASS` on all seven ARGUS-SHADOW-017 WPF checks. No further visual action is pending; any brokerage anomaly or real-order proposal remains a separate interruption gate. |
 | Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |

@@ -151,6 +151,7 @@
 - Separated Engine Host request and response limits so a valid larger authenticated loopback result can complete its terminal handoff while oversized responses remain bounded and rejected.
 - Completed a late-session isolated rehearsal with 12/12 proof, one IREN FakeBroker decision/trade, one idempotent terminal handoff, no transmission capability, no production mutation, and no official-sample count.
 - Passed combined integration verification with ARGUS-SERVICE-001: Python compileall, all 976 Python tests, all 228 .NET tests, and a zero-warning Release build.
+- Fast-forwarded ARGUS-SERVICE-001 and ARGUS-SHADOW-023 into canonical `master` through `cc2b1e2` and backed the implementation up to `origin/master` without a merge commit.
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

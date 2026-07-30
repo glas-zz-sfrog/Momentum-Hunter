@@ -139,3 +139,4 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Separated the 64 KiB Engine Host request cap from a bounded 1 MiB response cap and added direct oversized-line rejection tests.
 - Verification on the repair branch: compileall pass, 138 affected tests pass, all 953 Python tests pass, protected-path and secret scans pass, and sanitized rehearsal evidence is preserved outside the repository.
 - Combined integration verification with ARGUS-SERVICE-001: compileall pass, all 976 Python tests pass, all 228 .NET tests pass, and the Release solution builds with zero warnings or errors.
+- Fast-forwarded service commit `0ce70c2` and integration commit `cc2b1e2` into canonical `master` and completed a non-force backup push; no merge commit, production Shadow mutation, broker capability, or official-sample count was created.
