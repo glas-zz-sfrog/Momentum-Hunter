@@ -4,23 +4,22 @@ Date reconciled: 2026-07-29
 
 ## ARGUS-SHADOW-017 Live Position Marking
 
-`codex/ARGUS-SHADOW-017-live-position-marking` is the active visual branch.
-It begins from synchronized `master`/`origin/master` `496e227`; branch HEAD
-`797fb59` preserves restart-integrity hardening, and the live-marking changes
-remain uncommitted after Steven passed all seven WPF checks on 2026-07-29.
-Nothing from this branch is pushed or merged. The existing 2026-07-30 Shadow
-task is disabled. Prior v1
-evidence and the write-once v2 activation remain preserved; v3 has no activation,
-arm, policy, cycle, state, handoff, or trade.
+`codex/ARGUS-SHADOW-017-live-position-marking` was accepted after Steven passed
+all seven WPF checks on 2026-07-29. Git Steward committed the implementation as
+`94f5074`, fast-forwarded it into local `master`, and non-force pushed canonical
+`master` with exact local/remote equality. The existing 2026-07-30 Shadow task
+remains disabled. Prior v1 evidence and the write-once v2 activation remain
+preserved; v3 has no activation, arm, policy, cycle, state, handoff, or trade.
 
 ## Current Truth
 
-Local and remote `master` are synchronized at `496e227`. The canonical product
-baseline contains the complete prior Shadow stack through opening-runtime repair
-`2213299` and its v2 scheduling closeout, alongside the Python
+Local and remote `master` are synchronized through accepted live-marking
+implementation `94f5074`. The canonical product baseline contains the complete
+prior Shadow stack through opening-runtime repair `2213299` and its v2 scheduling
+closeout, alongside the Python
 automation/simulation foundation, R004-R029 workstation work,
 ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003. Live position marking is
-not canonical yet; it remains on the active visual branch recorded above.
+canonical; final-head v3/task/proof rebinding remains operationally pending.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`, and
@@ -108,7 +107,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD | Pushed? | Merged to local `master`? | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `codex/ARGUS-SHADOW-017-live-position-marking` | `797fb59` plus accepted uncommitted implementation/proof | No | No | `IMPLEMENTED_PENDING_MERGE / MANUAL_PASS` | Adds separate five-second active FakeBroker marking, ten-second staleness, persisted bid/ask marks, restart validation, versioned Engine Host snapshot, and WPF Active Test Trade review under prospective v3. | Git Steward may commit, fast-forward, push, activate v3, and rebind the disabled task/proof only after every final gate passes. |
+| `codex/ARGUS-SHADOW-017-live-position-marking` | `94f5074` | No; canonical `master` pushed | Yes | `MERGED_TO_LOCAL_MASTER / MANUAL_PASS` | Adds separate five-second active FakeBroker marking, ten-second staleness, persisted bid/ask marks, restart validation, versioned Engine Host snapshot, and WPF Active Test Trade review under prospective v3. | Preserve as accepted source history; regenerate v3/task/proof identities only from synchronized final canonical head. |
 | `codex/ARGUS-SHADOW-013-opening-ceremony-hardening` | `58552da` | Via `master` | Yes | `MERGED_TO_LOCAL_MASTER` | Hardens semantic handoff completion, clock validity, frozen configuration, retry classification, proof-only opening rehearsal, outcome separation, and read-only heartbeat behavior. | Preserve branch; prepare the final-HEAD disabled proof-only task and real-session audit. |
 | `codex/ARGUS-SHADOW-012-scheduler-retry` | `c9c31f6` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Adds bounded one-minute Windows restarts to the idempotent Shadow opening task without changing other capture schedules. | Preserve as source history; use the regenerated SHADOW-012 final-HEAD bundle and inspect the first live run. |
 | `codex/ARGUS-SHADOW-011-proof-timestamp-ordering` | `3f8acb8` plus governance closeout | Yes | Yes | `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` | Evaluates proof freshness after guarded OAuth/provider completion instead of against the pre-request clock, while preserving future-data rejection. | Preserve as source history; use only the regenerated SHADOW-011 final-HEAD bundle for the opening task. |
