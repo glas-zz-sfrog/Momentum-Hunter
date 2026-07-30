@@ -28,15 +28,42 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-SHADOW-017 live position marking is `READY_FOR_2026-07-30_ARMED_RUN` on
-canonical `master`/`origin/master` through accepted implementation `94f5074`,
-proof-acceptance repair `40a26a0`, and the operational closeout containing this
-statement. The implementation adds a separate
+The 2026-07-30 ARGUS-SHADOW-017 opening is `FAILED_TASK_DID_NOT_RUN`. The
+one-time 8:35 AM Central task remained enabled with the correct final release
+action, but Task Scheduler still reports its last run as 2026-07-29 at
+08:35:01, result `1`, and reports no next run. No 2026-07-30 opening log,
+runner attempt, exit code, capture, report, quote proof, handoff, decision
+cycle, or trade exists. The canonical `60d7c9a` bundle remains static-ready at
+11 / 12 and was not finalized. This is a missed task launch, not a failed
+selector cycle and not an official sample observation.
+
+The frozen task definition remains byte-valid at SHA-256
+`E07D069123C8EBEAEC90D0C34619B63FB8040725F2A8BB6F4C6838EEF9230AC1`.
+Its action contains exactly one `-ArmShadowSelector`, references only
+`official-shadow-v3-selector-proof-bundle-60d7c9a`, has no proof-only switch,
+and retains the intended one-time, no-late-start, zero-scheduler-retry,
+limited-interactive shape. Task Scheduler Operational history was disabled, so
+Windows retained no event-level explanation for the missed trigger. Windows
+recorded an input-driven system-session transition at 08:45:22 and successful
+Winlogon authentication at 08:46:23, after the trigger; these facts are
+consistent with the interactive session being unavailable around 08:35 but do
+not prove a single root cause. Repeated ExpressVPN service failures also
+occurred around the opening window, but no causal relationship is established.
+
+Current classification is `FAILED_TASK_DID_NOT_RUN / PRESERVE_EVIDENCE /
+DO_NOT_RETRY_AFTER_FACT`. The next bounded work is scheduler-observability and
+missed-trigger hardening with nonmarket canaries before scheduling another
+market opening. A new market run must use a new prospective date and fresh
+proof identity; the July 30 opening must not be reconstructed.
+
+The accepted SHADOW-017 implementation remains complete on canonical
+`master`/`origin/master` through implementation `94f5074`, proof-acceptance
+repair `40a26a0`, and operational release `60d7c9a`. It adds a separate
 five-second active-order/position quote loop, a ten-second maximum active quote
 age, durable executable marks, restart validation, a versioned read-only Engine
-Host/WPF snapshot, and the Active Test Trade review. Python remains authoritative.
-WPF refreshes cached state once per second and never fetches a quote or calculates
-official P&L, R, MFE, MAE, stops, targets, or outcomes.
+Host/WPF snapshot, and the Active Test Trade review. Python remains
+authoritative. WPF refreshes cached state once per second and never fetches a
+quote or calculates official P&L, R, MFE, MAE, stops, targets, or outcomes.
 
 This is a material fill-model change. The failed `official-shadow-v1` ceremony
 and activated-empty `official-shadow-v2` sample remain preserved at `0 / 30`
@@ -50,20 +77,23 @@ and cannot appear as a live winner.
 
 Steven accepted all seven WPF proof checks on 2026-07-29, and Git Steward
 committed, fast-forwarded, and backed up the implementation and proof repair
-without a merge commit. After this closeout is integrated and synchronized, one
-enabled, one-time 2026-07-30 8:35 AM Central task is generated from that exact
-final canonical commit and its fresh 11-artifact static bundle. The selector
-remains unarmed until the task obtains and verifies the twelfth live
-candidate+SPY/IWM quote/clock artifact. V3 has only its activation; no policy,
-arm, cycle, state, handoff, trade, or real-order capability exists before the
-run.
+without a merge commit. The missed July 30 task did not alter that visual
+acceptance or implementation result. V3 still has only its activation; no
+policy, arm, cycle, state, handoff, trade, or real-order capability exists.
+The selector is `NOT_ARMED`, the official sample remains `0 / 30`, and no
+retrospective evidence may be fabricated.
 
 Automated proof currently includes Python compileall, 183 focused
 Shadow/Engine Host/Schwab read-only tests, the 941-test Python discovery, all
 224 .NET tests with warnings treated as errors, and a real 1180x820 WPF render
 at `docs/argus-office/reports/releases/ARGUS-SHADOW-017-synthetic-live-marking-ui-proof.png`.
 The screenshot is synthetic, explicitly non-production, and changes no official
-state. Current classification is `READY_FOR_2026-07-30_ARMED_RUN`.
+state. The read-only 08:50 audit found a healthy loopback Engine Host with the
+expected runtime build and schema, no active FakeBroker order or position, and
+order transmission `UNAVAILABLE`. The immutable Schwab binding remained ending
+`2573`, type `INDIVIDUAL_CASH`, with the hash withheld, no positions requested,
+and no order-transmission capability. Its access token was expired at inspection;
+that is not attributed as the launch failure because the runner never started.
 
 Final-head self-review rejected the first `d87b53b` static bundle before use:
 its visual-acceptance collector still referenced the historical SHADOW-004 JPEG
@@ -110,10 +140,10 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Active branch | No implementation branch remains pending after this operational closeout is fast-forwarded. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | No implementation or visual gate remains. Selector arming is intentionally deferred to the task's fresh live twelfth proof; any failed quote, clock, account, Git, host, or evidence invariant fails closed. |
-| Scheduled operational proof | `READY_FOR_2026-07-30_ARMED_RUN`; after this closeout is synchronized, one enabled one-time 8:35 AM Central task is bound to its exact final-head static bundle, and one finite 8:50 read-only observer is bound to the same identity. |
-| Immediate operational work | Preserve the final-head code, task, activation, and static bundle unchanged; allow the scheduled ceremony to attempt the twelfth proof and automatic FakeBroker-only selection, then inspect its evidence at 8:50. |
-| Broker state | Schwab OAuth is active after exact sole-account revalidation; the immutable `2573` `INDIVIDUAL_CASH` binding remains read-only. No preview or transmitting method exists. The previously surfaced, unrotated Client Secret is an explicit blocker for future transmitting code. |
+| Blocked by | The July 30 one-time task did not launch. Scheduler observability and missed-trigger reliability must be proven with nonmarket canaries before another prospective opening is scheduled. Selector, quote, clock, account, Git, host, and evidence gates remain fail-closed. |
+| Scheduled operational proof | `FAILED_TASK_DID_NOT_RUN`; the task retained the correct `60d7c9a` action and static 11 / 12 bundle, but produced no July 30 runner attempt or runtime evidence. It has no next run and must not be started late. |
+| Immediate operational work | Preserve the failed-date evidence unchanged. Add event-level scheduler observability and exercise wake/session/missed-trigger conditions with nonmarket canaries before preparing a new prospective task, bundle, and observer identity. |
+| Broker state | Schwab OAuth remains authorized and the immutable `2573` `INDIVIDUAL_CASH` binding remains read-only; the access token was expired at the 08:50 inspection. No positions were requested and no preview or transmitting method exists. The previously surfaced, unrotated Client Secret is an explicit blocker for future transmitting code. |
 | Steven action | `MANUAL_PASS` on all seven ARGUS-SHADOW-017 WPF checks. No further visual action is pending; any brokerage anomaly or real-order proposal remains a separate interruption gate. |
 | Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
 
@@ -238,7 +268,8 @@ Status: `COMPLETE` on local and remote `master` through `a17eff8`
 Status: `ACTIVE`; the prior SHADOW-017 opening-runtime repair and Schwab
 read-only foundations are `COMPLETE` on synchronized `master`; the
 SHADOW-017 live-position-marking amendment is
-`READY_FOR_2026-07-30_ARMED_RUN`;
+implemented and visually accepted, while its 2026-07-30 prospective opening is
+`FAILED_TASK_DID_NOT_RUN`;
 v1 and activated-empty v2 are preserved at `0 / 30`, prospective v3 is
 activated-empty and unarmed at `0 / 30`, A017 is
 `BLOCKED_VENDOR_CAPABILITY`, and every real-order gate remains closed.
