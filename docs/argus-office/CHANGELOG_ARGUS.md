@@ -152,6 +152,7 @@
 - Completed a late-session isolated rehearsal with 12/12 proof, one IREN FakeBroker decision/trade, one idempotent terminal handoff, no transmission capability, no production mutation, and no official-sample count.
 - Passed combined integration verification with ARGUS-SERVICE-001: Python compileall, all 976 Python tests, all 228 .NET tests, and a zero-warning Release build.
 - Fast-forwarded ARGUS-SERVICE-001 and ARGUS-SHADOW-023 into canonical `master` through `cc2b1e2` and backed the implementation up to `origin/master` without a merge commit.
+- Configured and started Windows Time with NIST/Windows peers; the immediate external offset improved to roughly 3-6 ms, while a settled synchronization-status recheck remains pending. The password-based automation-service install failed closed before service or wake-task creation, so the next protected decision is password recovery with DPAPI continuity proof versus a password-free service identity and service-scoped credential envelope.
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.
