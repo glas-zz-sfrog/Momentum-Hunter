@@ -2,6 +2,22 @@
 
 Date reconciled: 2026-07-31
 
+## ARGUS-SERVICE Reboot Reliability Closeout
+
+`codex/streamline-reboot-canary` and
+`codex/reliable-forced-reboot-canary` are `MERGED_TO_LOCAL_MASTER` and backed
+up through canonical `origin/master` at `40729c9` and `e24feed`. They add one
+approval-first exact-time launcher, independent preservation checks for all 30
+opening jobs, PENDING receipt acknowledgement, a three-minute remaining-time
+floor, and forced restart so an open application cannot silently cancel the
+test. PowerShell parsing, Python compileall, 52 bounded automation tests, live
+exact-time PlanOnly nonmutation, and rejection-path proof pass. The final
+16:39 Central canary is `PASS` with a new kernel boot, new service instance,
+Session 0, zero interactive sessions, Healthy Engine Host, exact Codex output,
+unchanged sole account binding, no position/order request, zero Shadow jobs,
+and transmission `UNAVAILABLE`. Earlier failed/invalid attempts remain
+preserved and are not reclassified.
+
 ## ARGUS-SERVICE-005 Reboot Manifest Validation
 
 `codex/ARGUS-SERVICE-005-reboot-canary-manifest-validation` is
@@ -12,8 +28,8 @@ manifest before any runtime canary or broker-adjacent read. The failed evidence
 is preserved, the prior terminal manifest is restored, and the service is
 Healthy. The repair emits lowercase IDs and adds a production-parser
 integration test. Compileall, 35 focused tests, and all 988 Python tests pass.
-One prospective reboot-without-login repeat remains; this branch does not make
-the operational gate pass.
+This repair did not itself make the operational gate pass; the later final
+exact-time attempt recorded in the closeout above does.
 
 ## ARGUS-SERVICE-004 Reboot Canary
 
@@ -26,8 +42,9 @@ focused regression coverage. Python compileall, PowerShell parsing, live
 `PlanOnly` nonmutation proof, 75 final focused/adjacent tests, and all 987
 Python tests pass. No Shadow job, account scope, position/order request,
 credential, or transmission capability changed. Next action is the deliberate
-physical reboot observation; the tooling must not be confused with a passed
-reboot.
+physical reboot observation. That later observation now passes through the
+forced-restart closeout above; the original tooling alone remains distinct
+from the physical proof.
 
 ## ARGUS-SHADOW-023 Service Integration
 
@@ -78,14 +95,14 @@ artifact generation.
 
 ## Current Truth
 
-Local and remote `master` are synchronized through ARGUS-SERVICE-005 repair
-`becbd6d` and this Roadmap closeout. The canonical product
+Local and remote `master` are synchronized through unattended reliability
+commit `c95da62`, exact-time forced reboot launcher `e24feed`, and this
+Roadmap closeout. The canonical product
 baseline contains the installed automation service and reboot-canary tooling,
 the complete prior Shadow stack through opening-runtime repair `2213299`,
 accepted live-marking implementation `94f5074`, the WPF workstation through
 R030, ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003. The first
-reboot-without-login attempt failed before canary execution, its manifest-ID
-defect is repaired, and one clean repeat remains; v3 remains unarmed at
+reboot-without-login gate passes on preserved final evidence; v3 remains unarmed at
 `0 / 30`, and no order transmission exists.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
