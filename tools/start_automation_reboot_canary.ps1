@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateRange(5, 15)][int]$LeadMinutes = 5,
+    [datetime]$CanaryAt = [datetime]::MinValue,
     [string]$ProjectRoot = "",
     [string]$PythonExe = "",
     [string]$ServiceRoot = "C:\ProgramData\MomentumHunter\Automation",
@@ -53,9 +54,32 @@ $pendingOpeningBefore = @(
         [datetimeoffset]$_.scheduledAt -gt [datetimeoffset]::Now
     }
 )
-$canaryAt = (Get-Date).AddMinutes($LeadMinutes)
+if (
+    $PSBoundParameters.ContainsKey("CanaryAt") -and
+    $PSBoundParameters.ContainsKey("LeadMinutes")
+) {
+    throw "Specify either -CanaryAt or -LeadMinutes, not both."
+}
+$now = Get-Date
+$scheduledCanaryAt = if ($PSBoundParameters.ContainsKey("CanaryAt")) {
+    if ($CanaryAt.Kind -eq [DateTimeKind]::Unspecified) {
+        [DateTime]::SpecifyKind($CanaryAt, [DateTimeKind]::Local)
+    }
+    else {
+        $CanaryAt.ToLocalTime()
+    }
+}
+else {
+    $now.AddMinutes($LeadMinutes)
+}
+if ($scheduledCanaryAt -lt $now.AddMinutes(3)) {
+    throw "The exact canary time must remain at least three minutes ahead."
+}
+if ($scheduledCanaryAt -gt $now.AddMinutes(15)) {
+    throw "The exact canary time cannot be more than fifteen minutes ahead."
+}
 $prepareArguments = @{
-    CanaryAt = $canaryAt
+    CanaryAt = $scheduledCanaryAt
     ProjectRoot = $projectPath
     PythonExe = $pythonPath
     ServiceRoot = $ServiceRoot
@@ -69,8 +93,11 @@ if ($PlanOnly) {
     }
     [ordered]@{
         classification = "PLAN_ONLY"
-        leadMinutes = $LeadMinutes
-        scheduledAt = $canaryAt.ToString("o")
+        leadMinutes = [math]::Round(
+            ($scheduledCanaryAt - $now).TotalMinutes,
+            3
+        )
+        scheduledAt = $scheduledCanaryAt.ToString("o")
         pendingOpeningCaptureJobs = $pendingOpeningBefore.Count
         immediateReboot = $false
         orderTransmission = "UNAVAILABLE"
@@ -188,7 +215,7 @@ $launchReceipt = [ordered]@{
     serviceStartMode = $serviceConfig.StartMode
     shadowJobsEnabled = 0
     orderTransmission = "UNAVAILABLE"
-    rebootCommand = "shutdown.exe /r /t 0"
+    rebootCommand = "shutdown.exe /r /f /t 0"
 }
 [System.IO.File]::WriteAllText(
     $launchReceiptPath,
@@ -197,7 +224,7 @@ $launchReceipt = [ordered]@{
 )
 
 $launchReceipt | ConvertTo-Json -Depth 5
-& "$env:SystemRoot\System32\shutdown.exe" /r /t 0 /d p:0:0 /c (
+& "$env:SystemRoot\System32\shutdown.exe" /r /f /t 0 /d p:0:0 /c (
     "Momentum Hunter verified automation-service reboot canary"
 )
 if ($LASTEXITCODE -ne 0) {

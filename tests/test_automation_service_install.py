@@ -249,6 +249,22 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertNotIn("cancel_order", prepare)
 
         self.assertIn("[ValidateRange(5, 15)][int]$LeadMinutes = 5", start)
+        self.assertIn(
+            '[datetime]$CanaryAt = [datetime]::MinValue',
+            start,
+        )
+        self.assertIn(
+            '$PSBoundParameters.ContainsKey("CanaryAt")',
+            start,
+        )
+        self.assertIn(
+            '$scheduledCanaryAt -lt $now.AddMinutes(3)',
+            start,
+        )
+        self.assertIn(
+            '$scheduledCanaryAt -gt $now.AddMinutes(15)',
+            start,
+        )
         self.assertIn('$ConfirmImmediateReboot -cne "REBOOT NOW"', start)
         self.assertIn("& $prepareScript @prepareArguments", start)
         self.assertIn('$canaryReceipt.status -eq "PENDING"', start)
@@ -264,8 +280,8 @@ class AutomationServiceInstallTests(unittest.TestCase):
         )
         self.assertIn('$secondsRemaining -lt 180', start)
         self.assertIn('classification = "VERIFIED_REBOOT_REQUESTED"', start)
-        self.assertIn('shutdown.exe" /r /t 0', start)
-        self.assertEqual(1, start.count('shutdown.exe" /r /t 0'))
+        self.assertIn('shutdown.exe" /r /f /t 0', start)
+        self.assertEqual(1, start.count('shutdown.exe" /r /f /t 0'))
         self.assertIn('orderTransmission = "UNAVAILABLE"', start)
         self.assertNotIn("Restart-Service", start)
         self.assertNotIn("Start-Service", start)
