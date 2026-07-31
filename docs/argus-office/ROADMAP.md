@@ -70,23 +70,20 @@ It excludes raw captures, full state, accounts, secrets, tokens, credentials,
 and environment files.
 
 The same-response Schwab HTTPS clock remains the quote-chronology authority.
-Read-only NIST measurements independently corroborated that this workstation
-was approximately 2.35 seconds slow, consistent with the Schwab proof, but
-public NIST NTP is unauthenticated and is not a sole runtime authority. Windows
-Time now runs automatically with NIST and Windows peers. The one-time resync
-completed successfully and a five-sample NIST stripchart measured the local
-clock within roughly 3-6 milliseconds, but the immediate Windows status still
-reported leap indicator `3 / NOT_SYNCHRONIZED`; a settled follow-up status check
-is still required. Tomorrow's runtime must not require UAC, an interactive
-PowerShell prompt, Codex, or a signed-in user.
+Public NIST NTP is unauthenticated and remains corroboration rather than sole
+runtime authority. Windows Time now reports leap indicator `0 / NO_WARNING`,
+stratum `2`, source `time.nist.gov`, and a successful synchronization at
+2026-07-30 21:44:21 Central. A three-sample NIST stripchart measured the local
+offset at approximately 105-107 milliseconds, well inside the five-second
+clock gate.
 
-ARGUS-SERVICE-001 code is `COMPLETE_AND_BACKED_UP` through `0ce70c2` and
-`cc2b1e2`; its Windows installation is still pending. It replaces the
-interactive Task Scheduler launch dependency with a boot-starting Windows
-Service architecture. The implemented supervisor persists restart-safe job
-receipts, records a missed market window instead of running late, starts or
-reconnects to the loopback Engine Host, and permits a headless Codex review
-only after a terminal runtime receipt. Runtime jobs cannot depend on Codex.
+ARGUS-SERVICE-001 is installed and operational. The code is
+`COMPLETE_AND_BACKED_UP` through `0ce70c2`, `cc2b1e2`, retry repair `8ce0d53`,
+and installer hardening `c3928b6`. `MomentumHunterAutomation` runs under
+`BEASTCOMPUTER\steve`, is configured for automatic startup, and retains finite
+restart recovery. The password was recovered locally rather than reset, was
+never placed in Git or chat, and the current-user DPAPI boundary was not
+changed.
 
 The Windows service wrapper, strict manifest, nonmarket account/DPAPI canary,
 read-only status command, secure installer, and one-time manifest updater are
@@ -116,22 +113,24 @@ probe tests. Protected-path review shows no scoring, readiness, replay, alert,
 database/schema, broker/order, production UI, raw capture, or generated-report
 change.
 
-Installation is the current ARGUS-SERVICE-001 blocker. The elevated installer
-successfully published the service files and configured Windows Time, then
-failed closed at the Windows-service credential proof because Steven does not
-remember the `BEASTCOMPUTER\steve` password. `MomentumHunterAutomation` and its
-wake task were not created, no service canary ran, zero Shadow jobs exist, and
-the published files remain preserved under `C:\ProgramData\MomentumHunter`.
-Do not reset the Windows password or broaden Schwab secret access casually:
-the current OAuth and account-binding stores use current-user DPAPI. The next
-protected decision is either deliberate Windows-password recovery with DPAPI
-continuity proof, or a bounded password-free service identity plus
-service-scoped credential-envelope design. Until that decision is implemented
-and proven, the service is `IMPLEMENTED_PENDING_INSTALL`, the legacy one-time
-opening must not be treated as reliable, and no new prospective Shadow opening
-may be scheduled. A machine that is powered off through 08:35 still records a
-missed window after boot; neither the service nor Codex may backfill the market
-event.
+The installed nonmarket account/DPAPI canary completed without runtime
+mutation, the downstream headless Codex probe returned exactly
+`CODEX_SERVICE_READY`, and the Engine Host reports `Healthy`. The SYSTEM-owned
+wake task is `Ready`, uses `ServiceAccount` logon, has `WakeToRun: true`,
+`StartWhenAvailable: false`, and next runs at 2026-07-31 08:15 Central.
+Interactive autologon remains prohibited. Zero Shadow jobs are enabled and
+order transmission is `UNAVAILABLE`.
+
+Installation exposed and repaired three bounded defects: retrying over an
+existing manifest, resolving the project root under Windows PowerShell
+`-File`, and Windows PowerShell's UTF-8 BOM making the Python manifest
+unreadable. The generated manifest was normalized without changing its JSON,
+the running service recovered on its finite retry, and both canaries then
+completed. The remaining operational gate is a deliberate
+reboot-without-login canary. No new prospective official opening should be
+scheduled until that proof passes. A machine powered off through 08:35 still
+records a missed window after boot; neither the service nor Codex may backfill
+the market event.
 
 The 2026-07-30 ARGUS-SHADOW-017 opening is `FAILED_TASK_DID_NOT_RUN`. The
 one-time 8:35 AM Central task remained enabled with the correct final release
@@ -242,13 +241,13 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Synchronized `master`/`origin/master` through `cc2b1e2` contains ARGUS-SERVICE-001, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R029, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active implementation | No runtime feature branch is pending merge. ARGUS-SERVICE-001 and ARGUS-SHADOW-023 are integrated and backed up; privileged Windows installation and physical canaries remain operational work, not code work. |
+| Canonical baseline | Synchronized `master`/`origin/master` through retry repair `8ce0d53` contains ARGUS-SERVICE-001, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R029, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. Installer hardening `c3928b6` is verified on the active branch pending integration. |
+| Active implementation | `codex/ARGUS-SERVICE-003-installer-hardening` contains BOM-free manifest writing, reliable `-File` project-root resolution, and truthful elevation-protected wake-task status. The service itself is installed and healthy; only the separate reboot-without-login canary remains operationally pending. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | Windows has not installed `MomentumHunterAutomation` because the current user-account service design requires a Windows password Steven does not remember. Windows Time is running and externally close to NIST, but its formal synchronization flag needs a settled recheck. A protected service-identity/credential-scope decision, service canary, machine-time proof, and later reboot-without-login proof must pass before another prospective opening. |
+| Blocked by | The password, installation, canary, wake-task, and machine-time gates now pass. The remaining blocker before another prospective opening is a deliberate reboot-without-login canary. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss and cannot be proven by the Windows service alone. |
 | Scheduled operational proof | `FAILED_TASK_DID_NOT_RUN`; the task retained the correct `60d7c9a` action and static 11 / 12 bundle, but produced no July 30 runner attempt or runtime evidence. It has no next run and must not be started late. |
-| Immediate operational work | Resolve the password-dependent service identity without resetting credentials or broadening DPAPI scope implicitly; recheck settled Windows Time status; then install the service, verify nonmarket canaries and Codex readiness, and run a separate reboot-without-login canary. Preserve failed-date evidence and do not prepare a new official opening until those gates pass. |
+| Immediate operational work | Integrate and back up `c3928b6`, then run a separate reboot-without-login canary without arming Shadow or enabling transmission. Preserve failed-date evidence and do not prepare a new official opening until that gate passes. |
 | Broker state | Schwab OAuth remains authorized and the immutable `2573` `INDIVIDUAL_CASH` binding remains read-only; the access token was expired at the 08:50 inspection. No positions were requested and no preview or transmitting method exists. The previously surfaced, unrotated Client Secret is an explicit blocker for future transmitting code. |
 | Steven action | `MANUAL_PASS` on all seven ARGUS-SHADOW-017 WPF checks. No further visual action is pending; any brokerage anomaly or real-order proposal remains a separate interruption gate. |
 | Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
