@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added ARGUS-SERVICE-004 one-use reboot-without-login canary planning and verification. The tool requires a new boot and service instance, exact scheduled receipts, Running/Automatic service state, Healthy Engine Host, Session 0, zero logged-on interactive user sessions, the unchanged sole `2573` `INDIVIDUAL_CASH` binding, no position/order requests, zero Shadow jobs, and transmission `UNAVAILABLE`.
+- Added crash-preserving PowerShell preparation and read-only verification commands. `PlanOnly` against the installed service changed neither manifest semantics, terminal job receipts, service identity, nor baseline state; preparation does not restart the service or reboot Windows.
+- Passed Python compileall, PowerShell parsing, 75 final focused/adjacent tests, all 987 Python tests, and a live redacted Windows-session census. Implementation `357c974` and its Roadmap closeout are integrated and backed up; the deliberate physical reboot observation remains pending.
 - Installed and started `MomentumHunterAutomation` under the existing `BEASTCOMPUTER\steve` identity without resetting or disclosing the recovered Windows password. The nonmarket account/DPAPI canary, exact-response headless Codex probe, and Engine Host health check all completed.
 - Verified the SYSTEM-owned 08:15 wake task is Ready with service-account logon, wake enabled, missed-start backfill disabled, and a next run at 2026-07-31 08:15 Central. Windows Time now reports synchronized stratum 2 against NIST; a separate reboot-without-login canary remains pending.
 - Repaired installer retries over an existing manifest, Windows PowerShell `-File` project-root resolution, BOM-free manifest serialization, and truthful status when SYSTEM task details require elevation. The running service remains at zero Shadow jobs with order transmission unavailable.

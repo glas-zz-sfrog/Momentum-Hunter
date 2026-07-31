@@ -1,6 +1,20 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-30
+Date reconciled: 2026-07-31
+
+## ARGUS-SERVICE-004 Reboot Canary
+
+`codex/ARGUS-SERVICE-004-reboot-canary` is `MERGED_TO_LOCAL_MASTER` at
+implementation `357c974`. The local feature ref is not pushed separately; its
+commit is backed up through canonical `origin/master` with this Roadmap
+closeout. It adds the nonmarket reboot-without-login planner, verifier,
+Session 0 and zero-interactive-user proof fields, PowerShell entry points, and
+focused regression coverage. Python compileall, PowerShell parsing, live
+`PlanOnly` nonmutation proof, 75 final focused/adjacent tests, and all 987
+Python tests pass. No Shadow job, account scope, position/order request,
+credential, or transmission capability changed. Next action is the deliberate
+physical reboot observation; the tooling must not be confused with a passed
+reboot.
 
 ## ARGUS-SHADOW-023 Service Integration
 
@@ -19,10 +33,11 @@ broker capability changed.
 `MERGED_TO_LOCAL_MASTER` through integration commit `cc2b1e2`. It contains
 the boot-starting service supervisor, strict manifests, secure installer and
 status tooling, account-bound nonmarket canary, guarded one-time updater, and
-downstream-only headless Codex reviewer. Automated implementation proof passes;
-the Windows service is not installed because the UAC/password interaction did
-not complete. The commit is backed up through `origin/master`. No Shadow job,
-selector arm, trade, broker order, or transmission capability was created.
+downstream-only headless Codex reviewer. The Windows service is installed and
+Running/Automatic under `BEASTCOMPUTER\steve`; its installation canary,
+exact-response Codex probe, wake-task proof, and Engine Host health check pass.
+The commit is backed up through `origin/master`. No Shadow job, selector arm,
+trade, broker order, or transmission capability was created.
 
 ## ARGUS-SHADOW-017 Live Position Marking
 
@@ -50,14 +65,14 @@ artifact generation.
 
 ## Current Truth
 
-Local and remote `master` are synchronized through accepted live-marking
-implementation `94f5074`, proof repair `40a26a0`, and this operational
-closeout. The canonical product baseline contains the complete
-prior Shadow stack through opening-runtime repair `2213299` and its v2 scheduling
-closeout, alongside the Python
-automation/simulation foundation, R004-R029 workstation work,
-ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003. Live position marking is
-canonical; final-head v3/task/proof rebinding remains operationally pending.
+Local and remote `master` are synchronized through ARGUS-SERVICE-004
+implementation `357c974` and this Roadmap closeout. The canonical product
+baseline contains the installed automation service and reboot-canary tooling,
+the complete prior Shadow stack through opening-runtime repair `2213299`,
+accepted live-marking implementation `94f5074`, the WPF workstation through
+R030, ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003. The physical
+reboot-without-login observation remains pending; v3 remains unarmed at
+`0 / 30`, and no order transmission exists.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`, and

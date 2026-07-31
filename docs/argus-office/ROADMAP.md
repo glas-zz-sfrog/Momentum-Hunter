@@ -138,6 +138,27 @@ wake task is `Ready`, uses `ServiceAccount` logon, has `WakeToRun: true`,
 Interactive autologon remains prohibited. Zero Shadow jobs are enabled and
 order transmission is `UNAVAILABLE`.
 
+ARGUS-SERVICE-004 implementation `357c974` is now on local `master`. It adds
+one-use planning and verification for the remaining reboot-without-login
+canary. Preparation is fail-closed, requires a future nonmarket schedule,
+preserves terminal installation receipts, enables zero Shadow jobs, performs
+no service restart, and never reboots the machine. Verification requires a
+new Windows boot, a new service instance, Running/Automatic service state,
+Healthy Engine Host, an exit-zero canary receipt inside the exact schedule,
+Session 0 execution, zero logged-on interactive user sessions, the unchanged
+sole `2573` `INDIVIDUAL_CASH` binding, no position or order request, and
+transmission `UNAVAILABLE`. An optional downstream Codex probe must return
+exactly `CODEX_SERVICE_READY`; runtime success does not depend on Codex.
+
+The new tooling passes Python compileall, PowerShell parsing, a live
+nonmutating `PlanOnly` run against the installed service, 75 final focused and
+adjacent tests, and all 987 Python tests. The installed manifest and terminal
+job receipts remained semantically unchanged during dry-run proof; no reboot
+baseline was created. The service remains Running/Automatic with a Healthy
+Engine Host, two terminal installation jobs, zero Shadow jobs, and no order
+transmission. The tooling is integrated, but the physical reboot observation
+is still `NOT_RUN`.
+
 Installation exposed and repaired three bounded defects: retrying over an
 existing manifest, resolving the project root under Windows PowerShell
 `-File`, and Windows PowerShell's UTF-8 BOM making the Python manifest
@@ -258,13 +279,13 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Synchronized `master`/`origin/master` through installation proof `d111bf9` contains ARGUS-SERVICE-001, installer hardening `c3928b6`, retry repair `8ce0d53`, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R029, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active implementation | No runtime feature branch is pending integration. ARGUS-SERVICE-003 hardening is integrated and backed up; the service is installed and healthy. Only the separate reboot-without-login canary remains operationally pending. |
+| Canonical baseline | Synchronized `master`/`origin/master` through ARGUS-SERVICE-004 implementation `357c974` and this Roadmap closeout contains the reboot-without-login proof tooling, ARGUS-SERVICE-001/002/003, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R030, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
+| Active implementation | No runtime feature branch is pending integration. ARGUS-SERVICE-004 tooling is integrated, backed up, and automated-test clean. The installed service remains healthy and unchanged; only the deliberate reboot-without-login observation remains operationally pending. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | The password, installation, canary, wake-task, and machine-time gates now pass. The remaining blocker before another prospective opening is a deliberate reboot-without-login canary. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss and cannot be proven by the Windows service alone. |
 | Scheduled operational proof | `FAILED_TASK_DID_NOT_RUN`; the task retained the correct `60d7c9a` action and static 11 / 12 bundle, but produced no July 30 runner attempt or runtime evidence. It has no next run and must not be started late. |
-| Immediate operational work | Run a separate reboot-without-login canary without arming Shadow or enabling transmission. Preserve failed-date evidence and do not prepare a new official opening until that gate passes. |
+| Immediate operational work | After this Roadmap closeout is backed up, prepare one future nonmarket reboot canary, reboot deliberately, leave Windows at the sign-in screen through the scheduled canary window, then run the read-only verifier after login. Do not arm Shadow, enable transmission, or prepare a new official opening until that gate passes. |
 | Broker state | Schwab OAuth remains authorized and the immutable `2573` `INDIVIDUAL_CASH` binding remains read-only; the access token was expired at the 08:50 inspection. No positions were requested and no preview or transmitting method exists. The previously surfaced, unrotated Client Secret is an explicit blocker for future transmitting code. |
 | Steven action | `MANUAL_PASS` on all seven ARGUS-SHADOW-017 WPF checks. No further visual action is pending; any brokerage anomaly or real-order proposal remains a separate interruption gate. |
 | Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
@@ -365,9 +386,11 @@ Status: `COMPLETE` on local and remote `master` through `a886c90`
 - The host core owns snapshot, pause, resume, one collection cycle, and graceful shutdown. Phase 9 adds one versioned persisted-evidence snapshot capability; TradePlan, Risk Governor, chart data, simulation, broker, Paper, and Live remain outside the boundary.
 - Focused Python process proof and .NET integration proof passed. The implementation fast-forwarded into local `master` and was later backed up through the approved R011 master push. See `reports/releases/ARGUS-R008-python-engine-contract-host.md`.
 - ARGUS-SERVICE-001 extends this boundary with a Windows Service wrapper and
-  restart-safe scheduler. It is implemented and automated-test clean but not
-  installed. Codex is an optional read-only downstream reviewer, not a runtime
-  authority and not an order path.
+  restart-safe scheduler. It is installed, Running/Automatic, and has passed
+  its installation canary and exact-response Codex probe. ARGUS-SERVICE-004
+  adds the separate reboot-without-login proof tooling; the actual reboot
+  observation remains pending. Codex is an optional read-only downstream
+  reviewer, not a runtime authority and not an order path.
 
 ### Phase 9 - Read-Only Discovery, Research, Health, And Replay Integration
 
@@ -454,6 +477,14 @@ activated-empty and unarmed at `0 / 30`, A017 is
 
 #### 11B - Schwab Read-Only And Canary Preparation
 
+- ARGUS-SERVICE-004 provides the one-use reboot-without-login canary gate. It
+  records a pre-reboot boot and service-instance baseline, schedules only a
+  nonmarket account/DPAPI canary plus an optional downstream exact-response
+  Codex probe, and verifies post-boot service, Engine Host, receipt, account,
+  Session 0, zero-interactive-user, and no-order evidence. It never schedules
+  Shadow, restarts the service during preparation, reboots Windows, reads
+  positions, requests orders, or enables transmission. Tooling is complete on
+  local `master`; the physical reboot observation is still pending.
 - A016 selected Schwab/thinkorswim continuity. Schwab Support confirmed that Trader API cannot access paperMoney and has no retail sandbox, so A017 is `BLOCKED_VENDOR_CAPABILITY`.
 - FakeBroker is the only automated boundary. thinkorswim paperMoney is manual ticket and fill-model reconciliation only; no interim Alpaca path is approved.
 - SCHWAB-001/002/002A/003, live `CASH` validation, immutable binding, and bound-refresh safety are integrated. The production app, loopback callback, certificate trust, OAuth, DPAPI vault, and sole `2573` `INDIVIDUAL_CASH` binding are active and read-only.
