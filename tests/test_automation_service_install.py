@@ -85,6 +85,11 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertIn('"NO_OP_WAKE_ONLY"', source)
         self.assertIn('"installation-codex-probe"', source)
         self.assertIn('"CODEX_SERVICE_READY"', source)
+        self.assertIn(
+            "Move-Item -LiteralPath $temporaryManifest "
+            "-Destination $manifestPath -Force",
+            source,
+        )
         self.assertNotIn("AutoAdminLogon", source)
         self.assertIn("actions= restart/5000/restart/15000/restart/60000", source)
         self.assertNotIn("-Password", source)

@@ -338,7 +338,7 @@ try {
     $temporaryManifest = "$manifestPath.$([guid]::NewGuid().ToString('N')).tmp"
     $manifest | ConvertTo-Json -Depth 6 |
         Set-Content -LiteralPath $temporaryManifest -Encoding utf8
-    Move-Item -LiteralPath $temporaryManifest -Destination $manifestPath
+    Move-Item -LiteralPath $temporaryManifest -Destination $manifestPath -Force
 
     $credential = Get-Credential `
         -UserName $serviceAccount `
