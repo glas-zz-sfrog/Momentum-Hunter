@@ -10,14 +10,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Test-IsAdministrator {
-    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = [System.Security.Principal.WindowsPrincipal]::new($identity)
-    return $principal.IsInRole(
-        [System.Security.Principal.WindowsBuiltInRole]::Administrator
-    )
-}
-
 if (-not $ProjectRoot) {
     $ProjectRoot = Split-Path -Parent $PSScriptRoot
 }
@@ -84,12 +76,6 @@ if ($plan.summary.orderTransmission -ne "UNAVAILABLE") {
 if ($PlanOnly) {
     $plan.summary | ConvertTo-Json -Depth 6
     exit 0
-}
-if (-not (Test-IsAdministrator)) {
-    throw (
-        "Reboot-canary preparation requires an elevated PowerShell session. " +
-        "No service restart or reboot is performed by this script."
-    )
 }
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if (-not $service) {

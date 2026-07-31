@@ -160,6 +160,8 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertIn("[System.Text.UTF8Encoding]::new($false)", prepare)
         self.assertIn("Push-Location -LiteralPath $projectPath", prepare)
         self.assertIn("Pop-Location", prepare)
+        self.assertNotIn("Test-IsAdministrator", prepare)
+        self.assertNotIn("requires an elevated PowerShell session", prepare)
         self.assertNotIn("Restart-Service", prepare)
         self.assertNotIn("Start-Service", prepare)
         self.assertNotIn("Restart-Computer", prepare)
