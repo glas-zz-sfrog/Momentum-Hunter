@@ -12,6 +12,12 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = REPOSITORY_ROOT / "tools" / "install_automation_service.ps1"
 STATUS = REPOSITORY_ROOT / "tools" / "get_automation_service_status.ps1"
 SET_JOBS = REPOSITORY_ROOT / "tools" / "set_automation_service_jobs.ps1"
+PREPARE_REBOOT = (
+    REPOSITORY_ROOT / "tools" / "prepare_automation_reboot_canary.ps1"
+)
+VERIFY_REBOOT = (
+    REPOSITORY_ROOT / "tools" / "verify_automation_reboot_canary.ps1"
+)
 EXAMPLE = REPOSITORY_ROOT / "config" / "automation-service.example.json"
 
 
@@ -141,6 +147,36 @@ class AutomationServiceInstallTests(unittest.TestCase):
             self.assertNotIn(forbidden, source)
         self.assertIn('orderTransmission = "UNAVAILABLE"', source)
         self.assertIn("PRESENT_REQUIRES_ELEVATION", source)
+
+    def test_reboot_canary_scripts_preserve_nonmarket_boundary(self) -> None:
+        prepare = PREPARE_REBOOT.read_text(encoding="utf-8")
+        verify = VERIFY_REBOOT.read_text(encoding="utf-8")
+
+        self.assertIn("[switch]$PlanOnly", prepare)
+        self.assertIn("requiresNoInteractiveLogin", prepare)
+        self.assertIn("serviceRestarted = $false", prepare)
+        self.assertIn('shadowJobsEnabled = 0', prepare)
+        self.assertIn('orderTransmission = "UNAVAILABLE"', prepare)
+        self.assertIn("[System.Text.UTF8Encoding]::new($false)", prepare)
+        self.assertNotIn("Restart-Service", prepare)
+        self.assertNotIn("Start-Service", prepare)
+        self.assertNotIn("Restart-Computer", prepare)
+        self.assertNotIn("shutdown.exe", prepare)
+        self.assertNotIn("submit_order", prepare)
+        self.assertNotIn("cancel_order", prepare)
+
+        for forbidden in (
+            "Set-Content",
+            "Move-Item",
+            "Remove-Item",
+            "Restart-Service",
+            "Start-Service",
+            "Restart-Computer",
+            "shutdown.exe",
+            "submit_order",
+            "cancel_order",
+        ):
+            self.assertNotIn(forbidden, verify)
 
     def test_market_manifest_update_has_hard_interlocks(self) -> None:
         source = SET_JOBS.read_text(encoding="utf-8")

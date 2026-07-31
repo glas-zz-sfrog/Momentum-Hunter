@@ -161,6 +161,16 @@ class AutomationSupervisorTests(unittest.TestCase):
                 "SchwabOAuthSecretRepository",
                 return_value=auth,
             ),
+            patch(
+                "momentum_hunter.automation_supervisor."
+                "_current_process_session_id",
+                return_value=0,
+            ),
+            patch(
+                "momentum_hunter.automation_supervisor."
+                "_interactive_user_session_count",
+                return_value=0,
+            ),
         ):
             store_type.return_value.load.return_value = binding
             supervisor = AutomationSupervisor(
@@ -180,6 +190,9 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertFalse(receipt["positionsRequested"])
         self.assertFalse(receipt["ordersRequested"])
         self.assertEqual("UNAVAILABLE", receipt["orderTransmission"])
+        self.assertEqual(0, receipt["serviceSessionId"])
+        self.assertTrue(receipt["serviceSessionIsNonInteractive"])
+        self.assertEqual(0, receipt["interactiveUserSessionCount"])
 
     def test_codex_review_requires_completed_dependency(self) -> None:
         runtime = self.job(kind="nonmarket_canary", job_id="runtime")

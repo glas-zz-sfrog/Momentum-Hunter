@@ -8,6 +8,7 @@ transmit an order by itself. Missed market jobs are recorded and never run late.
 """
 
 import argparse
+import ctypes
 import json
 import os
 import re
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import time
 import uuid
+from ctypes import wintypes
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -648,6 +650,8 @@ class AutomationSupervisor:
     def _run_nonmarket_canary(self, log_path: Path) -> tuple[int, str]:
         binding = EncryptedSchwabAccountBindingStore().load()
         auth = SchwabOAuthSecretRepository().status()
+        service_session_id = _current_process_session_id()
+        interactive_user_session_count = _interactive_user_session_count()
         binding_matches = (
             binding.account_number_last_four
             == self.manifest.expected_account_ending
@@ -665,6 +669,10 @@ class AutomationSupervisor:
             "schemaVersion": 1,
             "mode": "NONMARKET_SERVICE_CANARY",
             "windowsIdentity": os.environ.get("USERNAME", ""),
+            "serviceProcessId": os.getpid(),
+            "serviceSessionId": service_session_id,
+            "serviceSessionIsNonInteractive": service_session_id == 0,
+            "interactiveUserSessionCount": interactive_user_session_count,
             "userProfileAvailable": Path.home().is_dir(),
             "dpapiBindingReadable": True,
             "accountEnding": binding.account_number_last_four,
@@ -687,6 +695,10 @@ class AutomationSupervisor:
         if not binding_matches:
             return 1, (
                 "Brokerage account binding anomaly; service canary failed closed."
+            )
+        if service_session_id != 0:
+            return 1, (
+                "Service canary is not running in noninteractive session 0."
             )
         return 0, "Nonmarket service canary completed without runtime mutation."
 
@@ -812,6 +824,95 @@ def _run_git(repository_root: Path, arguments: Sequence[str]) -> str:
             "Git identity preflight could not be completed."
         )
     return completed.stdout.strip()
+
+
+def _current_process_session_id() -> int:
+    if os.name != "nt":
+        raise AutomationSupervisorError(
+            "Automation service session proof requires Windows."
+        )
+    session_id = ctypes.c_uint()
+    if not ctypes.windll.kernel32.ProcessIdToSessionId(
+        os.getpid(),
+        ctypes.byref(session_id),
+    ):
+        raise AutomationSupervisorError(
+            "Automation service session identity could not be determined."
+        )
+    return int(session_id.value)
+
+
+class _WtsSessionInfo(ctypes.Structure):
+    _fields_ = (
+        ("session_id", wintypes.DWORD),
+        ("station_name", wintypes.LPWSTR),
+        ("state", ctypes.c_int),
+    )
+
+
+def _interactive_user_session_count() -> int:
+    if os.name != "nt":
+        raise AutomationSupervisorError(
+            "Interactive session proof requires Windows."
+        )
+    wts = ctypes.WinDLL("Wtsapi32.dll", use_last_error=True)
+    sessions = ctypes.POINTER(_WtsSessionInfo)()
+    session_count = wintypes.DWORD()
+    wts.WTSEnumerateSessionsW.argtypes = (
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.POINTER(_WtsSessionInfo)),
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    wts.WTSEnumerateSessionsW.restype = wintypes.BOOL
+    wts.WTSQuerySessionInformationW.argtypes = (
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        ctypes.c_int,
+        ctypes.POINTER(wintypes.LPWSTR),
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    wts.WTSQuerySessionInformationW.restype = wintypes.BOOL
+    wts.WTSFreeMemory.argtypes = (wintypes.LPVOID,)
+    wts.WTSFreeMemory.restype = None
+    if not wts.WTSEnumerateSessionsW(
+        None,
+        0,
+        1,
+        ctypes.byref(sessions),
+        ctypes.byref(session_count),
+    ):
+        raise AutomationSupervisorError(
+            "Interactive Windows sessions could not be enumerated."
+        )
+    logged_on = 0
+    try:
+        for session in sessions[: session_count.value]:
+            if session.session_id == 0:
+                continue
+            user_name = wintypes.LPWSTR()
+            returned_bytes = wintypes.DWORD()
+            if not wts.WTSQuerySessionInformationW(
+                None,
+                session.session_id,
+                5,
+                ctypes.byref(user_name),
+                ctypes.byref(returned_bytes),
+            ):
+                raise AutomationSupervisorError(
+                    "A Windows session user could not be inspected."
+                )
+            try:
+                if user_name.value and user_name.value.strip():
+                    logged_on += 1
+            finally:
+                if user_name:
+                    wts.WTSFreeMemory(user_name)
+    finally:
+        if sessions:
+            wts.WTSFreeMemory(sessions)
+    return logged_on
 
 
 def _terminate_process_tree(process_id: int) -> None:
