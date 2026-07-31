@@ -2,6 +2,22 @@
 
 Date reconciled: 2026-07-31
 
+## Monday Opening Readiness Hardening
+
+`codex/monday-opening-readiness-hardening` is
+`MERGED_TO_LOCAL_MASTER` and backed up through canonical `origin/master` with
+runtime commit `4b6668c` plus this governance closeout. It makes ordinary
+opening jobs fail visibly unless they persist a capture, recover a report, or
+prove an exact duplicate, and it can recreate only the expected SYSTEM-owned
+08:15 wake/resync task when genuinely absent. PowerShell parsing, compileall,
+91 affected tests, all 1,016 Python tests, diff check, and protected-path review
+pass. No scoring, readiness, replay, alert, database/schema, broker/order, UI,
+raw-capture, or generated-report behavior changed. The remaining Monday gate
+is operational: current post-reboot Windows Time must be revalidated and
+resynchronized through one local UAC interaction. Keep the canonical service
+checkout clean and use a separate worktree for unrelated development until
+the August 3 terminal opening receipt and report are preserved.
+
 ## ARGUS-SERVICE Reboot Reliability Closeout
 
 `codex/streamline-reboot-canary` and

@@ -28,6 +28,55 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+Monday opening readiness hardening is implemented on
+`codex/monday-opening-readiness-hardening` at runtime commit `4b6668c` and is
+integrated through this Roadmap closeout. The installed unattended service has
+one ordinary capture-only job for Monday, 2026-08-03, at 08:35 Central with a
+hard 08:40 latest-start boundary and a 15-minute process timeout. It is the
+first of 30 pending XNYS market-session opening jobs through 2026-09-14.
+Opening capture remains separate from Official Shadow: zero Shadow jobs are
+enabled, the selector is not armed, no account, position, or order request is
+part of this job, and order transmission remains `UNAVAILABLE`.
+
+The runner now requires an opening job to finish as `CAPTURED`,
+`REPORT_RECOVERED`, or `DUPLICATE`. A late retry or other ordinary `SKIPPED`
+result can no longer be recorded as a successful service run with no opening
+evidence. The clock-task hardener can also recreate the exact expected
+SYSTEM-owned 08:15 wake/resync task if it is genuinely absent, while refusing
+to replace an existing task with an unexpected principal or action. These
+changes pass PowerShell parsing, Python compileall, 91 affected automation
+tests, all 1,016 Python tests, `git diff --check`, and protected-path review.
+No scoring, readiness, replay, alert, database/schema, broker/order, UI, raw
+capture, or generated-report behavior changed.
+
+The live Friday preflight found the service Running/Automatic in Session 0,
+a fresh heartbeat, a Healthy Engine Host, the expected 30 pending opening
+jobs, no duplicate August 3 capture/report, working Finviz and Yahoo access,
+ten current screener candidates, a current bull regime result, about 18.9 GB
+free on `C:`, AC sleep and hibernate disabled, wake timers enabled, and no
+Windows Update reboot-pending flag. A recent ordinary morning capture also
+completed end to end with raw JSON/Markdown, score breakdown, TradePlan
+reports, and outcome-update exit `0`.
+
+One physical security gate remains before Monday is classified fully ready:
+after the latest reboot, Windows Time reports `Local CMOS Clock` and
+`NOT_SYNCHRONIZED`. The exact protected wake-task file exists, and prior
+elevated evidence proves its SYSTEM principal, startup plus daily 08:15
+triggers, `WakeToRun`, bounded retries, and successful NIST resync; current
+non-elevated inspection cannot revalidate or resync that protected state.
+Steven only needs to click **Yes** on one clearly announced UAC prompt. The
+elevated script then validates or narrowly repairs that task and runs Windows
+Time resync. It does not reboot, capture market data, touch credentials, query
+accounts, arm Shadow, or create/transmit an order. After that result passes,
+leave the computer powered on and plugged in through at least 08:40 Central on
+Monday. Windows can wake a sleeping machine, but it cannot start a fully
+powered-off machine without separate BIOS support.
+
+Until Monday's terminal receipt and opening capture/report are preserved, the
+canonical service checkout must remain clean on synchronized `master`.
+Unrelated development may continue in a separate Git worktree so an active
+coding branch cannot change the runtime files used by the installed service.
+
 ARGUS-R030 is `COMPLETE_AND_BACKED_UP` on canonical `master` through
 implementation commit `94e1708`. The WPF workstation now has a
 first-class `Positions` command and compact top-bar entry that opens a
@@ -349,15 +398,15 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Synchronized `master`/`origin/master` through unattended reliability commit `c95da62` and forced exact-time reboot launcher `e24feed`, plus this Roadmap closeout. It contains the reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001/002/003/004/005/006, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R030, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active implementation | No runtime feature branch is pending integration. Exact-time forced reboot preparation, fail-closed preflight, immutable evidence preservation, and the reboot-without-login verifier are backed up. The final 16:39 Central attempt is `PASS`; the installed service is Running/Automatic and Healthy on the restored 30-opening manifest. |
+| Canonical baseline | Synchronized `master`/`origin/master` through Monday opening runtime hardening `4b6668c` plus this Roadmap closeout. It contains the reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001/002/003/004/005/006, strict opening-result enforcement, safe wake-task recreation, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R030, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
+| Active implementation | Monday opening readiness code is complete and integrated. The final 16:39 Central reboot canary is `PASS`; the installed service is Running/Automatic and Healthy on the 30-opening manifest. Current elevated wake-task and Windows Time revalidation remains an operational gate, not an application-code task. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | No service-start or reboot-without-login software gate remains. Password, installation, account/DPAPI canary, wake-task, machine-time, exact-time forced restart, new-boot/new-service identity, Session 0, zero-interactive-session, Engine Host, and downstream Codex proof all pass. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss and cannot be proven by the Windows service alone. |
+| Blocked by | No service-start or reboot-without-login code gate remains. Current Monday readiness waits only for one elevated validation/resync because the post-reboot Windows Time source is presently `Local CMOS Clock / NOT_SYNCHRONIZED`. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss and cannot be provided by the Windows service alone. |
 | Scheduled operational proof | `FAILED_TASK_DID_NOT_RUN`; the task retained the correct `60d7c9a` action and static 11 / 12 bundle, but produced no July 30 runner attempt or runtime evidence. It has no next run and must not be started late. |
-| Immediate operational work | Observe the first ordinary unattended opening capture on 2026-08-03 at 08:35-08:40 Central and verify its terminal receipt plus preserved `opening` capture/report. This capture-only path does not arm Shadow or enable transmission. Continue unrelated bounded development without waiting for the observation. |
+| Immediate operational work | Run the announced elevated 08:15 wake/clock validation and resync, confirm Windows Time is synchronized, then keep the machine powered on and plugged in. On 2026-08-03 observe the ordinary unattended 08:35-08:40 Central opening receipt plus preserved `opening` capture/report. This capture-only path does not arm Shadow or enable transmission. Continue unrelated bounded development only from a separate worktree until the receipt is preserved. |
 | Broker state | Schwab OAuth remains authorized and the immutable `2573` `INDIVIDUAL_CASH` binding remains read-only; the access token was expired at the 08:50 inspection. No positions were requested and no preview or transmitting method exists. The previously surfaced, unrotated Client Secret is an explicit blocker for future transmitting code. |
-| Steven action | `MANUAL_PASS` on all seven ARGUS-SHADOW-017 WPF checks. No further visual action is pending; any brokerage anomaly or real-order proposal remains a separate interruption gate. |
+| Steven action | Click **Yes** on the one announced Windows UAC prompt used to validate/repair the SYSTEM wake task and resynchronize Windows Time, then leave the computer powered on and plugged in through Monday's capture window. No visual product approval is pending; any brokerage anomaly or real-order proposal remains a separate interruption gate. |
 | Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
 
 ### Status Legend
