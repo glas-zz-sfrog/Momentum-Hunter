@@ -2,6 +2,19 @@
 
 Date reconciled: 2026-07-31
 
+## ARGUS-SERVICE-005 Reboot Manifest Validation
+
+`codex/ARGUS-SERVICE-005-reboot-canary-manifest-validation` is
+`MERGED_TO_LOCAL_MASTER` at `becbd6d` and backed up through
+`origin/master`. The first physical reboot exposed uppercase timestamp text in
+generated job IDs; the lowercase-only production supervisor rejected the
+manifest before any runtime canary or broker-adjacent read. The failed evidence
+is preserved, the prior terminal manifest is restored, and the service is
+Healthy. The repair emits lowercase IDs and adds a production-parser
+integration test. Compileall, 35 focused tests, and all 988 Python tests pass.
+One prospective reboot-without-login repeat remains; this branch does not make
+the operational gate pass.
+
 ## ARGUS-SERVICE-004 Reboot Canary
 
 `codex/ARGUS-SERVICE-004-reboot-canary` is `MERGED_TO_LOCAL_MASTER` at
@@ -65,13 +78,14 @@ artifact generation.
 
 ## Current Truth
 
-Local and remote `master` are synchronized through ARGUS-SERVICE-004
-implementation `357c974` and this Roadmap closeout. The canonical product
+Local and remote `master` are synchronized through ARGUS-SERVICE-005 repair
+`becbd6d` and this Roadmap closeout. The canonical product
 baseline contains the installed automation service and reboot-canary tooling,
 the complete prior Shadow stack through opening-runtime repair `2213299`,
 accepted live-marking implementation `94f5074`, the WPF workstation through
-R030, ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003. The physical
-reboot-without-login observation remains pending; v3 remains unarmed at
+R030, ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003. The first
+reboot-without-login attempt failed before canary execution, its manifest-ID
+defect is repaired, and one clean repeat remains; v3 remains unarmed at
 `0 / 30`, and no order transmission exists.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
