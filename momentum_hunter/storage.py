@@ -3,8 +3,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 import csv
+import uuid
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -147,7 +149,7 @@ def save_capture_integrity_manifest(payload: dict, path: Path | None = None) -> 
     path = path or CAPTURE_INTEGRITY_MANIFEST
     ensure_app_dirs()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _replace_text_atomically(path, json.dumps(payload, indent=2))
     return path
 
 
@@ -165,18 +167,21 @@ def record_raw_capture_integrity(
     manifest["schema_version"] = 2
     records = manifest.setdefault("records", {})
     for path, kind in ((json_path, "raw_capture_json"), (report_path, "raw_capture_markdown")):
-        records[capture_manifest_key(path)] = {
-            "kind": kind,
-            "capture_version": CAPTURE_VERSION,
-            "created_at": created_at.isoformat(),
-            "capture_time": capture_time.isoformat(),
-            "capture_date": capture_time.strftime("%Y-%m-%d"),
-            "session": session.value,
-            "provider": provider,
-            "scanner": scanner,
-            "hash_algorithm": "sha256",
-            "source_hash": file_sha256(path),
-        }
+        records.setdefault(
+            capture_manifest_key(path),
+            {
+                "kind": kind,
+                "capture_version": CAPTURE_VERSION,
+                "created_at": created_at.isoformat(),
+                "capture_time": capture_time.isoformat(),
+                "capture_date": capture_time.strftime("%Y-%m-%d"),
+                "session": session.value,
+                "provider": provider,
+                "scanner": scanner,
+                "hash_algorithm": "sha256",
+                "source_hash": file_sha256(path),
+            },
+        )
     manifest["updated_at"] = now_central().isoformat()
     save_capture_integrity_manifest(manifest)
 
@@ -184,7 +189,106 @@ def record_raw_capture_integrity(
 def write_raw_text_once(path: Path, text: str) -> None:
     if path.exists():
         raise RawCaptureAlreadyExistsError(f"Raw capture already exists and will not be overwritten: {path}")
-    path.write_text(text, encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = _write_fsynced_temporary(path, text)
+    try:
+        try:
+            os.link(temporary, path)
+        except FileExistsError as exc:
+            raise RawCaptureAlreadyExistsError(
+                f"Raw capture already exists and will not be overwritten: {path}"
+            ) from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def ensure_raw_capture_artifacts(json_path: Path) -> tuple[Path, Path]:
+    """Recover only derived raw companions after an interrupted write sequence."""
+    if not json_path.is_file():
+        raise FileNotFoundError(
+            f"Raw capture JSON is missing and cannot be reconstructed: {json_path}"
+        )
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Raw capture JSON is unreadable: {json_path}") from exc
+    capture_time = datetime.fromisoformat(str(payload.get("capture_time", "")))
+    if capture_time.tzinfo is None or capture_time.utcoffset() is None:
+        raise ValueError("Raw capture has no offset-aware capture_time.")
+    session = CaptureSession(str(payload.get("session", "")))
+    provider = str(payload.get("provider", "")).strip()
+    scanner = payload.get("scanner")
+    scanner_name = (
+        str(scanner.get("name", "")).strip()
+        if isinstance(scanner, dict)
+        else ""
+    )
+    if not provider or not scanner_name:
+        raise ValueError("Raw capture provider or scanner identity is missing.")
+    report_path = json_path.with_suffix(".md")
+    manifest = load_capture_integrity_manifest()
+    records = manifest.get("records", {})
+    if not isinstance(records, dict):
+        raise ValueError("Raw capture integrity manifest records are invalid.")
+    json_record = records.get(capture_manifest_key(json_path))
+    report_record = records.get(capture_manifest_key(report_path))
+    _verify_existing_capture_integrity(json_path, json_record)
+    if report_record is not None and not report_path.exists():
+        raise ValueError(
+            "Raw capture Markdown is missing despite an existing integrity record."
+        )
+    if not report_path.exists():
+        write_raw_text_once(report_path, capture_to_markdown(payload))
+    _verify_existing_capture_integrity(report_path, report_record)
+    if json_record is None or report_record is None:
+        record_raw_capture_integrity(
+            json_path=json_path,
+            report_path=report_path,
+            capture_time=capture_time,
+            session=session,
+            provider=provider,
+            scanner=scanner_name,
+            created_at=now_central(),
+        )
+    return json_path, report_path
+
+
+def _verify_existing_capture_integrity(
+    path: Path,
+    record: object,
+) -> None:
+    if record is None:
+        return
+    if not isinstance(record, dict):
+        raise ValueError(f"Raw capture integrity record is invalid: {path}")
+    expected_hash = str(record.get("source_hash", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_hash):
+        raise ValueError(f"Raw capture integrity hash is invalid: {path}")
+    if file_sha256(path) != expected_hash:
+        raise ValueError(
+            f"Raw capture integrity mismatch; refusing recovery: {path}"
+        )
+
+
+def _write_fsynced_temporary(path: Path, text: str) -> Path:
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8", newline="") as file:
+            file.write(text)
+            file.flush()
+            os.fsync(file.fileno())
+        return temporary
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _replace_text_atomically(path: Path, text: str) -> None:
+    temporary = _write_fsynced_temporary(path, text)
+    try:
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def capture_failure_path(failure_time: datetime | None = None, session: CaptureSession = CaptureSession.MANUAL) -> Path:
@@ -218,7 +322,7 @@ def save_capture_failure(
         "traceback": traceback_text,
     }
     path = capture_failure_path(failure_time, session)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _replace_text_atomically(path, json.dumps(payload, indent=2))
     return path
 
 

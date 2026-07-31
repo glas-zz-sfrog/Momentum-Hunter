@@ -127,14 +127,14 @@ try {
             session = $Session
             completedAt = (Get-Date -Format o)
             exitCode = $outcomeExitCode
-            openingResultPreserved = ($Session -eq "shadow")
+            openingResultPreserved = ($Session -in @("opening", "shadow"))
         } | ConvertTo-Json | Set-Content -LiteralPath $outcomeStatusPath -Encoding utf8
         "OutcomeUpdateExitCode: $outcomeExitCode" | Tee-Object -FilePath $logPath -Append
-        if ($Session -ne "shadow") {
+        if ($Session -notin @("opening", "shadow")) {
             $exitCode = $outcomeExitCode
         }
         elseif ($outcomeExitCode -ne 0) {
-            "WARNING: Shadow outcome update failed after the opening result became immutable; no opening retry will occur." | Tee-Object -FilePath $logPath -Append
+            "WARNING: Outcome update failed after the opening result became immutable; no opening retry will occur." | Tee-Object -FilePath $logPath -Append
         }
     }
     "ExitCode: $exitCode" | Tee-Object -FilePath $logPath -Append

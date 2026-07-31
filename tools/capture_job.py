@@ -8,7 +8,10 @@ import sys
 import traceback
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
+from urllib.request import Request, urlopen
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -20,11 +23,19 @@ from momentum_hunter.providers import ProviderUnavailableError, provider_from_na
 from momentum_hunter.scheduling import SkipReason, evaluate_automatic_capture
 from momentum_hunter.scoring import score_candidates
 from momentum_hunter.score_breakdowns import upsert_score_breakdowns_for_capture_payload
-from momentum_hunter.storage import CAPTURES_DIR, file_sha256, save_capture_failure, save_daily_capture
+from momentum_hunter.storage import (
+    CAPTURES_DIR,
+    ensure_raw_capture_artifacts,
+    file_sha256,
+    save_capture_failure,
+    save_daily_capture,
+)
 from momentum_hunter.shadow_opening import (
     ShadowOpeningSafetyError,
+    build_https_clock_skew_proof,
     build_shadow_handoff_receipt,
     canonical_json,
+    clock_skew_findings,
     shadow_handoff_findings,
 )
 from momentum_hunter.time_utils import now_central
@@ -39,6 +50,8 @@ from momentum_hunter.trade_planning import (
 REPORTS_DIR = DATA_DIR / "reports"
 SHADOW_HANDOFFS_DIR = DATA_DIR / "shadow-trading" / "capture-handoffs"
 SHADOW_RETRYABLE_INFRASTRUCTURE_EXIT = 75
+OPENING_CLOCK_URL = "https://finviz.com/"
+OPENING_CLOCK_SOURCE = "finviz.com:https_date"
 
 
 @dataclass(frozen=True)
@@ -197,6 +210,7 @@ def run_capture_with_result(
                 / decision.run_at.date().isoformat()
                 / f"{decision.capture_session.value}.json"
             )
+            ensure_raw_capture_artifacts(capture_path)
             expected = trade_planning_report_paths(
                 capture_path,
                 reports_dir=REPORTS_DIR,
@@ -223,6 +237,15 @@ def run_capture_with_result(
             exit_code=0,
             disposition="SKIPPED",
             report_paths={},
+        )
+
+    if session == CaptureSession.OPENING:
+        proof = verify_opening_https_clock()
+        print(
+            "Opening HTTPS clock proof: "
+            f"{proof['status']} | source={proof['source']} | "
+            f"skewMs={proof['signedSkewMilliseconds']} | "
+            f"uncertaintyMs={proof['measurementUncertaintyMilliseconds']}"
         )
 
     provider = provider_from_name(args.provider or config.provider)
@@ -266,6 +289,41 @@ def run_capture_with_result(
         disposition="CAPTURED",
         report_paths=report_paths,
     )
+
+
+def verify_opening_https_clock(
+    *,
+    url: str = OPENING_CLOCK_URL,
+    timeout_seconds: float = 10.0,
+    opener: Callable[..., object] = urlopen,
+    utc_clock: Callable[[], datetime] | None = None,
+) -> dict[str, object]:
+    clock = utc_clock or (lambda: datetime.now(timezone.utc))
+    request_started_at = clock()
+    request = Request(
+        url,
+        method="HEAD",
+        headers={"User-Agent": "MomentumHunter/1.0 clock-preflight"},
+    )
+    with opener(request, timeout=timeout_seconds) as response:
+        remote_date = str(response.headers.get("Date", ""))
+    response_received_at = clock()
+    proof = build_https_clock_skew_proof(
+        request_started_at=request_started_at,
+        response_received_at=response_received_at,
+        remote_date_header=remote_date,
+        source_identity=OPENING_CLOCK_SOURCE,
+    )
+    findings = clock_skew_findings(
+        proof,
+        evaluated_at=response_received_at,
+    )
+    if findings:
+        raise RuntimeError(
+            "Opening capture clock preflight failed closed: "
+            + " | ".join(findings)
+        )
+    return proof
 
 
 def ensure_trade_planning_report(

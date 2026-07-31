@@ -60,6 +60,7 @@ def build_reboot_canary_plan(
         raise RebootCanaryError(
             "The observed pre-reboot boot time must precede preparation."
         )
+    latest_start_at = scheduled + timedelta(minutes=15)
 
     service_instance_id = str(state.get("service_instance_id", "")).strip()
     if not service_instance_id:
@@ -74,6 +75,7 @@ def build_reboot_canary_plan(
     if not isinstance(raw_jobs, Sequence) or isinstance(raw_jobs, (str, bytes)):
         raise RebootCanaryError("Automation manifest jobs must be a list.")
     existing_jobs: list[dict[str, object]] = []
+    preserved_pending_opening_jobs: list[dict[str, object]] = []
     for raw_job in raw_jobs:
         if not isinstance(raw_job, Mapping):
             raise RebootCanaryError("Automation manifest jobs must be objects.")
@@ -95,10 +97,23 @@ def build_reboot_canary_plan(
             if isinstance(receipt, Mapping)
             else ""
         )
-        if enabled and receipt_status not in FINAL_JOB_STATES:
+        preserves_pending_opening = False
+        if enabled and kind == "opening_capture" and receipt_status == "PENDING":
+            opening_scheduled_at = parse_timestamp(
+                job.get("scheduledAt"),
+                f"Existing opening job {job_id} scheduledAt",
+            )
+            preserves_pending_opening = opening_scheduled_at > latest_start_at
+        if (
+            enabled
+            and receipt_status not in FINAL_JOB_STATES
+            and not preserves_pending_opening
+        ):
             raise RebootCanaryError(
                 f"Existing enabled job {job_id} is not terminal."
             )
+        if preserves_pending_opening:
+            preserved_pending_opening_jobs.append(job)
         existing_jobs.append(job)
 
     suffix = scheduled.strftime("%Y%m%dt%H%M%S")
@@ -107,7 +122,6 @@ def build_reboot_canary_plan(
     existing_ids = {str(job["jobId"]) for job in existing_jobs}
     if canary_job_id in existing_ids:
         raise RebootCanaryError("The planned reboot canary job already exists.")
-    latest_start_at = scheduled + timedelta(minutes=15)
     canary_job: dict[str, object] = {
         "jobId": canary_job_id,
         "kind": "nonmarket_canary",
@@ -166,6 +180,7 @@ def build_reboot_canary_plan(
         "shadowJobsEnabled": 0,
         "orderTransmission": "UNAVAILABLE",
         "baselinePath": str(baseline_path.resolve()),
+        "preservedPendingOpeningJobs": preserved_pending_opening_jobs,
     }
     summary = {
         "classification": "READY_TO_INSTALL",
@@ -179,6 +194,9 @@ def build_reboot_canary_plan(
         "requiresReboot": True,
         "requiresNoInteractiveLogin": True,
         "orderTransmission": "UNAVAILABLE",
+        "preservedPendingOpeningJobCount": len(
+            baseline["preservedPendingOpeningJobs"]
+        ),
     }
     return {
         "manifest": planned_manifest,
@@ -253,6 +271,12 @@ def verify_reboot_canary(
         "latestStartAt",
     )
     manifest_jobs = manifest.get("jobs", [])
+    _verify_preserved_pending_opening_jobs(
+        manifest_jobs,
+        jobs,
+        baseline.get("preservedPendingOpeningJobs", []),
+        latest_start_at=latest_start_at,
+    )
     canary_job = _find_manifest_job(manifest_jobs, canary_job_id)
     _verify_manifest_job(
         canary_job,
@@ -374,7 +398,46 @@ def verify_reboot_canary(
         "ordersRequested": False,
         "shadowJobsEnabled": 0,
         "orderTransmission": "UNAVAILABLE",
+        "preservedPendingOpeningJobCount": len(
+            baseline.get("preservedPendingOpeningJobs", [])
+        ),
     }
+
+
+def _verify_preserved_pending_opening_jobs(
+    manifest_jobs: object,
+    state_jobs: Mapping[str, object],
+    expected_jobs: object,
+    *,
+    latest_start_at: datetime,
+) -> None:
+    if not isinstance(expected_jobs, list):
+        raise RebootCanaryError(
+            "Reboot baseline pending opening jobs must be a list."
+        )
+    for expected in expected_jobs:
+        if not isinstance(expected, Mapping):
+            raise RebootCanaryError(
+                "Reboot baseline pending opening job is invalid."
+            )
+        job_id = str(expected.get("jobId", "")).strip()
+        actual = _find_manifest_job(manifest_jobs, job_id)
+        if dict(actual) != dict(expected):
+            raise RebootCanaryError(
+                f"Pending opening job {job_id!r} changed during reboot proof."
+            )
+        receipt = state_jobs.get(job_id)
+        if not isinstance(receipt, Mapping) or receipt.get("status") != "PENDING":
+            raise RebootCanaryError(
+                f"Pending opening job {job_id!r} was not preserved as PENDING."
+            )
+        if parse_timestamp(
+            actual.get("scheduledAt"),
+            f"Pending opening job {job_id} scheduledAt",
+        ) <= latest_start_at:
+            raise RebootCanaryError(
+                f"Pending opening job {job_id!r} is not prospective."
+            )
 
 
 def _validate_manifest_identity(manifest: Mapping[str, object]) -> None:

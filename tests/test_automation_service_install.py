@@ -10,6 +10,12 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = REPOSITORY_ROOT / "tools" / "install_automation_service.ps1"
+HARDEN_CLOCK = (
+    REPOSITORY_ROOT / "tools" / "harden_automation_clock_task.ps1"
+)
+ARCHIVE_REBOOT = (
+    REPOSITORY_ROOT / "tools" / "archive_passed_automation_reboot_canary.ps1"
+)
 STATUS = REPOSITORY_ROOT / "tools" / "get_automation_service_status.ps1"
 SET_JOBS = REPOSITORY_ROOT / "tools" / "set_automation_service_jobs.ps1"
 PREPARE_REBOOT = (
@@ -55,7 +61,12 @@ class AutomationServiceInstallTests(unittest.TestCase):
             self.assertEqual("SYSTEM", plan["wakeTask"]["principal"])
             self.assertTrue(plan["wakeTask"]["wakeToRun"])
             self.assertFalse(plan["wakeTask"]["interactiveLogon"])
-            self.assertEqual("NO_OP_WAKE_ONLY", plan["wakeTask"]["action"])
+            self.assertEqual("WINDOWS_TIME_RESYNC", plan["wakeTask"]["action"])
+            self.assertEqual(
+                ["AT_STARTUP", "DAILY_08_15"],
+                plan["wakeTask"]["triggers"],
+            )
+            self.assertEqual(5, plan["wakeTask"]["restartCount"])
             initial_kinds = [job["kind"] for job in plan["initialJobs"]]
             self.assertEqual("nonmarket_canary", initial_kinds[0])
             if plan["codexHeadlessConfigured"]:
@@ -112,7 +123,11 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertIn("-StartupType Automatic", source)
         self.assertIn("-WakeToRun", source)
         self.assertIn('-UserId "SYSTEM"', source)
-        self.assertIn('"NO_OP_WAKE_ONLY"', source)
+        self.assertIn('"WINDOWS_TIME_RESYNC"', source)
+        self.assertIn('"$env:SystemRoot\\System32\\w32tm.exe"', source)
+        self.assertIn('"/resync /rediscover"', source)
+        self.assertIn("New-ScheduledTaskTrigger -AtStartup", source)
+        self.assertIn("-RestartCount 5", source)
         self.assertIn('"installation-codex-probe"', source)
         self.assertIn('"CODEX_SERVICE_READY"', source)
         self.assertIn(
@@ -131,6 +146,61 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertNotIn("LocalSystem", source)
         self.assertNotIn("ArmShadowSelector", source)
 
+    def test_clock_hardener_is_bounded_and_plan_only_is_nonmutating(self) -> None:
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(HARDEN_CLOCK),
+                "-PlanOnly",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual("SYSTEM", plan["principal"])
+        self.assertEqual(
+            "w32tm.exe /resync /rediscover",
+            plan["action"],
+        )
+        self.assertEqual(["AT_STARTUP", "DAILY_08_15"], plan["triggers"])
+        self.assertEqual(5, plan["restartCount"])
+        self.assertFalse(plan["startWhenAvailable"])
+        self.assertFalse(plan["deletesTask"])
+        self.assertEqual("UNAVAILABLE", plan["orderTransmission"])
+
+        source = HARDEN_CLOCK.read_text(encoding="utf-8")
+        self.assertIn("Set-ScheduledTask", source)
+        self.assertIn("New-ScheduledTaskTrigger -AtStartup", source)
+        self.assertIn("-WakeToRun", source)
+        self.assertIn("-RestartCount 5", source)
+        self.assertIn("Start-ScheduledTask", source)
+        self.assertNotIn("Unregister-ScheduledTask", source)
+        self.assertNotIn("Remove-Item", source)
+        self.assertNotIn("Restart-Computer", source)
+
+    def test_reboot_archive_preserves_evidence_and_requires_verified_pass(
+        self,
+    ) -> None:
+        source = ARCHIVE_REBOOT.read_text(encoding="utf-8")
+
+        self.assertIn("verify_automation_reboot_canary.ps1", source)
+        self.assertIn('classification -ne "PASS"', source)
+        self.assertIn("Copy-Item", source)
+        self.assertIn("Move-Item -LiteralPath $baselinePath", source)
+        self.assertIn("Get-FileHash", source)
+        self.assertIn("evidenceDeleted = $false", source)
+        self.assertNotIn("Remove-Item", source)
+        self.assertNotIn("Restart-Computer", source)
+        self.assertNotIn("shutdown.exe", source)
+
     def test_status_script_is_read_only(self) -> None:
         source = STATUS.read_text(encoding="utf-8")
 
@@ -147,6 +217,9 @@ class AutomationServiceInstallTests(unittest.TestCase):
             self.assertNotIn(forbidden, source)
         self.assertIn('orderTransmission = "UNAVAILABLE"', source)
         self.assertIn("PRESENT_REQUIRES_ELEVATION", source)
+        self.assertIn("openingCaptureCoverageStatus", source)
+        self.assertIn("pendingOpeningCaptureJobs", source)
+        self.assertIn("failedOpeningCaptureJobs", source)
 
     def test_reboot_canary_scripts_preserve_nonmarket_boundary(self) -> None:
         prepare = PREPARE_REBOOT.read_text(encoding="utf-8")
@@ -158,6 +231,8 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertIn('shadowJobsEnabled = 0', prepare)
         self.assertIn('orderTransmission = "UNAVAILABLE"', prepare)
         self.assertIn("[System.Text.UTF8Encoding]::new($false)", prepare)
+        self.assertIn("[DateTimeOffset]$canaryLocal", prepare)
+        self.assertIn('$canaryOffset.ToString("o")', prepare)
         self.assertIn("Push-Location -LiteralPath $projectPath", prepare)
         self.assertIn("Pop-Location", prepare)
         self.assertNotIn("Test-IsAdministrator", prepare)

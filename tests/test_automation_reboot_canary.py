@@ -146,6 +146,64 @@ class AutomationRebootCanaryTests(unittest.TestCase):
                 self.state(jobs={"still-running": {"status": "RUNNING"}}),
             )
 
+    def test_plan_preserves_prospective_pending_opening_capture_jobs(self) -> None:
+        opening = {
+            "jobId": "opening-capture-20260803",
+            "kind": "opening_capture",
+            "scheduledAt": "2026-08-03T08:35:00-05:00",
+            "latestStartAt": "2026-08-03T08:40:00-05:00",
+            "enabled": True,
+            "timeoutSeconds": 900,
+        }
+
+        result = self.plan(
+            self.manifest(jobs=[opening]),
+            self.state(
+                jobs={
+                    "opening-capture-20260803": {"status": "PENDING"}
+                }
+            ),
+        )
+
+        self.assertEqual(opening, result["manifest"]["jobs"][0])
+        self.assertEqual(
+            [opening],
+            result["baseline"]["preservedPendingOpeningJobs"],
+        )
+        self.assertEqual(
+            1,
+            result["summary"]["preservedPendingOpeningJobCount"],
+        )
+
+    def test_verify_rejects_changed_or_consumed_pending_opening_job(self) -> None:
+        manifest, state, baseline = self.valid_verification_evidence()
+        opening = {
+            "jobId": "opening-capture-20260803",
+            "kind": "opening_capture",
+            "scheduledAt": "2026-08-03T08:35:00-05:00",
+            "latestStartAt": "2026-08-03T08:40:00-05:00",
+            "enabled": True,
+            "timeoutSeconds": 900,
+        }
+        manifest["jobs"].append(opening)
+        baseline["preservedPendingOpeningJobs"] = [opening]
+        state["jobs"][opening["jobId"]] = {
+            "kind": "opening_capture",
+            "status": "PENDING",
+        }
+
+        result = self.verify(manifest, state, baseline)
+        self.assertEqual(1, result["preservedPendingOpeningJobCount"])
+
+        manifest["jobs"][-1] = {**opening, "timeoutSeconds": 901}
+        with self.assertRaisesRegex(RebootCanaryError, "changed"):
+            self.verify(manifest, state, baseline)
+
+        manifest["jobs"][-1] = opening
+        state["jobs"][opening["jobId"]]["status"] = "MISSED"
+        with self.assertRaisesRegex(RebootCanaryError, "not preserved"):
+            self.verify(manifest, state, baseline)
+
     def test_plan_requires_lead_time_and_expected_account_identity(self) -> None:
         with self.assertRaisesRegex(RebootCanaryError, "three minutes"):
             build_reboot_canary_plan(

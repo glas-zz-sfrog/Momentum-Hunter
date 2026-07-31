@@ -36,6 +36,13 @@ if (Test-Path -LiteralPath $baselinePath -PathType Leaf) {
 
 $preparedAt = Get-Date
 $bootTime = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+$canaryLocal = if ($CanaryAt.Kind -eq [DateTimeKind]::Unspecified) {
+    [DateTime]::SpecifyKind($CanaryAt, [DateTimeKind]::Local)
+}
+else {
+    $CanaryAt.ToLocalTime()
+}
+$canaryOffset = [DateTimeOffset]$canaryLocal
 $arguments = @(
     "-B",
     "-m",
@@ -46,7 +53,7 @@ $arguments = @(
     "--state",
     $statePath,
     "--scheduled-at",
-    $CanaryAt.ToString("o"),
+    $canaryOffset.ToString("o"),
     "--prepared-at",
     $preparedAt.ToString("o"),
     "--pre-reboot-boot-time",

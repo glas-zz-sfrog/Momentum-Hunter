@@ -68,6 +68,31 @@ $openingCaptureEnabled = @(
         $_.kind -eq "opening_capture" -and $_.enabled
     }
 ).Count
+$now = Get-Date
+$pendingOpeningCaptures = @(
+    $jobs | Where-Object {
+        $_.kind -eq "opening_capture" -and
+        $_.enabled -and
+        $_.status -in @("PENDING", "NOT_OBSERVED") -and
+        [datetime]$_.scheduledAt -gt $now
+    } | Sort-Object { [datetime]$_.scheduledAt }
+)
+$failedOpeningCaptures = @(
+    $jobs | Where-Object {
+        $_.kind -eq "opening_capture" -and
+        $_.enabled -and
+        $_.status -in @("FAILED", "MISSED", "BLOCKED_DEPENDENCY")
+    }
+)
+$openingCoverageStatus = if ($pendingOpeningCaptures.Count -eq 0) {
+    "EXHAUSTED"
+}
+elseif ($pendingOpeningCaptures.Count -lt 5) {
+    "LOW"
+}
+else {
+    "READY"
+}
 
 [ordered]@{
     serviceName = $ServiceName
@@ -108,6 +133,25 @@ $openingCaptureEnabled = @(
     else {
         ""
     }
+    wakeTaskAction = if ($wakeTask -and @($wakeTask.Actions).Count -eq 1) {
+        $action = @($wakeTask.Actions)[0]
+        "$($action.Execute) $($action.Arguments)".Trim()
+    }
+    else {
+        ""
+    }
+    wakeTaskTriggerCount = if ($wakeTask) {
+        @($wakeTask.Triggers).Count
+    }
+    else {
+        0
+    }
+    wakeTaskLastResult = if ($wakeTaskInfo) {
+        $wakeTaskInfo.LastTaskResult
+    }
+    else {
+        $null
+    }
     wakeTaskNextRunAt = if ($wakeTaskInfo) {
         $wakeTaskInfo.NextRunTime.ToString("o")
     }
@@ -126,6 +170,21 @@ $openingCaptureEnabled = @(
     )
     jobs = $jobs
     openingCaptureJobsEnabled = $openingCaptureEnabled
+    pendingOpeningCaptureJobs = $pendingOpeningCaptures.Count
+    failedOpeningCaptureJobs = $failedOpeningCaptures.Count
+    nextOpeningCaptureAt = if ($pendingOpeningCaptures.Count) {
+        $pendingOpeningCaptures[0].scheduledAt
+    }
+    else {
+        ""
+    }
+    openingCaptureCoverageEndsAt = if ($pendingOpeningCaptures.Count) {
+        $pendingOpeningCaptures[-1].scheduledAt
+    }
+    else {
+        ""
+    }
+    openingCaptureCoverageStatus = $openingCoverageStatus
     shadowJobsEnabled = $shadowEnabled
     orderTransmission = "UNAVAILABLE"
 } | ConvertTo-Json -Depth 8

@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -20,6 +20,83 @@ from tools import capture_job
 
 
 class CaptureJobTradePlanHandoffTests(unittest.TestCase):
+    def test_opening_https_clock_preflight_accepts_bounded_exact_host_time(
+        self,
+    ) -> None:
+        started = datetime(2026, 7, 31, 13, 35, 0, 100000, tzinfo=timezone.utc)
+        received = started + timedelta(milliseconds=150)
+        observed = iter((started, received))
+
+        class Response:
+            headers = {"Date": "Fri, 31 Jul 2026 13:35:00 GMT"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        proof = capture_job.verify_opening_https_clock(
+            opener=lambda *_args, **_kwargs: Response(),
+            utc_clock=lambda: next(observed),
+        )
+
+        self.assertEqual("PASS", proof["status"])
+        self.assertEqual("finviz.com:https_date", proof["source"])
+
+    def test_opening_https_clock_preflight_fails_closed_on_large_skew(
+        self,
+    ) -> None:
+        started = datetime(2026, 7, 31, 13, 35, 10, tzinfo=timezone.utc)
+        received = started + timedelta(milliseconds=100)
+        observed = iter((started, received))
+
+        class Response:
+            headers = {"Date": "Fri, 31 Jul 2026 13:35:00 GMT"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        with self.assertRaisesRegex(RuntimeError, "failed closed"):
+            capture_job.verify_opening_https_clock(
+                opener=lambda *_args, **_kwargs: Response(),
+                utc_clock=lambda: next(observed),
+            )
+
+    def test_opening_capture_clock_failure_prevents_provider_contact(self) -> None:
+        args = argparse.Namespace(provider="finviz", scanner=None)
+        decision = capture_decision()
+
+        with (
+            patch.object(
+                capture_job,
+                "load_config",
+                return_value=AppConfig(provider="finviz"),
+            ),
+            patch.object(capture_job, "now_central", return_value=decision.run_at),
+            patch.object(
+                capture_job,
+                "evaluate_automatic_capture",
+                return_value=decision,
+            ),
+            patch.object(
+                capture_job,
+                "verify_opening_https_clock",
+                side_effect=RuntimeError("clock failed closed"),
+            ),
+            patch.object(capture_job, "provider_from_name") as provider_factory,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "clock failed closed"):
+                capture_job.run_capture_with_result(
+                    args,
+                    session=CaptureSession.OPENING,
+                )
+
+        provider_factory.assert_not_called()
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
@@ -33,8 +110,15 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                     "capture_time": "2026-07-24T07:00:00-05:00",
                     "capture_date": "2026-07-24",
                     "session": "morning",
+                    "mode": "paper",
                     "provider": "finviz",
                     "scanner": {"name": "Institutional Momentum"},
+                    "scoring": {},
+                    "market": {
+                        "regime": "neutral",
+                        "symbol": "SPY",
+                        "reason": "test",
+                    },
                     "candidates": [],
                 }
             ),
@@ -206,6 +290,10 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             patch.object(capture_job, "load_config", return_value=AppConfig(provider="finviz")),
             patch.object(capture_job, "now_central", return_value=decision.run_at),
             patch.object(capture_job, "evaluate_automatic_capture", return_value=decision),
+            patch(
+                "momentum_hunter.storage.CAPTURE_INTEGRITY_MANIFEST",
+                self.root / "capture-manifest.json",
+            ),
             patch.object(capture_job, "provider_from_name", return_value=provider),
             patch.object(
                 capture_job,
@@ -324,6 +412,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 "evaluate_automatic_capture",
                 return_value=decision,
             ),
+            patch.object(capture_job, "ensure_raw_capture_artifacts"),
             patch.object(
                 capture_job,
                 "ensure_trade_planning_report",

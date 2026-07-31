@@ -244,6 +244,54 @@ class OpeningCaptureRunnerTests(unittest.TestCase):
         self.assertNotIn("position", joined)
         self.assertNotIn("order", joined)
 
+    def test_opening_capture_success_survives_independent_outcome_failure(
+        self,
+    ) -> None:
+        (self.tools / "capture_job.py").write_text(
+            "raise SystemExit(0)\n",
+            encoding="utf-8",
+        )
+        (self.tools / "update_outcomes.py").write_text(
+            "raise SystemExit(23)\n",
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            (
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(self.runner),
+                "-Session",
+                "opening",
+                "-ProjectRoot",
+                str(self.root),
+                "-PythonExe",
+                sys.executable,
+                "-OpeningRetryCount",
+                "0",
+            ),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("OutcomeUpdateExitCode: 23", result.stdout)
+        self.assertIn("no opening retry will occur", result.stdout)
+        status_paths = list(
+            (self.root / "MomentumHunterData" / "logs").glob(
+                "outcomes-opening-*.status.json"
+            )
+        )
+        self.assertEqual(1, len(status_paths))
+        status = json.loads(status_paths[0].read_text(encoding="utf-8-sig"))
+        self.assertTrue(status["openingResultPreserved"])
+        self.assertEqual(23, status["exitCode"])
+
 
 if __name__ == "__main__":
     unittest.main()

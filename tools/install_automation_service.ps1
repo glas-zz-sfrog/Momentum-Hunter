@@ -252,7 +252,10 @@ $plan = [ordered]@{
         principal = "SYSTEM"
         wakeToRun = $true
         startWhenAvailable = $false
-        action = "NO_OP_WAKE_ONLY"
+        action = "WINDOWS_TIME_RESYNC"
+        triggers = @("AT_STARTUP", "DAILY_$($WakeTime.Replace(':', '_'))")
+        restartCount = 5
+        restartIntervalMinutes = 2
         interactiveLogon = $false
     }
     serviceRoot = $ServiceRoot
@@ -391,9 +394,12 @@ try {
     }
 
     $wakeAction = New-ScheduledTaskAction `
-        -Execute "$env:SystemRoot\System32\cmd.exe" `
-        -Argument "/d /c exit 0"
-    $wakeTrigger = New-ScheduledTaskTrigger -Daily -At $WakeTime
+        -Execute "$env:SystemRoot\System32\w32tm.exe" `
+        -Argument "/resync /rediscover"
+    $wakeTriggers = @(
+        (New-ScheduledTaskTrigger -AtStartup),
+        (New-ScheduledTaskTrigger -Daily -At $WakeTime)
+    )
     $wakePrincipal = New-ScheduledTaskPrincipal `
         -UserId "SYSTEM" `
         -LogonType ServiceAccount `
@@ -403,11 +409,13 @@ try {
         -AllowStartIfOnBatteries `
         -DontStopIfGoingOnBatteries `
         -MultipleInstances IgnoreNew `
-        -ExecutionTimeLimit ([TimeSpan]::FromMinutes(1))
+        -RestartCount 5 `
+        -RestartInterval ([TimeSpan]::FromMinutes(2)) `
+        -ExecutionTimeLimit ([TimeSpan]::FromMinutes(15))
     Register-ScheduledTask `
         -TaskName $WakeTaskName `
         -Action $wakeAction `
-        -Trigger $wakeTrigger `
+        -Trigger $wakeTriggers `
         -Principal $wakePrincipal `
         -Settings $wakeSettings | Out-Null
 

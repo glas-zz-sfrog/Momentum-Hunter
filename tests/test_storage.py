@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -13,15 +14,133 @@ from momentum_hunter.storage import (
     capture_manifest_key,
     candidate_from_dict,
     candidate_to_dict,
+    ensure_raw_capture_artifacts,
     load_capture_integrity_manifest,
     load_latest_capture_failure,
     save_capture_failure,
     save_daily_capture,
+    write_raw_text_once,
+    RawCaptureAlreadyExistsError,
 )
 from momentum_hunter.time_utils import CENTRAL_TZ
 
 
 class StorageSerializationTests(unittest.TestCase):
+    def test_raw_write_once_is_atomic_and_never_overwrites(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "opening.json"
+
+            write_raw_text_once(path, "complete evidence")
+            with self.assertRaises(RawCaptureAlreadyExistsError):
+                write_raw_text_once(path, "replacement")
+
+            self.assertEqual("complete evidence", path.read_text(encoding="utf-8"))
+            self.assertEqual([], list(path.parent.glob(".*.tmp")))
+
+    def test_interrupted_temp_write_never_claims_official_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "opening.json"
+            with patch(
+                "momentum_hunter.storage.os.fsync",
+                side_effect=OSError("simulated power-loss write failure"),
+            ):
+                with self.assertRaisesRegex(OSError, "power-loss"):
+                    write_raw_text_once(path, "partial evidence")
+
+            self.assertFalse(path.exists())
+            self.assertEqual([], list(path.parent.glob(".*.tmp")))
+
+    def test_missing_markdown_and_integrity_recover_from_immutable_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            json_path = root / "opening.json"
+            manifest_path = root / "capture-manifest.json"
+            payload = {
+                "capture_time": "2026-07-31T08:35:00-05:00",
+                "capture_date": "2026-07-31",
+                "session": "opening",
+                "mode": "paper",
+                "provider": "finviz",
+                "scanner": {"name": "Institutional Momentum"},
+                "scoring": {},
+                "market": {
+                    "regime": "neutral",
+                    "symbol": "SPY",
+                    "reason": "test",
+                },
+                "candidates": [],
+            }
+            write_raw_text_once(json_path, json.dumps(payload))
+            original_hash = json_path.read_bytes()
+
+            with patch(
+                "momentum_hunter.storage.CAPTURE_INTEGRITY_MANIFEST",
+                manifest_path,
+            ):
+                recovered_json, recovered_markdown = ensure_raw_capture_artifacts(
+                    json_path
+                )
+                first_manifest = manifest_path.read_bytes()
+                ensure_raw_capture_artifacts(json_path)
+
+            self.assertEqual(json_path, recovered_json)
+            self.assertTrue(recovered_markdown.is_file())
+            self.assertEqual(original_hash, json_path.read_bytes())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(2, len(manifest["records"]))
+            self.assertEqual(first_manifest, manifest_path.read_bytes())
+
+    def test_recovery_rejects_raw_capture_hash_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            json_path = root / "opening.json"
+            report_path = root / "opening.md"
+            manifest_path = root / "capture-manifest.json"
+            payload = {
+                "capture_time": "2026-07-31T08:35:00-05:00",
+                "capture_date": "2026-07-31",
+                "session": "opening",
+                "mode": "paper",
+                "provider": "finviz",
+                "scanner": {"name": "Institutional Momentum"},
+                "scoring": {},
+                "market": {
+                    "regime": "neutral",
+                    "symbol": "SPY",
+                    "reason": "test",
+                },
+                "candidates": [],
+            }
+            json_path.write_text(json.dumps(payload), encoding="utf-8")
+            report_path.write_text("report", encoding="utf-8")
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "records": {
+                            capture_manifest_key(json_path): {
+                                "source_hash": "0" * 64,
+                            },
+                            capture_manifest_key(report_path): {
+                                "source_hash": "1" * 64,
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch(
+                "momentum_hunter.storage.CAPTURE_INTEGRITY_MANIFEST",
+                manifest_path,
+            ):
+                with self.assertRaisesRegex(ValueError, "integrity mismatch"):
+                    ensure_raw_capture_artifacts(json_path)
+
+            self.assertEqual("0" * 64, json.loads(
+                manifest_path.read_text(encoding="utf-8")
+            )["records"][capture_manifest_key(json_path)]["source_hash"])
+
     def test_candidate_news_stack_round_trips_through_json_payload(self) -> None:
         now = datetime(2026, 6, 4, 12, 0, tzinfo=CENTRAL_TZ)
         candidate = Candidate(
