@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$ProjectRoot = "",
     [string]$PythonExe = "",
     [string]$ServiceRoot = "C:\ProgramData\MomentumHunter\Automation",
     [string]$ServiceName = "MomentumHunterAutomation",
@@ -160,6 +160,9 @@ namespace MomentumHunter
     )
 }
 
+if (-not $ProjectRoot) {
+    $ProjectRoot = Split-Path -Parent $PSScriptRoot
+}
 $projectPath = (Resolve-Path -LiteralPath $ProjectRoot).Path
 if (-not $PythonExe) {
     $PythonExe = Join-Path $projectPath ".venv\Scripts\python.exe"
@@ -336,8 +339,12 @@ try {
         jobs = $initialJobs
     }
     $temporaryManifest = "$manifestPath.$([guid]::NewGuid().ToString('N')).tmp"
-    $manifest | ConvertTo-Json -Depth 6 |
-        Set-Content -LiteralPath $temporaryManifest -Encoding utf8
+    $manifestJson = $manifest | ConvertTo-Json -Depth 6
+    [System.IO.File]::WriteAllText(
+        $temporaryManifest,
+        $manifestJson,
+        [System.Text.UTF8Encoding]::new($false)
+    )
     Move-Item -LiteralPath $temporaryManifest -Destination $manifestPath -Force
 
     $credential = Get-Credential `

@@ -70,6 +70,30 @@ class AutomationServiceInstallTests(unittest.TestCase):
                 self.assertEqual(["nonmarket_canary"], initial_kinds)
             self.assertFalse(service_root.exists())
 
+    def test_file_invocation_resolves_default_project_root(self) -> None:
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(INSTALLER),
+                "-PlanOnly",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(
+            str(REPOSITORY_ROOT),
+            plan["repositoryRoot"],
+        )
+
     def test_installer_uses_local_secure_credential_and_recovery(self) -> None:
         source = INSTALLER.read_text(encoding="utf-8")
 
@@ -88,6 +112,11 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertIn(
             "Move-Item -LiteralPath $temporaryManifest "
             "-Destination $manifestPath -Force",
+            source,
+        )
+        self.assertIn("[System.Text.UTF8Encoding]::new($false)", source)
+        self.assertNotIn(
+            "Set-Content -LiteralPath $temporaryManifest -Encoding utf8",
             source,
         )
         self.assertNotIn("AutoAdminLogon", source)
@@ -111,6 +140,7 @@ class AutomationServiceInstallTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, source)
         self.assertIn('orderTransmission = "UNAVAILABLE"', source)
+        self.assertIn("PRESENT_REQUIRES_ELEVATION", source)
 
     def test_market_manifest_update_has_hard_interlocks(self) -> None:
         source = SET_JOBS.read_text(encoding="utf-8")
@@ -124,6 +154,11 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertIn("repository must be clean", source)
         self.assertIn("Restart-Service", source)
         self.assertIn('orderTransmission = "UNAVAILABLE"', source)
+        self.assertIn("[System.Text.UTF8Encoding]::new($false)", source)
+        self.assertNotIn(
+            "Set-Content -LiteralPath $temporaryManifest -Encoding utf8",
+            source,
+        )
         self.assertNotIn("submit_order", source)
         self.assertNotIn("cancel_order", source)
 

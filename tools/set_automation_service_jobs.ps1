@@ -185,8 +185,12 @@ if ($backupPath) {
     Copy-Item -LiteralPath $manifestPath -Destination $backupPath
 }
 $temporaryManifest = "$manifestPath.$([guid]::NewGuid().ToString('N')).tmp"
-$manifest | ConvertTo-Json -Depth 8 |
-    Set-Content -LiteralPath $temporaryManifest -Encoding utf8
+$manifestJson = $manifest | ConvertTo-Json -Depth 8
+[System.IO.File]::WriteAllText(
+    $temporaryManifest,
+    $manifestJson,
+    [System.Text.UTF8Encoding]::new($false)
+)
 Move-Item -LiteralPath $temporaryManifest -Destination $manifestPath -Force
 Restart-Service -Name $ServiceName
 $service = Get-Service -Name $ServiceName

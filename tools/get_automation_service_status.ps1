@@ -13,10 +13,19 @@ $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 $serviceConfig = Get-CimInstance Win32_Service -Filter (
     "Name='$($ServiceName.Replace("'", "''"))'"
 ) -ErrorAction SilentlyContinue
+$wakeTaskErrors = @()
 $wakeTask = Get-ScheduledTask -TaskName $WakeTaskName `
-    -ErrorAction SilentlyContinue
+    -ErrorAction SilentlyContinue `
+    -ErrorVariable wakeTaskErrors
+$wakeTaskInfoErrors = @()
 $wakeTaskInfo = Get-ScheduledTaskInfo -TaskName $WakeTaskName `
-    -ErrorAction SilentlyContinue
+    -ErrorAction SilentlyContinue `
+    -ErrorVariable wakeTaskInfoErrors
+$wakeTaskAccessDenied = [bool](
+    @($wakeTaskErrors) + @($wakeTaskInfoErrors) |
+        Where-Object { $_.Exception.Message -match "Access is denied" }
+)
+$wakeTaskPresent = [bool]$wakeTask -or $wakeTaskAccessDenied
 $manifest = if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 }
@@ -63,9 +72,31 @@ $shadowEnabled = @(
     startName = if ($serviceConfig) { $serviceConfig.StartName } else { "" }
     processId = if ($serviceConfig) { $serviceConfig.ProcessId } else { 0 }
     wakeTaskName = $WakeTaskName
-    wakeTaskPresent = [bool]$wakeTask
-    wakeTaskState = if ($wakeTask) { $wakeTask.State.ToString() } else { "" }
-    wakeToRun = [bool]($wakeTask -and $wakeTask.Settings.WakeToRun)
+    wakeTaskPresent = $wakeTaskPresent
+    wakeTaskVisibility = if ($wakeTask) {
+        "VISIBLE"
+    }
+    elseif ($wakeTaskAccessDenied) {
+        "PRESENT_REQUIRES_ELEVATION"
+    }
+    else {
+        "NOT_FOUND"
+    }
+    wakeTaskState = if ($wakeTask) {
+        $wakeTask.State.ToString()
+    }
+    elseif ($wakeTaskAccessDenied) {
+        "PRESENT_REQUIRES_ELEVATION"
+    }
+    else {
+        ""
+    }
+    wakeToRun = if ($wakeTask) {
+        [bool]$wakeTask.Settings.WakeToRun
+    }
+    else {
+        $null
+    }
     wakeTaskPrincipal = if ($wakeTask) {
         $wakeTask.Principal.UserId
     }
