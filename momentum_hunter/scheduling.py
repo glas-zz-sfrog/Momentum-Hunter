@@ -120,7 +120,7 @@ def evaluate_automatic_capture(
                 SkipReason.SKIP_NOT_PREOPEN_GAP_REVIEW_DAY,
             )
 
-    elif requested_session == CaptureSession.SHADOW:
+    elif requested_session in {CaptureSession.OPENING, CaptureSession.SHADOW}:
         if not is_market_open_day(current.date()):
             return skip_decision(
                 requested_session,
@@ -128,7 +128,7 @@ def evaluate_automatic_capture(
                 current,
                 SkipReason.SKIP_NOT_MARKET_DAY,
             )
-        target_session = CaptureSession.SHADOW
+        target_session = requested_session
 
     return capture_decision(requested_session, target_session, current, captures_dir=captures_dir)
 
@@ -199,7 +199,10 @@ def classify_capture(
     if session_value == CaptureSession.PREOPEN.value and is_preopen_gap_review_day(capture_day):
         status = CaptureCalendarStatus.PREOPEN_GAP_REVIEW_DAY
 
-    is_study_eligible = session_value in {CaptureSession.MORNING.value, CaptureSession.EVENING.value} and market_day
+    is_study_eligible = session_value in {
+        CaptureSession.MORNING.value,
+        CaptureSession.EVENING.value,
+    } and market_day
     return CaptureCalendarClassification(
         capture_session=session_value,
         capture_calendar_status=status.value,
@@ -258,7 +261,7 @@ def is_capture_window(session: CaptureSession, current: datetime) -> bool:
         return time(19, 0) <= current.time().replace(second=0, microsecond=0) <= time(20, 0)
     if session == CaptureSession.PREOPEN:
         return time(19, 0) <= current.time().replace(second=0, microsecond=0) <= time(20, 0)
-    if session == CaptureSession.SHADOW:
+    if session in {CaptureSession.OPENING, CaptureSession.SHADOW}:
         return time(8, 35) <= current.time().replace(second=0, microsecond=0) <= time(8, 40)
     return True
 
@@ -272,7 +275,7 @@ def next_automatic_run(
     current = normalize_central(after or now_central())
     if session == CaptureSession.MORNING:
         target_time = time(7, 0)
-    elif session == CaptureSession.SHADOW:
+    elif session in {CaptureSession.OPENING, CaptureSession.SHADOW}:
         target_time = time(8, 35)
     else:
         target_time = time(19, 0)

@@ -12,6 +12,7 @@ class TradingMode(str, Enum):
 
 class CaptureSession(str, Enum):
     MORNING = "morning"
+    OPENING = "opening"
     EVENING = "evening"
     PREOPEN = "preopen"
     SHADOW = "shadow"

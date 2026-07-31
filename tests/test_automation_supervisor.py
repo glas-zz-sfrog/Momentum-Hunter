@@ -139,6 +139,24 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertEqual("FAILED", state.jobs["canary"].status)
         self.assertIn("not healthy", state.jobs["canary"].reason)
 
+    def test_opening_capture_runs_without_engine_host_dependency(self) -> None:
+        job = self.job(kind="opening_capture")
+        supervisor = AutomationSupervisor(
+            self.manifest(job),
+            clock=lambda: self.now,
+            engine_host_probe=lambda: {
+                "identity": {},
+                "health": {"state": "Failed", "detail": "not ready"},
+            },
+            job_executor=self.execute,
+        )
+
+        state = supervisor.tick()
+
+        self.assertEqual(["canary"], self.executed)
+        self.assertEqual("COMPLETED", state.jobs["canary"].status)
+        self.assertEqual("Failed", state.engine_host_state)
+
     def test_nonmarket_canary_fails_closed_on_account_binding_anomaly(
         self,
     ) -> None:
@@ -254,6 +272,95 @@ class AutomationSupervisorTests(unittest.TestCase):
         with self.assertRaisesRegex(
             ManifestValidationError,
             "five-second start window",
+        ):
+            self.parse_payload(payload)
+
+    def test_manifest_accepts_capture_only_opening_window(self) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260730",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:40:00-05:00",
+                    "timeoutSeconds": 900,
+                }
+            ]
+        )
+
+        manifest = self.parse_payload(payload)
+
+        self.assertEqual("opening_capture", manifest.jobs[0].kind)
+        self.assertEqual("", manifest.jobs[0].expected_git_head)
+        self.assertIsNone(manifest.jobs[0].proof_bundle_path)
+        self.assertIsNone(manifest.jobs[0].task_definition_path)
+
+    def test_manifest_rejects_opening_capture_authority_and_wide_window(
+        self,
+    ) -> None:
+        authority = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260730",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:40:00-05:00",
+                    "expectedGitHead": "a" * 40,
+                }
+            ]
+        )
+        wide = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260730",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:40:01-05:00",
+                }
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            ManifestValidationError,
+            "cannot carry Shadow opening authority",
+        ):
+            self.parse_payload(authority)
+        with self.assertRaisesRegex(
+            ManifestValidationError,
+            "five-minute start window",
+        ):
+            self.parse_payload(wide)
+
+    def test_manifest_rejects_duplicate_opening_and_shadow_capture_date(
+        self,
+    ) -> None:
+        bundle = self.repo / "MomentumHunterData" / "data" / "reports" / "bundle"
+        bundle.mkdir(parents=True)
+        definition = bundle.parent / "launch.xml"
+        definition.write_text("<Task />", encoding="utf-8")
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260730",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:40:00-05:00",
+                },
+                {
+                    "jobId": "shadow-opening-20260730",
+                    "kind": "shadow_opening",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:35:05-05:00",
+                    "expectedGitHead": "a" * 40,
+                    "proofBundlePath": str(bundle),
+                    "taskDefinitionPath": str(definition),
+                },
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            ManifestValidationError,
+            "cannot schedule both",
         ):
             self.parse_payload(payload)
 
@@ -517,6 +624,46 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertNotIn("--shadow-opening-proof-only", command)
         self.assertNotIn("submit", " ".join(command).lower())
         self.assertNotIn("cancel", " ".join(command).lower())
+
+    def test_opening_capture_command_has_no_selector_or_broker_authority(
+        self,
+    ) -> None:
+        supervisor = self.supervisor(self.job(kind="opening_capture"))
+
+        command = supervisor._opening_capture_command()
+
+        joined = " ".join(command).lower()
+        self.assertIn("-session opening", joined)
+        self.assertNotIn("shadow", joined)
+        self.assertNotIn("selector", joined)
+        self.assertNotIn("proof", joined)
+        self.assertNotIn("account", joined)
+        self.assertNotIn("position", joined)
+        self.assertNotIn("order", joined)
+        self.assertNotIn("submit", joined)
+        self.assertNotIn("cancel", joined)
+
+    def test_hot_reload_accepts_jobs_only_and_rejects_runtime_change(self) -> None:
+        first = self.job(kind="nonmarket_canary", job_id="first")
+        second = self.job(kind="opening_capture", job_id="second")
+        supervisor = self.supervisor(first)
+
+        supervisor.replace_manifest(self.manifest(first, second))
+
+        self.assertEqual(("first", "second"), tuple(
+            job.job_id for job in supervisor.manifest.jobs
+        ))
+        changed = AutomationManifest(
+            **{
+                **self.manifest(first, second).__dict__,
+                "expected_account_ending": "9999",
+            }
+        )
+        with self.assertRaisesRegex(
+            ManifestValidationError,
+            "hot-reload jobs only",
+        ):
+            supervisor.replace_manifest(changed)
 
     def test_existing_final_receipt_survives_service_restart(self) -> None:
         job = self.job(kind="nonmarket_canary")

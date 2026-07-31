@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("morning", "evening", "preopen", "shadow", "manual")]
+    [ValidateSet("morning", "opening", "evening", "preopen", "shadow", "manual")]
     [string]$Session,
     [string]$ProjectRoot = "C:\Users\steve\OneDrive\Documents\Investing",
     [string]$PythonExe = "C:\Users\steve\OneDrive\Documents\Investing\.venv\Scripts\python.exe",
@@ -10,7 +10,9 @@ param(
     [string]$Scanner = "Institutional Momentum",
     [switch]$ArmShadowSelector,
     [int]$ShadowRetryCount = 3,
-    [int]$ShadowRetryDelaySeconds = 60
+    [int]$ShadowRetryDelaySeconds = 60,
+    [int]$OpeningRetryCount = 3,
+    [int]$OpeningRetryDelaySeconds = 60
 )
 
 $ErrorActionPreference = "Stop"
@@ -65,7 +67,15 @@ try {
             $captureArguments += "--shadow-opening-proof-only"
         }
     }
-    $maximumAttempts = if ($Session -eq "shadow") { 1 + [Math]::Max(0, $ShadowRetryCount) } else { 1 }
+    $maximumAttempts = if ($Session -eq "shadow") {
+        1 + [Math]::Max(0, $ShadowRetryCount)
+    }
+    elseif ($Session -eq "opening") {
+        1 + [Math]::Max(0, $OpeningRetryCount)
+    }
+    else {
+        1
+    }
     $exitCode = 1
     for ($attempt = 1; $attempt -le $maximumAttempts; $attempt++) {
         "OpeningAttempt: $attempt / $maximumAttempts" | Tee-Object -FilePath $logPath -Append
@@ -81,12 +91,22 @@ try {
             $ErrorActionPreference = $previousErrorActionPreference
         }
         "OpeningAttemptExitCode: $exitCode" | Tee-Object -FilePath $logPath -Append
-        if ($exitCode -ne $retryableInfrastructureExit) {
+        $retryable = (
+            ($Session -eq "shadow" -and $exitCode -eq $retryableInfrastructureExit) -or
+            ($Session -eq "opening" -and $exitCode -ne 0)
+        )
+        if (-not $retryable) {
             break
         }
         if ($attempt -lt $maximumAttempts) {
-            "Retrying retryable infrastructure failure without changing capture/report identity." | Tee-Object -FilePath $logPath -Append
-            Start-Sleep -Seconds ([Math]::Max(0, $ShadowRetryDelaySeconds))
+            "Retrying bounded capture failure without changing capture/report identity." | Tee-Object -FilePath $logPath -Append
+            $delaySeconds = if ($Session -eq "opening") {
+                $OpeningRetryDelaySeconds
+            }
+            else {
+                $ShadowRetryDelaySeconds
+            }
+            Start-Sleep -Seconds ([Math]::Max(0, $delaySeconds))
         }
     }
     if ($exitCode -eq 0) {

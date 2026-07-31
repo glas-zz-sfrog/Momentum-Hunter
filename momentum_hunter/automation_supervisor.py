@@ -9,6 +9,7 @@ transmit an order by itself. Missed market jobs are recorded and never run late.
 
 import argparse
 import ctypes
+import hashlib
 import json
 import os
 import re
@@ -39,7 +40,17 @@ from momentum_hunter.schwab_readonly import redact_value
 
 MANIFEST_SCHEMA_VERSION = 1
 STATE_SCHEMA_VERSION = 1
-JOB_KINDS = frozenset({"nonmarket_canary", "shadow_opening", "codex_review"})
+JOB_KINDS = frozenset(
+    {
+        "nonmarket_canary",
+        "opening_capture",
+        "shadow_opening",
+        "codex_review",
+    }
+)
+ENGINE_HOST_REQUIRED_JOB_KINDS = frozenset(
+    {"nonmarket_canary", "shadow_opening"}
+)
 FINAL_JOB_STATES = frozenset(
     {
         "COMPLETED",
@@ -218,6 +229,21 @@ def parse_manifest(path: Path) -> AutomationManifest:
             raise ManifestValidationError(
                 "Codex review job exists but codexExecutable is not configured."
             )
+    opening_dates = {
+        job.scheduled_at.date()
+        for job in jobs
+        if job.kind == "opening_capture" and job.enabled
+    }
+    shadow_dates = {
+        job.scheduled_at.date()
+        for job in jobs
+        if job.kind == "shadow_opening" and job.enabled
+    }
+    if opening_dates & shadow_dates:
+        raise ManifestValidationError(
+            "A market date cannot schedule both an opening capture and a "
+            "Shadow opening; the Shadow opening already performs the capture."
+        )
 
     return AutomationManifest(
         repository_root=repository_root,
@@ -257,14 +283,21 @@ def _parse_job(
         raise ManifestValidationError(
             f"Job {job_id!r} latestStartAt precedes scheduledAt."
         )
-    if kind == "shadow_opening":
-        if (latest_start_at - scheduled_at).total_seconds() > 5:
-            raise ManifestValidationError(
-                "Shadow openings allow at most a five-second start window."
-            )
+    if kind in {"opening_capture", "shadow_opening"}:
+        maximum_window = 5 if kind == "shadow_opening" else 300
+        if (latest_start_at - scheduled_at).total_seconds() > maximum_window:
+            if kind == "shadow_opening":
+                message = (
+                    "Shadow openings allow at most a five-second start window."
+                )
+            else:
+                message = (
+                    "Opening captures allow at most a five-minute start window."
+                )
+            raise ManifestValidationError(message)
         if scheduled_at.strftime("%H:%M:%S") != "08:35:00":
             raise ManifestValidationError(
-                "Shadow openings must be scheduled at exactly 08:35:00 local time."
+                "Opening jobs must be scheduled at exactly 08:35:00 local time."
             )
 
     timeout_seconds = int(payload.get("timeoutSeconds", 1800))
@@ -461,14 +494,36 @@ class AutomationSupervisor:
         self._last_engine_probe_monotonic = 0.0
 
     def tick(self) -> SupervisorState:
+        now = self.clock()
+        opening_jobs = tuple(
+            job
+            for job in self.manifest.jobs
+            if job.kind == "opening_capture"
+        )
+        for job in opening_jobs:
+            self._evaluate_job(job, now)
         probe_started_at = self.clock()
         self._refresh_engine_host(probe_started_at)
         now = self.clock()
         self.state.last_heartbeat_at = now.isoformat()
         for job in self.manifest.jobs:
-            self._evaluate_job(job, now)
+            if job.kind in ENGINE_HOST_REQUIRED_JOB_KINDS:
+                self._evaluate_job(job, now)
+        for job in self.manifest.jobs:
+            if job.kind == "codex_review":
+                self._evaluate_job(job, now)
         self.state_store.save(self.state)
         return self.state
+
+    def replace_manifest(self, manifest: AutomationManifest) -> None:
+        if _manifest_runtime_identity(manifest) != _manifest_runtime_identity(
+            self.manifest
+        ):
+            raise ManifestValidationError(
+                "A running service may hot-reload jobs only; runtime identity "
+                "changes require explicit service reinstallation."
+            )
+        self.manifest = manifest
 
     def _refresh_engine_host(self, now: datetime) -> None:
         current = time.monotonic()
@@ -537,7 +592,10 @@ class AutomationSupervisor:
                 "the job will not run late.",
             )
             return
-        if self.state.engine_host_state != "Healthy":
+        if (
+            job.kind in ENGINE_HOST_REQUIRED_JOB_KINDS
+            and self.state.engine_host_state != "Healthy"
+        ):
             self.state.jobs[job.job_id] = self._receipt(
                 job,
                 now,
@@ -616,6 +674,14 @@ class AutomationSupervisor:
     ) -> tuple[int, str]:
         if job.kind == "nonmarket_canary":
             return self._run_nonmarket_canary(log_path)
+        if job.kind == "opening_capture":
+            command = self._opening_capture_command()
+            return self._run_process(
+                command,
+                log_path=log_path,
+                timeout_seconds=job.timeout_seconds,
+                working_directory=self.manifest.repository_root,
+            )
         if job.kind == "shadow_opening":
             self._validate_repository_identity(job.expected_git_head)
             command = self._shadow_opening_command(job)
@@ -752,6 +818,31 @@ class AutomationSupervisor:
             "-ArmShadowSelector",
         ]
 
+    def _opening_capture_command(self) -> list[str]:
+        runner = self.manifest.repository_root / "tools" / "run_capture_job.ps1"
+        if not runner.is_file():
+            raise AutomationSupervisorError(
+                "Opening capture runner is missing."
+            )
+        return [
+            str(self.manifest.powershell_executable),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(runner),
+            "-Session",
+            "opening",
+            "-ProjectRoot",
+            str(self.manifest.repository_root),
+            "-PythonExe",
+            str(self.manifest.python_executable),
+            "-Provider",
+            "finviz",
+            "-Scanner",
+            "Institutional Momentum",
+        ]
+
     def _codex_review_command(
         self,
         job: AutomationJob,
@@ -824,6 +915,30 @@ def _run_git(repository_root: Path, arguments: Sequence[str]) -> str:
             "Git identity preflight could not be completed."
         )
     return completed.stdout.strip()
+
+
+def _manifest_runtime_identity(
+    manifest: AutomationManifest,
+) -> tuple[object, ...]:
+    return (
+        manifest.repository_root,
+        manifest.python_executable,
+        manifest.powershell_executable,
+        manifest.codex_executable,
+        manifest.state_directory,
+        manifest.engine_host_state_directory,
+        manifest.poll_interval_seconds,
+        manifest.expected_account_ending,
+        manifest.expected_account_type,
+    )
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _current_process_session_id() -> int:
@@ -930,7 +1045,14 @@ def _terminate_process_tree(process_id: int) -> None:
 def run_service_loop(manifest_path: Path) -> int:
     manifest = parse_manifest(manifest_path)
     supervisor = AutomationSupervisor(manifest)
+    manifest_hash = _file_sha256(manifest_path)
     while True:
+        current_hash = _file_sha256(manifest_path)
+        if current_hash != manifest_hash:
+            candidate = parse_manifest(manifest_path)
+            supervisor.replace_manifest(candidate)
+            manifest = candidate
+            manifest_hash = current_hash
         supervisor.tick()
         time.sleep(manifest.poll_interval_seconds)
 

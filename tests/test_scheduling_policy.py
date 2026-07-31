@@ -98,6 +98,32 @@ class SchedulingPolicyTests(unittest.TestCase):
         self.assertTrue(decision.should_capture)
         self.assertEqual("2026-06-08T08:35:00-05:00", next_run.isoformat())
 
+    def test_opening_capture_is_preserved_without_study_or_shadow_identity(self) -> None:
+        opening = self.decision(
+            CaptureSession.OPENING,
+            "2026-06-08T08:35:00-05:00",
+        )
+        late = self.decision(
+            CaptureSession.OPENING,
+            "2026-06-08T08:41:00-05:00",
+        )
+        next_run = next_automatic_run(
+            CaptureSession.OPENING,
+            after=datetime.fromisoformat(
+                "2026-06-08T08:00:00-05:00"
+            ).astimezone(CENTRAL_TZ),
+            captures_dir=self.captures_dir,
+        )
+
+        self.assertTrue(opening.should_capture)
+        self.assertEqual(CaptureSession.OPENING, opening.capture_session)
+        self.assertFalse(opening.classification.is_study_eligible)
+        self.assertEqual(
+            SkipReason.SKIP_OUTSIDE_CAPTURE_WINDOW.value,
+            late.skip_reason,
+        )
+        self.assertEqual("2026-06-08T08:35:00-05:00", next_run.isoformat())
+
     def test_friday_evening_capture_is_retained(self) -> None:
         decision = self.decision(CaptureSession.EVENING, "2026-06-05T19:00:00-05:00")
 

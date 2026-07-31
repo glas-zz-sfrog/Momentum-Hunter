@@ -63,6 +63,11 @@ $shadowEnabled = @(
         $_.kind -eq "shadow_opening" -and $_.enabled
     }
 ).Count
+$openingCaptureEnabled = @(
+    $jobs | Where-Object {
+        $_.kind -eq "opening_capture" -and $_.enabled
+    }
+).Count
 
 [ordered]@{
     serviceName = $ServiceName
@@ -120,6 +125,7 @@ $shadowEnabled = @(
         (Test-Path -LiteralPath $manifest.codexExecutable -PathType Leaf)
     )
     jobs = $jobs
+    openingCaptureJobsEnabled = $openingCaptureEnabled
     shadowJobsEnabled = $shadowEnabled
     orderTransmission = "UNAVAILABLE"
 } | ConvertTo-Json -Depth 8
