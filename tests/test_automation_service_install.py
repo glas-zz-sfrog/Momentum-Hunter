@@ -176,10 +176,12 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertEqual(["AT_STARTUP", "DAILY_08_15"], plan["triggers"])
         self.assertEqual(5, plan["restartCount"])
         self.assertFalse(plan["startWhenAvailable"])
+        self.assertTrue(plan["createsIfMissing"])
         self.assertFalse(plan["deletesTask"])
         self.assertEqual("UNAVAILABLE", plan["orderTransmission"])
 
         source = HARDEN_CLOCK.read_text(encoding="utf-8")
+        self.assertIn("Register-ScheduledTask", source)
         self.assertIn("Set-ScheduledTask", source)
         self.assertIn("New-ScheduledTaskTrigger -AtStartup", source)
         self.assertIn("-WakeToRun", source)

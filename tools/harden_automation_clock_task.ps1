@@ -28,6 +28,7 @@ $plan = [ordered]@{
     restartCount = 5
     restartIntervalMinutes = 2
     runNow = [bool]$RunNow
+    createsIfMissing = $true
     deletesTask = $false
     orderTransmission = "UNAVAILABLE"
 }
@@ -41,26 +42,38 @@ if (-not (Test-IsAdministrator)) {
     throw "Clock-task hardening requires an elevated PowerShell session."
 }
 
-$existing = Get-ScheduledTask -TaskName $WakeTaskName -ErrorAction Stop
-if ($existing.Principal.UserId -notin @("SYSTEM", "S-1-5-18")) {
-    throw "Existing wake task principal is not SYSTEM; refusing to alter it."
-}
-if (@($existing.Actions).Count -ne 1) {
-    throw "Existing wake task action count is unexpected; refusing to alter it."
-}
-$existingAction = @($existing.Actions)[0]
-$existingExecute = [string]$existingAction.Execute
-$existingArguments = [string]$existingAction.Arguments
-$isExpectedNoOp = (
-    [System.IO.Path]::GetFileName($existingExecute) -ieq "cmd.exe" -and
-    $existingArguments.Trim() -ieq "/d /c exit 0"
+$lookupErrors = @()
+$existing = Get-ScheduledTask -TaskName $WakeTaskName `
+    -ErrorAction SilentlyContinue `
+    -ErrorVariable lookupErrors
+$lookupBlocked = [bool](
+    @($lookupErrors) |
+        Where-Object { $_.Exception.Message -match "Access is denied" }
 )
-$isExpectedTimeSync = (
-    [System.IO.Path]::GetFileName($existingExecute) -ieq "w32tm.exe" -and
-    $existingArguments.Trim() -ieq "/resync /rediscover"
-)
-if (-not ($isExpectedNoOp -or $isExpectedTimeSync)) {
-    throw "Existing wake task action is unexpected; refusing to alter it."
+if ($lookupBlocked) {
+    throw "Existing wake task cannot be inspected without elevation."
+}
+if ($existing) {
+    if ($existing.Principal.UserId -notin @("SYSTEM", "S-1-5-18")) {
+        throw "Existing wake task principal is not SYSTEM; refusing to alter it."
+    }
+    if (@($existing.Actions).Count -ne 1) {
+        throw "Existing wake task action count is unexpected; refusing to alter it."
+    }
+    $existingAction = @($existing.Actions)[0]
+    $existingExecute = [string]$existingAction.Execute
+    $existingArguments = [string]$existingAction.Arguments
+    $isExpectedNoOp = (
+        [System.IO.Path]::GetFileName($existingExecute) -ieq "cmd.exe" -and
+        $existingArguments.Trim() -ieq "/d /c exit 0"
+    )
+    $isExpectedTimeSync = (
+        [System.IO.Path]::GetFileName($existingExecute) -ieq "w32tm.exe" -and
+        $existingArguments.Trim() -ieq "/resync /rediscover"
+    )
+    if (-not ($isExpectedNoOp -or $isExpectedTimeSync)) {
+        throw "Existing wake task action is unexpected; refusing to alter it."
+    }
 }
 
 $action = New-ScheduledTaskAction `
@@ -83,12 +96,23 @@ $settings = New-ScheduledTaskSettingsSet `
     -RestartInterval ([TimeSpan]::FromMinutes(2)) `
     -ExecutionTimeLimit ([TimeSpan]::FromMinutes(15))
 
-Set-ScheduledTask `
-    -TaskName $WakeTaskName `
-    -Action $action `
-    -Trigger $triggers `
-    -Principal $principal `
-    -Settings $settings | Out-Null
+$taskCreated = -not [bool]$existing
+if ($taskCreated) {
+    Register-ScheduledTask `
+        -TaskName $WakeTaskName `
+        -Action $action `
+        -Trigger $triggers `
+        -Principal $principal `
+        -Settings $settings | Out-Null
+}
+else {
+    Set-ScheduledTask `
+        -TaskName $WakeTaskName `
+        -Action $action `
+        -Trigger $triggers `
+        -Principal $principal `
+        -Settings $settings | Out-Null
+}
 
 $lastTaskResult = $null
 $clockSource = "NOT_CHECKED"
@@ -132,6 +156,7 @@ if ($RunNow) {
 
 [ordered]@{
     hardened = $true
+    taskCreated = $taskCreated
     taskName = $WakeTaskName
     principal = "SYSTEM"
     action = "w32tm.exe /resync /rediscover"

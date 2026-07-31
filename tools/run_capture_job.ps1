@@ -38,6 +38,9 @@ try {
         "--provider", $Provider,
         "--scanner", $Scanner
     )
+    if ($Session -eq "opening") {
+        $captureArguments += "--require-opening-result"
+    }
     if ($Session -eq "shadow") {
         if (-not $SelectorProofBundle) {
             throw "Shadow opening requires an explicit selector proof bundle."

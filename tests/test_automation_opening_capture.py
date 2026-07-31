@@ -236,6 +236,7 @@ class OpeningCaptureRunnerTests(unittest.TestCase):
         arguments = json.loads((self.root / "arguments.json").read_text())
         self.assertIn("--session", arguments)
         self.assertIn("opening", arguments)
+        self.assertIn("--require-opening-result", arguments)
         joined = " ".join(arguments).lower()
         self.assertNotIn("shadow", joined)
         self.assertNotIn("selector", joined)

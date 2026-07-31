@@ -97,6 +97,87 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
 
         provider_factory.assert_not_called()
 
+    def test_required_opening_result_rejects_normal_skip(self) -> None:
+        args = argparse.Namespace(
+            session=CaptureSession.OPENING.value,
+            provider="finviz",
+            scanner="Institutional Momentum",
+            require_opening_result=True,
+            trigger_shadow_selector=False,
+        )
+        result = capture_job.CaptureRunResult(
+            exit_code=0,
+            disposition="SKIPPED",
+            report_paths={},
+        )
+
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(
+                capture_job,
+                "run_capture_with_result",
+                return_value=result,
+            ),
+            patch.object(
+                capture_job,
+                "save_capture_failure",
+                return_value=self.root / "opening-failure.json",
+            ) as save_failure,
+        ):
+            exit_code = capture_job.main()
+
+        self.assertEqual(1, exit_code)
+        save_failure.assert_called_once()
+
+    def test_required_opening_result_accepts_recovered_report(self) -> None:
+        args = argparse.Namespace(
+            session=CaptureSession.OPENING.value,
+            provider="finviz",
+            scanner="Institutional Momentum",
+            require_opening_result=True,
+            trigger_shadow_selector=False,
+        )
+        result = capture_job.CaptureRunResult(
+            exit_code=0,
+            disposition="REPORT_RECOVERED",
+            report_paths={"json": self.root / "opening-report.json"},
+        )
+
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(
+                capture_job,
+                "run_capture_with_result",
+                return_value=result,
+            ),
+        ):
+            exit_code = capture_job.main()
+
+        self.assertEqual(0, exit_code)
+
+    def test_required_opening_result_rejects_other_session_before_capture(self) -> None:
+        args = argparse.Namespace(
+            session=CaptureSession.SHADOW.value,
+            provider="finviz",
+            scanner="Institutional Momentum",
+            require_opening_result=True,
+            trigger_shadow_selector=False,
+        )
+
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(capture_job, "run_capture_with_result") as run_capture,
+            patch.object(
+                capture_job,
+                "save_capture_failure",
+                return_value=self.root / "invalid-session-failure.json",
+            ),
+        ):
+            exit_code = capture_job.main()
+
+        self.assertEqual(1, exit_code)
+        run_capture.assert_not_called()
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)

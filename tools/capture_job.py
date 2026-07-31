@@ -72,9 +72,26 @@ def main() -> int:
     scanner_name = args.scanner or "Institutional Momentum"
     failure_time = now_central()
     try:
+        if (
+            getattr(args, "require_opening_result", False)
+            and session != CaptureSession.OPENING
+        ):
+            raise ValueError(
+                "--require-opening-result is valid only for the opening session."
+            )
         if args.trigger_shadow_selector:
             require_frozen_shadow_arguments(args)
         result = run_capture_with_result(args, session=session)
+        if getattr(args, "require_opening_result", False):
+            if result.disposition not in {
+                "CAPTURED",
+                "REPORT_RECOVERED",
+                "DUPLICATE",
+            }:
+                raise RuntimeError(
+                    "Required opening capture result was not produced: "
+                    f"{result.disposition}."
+                )
         if args.trigger_shadow_selector:
             if session != CaptureSession.SHADOW:
                 raise ValueError(
@@ -674,6 +691,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--session", choices=[item.value for item in CaptureSession], required=True)
     parser.add_argument("--provider", choices=["sample", "finviz"], default=None)
     parser.add_argument("--scanner", choices=list(SCANNER_PRESETS), default=None)
+    parser.add_argument(
+        "--require-opening-result",
+        action="store_true",
+        help=(
+            "Fail the service-run opening job unless a capture, recovered "
+            "report, or verified duplicate exists."
+        ),
+    )
     parser.add_argument(
         "--trigger-shadow-selector",
         action="store_true",
