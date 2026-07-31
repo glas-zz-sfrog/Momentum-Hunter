@@ -211,6 +211,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="46" />
                     <ColumnDefinition Width="46" />
                     <ColumnDefinition Width="46" />
@@ -270,21 +271,27 @@
                        AutomationProperties.Name="{Binding EnvironmentLabel}"
                        Style="{StaticResource EnvironmentBadgeStyle}" />
                 <Button Grid.Column="7"
+                        Content="{Binding PositionsButtonLabel}"
+                        ToolTip="{Binding PositionsButtonToolTip}"
+                        AutomationProperties.Name="Open positions"
+                        Style="{StaticResource TopBarButtonStyle}"
+                        Click="PositionsButton_Click" />
+                <Button Grid.Column="8"
                         Content="{Binding ActivityLabel}"
                         Style="{StaticResource TopBarButtonStyle}"
                         Click="ActivityButton_Click" />
                 <Button x:Name="HealthButton"
-                        Grid.Column="8"
+                        Grid.Column="9"
                         Content="Health"
                         Style="{StaticResource TopBarButtonStyle}"
                         Command="{Binding ToggleHealthCommand}" />
                 <Button x:Name="ApplicationMenuButton"
-                        Grid.Column="9"
+                        Grid.Column="10"
                         Content="Menu"
                         Style="{StaticResource TopBarButtonStyle}"
                         Click="ApplicationMenuButton_Click" />
                 <Button x:Name="MinimizeWindowButton"
-                        Grid.Column="10"
+                        Grid.Column="11"
                         Style="{StaticResource WindowCaptionButtonStyle}"
                         ToolTip="Minimize"
                         AutomationProperties.Name="Minimize window"
@@ -292,7 +299,7 @@
                     <TextBlock Text="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
                 </Button>
                 <Button x:Name="MaximizeRestoreWindowButton"
-                        Grid.Column="11"
+                        Grid.Column="12"
                         Style="{StaticResource WindowCaptionButtonStyle}"
                         ToolTip="Maximize"
                         AutomationProperties.Name="Maximize window"
@@ -303,7 +310,7 @@
                                FontSize="10" />
                 </Button>
                 <Button x:Name="CloseWindowButton"
-                        Grid.Column="12"
+                        Grid.Column="13"
                         Style="{StaticResource CloseCaptionButtonStyle}"
                         ToolTip="Close"
                         AutomationProperties.Name="Close window"
@@ -1717,12 +1724,191 @@
                             </Border>
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="PositionsAnchor" ContentId="pane-positions" Title="Positions" CanClose="True" CanFloat="True">
-                            <Border Background="{StaticResource PanelBackground}" Padding="12">
-                                <StackPanel>
-                                    <TextBlock Text="Positions" FontSize="16" FontWeight="SemiBold" />
-                                    <TextBlock Text="Position data is unavailable because no account data source is configured." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,6,0,12" />
-                                    <TextBlock Text="A future read-only account source can appear here after explicit approval." TextWrapping="Wrap" />
-                                </StackPanel>
+                            <Border Background="{StaticResource PanelBackground}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <DockPanel Margin="12,10,12,8" LastChildFill="True">
+                                        <Border DockPanel.Dock="Right"
+                                                Background="#203A38"
+                                                BorderBrush="#315A55"
+                                                BorderThickness="1"
+                                                Padding="8,3"
+                                                CornerRadius="3">
+                                            <TextBlock Text="{Binding PositionsModeLabel}"
+                                                       Foreground="{StaticResource Teal}"
+                                                       FontSize="10"
+                                                       FontWeight="SemiBold" />
+                                        </Border>
+                                        <StackPanel>
+                                            <TextBlock Text="Open Positions" FontSize="16" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding PositionsSummary}"
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       FontSize="11"
+                                                       Margin="0,3,12,0" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                    <Border Grid.Row="1"
+                                            Background="#121C24"
+                                            BorderBrush="{StaticResource PanelBorder}"
+                                            BorderThickness="0,1"
+                                            Padding="12,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1*" />
+                                                <ColumnDefinition Width="1*" />
+                                                <ColumnDefinition Width="1*" />
+                                                <ColumnDefinition Width="1.2*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="Open" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                <TextBlock Text="{Binding OpenPositionCountDisplay}" FontSize="15" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="Unrealized P&amp;L" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                <TextBlock Text="{Binding OpenPositionPnlDisplay}" FontSize="15" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="Market Value" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                <TextBlock Text="{Binding OpenPositionMarketValueDisplay}" FontSize="15" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="3">
+                                                <TextBlock Text="Quote Health" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                <TextBlock Text="{Binding OpenPositionQuoteHealthDisplay}" FontSize="15" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                    <Grid Grid.Row="2">
+                                        <DataGrid x:Name="OpenPositionsGrid"
+                                                  ItemsSource="{Binding OpenPositions}"
+                                                  AutoGenerateColumns="False"
+                                                  IsReadOnly="True"
+                                                  CanUserAddRows="False"
+                                                  CanUserDeleteRows="False"
+                                                  CanUserReorderColumns="True"
+                                                  CanUserResizeColumns="True"
+                                                  CanUserSortColumns="True"
+                                                  HeadersVisibility="Column"
+                                                  GridLinesVisibility="Horizontal"
+                                                  SelectionMode="Single"
+                                                  SelectionUnit="FullRow"
+                                                  RowHeaderWidth="0"
+                                                  Margin="0">
+                                            <DataGrid.Style>
+                                                <Style TargetType="{x:Type DataGrid}" BasedOn="{StaticResource {x:Type DataGrid}}">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasOpenPositions}" Value="False">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </DataGrid.Style>
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Symbol" Binding="{Binding Symbol}" Width="75" />
+                                                <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="62" />
+                                                <DataGridTextColumn Header="Qty" Binding="{Binding QuantityDisplay}" Width="54" />
+                                                <DataGridTextColumn Header="Avg Fill" Binding="{Binding AverageFillDisplay}" Width="82" />
+                                                <DataGridTextColumn Header="Mark" Binding="{Binding ExecutableMarkDisplay}" Width="82" />
+                                                <DataGridTextColumn Header="Value" Binding="{Binding MarketValueDisplay}" Width="86" />
+                                                <DataGridTemplateColumn Header="Unrealized" Width="90">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding UnrealizedPnlDisplay}" FontWeight="SemiBold">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding PnlState}" Value="POSITIVE">
+                                                                                <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding PnlState}" Value="NEGATIVE">
+                                                                                <Setter Property="Foreground" Value="#F06A6A" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding PnlState}" Value="FLAT">
+                                                                                <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                </DataGridTemplateColumn>
+                                                <DataGridTextColumn Header="P&amp;L %" Binding="{Binding UnrealizedPercentDisplay}" Width="76" />
+                                                <DataGridTextColumn Header="R" Binding="{Binding UnrealizedRDisplay}" Width="66" />
+                                                <DataGridTextColumn Header="Stop" Binding="{Binding StopDisplay}" Width="82" />
+                                                <DataGridTextColumn Header="Next Target" Binding="{Binding NextTargetDisplay}" Width="92" />
+                                                <DataGridTemplateColumn Header="State" Width="86">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding State}" FontWeight="SemiBold">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding State}" Value="AHEAD">
+                                                                                <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding State}" Value="BEHIND">
+                                                                                <Setter Property="Foreground" Value="#F06A6A" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding State}" Value="STALE">
+                                                                                <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding State}" Value="HALTED">
+                                                                                <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding State}" Value="EXIT_PENDING">
+                                                                                <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                </DataGridTemplateColumn>
+                                                <DataGridTextColumn Header="Quote Age" Binding="{Binding QuoteAgeDisplay}" Width="82" />
+                                                <DataGridTextColumn Header="Source" Binding="{Binding QuoteProvider}" Width="*" MinWidth="130" />
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                        <StackPanel HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    MaxWidth="520"
+                                                    Margin="24">
+                                            <StackPanel.Style>
+                                                <Style TargetType="StackPanel">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasOpenPositions}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </StackPanel.Style>
+                                            <TextBlock Text="No open positions"
+                                                       FontSize="18"
+                                                       FontWeight="SemiBold"
+                                                       HorizontalAlignment="Center" />
+                                            <TextBlock Text="{Binding PositionsSummary}"
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       TextAlignment="Center"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,6,0,0" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Grid.Row="3"
+                                               Text="{Binding PositionsSourceDetail}"
+                                               Foreground="{StaticResource TextMuted}"
+                                               FontSize="10"
+                                               TextWrapping="Wrap"
+                                               Margin="12,8,12,10" />
+                                </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
                         <avalon:LayoutAnchorable x:Name="ReplayEventsAnchor" ContentId="pane-replay-events" Title="Replay Events" CanClose="True" CanFloat="True">

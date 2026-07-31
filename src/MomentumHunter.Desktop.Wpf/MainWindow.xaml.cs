@@ -355,6 +355,10 @@ public partial class MainWindow : Window, IWorkstationPresentation
             case CommandPaletteAction.AddChart when result.AddedPane is not null:
                 CreateAdditionalChartDocument(result.AddedPane, activate: true);
                 break;
+            case CommandPaletteAction.OpenPositions:
+                SetContentVisibility(PositionsContentId, true);
+                EnsureAnchorablePaneHeight(PositionsContentId, 360);
+                break;
             case CommandPaletteAction.ToggleActivity:
                 SetContentVisibility(ActivityContentId, _viewModel.IsActivityOpen);
                 break;
@@ -367,6 +371,17 @@ public partial class MainWindow : Window, IWorkstationPresentation
     private async void TradePlanActionButton_Click(object sender, RoutedEventArgs e)
     {
         await _viewModel.RunPrimaryActionAsync();
+    }
+
+    private async void PositionsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!await _viewModel.OpenPositionsPaneAsync())
+        {
+            return;
+        }
+
+        SetContentVisibility(PositionsContentId, true);
+        EnsureAnchorablePaneHeight(PositionsContentId, 360);
     }
 
     private async void SaveLayoutButton_Click(object sender, RoutedEventArgs e)
@@ -426,7 +441,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
         System.Windows.Application.Current.Shutdown();
     }
 
-    private void ShowPaneButton_Click(object sender, RoutedEventArgs e)
+    private async void ShowPaneButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: Guid instanceId }
             || _viewModel.Registry.Find(instanceId) is not { } pane)
@@ -467,6 +482,11 @@ public partial class MainWindow : Window, IWorkstationPresentation
         else if (pane.Kind == PaneKind.ShadowReview)
         {
             EnsureAnchorablePaneHeight(ShadowReviewContentId, 620);
+        }
+        else if (pane.Kind == PaneKind.Positions)
+        {
+            await _viewModel.RefreshShadowReviewDisplayAsync();
+            EnsureAnchorablePaneHeight(PositionsContentId, 360);
         }
 
         EnsureEvidencePaneHeight(ContentIdForPane(pane));

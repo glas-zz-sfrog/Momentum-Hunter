@@ -6,6 +6,7 @@ public enum CommandPaletteAction
 {
     OpenCandidate,
     AddChart,
+    OpenPositions,
     ToggleActivity,
     ViewDiagnostics,
 }
@@ -45,6 +46,12 @@ public static class CommandPaletteCatalog
             "Toggle activity",
             "Show or hide the workstation activity pane.",
             ["toggle activity", "activity", "events"]),
+        new(
+            "open-positions",
+            CommandPaletteAction.OpenPositions,
+            "Open positions",
+            "Open the read-only FakeBroker position monitor.",
+            ["open positions", "positions", "portfolio", "holdings"]),
         new(
             "view-diagnostics",
             CommandPaletteAction.ViewDiagnostics,

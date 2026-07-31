@@ -28,6 +28,21 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-R030 is `VISUAL_ACCEPTED_PENDING_INTEGRATION` on branch
+`codex/ARGUS-R030-open-positions-console`. The WPF workstation now has a
+first-class `Positions` command and compact top-bar entry that opens a
+read-only, dockable open-position monitor in the current workspace. The
+monitor maps only canonical Shadow/FakeBroker open-position evidence and
+shows side, quantity, average fill, executable mark, market value, unrealized
+P&L, percentage, R multiple, stop, next target, state, quote age, and quote
+source. Stale or halted positions remain visible with unavailable values
+instead of disappearing. The current canonical empty state reports zero open
+positions honestly. Schwab account positions are not connected, no account
+scope changed, and no order or broker controls were added. Automated proof
+passes a zero-warning solution build, all 185 presentation tests, and all 237
+.NET tests. Steven accepted the visible surface on 2026-07-31. Commit,
+fast-forward integration, and backup are the remaining routine closeout steps.
+
 ARGUS-SHADOW-023 is `COMPLETE_AND_BACKED_UP` on canonical `master` through
 integration commit `cc2b1e2`, with ARGUS-SERVICE-001 predecessor `0ce70c2`.
 It repairs the clock chronology defects

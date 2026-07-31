@@ -86,13 +86,14 @@ public sealed class PaneRegistryTests
         var expectedPaneCount = workspace switch
         {
             WorkspaceKind.Live => 13,
-            WorkspaceKind.Review => 6,
-            _ => 5,
+            WorkspaceKind.Review => 7,
+            _ => 6,
         };
         Assert.Equal(expectedPaneCount, registry.Panes.Count);
         Assert.Equal(hunterTitle, registry.Panes.Single(pane => pane.Kind == PaneKind.Hunter).Title);
         Assert.Equal(lowerPaneVisible, registry.Panes.Single(pane => pane.Kind == lowerPaneKind).IsVisible);
         Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Diagnostics).IsVisible);
+        Assert.False(registry.Panes.Single(pane => pane.Kind == PaneKind.Positions).IsVisible);
         if (workspace == WorkspaceKind.Review)
         {
             var shadowReview = registry.Panes.Single(pane => pane.Kind == PaneKind.ShadowReview);

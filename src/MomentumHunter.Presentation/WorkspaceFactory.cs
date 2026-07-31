@@ -29,6 +29,7 @@ public static class WorkspaceFactory
                 registry.Create(PaneKind.Chart, "Chart", LinkGroup.A, DockRegion.Center, symbol, interval);
                 registry.Create(PaneKind.TradePlan, "Plan Snapshot", LinkGroup.A, DockRegion.Right, symbol, interval);
                 registry.Create(PaneKind.ReplayEvents, "Replay Events", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
+                registry.Create(PaneKind.Positions, "Positions", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.Diagnostics, "Diagnostics", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 break;
             case WorkspaceKind.Review:
@@ -37,6 +38,7 @@ public static class WorkspaceFactory
                 registry.Create(PaneKind.TradePlan, "Audit Detail", LinkGroup.A, DockRegion.Right, symbol, interval);
                 registry.Create(PaneKind.ShadowReview, "Test Trade Review", LinkGroup.A, DockRegion.Bottom, symbol, interval);
                 registry.Create(PaneKind.ReviewOutcomes, "Outcomes", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
+                registry.Create(PaneKind.Positions, "Positions", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.Diagnostics, "Diagnostics", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 break;
             default:

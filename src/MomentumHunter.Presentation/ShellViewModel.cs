@@ -377,11 +377,13 @@ public sealed partial class ShellViewModel : ObservableObject
             OnPropertyChanged(nameof(ActivityCountLabel));
         };
         Candles = [];
+        OpenPositions = [];
         ShadowTrades = [];
         ShadowOfficialTrades = [];
         ShadowUnfilledBlockedTrades = [];
         CommandPaletteResults = [];
         SavedWatchlistItems = [];
+        OpenPositions.CollectionChanged += (_, _) => RaiseOpenPositionProperties();
         WorkspaceOptions = Enum.GetValues<WorkspaceKind>();
         IntervalOptions = ["1m", "5m", "15m", "Daily"];
         Candidates.CollectionChanged += (_, _) =>
@@ -420,6 +422,8 @@ public sealed partial class ShellViewModel : ObservableObject
         Activity.Select(ActivityEventView.From).ToArray();
 
     public ObservableCollection<CandleSnapshot> Candles { get; }
+
+    public ObservableCollection<OpenPositionView> OpenPositions { get; }
 
     public ObservableCollection<ShadowTradeReviewSnapshot> ShadowTrades { get; }
     public ObservableCollection<ShadowTradeReviewSnapshot> ShadowOfficialTrades { get; }
@@ -621,6 +625,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public PaneState? ShadowReviewPane => Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.ShadowReview);
 
+    public PaneState? PositionsPane => Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Positions);
+
     public string PrimaryChartLinkLabel => PaneSyncLabel(PrimaryChartPane);
 
     public string PrimaryTradePlanLinkLabel => PaneSyncLabel(PrimaryTradePlanPane);
@@ -650,7 +656,7 @@ public sealed partial class ShellViewModel : ObservableObject
     public bool HasCommandPaletteResults => CommandPaletteResults.Count > 0;
 
     public string CommandPaletteScopeLabel =>
-        $"{Candidates.Count} current Hunter symbols | Commands: chart, activity, diagnostics";
+        $"{Candidates.Count} current Hunter symbols | Commands: chart, positions, activity, diagnostics";
 
     public string CommandPaletteEmptyText
     {
@@ -663,13 +669,58 @@ public sealed partial class ShellViewModel : ObservableObject
 
             var examples = string.Join(", ", Candidates.Take(3).Select(candidate => candidate.Symbol));
             var suggestion = string.IsNullOrWhiteSpace(examples)
-                ? "Try chart, activity, or diagnostics."
+                ? "Try chart, positions, activity, or diagnostics."
                 : $"Try {examples}, or a command such as chart.";
             return $"'{CommandQuery.Trim()}' is not in the current Hunter list. {suggestion}";
         }
     }
 
     public string ActivityCountLabel => Activity.Count == 1 ? "1 source event" : $"{Activity.Count} source events";
+
+    public bool HasOpenPositions => OpenPositions.Count > 0;
+
+    public string PositionsButtonLabel => OpenPositions.Count == 0 ? "Positions" : $"Positions {OpenPositions.Count}";
+
+    public string PositionsButtonToolTip =>
+        OpenPositions.Count == 0
+            ? "Open the read-only position monitor. No open FakeBroker positions are currently reported."
+            : $"Open {OpenPositions.Count} FakeBroker position{(OpenPositions.Count == 1 ? string.Empty : "s")} | {OpenPositionPnlDisplay}";
+
+    public string OpenPositionCountDisplay => OpenPositions.Count.ToString("N0");
+
+    public string OpenPositionPnlDisplay =>
+        OpenPositions.Any(position => position.UnrealizedPnl is not null)
+            ? OpenPositions.Sum(position => position.UnrealizedPnl ?? 0m).ToString("C2")
+            : "Unavailable";
+
+    public string OpenPositionMarketValueDisplay =>
+        OpenPositions.Any(position => position.MarketValue is not null)
+            ? OpenPositions.Sum(position => position.MarketValue ?? 0m).ToString("C2")
+            : OpenPositions.Count == 0
+                ? "$0.00"
+                : "Unavailable";
+
+    public int OpenPositionAttentionCount =>
+        OpenPositions.Count(position => position.State is "STALE" or "HALTED" or "EXIT_PENDING");
+
+    public string OpenPositionQuoteHealthDisplay =>
+        OpenPositions.Count == 0
+            ? "No open marks"
+            : OpenPositionAttentionCount == 0
+                ? "Current"
+                : $"{OpenPositionAttentionCount} need attention";
+
+    public string PositionsModeLabel => _shadowReviewSnapshot?.Mode ?? "POSITION DATA UNAVAILABLE";
+
+    public string PositionsSummary =>
+        _shadowReviewSnapshot is null
+            ? "Position evidence is unavailable. No fallback position was created."
+            : OpenPositions.Count == 0
+                ? "No open FakeBroker positions are present in the canonical Shadow evidence."
+                : $"{OpenPositions.Count} open FakeBroker position{(OpenPositions.Count == 1 ? string.Empty : "s")} from canonical Shadow evidence.";
+
+    public string PositionsSourceDetail =>
+        "Read-only Python Engine Host snapshot. Schwab account positions are not connected, and no order controls are available.";
 
     public bool CanRunSimulation => !IsReadOnlySnapshotMode && TradePlan?.RiskDecision?.Allowed == true && Environment == EnvironmentMode.Simulation;
 
@@ -1232,6 +1283,12 @@ public sealed partial class ShellViewModel : ObservableObject
                 addedPane = await AddLinkedChartAsync(cancellationToken);
                 StatusMessage = $"Added linked chart for {addedPane.Symbol}.";
                 break;
+            case CommandPaletteAction.OpenPositions:
+                if (!await OpenPositionsPaneAsync(cancellationToken))
+                {
+                    return new CommandPaletteExecution(false);
+                }
+                break;
             case CommandPaletteAction.ToggleActivity:
                 ToggleActivity();
                 StatusMessage = IsActivityOpen ? "Opened workstation activity." : "Hid workstation activity.";
@@ -1257,6 +1314,23 @@ public sealed partial class ShellViewModel : ObservableObject
         var action = selected.Action;
         CloseCommandPalette();
         return new CommandPaletteExecution(true, action, addedPane);
+    }
+
+    public async Task<bool> OpenPositionsPaneAsync(CancellationToken cancellationToken = default)
+    {
+        if (PositionsPane is not { } positions)
+        {
+            StatusMessage = "The Positions pane is not available in this workspace.";
+            return false;
+        }
+
+        positions.IsVisible = true;
+        await RefreshShadowReviewDisplayAsync(cancellationToken);
+        StatusMessage = OpenPositions.Count == 0
+            ? "Opened Positions. No open FakeBroker positions are currently reported."
+            : $"Opened Positions with {OpenPositions.Count} current FakeBroker position{(OpenPositions.Count == 1 ? string.Empty : "s")}.";
+        RequestLayoutSave();
+        return true;
     }
 
     [RelayCommand]
@@ -1898,6 +1972,7 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(PrimaryTradePlanPane));
         OnPropertyChanged(nameof(PrimaryTradePlanLinkLabel));
         OnPropertyChanged(nameof(ShadowReviewPane));
+        OnPropertyChanged(nameof(PositionsPane));
         OnPropertyChanged(nameof(CanRunSimulation));
         OnPropertyChanged(nameof(CanRunPrimaryAction));
         OnPropertyChanged(nameof(TradePlanSymbolLabel));
@@ -2169,6 +2244,7 @@ public sealed partial class ShellViewModel : ObservableObject
                     && trade.ActiveMark.DisplayState is
                     "WORKING" or "AHEAD" or "BEHIND" or "FLAT"
                     or "STALE" or "HALTED" or "EXIT_PENDING");
+            RefreshOpenPositions();
             if (Workspace == WorkspaceKind.Review)
             {
                 SelectedShadowTrade = (
@@ -2193,6 +2269,7 @@ public sealed partial class ShellViewModel : ObservableObject
             ShadowUnfilledBlockedTrades.Clear();
             SelectedShadowTrade = null;
             ActiveShadowTrade = null;
+            OpenPositions.Clear();
             ShadowSample = new ShadowSampleStatus(
                 30, 0, 0, 0, 0, 0, 0, 0, false,
                 "Evidence collection is unavailable. No sample records were counted.",
@@ -2216,7 +2293,12 @@ public sealed partial class ShellViewModel : ObservableObject
         CancellationToken cancellationToken = default)
     {
         if (Workspace != WorkspaceKind.Review
-            || _shadowReviewClient is null
+            && PositionsPane?.IsVisible != true)
+        {
+            return;
+        }
+
+        if (_shadowReviewClient is null
             || !await _shadowRefreshLock.WaitAsync(0, cancellationToken))
         {
             return;
@@ -2229,6 +2311,41 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             _shadowRefreshLock.Release();
         }
+    }
+
+    private void RefreshOpenPositions()
+    {
+        OpenPositions.Clear();
+        if (_shadowReviewSnapshot is null)
+        {
+            return;
+        }
+
+        foreach (var position in _shadowReviewSnapshot.Trades
+                     .Select(OpenPositionView.From)
+                     .OfType<OpenPositionView>()
+                     .OrderByDescending(position => position.UnrealizedPnl ?? decimal.MinValue)
+                     .ThenBy(position => position.Symbol, StringComparer.Ordinal))
+        {
+            OpenPositions.Add(position);
+        }
+
+        RaiseOpenPositionProperties();
+    }
+
+    private void RaiseOpenPositionProperties()
+    {
+        OnPropertyChanged(nameof(HasOpenPositions));
+        OnPropertyChanged(nameof(PositionsButtonLabel));
+        OnPropertyChanged(nameof(PositionsButtonToolTip));
+        OnPropertyChanged(nameof(OpenPositionCountDisplay));
+        OnPropertyChanged(nameof(OpenPositionPnlDisplay));
+        OnPropertyChanged(nameof(OpenPositionMarketValueDisplay));
+        OnPropertyChanged(nameof(OpenPositionAttentionCount));
+        OnPropertyChanged(nameof(OpenPositionQuoteHealthDisplay));
+        OnPropertyChanged(nameof(PositionsModeLabel));
+        OnPropertyChanged(nameof(PositionsSummary));
+        OnPropertyChanged(nameof(PositionsSourceDetail));
     }
 
     private void UpdateShadowFilterOptions(IReadOnlyList<ShadowTradeReviewSnapshot> trades)

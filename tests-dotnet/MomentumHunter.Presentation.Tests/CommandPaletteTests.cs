@@ -15,6 +15,7 @@ public sealed class CommandPaletteTests
         Assert.True(viewModel.IsCommandPaletteOpen);
         Assert.True(viewModel.HasCommandPaletteResults);
         Assert.Contains(viewModel.CommandPaletteResults, item => item.Action == CommandPaletteAction.AddChart);
+        Assert.Contains(viewModel.CommandPaletteResults, item => item.Action == CommandPaletteAction.OpenPositions);
         Assert.Contains(viewModel.CommandPaletteResults, item => item.Action == CommandPaletteAction.ToggleActivity);
         Assert.Contains(viewModel.CommandPaletteResults, item => item.Action == CommandPaletteAction.ViewDiagnostics);
         Assert.Contains(viewModel.CommandPaletteResults, item => item.Symbol == "NVDA");

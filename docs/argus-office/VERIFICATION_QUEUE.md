@@ -31,6 +31,7 @@ create a rubber-stamp Steven item.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
+| ARGUS-R030 open positions console | `AUTOMATED_PASS`; zero-warning solution build, all 185 presentation tests, and all 237 .NET tests pass; stale/halted positions remain visible, the source is read-only canonical Shadow/FakeBroker evidence, and source review finds no brokerage/order control | `MANUAL_PASS`; Steven accepted the visible surface on 2026-07-31 | `VISUAL_ACCEPTED_PENDING_INTEGRATION` on `codex/ARGUS-R030-open-positions-console` | Checks 1-8 passed. The populated-row check remains deferred until canonical evidence contains an open Shadow position; do not fabricate production evidence for visual proof. |
 | ARGUS-SHADOW-023 trusted-clock and host-response hardening | `AUTOMATED_PASS`; live CRWV/SPY/IWM quote proof passed against same-response HTTPS clock bounds, isolated 12/12 proof completed, exactly one IREN FakeBroker decision/trade and terminal handoff persisted, compileall passed, 138 affected tests and all 953 Python tests passed on the repair branch, and the combined integration passed all 976 Python tests, all 228 .NET tests, and a zero-warning build | `NO_STEVEN_ACTION`; this is nonvisual, isolated, nontransmitting evidence and does not count toward the official sample | `COMPLETE_AND_BACKED_UP` on canonical `master` through `cc2b1e2` | No manual product check. The remaining local Windows interaction is tracked under ARGUS-SERVICE-001; no future runtime may depend on a UAC response. |
 | ARGUS-SERVICE-001 unattended automation host | `AUTOMATED_PASS`; service is Running/Automatic under `BEASTCOMPUTER\steve`, nonmarket account/DPAPI canary and exact-response Codex probe completed, Engine Host is Healthy, Windows Time is synchronized at stratum 2, and the SYSTEM wake task is Ready for 08:15 with wake enabled and late start disabled. Compileall, 24 focused service/supervisor tests, 228 .NET tests, and a zero-warning service build pass. | `NO_STEVEN_ACTION`; the password was recovered locally, not reset or disclosed, and the required UAC interaction is complete. | Runtime installation and hardening are integrated and backed up through `d111bf9`, with zero Shadow jobs and order transmission `UNAVAILABLE`. | Run the separate reboot-without-login canary before scheduling another prospective opening. This is an operational proof, not a visual approval item. |
 | ARGUS-SHADOW-017 live position marking | `AUTOMATED_PASS` for implementation and `AUTOMATED_FAIL` for the 2026-07-30 opening because the one-time task did not launch; no current log, attempt, capture, twelfth proof, arm, cycle, handoff, or trade exists | `MANUAL_PASS`; Steven passed all seven visual checks on 2026-07-29; no new Steven visual action | Implementation `94f5074`, proof repair `40a26a0`, and release `60d7c9a` are integrated/backed up; v3 remains activated-empty, unarmed, and `0 / 30`; the failed date will not be retried or reconstructed | No manual verification is pending. Codex must harden scheduler observability and missed-trigger reliability with nonmarket canaries before proposing a new prospective opening date |
@@ -57,6 +58,45 @@ create a rubber-stamp Steven item.
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted visual baseline; subsequent nonvisual roadmap work follows standing delegation |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | Destructive decision not yet due | Future market-data cutover task | Interrupt Steven immediately before deleting the exact legacy paths/rows; visual cutover proof remains manual |
+
+## ARGUS-R030 - Open Positions Console
+
+Branch: `codex/ARGUS-R030-open-positions-console`
+
+Automated result: `AUTOMATED_PASS`
+
+Steven result: `MANUAL_PASS` on 2026-07-31
+
+Check these nine items:
+
+1. In the latest Momentum Hunter workstation, confirm a compact `Positions`
+   button appears in the dark top bar without clipping nearby controls.
+2. Click `Positions`. Confirm the pane opens inside the same workstation and
+   the window remains focused; no separate taskbar window should appear.
+3. Press `Ctrl+K`, type `positions`, and run the exact command. Confirm it opens
+   or focuses the same Positions pane.
+4. With the current canonical empty state, confirm the summary says Open `0`,
+   Unrealized P&L `Unavailable`, Market Value `$0.00`, and Quote Health
+   `No open marks`.
+5. Confirm the pane clearly identifies `PAPER SHADOW / NONTRANSMITTING` and
+   says Schwab account positions are not connected.
+6. Confirm there are no Buy, Sell, Submit, Replace, Cancel, Close Position, or
+   other order-execution controls in the pane.
+7. Close the pane with its pane-level close control, then click the top-bar
+   `Positions` button and confirm the pane returns.
+8. Check the normal restored and maximized workstation layouts for clipped,
+   overlapping, or unreadable Positions controls.
+9. When canonical Shadow evidence eventually contains an open position, verify
+   the table shows Symbol, Side, Qty, Avg Fill, Mark, Market Value, Unrealized,
+   %, R, Stop, Next Target, State, Quote Age, and Source. This check is
+   `MANUAL_NOT_YET_AVAILABLE` while the official sample has no open position.
+
+Report `PASS` for checks 1-8 only when all eight pass. Check 9 remains deferred
+without blocking acceptance of the empty-state surface. Report any failed
+number and the exact clipping, wording, focus, reopen, or unsafe-control issue.
+
+Steven accepted the visible surface after checks 1-8 on 2026-07-31. Check 9
+remains `MANUAL_NOT_YET_AVAILABLE` and does not block integration.
 
 ## ARGUS-SHADOW-017 - Live Position Marking
 
