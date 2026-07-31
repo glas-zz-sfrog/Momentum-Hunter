@@ -178,16 +178,43 @@ backed up. The reboot-without-login gate remains `NOT_PASSED` and requires one
 clean prospective repeat; the failed attempt is not reclassified as evidence
 of Session 0 account-canary execution.
 
+ARGUS-SERVICE-006 implementation `13c453d` is integrated into local `master`
+and is `IMPLEMENTED_PENDING_OPERATIONAL_INSTALL`. It separates ordinary 08:35
+market evidence collection from the official Shadow selector ceremony. The new
+`opening` capture session is non-official, not automatically study-eligible,
+and cannot carry a proof bundle, task definition, frozen Git identity, selector
+arm, decision-cycle dependency, Codex prompt, account/position/order request,
+or transmission authority. It runs from the existing unattended Windows
+service without an Engine Host dependency, uses a bounded 08:35-08:40 Central
+start window and at most four capture attempts, records terminal service
+receipts, and never backfills after the window. A manifest cannot schedule both
+an opening capture and an official Shadow opening on the same market date;
+Shadow already performs that date's capture.
+
+The service can hot-reload job-only manifest changes while rejecting account,
+path, executable, polling, and service-identity changes. The planner generates
+bounded date-specific jobs from the existing NYSE calendar and preserves every
+non-opening job. A live `PlanOnly` pass against the installed manifest produced
+30 future market sessions from 2026-08-03 through 2026-09-14, skipped weekends
+and Labor Day, and reported selector arming and order transmission
+`UNAVAILABLE`. Python compileall, PowerShell parsing, 74 focused tests, all
+1,001 Python tests, and a 106-test post-review regression pass succeed. The
+installed service is still running the pre-`13c453d` supervisor, so the planned
+jobs are not yet installed. The repaired reboot-without-login canary will load
+the current supervisor; after that pass, install and verify the 30-job manifest
+without another service restart or UAC prompt.
+
 Installation exposed and repaired three bounded defects: retrying over an
 existing manifest, resolving the project root under Windows PowerShell
 `-File`, and Windows PowerShell's UTF-8 BOM making the Python manifest
 unreadable. The generated manifest was normalized without changing its JSON,
 the running service recovered on its finite retry, and both canaries then
-completed. The remaining operational gate is a deliberate
-reboot-without-login canary. No new prospective official opening should be
-scheduled until that proof passes. A machine powered off through 08:35 still
-records a missed window after boot; neither the service nor Codex may backfill
-the market event.
+completed. The remaining official-sample operational gate is a deliberate
+reboot-without-login canary. No new prospective official Shadow selector
+opening should be scheduled until that proof passes. Independent capture-only
+opening evidence does not wait on that selector gate. A machine powered off
+through 08:40 still records a missed capture window after boot; neither the
+service nor Codex may backfill the market event.
 
 The 2026-07-30 ARGUS-SHADOW-017 opening is `FAILED_TASK_DID_NOT_RUN`. The
 one-time 8:35 AM Central task remained enabled with the correct final release
@@ -214,7 +241,9 @@ occurred around the opening window, but no causal relationship is established.
 Current classification is `FAILED_TASK_DID_NOT_RUN / PRESERVE_EVIDENCE /
 DO_NOT_RETRY_AFTER_FACT`. ARGUS-SERVICE-001 is the bounded reliability repair.
 Its service-account canary and a later reboot-without-login canary must pass
-before scheduling another market opening. A new market run must use a new
+before scheduling another official Shadow selector opening. Capture-only
+market evidence now follows the separate ARGUS-SERVICE-006 path and requires
+no proof identity or selector authority. A new official run must use a new
 prospective date and fresh proof identity; the July 30 opening must not be
 reconstructed.
 
