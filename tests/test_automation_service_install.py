@@ -158,6 +158,8 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertIn('shadowJobsEnabled = 0', prepare)
         self.assertIn('orderTransmission = "UNAVAILABLE"', prepare)
         self.assertIn("[System.Text.UTF8Encoding]::new($false)", prepare)
+        self.assertIn("Push-Location -LiteralPath $projectPath", prepare)
+        self.assertIn("Pop-Location", prepare)
         self.assertNotIn("Restart-Service", prepare)
         self.assertNotIn("Start-Service", prepare)
         self.assertNotIn("Restart-Computer", prepare)
@@ -177,6 +179,8 @@ class AutomationServiceInstallTests(unittest.TestCase):
             "cancel_order",
         ):
             self.assertNotIn(forbidden, verify)
+        self.assertIn("Push-Location -LiteralPath $projectPath", verify)
+        self.assertIn("Pop-Location", verify)
 
     def test_market_manifest_update_has_hard_interlocks(self) -> None:
         source = SET_JOBS.read_text(encoding="utf-8")

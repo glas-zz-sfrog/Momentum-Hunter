@@ -62,8 +62,15 @@ $arguments = @(
     "--baseline",
     $baselinePath
 )
-$planJson = & $pythonPath @arguments
-if ($LASTEXITCODE -ne 0) {
+Push-Location -LiteralPath $projectPath
+try {
+    $planJson = & $pythonPath @arguments
+    $planExitCode = $LASTEXITCODE
+}
+finally {
+    Pop-Location
+}
+if ($planExitCode -ne 0) {
     throw "Reboot-canary planning failed: $($planJson -join [Environment]::NewLine)"
 }
 $plan = ($planJson -join [Environment]::NewLine) | ConvertFrom-Json

@@ -52,7 +52,13 @@ $arguments = @(
     "--service-start-mode",
     $serviceConfig.StartMode
 )
-$result = & $pythonPath @arguments
-$exitCode = $LASTEXITCODE
+Push-Location -LiteralPath $projectPath
+try {
+    $result = & $pythonPath @arguments
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    Pop-Location
+}
 $result -join [Environment]::NewLine
 exit $exitCode
