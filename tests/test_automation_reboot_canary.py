@@ -11,6 +11,7 @@ from momentum_hunter.automation_reboot_canary import (
     build_reboot_canary_plan,
     verify_reboot_canary,
 )
+from momentum_hunter.automation_supervisor import parse_manifest
 
 
 UTC = timezone.utc
@@ -69,7 +70,7 @@ class AutomationRebootCanaryTests(unittest.TestCase):
 
         jobs = result["manifest"]["jobs"]
         self.assertEqual(
-            ["installation-canary", "reboot-canary-20260731T120500"],
+            ["installation-canary", "reboot-canary-20260731t120500"],
             [job["jobId"] for job in jobs],
         )
         self.assertEqual("nonmarket_canary", jobs[-1]["kind"])
@@ -80,6 +81,21 @@ class AutomationRebootCanaryTests(unittest.TestCase):
         self.assertTrue(result["summary"]["requiresReboot"])
         self.assertTrue(result["baseline"]["requiresNoInteractiveLogin"])
         self.assertEqual("UNAVAILABLE", result["baseline"]["orderTransmission"])
+
+    def test_planned_manifest_is_accepted_by_production_supervisor(self) -> None:
+        result = self.plan(self.manifest(), self.state())
+        manifest_path = self.root / "planned-manifest.json"
+        manifest_path.write_text(
+            json.dumps(result["manifest"]),
+            encoding="utf-8",
+        )
+
+        parsed = parse_manifest(manifest_path)
+
+        self.assertEqual(
+            ["reboot-canary-20260731t120500"],
+            [job.job_id for job in parsed.jobs],
+        )
 
     def test_plan_adds_exact_response_codex_probe_when_configured(self) -> None:
         codex = self.root / "codex.exe"

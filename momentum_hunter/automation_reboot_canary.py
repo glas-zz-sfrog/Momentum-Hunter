@@ -101,7 +101,7 @@ def build_reboot_canary_plan(
             )
         existing_jobs.append(job)
 
-    suffix = scheduled.strftime("%Y%m%dT%H%M%S")
+    suffix = scheduled.strftime("%Y%m%dt%H%M%S")
     canary_job_id = f"reboot-canary-{suffix}"
     codex_job_id = ""
     existing_ids = {str(job["jobId"]) for job in existing_jobs}
