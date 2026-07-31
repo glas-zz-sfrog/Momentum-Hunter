@@ -21,6 +21,9 @@ SET_JOBS = REPOSITORY_ROOT / "tools" / "set_automation_service_jobs.ps1"
 PREPARE_REBOOT = (
     REPOSITORY_ROOT / "tools" / "prepare_automation_reboot_canary.ps1"
 )
+START_REBOOT = (
+    REPOSITORY_ROOT / "tools" / "start_automation_reboot_canary.ps1"
+)
 VERIFY_REBOOT = (
     REPOSITORY_ROOT / "tools" / "verify_automation_reboot_canary.ps1"
 )
@@ -223,6 +226,7 @@ class AutomationServiceInstallTests(unittest.TestCase):
 
     def test_reboot_canary_scripts_preserve_nonmarket_boundary(self) -> None:
         prepare = PREPARE_REBOOT.read_text(encoding="utf-8")
+        start = START_REBOOT.read_text(encoding="utf-8")
         verify = VERIFY_REBOOT.read_text(encoding="utf-8")
 
         self.assertIn("[switch]$PlanOnly", prepare)
@@ -243,6 +247,30 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertNotIn("shutdown.exe", prepare)
         self.assertNotIn("submit_order", prepare)
         self.assertNotIn("cancel_order", prepare)
+
+        self.assertIn("[ValidateRange(5, 15)][int]$LeadMinutes = 5", start)
+        self.assertIn('$ConfirmImmediateReboot -cne "REBOOT NOW"', start)
+        self.assertIn("& $prepareScript @prepareArguments", start)
+        self.assertIn('$canaryReceipt.status -eq "PENDING"', start)
+        self.assertIn('$codexReceipt.status -eq "PENDING"', start)
+        self.assertIn(
+            "$pendingOpeningAfter.Count -ne $pendingOpeningBefore.Count",
+            start,
+        )
+        self.assertIn(
+            "@($baseline.preservedPendingOpeningJobs).Count -ne "
+            "$pendingOpeningBefore.Count",
+            start,
+        )
+        self.assertIn('$secondsRemaining -lt 180', start)
+        self.assertIn('classification = "VERIFIED_REBOOT_REQUESTED"', start)
+        self.assertIn('shutdown.exe" /r /t 0', start)
+        self.assertEqual(1, start.count('shutdown.exe" /r /t 0'))
+        self.assertIn('orderTransmission = "UNAVAILABLE"', start)
+        self.assertNotIn("Restart-Service", start)
+        self.assertNotIn("Start-Service", start)
+        self.assertNotIn("submit_order", start)
+        self.assertNotIn("cancel_order", start)
 
         for forbidden in (
             "Set-Content",
