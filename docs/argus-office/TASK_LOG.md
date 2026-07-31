@@ -159,3 +159,20 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   30-opening manifest. Next operational evidence is the 2026-08-03 opening
   capture receipt and preserved capture/report; unrelated development may
   continue.
+
+## 2026-07-31 - Monday Clock Task Reliability Hardening
+
+- Post-reboot inspection found Windows Time on `Local CMOS Clock` with no
+  successful NTP synchronization event after the 16:35 reboot; the immediate
+  startup task could run before network readiness.
+- Added a two-minute delayed startup resync, preserved the 08:15 daily
+  wake/resync, and added a final 08:25 resync before the 08:35 opening capture.
+- Added exact native task-shape validation in plan-only mode and installed-task
+  read-back for SYSTEM principal, action, triggers, wake policy, no late start,
+  and five bounded two-minute retries.
+- Verification: PowerShell parsing and native plan construction pass;
+  compileall passes; 92 affected tests and all 1,017 Python tests pass;
+  diff, secret, and protected-path reviews pass.
+- Runtime commit `30c25e5` is pending fast-forward integration. The installed
+  task and current Windows Time state remain unchanged until one announced UAC
+  prompt is accepted and the elevated read-back succeeds.

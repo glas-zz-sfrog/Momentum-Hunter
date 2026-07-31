@@ -167,5 +167,13 @@
 - Fast-forwarded ARGUS-SERVICE-001 and ARGUS-SHADOW-023 into canonical `master` through `cc2b1e2` and backed the implementation up to `origin/master` without a merge commit.
 - Configured and started Windows Time with NIST/Windows peers; the immediate external offset improved to roughly 3-6 ms, while a settled synchronization-status recheck remains pending. The password-based automation-service install failed closed before service or wake-task creation, so the next protected decision is password recovery with DPAPI continuity proof versus a password-free service identity and service-scoped credential envelope.
 
+- Hardened the SYSTEM-owned Windows Time task with a two-minute startup delay,
+  daily 08:15 and 08:25 resyncs, exact native task-shape validation, and
+  installed-task read-back before Monday opening capture.
+- Passed PowerShell parsing, native plan construction, compileall, 92 affected
+  tests, all 1,017 Python tests, diff check, secret scan, and protected-path
+  review without changing capture, Shadow, brokerage, credential, order, UI,
+  scoring, readiness, replay, alert, schema, raw-data, or report semantics.
+
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

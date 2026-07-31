@@ -28,6 +28,19 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+Post-boot clock reliability hardening is `IMPLEMENTED_PENDING_MERGE` on
+`codex/monday-clock-task-reliability` at runtime commit `30c25e5`. The wake
+task now waits two minutes after startup so the network can settle, keeps the
+08:15 Central resync, and adds a final 08:25 resync before the 08:35 opening
+capture. Both the installer and standalone hardener construct the same
+SYSTEM-owned task and read it back to require the exact principal, action,
+three triggers, wake policy, no late-start behavior, and five bounded
+two-minute retries. Plan-only mode validates the native in-memory task shape
+without registering it. PowerShell parsing, native task construction,
+compileall, 92 affected tests, all 1,017 Python tests, diff check, secret scan,
+and protected-path review pass. The installed task has not yet been changed;
+one announced UAC interaction and elevated read-back remain required.
+
 Monday opening readiness hardening is implemented on
 `codex/monday-opening-readiness-hardening` at runtime commit `4b6668c` and is
 integrated through this Roadmap closeout. The installed unattended service has
@@ -42,10 +55,11 @@ The runner now requires an opening job to finish as `CAPTURED`,
 `REPORT_RECOVERED`, or `DUPLICATE`. A late retry or other ordinary `SKIPPED`
 result can no longer be recorded as a successful service run with no opening
 evidence. The clock-task hardener can also recreate the exact expected
-SYSTEM-owned 08:15 wake/resync task if it is genuinely absent, while refusing
-to replace an existing task with an unexpected principal or action. These
-changes pass PowerShell parsing, Python compileall, 91 affected automation
-tests, all 1,016 Python tests, `git diff --check`, and protected-path review.
+SYSTEM-owned wake/resync task if it is genuinely absent, while refusing to
+replace an existing task with an unexpected principal or action. The opening
+capture hardening passes PowerShell parsing, Python compileall, 91 affected
+automation tests, all 1,016 Python tests, `git diff --check`, and
+protected-path review.
 No scoring, readiness, replay, alert, database/schema, broker/order, UI, raw
 capture, or generated-report behavior changed.
 

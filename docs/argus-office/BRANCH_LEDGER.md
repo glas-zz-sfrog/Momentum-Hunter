@@ -2,6 +2,20 @@
 
 Date reconciled: 2026-07-31
 
+## Monday Clock Task Reliability
+
+`codex/monday-clock-task-reliability` is `ACTIVE` and
+`IMPLEMENTED_PENDING_MERGE` at `30c25e5`. It adds a two-minute delayed startup
+Windows Time resync, retains the 08:15 daily wake/resync, adds a final 08:25
+resync, and validates the installed SYSTEM task by reading back its principal,
+action, triggers, wake/late-start policy, and bounded retries. PowerShell
+parsing, native plan construction, compileall, 92 affected tests, all 1,017
+Python tests, diff check, secret scan, and protected-path review pass. It is
+not pushed or merged yet. The installed task remains unchanged until one
+announced UAC interaction succeeds; no Shadow, brokerage, credential, order,
+capture, scoring, readiness, replay, alert, schema, UI, raw-data, or generated
+report behavior changed.
+
 ## Monday Opening Readiness Hardening
 
 `codex/monday-opening-readiness-hardening` is
