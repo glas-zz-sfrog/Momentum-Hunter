@@ -66,8 +66,21 @@ class AutomationServiceInstallTests(unittest.TestCase):
             self.assertFalse(plan["wakeTask"]["interactiveLogon"])
             self.assertEqual("WINDOWS_TIME_RESYNC", plan["wakeTask"]["action"])
             self.assertEqual(
-                ["AT_STARTUP", "DAILY_08_15"],
+                [
+                    "AT_STARTUP_DELAY_2_MINUTES",
+                    "DAILY_08_15",
+                    "DAILY_08_25",
+                ],
                 plan["wakeTask"]["triggers"],
+            )
+            self.assertEqual(2, plan["wakeTask"]["startupDelayMinutes"])
+            self.assertEqual("08:25", plan["wakeTask"]["finalResyncAt"])
+            self.assertTrue(
+                plan["wakeTask"]["taskShapeValidation"]["validated"]
+            )
+            self.assertEqual(
+                ["08:15", "08:25"],
+                plan["wakeTask"]["taskShapeValidation"]["dailyTimes"],
             )
             self.assertEqual(5, plan["wakeTask"]["restartCount"])
             initial_kinds = [job["kind"] for job in plan["initialJobs"]]
@@ -130,6 +143,16 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertIn('"$env:SystemRoot\\System32\\w32tm.exe"', source)
         self.assertIn('"/resync /rediscover"', source)
         self.assertIn("New-ScheduledTaskTrigger -AtStartup", source)
+        self.assertIn("Confirm-WakeTaskConfiguration", source)
+        self.assertIn("installedWakeConfiguration", source)
+        self.assertIn(
+            '$startupWakeTrigger.Delay = $startupDelayIso',
+            source,
+        )
+        self.assertIn(
+            "New-ScheduledTaskTrigger -Daily -At $finalResyncTime",
+            source,
+        )
         self.assertIn("-RestartCount 5", source)
         self.assertIn('"installation-codex-probe"', source)
         self.assertIn('"CODEX_SERVICE_READY"', source)
@@ -173,7 +196,21 @@ class AutomationServiceInstallTests(unittest.TestCase):
             "w32tm.exe /resync /rediscover",
             plan["action"],
         )
-        self.assertEqual(["AT_STARTUP", "DAILY_08_15"], plan["triggers"])
+        self.assertEqual(
+            [
+                "AT_STARTUP_DELAY_2_MINUTES",
+                "DAILY_08_15",
+                "DAILY_08_25",
+            ],
+            plan["triggers"],
+        )
+        self.assertEqual(2, plan["startupDelayMinutes"])
+        self.assertEqual("08:25", plan["finalResyncTime"])
+        self.assertTrue(plan["taskShapeValidation"]["validated"])
+        self.assertEqual(
+            ["08:15", "08:25"],
+            plan["taskShapeValidation"]["dailyTimes"],
+        )
         self.assertEqual(5, plan["restartCount"])
         self.assertFalse(plan["startWhenAvailable"])
         self.assertTrue(plan["createsIfMissing"])
@@ -184,12 +221,43 @@ class AutomationServiceInstallTests(unittest.TestCase):
         self.assertIn("Register-ScheduledTask", source)
         self.assertIn("Set-ScheduledTask", source)
         self.assertIn("New-ScheduledTaskTrigger -AtStartup", source)
+        self.assertIn("Confirm-WakeTaskConfiguration", source)
+        self.assertIn("installedConfiguration", source)
+        self.assertIn('$startupTrigger.Delay = $startupDelayIso', source)
+        self.assertIn(
+            "New-ScheduledTaskTrigger -Daily -At $finalResyncTime",
+            source,
+        )
         self.assertIn("-WakeToRun", source)
         self.assertIn("-RestartCount 5", source)
         self.assertIn("Start-ScheduledTask", source)
         self.assertNotIn("Unregister-ScheduledTask", source)
         self.assertNotIn("Remove-Item", source)
         self.assertNotIn("Restart-Computer", source)
+
+    def test_clock_hardener_final_resync_wraps_after_midnight(self) -> None:
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(HARDEN_CLOCK),
+                "-WakeTime",
+                "23:55",
+                "-PlanOnly",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual("00:05", plan["finalResyncTime"])
+        self.assertEqual("DAILY_00_05", plan["triggers"][-1])
 
     def test_reboot_archive_preserves_evidence_and_requires_verified_pass(
         self,

@@ -12,12 +12,101 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$startupDelayMinutes = 2
+$startupDelayIso = "PT$($startupDelayMinutes)M"
+$finalResyncTime = (
+    [DateTime]::ParseExact(
+        $WakeTime,
+        "HH:mm",
+        [Globalization.CultureInfo]::InvariantCulture
+    ).AddMinutes(10).ToString("HH:mm")
+)
+
 function Test-IsAdministrator {
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [System.Security.Principal.WindowsPrincipal]::new($identity)
     return $principal.IsInRole(
         [System.Security.Principal.WindowsBuiltInRole]::Administrator
     )
+}
+
+function Confirm-WakeTaskConfiguration {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Task,
+        [Parameter(Mandatory)]
+        [string]$PrimaryTime,
+        [Parameter(Mandatory)]
+        [string]$FinalTime,
+        [Parameter(Mandatory)]
+        [string]$StartupDelay
+    )
+
+    if ($Task.Principal.UserId -notin @("SYSTEM", "S-1-5-18")) {
+        throw "Installed wake task principal is not SYSTEM."
+    }
+    $actions = @($Task.Actions)
+    if ($actions.Count -ne 1) {
+        throw "Installed wake task action count is unexpected."
+    }
+    $action = $actions[0]
+    if (
+        [System.IO.Path]::GetFileName([string]$action.Execute) -ine "w32tm.exe" -or
+        ([string]$action.Arguments).Trim() -ine "/resync /rediscover"
+    ) {
+        throw "Installed wake task action is not the expected time resync."
+    }
+
+    $bootTriggers = @(
+        $Task.Triggers |
+            Where-Object { $_.CimClass.CimClassName -eq "MSFT_TaskBootTrigger" }
+    )
+    $dailyTriggers = @(
+        $Task.Triggers |
+            Where-Object { $_.CimClass.CimClassName -eq "MSFT_TaskDailyTrigger" }
+    )
+    if (
+        $bootTriggers.Count -ne 1 -or
+        [string]$bootTriggers[0].Delay -ne $StartupDelay
+    ) {
+        throw "Installed wake task startup trigger is missing or has the wrong delay."
+    }
+    if ($dailyTriggers.Count -ne 2) {
+        throw "Installed wake task must have exactly two daily resync triggers."
+    }
+    $dailyTimes = @(
+        $dailyTriggers |
+            ForEach-Object {
+                [DateTimeOffset]::Parse(
+                    [string]$_.StartBoundary
+                ).ToLocalTime().ToString("HH:mm")
+            } |
+            Sort-Object
+    )
+    $expectedTimes = @($PrimaryTime, $FinalTime) | Sort-Object
+    if (Compare-Object -ReferenceObject $expectedTimes -DifferenceObject $dailyTimes) {
+        throw "Installed wake task daily trigger times are unexpected."
+    }
+    if (
+        -not [bool]$Task.Settings.WakeToRun -or
+        [bool]$Task.Settings.StartWhenAvailable -or
+        [int]$Task.Settings.RestartCount -ne 5 -or
+        [string]$Task.Settings.RestartInterval -ne "PT2M"
+    ) {
+        throw "Installed wake task settings do not match the fail-closed plan."
+    }
+
+    return [ordered]@{
+        validated = $true
+        principal = "SYSTEM"
+        action = "w32tm.exe /resync /rediscover"
+        startupDelay = $StartupDelay
+        dailyTimes = $dailyTimes
+        wakeToRun = $true
+        startWhenAvailable = $false
+        restartCount = 5
+        restartInterval = "PT2M"
+    }
 }
 
 function Resolve-CodexExecutable {
@@ -249,11 +338,17 @@ $plan = [ordered]@{
     wakeTask = [ordered]@{
         taskName = $WakeTaskName
         runAt = $WakeTime
+        finalResyncAt = $finalResyncTime
         principal = "SYSTEM"
         wakeToRun = $true
         startWhenAvailable = $false
         action = "WINDOWS_TIME_RESYNC"
-        triggers = @("AT_STARTUP", "DAILY_$($WakeTime.Replace(':', '_'))")
+        triggers = @(
+            "AT_STARTUP_DELAY_$($startupDelayMinutes)_MINUTES",
+            "DAILY_$($WakeTime.Replace(':', '_'))",
+            "DAILY_$($finalResyncTime.Replace(':', '_'))"
+        )
+        startupDelayMinutes = $startupDelayMinutes
         restartCount = 5
         restartIntervalMinutes = 2
         interactiveLogon = $false
@@ -271,6 +366,36 @@ $plan = [ordered]@{
 }
 
 if ($PlanOnly) {
+    $planWakeAction = New-ScheduledTaskAction `
+        -Execute "$env:SystemRoot\System32\w32tm.exe" `
+        -Argument "/resync /rediscover"
+    $planStartupTrigger = New-ScheduledTaskTrigger -AtStartup
+    $planStartupTrigger.Delay = $startupDelayIso
+    $planWakeTriggers = @(
+        $planStartupTrigger,
+        (New-ScheduledTaskTrigger -Daily -At $WakeTime),
+        (New-ScheduledTaskTrigger -Daily -At $finalResyncTime)
+    )
+    $planWakePrincipal = New-ScheduledTaskPrincipal `
+        -UserId "SYSTEM" `
+        -LogonType ServiceAccount `
+        -RunLevel Highest
+    $planWakeSettings = New-ScheduledTaskSettingsSet `
+        -WakeToRun `
+        -MultipleInstances IgnoreNew `
+        -RestartCount 5 `
+        -RestartInterval ([TimeSpan]::FromMinutes(2)) `
+        -ExecutionTimeLimit ([TimeSpan]::FromMinutes(15))
+    $planWakeTask = New-ScheduledTask `
+        -Action $planWakeAction `
+        -Trigger $planWakeTriggers `
+        -Principal $planWakePrincipal `
+        -Settings $planWakeSettings
+    $plan.wakeTask.taskShapeValidation = Confirm-WakeTaskConfiguration `
+        -Task $planWakeTask `
+        -PrimaryTime $WakeTime `
+        -FinalTime $finalResyncTime `
+        -StartupDelay $startupDelayIso
     $plan | ConvertTo-Json -Depth 6
     exit 0
 }
@@ -396,9 +521,12 @@ try {
     $wakeAction = New-ScheduledTaskAction `
         -Execute "$env:SystemRoot\System32\w32tm.exe" `
         -Argument "/resync /rediscover"
+    $startupWakeTrigger = New-ScheduledTaskTrigger -AtStartup
+    $startupWakeTrigger.Delay = $startupDelayIso
     $wakeTriggers = @(
-        (New-ScheduledTaskTrigger -AtStartup),
-        (New-ScheduledTaskTrigger -Daily -At $WakeTime)
+        $startupWakeTrigger,
+        (New-ScheduledTaskTrigger -Daily -At $WakeTime),
+        (New-ScheduledTaskTrigger -Daily -At $finalResyncTime)
     )
     $wakePrincipal = New-ScheduledTaskPrincipal `
         -UserId "SYSTEM" `
@@ -419,6 +547,13 @@ try {
         -Principal $wakePrincipal `
         -Settings $wakeSettings | Out-Null
 
+    $installedWakeTask = Get-ScheduledTask -TaskName $WakeTaskName
+    $installedWakeConfiguration = Confirm-WakeTaskConfiguration `
+        -Task $installedWakeTask `
+        -PrimaryTime $WakeTime `
+        -FinalTime $finalResyncTime `
+        -StartupDelay $startupDelayIso
+
     Start-Service -Name $ServiceName
     $service = Get-Service -Name $ServiceName
     $service.WaitForStatus(
@@ -434,6 +569,9 @@ try {
         serviceAccount = $serviceAccount
         wakeTaskName = $WakeTaskName
         wakeTime = $WakeTime
+        finalResyncTime = $finalResyncTime
+        startupDelayMinutes = $startupDelayMinutes
+        installedWakeConfiguration = $installedWakeConfiguration
         wakeToRun = $true
         interactiveLogon = $false
         manifestPath = $manifestPath
