@@ -125,15 +125,16 @@ artifact generation.
 
 ## Current Truth
 
-Local and remote `master` are synchronized through unattended reliability
-commit `c95da62`, exact-time forced reboot launcher `e24feed`, and this
-Roadmap closeout. The canonical product
-baseline contains the installed automation service and reboot-canary tooling,
-the complete prior Shadow stack through opening-runtime repair `2213299`,
-accepted live-marking implementation `94f5074`, the WPF workstation through
-R030, ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003. The first
-reboot-without-login gate passes on preserved final evidence; v3 remains unarmed at
-`0 / 30`, and no order transmission exists.
+Local and remote `master` are synchronized at Monday clock operational
+closeout `c0e98dd`, including opening runtime hardening `4b6668c` and clock
+reliability runtime `30c25e5`. The canonical product baseline contains the
+installed automation service and reboot-canary tooling, the complete prior
+Shadow stack through opening-runtime repair `2213299`, accepted live-marking
+implementation `94f5074`, the WPF workstation through R030,
+ARGUS-SHADOW-001/002/003, and SCHWAB-001/002/002A/003. The
+reboot-without-login and protected clock gates pass on preserved evidence;
+all 30 opening jobs remain pending, v3 remains unarmed at `0 / 30`, and no
+order transmission exists.
 
 `codex/ARGUS-SHADOW-004-official-sample-activation`,
 `codex/ARGUS-SHADOW-005-prospective-evidence-handoff`, and
