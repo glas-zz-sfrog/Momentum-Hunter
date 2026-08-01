@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
+from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +53,8 @@ SHADOW_HANDOFFS_DIR = DATA_DIR / "shadow-trading" / "capture-handoffs"
 SHADOW_RETRYABLE_INFRASTRUCTURE_EXIT = 75
 OPENING_CLOCK_URL = "https://finviz.com/"
 OPENING_CLOCK_SOURCE = "finviz.com:https_date"
+OPENING_REPORT_REQUEST_TIMEOUT_SECONDS = 5.0
+OPENING_REPORT_NETWORK_CANDIDATE_LIMIT = 5
 
 
 @dataclass(frozen=True)
@@ -188,17 +191,14 @@ def main() -> int:
         print(f"Capture failed: {friendly_error_message(exc)}", file=sys.stderr)
         print(f"Failure record: {failure_path}", file=sys.stderr)
         print(traceback_text, file=sys.stderr)
-        return (
-            SHADOW_RETRYABLE_INFRASTRUCTURE_EXIT
-            if shadow_error_is_retryable(
-                exc,
-                session=session,
-                trigger_shadow_selector=bool(
-                    getattr(args, "trigger_shadow_selector", False)
-                ),
-            )
-            else 1
-        )
+        retryable = shadow_error_is_retryable(
+            exc,
+            session=session,
+            trigger_shadow_selector=bool(
+                getattr(args, "trigger_shadow_selector", False)
+            ),
+        ) or opening_error_is_retryable(exc, session=session)
+        return SHADOW_RETRYABLE_INFRASTRUCTURE_EXIT if retryable else 1
 
 
 def run_capture(args: argparse.Namespace, *, session: CaptureSession) -> int:
@@ -238,6 +238,16 @@ def run_capture_with_result(
                 expected_provider=args.provider or config.provider,
                 expected_scanner=(
                     args.scanner or "Institutional Momentum"
+                ),
+                request_timeout_seconds=(
+                    OPENING_REPORT_REQUEST_TIMEOUT_SECONDS
+                    if session == CaptureSession.OPENING
+                    else 20.0
+                ),
+                network_candidate_limit=(
+                    OPENING_REPORT_NETWORK_CANDIDATE_LIMIT
+                    if session == CaptureSession.OPENING
+                    else None
                 ),
             )
             print_report_paths(report_paths, prefix="Existing capture report")
@@ -299,6 +309,16 @@ def run_capture_with_result(
         json_path,
         expected_provider=provider.name,
         expected_scanner=criteria.name,
+        request_timeout_seconds=(
+            OPENING_REPORT_REQUEST_TIMEOUT_SECONDS
+            if session == CaptureSession.OPENING
+            else 20.0
+        ),
+        network_candidate_limit=(
+            OPENING_REPORT_NETWORK_CANDIDATE_LIMIT
+            if session == CaptureSession.OPENING
+            else None
+        ),
     )
     print_report_paths(report_paths, prefix="Trade planning")
     return CaptureRunResult(
@@ -349,12 +369,22 @@ def ensure_trade_planning_report(
     reports_dir: Path = REPORTS_DIR,
     expected_provider: str | None = None,
     expected_scanner: str | None = None,
+    request_timeout_seconds: float = 20.0,
+    network_candidate_limit: int | None = None,
 ) -> dict[str, Path]:
     if not capture_path.exists():
         raise FileNotFoundError(f"Raw capture JSON is missing: {capture_path}")
     expected = trade_planning_report_paths(capture_path, reports_dir=reports_dir)
     existing = {name: path.exists() for name, path in expected.items()}
-    if all(existing.values()):
+    if existing["json"]:
+        if not all(existing.values()):
+            missing = ", ".join(
+                name for name, exists in existing.items() if not exists
+            )
+            raise RuntimeError(
+                "The completed TradePlan JSON exists but companion outputs are "
+                f"missing: {missing}."
+            )
         validate_trade_planning_report(
             expected["json"],
             capture_path,
@@ -362,12 +392,6 @@ def ensure_trade_planning_report(
             expected_scanner=expected_scanner,
         )
         return expected
-    if any(existing.values()):
-        incomplete = ", ".join(name for name, exists in existing.items() if exists)
-        raise RuntimeError(
-            "A partial derived TradePlan report already exists; refusing to overwrite it. "
-            f"Existing outputs: {incomplete}"
-        )
 
     capture_payload = json.loads(capture_path.read_text(encoding="utf-8"))
     capture_timestamp = parse_datetime(str(capture_payload.get("capture_time", "")))
@@ -380,6 +404,8 @@ def ensure_trade_planning_report(
         fetch_bars=True,
         fetch_market_data=True,
         as_of=generated_at,
+        request_timeout_seconds=request_timeout_seconds,
+        network_candidate_limit=network_candidate_limit,
     )
     actual = export_trade_planning_report(report, reports_dir)
     if actual != expected:
@@ -682,6 +708,24 @@ def shadow_error_is_retryable(
             EngineHostRetryableError,
             ProviderUnavailableError,
             SchwabMarketDataNetworkError,
+        ),
+    )
+
+
+def opening_error_is_retryable(
+    exc: Exception,
+    *,
+    session: CaptureSession,
+) -> bool:
+    if session != CaptureSession.OPENING:
+        return False
+    return isinstance(
+        exc,
+        (
+            ConnectionError,
+            ProviderUnavailableError,
+            TimeoutError,
+            URLError,
         ),
     )
 

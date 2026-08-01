@@ -250,7 +250,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         expected["json"].write_text("{}", encoding="utf-8")
         before = file_sha256(self.capture_path)
 
-        with self.assertRaisesRegex(RuntimeError, "partial derived TradePlan report"):
+        with self.assertRaisesRegex(RuntimeError, "completed TradePlan JSON"):
             capture_job.ensure_trade_planning_report(
                 self.capture_path,
                 reports_dir=self.reports_dir,
@@ -259,6 +259,26 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
         self.assertEqual(before, file_sha256(self.capture_path))
         self.assertFalse(expected["csv"].exists())
         self.assertFalse(expected["report"].exists())
+
+    def test_incomplete_outputs_without_json_are_recovered_atomically(self) -> None:
+        expected = capture_job.trade_planning_report_paths(
+            self.capture_path,
+            reports_dir=self.reports_dir,
+        )
+        expected["csv"].parent.mkdir(parents=True)
+        expected["csv"].write_text("interrupted", encoding="utf-8")
+        before = file_sha256(self.capture_path)
+
+        actual = capture_job.ensure_trade_planning_report(
+            self.capture_path,
+            reports_dir=self.reports_dir,
+        )
+
+        self.assertEqual(expected, actual)
+        self.assertTrue(all(path.is_file() for path in actual.values()))
+        self.assertNotEqual("interrupted", actual["csv"].read_text(encoding="utf-8"))
+        self.assertEqual(before, file_sha256(self.capture_path))
+        self.assertEqual([], list(self.reports_dir.glob(".*.tmp")))
 
     def test_invalid_or_offsetless_capture_time_fails_before_report_generation(self) -> None:
         payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
@@ -358,6 +378,8 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             self.capture_path,
             expected_provider="finviz",
             expected_scanner="Institutional Momentum",
+            request_timeout_seconds=20.0,
+            network_candidate_limit=None,
         )
         provider.scan.assert_called_once()
         provider.fetch_news.assert_not_called()
@@ -448,6 +470,8 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             duplicate_path,
             expected_provider="finviz",
             expected_scanner="Institutional Momentum",
+            request_timeout_seconds=20.0,
+            network_candidate_limit=None,
         )
         provider_factory.assert_not_called()
 
@@ -508,6 +532,61 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
 
         self.assertEqual("DUPLICATE", result.disposition)
         self.assertFalse(result.should_trigger_shadow_selector)
+        provider_factory.assert_not_called()
+
+    def test_duplicate_opening_report_recovery_uses_five_second_requests(self) -> None:
+        args = argparse.Namespace(provider="finviz", scanner=None)
+        decision = capture_decision(
+            should_capture=False,
+            skip_reason=SkipReason.SKIP_DUPLICATE_CAPTURE.value,
+            session=CaptureSession.OPENING,
+        )
+        duplicate_path = (
+            self.captures_dir
+            / decision.run_at.date().isoformat()
+            / f"{decision.capture_session.value}.json"
+        )
+        duplicate_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        payload["session"] = CaptureSession.OPENING.value
+        duplicate_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with (
+            patch.object(capture_job, "CAPTURES_DIR", self.captures_dir),
+            patch.object(capture_job, "REPORTS_DIR", self.reports_dir),
+            patch.object(
+                capture_job,
+                "load_config",
+                return_value=AppConfig(provider="finviz"),
+            ),
+            patch.object(
+                capture_job,
+                "evaluate_automatic_capture",
+                return_value=decision,
+            ),
+            patch.object(
+                capture_job,
+                "ensure_trade_planning_report",
+                return_value={
+                    "csv": self.reports_dir / "report.csv",
+                    "json": self.reports_dir / "report.json",
+                    "report": self.reports_dir / "report.md",
+                },
+            ) as ensure_report,
+            patch.object(capture_job, "provider_from_name") as provider_factory,
+        ):
+            capture_job.run_capture_with_result(
+                args,
+                session=CaptureSession.OPENING,
+            )
+
+        ensure_report.assert_called_once_with(
+            duplicate_path,
+            expected_provider="finviz",
+            expected_scanner="Institutional Momentum",
+            request_timeout_seconds=5.0,
+            network_candidate_limit=5,
+        )
         provider_factory.assert_not_called()
 
     def test_main_triggers_one_host_cycle_only_for_new_shadow_report(self) -> None:
@@ -956,7 +1035,52 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             fetch_bars=True,
             fetch_market_data=True,
             as_of=datetime.fromisoformat("2026-07-24T07:05:00-05:00"),
+            request_timeout_seconds=20.0,
+            network_candidate_limit=None,
         )
+
+    def test_opening_infrastructure_failure_is_retryable_but_policy_failure_is_not(
+        self,
+    ) -> None:
+        args = argparse.Namespace(
+            session=CaptureSession.OPENING.value,
+            provider="finviz",
+            scanner="Institutional Momentum",
+            require_opening_result=True,
+            trigger_shadow_selector=False,
+        )
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(
+                capture_job,
+                "run_capture_with_result",
+                side_effect=capture_job.ProviderUnavailableError(
+                    "finviz",
+                    "temporary provider failure",
+                ),
+            ),
+            patch.object(
+                capture_job,
+                "save_capture_failure",
+                return_value=self.root / "provider-failure.json",
+            ),
+        ):
+            self.assertEqual(75, capture_job.main())
+
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(
+                capture_job,
+                "run_capture_with_result",
+                side_effect=RuntimeError("deterministic policy failure"),
+            ),
+            patch.object(
+                capture_job,
+                "save_capture_failure",
+                return_value=self.root / "policy-failure.json",
+            ),
+        ):
+            self.assertEqual(1, capture_job.main())
 
     def test_windows_task_wires_distinct_shadow_opening_capture(self) -> None:
         project_root = Path(capture_job.__file__).resolve().parents[1]
@@ -1350,14 +1474,19 @@ def capture_decision(
     *,
     should_capture: bool = True,
     skip_reason: str = "",
+    session: CaptureSession = CaptureSession.MORNING,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         should_capture=should_capture,
         is_skip=not should_capture,
         skip_reason=skip_reason,
-        requested_session=CaptureSession.MORNING,
-        capture_session=CaptureSession.MORNING,
-        run_at=datetime.fromisoformat("2026-07-24T07:00:00-05:00"),
+        requested_session=session,
+        capture_session=session,
+        run_at=datetime.fromisoformat(
+            "2026-07-24T08:35:00-05:00"
+            if session == CaptureSession.OPENING
+            else "2026-07-24T07:00:00-05:00"
+        ),
         classification=SimpleNamespace(
             capture_calendar_status="MARKET_OPEN_DAY",
             next_market_session_date="2026-07-24",

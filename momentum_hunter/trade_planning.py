@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import json
 import math
+import os
+import uuid
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, time
 from pathlib import Path
@@ -218,6 +221,8 @@ def build_trade_planning_report(
     event_mode: bool = False,
     as_of: datetime | None = None,
     previous_state_path: Path | None = None,
+    request_timeout_seconds: float = 20.0,
+    network_candidate_limit: int | None = None,
 ) -> TradePlanningReport:
     payload = json.loads(capture_path.read_text(encoding="utf-8"))
     candidates = [candidate_from_dict(item) for item in payload.get("candidates", [])]
@@ -232,11 +237,30 @@ def build_trade_planning_report(
 
     if fetch_bars or fetch_market_data:
         session = build_http_session()
-        for candidate in candidates:
+        network_candidates = (
+            candidates
+            if network_candidate_limit is None
+            else candidates[: max(0, network_candidate_limit)]
+        )
+        for candidate in network_candidates:
             if fetch_bars or fetch_market_data:
-                bars_by_ticker.setdefault(candidate.ticker, fetch_price_bars(session, candidate.ticker))
+                bars_by_ticker.setdefault(
+                    candidate.ticker,
+                    fetch_price_bars(
+                        session,
+                        candidate.ticker,
+                        timeout_seconds=request_timeout_seconds,
+                    ),
+                )
             if fetch_market_data:
-                market_tape_by_ticker.setdefault(candidate.ticker, fetch_market_tape(session, candidate.ticker))
+                market_tape_by_ticker.setdefault(
+                    candidate.ticker,
+                    fetch_market_tape(
+                        session,
+                        candidate.ticker,
+                        timeout_seconds=request_timeout_seconds,
+                    ),
+                )
 
     rows = [
         build_trade_plan_row(
@@ -605,15 +629,33 @@ def tape_from_candidate(candidate: Candidate) -> MarketTape:
     )
 
 
-def fetch_market_tape(session, ticker: str) -> MarketTape:
-    nasdaq_tape = fetch_nasdaq_market_tape(session, ticker)
-    yahoo_tape = fetch_yahoo_market_tape(session, ticker)
+def fetch_market_tape(
+    session,
+    ticker: str,
+    *,
+    timeout_seconds: float = 20.0,
+) -> MarketTape:
+    nasdaq_tape = fetch_nasdaq_market_tape(
+        session,
+        ticker,
+        timeout_seconds=timeout_seconds,
+    )
+    yahoo_tape = fetch_yahoo_market_tape(
+        session,
+        ticker,
+        timeout_seconds=timeout_seconds,
+    )
     if has_core_tape(nasdaq_tape):
         return overlay_tapes(primary=nasdaq_tape, fallback=yahoo_tape)
     return overlay_tapes(primary=yahoo_tape, fallback=nasdaq_tape)
 
 
-def fetch_nasdaq_market_tape(session, ticker: str) -> MarketTape:
+def fetch_nasdaq_market_tape(
+    session,
+    ticker: str,
+    *,
+    timeout_seconds: float = 20.0,
+) -> MarketTape:
     if not ticker:
         return MarketTape(source="nasdaq", warnings=["MISSING_TICKER"])
     symbol = ticker.replace(".", "-").upper()
@@ -631,18 +673,21 @@ def fetch_nasdaq_market_tape(session, ticker: str) -> MarketTape:
         f"https://api.nasdaq.com/api/quote/{symbol}/info?assetclass=stocks",
         headers=headers,
         warning_prefix="NASDAQ_INFO",
+        timeout_seconds=timeout_seconds,
     )
     summary, summary_warnings = request_json(
         session,
         f"https://api.nasdaq.com/api/quote/{symbol}/summary?assetclass=stocks",
         headers=headers,
         warning_prefix="NASDAQ_SUMMARY",
+        timeout_seconds=timeout_seconds,
     )
     extended, extended_warnings = request_json(
         session,
         f"https://api.nasdaq.com/api/quote/{symbol}/extended-trading?assetclass=stocks&markettype=pre",
         headers=headers,
         warning_prefix="NASDAQ_EXTENDED",
+        timeout_seconds=timeout_seconds,
     )
     info_data = (info or {}).get("data") or {}
     summary_data = ((summary or {}).get("data") or {}).get("summaryData") or {}
@@ -698,14 +743,23 @@ def fetch_nasdaq_market_tape(session, ticker: str) -> MarketTape:
     )
 
 
-def fetch_yahoo_market_tape(session, ticker: str) -> MarketTape:
+def fetch_yahoo_market_tape(
+    session,
+    ticker: str,
+    *,
+    timeout_seconds: float = 20.0,
+) -> MarketTape:
     if not ticker:
         return MarketTape(source="yahoo_quote", warnings=["MISSING_TICKER"])
-    chart_tape = fetch_yahoo_chart_tape(session, ticker)
+    chart_tape = fetch_yahoo_chart_tape(
+        session,
+        ticker,
+        timeout_seconds=timeout_seconds,
+    )
     symbol = ticker.replace(".", "-")
     url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}"
     try:
-        response = session.get(url, timeout=20)
+        response = session.get(url, timeout=timeout_seconds)
         if response.status_code != 200:
             return merge_tapes(
                 quote_tape=MarketTape(source="yahoo_quote", warnings=[f"QUOTE_HTTP_{response.status_code}"]),
@@ -760,11 +814,16 @@ def fetch_yahoo_market_tape(session, ticker: str) -> MarketTape:
     return merge_tapes(quote_tape=quote_tape, chart_tape=chart_tape)
 
 
-def fetch_yahoo_chart_tape(session, ticker: str) -> MarketTape:
+def fetch_yahoo_chart_tape(
+    session,
+    ticker: str,
+    *,
+    timeout_seconds: float = 20.0,
+) -> MarketTape:
     symbol = ticker.replace(".", "-")
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1d&interval=1m&includePrePost=true"
     try:
-        response = session.get(url, timeout=20)
+        response = session.get(url, timeout=timeout_seconds)
         if response.status_code != 200:
             return MarketTape(source="yahoo_chart", warnings=[f"CHART_HTTP_{response.status_code}"])
         result = (response.json().get("chart", {}).get("result") or [])
@@ -953,9 +1012,20 @@ def has_core_tape(tape: MarketTape) -> bool:
     )
 
 
-def request_json(session, url: str, *, headers: dict[str, str] | None = None, warning_prefix: str) -> tuple[dict | None, list[str]]:
+def request_json(
+    session,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    warning_prefix: str,
+    timeout_seconds: float = 20.0,
+) -> tuple[dict | None, list[str]]:
     try:
-        response = session.get(url, headers=headers, timeout=20)
+        response = session.get(
+            url,
+            headers=headers,
+            timeout=timeout_seconds,
+        )
         if response.status_code != 200:
             return None, [f"{warning_prefix}_HTTP_{response.status_code}"]
         return response.json(), []
@@ -1335,17 +1405,20 @@ def export_trade_planning_report(report: TradePlanningReport, output_dir: Path |
     json_path = output_dir / f"{base}.json"
     md_path = output_dir / f"{base}.md"
     write_csv(report, csv_path)
-    write_json(report, json_path)
     write_markdown(report, md_path)
+    # JSON is the completion marker. Recovery may replace incomplete CSV/Markdown
+    # outputs only while this file is absent.
+    write_json(report, json_path)
     return {"csv": csv_path, "json": json_path, "report": md_path}
 
 
 def write_csv(report: TradePlanningReport, path: Path) -> None:
-    with path.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=REPORT_COLUMNS)
-        writer.writeheader()
-        for row in report.rows:
-            writer.writerow(row_to_csv(row))
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=REPORT_COLUMNS)
+    writer.writeheader()
+    for row in report.rows:
+        writer.writerow(row_to_csv(row))
+    _replace_report_text(path, stream.getvalue())
 
 
 def write_json(report: TradePlanningReport, path: Path) -> None:
@@ -1369,7 +1442,7 @@ def write_json(report: TradePlanningReport, path: Path) -> None:
         "state_transition_log": report.state_transition_log,
         "fed_news_summary": report.fed_news_summary,
     }
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _replace_report_text(path, json.dumps(payload, indent=2))
 
 
 def write_markdown(report: TradePlanningReport, path: Path) -> None:
@@ -1482,7 +1555,19 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
                 "",
             ]
         )
-    path.write_text("\n".join(lines), encoding="utf-8")
+    _replace_report_text(path, "\n".join(lines))
+
+
+def _replace_report_text(path: Path, text: str) -> None:
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8", newline="") as file:
+            file.write(text)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def readiness_section_lines(title: str, rows: list[TradePlanRow], readiness_prefix: str) -> list[str]:

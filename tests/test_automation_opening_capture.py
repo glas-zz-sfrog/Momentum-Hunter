@@ -141,7 +141,11 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
         self.assertIn('"opening_capture"', installer)
         self.assertIn('"UNAVAILABLE"', installer)
         self.assertIn('"opening"', runner)
-        self.assertIn("$OpeningRetryCount = 3", runner)
+        self.assertIn("$OpeningRetryCount = 1", runner)
+        self.assertIn(
+            '$Session -eq "opening" -and $exitCode -eq $retryableInfrastructureExit',
+            runner,
+        )
         self.assertNotIn("ArmShadowSelector", installer)
         self.assertNotIn("submit", installer.lower())
         self.assertNotIn("cancel", installer.lower())
@@ -195,7 +199,7 @@ class OpeningCaptureRunnerTests(unittest.TestCase):
                     "attempt = int(attempt_path.read_text()) + 1 if attempt_path.exists() else 1",
                     "attempt_path.write_text(str(attempt))",
                     "(root / 'arguments.json').write_text(json.dumps(sys.argv[1:]))",
-                    "raise SystemExit(0 if attempt == 3 else 1)",
+                    "raise SystemExit(0 if attempt == 3 else 75)",
                     "",
                 )
             ),
@@ -245,7 +249,51 @@ class OpeningCaptureRunnerTests(unittest.TestCase):
         self.assertNotIn("position", joined)
         self.assertNotIn("order", joined)
 
-    def test_opening_capture_success_survives_independent_outcome_failure(
+    def test_opening_runner_does_not_retry_terminal_failure(self) -> None:
+        (self.tools / "capture_job.py").write_text(
+            "from pathlib import Path\n"
+            "root = Path(__file__).resolve().parents[1]\n"
+            "counter = root / 'attempts.txt'\n"
+            "attempt = int(counter.read_text()) + 1 if counter.exists() else 1\n"
+            "counter.write_text(str(attempt))\n"
+            "raise SystemExit(1)\n",
+            encoding="utf-8",
+        )
+        (self.tools / "update_outcomes.py").write_text(
+            "raise SystemExit(0)\n",
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            (
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(self.runner),
+                "-Session",
+                "opening",
+                "-ProjectRoot",
+                str(self.root),
+                "-PythonExe",
+                sys.executable,
+                "-OpeningRetryCount",
+                "3",
+                "-OpeningRetryDelaySeconds",
+                "0",
+            ),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        self.assertEqual(1, result.returncode)
+        self.assertEqual("1", (self.root / "attempts.txt").read_text())
+        self.assertNotIn("Retrying bounded capture failure", result.stdout)
+
+    def test_opening_capture_defers_unbounded_outcome_maintenance(
         self,
     ) -> None:
         (self.tools / "capture_job.py").write_text(
@@ -253,6 +301,8 @@ class OpeningCaptureRunnerTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.tools / "update_outcomes.py").write_text(
+            "from pathlib import Path\n"
+            "Path(__file__).resolve().parents[1].joinpath('outcome-ran.txt').write_text('ran')\n"
             "raise SystemExit(23)\n",
             encoding="utf-8",
         )
@@ -281,8 +331,8 @@ class OpeningCaptureRunnerTests(unittest.TestCase):
         )
 
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-        self.assertIn("OutcomeUpdateExitCode: 23", result.stdout)
-        self.assertIn("no opening retry will occur", result.stdout)
+        self.assertIn("OutcomeUpdateState: DEFERRED_AFTER_OPENING", result.stdout)
+        self.assertFalse((self.root / "outcome-ran.txt").exists())
         status_paths = list(
             (self.root / "MomentumHunterData" / "logs").glob(
                 "outcomes-opening-*.status.json"
@@ -291,7 +341,8 @@ class OpeningCaptureRunnerTests(unittest.TestCase):
         self.assertEqual(1, len(status_paths))
         status = json.loads(status_paths[0].read_text(encoding="utf-8-sig"))
         self.assertTrue(status["openingResultPreserved"])
-        self.assertEqual(23, status["exitCode"])
+        self.assertEqual("DEFERRED_AFTER_OPENING", status["state"])
+        self.assertIsNone(status["exitCode"])
 
 
 if __name__ == "__main__":

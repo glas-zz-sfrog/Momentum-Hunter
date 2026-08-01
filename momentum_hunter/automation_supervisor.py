@@ -578,17 +578,14 @@ class AutomationSupervisor:
                 "Job is disabled in the immutable service manifest.",
             )
             return
-        if (
-            receipt is not None
-            and receipt.status == "RUNNING"
-            and now > job.latest_start_at
-        ):
+        if receipt is not None and receipt.status == "RUNNING":
             receipt.status = "FAILED"
             receipt.observed_at = now.isoformat()
             receipt.completed_at = now.isoformat()
             receipt.reason = (
-                "The service restarted after an in-progress job exceeded its "
-                "allowed start window; the job was not resumed late."
+                "The service restarted while this job was in progress; the job "
+                "was not relaunched because doing so could duplicate an existing "
+                "capture process."
             )
             return
         if now < job.scheduled_at:
@@ -654,6 +651,9 @@ class AutomationSupervisor:
         running.exit_code = exit_code
         running.reason = detail
         running.log_path = str(log_path)
+        # Persist the terminal result before any later health probe or job can
+        # interrupt this tick and leave a completed opening job marked RUNNING.
+        self.state_store.save(self.state)
 
     @staticmethod
     def _receipt(

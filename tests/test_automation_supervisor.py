@@ -177,7 +177,28 @@ class AutomationSupervisorTests(unittest.TestCase):
 
         self.assertEqual([], self.executed)
         self.assertEqual("FAILED", state.jobs["canary"].status)
-        self.assertIn("not resumed late", state.jobs["canary"].reason)
+        self.assertIn("not relaunched", state.jobs["canary"].reason)
+
+    def test_interrupted_job_is_not_relaunched_inside_start_window(self) -> None:
+        job = self.job(
+            kind="opening_capture",
+            scheduled_at=self.now - timedelta(minutes=1),
+            latest_start_at=self.now + timedelta(minutes=4),
+        )
+        SupervisorStateStore(
+            self.state_dir / "automation-service-state.json"
+        ).save(
+            self.running_state(
+                job,
+                started_at=self.now - timedelta(minutes=1),
+            )
+        )
+
+        state = self.supervisor(job).tick()
+
+        self.assertEqual([], self.executed)
+        self.assertEqual("FAILED", state.jobs["canary"].status)
+        self.assertIn("could duplicate", state.jobs["canary"].reason)
 
     def test_unhealthy_engine_host_fails_due_job_closed(self) -> None:
         job = self.job(kind="nonmarket_canary")
@@ -214,6 +235,27 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertEqual(["canary"], self.executed)
         self.assertEqual("COMPLETED", state.jobs["canary"].status)
         self.assertEqual("Failed", state.engine_host_state)
+
+    def test_opening_terminal_receipt_is_saved_before_later_probe_crash(self) -> None:
+        job = self.job(kind="opening_capture")
+        supervisor = AutomationSupervisor(
+            self.manifest(job),
+            clock=lambda: self.now,
+            engine_host_probe=lambda: (_ for _ in ()).throw(
+                SystemExit("simulated host-process interruption")
+            ),
+            job_executor=self.execute,
+        )
+
+        with self.assertRaises(SystemExit):
+            supervisor.tick()
+
+        stored = SupervisorStateStore(
+            self.state_dir / "automation-service-state.json"
+        ).load(started_at=self.now)
+        self.assertEqual(["canary"], self.executed)
+        self.assertEqual("COMPLETED", stored.jobs["canary"].status)
+        self.assertEqual(0, stored.jobs["canary"].exit_code)
 
     def test_nonmarket_canary_fails_closed_on_account_binding_anomaly(
         self,

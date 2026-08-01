@@ -6,6 +6,7 @@ import unittest
 import uuid
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from momentum_hunter.outcomes import PriceBar
 from momentum_hunter.storage import file_sha256
@@ -127,6 +128,63 @@ class TradePlanningTests(unittest.TestCase):
         export_trade_planning_report(report, self.root / "reports")
 
         self.assertEqual(before, file_sha256(self.capture_path))
+
+    def test_bounded_request_timeout_reaches_every_candidate_fetch(self) -> None:
+        with (
+            patch(
+                "momentum_hunter.trade_planning.build_http_session",
+                return_value=object(),
+            ),
+            patch(
+                "momentum_hunter.trade_planning.fetch_price_bars",
+                return_value=[],
+            ) as fetch_bars,
+            patch(
+                "momentum_hunter.trade_planning.fetch_market_tape",
+                return_value=MarketTape(),
+            ) as fetch_tape,
+        ):
+            build_trade_planning_report(
+                self.capture_path,
+                fetch_bars=True,
+                fetch_market_data=True,
+                request_timeout_seconds=5.0,
+            )
+
+        self.assertEqual(2, fetch_bars.call_count)
+        self.assertEqual(2, fetch_tape.call_count)
+        self.assertTrue(
+            all(call.kwargs == {"timeout_seconds": 5.0} for call in fetch_bars.call_args_list)
+        )
+        self.assertTrue(
+            all(call.kwargs == {"timeout_seconds": 5.0} for call in fetch_tape.call_args_list)
+        )
+
+    def test_network_candidate_limit_preserves_rows_and_bounds_fetches(self) -> None:
+        with (
+            patch(
+                "momentum_hunter.trade_planning.build_http_session",
+                return_value=object(),
+            ),
+            patch(
+                "momentum_hunter.trade_planning.fetch_price_bars",
+                return_value=[],
+            ) as fetch_bars,
+            patch(
+                "momentum_hunter.trade_planning.fetch_market_tape",
+                return_value=MarketTape(),
+            ) as fetch_tape,
+        ):
+            report = build_trade_planning_report(
+                self.capture_path,
+                fetch_bars=True,
+                fetch_market_data=True,
+                network_candidate_limit=1,
+            )
+
+        self.assertEqual(2, len(report.rows))
+        fetch_bars.assert_called_once()
+        fetch_tape.assert_called_once()
 
     def test_exports_csv_json_and_markdown(self) -> None:
         report = build_trade_planning_report(self.capture_path)

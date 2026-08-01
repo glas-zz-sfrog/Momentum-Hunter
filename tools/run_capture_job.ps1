@@ -11,7 +11,7 @@ param(
     [switch]$ArmShadowSelector,
     [int]$ShadowRetryCount = 3,
     [int]$ShadowRetryDelaySeconds = 60,
-    [int]$OpeningRetryCount = 3,
+    [int]$OpeningRetryCount = 1,
     [int]$OpeningRetryDelaySeconds = 60
 )
 
@@ -20,7 +20,7 @@ $ErrorActionPreference = "Stop"
 $logDir = Join-Path $ProjectRoot "MomentumHunterData\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
-$timestamp = Get-Date -Format "yyyy-MM-dd-HHmmss"
+$timestamp = "$(Get-Date -Format 'yyyy-MM-dd-HHmmss-fff')-$PID"
 $logPath = Join-Path $logDir "capture-$Session-$timestamp.log"
 $outcomeLogPath = Join-Path $logDir "outcomes-$Session-$timestamp.log"
 $outcomeStatusPath = Join-Path $logDir "outcomes-$Session-$timestamp.status.json"
@@ -96,7 +96,7 @@ try {
         "OpeningAttemptExitCode: $exitCode" | Tee-Object -FilePath $logPath -Append
         $retryable = (
             ($Session -eq "shadow" -and $exitCode -eq $retryableInfrastructureExit) -or
-            ($Session -eq "opening" -and $exitCode -ne 0)
+            ($Session -eq "opening" -and $exitCode -eq $retryableInfrastructureExit)
         )
         if (-not $retryable) {
             break
@@ -112,7 +112,19 @@ try {
             Start-Sleep -Seconds ([Math]::Max(0, $delaySeconds))
         }
     }
-    if ($exitCode -eq 0) {
+    if ($exitCode -eq 0 -and $Session -eq "opening") {
+        @{
+            schemaVersion = 1
+            session = $Session
+            completedAt = (Get-Date -Format o)
+            state = "DEFERRED_AFTER_OPENING"
+            exitCode = $null
+            openingResultPreserved = $true
+            reason = "Outcome maintenance is outside the finite opening-capture deadline."
+        } | ConvertTo-Json | Set-Content -LiteralPath $outcomeStatusPath -Encoding utf8
+        "OutcomeUpdateState: DEFERRED_AFTER_OPENING" | Tee-Object -FilePath $logPath -Append
+    }
+    elseif ($exitCode -eq 0) {
         "Updating outcomes independently: $(Get-Date -Format o)" | Tee-Object -FilePath $outcomeLogPath
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
@@ -129,6 +141,7 @@ try {
             schemaVersion = 1
             session = $Session
             completedAt = (Get-Date -Format o)
+            state = if ($outcomeExitCode -eq 0) { "COMPLETED" } else { "FAILED" }
             exitCode = $outcomeExitCode
             openingResultPreserved = ($Session -in @("opening", "shadow"))
         } | ConvertTo-Json | Set-Content -LiteralPath $outcomeStatusPath -Encoding utf8

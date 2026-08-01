@@ -262,7 +262,12 @@ def calculate_outcome(row: dict, bars: list[PriceBar], *, as_of_date: date | Non
     )
 
 
-def fetch_price_bars(session: requests.Session, ticker: str) -> list[PriceBar]:
+def fetch_price_bars(
+    session: requests.Session,
+    ticker: str,
+    *,
+    timeout_seconds: float = 20.0,
+) -> list[PriceBar]:
     if not ticker:
         return []
     symbol = ticker.replace(".", "-")
@@ -273,7 +278,7 @@ def fetch_price_bars(session: requests.Session, ticker: str) -> list[PriceBar]:
         f"?period1={period1}&period2={period2}&interval=1d&events=history"
     )
     try:
-        response = session.get(url, timeout=20)
+        response = session.get(url, timeout=timeout_seconds)
     except requests.RequestException:
         return []
     if response.status_code != 200:
