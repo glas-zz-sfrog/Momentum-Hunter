@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from momentum_hunter import schwab_candle_contract as candle_contract_module
 from momentum_hunter.schwab_account_discovery import (
     SchwabAccountDiscoveryError,
     SchwabAccountNumbersTransport,
@@ -69,6 +70,7 @@ MAX_OBSERVATION_SECONDS = 900
 DEFAULT_OBSERVATION_SECONDS = 300
 HTTP_TIMEOUT = (5.0, 30.0)
 ACK_TIMEOUT_SECONDS = 15.0
+EXPECTED_WEBSOCKET_CLIENT_VERSION = "1.9.0"
 
 
 class SchwabCandleObserverError(RuntimeError):
@@ -600,6 +602,8 @@ class WebSocketClientConnection:
 
 
 class WebSocketClientFactory:
+    dependency_version: str | None = None
+
     def connect(self, socket_url: str) -> WebSocketClientConnection:
         _validate_streamer_url(socket_url)
         try:
@@ -608,6 +612,12 @@ class WebSocketClientFactory:
             raise SchwabCandleObserverNetworkError(
                 "The isolated candle observer requires websocket-client."
             ) from None
+        version = str(getattr(websocket, "__version__", "")).strip()
+        if version != EXPECTED_WEBSOCKET_CLIENT_VERSION:
+            raise SchwabCandleObserverNetworkError(
+                "The isolated candle observer found an unexpected websocket-client version."
+            )
+        self.dependency_version = version
         try:
             socket = websocket.create_connection(
                 socket_url,
@@ -644,6 +654,7 @@ class SchwabCandleMarketHoursObserver:
         self.monotonic_clock = monotonic_clock or time.monotonic
 
     def observe(self, options: CandleObservationOptions) -> dict[str, object]:
+        source_identity = _implementation_source_identity()
         request_started_at = _aware_now(self.utc_clock())
         observed_session = session_for_timestamp(request_started_at)
         market_date = request_started_at.astimezone(EASTERN_TZ).date()
@@ -771,6 +782,10 @@ class SchwabCandleMarketHoursObserver:
                     "extendedHoursRequested": options.extended_hours,
                 }
             )
+        if source_identity != _implementation_source_identity():
+            raise SchwabCandleObserverError(
+                "Candle observer source identity changed during observation."
+            )
         proof = build_nonpersisting_stream_proof(
             messages,
             expected_symbols=options.symbols,
@@ -789,6 +804,17 @@ class SchwabCandleMarketHoursObserver:
                 "observationOptions": options.evidence(),
                 "accountInvariant": access.evidence(),
                 "streamerBootstrap": bootstrap.evidence(),
+                "implementationIdentity": {
+                    **source_identity,
+                    "expectedWebsocketClientVersion": (
+                        EXPECTED_WEBSOCKET_CLIENT_VERSION
+                    ),
+                    "observedWebsocketClientVersion": getattr(
+                        self.stream_factory,
+                        "dependency_version",
+                        None,
+                    ),
+                },
                 "streamStatus": "FAIL" if stream_failure else "PASS",
                 "streamFailure": stream_failure,
                 "priceHistoryRequests": history_observations,
@@ -948,6 +974,19 @@ def require_safe_output_path(output_path: Path) -> Path:
 def _proof_fingerprint(proof: Mapping[str, object]) -> str:
     payload = json.dumps(proof, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest().upper()
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+
+
+def _implementation_source_identity() -> dict[str, str]:
+    return {
+        "observerModuleSha256": _file_sha256(Path(__file__)),
+        "candleContractModuleSha256": _file_sha256(
+            Path(candle_contract_module.__file__)
+        ),
+    }
 
 
 def _require_sanitized_proof(

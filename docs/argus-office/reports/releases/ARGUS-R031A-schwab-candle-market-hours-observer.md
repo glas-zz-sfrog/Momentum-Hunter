@@ -11,6 +11,9 @@ populate charts, alter Monday automation, or authorize R032 persistence.
 ## Runtime Boundary
 
 - The CLI is a deterministic zero-network plan unless `--execute` is supplied.
+- The PowerShell runner is likewise plan-first, pins module imports to this
+  isolated worktree from any current directory, and requires `-Execute` for
+  live use.
 - Live use requires an explicit `.json` output outside the repository and
   refuses overwrite.
 - Observation is bounded to ten symbols and three through fifteen minutes on
@@ -37,17 +40,25 @@ Per-symbol history failure is explicit and does not discard the primary
 Streamer proof. A socket failure after candle receipt preserves those candles
 and adds an explicit disconnect finding. Output excludes tokens, credentials, full account identity,
 account hash, balance values, and raw Streamer bootstrap identifiers.
+Every proof records the SHA-256 identity of the observer and candle-contract
+modules, the expected WebSocket dependency version, and the version actually
+imported. Source identity is checked before and after the observation, and any
+change fails without producing ambiguous proof. Any version other than
+`websocket-client==1.9.0` fails before the socket is opened.
 
 ## Verification
 
 - Python compileall: PASS.
-- Focused observer tests: 20 PASS.
-- Schwab/candle boundary regression: 207 PASS.
-- Full Python discovery: 1,078 PASS.
+- Focused observer tests: 23 PASS.
+- Schwab/candle boundary regression: 210 PASS.
+- Full Python discovery: 1,081 PASS.
 - `websocket-client==1.9.0`: imported successfully from an isolated external
   target; canonical `.venv` unchanged.
 - Default CLI plan: PASS, with network, persistence, service, Engine Host, WPF,
   positions, orders, and transmission all disabled or unavailable.
+- PowerShell runner parse and unrelated-directory plan: PASS. The runner
+  supplied exactly `SPY`, `IWM`, and `CRWV`, called no network, wrote no
+  production data, and left transmission unavailable.
 - Protected-path and secret/capability scans: PASS before commit.
 - Canonical Monday checkout/runtime nonmutation: PASS. Canonical Git remains
   clean and synchronized at `c546242`; the service is Running/Automatic with a

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -14,6 +15,7 @@ import requests
 
 from momentum_hunter.schwab_account_discovery import DiscoveredSchwabAccount
 from momentum_hunter.schwab_candle_observer import (
+    EXPECTED_WEBSOCKET_CLIENT_VERSION,
     EXPECTED_STREAMER_HOST,
     EXPECTED_STREAMER_PATH,
     GuardedStreamerAccess,
@@ -669,6 +671,7 @@ class SchwabCandleObserverTests(unittest.TestCase):
             (),
             {
                 "WebSocketTimeoutException": FakeWebSocketTimeout,
+                "__version__": EXPECTED_WEBSOCKET_CLIENT_VERSION,
                 "create_connection": staticmethod(lambda *args, **kwargs: socket),
             },
         )
@@ -679,8 +682,9 @@ class SchwabCandleObserverTests(unittest.TestCase):
             return socket
 
         fake_module.create_connection = create_connection
+        factory = WebSocketClientFactory()
         with patch.dict("sys.modules", {"websocket": fake_module}):
-            connection = WebSocketClientFactory().connect(
+            connection = factory.connect(
                 f"wss://{EXPECTED_STREAMER_HOST}{EXPECTED_STREAMER_PATH}"
             )
         self.assertIsInstance(connection, WebSocketClientConnection)
@@ -691,8 +695,36 @@ class SchwabCandleObserverTests(unittest.TestCase):
         self.assertIsNone(calls[0][1]["http_proxy_host"])
         self.assertEqual([EXPECTED_STREAMER_HOST], calls[0][1]["http_no_proxy"])
         self.assertTrue(calls[0][1]["sslopt"]["check_hostname"])
+        self.assertEqual(
+            EXPECTED_WEBSOCKET_CLIENT_VERSION,
+            connection.module.__version__,
+        )
+        self.assertEqual(
+            EXPECTED_WEBSOCKET_CLIENT_VERSION,
+            factory.dependency_version,
+        )
         with self.assertRaisesRegex(SchwabCandleObserverResponseError, "unexpected"):
             WebSocketClientFactory().connect("wss://example.com/ws")
+
+        wrong_version = type(
+            "WrongVersionModule",
+            (),
+            {
+                "WebSocketTimeoutException": FakeWebSocketTimeout,
+                "__version__": "0.0.0",
+                "create_connection": staticmethod(create_connection),
+            },
+        )
+        with (
+            patch.dict("sys.modules", {"websocket": wrong_version}),
+            self.assertRaisesRegex(
+                SchwabCandleObserverNetworkError,
+                "unexpected websocket-client version",
+            ),
+        ):
+            WebSocketClientFactory().connect(
+                f"wss://{EXPECTED_STREAMER_HOST}{EXPECTED_STREAMER_PATH}"
+            )
         with self.assertRaisesRegex(SchwabCandleObserverResponseError, "HTTP 503"):
             SchwabCandleHttpTransport(
                 session=FakeSession([FakeResponse({}, status_code=503)])
@@ -745,6 +777,13 @@ class SchwabCandleObserverTests(unittest.TestCase):
         self.assertFalse(proof["wpfInvoked"])
         self.assertEqual("UNAVAILABLE", proof["orderTransmission"])
         self.assertRegex(proof["proofFingerprint"], r"^[0-9A-F]{64}$")
+        identity = proof["implementationIdentity"]
+        self.assertRegex(identity["observerModuleSha256"], r"^[0-9A-F]{64}$")
+        self.assertRegex(identity["candleContractModuleSha256"], r"^[0-9A-F]{64}$")
+        self.assertEqual(
+            EXPECTED_WEBSOCKET_CLIENT_VERSION,
+            identity["expectedWebsocketClientVersion"],
+        )
         self.assertEqual(2, len(proof["priceHistoryRequests"]))
         self.assertTrue(
             all(row["responseSeconds"] >= 0 for row in proof["priceHistoryRequests"])
@@ -818,6 +857,45 @@ class SchwabCandleObserverTests(unittest.TestCase):
         self.assertEqual(2, len(proof["updateObservations"]))
         self.assertTrue(stream.closed)
 
+    def test_observer_rejects_source_identity_change_during_run(self) -> None:
+        stream = FakeStream(
+            [
+                ack("ADMIN", "LOGIN", "0"),
+                ack("CHART_EQUITY", "SUBS", "1"),
+                stream_payload("SPY"),
+                stream_payload("IWM"),
+            ]
+        )
+        observer = SchwabCandleMarketHoursObserver(
+            access_guard=FakeAccessGuard(),
+            http_transport=FakeHttpTransport(),
+            stream_factory=FakeStreamFactory(stream),
+            utc_clock=SteppingClock(OBSERVED_MINUTE + timedelta(seconds=1)),
+            monotonic_clock=SteppingMonotonic(step=10.0),
+        )
+        with (
+            patch(
+                "momentum_hunter.schwab_candle_observer."
+                "_implementation_source_identity",
+                side_effect=[
+                    {
+                        "observerModuleSha256": "A" * 64,
+                        "candleContractModuleSha256": "B" * 64,
+                    },
+                    {
+                        "observerModuleSha256": "C" * 64,
+                        "candleContractModuleSha256": "B" * 64,
+                    },
+                ],
+            ),
+            self.assertRaisesRegex(
+                SchwabCandleObserverError,
+                "source identity changed",
+            ),
+        ):
+            observer.observe(self.options())
+        self.assertTrue(stream.closed)
+
     def test_observer_rejects_closed_session_before_authorization(self) -> None:
         guard = FakeAccessGuard()
         observer = SchwabCandleMarketHoursObserver(
@@ -869,6 +947,68 @@ class SchwabCandleObserverTests(unittest.TestCase):
         self.assertNotIn("MomentumHunterData", source)
         self.assertNotIn("engine_host", source.lower())
         self.assertNotIn("automation_supervisor", source)
+
+    def test_powershell_runner_is_plan_first_and_has_no_runtime_authority(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        runner = root / "tools" / "run_schwab_candle_observer.ps1"
+        source = runner.read_text(encoding="utf-8")
+        self.assertIn('[switch]$Execute', source)
+        self.assertIn('"SPY"', source)
+        self.assertIn('"IWM"', source)
+        self.assertIn('R031-websocket-client-1.9.0', source)
+        self.assertNotIn("submit_order", source)
+        self.assertNotIn("cancel_order", source)
+        self.assertNotIn("replace_order", source)
+        self.assertNotIn("automation-manifest", source)
+        self.assertNotIn("MomentumHunterData", source)
+
+    def test_powershell_runner_parses_and_executes_zero_network_plan(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        runner = root / "tools" / "run_schwab_candle_observer.ps1"
+        parse = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-Command",
+                (
+                    "$errors=$null; [System.Management.Automation.Language.Parser]"
+                    f"::ParseFile('{runner}', [ref]$null, [ref]$errors) | Out-Null; "
+                    "if($errors.Count){$errors | Out-String; exit 1}"
+                ),
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(0, parse.returncode, parse.stdout + parse.stderr)
+        with tempfile.TemporaryDirectory() as unrelated_directory:
+            result = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(runner),
+                    "-CandidateSymbol",
+                    "CRWV",
+                    "-ProjectRoot",
+                    str(root),
+                ],
+                cwd=unrelated_directory,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertFalse(plan["networkCalled"])
+        self.assertFalse(plan["productionDataWritten"])
+        self.assertEqual(["SPY", "IWM", "CRWV"], plan["symbols"])
+        self.assertEqual("UNAVAILABLE", plan["orderTransmission"])
 
 
 if __name__ == "__main__":

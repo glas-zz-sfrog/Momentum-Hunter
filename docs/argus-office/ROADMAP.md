@@ -149,12 +149,16 @@ The observer records connection/subscription chronology, every received
 candle version, provider and receipt times, first-candle latency, gaps,
 revisions, replays, and out-of-order arrivals, then compares the last observed
 minute versions to bounded explicit-window `/pricehistory` responses. A
-  history failure is preserved as partial reconciliation instead of discarding
-  the Streamer proof, and a mid-observation socket failure preserves received
-  candles with an explicit disconnect finding. The added
-  `websocket-client==1.9.0` dependency was imported
-from an isolated external target; the canonical service environment was not
-modified. The observer has no service, scheduler, Engine Host, WPF,
+history failure is preserved as partial reconciliation instead of discarding
+the Streamer proof, and a mid-observation socket failure preserves received
+candles with an explicit disconnect finding. A default-plan PowerShell runner
+pins imports to the isolated worktree even when launched elsewhere; live use
+still requires its explicit `-Execute` switch. Each proof records both observer
+and parser source hashes, requires exactly `websocket-client==1.9.0`, and
+  records the observed dependency version. Start/end source identity must match
+  or the observation fails without a proof. That dependency was imported from
+  an isolated external target; the canonical service environment was not modified.
+The observer has no service, scheduler, Engine Host, WPF,
 production-store, broker, position, order, or transmission integration and
 does not populate charts. Its live run remains pending after Monday's opening
 evidence is secured; R032 and R033 remain blocked.
@@ -805,8 +809,16 @@ Status: `IMPLEMENTED_PENDING_LIVE_MARKET_HOURS_RUN` on the stacked R032A branch
   price-history failures are visible as partial reconciliation without erasing
   captured Streamer evidence. Output is sanitized, write-once, and prohibited
   beneath the repository.
-- Compileall, 20 focused observer tests, 207 Schwab/candle boundary tests, and
-  all 1,078 Python tests pass. The exact pinned WebSocket dependency imports
+- `tools/run_schwab_candle_observer.ps1` always supplies `SPY`, `IWM`, and one
+  explicit Hunter candidate. It works from an unrelated directory, pins Python
+  imports to this worktree, defaults to the zero-network plan, requires
+  `-Execute` for live use, and keeps the pinned WebSocket package and output
+  proof outside the repository.
+- Each proof freezes the SHA-256 identity of the observer and parser modules,
+  requires exactly `websocket-client==1.9.0`, and records the dependency
+  version actually imported. Dependency drift fails before socket creation.
+- Compileall, 23 focused observer tests, 210 Schwab/candle boundary tests, and
+  all 1,081 Python tests pass. The exact pinned WebSocket dependency imports
   from an isolated external target without changing the frozen canonical
   `.venv`. No live provider/account call was made while the market was closed.
 - This task does not populate WPF charts, authorize R032 persistence, or prove

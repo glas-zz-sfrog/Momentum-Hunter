@@ -9,16 +9,19 @@ Date reconciled: 2026-08-01
 R031 worktree. It adds only a temp-root-only provisional persistence contract
 and synthetic tests. It has no live provider, production persistence, service,
 Engine Host, WPF, broker, or legacy-data path and cannot merge independently of
-R031. Back up the feature branch after Hard Chew proof; preserve it without
-integration until Monday evidence and R031 market-hours proof are secured.
+R031. The feature branch is backed up by ordinary non-force push and must stay
+unintegrated until Monday evidence and R031 market-hours proof are secured.
 
 The same stacked branch now also contains ARGUS-R031A, the isolated
 nonpersisting market-hours observer needed to execute R031's remaining proof.
 It is default-dry-run, explicit-execute, sole-account guarded, and has no
 service, Engine Host, WPF, production persistence, broker, or order path. The
-observer and dependency are not installed in the canonical checkout. Preserve
-the branch without integration until Monday evidence is secured and the live
-market-hours proof is reviewed.
+plan-first PowerShell runner pins imports to this worktree from any current
+directory, and live proof freezes source hashes plus the exact externally
+installed `websocket-client==1.9.0` identity. The observer and dependency are
+not installed in the canonical checkout. Preserve the branch without
+integration until Monday evidence is secured and the live market-hours proof
+is reviewed.
 
 ## ARGUS-R031 Schwab Candle Contract
 
