@@ -50,3 +50,11 @@ service remained Running/Automatic with a fresh heartbeat and Healthy Engine
 Host. All 30 opening jobs remain pending through 2026-09-14, Monday 08:35 is
 still `PENDING`, zero Shadow jobs are enabled, and transmission is
 `UNAVAILABLE`.
+
+The final Friday readiness sweep also passed canonical Git synchronization,
+Finviz scanning, Yahoo SPY history, same-response HTTPS clock proof, NIST
+Windows Time, Central timezone, AC power settings, disk health, reboot-pending
+inspection, service-account lifetime, and three-level Windows service recovery.
+Monday is a normal XNYS session. Residual external risks remain power loss,
+full shutdown, internet/provider outage, or a new OS/hardware failure after the
+Sunday preflight.

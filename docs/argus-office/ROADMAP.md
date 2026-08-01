@@ -95,21 +95,31 @@ protected-path review.
 No scoring, readiness, replay, alert, database/schema, broker/order, UI, raw
 capture, or generated-report behavior changed.
 
-The live Friday preflight found the service Running/Automatic in Session 0,
-a fresh heartbeat, a Healthy Engine Host, the expected 30 pending opening
-jobs, no duplicate August 3 capture/report, working Finviz and Yahoo access,
-ten current screener candidates, a current bull regime result, about 18.9 GB
-free on `C:`, AC sleep and hibernate disabled, wake timers enabled, and no
-Windows Update reboot-pending flag. A recent ordinary morning capture also
-completed end to end with raw JSON/Markdown, score breakdown, TradePlan
-reports, and outcome-update exit `0`.
+The final Friday preflight at 02:35 Central found canonical `master` clean and
+synchronized with `origin/master`, the service Running/Automatic with a fresh
+heartbeat, a Healthy Engine Host, the expected 30 pending opening jobs, no
+duplicate August 3 capture/report, working Finviz and Yahoo access, ten current
+screener candidates, and a current bull regime result. The same-response
+Finviz HTTPS clock proof passed with 511 milliseconds absolute skew and 1,192
+milliseconds uncertainty; Windows Time reports leap indicator zero, stratum
+two, and `time.nist.gov,0x9`. The local session policy and the
+[official NYSE 2026 calendar](https://www.nyse.com/publicdocs/nyse/ICE_NYSE_2026_Yearly_Trading_Calendar.pdf)
+both classify Monday, August 3 as a normal trading day. Drive
+`C:` is healthy with about 16.4 GiB free, AC sleep and hibernate are disabled,
+wake timers are enabled, and no Windows Update reboot-pending flag exists. The
+service account is enabled and does not expire, while Windows Service Control
+Manager retains three restart actions after 5, 15, and 60 seconds. A recent
+ordinary morning capture also completed end to end with raw JSON/Markdown,
+score breakdown, TradePlan reports, and outcome-update exit `0`.
 
-No physical software gate remains before Monday. Leave the computer powered
-on and plugged in through at least 08:40 Central. Windows can wake a sleeping
+No known software gate remains before Monday. Leave the computer powered on
+and plugged in through at least 08:40 Central. Windows can wake a sleeping
 machine, but it cannot start a fully powered-off machine without separate BIOS
-support. The Sunday 19:00 read-only preflight and Monday terminal audit remain
-evidence observers; they must not launch, retry, repair, or fabricate an
-opening capture.
+support. Residual failure modes are external power loss, full shutdown,
+internet/provider outage, or a new operating-system/hardware failure after the
+Sunday check. The Sunday 19:00 read-only preflight and Monday terminal audit
+remain evidence observers; they must not launch, retry, repair, or fabricate
+an opening capture.
 
 Until Monday's terminal receipt and opening capture/report are preserved, the
 canonical service checkout must remain clean on synchronized `master`.
