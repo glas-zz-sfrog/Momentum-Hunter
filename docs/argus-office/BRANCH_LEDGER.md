@@ -1,6 +1,19 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-31
+Date reconciled: 2026-08-01
+
+## ARGUS-SHADOW-024 Offline Terminal Review Packet
+
+`codex/ARGUS-SHADOW-024-offline-terminal-review-packet` is `ACTIVE` with final
+classification `IMPLEMENTED_PENDING_INTEGRATION_AFTER_MONDAY_EVIDENCE`. It is a
+separate worktree from shared base `ddc09f8`; its focused task commit is reported
+by Git after this artifact set is sealed. The branch adds only the offline packet
+module, synthetic tests, and governance/release evidence. Compileall, 17 focused,
+168 adjacent Shadow, and all 1,034 Python tests pass. It may receive an ordinary
+non-force feature-branch backup push, but it must not be merged into canonical
+`master` until Monday's operational receipt and capture/report evidence are
+preserved. No service, manifest, scheduler, Engine Host, provider, WPF, broker,
+credential, production data, or official Shadow state changed.
 
 ## Monday Clock Task Reliability
 

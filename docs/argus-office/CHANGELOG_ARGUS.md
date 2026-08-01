@@ -1,6 +1,10 @@
 # Argus Changelog
 
 ## Unreleased
+- Added ARGUS-SHADOW-024's offline terminal review packet builder. Six explicit persisted inputs produce deterministic, hash-addressed, write-once JSON and Markdown for completed, unfilled, cancelled, invalidated, and terminal no-trade Shadow evidence.
+- Classified review fields as stored fact, deterministic derivation, missing, or review question; bound current sample, fill-model, policy, arm, capture, report, cycle, command, opportunity, trade, plan, risk, order, position, ledger, and outcome identities where persisted.
+- Added fail-closed report tamper, cross-record mismatch, secret-risk, source-mutation, duplicate, conflicting-output, partial-write, and post-write source-race handling. The module adds no network, provider, broker, service, Engine Host, scheduler, WPF, or Codex capability.
+- Passed Python compileall, 17 focused packet tests, 168 adjacent Shadow tests, all 1,034 Python tests, `git diff --check`, protected-path review, and static capability/secret scans. The feature remains isolated from Monday's frozen canonical runtime.
 - Hardened Monday's ordinary opening capture so a service job cannot report success after a late or otherwise nonproductive `SKIPPED` result. Opening success now requires `CAPTURED`, `REPORT_RECOVERED`, or `DUPLICATE`, while wrong-session use fails before capture execution.
 - Hardened the elevated clock-task repair path to recreate only the exact expected SYSTEM-owned startup plus 08:15 wake/resync task when genuinely absent and to refuse unexpected existing principals or actions.
 - Passed PowerShell parsing, Python compileall, 91 affected automation tests, all 1,016 Python tests, `git diff --check`, and protected-path review. Monday's 08:35 job, 08:40 latest start, service, provider access, recent capture, power policy, disk space, and duplicate check pass; one elevated Windows Time revalidation remains because the latest reboot left the OS on unsynchronized Local CMOS Clock.
