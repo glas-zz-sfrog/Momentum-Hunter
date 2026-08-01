@@ -28,18 +28,27 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-Post-boot clock reliability hardening is `IMPLEMENTED_PENDING_MERGE` on
-`codex/monday-clock-task-reliability` at runtime commit `30c25e5`. The wake
-task now waits two minutes after startup so the network can settle, keeps the
+Post-boot clock reliability hardening is `COMPLETE_AND_BACKED_UP` on canonical
+`master` through runtime commit `30c25e5` and governance commit `3821490`. The
+wake task waits two minutes after startup so the network can settle, keeps the
 08:15 Central resync, and adds a final 08:25 resync before the 08:35 opening
 capture. Both the installer and standalone hardener construct the same
 SYSTEM-owned task and read it back to require the exact principal, action,
 three triggers, wake policy, no late-start behavior, and five bounded
-two-minute retries. Plan-only mode validates the native in-memory task shape
-without registering it. PowerShell parsing, native task construction,
-compileall, 92 affected tests, all 1,017 Python tests, diff check, secret scan,
-and protected-path review pass. The installed task has not yet been changed;
-one announced UAC interaction and elevated read-back remain required.
+two-minute retries. PowerShell parsing, native task construction, compileall,
+92 affected tests, all 1,017 Python tests, diff check, secret scan, and
+protected-path review pass.
+
+The physical clock gate passed at 2026-07-31 19:35 Central. Timestamped
+elevated evidence proves SYSTEM ownership, action
+`w32tm.exe /resync /rediscover`, startup delay `PT2M`, daily 08:15 and 08:25
+triggers, `WakeToRun=true`, `StartWhenAvailable=false`, five two-minute
+retries, task result `0`, and `clockSynchronized=true` against
+`time.nist.gov,0x9`. Independent `w32tm /query /status` reports leap indicator
+`0`, stratum `2`, the same NIST source, and successful synchronization at
+19:35:42 Central. The automation service remains Running/Automatic with a
+fresh heartbeat, Healthy Engine Host, all 30 opening jobs pending, zero Shadow
+jobs, and order transmission `UNAVAILABLE`.
 
 Monday opening readiness hardening is implemented on
 `codex/monday-opening-readiness-hardening` at runtime commit `4b6668c` and is
@@ -72,19 +81,12 @@ Windows Update reboot-pending flag. A recent ordinary morning capture also
 completed end to end with raw JSON/Markdown, score breakdown, TradePlan
 reports, and outcome-update exit `0`.
 
-One physical security gate remains before Monday is classified fully ready:
-after the latest reboot, Windows Time reports `Local CMOS Clock` and
-`NOT_SYNCHRONIZED`. The exact protected wake-task file exists, and prior
-elevated evidence proves its SYSTEM principal, startup plus daily 08:15
-triggers, `WakeToRun`, bounded retries, and successful NIST resync; current
-non-elevated inspection cannot revalidate or resync that protected state.
-Steven only needs to click **Yes** on one clearly announced UAC prompt. The
-elevated script then validates or narrowly repairs that task and runs Windows
-Time resync. It does not reboot, capture market data, touch credentials, query
-accounts, arm Shadow, or create/transmit an order. After that result passes,
-leave the computer powered on and plugged in through at least 08:40 Central on
-Monday. Windows can wake a sleeping machine, but it cannot start a fully
-powered-off machine without separate BIOS support.
+No physical software gate remains before Monday. Leave the computer powered
+on and plugged in through at least 08:40 Central. Windows can wake a sleeping
+machine, but it cannot start a fully powered-off machine without separate BIOS
+support. The Sunday 19:00 read-only preflight and Monday terminal audit remain
+evidence observers; they must not launch, retry, repair, or fabricate an
+opening capture.
 
 Until Monday's terminal receipt and opening capture/report are preserved, the
 canonical service checkout must remain clean on synchronized `master`.

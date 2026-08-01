@@ -4,17 +4,18 @@ Date reconciled: 2026-07-31
 
 ## Monday Clock Task Reliability
 
-`codex/monday-clock-task-reliability` is `ACTIVE` and
-`IMPLEMENTED_PENDING_MERGE` at `30c25e5`. It adds a two-minute delayed startup
+`codex/monday-clock-task-reliability` is `MERGED_TO_LOCAL_MASTER` and backed up
+through canonical `origin/master` at runtime `30c25e5` and governance
+`3821490`. It adds a two-minute delayed startup
 Windows Time resync, retains the 08:15 daily wake/resync, adds a final 08:25
 resync, and validates the installed SYSTEM task by reading back its principal,
 action, triggers, wake/late-start policy, and bounded retries. PowerShell
 parsing, native plan construction, compileall, 92 affected tests, all 1,017
-Python tests, diff check, secret scan, and protected-path review pass. It is
-not pushed or merged yet. The installed task remains unchanged until one
-announced UAC interaction succeeds; no Shadow, brokerage, credential, order,
-capture, scoring, readiness, replay, alert, schema, UI, raw-data, or generated
-report behavior changed.
+Python tests, diff check, secret scan, and protected-path review pass. The
+installed task read-back and NIST synchronization passed at 19:35 Central with
+result `0`; no Shadow, brokerage, credential, order, capture, scoring,
+readiness, replay, alert, schema, UI, raw-data, or generated-report behavior
+changed.
 
 ## Monday Opening Readiness Hardening
 
@@ -26,9 +27,8 @@ prove an exact duplicate, and it can recreate only the expected SYSTEM-owned
 08:15 wake/resync task when genuinely absent. PowerShell parsing, compileall,
 91 affected tests, all 1,016 Python tests, diff check, and protected-path review
 pass. No scoring, readiness, replay, alert, database/schema, broker/order, UI,
-raw-capture, or generated-report behavior changed. The remaining Monday gate
-is operational: current post-reboot Windows Time must be revalidated and
-resynchronized through one local UAC interaction. Keep the canonical service
+raw-capture, or generated-report behavior changed. The later clock reliability
+branch above closed the post-reboot time gate. Keep the canonical service
 checkout clean and use a separate worktree for unrelated development until
 the August 3 terminal opening receipt and report are preserved.
 

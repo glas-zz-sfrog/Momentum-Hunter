@@ -176,3 +176,25 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Runtime commit `30c25e5` is pending fast-forward integration. The installed
   task and current Windows Time state remain unchanged until one announced UAC
   prompt is accepted and the elevated read-back succeeds.
+
+## 2026-07-31 - Monday Clock Operational Closeout
+
+- Fast-forwarded runtime `30c25e5` and governance `3821490` into canonical
+  `master` and completed a normal non-force backup push.
+- Steven accepted the one required PowerShell UAC prompt. Timestamped elevated
+  evidence at 19:35 Central validated the installed SYSTEM task, exact
+  `w32tm.exe /resync /rediscover` action, startup delay `PT2M`, daily 08:15 and
+  08:25 triggers, `WakeToRun`, no late start, five two-minute retries, task
+  result `0`, and synchronized NIST source.
+- The preserved local result is
+  `C:\ProgramData\MomentumHunter\Automation\state\clock-task-hardening-20260731-193530.json`,
+  SHA-256
+  `5464F4844D2847EDF31035163325A5C1BDA11497F0E70A0F2FEBF6318DA33998`.
+- Independent Windows Time status reports leap indicator `0`, stratum `2`,
+  source `time.nist.gov,0x9`, and successful synchronization at 19:35:42.
+- Service status remains Running/Automatic with a fresh heartbeat, Healthy
+  Engine Host, all 30 opening jobs pending, zero Shadow jobs, and order
+  transmission `UNAVAILABLE`.
+- No manual software gate remains. Preserve a clean canonical checkout, leave
+  the computer powered and plugged in, run the Sunday read-only preflight, and
+  audit Monday's ordinary opening receipt without intervention or fabrication.

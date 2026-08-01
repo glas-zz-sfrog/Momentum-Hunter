@@ -175,5 +175,13 @@
   review without changing capture, Shadow, brokerage, credential, order, UI,
   scoring, readiness, replay, alert, schema, raw-data, or report semantics.
 
+- Closed the Monday clock gate with elevated installed-task read-back and
+  independent Windows Time proof: SYSTEM ownership, delayed startup, 08:15 and
+  08:25 resyncs, bounded retries, result `0`, leap indicator `0`, stratum `2`,
+  and NIST synchronization all pass.
+- Reverified the Running/Automatic service, fresh heartbeat, Healthy Engine
+  Host, 30 pending opening jobs, zero Shadow jobs, and unavailable order
+  transmission after the clock repair.
+
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.
