@@ -125,9 +125,10 @@ artifact generation.
 
 ## Current Truth
 
-Local and remote `master` are synchronized at Monday clock operational
-closeout `c0e98dd`, including opening runtime hardening `4b6668c` and clock
-reliability runtime `30c25e5`. The canonical product baseline contains the
+Local and remote `master` are synchronized through Monday clock operational
+closeout `c0e98dd` plus this truth reconciliation, including opening runtime
+hardening `4b6668c` and clock reliability runtime `30c25e5`. The canonical
+product baseline contains the
 installed automation service and reboot-canary tooling, the complete prior
 Shadow stack through opening-runtime repair `2213299`, accepted live-marking
 implementation `94f5074`, the WPF workstation through R030,
