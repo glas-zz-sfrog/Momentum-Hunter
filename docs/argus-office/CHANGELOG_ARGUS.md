@@ -193,6 +193,10 @@
   adjustments, volume authority, and halt/stale behavior explicitly unknown.
 - Reprioritized R031-R034 ahead of optional SHADOW-024 packet work while
   preserving the canonical Monday runtime and both isolated worktrees.
+- Hardened the pending R031 market-hours proof so Streamer replay, same-minute
+  revision, late arrival, reconnect events, and observational gaps are retained
+  in arrival order and reconciled field-by-field against price history without
+  granting either source canonicality or modifying source evidence.
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

@@ -21,6 +21,8 @@ from momentum_hunter.schwab_candle_contract import (
     build_chart_equity_subscription,
     build_nonpersisting_stream_proof,
     build_price_history_parameters,
+    compare_stream_observations_to_price_history,
+    inspect_chart_equity_observations,
     main,
     official_candle_contract,
     parse_chart_equity_messages,
@@ -224,25 +226,59 @@ class SchwabCandleContractTests(unittest.TestCase):
                 expected_symbols=["AAPL"],
             )
 
-    def test_stream_parser_rejects_duplicate_and_out_of_order_events(self) -> None:
-        duplicate = stream_payload()
-        with self.assertRaisesRegex(SchwabCandleContractError, "duplicate"):
-            parse_chart_equity_messages(
-                [duplicate, duplicate],
-                expected_symbols=["AAPL"],
-            )
-
-        later = stream_payload(
-            timestamp=datetime(2026, 7, 31, 14, 32, tzinfo=timezone.utc),
-            sequence=8,
+    def test_stream_observations_preserve_replay_revision_and_late_arrival(
+        self,
+    ) -> None:
+        minute = datetime(2026, 7, 31, 14, 31, tzinfo=timezone.utc)
+        later_minute = minute + timedelta(minutes=1)
+        receipts = [
+            minute + timedelta(seconds=1),
+            minute + timedelta(seconds=2),
+            minute + timedelta(seconds=3),
+            later_minute + timedelta(seconds=1),
+            later_minute + timedelta(seconds=2),
+        ]
+        observations = inspect_chart_equity_observations(
+            [
+                stream_payload(timestamp=minute),
+                stream_payload(timestamp=minute),
+                stream_payload(timestamp=minute, close=100.9, volume=13_000),
+                stream_payload(timestamp=later_minute, sequence=8),
+                stream_payload(timestamp=minute, close=101.0, volume=13_500),
+            ],
+            expected_symbols=["AAPL"],
+            received_at_by_payload=receipts,
         )
+
+        self.assertEqual(5, len(observations))
+        self.assertEqual("FIRST_OBSERVATION", observations[0].update_kind)
+        self.assertEqual("IDENTICAL_REPLAY", observations[1].update_kind)
+        self.assertEqual("REVISION", observations[2].update_kind)
+        self.assertEqual(
+            ("close", "volume"),
+            observations[2].changed_fields,
+        )
+        self.assertEqual("FIRST_OBSERVATION", observations[3].update_kind)
+        self.assertEqual("REVISION", observations[4].update_kind)
+        self.assertTrue(observations[4].out_of_order)
+        self.assertEqual(-1, observations[4].sequence_delta_from_previous_arrival)
+        self.assertIn(
+            "schwab_streamer_chart_equity:v1|AAPL|2026-07-31|",
+            observations[0].minute_identity,
+        )
+        self.assertEqual(
+            "2026-07-31",
+            observations[0].to_evidence()["candle"]["sessionDate"],
+        )
+
         with self.assertRaisesRegex(
             SchwabCandleContractError,
-            "chronological",
+            "receipt timestamps",
         ):
-            parse_chart_equity_messages(
-                [later, stream_payload()],
+            inspect_chart_equity_observations(
+                [stream_payload(), stream_payload()],
                 expected_symbols=["AAPL"],
+                received_at_by_payload=list(reversed(receipts[:2])),
             )
 
     def test_price_history_parser_reads_strict_ordered_candles(self) -> None:
@@ -290,6 +326,30 @@ class SchwabCandleContractTests(unittest.TestCase):
         with self.assertRaisesRegex(SchwabCandleContractError, "no candles"):
             parse_price_history_response(
                 {"symbol": "AAPL", "empty": False, "candles": []},
+                expected_symbol="AAPL",
+            )
+
+    def test_price_history_rejects_duplicate_and_out_of_order_minutes(self) -> None:
+        first = datetime(2026, 7, 31, 14, 31, tzinfo=timezone.utc)
+        duplicate = price_history_payload()
+        duplicate["candles"] = [history_row(first), history_row(first)]
+        with self.assertRaisesRegex(SchwabCandleContractError, "duplicate"):
+            parse_price_history_response(
+                duplicate,
+                expected_symbol="AAPL",
+            )
+
+        out_of_order = price_history_payload()
+        out_of_order["candles"] = [
+            history_row(first + timedelta(minutes=1)),
+            history_row(first),
+        ]
+        with self.assertRaisesRegex(
+            SchwabCandleContractError,
+            "chronological",
+        ):
+            parse_price_history_response(
+                out_of_order,
                 expected_symbol="AAPL",
             )
 
@@ -343,6 +403,188 @@ class SchwabCandleContractTests(unittest.TestCase):
         self.assertEqual("FAIL", proof["proofStatus"])
         self.assertEqual(["SPY"], proof["missingSymbols"])
         self.assertEqual("MISSING", proof["candles"][1]["status"])
+
+    def test_nonpersisting_proof_records_transport_updates_and_gaps(self) -> None:
+        first = datetime(2026, 7, 31, 14, 31, tzinfo=timezone.utc)
+        third = first + timedelta(minutes=2)
+        proof = build_nonpersisting_stream_proof(
+            [
+                stream_payload(timestamp=first),
+                stream_payload(timestamp=first, close=100.9, volume=13_000),
+                stream_payload(timestamp=third, sequence=9),
+            ],
+            expected_symbols=["AAPL"],
+            request_started_at=first,
+            response_received_at=third + timedelta(seconds=1),
+            evaluated_at=third + timedelta(seconds=5),
+            received_at_by_payload=[
+                first + timedelta(seconds=1),
+                first + timedelta(seconds=10),
+                third + timedelta(seconds=1),
+            ],
+            transport_events=[
+                {"kind": "CONNECTED", "timestamp": first.isoformat()},
+                {
+                    "kind": "SUBSCRIPTION_ACKNOWLEDGED",
+                    "timestamp": (first + timedelta(milliseconds=100)).isoformat(),
+                },
+                {
+                    "kind": "DISCONNECTED",
+                    "timestamp": (third + timedelta(milliseconds=250)).isoformat(),
+                },
+                {
+                    "kind": "RECONNECTED",
+                    "timestamp": (third + timedelta(milliseconds=500)).isoformat(),
+                },
+            ],
+        )
+
+        self.assertEqual(3, len(proof["updateObservations"]))
+        self.assertEqual("REVISION", proof["updateObservations"][1]["updateKind"])
+        self.assertEqual(2, len(proof["minuteSummaries"]))
+        first_summary = next(
+            row
+            for row in proof["minuteSummaries"]
+            if row["candleTimestamp"] == first.isoformat()
+        )
+        self.assertEqual(2, first_summary["updateCount"])
+        self.assertEqual(1, first_summary["revisionCount"])
+        self.assertEqual(
+            (first + timedelta(seconds=10)).isoformat(),
+            first_summary["lastChangedAt"],
+        )
+        self.assertEqual(1, len(proof["observedTimestampGaps"]))
+        self.assertEqual(
+            1,
+            proof["observedTimestampGaps"][0]["observedMissingMinuteCount"],
+        )
+        self.assertFalse(
+            proof["observedTimestampGaps"][0]["dataLossProven"]
+        )
+        self.assertEqual(4, len(proof["transportEvents"]))
+        self.assertIn(
+            "INTRA_MINUTE_STREAM_REVISION_OBSERVED",
+            proof["findings"],
+        )
+        self.assertIn(
+            "OBSERVED_TIMESTAMP_GAP_REQUIRES_RECONCILIATION",
+            proof["findings"],
+        )
+
+    def test_stream_history_reconciliation_preserves_both_versions(self) -> None:
+        first = datetime(2026, 7, 31, 14, 31, tzinfo=timezone.utc)
+        second = first + timedelta(minutes=1)
+        observations = inspect_chart_equity_observations(
+            [
+                stream_payload(timestamp=first),
+                stream_payload(timestamp=first, close=100.9, volume=13_000),
+                stream_payload(timestamp=second, sequence=8),
+            ],
+            expected_symbols=["AAPL"],
+            received_at_by_payload=[
+                first + timedelta(seconds=1),
+                first + timedelta(seconds=10),
+                second + timedelta(seconds=1),
+            ],
+        )
+        history = price_history_payload()
+        history["candles"] = [
+            history_row(first, close=101.0, volume=13_500),
+            history_row(second),
+        ]
+
+        comparison = compare_stream_observations_to_price_history(
+            observations,
+            price_history_payloads={"AAPL": history},
+        )
+
+        self.assertFalse(comparison["allComparableMinutesMatch"])
+        self.assertEqual(2, comparison["comparableMinuteCount"])
+        self.assertEqual(1, comparison["matchingMinuteCount"])
+        self.assertEqual(1, comparison["differentMinuteCount"])
+        corrected = next(
+            row
+            for row in comparison["rows"]
+            if row["status"] == "CORRECTED_OR_DIFFERENT"
+        )
+        self.assertEqual(["close", "volume"], corrected["changedFields"])
+        self.assertEqual(100.9, corrected["stream"]["close"])
+        self.assertEqual(101.0, corrected["priceHistory"]["close"])
+        self.assertFalse(comparison["canonicalityGranted"])
+
+    def test_stream_history_reconciliation_labels_unmatched_minutes(self) -> None:
+        first = datetime(2026, 7, 31, 14, 31, tzinfo=timezone.utc)
+        second = first + timedelta(minutes=1)
+        observations = inspect_chart_equity_observations(
+            [stream_payload(timestamp=first)],
+            expected_symbols=["AAPL"],
+            received_at_by_payload=[first + timedelta(seconds=1)],
+        )
+        history = price_history_payload()
+        history["candles"] = [history_row(second)]
+
+        comparison = compare_stream_observations_to_price_history(
+            observations,
+            price_history_payloads={"AAPL": history},
+        )
+
+        self.assertEqual(0, comparison["comparableMinuteCount"])
+        self.assertEqual(1, comparison["streamOnlyMinuteCount"])
+        self.assertEqual(1, comparison["historyOnlyMinuteCount"])
+        self.assertEqual(
+            ["STREAM_ONLY", "HISTORY_ONLY"],
+            [row["status"] for row in comparison["rows"]],
+        )
+
+    def test_enriched_cli_input_preserves_receipts_and_reconciliation(self) -> None:
+        first = datetime(2026, 7, 31, 14, 31, tzinfo=timezone.utc)
+        received = first + timedelta(seconds=1)
+        enriched = {
+            "transportEvents": [
+                {"kind": "CONNECTED", "timestamp": first.isoformat()},
+                {
+                    "kind": "SUBSCRIPTION_ACKNOWLEDGED",
+                    "timestamp": (first + timedelta(milliseconds=100)).isoformat(),
+                },
+            ],
+            "messages": [
+                {
+                    "receivedAt": received.isoformat(),
+                    "payload": stream_payload(timestamp=first),
+                }
+            ],
+            "priceHistory": {"AAPL": price_history_payload()},
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "proof.json"
+            source.write_text(json.dumps(enriched), encoding="utf-8")
+            before = source.read_bytes()
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = main(
+                    [
+                        "inspect-stream",
+                        "--input",
+                        str(source),
+                        "--symbols",
+                        "AAPL",
+                        "--request-started-at",
+                        first.isoformat(),
+                        "--response-received-at",
+                        received.isoformat(),
+                        "--evaluated-at",
+                        (received + timedelta(seconds=5)).isoformat(),
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            proof = json.loads(stdout.getvalue())
+            self.assertEqual(received.isoformat(), proof["updateObservations"][0]["receivedAt"])
+            self.assertEqual(
+                1,
+                proof["streamHistoryReconciliation"]["matchingMinuteCount"],
+            )
+            self.assertEqual(before, source.read_bytes())
 
     def test_session_classification_distinguishes_extended_and_closed(self) -> None:
         self.assertEqual(
@@ -438,6 +680,8 @@ def stream_payload(
     symbol: str = "AAPL",
     timestamp: datetime | None = None,
     sequence: int = 7,
+    close: float = 100.75,
+    volume: int = 12_345,
 ) -> dict[str, object]:
     observed = timestamp or datetime(
         2026,
@@ -457,10 +701,10 @@ def stream_payload(
                     {
                         "0": symbol,
                         "1": 100.0,
-                        "2": 101.0,
+                        "2": max(101.0, close),
                         "3": 99.5,
-                        "4": 100.75,
-                        "5": 12_345,
+                        "4": close,
+                        "5": volume,
                         "6": sequence,
                         "7": int(observed.timestamp() * 1000),
                         "8": 12_345,
@@ -485,6 +729,7 @@ def history_row(
     timestamp: datetime | None = None,
     *,
     close: float = 100.75,
+    volume: int = 12_345,
 ) -> dict[str, object]:
     observed = timestamp or datetime(
         2026,
@@ -499,7 +744,7 @@ def history_row(
         "high": max(101.0, close),
         "low": 99.5,
         "close": close,
-        "volume": 12_345,
+        "volume": volume,
         "datetime": int(observed.timestamp() * 1000),
     }
 

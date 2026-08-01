@@ -105,12 +105,14 @@ close latency, correction behavior, a numeric chart symbol limit, REST rate
 limits, split adjustment behavior, consolidated-volume authority, or candle-
 level halt/stale signaling. Those items remain unproven rather than guessed.
 
-The R031 branch adds a strict nonpersisting contract/parser and 18 synthetic
+The R031 branch adds a strict nonpersisting contract/parser and 23 synthetic
 tests for Streamer and price-history shapes, explicit historical windows,
-OHLC validity, ordering, missing data, session classification, deterministic
-proof output, redaction, and absence of network, persistence, account, broker,
-or order capability. Compileall, all 18 focused tests, all 72 tests in the
-focused-plus-adjacent Schwab run, and all 1,035 Python tests pass. A real market-hours shape/latency
+OHLC validity, arrival-preserving replay/revision/out-of-order evidence,
+observed gaps, Streamer/history reconciliation, missing data, session
+classification, deterministic proof output, redaction, and absence of network,
+persistence, account, broker, or order capability. Compileall, all 23 focused
+tests, all 77 tests in the focused-plus-adjacent Schwab run, and all 1,040
+Python tests pass. A real market-hours shape/latency
 observation is still
 required before R031 can be integrated or R032 can connect a collector. The
 required Streamer bootstrap is `GET /trader/v1/userPreference`; because that
@@ -706,16 +708,23 @@ Status: `IMPLEMENTED_PENDING_MARKET_HOURS_PROOF` on the isolated R031 branch
   source. Day/minute supports 1, 5, 10, 15, and 30-minute frequencies for up
   to the documented ten-day period. Near-current probes must supply an explicit
   end time because the omitted default is the prior business-day market close.
-- The strict Python contract parses both shapes, rejects malformed identities,
-  OHLC contradictions, nonfinite values, duplicate/out-of-order evidence, and
-  missing expected symbols, and emits nonpersisting shape/latency evidence.
-  It never calls a provider, writes a report, reads account data, or exposes an
-  order method.
+- The strict Python contract parses both shapes; rejects malformed identities,
+  OHLC contradictions, nonfinite values, malformed receipt chronology, and
+  missing expected symbols; and emits nonpersisting shape/latency evidence.
+  Streamer duplicates, same-minute revisions, reconnect replays, late arrivals,
+  and observed timestamp gaps are preserved and classified rather than rejected
+  or normalized. Historical responses remain strictly duplicate-free and
+  chronological. The contract never calls a provider, writes a report, reads
+  account data, or exposes an order method.
 - The market-hours proof must record request start, response receipt, newest
   candle timestamp, current market minute, observed age, OHLCV completeness,
-  session, entitlement/source identity, and whether the current minute is an
-  update or a completed bar. Until observed, completion and acceptance latency
-  remain `UNVERIFIED` and the proof is truthfully `PARTIAL`.
+  session, entitlement/source identity, connection/subscription/reconnect
+  chronology, every update received for each minute, first appearance, last
+  change, observed stability, gaps, and whether the current minute is an update
+  or a completed bar. The last observed version for each minute must then be
+  compared field-by-field with `/pricehistory` without overwriting either side.
+  Until observed, completion and acceptance latency remain `UNVERIFIED`, no
+  source is granted canonicality, and the proof is truthfully `PARTIAL`.
 - The Streamer bootstrap endpoint also returns account metadata. R032 must use
   the existing exact single-account invariant before consuming its socket and
   session fields. No account, provider, token-refresh, service, Engine Host, or
@@ -734,6 +743,11 @@ Status: `NOT_STARTED`; blocked on R031 market-hours proof and integration
   quality state, lineage, and idempotent persistence. Do not query accounts
   beyond the required existing bootstrap invariant, and do not query positions,
   previews, or orders.
+- Persist explicit bar states: `IN_PROGRESS`, `COMPLETED_UNRECONCILED`,
+  `RECONCILED`, `CORRECTED`, `GAP`, and `STALE`. Key source bars by provider,
+  symbol, session date, and candle-start timestamp. Arrival order must never be
+  treated as candle order, and a correction must create lineage rather than
+  silently overwriting prior evidence.
 - Never mix Schwab and legacy candles under one source identity. Preserve the
   CRWV legacy artifact and mirror until the separately approved R034 cutover.
 

@@ -7,7 +7,8 @@ Date reconciled: 2026-07-31
 `codex/ARGUS-R031-schwab-candle-contract` is `ACTIVE` in the distinct worktree
 `C:\Users\steve\AppData\Local\MomentumHunter\worktrees\ARGUS-R031-schwab-candle-contract`
 from synchronized base `ddc09f8`. It contains strict, nonpersisting Streamer
-and price-history candle contract code, focused tests, and branch-local
+and price-history candle contract code, arrival-preserving replay/revision/gap
+evidence and reconciliation, focused tests, and branch-local
 governance. It is not merged and is not installed. Its task commit is identified
 by the final branch HEAD after Hard Chew closeout; an ordinary feature-branch
 backup may follow, but canonical integration remains frozen until Monday

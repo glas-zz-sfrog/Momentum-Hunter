@@ -27,6 +27,15 @@ SCHWAB_CHART_EQUITY_FIELDS = "0,1,2,3,4,5,6,7,8"
 MAX_PROOF_MESSAGES = 10_000
 MAX_INPUT_BYTES = 8 * 1024 * 1024
 EASTERN_TZ = ZoneInfo("America/New_York")
+TRANSPORT_EVENT_KINDS = frozenset(
+    {
+        "CONNECTED",
+        "SUBSCRIPTION_ACKNOWLEDGED",
+        "DISCONNECTED",
+        "RECONNECTED",
+        "OBSERVATION_STOPPED",
+    }
+)
 
 
 class SchwabCandleContractError(ValueError):
@@ -49,6 +58,7 @@ class SchwabMinuteCandle:
         return {
             "symbol": self.symbol,
             "timestamp": self.timestamp.isoformat(),
+            "sessionDate": self.timestamp.astimezone(EASTERN_TZ).date().isoformat(),
             "open": self.open,
             "high": self.high,
             "low": self.low,
@@ -57,6 +67,34 @@ class SchwabMinuteCandle:
             "sequence": self.sequence,
             "source": self.source,
             "ohlcvComplete": True,
+        }
+
+
+@dataclass(frozen=True)
+class SchwabStreamCandleObservation:
+    arrival_index: int
+    payload_index: int
+    received_at: datetime
+    candle: SchwabMinuteCandle
+    minute_identity: str
+    update_kind: str
+    changed_fields: tuple[str, ...]
+    out_of_order: bool
+    sequence_delta_from_previous_arrival: int | None
+
+    def to_evidence(self) -> dict[str, object]:
+        return {
+            "arrivalIndex": self.arrival_index,
+            "payloadIndex": self.payload_index,
+            "receivedAt": self.received_at.isoformat(),
+            "minuteIdentity": self.minute_identity,
+            "updateKind": self.update_kind,
+            "changedFields": list(self.changed_fields),
+            "outOfOrder": self.out_of_order,
+            "sequenceDeltaFromPreviousArrival": (
+                self.sequence_delta_from_previous_arrival
+            ),
+            "candle": self.candle.to_evidence(),
         }
 
 
@@ -270,8 +308,85 @@ def parse_chart_equity_messages(
                 candles.append(
                     _parse_chart_equity_row(row, expected_symbols=expected)
                 )
-    _require_strict_event_order(candles)
     return tuple(candles)
+
+
+def inspect_chart_equity_observations(
+    payloads: Sequence[object],
+    *,
+    expected_symbols: Sequence[str],
+    received_at_by_payload: Sequence[datetime],
+) -> tuple[SchwabStreamCandleObservation, ...]:
+    """Preserve arrival evidence without treating arrival order as candle order."""
+
+    expected = normalize_symbols(expected_symbols)
+    if len(payloads) != len(received_at_by_payload):
+        raise SchwabCandleContractError(
+            "Each Streamer payload requires one local receipt timestamp."
+        )
+    receipts = tuple(
+        _aware_datetime(value, "payload receipt")
+        for value in received_at_by_payload
+    )
+    if any(current < previous for previous, current in zip(receipts, receipts[1:])):
+        raise SchwabCandleContractError(
+            "Streamer payload receipt timestamps were not chronological."
+        )
+
+    observations: list[SchwabStreamCandleObservation] = []
+    latest_version_by_minute: dict[
+        tuple[str, str, datetime], SchwabMinuteCandle
+    ] = {}
+    greatest_timestamp_by_symbol: dict[str, datetime] = {}
+    previous_arrival_by_symbol: dict[str, SchwabMinuteCandle] = {}
+    for payload_index, (payload, received_at) in enumerate(
+        zip(payloads, receipts)
+    ):
+        candles = parse_chart_equity_messages(
+            [payload],
+            expected_symbols=expected,
+        )
+        for candle in candles:
+            key = (candle.source, candle.symbol, candle.timestamp)
+            previous_version = latest_version_by_minute.get(key)
+            if previous_version is None:
+                update_kind = "FIRST_OBSERVATION"
+                changed_fields: tuple[str, ...] = ()
+            else:
+                changed_fields = _changed_candle_fields(
+                    previous_version,
+                    candle,
+                )
+                update_kind = (
+                    "REVISION" if changed_fields else "IDENTICAL_REPLAY"
+                )
+            greatest = greatest_timestamp_by_symbol.get(candle.symbol)
+            out_of_order = greatest is not None and candle.timestamp < greatest
+            previous_arrival = previous_arrival_by_symbol.get(candle.symbol)
+            sequence_delta = (
+                candle.sequence - previous_arrival.sequence
+                if candle.sequence is not None
+                and previous_arrival is not None
+                and previous_arrival.sequence is not None
+                else None
+            )
+            observation = SchwabStreamCandleObservation(
+                arrival_index=len(observations),
+                payload_index=payload_index,
+                received_at=received_at,
+                candle=candle,
+                minute_identity=_minute_identity(candle),
+                update_kind=update_kind,
+                changed_fields=changed_fields,
+                out_of_order=out_of_order,
+                sequence_delta_from_previous_arrival=sequence_delta,
+            )
+            observations.append(observation)
+            latest_version_by_minute[key] = candle
+            previous_arrival_by_symbol[candle.symbol] = candle
+            if greatest is None or candle.timestamp > greatest:
+                greatest_timestamp_by_symbol[candle.symbol] = candle.timestamp
+    return tuple(observations)
 
 
 def parse_price_history_response(
@@ -317,6 +432,9 @@ def build_nonpersisting_stream_proof(
     request_started_at: datetime,
     response_received_at: datetime,
     evaluated_at: datetime | None = None,
+    received_at_by_payload: Sequence[datetime] | None = None,
+    transport_events: Sequence[Mapping[str, object]] = (),
+    price_history_payloads: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     requested = _aware_datetime(request_started_at, "request start")
     received = _aware_datetime(response_received_at, "response receipt")
@@ -329,19 +447,41 @@ def build_nonpersisting_stream_proof(
             "Candle proof timestamps were not chronological."
         )
     expected = normalize_symbols(expected_symbols)
-    candles = parse_chart_equity_messages(
+    receipt_times = (
+        tuple(received_at_by_payload)
+        if received_at_by_payload is not None
+        else tuple(received for _ in payloads)
+    )
+    observations = inspect_chart_equity_observations(
         payloads,
         expected_symbols=expected,
+        received_at_by_payload=receipt_times,
     )
-    latest_by_symbol: dict[str, SchwabMinuteCandle] = {}
-    for candle in candles:
-        latest_by_symbol[candle.symbol] = candle
+    if any(observation.received_at > evaluated for observation in observations):
+        raise SchwabCandleContractError(
+            "A Streamer payload receipt was later than proof evaluation."
+        )
+    normalized_transport_events = _normalize_transport_events(
+        transport_events,
+        evaluated_at=evaluated,
+    )
+    latest_by_symbol: dict[str, SchwabStreamCandleObservation] = {}
+    for observation in observations:
+        previous = latest_by_symbol.get(observation.candle.symbol)
+        if previous is None or (
+            observation.candle.timestamp,
+            observation.arrival_index,
+        ) >= (
+            previous.candle.timestamp,
+            previous.arrival_index,
+        ):
+            latest_by_symbol[observation.candle.symbol] = observation
 
     rows: list[dict[str, object]] = []
     missing: list[str] = []
     for symbol in expected:
-        candle = latest_by_symbol.get(symbol)
-        if candle is None:
+        observation = latest_by_symbol.get(symbol)
+        if observation is None:
             missing.append(symbol)
             rows.append(
                 {
@@ -351,6 +491,7 @@ def build_nonpersisting_stream_proof(
                 }
             )
             continue
+        candle = observation.candle
         age_seconds = (evaluated - candle.timestamp).total_seconds()
         rows.append(
             {
@@ -362,7 +503,10 @@ def build_nonpersisting_stream_proof(
         )
 
     newest = max(
-        (candle.timestamp for candle in latest_by_symbol.values()),
+        (
+            observation.candle.timestamp
+            for observation in latest_by_symbol.values()
+        ),
         default=None,
     )
     shape_pass = not missing and all(row["status"] == "PASS" for row in rows)
@@ -371,6 +515,40 @@ def build_nonpersisting_stream_proof(
         second=0,
         microsecond=0,
     )
+    minute_summaries = _summarize_observed_minutes(
+        observations,
+        evaluated_at=evaluated,
+    )
+    observed_gaps = _observed_timestamp_gaps(observations)
+    reconciliation = (
+        compare_stream_observations_to_price_history(
+            observations,
+            price_history_payloads=price_history_payloads,
+        )
+        if price_history_payloads is not None
+        else None
+    )
+    findings = (
+        ["COMPLETION_SEMANTICS_REQUIRE_LIVE_MARKET_PROOF"]
+        if shape_pass
+        else ["EXPECTED_CANDLE_MISSING_OR_INVALID"]
+    )
+    if any(observation.out_of_order for observation in observations):
+        findings.append("OUT_OF_ORDER_STREAM_UPDATE_OBSERVED")
+    if any(
+        observation.update_kind == "IDENTICAL_REPLAY"
+        for observation in observations
+    ):
+        findings.append("IDENTICAL_STREAM_REPLAY_OBSERVED")
+    if any(
+        observation.update_kind == "REVISION"
+        for observation in observations
+    ):
+        findings.append("INTRA_MINUTE_STREAM_REVISION_OBSERVED")
+    if observed_gaps:
+        findings.append("OBSERVED_TIMESTAMP_GAP_REQUIRES_RECONCILIATION")
+    if reconciliation and not reconciliation["allComparableMinutesMatch"]:
+        findings.append("STREAM_HISTORY_DIFFERENCE_OBSERVED")
     return {
         "schemaVersion": SCHWAB_CANDLE_PROOF_SCHEMA_VERSION,
         "proofType": "SCHWAB_CHART_EQUITY_NONPERSISTING_SHAPE_LATENCY",
@@ -402,16 +580,123 @@ def build_nonpersisting_stream_proof(
         "requestedSymbols": list(expected),
         "missingSymbols": missing,
         "candles": rows,
-        "findings": (
-            ["COMPLETION_SEMANTICS_REQUIRE_LIVE_MARKET_PROOF"]
-            if shape_pass
-            else ["EXPECTED_CANDLE_MISSING_OR_INVALID"]
-        ),
+        "transportEvents": normalized_transport_events,
+        "updateObservations": [
+            observation.to_evidence() for observation in observations
+        ],
+        "minuteSummaries": minute_summaries,
+        "observedTimestampGaps": observed_gaps,
+        "streamHistoryReconciliation": reconciliation,
+        "findings": findings,
         "nonPersisting": True,
         "networkCalledByProofBuilder": False,
         "accountDataIncluded": False,
         "brokerMethodsIncluded": False,
         "orderTransmission": "UNAVAILABLE",
+    }
+
+
+def compare_stream_observations_to_price_history(
+    observations: Sequence[SchwabStreamCandleObservation],
+    *,
+    price_history_payloads: Mapping[str, object],
+) -> dict[str, object]:
+    """Compare the last observed stream version with immutable REST evidence."""
+
+    normalized_payloads: dict[str, object] = {}
+    for raw_symbol, payload in price_history_payloads.items():
+        symbol = normalize_symbols((raw_symbol,))[0]
+        if symbol in normalized_payloads:
+            raise SchwabCandleContractError(
+                "Price-history reconciliation repeated a symbol."
+            )
+        normalized_payloads[symbol] = payload
+
+    latest_stream: dict[tuple[str, datetime], SchwabMinuteCandle] = {}
+    for observation in observations:
+        latest_stream[
+            (observation.candle.symbol, observation.candle.timestamp)
+        ] = observation.candle
+
+    history: dict[tuple[str, datetime], SchwabMinuteCandle] = {}
+    for symbol, payload in normalized_payloads.items():
+        for candle in parse_price_history_response(
+            payload,
+            expected_symbol=symbol,
+        ):
+            history[(symbol, candle.timestamp)] = candle
+
+    rows: list[dict[str, object]] = []
+    comparable_matches = 0
+    comparable_differences = 0
+    stream_only = 0
+    history_only = 0
+    for symbol, timestamp in sorted(
+        set(latest_stream) | set(history),
+        key=lambda item: (item[0], item[1]),
+    ):
+        stream_candle = latest_stream.get((symbol, timestamp))
+        history_candle = history.get((symbol, timestamp))
+        if stream_candle is None:
+            status = "HISTORY_ONLY"
+            changed_fields: tuple[str, ...] = ()
+            history_only += 1
+        elif history_candle is None:
+            status = "STREAM_ONLY"
+            changed_fields = ()
+            stream_only += 1
+        else:
+            changed_fields = _changed_candle_fields(
+                stream_candle,
+                history_candle,
+            )
+            if changed_fields:
+                status = "CORRECTED_OR_DIFFERENT"
+                comparable_differences += 1
+            else:
+                status = "MATCH"
+                comparable_matches += 1
+        rows.append(
+            {
+                "minuteIdentity": (
+                    _minute_identity(stream_candle)
+                    if stream_candle is not None
+                    else _minute_identity(history_candle)
+                ),
+                "symbol": symbol,
+                "timestamp": timestamp.isoformat(),
+                "status": status,
+                "changedFields": list(changed_fields),
+                "stream": (
+                    stream_candle.to_evidence()
+                    if stream_candle is not None
+                    else None
+                ),
+                "priceHistory": (
+                    history_candle.to_evidence()
+                    if history_candle is not None
+                    else None
+                ),
+            }
+        )
+
+    comparable = comparable_matches + comparable_differences
+    return {
+        "schemaVersion": SCHWAB_CANDLE_PROOF_SCHEMA_VERSION,
+        "comparison": "LATEST_STREAM_VERSION_VS_PRICE_HISTORY",
+        "allComparableMinutesMatch": (
+            comparable > 0 and comparable_differences == 0
+        ),
+        "comparableMinuteCount": comparable,
+        "matchingMinuteCount": comparable_matches,
+        "differentMinuteCount": comparable_differences,
+        "streamOnlyMinuteCount": stream_only,
+        "historyOnlyMinuteCount": history_only,
+        "rows": rows,
+        "streamSource": SCHWAB_CHART_EQUITY_SOURCE,
+        "historySource": SCHWAB_PRICE_HISTORY_SOURCE,
+        "canonicalityGranted": False,
+        "nonPersisting": True,
     }
 
 
@@ -425,6 +710,149 @@ def session_for_timestamp(observed_at: datetime) -> str:
     if time(4, 0) <= local < time(9, 30) or time(16, 0) <= local < time(20, 0):
         return "extended"
     return "closed"
+
+
+def _minute_identity(candle: SchwabMinuteCandle | None) -> str:
+    if candle is None:
+        raise SchwabCandleContractError(
+            "Minute identity requires candle evidence."
+        )
+    return "|".join(
+        (
+            candle.source,
+            candle.symbol,
+            candle.timestamp.astimezone(EASTERN_TZ).date().isoformat(),
+            candle.timestamp.isoformat(),
+        )
+    )
+
+
+def _changed_candle_fields(
+    previous: SchwabMinuteCandle,
+    current: SchwabMinuteCandle,
+) -> tuple[str, ...]:
+    return tuple(
+        name
+        for name in ("open", "high", "low", "close", "volume")
+        if getattr(previous, name) != getattr(current, name)
+    )
+
+
+def _summarize_observed_minutes(
+    observations: Sequence[SchwabStreamCandleObservation],
+    *,
+    evaluated_at: datetime,
+) -> list[dict[str, object]]:
+    grouped: dict[str, list[SchwabStreamCandleObservation]] = {}
+    for observation in observations:
+        grouped.setdefault(observation.minute_identity, []).append(observation)
+    summaries: list[dict[str, object]] = []
+    for minute_identity in sorted(grouped):
+        versions = grouped[minute_identity]
+        first = versions[0]
+        last_changed = first.received_at
+        for observation in versions[1:]:
+            if observation.update_kind == "REVISION":
+                last_changed = observation.received_at
+        latest = versions[-1]
+        summaries.append(
+            {
+                "minuteIdentity": minute_identity,
+                "symbol": latest.candle.symbol,
+                "candleTimestamp": latest.candle.timestamp.isoformat(),
+                "firstObservedAt": first.received_at.isoformat(),
+                "lastObservedAt": latest.received_at.isoformat(),
+                "lastChangedAt": last_changed.isoformat(),
+                "observedStableForSeconds": round(
+                    (evaluated_at - last_changed).total_seconds(),
+                    6,
+                ),
+                "updateCount": len(versions),
+                "revisionCount": sum(
+                    observation.update_kind == "REVISION"
+                    for observation in versions
+                ),
+                "identicalReplayCount": sum(
+                    observation.update_kind == "IDENTICAL_REPLAY"
+                    for observation in versions
+                ),
+                "outOfOrderArrivalCount": sum(
+                    observation.out_of_order for observation in versions
+                ),
+                "latestObservedCandle": latest.candle.to_evidence(),
+                "completionState": "UNVERIFIED",
+            }
+        )
+    return summaries
+
+
+def _observed_timestamp_gaps(
+    observations: Sequence[SchwabStreamCandleObservation],
+) -> list[dict[str, object]]:
+    timestamps_by_symbol: dict[str, set[datetime]] = {}
+    for observation in observations:
+        timestamps_by_symbol.setdefault(
+            observation.candle.symbol,
+            set(),
+        ).add(observation.candle.timestamp)
+    gaps: list[dict[str, object]] = []
+    for symbol, timestamps in sorted(timestamps_by_symbol.items()):
+        ordered = sorted(timestamps)
+        for previous, current in zip(ordered, ordered[1:]):
+            previous_eastern = previous.astimezone(EASTERN_TZ)
+            current_eastern = current.astimezone(EASTERN_TZ)
+            if previous_eastern.date() != current_eastern.date():
+                continue
+            elapsed_seconds = (current - previous).total_seconds()
+            if elapsed_seconds <= 60:
+                continue
+            gaps.append(
+                {
+                    "symbol": symbol,
+                    "afterTimestamp": previous.isoformat(),
+                    "beforeTimestamp": current.isoformat(),
+                    "observedMissingMinuteCount": max(
+                        0,
+                        int(elapsed_seconds // 60) - 1,
+                    ),
+                    "classification": "OBSERVED_TIMESTAMP_GAP",
+                    "dataLossProven": False,
+                }
+            )
+    return gaps
+
+
+def _normalize_transport_events(
+    events: Sequence[Mapping[str, object]],
+    *,
+    evaluated_at: datetime,
+) -> list[dict[str, str]]:
+    normalized: list[dict[str, str]] = []
+    previous: datetime | None = None
+    for event in events:
+        kind = str(event.get("kind", "")).strip().upper()
+        if kind not in TRANSPORT_EVENT_KINDS:
+            raise SchwabCandleContractError(
+                "Candle transport event kind was invalid."
+            )
+        raw_timestamp = event.get("timestamp")
+        if isinstance(raw_timestamp, datetime):
+            timestamp = _aware_datetime(raw_timestamp, "transport event")
+        elif isinstance(raw_timestamp, str):
+            timestamp = _parse_cli_datetime(raw_timestamp)
+        else:
+            raise SchwabCandleContractError(
+                "Candle transport event timestamp was invalid."
+            )
+        if timestamp > evaluated_at or (
+            previous is not None and timestamp < previous
+        ):
+            raise SchwabCandleContractError(
+                "Candle transport events were not chronological."
+            )
+        normalized.append({"kind": kind, "timestamp": timestamp.isoformat()})
+        previous = timestamp
+    return normalized
 
 
 def _parse_chart_equity_row(
@@ -601,6 +1029,59 @@ def _load_json(path: Path) -> object:
         ) from None
 
 
+def _decode_stream_proof_input(
+    raw: object,
+    *,
+    fallback_received_at: datetime,
+) -> tuple[
+    list[object],
+    list[datetime],
+    list[Mapping[str, object]],
+    Mapping[str, object] | None,
+]:
+    if isinstance(raw, Mapping) and "messages" in raw:
+        messages = raw.get("messages")
+        if not isinstance(messages, list):
+            raise SchwabCandleContractError(
+                "Stream proof messages had an invalid shape."
+            )
+        payloads: list[object] = []
+        receipts: list[datetime] = []
+        for message in messages:
+            if not isinstance(message, Mapping) or "payload" not in message:
+                raise SchwabCandleContractError(
+                    "Stream proof message omitted its payload."
+                )
+            received_at = message.get("receivedAt")
+            if not isinstance(received_at, str):
+                raise SchwabCandleContractError(
+                    "Stream proof message omitted its local receipt time."
+                )
+            payloads.append(message["payload"])
+            receipts.append(_parse_cli_datetime(received_at))
+        raw_events = raw.get("transportEvents", [])
+        if not isinstance(raw_events, list) or any(
+            not isinstance(event, Mapping) for event in raw_events
+        ):
+            raise SchwabCandleContractError(
+                "Stream proof transport events had an invalid shape."
+            )
+        raw_history = raw.get("priceHistory")
+        if raw_history is not None and not isinstance(raw_history, Mapping):
+            raise SchwabCandleContractError(
+                "Stream proof price history had an invalid shape."
+            )
+        return payloads, receipts, raw_events, raw_history
+
+    payloads = raw if isinstance(raw, list) else [raw]
+    return (
+        list(payloads),
+        [fallback_received_at for _ in payloads],
+        [],
+        None,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Inspect Schwab candle contracts without persistence or trading."
@@ -625,21 +1106,33 @@ def main(argv: list[str] | None = None) -> int:
             result = official_candle_contract()
         elif args.command == "inspect-stream":
             raw = _load_json(args.input)
-            payloads = raw if isinstance(raw, list) else [raw]
+            response_received_at = _parse_cli_datetime(
+                args.response_received_at
+            )
+            (
+                payloads,
+                receipt_times,
+                transport_events,
+                price_history_payloads,
+            ) = _decode_stream_proof_input(
+                raw,
+                fallback_received_at=response_received_at,
+            )
             result = build_nonpersisting_stream_proof(
                 payloads,
                 expected_symbols=args.symbols,
                 request_started_at=_parse_cli_datetime(
                     args.request_started_at
                 ),
-                response_received_at=_parse_cli_datetime(
-                    args.response_received_at
-                ),
+                response_received_at=response_received_at,
                 evaluated_at=(
                     _parse_cli_datetime(args.evaluated_at)
                     if args.evaluated_at
                     else None
                 ),
+                received_at_by_payload=receipt_times,
+                transport_events=transport_events,
+                price_history_payloads=price_history_payloads,
             )
         else:
             candles = parse_price_history_response(

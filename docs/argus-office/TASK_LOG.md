@@ -217,8 +217,9 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Official Streamer bootstrap uses `GET /trader/v1/userPreference`, whose
   response also includes account metadata. No bootstrap/account/provider call
   was made; future use must pass the existing sole-account invariant.
-- Python compileall passes. All 18 focused tests, all 72 tests in the focused-
-  plus-adjacent Schwab run, and all 1,035 Python tests pass. The first full worktree run had one environment-
+- Python compileall passes. After proof-model hardening, all 23 focused tests,
+  all 77 tests in the focused-plus-adjacent Schwab run, and all 1,040 Python
+  tests pass. The first full worktree run had one environment-
   only failure because the installer test expects a project-local `.venv`; an
   ignored junction to the canonical virtual environment made that exact test
   and the complete rerun pass without a source change.
@@ -226,3 +227,10 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   integration or R032. Protected-path, secret, diff, and canonical-nonmutation
   checks pass; the focused commit and feature-branch backup close this bounded
   implementation without changing the frozen Monday runtime.
+- Post-closeout self-review found that rejecting duplicate/out-of-order Streamer
+  messages would discard evidence required by the live proof. The follow-up
+  patch preserves every timestamped arrival, classifies identical replay,
+  same-minute revision, late arrival, reconnect chronology, and observational
+  gaps, records first/last-change/stability times, and compares the last stream
+  version with price history while preserving both values and withholding
+  canonicality.
