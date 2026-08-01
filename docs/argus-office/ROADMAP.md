@@ -28,6 +28,19 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+Current canonical operational identity supersedes older branch-base figures in
+the detailed history below: the clean service checkout and `origin/master` are
+synchronized at `c546242` (`Record final Monday opening preflight`). The
+installed state-write retry at `252cdc7` survives transient Windows sharing
+locks while still failing closed on persistent or unrelated write errors; its
+release closeout and final preflight are included through `8f1d49d` and
+`c546242`. The service remains Running/Automatic with a fresh heartbeat,
+Healthy Engine Host, 30 pending opening captures, zero failed opening captures,
+zero Shadow jobs, and order transmission `UNAVAILABLE`. The installed manifest
+SHA-256 remains
+`636274F988D89BD19AF7BB84201D64DBC175E647AF670041CFD8A2B81D388638`.
+The next job is Monday 2026-08-03 at 08:35 Central with an 08:40 latest start.
+
 Post-boot clock reliability hardening is `COMPLETE_AND_BACKED_UP` on canonical
 `master` through runtime commit `30c25e5` and governance commit `3821490`. The
 wake task waits two minutes after startup so the network can settle, keeps the
@@ -119,6 +132,32 @@ required Streamer bootstrap is `GET /trader/v1/userPreference`; because that
 response also contains account metadata, any future live bootstrap must pass
 the existing sole-account invariant before using the Streamer identifiers.
 No such account call was made in this task.
+
+ARGUS-R031A is `IMPLEMENTED_PENDING_LIVE_MARKET_HOURS_RUN` on the stacked
+R032A branch in the same isolated worktree. It adds an executable but
+default-dry-run observer for a bounded three-to-fifteen-minute
+`CHART_EQUITY` session. Live execution is explicit, regular-hours-only by
+default, holiday-aware, limited to ten caller-supplied symbols, and writes one
+sanitized no-overwrite JSON proof only to an explicit path outside the
+repository. Before Streamer use it revalidates exactly one authorized account,
+ending `2573`, the immutable account hash, and `INDIVIDUAL_CASH`; account
+details may return balance fields, but values are suppressed and no positions
+or orders are requested. Any account-count or identity anomaly fails before
+Streamer use and requires Steven interruption.
+
+The observer records connection/subscription chronology, every received
+candle version, provider and receipt times, first-candle latency, gaps,
+revisions, replays, and out-of-order arrivals, then compares the last observed
+minute versions to bounded explicit-window `/pricehistory` responses. A
+  history failure is preserved as partial reconciliation instead of discarding
+  the Streamer proof, and a mid-observation socket failure preserves received
+  candles with an explicit disconnect finding. The added
+  `websocket-client==1.9.0` dependency was imported
+from an isolated external target; the canonical service environment was not
+modified. The observer has no service, scheduler, Engine Host, WPF,
+production-store, broker, position, order, or transmission integration and
+does not populate charts. Its live run remains pending after Monday's opening
+evidence is secured; R032 and R033 remain blocked.
 
 ARGUS-R032A is `IMPLEMENTED_PENDING_R031_PROOF_AND_INTEGRATION` on the stacked
 `codex/ARGUS-R032A-synthetic-candle-persistence-contract` branch. It adds a
@@ -459,7 +498,7 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Clean, synchronized local/remote `master` at `ddc09f8`. It contains Monday opening runtime hardening, clock reliability, reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001/002/003/004/005/006, strict opening-result enforcement, the installed three-trigger SYSTEM clock task, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation, the WPF workstation through R030, and SCHWAB-001/002/002A/003 read-only safeguards. This R031 worktree is isolated from that installed baseline. |
+| Canonical baseline | Clean, synchronized local/remote `master` at `c546242`. It contains the Monday opening runtime and final preflight, transient automation-state write retry `252cdc7`, clock reliability, reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001 through SERVICE-007, strict opening-result enforcement, the installed three-trigger SYSTEM clock task, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation, the WPF workstation through R030, and SCHWAB-001/002/002A/003 read-only safeguards. This R031/R032A worktree remains based on `ddc09f8` and isolated from the installed baseline; its branch-local code and dependency are not installed. |
 | Active implementation | ARGUS-R031 is implemented and backed up at `b96f745` with live market-hours proof pending. Initial implementation `a39086c` is an ancestor of and included by `b96f745`. R032A is implemented on one stacked successor branch as an explicitly provisional temp-root-only persistence contract; it cannot collect or display candles and cannot integrate before R031. SHADOW-024 is implemented and backed up at `48dbcb2`, pending post-Monday integration. The canonical runtime checkout remains clean and frozen for Monday. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
@@ -741,6 +780,39 @@ Status: `IMPLEMENTED_PENDING_MARKET_HOURS_PROOF` on the isolated R031 branch
   the existing exact single-account invariant before consuming its socket and
   session fields. No account, provider, token-refresh, service, Engine Host, or
   production-data call is part of R031's current branch proof.
+
+#### ARGUS-R031A - Nonpersisting Schwab Market-Hours Candle Observer
+
+Status: `IMPLEMENTED_PENDING_LIVE_MARKET_HOURS_RUN` on the stacked R032A branch
+
+- The CLI defaults to a deterministic zero-network plan. `--execute` plus an
+  explicit outside-repository JSON path is required before any provider call.
+  Execution is bounded to three through fifteen minutes, ten normalized
+  symbols, an open NYSE day, and regular hours unless extended hours are
+  separately requested.
+- The observer revalidates the encrypted immutable sole-account binding through
+  account-number discovery and one account-details GET before consuming
+  `/trader/v1/userPreference`. It requires exactly one account, ending `2573`,
+  the unchanged encrypted account identity, and internal type
+  `INDIVIDUAL_CASH`. It suppresses returned balance values, requests no
+  positions or orders, and has no transmission method.
+- The TLS WebSocket accepts only `wss://streamer-api.schwab.com/ws`, logs in,
+  subscribes to exact `CHART_EQUITY` fields, tolerates heartbeat frames, and
+  preserves data delivered before or with the subscription acknowledgement.
+  The first candle receipt, rather than the acknowledgement, closes the
+  end-to-end response-latency measurement.
+- Stream observations remain noncanonical and nonpersisting. Per-symbol
+  price-history failures are visible as partial reconciliation without erasing
+  captured Streamer evidence. Output is sanitized, write-once, and prohibited
+  beneath the repository.
+- Compileall, 20 focused observer tests, 207 Schwab/candle boundary tests, and
+  all 1,078 Python tests pass. The exact pinned WebSocket dependency imports
+  from an isolated external target without changing the frozen canonical
+  `.venv`. No live provider/account call was made while the market was closed.
+- This task does not populate WPF charts, authorize R032 persistence, or prove
+  entitlement, current-minute finality, latency acceptance, correction timing,
+  volume authority, reconnect behavior, or production symbol capacity. Those
+  facts require the bounded live market-hours run after Monday evidence.
 
 #### ARGUS-R032A - Synthetic Candle Persistence Contract
 

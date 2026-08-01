@@ -12,6 +12,14 @@ Engine Host, WPF, broker, or legacy-data path and cannot merge independently of
 R031. Back up the feature branch after Hard Chew proof; preserve it without
 integration until Monday evidence and R031 market-hours proof are secured.
 
+The same stacked branch now also contains ARGUS-R031A, the isolated
+nonpersisting market-hours observer needed to execute R031's remaining proof.
+It is default-dry-run, explicit-execute, sole-account guarded, and has no
+service, Engine Host, WPF, production persistence, broker, or order path. The
+observer and dependency are not installed in the canonical checkout. Preserve
+the branch without integration until Monday evidence is secured and the live
+market-hours proof is reviewed.
+
 ## ARGUS-R031 Schwab Candle Contract
 
 `codex/ARGUS-R031-schwab-candle-contract` is `ACTIVE` in the distinct worktree
