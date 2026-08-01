@@ -40,6 +40,8 @@ from momentum_hunter.schwab_readonly import redact_value
 
 MANIFEST_SCHEMA_VERSION = 1
 STATE_SCHEMA_VERSION = 1
+STATE_REPLACE_RETRY_ATTEMPTS = 20
+STATE_REPLACE_RETRY_DELAY_SECONDS = 0.05
 JOB_KINDS = frozenset(
     {
         "nonmarket_canary",
@@ -466,9 +468,24 @@ class SupervisorStateStore:
                 json.dumps(payload, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
-            temporary.replace(self.path)
+            _replace_state_file(temporary, self.path)
         finally:
             temporary.unlink(missing_ok=True)
+
+
+def _replace_state_file(temporary: Path, destination: Path) -> None:
+    for attempt in range(STATE_REPLACE_RETRY_ATTEMPTS):
+        try:
+            temporary.replace(destination)
+            return
+        except OSError as exc:
+            retryable = (
+                isinstance(exc, PermissionError)
+                or getattr(exc, "winerror", None) in {5, 32}
+            )
+            if not retryable or attempt == STATE_REPLACE_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(STATE_REPLACE_RETRY_DELAY_SECONDS)
 
 
 class AutomationSupervisor:

@@ -1,6 +1,16 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-31
+Date reconciled: 2026-08-01
+
+## ARGUS-SERVICE-007 State Write Retry
+
+`codex/ARGUS-SERVICE-007-state-write-retry` is `ACTIVE` from canonical
+`master` at `ddc09f8`. It repairs a reproduced Windows file-sharing race in the
+automation supervisor's atomic state-receipt replace without changing the
+receipt schema or any job semantics. Real Windows lock proof, compileall, 26
+focused tests, 74 affected tests, and all 1,019 Python tests pass. The branch
+must be committed, fast-forward integrated, backed up, and loaded by one
+controlled service restart before it becomes Monday's canonical runtime.
 
 ## Monday Clock Task Reliability
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import json
 import tempfile
 import unittest
@@ -60,6 +61,63 @@ class AutomationSupervisorTests(unittest.TestCase):
             self.state_dir / "automation-service-state.json"
         ).load(started_at=self.now)
         self.assertEqual("COMPLETED", stored.jobs["canary"].status)
+
+    def test_state_save_retries_transient_windows_replace_denial(self) -> None:
+        path = self.state_dir / "automation-service-state.json"
+        store = SupervisorStateStore(path)
+        state = SupervisorState(service_started_at=self.now.isoformat())
+        original_replace = Path.replace
+        attempts = 0
+
+        def replace_with_transient_denial(
+            temporary: Path,
+            destination: Path,
+        ) -> Path:
+            nonlocal attempts
+            attempts += 1
+            if attempts < 3:
+                error = PermissionError(errno.EACCES, "Access is denied")
+                error.winerror = 5
+                raise error
+            return original_replace(temporary, destination)
+
+        with (
+            patch.object(
+                Path,
+                "replace",
+                autospec=True,
+                side_effect=replace_with_transient_denial,
+            ),
+            patch("momentum_hunter.automation_supervisor.time.sleep") as sleep,
+        ):
+            store.save(state)
+
+        self.assertEqual(3, attempts)
+        self.assertEqual(2, sleep.call_count)
+        stored = store.load(started_at=self.now)
+        self.assertEqual(state.service_started_at, stored.service_started_at)
+        self.assertEqual([], list(self.state_dir.glob("*.tmp")))
+
+    def test_state_save_fails_closed_after_persistent_replace_denial(self) -> None:
+        path = self.state_dir / "automation-service-state.json"
+        path.parent.mkdir(parents=True)
+        original = b'{"schema_version": 1, "jobs": {}}\n'
+        path.write_bytes(original)
+        store = SupervisorStateStore(path)
+        denial = PermissionError(errno.EACCES, "Access is denied")
+        denial.winerror = 5
+
+        with (
+            patch.object(Path, "replace", autospec=True, side_effect=denial) as replace,
+            patch("momentum_hunter.automation_supervisor.time.sleep") as sleep,
+            self.assertRaises(PermissionError),
+        ):
+            store.save(SupervisorState(service_started_at=self.now.isoformat()))
+
+        self.assertEqual(20, replace.call_count)
+        self.assertEqual(19, sleep.call_count)
+        self.assertEqual(original, path.read_bytes())
+        self.assertEqual([], list(self.state_dir.glob("*.tmp")))
 
     def test_restart_after_window_marks_job_missed_without_execution(self) -> None:
         job = self.job(

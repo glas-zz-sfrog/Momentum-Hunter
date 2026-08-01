@@ -28,6 +28,22 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SERVICE-007 is `IMPLEMENTED_PENDING_INTEGRATION` on
+`codex/ARGUS-SERVICE-007-state-write-retry`. A read-only status inspection at
+2026-08-01 02:10 Central briefly denied the automation supervisor's atomic
+replace of `automation-service-state.json`; the Python supervisor exited and
+the Windows service wrapper recovered it after five seconds. The repair retries
+only transient Windows access-denied and sharing-violation replace failures for
+at most 20 attempts separated by 50 milliseconds. Persistent locks and every
+other filesystem error still fail closed, the previous valid state remains
+unchanged, and temporary files are removed. A real Windows no-delete-share lock
+recovered in 0.265 seconds. Python compileall, 26 focused supervisor tests, 74
+affected automation/capture tests, and all 1,019 Python tests pass. The patch
+does not change job timing, capture behavior, provider calls, scoring,
+readiness, Shadow state, accounts, broker/order behavior, or transmission.
+Integration, service reload, and post-reload stability proof remain required
+before Monday readiness is closed again.
+
 Post-boot clock reliability hardening is `COMPLETE_AND_BACKED_UP` on canonical
 `master` through runtime commit `30c25e5` and governance commit `3821490`. The
 wake task waits two minutes after startup so the network can settle, keeps the
