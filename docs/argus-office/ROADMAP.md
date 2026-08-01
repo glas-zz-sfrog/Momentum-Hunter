@@ -28,6 +28,40 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-MONDAY-001 opening-timing hardening is
+`MERGED_AND_BACKED_UP_PENDING_SERVICE_RELOAD` on synchronized canonical
+`master`/`origin/master` at `c344ed9`. A Monday-specific code audit found and
+repaired six bounded failure modes: a service restart could relaunch an
+existing `RUNNING` receipt; a successful terminal receipt was not persisted
+until after later supervisor work; the outer opening retry budget could exceed
+the 15-minute process timeout; supplemental candidate requests had an
+unbounded aggregate deadline; synchronous outcome maintenance could consume
+the opening deadline after capture succeeded; and partial TradePlan report
+writes could leave an unrecoverable output set. The runner now also gives each
+attempt log a millisecond-and-process-ID identity.
+
+The repaired path fails closed on a preexisting `RUNNING` receipt, persists the
+terminal job result immediately, retries only explicit transient opening exit
+`75` with one outer retry, limits opening enrichment to five seconds for the
+top five candidates while preserving all captured/scored rows, defers outcome
+maintenance until after the opening job, and uses atomic TradePlan writes with
+JSON as the completion marker. Python compileall, the focused and adjacent
+automation/capture/trade-planning suites, and all 1,027 Python tests pass.
+`git diff --check`, protected-path review, and secret scanning also pass. No
+scoring, ranking, readiness, replay, alert, database/schema, account,
+broker/order, Shadow, UI, credential, or transmission semantics changed.
+
+The installed manifest and Monday schedule remain unchanged: manifest SHA-256
+`636274F988D89BD19AF7BB84201D64DBC175E647AF670041CFD8A2B81D388638`, one
+ordinary capture-only job at 08:35 Central, hard latest start 08:40, receipt
+`PENDING`, zero Shadow jobs, and order transmission `UNAVAILABLE`. The Windows
+service is Running/Automatic, but its current Python supervisor started before
+`c344ed9` was merged and therefore has not imported this hardening. A controlled
+service restart or full Windows reboot is the sole remaining software
+activation gate. After that reload, read-only verification must prove a new
+service instance/heartbeat, the same manifest hash, and Monday still `PENDING`;
+it must not launch a capture.
+
 ARGUS-SERVICE-007 is `COMPLETE_AND_BACKED_UP` on canonical `master` at
 `252cdc7`. A read-only status inspection at
 2026-08-01 02:10 Central briefly denied the automation supervisor's atomic
@@ -112,14 +146,16 @@ Manager retains three restart actions after 5, 15, and 60 seconds. A recent
 ordinary morning capture also completed end to end with raw JSON/Markdown,
 score breakdown, TradePlan reports, and outcome-update exit `0`.
 
-No known software gate remains before Monday. Leave the computer powered on
-and plugged in through at least 08:40 Central. Windows can wake a sleeping
-machine, but it cannot start a fully powered-off machine without separate BIOS
-support. Residual failure modes are external power loss, full shutdown,
-internet/provider outage, or a new operating-system/hardware failure after the
-Sunday check. The Sunday 19:00 read-only preflight and Monday terminal audit
-remain evidence observers; they must not launch, retry, repair, or fabricate
-an opening capture.
+No known code defect remains before Monday, but the running automation service
+must reload `c344ed9` before readiness can be closed. After that controlled
+reload and read-only identity check, leave the computer powered on and plugged
+in through at least 08:40 Central. Windows can wake a sleeping machine, but it
+cannot start a fully powered-off machine without separate BIOS support.
+Residual failure modes are external power loss, full shutdown,
+internet/provider outage, provider-shape change, or a new
+operating-system/hardware failure after the Sunday check. The Sunday 19:00
+read-only preflight and Monday terminal audit remain evidence observers; they
+must not launch, retry, repair, or fabricate an opening capture.
 
 Until Monday's terminal receipt and opening capture/report are preserved, the
 canonical service checkout must remain clean on synchronized `master`.
@@ -447,15 +483,15 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Synchronized `master`/`origin/master` through Monday clock operational closeout `c0e98dd` plus this truth reconciliation. It contains Monday opening runtime hardening `4b6668c`, clock reliability runtime `30c25e5`, the passed reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001/002/003/004/005/006, strict opening-result enforcement, the installed three-trigger SYSTEM clock task, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R030, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active implementation | No Monday-readiness implementation remains. The final reboot canary, installed clock-task read-back, and independent NIST synchronization checks pass; the service is Running/Automatic and Healthy on the 30-opening manifest. The canonical runtime checkout stays clean while unrelated work uses separate worktrees. |
+| Canonical baseline | Synchronized `master`/`origin/master` at `c344ed9`. It contains ARGUS-MONDAY-001 opening-timing hardening, Monday opening runtime hardening `4b6668c`, clock reliability runtime `30c25e5`, the passed reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001/002/003/004/005/006/007, strict opening-result enforcement, the installed three-trigger SYSTEM clock task, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R030, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
+| Active implementation | ARGUS-MONDAY-001 is merged and backed up with all 1,027 Python tests passing. Its code is on disk, but the already-running Python supervisor predates `c344ed9`; a controlled service restart or full reboot plus read-only identity verification remains before the new code is active. The installed manifest and Monday receipt remain unchanged. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | No current software, service-start, reboot-without-login, or clock gate blocks Monday's ordinary capture. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss and cannot be provided by the Windows service alone. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. |
+| Blocked by | Monday readiness is blocked only on reloading the automation service and proving the new service instance retained the unchanged manifest and `PENDING` Monday receipt. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss and cannot be provided by the Windows service alone. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. |
 | Scheduled operational proof | `PENDING`: Sunday 2026-08-02 at 19:00 Central has a read-only preflight observer. Monday 2026-08-03 has one ordinary capture-only service job at 08:35 with a hard 08:40 latest-start boundary, followed by a read-only terminal evidence audit at 08:50. The observers do not launch, retry, repair, resync, capture, query accounts, arm Shadow, or touch orders. |
-| Immediate operational work | Keep the computer powered on and plugged in. Preserve a clean canonical checkout; allow the service to run the ordinary Monday capture; then audit its terminal receipt, capture JSON/Markdown, score breakdown, TradePlan reports, and outcome status. This capture-only path does not arm Shadow or enable transmission. Unrelated bounded development may continue only in a separate worktree until the receipt is preserved. |
+| Immediate operational work | Reload the automation service without launching a capture, then prove a new instance/heartbeat, unchanged manifest hash, all 30 jobs intact, and Monday still `PENDING`. Keep the computer powered on and plugged in; allow the service to run the ordinary Monday capture; then audit its terminal receipt, capture JSON/Markdown, score breakdown, TradePlan reports, and deferred outcome-maintenance status. This capture-only path does not arm Shadow or enable transmission. Unrelated bounded development may continue only in a separate worktree until the receipt is preserved. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. Token freshness is evaluated and refreshed only through the guarded read-only path when needed; no current account, position, preview, or order request is part of Monday's capture. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
-| Steven action | No software or visual approval is pending. Leave the computer powered on and plugged in through Monday's capture window. Any brokerage anomaly or real-order proposal remains a separate interruption gate. |
+| Steven action | Approve the single Windows elevation prompt needed to restart `MomentumHunterAutomation`, or approve a full reboot, so the merged hardening is loaded. No visual application review is required. After activation proof, leave the computer powered on and plugged in through Monday's capture window. Any brokerage anomaly or real-order proposal remains a separate interruption gate. |
 | Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
 
 ### Status Legend
