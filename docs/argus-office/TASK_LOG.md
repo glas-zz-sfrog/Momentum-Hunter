@@ -198,3 +198,31 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - No manual software gate remains. Preserve a clean canonical checkout, leave
   the computer powered and plugged in, run the Sunday read-only preflight, and
   audit Monday's ordinary opening receipt without intervention or fabrication.
+
+## 2026-07-31 - ARGUS-R031 Schwab Intraday Candle Contract
+
+- Created isolated worktree `ARGUS-R031-schwab-candle-contract` from clean,
+  synchronized canonical base `ddc09f8`; the installed service checkout and
+  Monday jobs were not changed, restarted, queried, or integrated.
+- Authenticated official Schwab documentation proves a near-live
+  `CHART_EQUITY` WebSocket service with minute OHLCV, sequence, epoch chart
+  time, and regular/extended-hours updates. `GET /pricehistory` is the
+  single-symbol historical/backfill source, not the primary live feed.
+- Added strict read-only contract code for Streamer subscription shape,
+  historical request windows, Streamer/history parsing, OHLC validation,
+  ordering, session classification, and deterministic nonpersisting proof.
+- Recorded unknowns honestly: current-bar finality, close latency, corrections,
+  numeric chart symbol limit, REST rate limits, split adjustments,
+  consolidated-volume authority, and candle-level halt/stale signaling.
+- Official Streamer bootstrap uses `GET /trader/v1/userPreference`, whose
+  response also includes account metadata. No bootstrap/account/provider call
+  was made; future use must pass the existing sole-account invariant.
+- Python compileall passes. All 18 focused tests, all 72 tests in the focused-
+  plus-adjacent Schwab run, and all 1,035 Python tests pass. The first full worktree run had one environment-
+  only failure because the installer test expects a project-local `.venv`; an
+  ignored junction to the canonical virtual environment made that exact test
+  and the complete rerun pass without a source change.
+- A real market-hours shape and latency observation remains required before
+  integration or R032. Protected-path, secret, diff, and canonical-nonmutation
+  checks pass; the focused commit and feature-branch backup close this bounded
+  implementation without changing the frozen Monday runtime.

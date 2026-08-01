@@ -183,5 +183,16 @@
   Host, 30 pending opening jobs, zero Shadow jobs, and unavailable order
   transmission after the clock repair.
 
+- Added the ARGUS-R031 strict Schwab candle contract and nonpersisting proof
+  builder for official `CHART_EQUITY` Streamer frames and `/pricehistory`
+  payloads, with no provider connection, persistence, account read, or broker
+  capability.
+- Froze official minute OHLCV, sequence, epoch-time, extended-session,
+  one-connection, historical-period, and bootstrap facts while leaving
+  undocumented finality, latency, corrections, symbol limits, rate limits,
+  adjustments, volume authority, and halt/stale behavior explicitly unknown.
+- Reprioritized R031-R034 ahead of optional SHADOW-024 packet work while
+  preserving the canonical Monday runtime and both isolated worktrees.
+
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

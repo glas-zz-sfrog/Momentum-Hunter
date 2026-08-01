@@ -2,6 +2,22 @@
 
 Date reconciled: 2026-07-31
 
+## ARGUS-R031 Schwab Candle Contract
+
+`codex/ARGUS-R031-schwab-candle-contract` is `ACTIVE` in the distinct worktree
+`C:\Users\steve\AppData\Local\MomentumHunter\worktrees\ARGUS-R031-schwab-candle-contract`
+from synchronized base `ddc09f8`. It contains strict, nonpersisting Streamer
+and price-history candle contract code, focused tests, and branch-local
+governance. It is not merged and is not installed. Its task commit is identified
+by the final branch HEAD after Hard Chew closeout; an ordinary feature-branch
+backup may follow, but canonical integration remains frozen until Monday
+evidence and the separate market-hours candle proof are secured.
+
+`codex/ARGUS-SHADOW-024-offline-terminal-review-packet` remains a preserved
+`ACTIVE_CHECKPOINT` at base `ddc09f8` with one untracked draft packet module
+and a branch-local Roadmap change. It is untested, uncommitted, unpushed, and
+must not be merged or discarded. Resume it after R031-R033 unless reprioritized.
+
 ## Monday Clock Task Reliability
 
 `codex/monday-clock-task-reliability` is `MERGED_TO_LOCAL_MASTER` and backed up
