@@ -28,8 +28,8 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-SERVICE-007 is `IMPLEMENTED_PENDING_INTEGRATION` on
-`codex/ARGUS-SERVICE-007-state-write-retry`. A read-only status inspection at
+ARGUS-SERVICE-007 is `COMPLETE_AND_BACKED_UP` on canonical `master` at
+`252cdc7`. A read-only status inspection at
 2026-08-01 02:10 Central briefly denied the automation supervisor's atomic
 replace of `automation-service-state.json`; the Python supervisor exited and
 the Windows service wrapper recovered it after five seconds. The repair retries
@@ -41,8 +41,15 @@ recovered in 0.265 seconds. Python compileall, 26 focused supervisor tests, 74
 affected automation/capture tests, and all 1,019 Python tests pass. The patch
 does not change job timing, capture behavior, provider calls, scoring,
 readiness, Shadow state, accounts, broker/order behavior, or transmission.
-Integration, service reload, and post-reload stability proof remain required
-before Monday readiness is closed again.
+The branch fast-forwarded into `master` and was pushed normally. A controlled
+service restart at 02:30 Central loaded the repair without changing the
+installed manifest, whose SHA-256 remains
+`636274F988D89BD19AF7BB84201D64DBC175E647AF670041CFD8A2B81D388638`.
+Twelve deliberate no-delete-share locks against the live receipt caused no
+wrapper or supervisor restart and no new Application error. The service remains
+Running/Automatic with a fresh heartbeat, Healthy Engine Host, all 30 opening
+jobs pending through 2026-09-14, Monday 08:35 still `PENDING`, zero Shadow jobs,
+and order transmission `UNAVAILABLE`.
 
 Post-boot clock reliability hardening is `COMPLETE_AND_BACKED_UP` on canonical
 `master` through runtime commit `30c25e5` and governance commit `3821490`. The

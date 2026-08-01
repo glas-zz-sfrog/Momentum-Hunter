@@ -2,7 +2,7 @@
 
 ## Classification
 
-`IMPLEMENTED_PENDING_INTEGRATION`
+`COMPLETE_AND_BACKED_UP`
 
 ## Defect
 
@@ -38,9 +38,15 @@ readiness, replay, alert, database/schema, UI, Shadow state, brokerage account,
 order, credential, or transmission behavior changes. The Monday manifest is
 not changed by this patch.
 
-## Remaining Gate
+## Installed Proof
 
-Commit and fast-forward integration must pass, then the installed service must
-be restarted once so its Python supervisor loads the repaired source. Final
-proof requires a fresh stable heartbeat, Monday still `PENDING`, all 30 opening
-jobs retained, zero Shadow jobs, and transmission `UNAVAILABLE`.
+Commit `252cdc7` fast-forwarded into canonical `master` and was pushed normally.
+A controlled service restart at 02:30 Central loaded the repaired source while
+the installed manifest SHA-256 remained
+`636274F988D89BD19AF7BB84201D64DBC175E647AF670041CFD8A2B81D388638`.
+Twelve deliberate no-delete-share locks against the live state receipt caused
+no wrapper restart, no supervisor restart, and no new Application error. The
+service remained Running/Automatic with a fresh heartbeat and Healthy Engine
+Host. All 30 opening jobs remain pending through 2026-09-14, Monday 08:35 is
+still `PENDING`, zero Shadow jobs are enabled, and transmission is
+`UNAVAILABLE`.
