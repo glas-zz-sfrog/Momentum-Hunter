@@ -28,6 +28,27 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+Monday's ordinary capture-only operational gate is `COMPLETE`. The unattended
+service started `opening-capture-20260803` at
+`2026-08-03T08:35:00.930235-05:00` and completed it on the first attempt at
+`2026-08-03T08:35:26.844111-05:00` with exit code `0`. The same-response HTTPS
+clock proof passed with 353.5 milliseconds skew and 1,152.171 milliseconds
+uncertainty. The immutable opening JSON/Markdown, four candidate score
+breakdowns, and TradePlan JSON/Markdown/CSV were preserved; outcome maintenance
+was truthfully deferred until after the opening. No selector, Risk Governor
+execution decision, Shadow trade, account/position/order request, or broker
+action occurred. Order transmission remains `UNAVAILABLE`.
+
+This releases the temporary canonical integration freeze. It does not arm
+`official-shadow-v3`, which remains `0 / 30`, and it does not promote the
+opening TradePlans beyond `PLANNING_SCAFFOLD`. Before official Shadow selection,
+the active analytical investigation queue is: quote provenance and
+`QUOTE_HTTP_401`; catalyst-to-symbol integrity; missed-breakout versus reclaim
+plan identity; time-normalized opening relative volume; reference simulation
+versus account-aware allocation; and explicit intraday versus swing-plan
+horizons. R031's nonpersisting market-hours candle proof remains the data
+foundation for R032-R034 and sequential breakout research.
+
 ARGUS-MONDAY-002 Sunday-readiness hardening is `IMPLEMENTED_AND_VERIFIED` at
 runtime commit `d86f750`. The opening manifest now freezes every ordinary
 opening job to a full lowercase Git SHA, and the supervisor validates that
@@ -169,10 +190,31 @@ operating-system/hardware failure after the Sunday check. The Sunday 19:00
 read-only preflight and Monday terminal audit remain evidence observers; they
 must not launch, retry, repair, or fabricate an opening capture.
 
-Until Monday's terminal receipt and opening capture/report are preserved, the
-canonical service checkout must remain clean on synchronized `master`.
-Unrelated development may continue in a separate Git worktree so an active
-coding branch cannot change the runtime files used by the installed service.
+Monday's terminal receipt and opening capture/report are preserved. Canonical
+integration may resume through verified fast-forward changes. Because each
+remaining opening job fails closed on an exact Git identity, any canonical
+advance must be followed by a controlled manifest repin and fresh service-state
+proof before the next opening window.
+
+The live-candle roadmap gap is explicit and sequenced. R011/R012 prove only
+stored-candle contracts and rendering; the five-second Schwab bid/ask loop is
+quote evidence and cannot be treated as authoritative OHLCV candles. R031
+contract implementation is complete and feature-branch backed up at `b96f745`.
+It identifies Schwab `CHART_EQUITY` Streamer messages as the near-live source
+and `/pricehistory` as historical/gap-repair evidence, preserves every arrival,
+classifies repeats/revisions/order/gaps, and grants no canonicality. R031 remains
+`IMPLEMENTED_PENDING_MARKET_HOURS_PROOF` until a nonpersisting live comparison
+proves entitlement, latency, provisional/final behavior, corrections, volume,
+reconnects, and agreement with price history. R032-R034 remain sequenced behind
+that observation.
+
+`ARGUS-SHADOW-024` is `IMPLEMENTED_PENDING_MERGE` on its post-Monday
+reconciliation branch. The deterministic offline packet builder and 17-test
+focused suite are complete; 168 adjacent Shadow tests and all 1,034 Python tests
+passed on the original branch. It reads six explicit files, emits write-once hash-addressed JSON/Markdown,
+and has no provider, broker, service, Engine Host, WPF, scheduler, or Codex
+capability. Monday's evidence is now preserved; current-baseline regression,
+protected-path, and secret checks must pass before fast-forward integration.
 
 ARGUS-R030 is `COMPLETE_AND_BACKED_UP` on canonical `master` through
 implementation commit `94e1708`. The WPF workstation now has a
@@ -495,16 +537,16 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Synchronized `master`/`origin/master` at `c344ed9`. It contains ARGUS-MONDAY-001 opening-timing hardening, Monday opening runtime hardening `4b6668c`, clock reliability runtime `30c25e5`, the passed reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001/002/003/004/005/006/007, strict opening-result enforcement, the installed three-trigger SYSTEM clock task, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R030, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active implementation | ARGUS-MONDAY-001 is merged and backed up with all 1,027 Python tests passing. Its code is on disk, but the already-running Python supervisor predates `c344ed9`; a controlled service restart or full reboot plus read-only identity verification remains before the new code is active. The installed manifest and Monday receipt remain unchanged. |
+| Canonical baseline | Synchronized `master`/`origin/master` at pre-integration head `2006f25`. It contains ARGUS-MONDAY-001/002 timing and Sunday-readiness hardening, clock reliability, the passed reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001 through 007, strict opening-result enforcement, the installed three-trigger SYSTEM clock task, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R030, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
+| Active implementation | Monday's capture-only gate passed. SHADOW-024 is being reconciled on the current baseline for fast-forward integration. R031 is implemented and backed up through contract `b96f745` plus nonpersisting observer/launch hardening `3272476` and `d6d7217`; its market-hours proof remains pending. R032 production persistence remains blocked until that behavior is frozen. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
-| Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | Monday readiness is blocked only on reloading the automation service and proving the new service instance retained the unchanged manifest and `PENDING` Monday receipt. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss and cannot be provided by the Windows service alone. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. |
-| Scheduled operational proof | `PENDING`: Sunday 2026-08-02 at 19:00 Central has a read-only preflight observer. Monday 2026-08-03 has one ordinary capture-only service job at 08:35 with a hard 08:40 latest-start boundary, followed by a read-only terminal evidence audit at 08:50. The observers do not launch, retry, repair, resync, capture, query accounts, arm Shadow, or touch orders. |
-| Immediate operational work | Reload the automation service without launching a capture, then prove a new instance/heartbeat, unchanged manifest hash, all 30 jobs intact, and Monday still `PENDING`. Keep the computer powered on and plugged in; allow the service to run the ordinary Monday capture; then audit its terminal receipt, capture JSON/Markdown, score breakdown, TradePlan reports, and deferred outcome-maintenance status. This capture-only path does not arm Shadow or enable transmission. Unrelated bounded development may continue only in a separate worktree until the receipt is preserved. |
-| Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. Token freshness is evaluated and refreshed only through the guarded read-only path when needed; no current account, position, preview, or order request is part of Monday's capture. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
-| Steven action | Approve the single Windows elevation prompt needed to restart `MomentumHunterAutomation`, or approve a full reboot, so the merged hardening is loaded. No visual application review is required. After activation proof, leave the computer powered on and plugged in through Monday's capture window. Any brokerage anomaly or real-order proposal remains a separate interruption gate. |
-| Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. The candidate-bound Schwab opening proof passed, but it is point-in-time evidence and expires after five minutes rather than becoming reusable market data. Only `CRWV` has stored minute candles; actual-data cutover remains a destructive-operation interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
+| Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
+| Blocked by | The capture-only and integration gates are no longer blocked. Official Shadow selection is blocked by the six analytical-integrity investigations above. R032 is blocked by R031 market-hours evidence. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
+| Scheduled operational proof | `COMPLETE`: the 2026-08-03 08:35 ordinary capture finished successfully on its first attempt with required artifacts and no Shadow or brokerage action. Twenty-nine later opening jobs remain independently scheduled. |
+| Immediate operational work | Verify and integrate SHADOW-024, repin the remaining 29 opening jobs to the final synchronized canonical head, and prove the running service loaded that manifest. Then investigate catalyst-symbol integrity and quote provenance before changing ranking or arming Shadow. Run R031's nonpersisting Streamer/price-history observation during a suitable market window; R032 production persistence remains blocked until it passes. |
+| Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's capture. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
+| Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
+| Data caveat | The Monday report used mixed research enrichment and carried `QUOTE_HTTP_401` on all four candidates; its bid/ask values are not execution-trusted. GOOGL and CMCSA catalyst text appears potentially cross-wired. Opening RVOL used full-day average volume, and the $500-per-row reference sizing is not account-aware. Only `CRWV` has stored minute candles. R031-R033 own the missing actual-candle capability, while R034 retains the destructive-operation interruption gate. |
 
 ### Status Legend
 
@@ -694,6 +736,16 @@ activated-empty and unarmed at `0 / 30`, A017 is
 - FakeBroker evidence must model and record bid/ask spread, slippage, unfilled and delayed limit fills, supported partial fills, gaps through stops, halted/unavailable states, stale/missing quote rejection, session eligibility, buying power, position concurrency, daily-loss limits, restart recovery, and ambiguous states. Track both ideal setup and estimated executable results; estimated executable result is the primary evidence metric.
 - Report evidence checkpoints at 5, 10, 20, and 30 completed eligible trades. Interim reports evaluate mechanics and evidence quality and must not tune the strategy to the developing sample.
 - Thirty completed eligible trades is an initial engineering gate, not proof of a durable edge, a profitability claim, or permission to transmit any broker order.
+- ARGUS-SHADOW-024 is implemented and Hard-Chew verified; current-baseline
+  reconciliation is pending fast-forward integration.
+  It builds deterministic, sanitized, write-once JSON/Markdown packets from one
+  terminal trade or no-trade evidence chain. It validates current sample/policy,
+  report, handoff, cycle, selection, lifecycle, and input hashes; separates
+  facts, derivations, missing values, and questions; and never invokes Codex,
+  Schwab, a broker, the service, Engine Host, WPF, or a scheduler. Focused tests
+  pass 17/17, adjacent Shadow tests pass 168/168, and full discovery passes
+  1,034/1,034 on the original branch. Status is
+  `IMPLEMENTED_PENDING_MERGE`; Monday's evidence prerequisite has passed.
 
 #### 11B - Schwab Read-Only And Canary Preparation
 
@@ -742,6 +794,98 @@ Status: `ACTIVE`; R011-R029 plus Shadow-001/002/003 are `COMPLETE` on local `mas
 - Real candle-data cutover has a mandatory destructive-operation interruption gate. The active legacy artifact is `MomentumHunterData/data/opportunity-minute-bars.json`, SHA-256 `DAAC049E4DA87729DE23B312D86B9034FF724F9BF4B2B8ED7FC1AFD293A6AD69`; its current SQLite mirror contains 710 `CRWV` rows tied to that exact path and hash. Immediately before activating an actual candle source, stop and tell Steven the exact deletion targets and effect before removing the legacy JSON or rebuilding mirrored rows. Cutover cannot pass until the old hash is absent from every active candle store, none of the old 710 rows can be queried or rendered, source lineage names the actual provider and fresh timestamp, and regression/UI proof shows no mixed legacy/live candles. Do not delete the legacy data early or treat an archive/backup as an active chart source.
 - R028 integrated-workstation chrome is `COMPLETE` on local `master`. The implementation removes the separate light Windows strip and makes app identity, workspace navigation, the single global mode state, and system controls one continuous dark surface through WPF `WindowChrome`. It uses the native caption and resize contract rather than a borderless imitation, routes caption buttons through `SystemCommands`, provides an explicit `Alt+Space` menu path, declares `PerMonitorV2` through the supported project property, and keeps a single dormant red badge treatment for any future separately approved real-money label. Focused tests pass 4/4, all current .NET tests pass 215/215, and the zero-warning Release build passes. Steven manually passed the dark title surface, drag, double-click maximize/restore, left/right Snap, four-edge/two-corner resize, minimize/maximize controls, `Alt+Space`, cross-monitor movement, and restored/maximized no-clipping checks. This visual shell task grants no broker, live-mode, credential, or execution authority.
 - R029 canonical WPF launcher and icon are `COMPLETE` and backed up through `origin/master`. `run.py`, the tracked batch/VBS path, the startup script generated by `momentum_hunter.startup`, and the PowerShell helper converge on a resolver that launches only the checkout Release WPF executable or a deliberately installed local workstation. Unmerged review builds are not auto-selected; missing WPF fails visibly; direct legacy Qt startup requires `python -m momentum_hunter.app`. Focused launcher tests pass 9/9, full Python discovery passes 679/679, all .NET tests pass 215/215, and Release compilation passes with zero warnings/errors. Physical verification opened the checkout Release WPF executable, retained one responsive process on a second launch, redirected the stale R027 Start Menu entry, removed all 20 obsolete local review packages, and passed the current icon/tooltip/single-window checks. Git Steward fast-forwarded the verified stack into local `master` through `1d3d8e5`; Steven separately approved the later remote backup.
+
+#### ARGUS-R031 - Schwab Intraday Candle Capability And Contract
+
+Status: `IMPLEMENTED_PENDING_MARKET_HOURS_PROOF`; branch commit `b96f745`
+
+- Contract implementation identifies Schwab `CHART_EQUITY` WebSocket messages
+  as the expected near-live one-minute source and `/pricehistory` as historical
+  retrieval and gap-repair evidence. It does not treat `/quotes` as candles.
+- The isolated implementation preserves every Streamer arrival in arrival order,
+  classifies first observations, identical replays, revisions, out-of-order
+  updates, and gaps, binds session/source identity, and compares the final
+  observed stream version with price history without granting canonicality.
+- Do not infer candle capability from the existing `/marketdata/v1/quotes`
+  path. Bid/ask snapshots are not authoritative trade-volume bars.
+- The provider-neutral candidate contract includes symbol,
+  interval, open/high/low/close/volume, bar-start/end identity, session,
+  completion state, provider/source lineage, provider timestamp, receipt time,
+  correction/version identity, and explicit quality state.
+- Fail-closed validators cover unsupported capability, stale or partial
+  responses, ambiguous timestamps, duplicate/out-of-order/corrected bars,
+  missing intervals, session boundaries, and rate exhaustion.
+- Focused tests pass 23/23, adjacent contract tests pass 77/77, and full Python
+  discovery passes 1,040/1,040 on the R031 branch. No generated output or secret
+  is tracked.
+- The remaining live proof is nonpersisting and must record connection and
+  subscription timing, every same-minute update, provider/receipt timestamps,
+  OHLCV completeness, minute stability, reconnect/gap events, entitlement, and
+  post-close `/pricehistory` comparison for SPY, IWM, and one active candidate.
+- Read-only verification and contract work only. Do not write production data,
+  change the service manifest, query accounts/orders, add WPF provider calls,
+  or modify the installed runtime. If official documentation does not prove a
+  safe candle source, stop at `BLOCKED_VENDOR_CAPABILITY` rather than deriving
+  candles from sparse quote snapshots.
+
+#### ARGUS-R032 - Schwab Incremental Candle Collector
+
+Status: `NOT_STARTED`; blocked on an accepted R031 capability contract
+
+- Implement a bounded, read-only collector for canonical one-minute OHLCV bars
+  only after R031 proves the provider contract. Initial symbols are the current
+  Hunter candidates, selected symbol, active FakeBroker position symbols, SPY,
+  and IWM. Do not start with a broad market universe.
+- Python owns provider access, normalization, quality classification, and
+  persistence. WPF never calls Schwab. The collector must not query accounts,
+  positions, previews, or orders and must not alter candidate ranking, Risk
+  Governor, selection, fill, or execution semantics.
+- Persist bars idempotently with source lineage. Detect and report gaps,
+  duplicates, out-of-order delivery, provider corrections, stale responses,
+  incomplete current bars, session transitions, and bounded retry/rate state.
+  Never overwrite conflicting evidence silently.
+- Never mix Schwab bars and legacy candles beneath the same source identity.
+  Keep the existing CRWV artifact and its SQLite mirror untouched until R034.
+- Prove synthetic normalization and persistence with temporary directories;
+  any production provider proof remains a separate read-only bounded exercise.
+
+#### ARGUS-R033 - Live Chart And Engine Host Integration
+
+Status: `NOT_STARTED`; blocked on verified R032 persisted-candle evidence
+
+- Python remains authoritative and exposes versioned candle snapshots through
+  the Engine Host. WPF consumes only that cached contract and performs no
+  provider or account calls.
+- Preserve one-minute source bars; derive 5m and 15m deterministically from 1m.
+  Daily remains a separately identified source/aggregation contract rather
+  than an implicit fallback.
+- Surface provider/source, last completed bar, separately identified in-
+  progress bar, provider and receipt times, quote/bar age, gaps, corrections,
+  stale state, and insufficient-data state. Missing bars must never be replaced
+  with mock, daily, legacy, or quote-derived candles.
+- Cover candidate changes, linked and pinned panes, selected/active symbols,
+  reconnects, stale transitions, corrections, and no-data states with Python,
+  contract, .NET, and visual proof. Steven remains the visual acceptance gate.
+
+#### ARGUS-R034 - Legacy Candle Cutover
+
+Status: `NOT_STARTED`; destructive-operation gate after R031-R033 pass
+
+- Stop and tell Steven the exact active deletion/rebuild targets and practical
+  effect immediately before cutover. Approval for R031-R033 does not authorize
+  R034 deletion.
+- Archive the legacy CRWV evidence outside active chart stores, then remove the
+  active legacy JSON and rebuild its 710 mirrored SQLite rows only after the
+  actual source and rollback evidence are proven.
+- Cutover fails unless the old SHA-256
+  `DAAC049E4DA87729DE23B312D86B9034FF724F9BF4B2B8ED7FC1AFD293A6AD69`
+  is absent from every active candle store, none of the old rows can be queried
+  or rendered, and every active chart names the verified actual source and
+  current timestamp.
+- Regression and UI proof must demonstrate that legacy and Schwab candles can
+  never appear in one active series. Do not delete legacy evidence early, and
+  do not treat the archive as an active fallback.
+
 - Migrate individual proven workflows to the WPF shell only after their Python contracts and operator proof are complete.
 - Retire corresponding Qt screens incrementally, with acceptance evidence and rollback paths. Do not perform a broad rewrite.
 
