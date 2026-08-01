@@ -1,6 +1,10 @@
 # Argus Changelog
 
 ## Unreleased
+- Added ARGUS-R032A as an explicitly provisional candle-persistence successor to R031. It preserves hash-addressed Streamer arrivals, revisions, replays, and out-of-order evidence in a single-writer store that refuses paths outside an explicitly supplied operating-system temp directory.
+- Added deterministic duplicate idempotency, deeply immutable snapshots, provisional gap/stale assessment, strict schema/identity/OHLCV validation, bounded store size, and atomic-replace crash preservation. Provider finality and volume authority remain `UNVERIFIED`, production readiness remains false, and no live collector or chart connection was added.
+- Kept R032A isolated from Schwab, accounts, OAuth, services, Engine Host, WPF, brokers, production data, and legacy CRWV candles. It does not populate workstation charts and cannot unblock or integrate ahead of R031's market-hours proof.
+- Passed compileall, 18 focused R032A tests, 41 combined R031/R032A contract tests, 169 existing Schwab boundary tests, and all 1,058 Python tests for the provisional persistence foundation.
 - Hardened Monday's ordinary opening capture so a service job cannot report success after a late or otherwise nonproductive `SKIPPED` result. Opening success now requires `CAPTURED`, `REPORT_RECOVERED`, or `DUPLICATE`, while wrong-session use fails before capture execution.
 - Hardened the elevated clock-task repair path to recreate only the exact expected SYSTEM-owned startup plus 08:15 wake/resync task when genuinely absent and to refuse unexpected existing principals or actions.
 - Passed PowerShell parsing, Python compileall, 91 affected automation tests, all 1,016 Python tests, `git diff --check`, and protected-path review. Monday's 08:35 job, 08:40 latest start, service, provider access, recent capture, power policy, disk space, and duplicate check pass; one elevated Windows Time revalidation remains because the latest reboot left the OS on unsynchronized Local CMOS Clock.

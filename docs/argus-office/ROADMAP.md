@@ -120,11 +120,23 @@ response also contains account metadata, any future live bootstrap must pass
 the existing sole-account invariant before using the Streamer identifiers.
 No such account call was made in this task.
 
-ARGUS-SHADOW-024 remains checkpointed, untested, and uncommitted in its own
-worktree. Its draft offline terminal-review packet does not affect the Monday
-runtime and stays below R031-R033 in priority. Freeze integration, not bounded
-development: canonical `master`, the installed service, provider state, and
-Monday jobs remain untouched.
+ARGUS-R032A is `IMPLEMENTED_PENDING_R031_PROOF_AND_INTEGRATION` on the stacked
+`codex/ARGUS-R032A-synthetic-candle-persistence-contract` branch. It adds a
+single-writer, operating-system-temp-root-only prototype store over R031
+observations, preserves revisions/replays/out-of-order arrivals, derives
+provisional gaps and caller-bounded staleness, writes atomically, and rejects
+tampering and contradictory identities. It explicitly marks provider finality
+and volume authority `UNVERIFIED` and production readiness false. It has no
+network, account, provider, service, Engine Host, WPF, broker, production-data,
+or legacy-candle path and therefore does not populate workstation charts.
+R032 production collection remains `NOT_STARTED`.
+
+ARGUS-SHADOW-024 is implemented, Hard-Chew verified, and backed up at
+`48dbcb2` in its own worktree, pending integration only after Monday evidence.
+Its offline terminal-review packet does not affect the Monday runtime and stays
+below R031-R033 in priority. Freeze integration, not bounded development:
+canonical `master`, the installed service, provider state, and Monday jobs
+remain untouched.
 
 ARGUS-R030 is `COMPLETE_AND_BACKED_UP` on canonical `master` through
 implementation commit `94e1708`. The WPF workstation now has a
@@ -448,15 +460,15 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Item | Current truth |
 | --- | --- |
 | Canonical baseline | Clean, synchronized local/remote `master` at `ddc09f8`. It contains Monday opening runtime hardening, clock reliability, reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001/002/003/004/005/006, strict opening-result enforcement, the installed three-trigger SYSTEM clock task, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation, the WPF workstation through R030, and SCHWAB-001/002/002A/003 read-only safeguards. This R031 worktree is isolated from that installed baseline. |
-| Active implementation | ARGUS-R031 is implemented in an isolated worktree with synthetic contract proof passing and a real market-hours Streamer observation pending. SHADOW-024 is checkpointed in a separate worktree and intentionally paused. The canonical runtime checkout remains clean and frozen for Monday. |
+| Active implementation | ARGUS-R031 is implemented and backed up at `b96f745` with live market-hours proof pending. Initial implementation `a39086c` is an ancestor of and included by `b96f745`. R032A is implemented on one stacked successor branch as an explicitly provisional temp-root-only persistence contract; it cannot collect or display candles and cannot integrate before R031. SHADOW-024 is implemented and backed up at `48dbcb2`, pending post-Monday integration. The canonical runtime checkout remains clean and frozen for Monday. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Treat five-second active-position monitoring as a material fill-model change. Preserve v1/v2 evidence, collect only prospectively under v3 after acceptance, and mark long positions from bid and short positions from ask. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | No current software, service-start, reboot-without-login, or clock gate blocks Monday's ordinary capture. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss and cannot be provided by the Windows service alone. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. |
 | Scheduled operational proof | `PENDING`: Sunday 2026-08-02 at 19:00 Central has a read-only preflight observer. Monday 2026-08-03 has one ordinary capture-only service job at 08:35 with a hard 08:40 latest-start boundary, followed by a read-only terminal evidence audit at 08:50. The observers do not launch, retry, repair, resync, capture, query accounts, arm Shadow, or touch orders. |
-| Immediate operational work | Keep the computer powered on and plugged in. Preserve a clean canonical checkout; allow the service to run the ordinary Monday capture; then audit its terminal receipt, capture JSON/Markdown, score breakdown, TradePlan reports, and outcome status. In isolated development, run R031's nonpersisting market-hours candle observation after the operational evidence is secure; do not install or integrate the branch before then. |
+| Immediate operational work | Keep the computer powered on and plugged in. Preserve a clean canonical checkout; allow the service to run the ordinary Monday capture; then audit its terminal receipt, capture JSON/Markdown, score breakdown, TradePlan reports, and outcome status. After that evidence is secure, run R031's nonpersisting market-hours candle observation. Do not install or integrate R031, R032A, or SHADOW-024 before then; do not begin the real R032 collector until R031 passes. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. Token freshness is evaluated and refreshed only through the guarded read-only path when needed; no current account, position, preview, or order request is part of Monday's capture. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
 | Steven action | No software or visual approval is pending. Leave the computer powered on and plugged in through Monday's capture window. Any brokerage anomaly or real-order proposal remains a separate interruption gate. |
-| Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. Only `CRWV` has stored minute candles. Official Schwab documentation proves a WebSocket candle capability, but no live Streamer sample has yet proven finality, latency, entitlement, correction, or volume-coverage behavior. R031-R033 own that gap; R034 retains the separate destructive legacy-cutover interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
+| Data caveat | Legacy/current persisted bid/ask rows with only monitor-cycle timestamps remain unavailable rather than presumed fresh. Only `CRWV` has stored minute candles. Official Schwab documentation proves a WebSocket candle capability, but no live Streamer sample has yet proven finality, latency, entitlement, correction, or volume-coverage behavior. R032A stores only synthetic evidence beneath an explicit operating-system temp root and is not a chart source. R031-R033 own the live-data gap; R034 retains the separate destructive legacy-cutover interruption gate. The frozen early-close table covers 2026-2028 and fails closed beyond it. |
 
 ### Status Legend
 
@@ -729,6 +741,33 @@ Status: `IMPLEMENTED_PENDING_MARKET_HOURS_PROOF` on the isolated R031 branch
   the existing exact single-account invariant before consuming its socket and
   session fields. No account, provider, token-refresh, service, Engine Host, or
   production-data call is part of R031's current branch proof.
+
+#### ARGUS-R032A - Synthetic Candle Persistence Contract
+
+Status: `IMPLEMENTED_PENDING_R031_PROOF_AND_INTEGRATION` on one stacked R031
+successor branch
+
+- Define a provisional append/load interface and deeply immutable stored
+  observation, revision-chain, observed-gap, and symbol-health models without
+  defining live-provider finality, volume authority, or acceptance latency.
+- The prototype implementation accepts only validated R031 `CHART_EQUITY`
+  observations and only writes below an explicitly supplied operating-system
+  temporary directory. There is no default output path and no production-data,
+  network, account, service, Engine Host, WPF, broker, or legacy-candle import.
+- Exact duplicate input is byte-idempotent. Distinct replays, revisions, and
+  out-of-order arrivals are hash-addressed and preserved. Hash tampering,
+  contradictory session/minute identity, unknown schema fields, invalid OHLCV,
+  a future receipt clock, and output outside the temp boundary fail closed.
+- Atomic same-directory replacement and simulated pre-replace crash tests prove
+  an existing snapshot remains unchanged and temporary files are removed.
+  Gap and stale states remain explicitly provisional and never fabricate bars.
+- Compileall, 18 focused R032A tests, the combined 41-test R031/R032A contract
+  run, all 169 existing Schwab boundary tests, and all 1,058 Python tests pass.
+  Diff, protected-path, secret, capability, and canonical-nonmutation review
+  must pass before branch backup.
+- This preparation does not populate the chart and does not unblock R032.
+  Reuse requires an accepted R031 market-hours proof plus later production
+  path, concurrency, retention, reconciliation, and recovery decisions.
 
 #### ARGUS-R032 - Schwab Incremental Candle Collector
 

@@ -1,6 +1,16 @@
 # Branch Ledger
 
-Date reconciled: 2026-07-31
+Date reconciled: 2026-08-01
+
+## ARGUS-R032A Synthetic Candle Persistence Contract
+
+`codex/ARGUS-R032A-synthetic-candle-persistence-contract` is an
+`ACTIVE_STACKED_SUCCESSOR` from R031 head `b96f745` in the existing isolated
+R031 worktree. It adds only a temp-root-only provisional persistence contract
+and synthetic tests. It has no live provider, production persistence, service,
+Engine Host, WPF, broker, or legacy-data path and cannot merge independently of
+R031. Back up the feature branch after Hard Chew proof; preserve it without
+integration until Monday evidence and R031 market-hours proof are secured.
 
 ## ARGUS-R031 Schwab Candle Contract
 
@@ -14,10 +24,11 @@ by the final branch HEAD after Hard Chew closeout; an ordinary feature-branch
 backup may follow, but canonical integration remains frozen until Monday
 evidence and the separate market-hours candle proof are secured.
 
-`codex/ARGUS-SHADOW-024-offline-terminal-review-packet` remains a preserved
-`ACTIVE_CHECKPOINT` at base `ddc09f8` with one untracked draft packet module
-and a branch-local Roadmap change. It is untested, uncommitted, unpushed, and
-must not be merged or discarded. Resume it after R031-R033 unless reprioritized.
+`codex/ARGUS-SHADOW-024-offline-terminal-review-packet` is
+`IMPLEMENTED_PENDING_INTEGRATION_AFTER_MONDAY_EVIDENCE` at pushed commit
+`48dbcb2`. Its deterministic offline terminal-review packet passed focused,
+adjacent, and full Python verification without changing the installed runtime.
+Preserve it without integration until Monday evidence is secured.
 
 ## Monday Clock Task Reliability
 
