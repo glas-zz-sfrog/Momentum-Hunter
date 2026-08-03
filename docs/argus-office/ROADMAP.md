@@ -28,39 +28,50 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-MONDAY-001 opening-timing hardening is
-`MERGED_AND_BACKED_UP_PENDING_SERVICE_RELOAD` on synchronized canonical
-`master`/`origin/master` at `c344ed9`. A Monday-specific code audit found and
-repaired six bounded failure modes: a service restart could relaunch an
-existing `RUNNING` receipt; a successful terminal receipt was not persisted
-until after later supervisor work; the outer opening retry budget could exceed
-the 15-minute process timeout; supplemental candidate requests had an
-unbounded aggregate deadline; synchronous outcome maintenance could consume
-the opening deadline after capture succeeded; and partial TradePlan report
-writes could leave an unrecoverable output set. The runner now also gives each
-attempt log a millisecond-and-process-ID identity.
+ARGUS-MONDAY-002 Sunday-readiness hardening is `IMPLEMENTED_AND_VERIFIED` at
+runtime commit `d86f750`. The opening manifest now freezes every ordinary
+opening job to a full lowercase Git SHA, and the supervisor validates that
+identity immediately before launching a capture. This prevents later edits or
+an unexpected checkout change from silently altering Monday's runtime. The
+manifest migration accepts the currently installed legacy unpinned opening
+jobs as input, validates the fully pinned replacement before installation, and
+does not mutate its source manifest while planning.
 
-The repaired path fails closed on a preexisting `RUNNING` receipt, persists the
-terminal job result immediately, retries only explicit transient opening exit
-`75` with one outer retry, limits opening enrichment to five seconds for the
-top five candidates while preserving all captured/scored rows, defers outcome
-maintenance until after the opening job, and uses atomic TradePlan writes with
-JSON as the completion marker. Python compileall, the focused and adjacent
-automation/capture/trade-planning suites, and all 1,027 Python tests pass.
-`git diff --check`, protected-path review, and secret scanning also pass. No
-scoring, ranking, readiness, replay, alert, database/schema, account,
-broker/order, Shadow, UI, credential, or transmission semantics changed.
+A successful opening capture can no longer be invalidated solely because the
+secondary `DEFERRED_AFTER_OPENING` outcome-status file cannot be written. That
+failure is logged as a warning while the immutable successful opening result
+and exit code zero are preserved. An explicit regression also proves that a
+failed Monday opening receipt does not block Tuesday's independent job. The
+changed path passes Python compileall, PowerShell parsing, 104 focused and
+adjacent automation/capture/trade-planning tests, and all 1,034 Python tests.
+`git diff --check`, protected-path review, capability review, and secret
+scanning pass. No scoring, ranking, readiness, replay, alert, database/schema,
+account, broker/order, Shadow, UI, credential, or transmission semantics
+changed.
 
-The installed manifest and Monday schedule remain unchanged: manifest SHA-256
-`636274F988D89BD19AF7BB84201D64DBC175E647AF670041CFD8A2B81D388638`, one
-ordinary capture-only job at 08:35 Central, hard latest start 08:40, receipt
-`PENDING`, zero Shadow jobs, and order transmission `UNAVAILABLE`. The Windows
-service is Running/Automatic, but its current Python supervisor started before
-`c344ed9` was merged and therefore has not imported this hardening. A controlled
-service restart or full Windows reboot is the sole remaining software
-activation gate. After that reload, read-only verification must prove a new
-service instance/heartbeat, the same manifest hash, and Monday still `PENDING`;
-it must not launch a capture.
+This Roadmap closeout must be committed before final runtime activation so the
+installed manifest can pin the exact synchronized canonical SHA that contains
+both the runtime patch and this record. Git Steward must then fast-forward and
+push normally, stop the service, migrate all 30 opening jobs to that final
+head, and start a fresh service process. Post-commit acceptance is live
+evidence: Running/Automatic service, fresh process and heartbeat, 30 pinned
+pending jobs through 2026-09-14, Monday at 08:35 Central with hard latest start
+08:40, zero Shadow jobs, transmission `UNAVAILABLE`, and no August 3 capture or
+report before the scheduled run. No further canonical Git change is permitted
+after that final pin before Monday's capture.
+
+ARGUS-MONDAY-001 opening-timing hardening is `COMPLETE_AND_BACKED_UP` on
+synchronized canonical `master`/`origin/master` through `50f2bae`. Its stale
+pre-hardening service process was found during the Sunday audit and replaced
+at 01:17 Central on 2026-08-02. The new service instance remained
+Running/Automatic with a fresh heartbeat, Healthy Engine Host, the unchanged
+30-job manifest, Monday `PENDING`, zero Shadow jobs, and transmission
+`UNAVAILABLE`. The path fails closed on a preexisting `RUNNING` receipt,
+persists terminal job results immediately, retries only explicit transient
+opening exit `75` with one outer retry, limits opening enrichment to five
+seconds for the top five candidates while preserving all captured/scored rows,
+defers outcome maintenance until after the opening job, and uses atomic
+TradePlan writes with JSON as the completion marker.
 
 ARGUS-SERVICE-007 is `COMPLETE_AND_BACKED_UP` on canonical `master` at
 `252cdc7`. A read-only status inspection at
@@ -146,11 +157,12 @@ Manager retains three restart actions after 5, 15, and 60 seconds. A recent
 ordinary morning capture also completed end to end with raw JSON/Markdown,
 score breakdown, TradePlan reports, and outcome-update exit `0`.
 
-No known code defect remains before Monday, but the running automation service
-must reload `c344ed9` before readiness can be closed. After that controlled
-reload and read-only identity check, leave the computer powered on and plugged
-in through at least 08:40 Central. Windows can wake a sleeping machine, but it
-cannot start a fully powered-off machine without separate BIOS support.
+No known code defect remains before Monday after ARGUS-MONDAY-002, but its
+final canonical head must be installed and loaded after this Roadmap commit as
+described above. After that controlled reload and read-only identity check,
+leave the computer powered on and plugged in through at least 08:40 Central.
+Windows can wake a sleeping machine, but it cannot start a fully powered-off
+machine without separate BIOS support.
 Residual failure modes are external power loss, full shutdown,
 internet/provider outage, provider-shape change, or a new
 operating-system/hardware failure after the Sunday check. The Sunday 19:00
