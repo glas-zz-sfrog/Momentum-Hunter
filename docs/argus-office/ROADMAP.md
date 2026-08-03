@@ -208,13 +208,14 @@ proves entitlement, latency, provisional/final behavior, corrections, volume,
 reconnects, and agreement with price history. R032-R034 remain sequenced behind
 that observation.
 
-`ARGUS-SHADOW-024` is `VERIFIED_PENDING_FAST_FORWARD` on its post-Monday
-reconciliation branch. The deterministic offline packet builder passes 17
+`ARGUS-SHADOW-024` is `COMPLETE_AND_BACKED_UP` through implementation
+reconciliation `4dea501` and verification/integration `cd43852`. The
+deterministic offline packet builder passes 17
 focused tests, 225 adjacent Shadow/Engine Host tests, and all 1,051 Python tests
 on the current baseline. It reads six explicit files, emits write-once hash-addressed JSON/Markdown,
 and has no provider, broker, service, Engine Host, WPF, scheduler, or Codex
-capability. Monday's evidence is now preserved; current-baseline regression,
-protected-path, and secret checks must pass before fast-forward integration.
+capability. Monday's evidence is preserved, current-baseline regression,
+protected-path, and secret checks pass, and canonical integration is complete.
 
 ARGUS-R030 is `COMPLETE_AND_BACKED_UP` on canonical `master` through
 implementation commit `94e1708`. The WPF workstation now has a
@@ -537,13 +538,13 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Synchronized `master`/`origin/master` at pre-integration head `2006f25`. It contains ARGUS-MONDAY-001/002 timing and Sunday-readiness hardening, clock reliability, the passed reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001 through 007, strict opening-result enforcement, the installed three-trigger SYSTEM clock task, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R030, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active implementation | Monday's capture-only gate passed. SHADOW-024 is being reconciled on the current baseline for fast-forward integration. R031 is implemented and backed up through contract `b96f745` plus nonpersisting observer/launch hardening `3272476` and `d6d7217`; its market-hours proof remains pending. R032 production persistence remains blocked until that behavior is frozen. |
+| Canonical baseline | Synchronized `master`/`origin/master` through SHADOW-024 integration `cd43852` plus this governance closeout. It contains ARGUS-MONDAY-001/002 timing and Sunday-readiness hardening, clock reliability, the passed reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001 through 007, SHADOW-024's offline terminal packet, strict opening-result enforcement, the installed three-trigger SYSTEM clock task, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R030, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
+| Active implementation | Monday's capture-only gate passed and SHADOW-024 is integrated. R031 is implemented and backed up through contract `b96f745` plus nonpersisting observer/launch hardening `3272476` and `d6d7217`; its market-hours proof remains pending. R032 production persistence remains blocked until that behavior is frozen. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | The capture-only and integration gates are no longer blocked. Official Shadow selection is blocked by the six analytical-integrity investigations above. R032 is blocked by R031 market-hours evidence. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03 08:35 ordinary capture finished successfully on its first attempt with required artifacts and no Shadow or brokerage action. Twenty-nine later opening jobs remain independently scheduled. |
-| Immediate operational work | Verify and integrate SHADOW-024, repin the remaining 29 opening jobs to the final synchronized canonical head, and prove the running service loaded that manifest. Then investigate catalyst-symbol integrity and quote provenance before changing ranking or arming Shadow. Run R031's nonpersisting Streamer/price-history observation during a suitable market window; R032 production persistence remains blocked until it passes. |
+| Immediate operational work | Repin the remaining 29 opening jobs to the final synchronized canonical head and prove the running service loaded that manifest. Then investigate catalyst-symbol integrity and quote provenance before changing ranking or arming Shadow. Run R031's nonpersisting Streamer/price-history observation during a suitable market window; R032 production persistence remains blocked until it passes. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's capture. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
 | Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
 | Data caveat | The Monday report used mixed research enrichment and carried `QUOTE_HTTP_401` on all four candidates; its bid/ask values are not execution-trusted. GOOGL and CMCSA catalyst text appears potentially cross-wired. Opening RVOL used full-day average volume, and the $500-per-row reference sizing is not account-aware. Only `CRWV` has stored minute candles. R031-R033 own the missing actual-candle capability, while R034 retains the destructive-operation interruption gate. |
@@ -736,16 +737,16 @@ activated-empty and unarmed at `0 / 30`, A017 is
 - FakeBroker evidence must model and record bid/ask spread, slippage, unfilled and delayed limit fills, supported partial fills, gaps through stops, halted/unavailable states, stale/missing quote rejection, session eligibility, buying power, position concurrency, daily-loss limits, restart recovery, and ambiguous states. Track both ideal setup and estimated executable results; estimated executable result is the primary evidence metric.
 - Report evidence checkpoints at 5, 10, 20, and 30 completed eligible trades. Interim reports evaluate mechanics and evidence quality and must not tune the strategy to the developing sample.
 - Thirty completed eligible trades is an initial engineering gate, not proof of a durable edge, a profitability claim, or permission to transmit any broker order.
-- ARGUS-SHADOW-024 is implemented and Hard-Chew verified; current-baseline
-  reconciliation is `VERIFIED_PENDING_FAST_FORWARD`.
+- ARGUS-SHADOW-024 is implemented, Hard-Chew verified, integrated, and backed up
+  through `cd43852`.
   It builds deterministic, sanitized, write-once JSON/Markdown packets from one
   terminal trade or no-trade evidence chain. It validates current sample/policy,
   report, handoff, cycle, selection, lifecycle, and input hashes; separates
   facts, derivations, missing values, and questions; and never invokes Codex,
   Schwab, a broker, the service, Engine Host, WPF, or a scheduler. Focused tests
   pass 17/17, adjacent Shadow/Engine Host tests pass 225/225, and full discovery
-  passes 1,051/1,051. Status is `VERIFIED_PENDING_FAST_FORWARD`; Monday's
-  evidence prerequisite has passed.
+  passes 1,051/1,051. Status is `COMPLETE_AND_BACKED_UP`; Monday's evidence
+  prerequisite passed.
 
 #### 11B - Schwab Read-Only And Canary Preparation
 

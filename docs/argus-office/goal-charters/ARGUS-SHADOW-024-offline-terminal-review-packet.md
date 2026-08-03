@@ -70,9 +70,9 @@ derivations, and review questions.
 
 ## Status
 
-`VERIFIED_PENDING_FAST_FORWARD` after Monday's terminal evidence passed and the
+`COMPLETE_AND_BACKED_UP` after Monday's terminal evidence passed, the
 current-baseline reconciliation passed 17 focused, 225 adjacent, and 1,051 full
-Python tests.
+Python tests, and `master` fast-forwarded through `cd43852`.
 
 ## Goal Steward Review
 
