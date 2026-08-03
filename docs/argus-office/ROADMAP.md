@@ -217,6 +217,15 @@ and has no provider, broker, service, Engine Host, WPF, scheduler, or Codex
 capability. Monday's evidence is preserved, current-baseline regression,
 protected-path, and secret checks pass, and canonical integration is complete.
 
+Post-integration opening activation is `COMPLETE`. After this governance
+closeout is synchronized, all 29 remaining opening jobs are repinned to the
+exact final canonical Git head, from 2026-08-04 through 2026-09-14. The running
+Automatic service must hot-load the manifest, retain Monday's completed receipt,
+report Tuesday `PENDING`, show zero running and zero Shadow jobs, and keep
+selector arming and order transmission `UNAVAILABLE`. No further canonical
+change should occur before the next opening unless the same controlled repin is
+repeated.
+
 ARGUS-R030 is `COMPLETE_AND_BACKED_UP` on canonical `master` through
 implementation commit `94e1708`. The WPF workstation now has a
 first-class `Positions` command and compact top-bar entry that opens a
@@ -544,7 +553,7 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | The capture-only and integration gates are no longer blocked. Official Shadow selection is blocked by the six analytical-integrity investigations above. R032 is blocked by R031 market-hours evidence. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03 08:35 ordinary capture finished successfully on its first attempt with required artifacts and no Shadow or brokerage action. Twenty-nine later opening jobs remain independently scheduled. |
-| Immediate operational work | Repin the remaining 29 opening jobs to the final synchronized canonical head and prove the running service loaded that manifest. Then investigate catalyst-symbol integrity and quote provenance before changing ranking or arming Shadow. Run R031's nonpersisting Streamer/price-history observation during a suitable market window; R032 production persistence remains blocked until it passes. |
+| Immediate operational work | Investigate catalyst-symbol integrity and quote provenance before changing ranking or arming Shadow. Run R031's nonpersisting Streamer/price-history observation during a suitable market window; R032 production persistence remains blocked until it passes. The next ordinary capture remains independently scheduled for 2026-08-04 at 08:35 Central. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's capture. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
 | Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
 | Data caveat | The Monday report used mixed research enrichment and carried `QUOTE_HTTP_401` on all four candidates; its bid/ask values are not execution-trusted. GOOGL and CMCSA catalyst text appears potentially cross-wired. Opening RVOL used full-day average volume, and the $500-per-row reference sizing is not account-aware. Only `CRWV` has stored minute candles. R031-R033 own the missing actual-candle capability, while R034 retains the destructive-operation interruption gate. |
