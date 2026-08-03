@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import uuid
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -19,18 +20,23 @@ OPENING_CAPTURE_TIME = time(8, 35)
 OPENING_CAPTURE_LATE_WINDOW = timedelta(minutes=5)
 DEFAULT_MARKET_SESSIONS = 30
 MAX_MARKET_SESSIONS = 90
+GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
 def build_opening_capture_jobs(
     *,
     start_date: date,
     market_sessions: int,
+    expected_git_head: str,
     shadow_dates: Iterable[date] = (),
 ) -> list[dict[str, object]]:
     if not 1 <= market_sessions <= MAX_MARKET_SESSIONS:
         raise ValueError(
             f"market_sessions must be between 1 and {MAX_MARKET_SESSIONS}."
         )
+    normalized_head = expected_git_head.strip()
+    if not GIT_SHA_PATTERN.fullmatch(normalized_head):
+        raise ValueError("expected_git_head must be a full lowercase Git SHA.")
     shadow_days = set(shadow_dates)
     jobs: list[dict[str, object]] = []
     candidate = start_date
@@ -54,6 +60,7 @@ def build_opening_capture_jobs(
                         ).isoformat(),
                         "enabled": True,
                         "timeoutSeconds": 900,
+                        "expectedGitHead": normalized_head,
                     }
                 )
         candidate += timedelta(days=1)
@@ -65,6 +72,7 @@ def plan_opening_capture_manifest(
     *,
     start_date: date,
     market_sessions: int,
+    expected_git_head: str,
 ) -> dict[str, object]:
     raw_jobs = payload.get("jobs", [])
     if not isinstance(raw_jobs, list):
@@ -83,6 +91,7 @@ def plan_opening_capture_manifest(
     opening_jobs = build_opening_capture_jobs(
         start_date=start_date,
         market_sessions=market_sessions,
+        expected_git_head=expected_git_head,
         shadow_dates=shadow_dates,
     )
     planned = dict(payload)
@@ -103,13 +112,14 @@ def write_validated_plan(
     output_path: Path,
     start_date: date,
     market_sessions: int,
+    expected_git_head: str,
 ) -> dict[str, object]:
-    parse_manifest(manifest_path)
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     planned = plan_opening_capture_manifest(
         payload,
         start_date=start_date,
         market_sessions=market_sessions,
+        expected_git_head=expected_git_head,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_path.with_name(
@@ -151,6 +161,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--start-date", type=date.fromisoformat, required=True)
+    parser.add_argument("--expected-git-head", required=True)
     parser.add_argument(
         "--market-sessions",
         type=int,
@@ -166,6 +177,7 @@ def main() -> int:
         output_path=args.output,
         start_date=args.start_date,
         market_sessions=args.market_sessions,
+        expected_git_head=args.expected_git_head,
     )
     print(json.dumps(summary, indent=2))
     return 0

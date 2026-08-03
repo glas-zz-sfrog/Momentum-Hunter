@@ -41,6 +41,10 @@ $gitStatus = & git -C $projectPath status --porcelain
 if ($LASTEXITCODE -ne 0 -or $gitStatus) {
     throw "The repository must be clean before installing opening captures."
 }
+$gitHead = (& git -C $projectPath rev-parse HEAD).Trim().ToLowerInvariant()
+if ($LASTEXITCODE -ne 0 -or $gitHead -notmatch '^[0-9a-f]{40}$') {
+    throw "The canonical repository HEAD could not be frozen."
+}
 
 if (Test-Path -LiteralPath $statePath -PathType Leaf) {
     $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
@@ -61,6 +65,7 @@ try {
         --manifest $manifestPath `
         --output $temporaryManifest `
         --start-date $StartDate.ToString("yyyy-MM-dd") `
+        --expected-git-head $gitHead `
         --market-sessions $MarketSessions
     if ($LASTEXITCODE -ne 0) {
         throw "Opening capture manifest planning failed."
@@ -76,6 +81,7 @@ try {
             marketSessionsCovered = $summary.marketSessionsCovered
             firstOpeningCapture = $summary.firstOpeningCapture
             lastOpeningCapture = $summary.lastOpeningCapture
+            expectedGitHead = $gitHead
             shadowDatesUseShadowCapture = $summary.shadowDatesUseShadowCapture
             jobs = @(
                 $plannedManifest.jobs |
@@ -132,6 +138,7 @@ try {
         marketSessionsCovered = $summary.marketSessionsCovered
         firstOpeningCapture = $summary.firstOpeningCapture
         lastOpeningCapture = $summary.lastOpeningCapture
+        expectedGitHead = $gitHead
         firstJobStatus = $observedStatus
         selectorArming = "UNAVAILABLE"
         orderTransmission = "UNAVAILABLE"

@@ -236,6 +236,44 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertEqual("COMPLETED", state.jobs["canary"].status)
         self.assertEqual("Failed", state.engine_host_state)
 
+    def test_failed_opening_does_not_block_next_market_day(self) -> None:
+        monday = self.job(
+            kind="opening_capture",
+            job_id="opening-capture-20260803",
+            scheduled_at=self.now,
+            latest_start_at=self.now + timedelta(minutes=5),
+        )
+        tuesday_time = self.now + timedelta(days=1)
+        tuesday = self.job(
+            kind="opening_capture",
+            job_id="opening-capture-20260804",
+            scheduled_at=tuesday_time,
+            latest_start_at=tuesday_time + timedelta(minutes=5),
+        )
+        current = self.now
+
+        def execute(job: AutomationJob, _log_path: Path) -> tuple[int, str]:
+            self.executed.append(job.job_id)
+            return (1, "Monday failed") if job is monday else (0, "Tuesday completed")
+
+        supervisor = AutomationSupervisor(
+            self.manifest(monday, tuesday),
+            clock=lambda: current,
+            engine_host_probe=self.healthy_engine,
+            job_executor=execute,
+        )
+
+        monday_state = supervisor.tick()
+        current = tuesday_time
+        tuesday_state = supervisor.tick()
+
+        self.assertEqual(
+            ["opening-capture-20260803", "opening-capture-20260804"],
+            self.executed,
+        )
+        self.assertEqual("FAILED", monday_state.jobs[monday.job_id].status)
+        self.assertEqual("COMPLETED", tuesday_state.jobs[tuesday.job_id].status)
+
     def test_opening_terminal_receipt_is_saved_before_later_probe_crash(self) -> None:
         job = self.job(kind="opening_capture")
         supervisor = AutomationSupervisor(
@@ -384,6 +422,7 @@ class AutomationSupervisorTests(unittest.TestCase):
                     "scheduledAt": "2026-07-30T08:35:00-05:00",
                     "latestStartAt": "2026-07-30T08:40:00-05:00",
                     "timeoutSeconds": 900,
+                    "expectedGitHead": "a" * 40,
                 }
             ]
         )
@@ -391,9 +430,27 @@ class AutomationSupervisorTests(unittest.TestCase):
         manifest = self.parse_payload(payload)
 
         self.assertEqual("opening_capture", manifest.jobs[0].kind)
-        self.assertEqual("", manifest.jobs[0].expected_git_head)
+        self.assertEqual("a" * 40, manifest.jobs[0].expected_git_head)
         self.assertIsNone(manifest.jobs[0].proof_bundle_path)
         self.assertIsNone(manifest.jobs[0].task_definition_path)
+
+    def test_manifest_rejects_opening_without_frozen_git_identity(self) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260730",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:40:00-05:00",
+                }
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            ManifestValidationError,
+            "full expectedGitHead",
+        ):
+            self.parse_payload(payload)
 
     def test_manifest_rejects_opening_capture_authority_and_wide_window(
         self,
@@ -406,6 +463,7 @@ class AutomationSupervisorTests(unittest.TestCase):
                     "scheduledAt": "2026-07-30T08:35:00-05:00",
                     "latestStartAt": "2026-07-30T08:40:00-05:00",
                     "expectedGitHead": "a" * 40,
+                    "proofBundlePath": str(self.repo),
                 }
             ]
         )
@@ -445,6 +503,7 @@ class AutomationSupervisorTests(unittest.TestCase):
                     "kind": "opening_capture",
                     "scheduledAt": "2026-07-30T08:35:00-05:00",
                     "latestStartAt": "2026-07-30T08:40:00-05:00",
+                    "expectedGitHead": "a" * 40,
                 },
                 {
                     "jobId": "shadow-opening-20260730",
@@ -742,6 +801,38 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertNotIn("order", joined)
         self.assertNotIn("submit", joined)
         self.assertNotIn("cancel", joined)
+
+    def test_opening_execution_validates_frozen_repository_identity(self) -> None:
+        job = self.job(kind="opening_capture", expected_git_head="a" * 40)
+        supervisor = self.supervisor(job)
+        log_path = self.state_dir / "opening.log"
+
+        with (
+            patch.object(supervisor, "_validate_repository_identity") as validate,
+            patch.object(supervisor, "_run_process", return_value=(0, "ok")) as run,
+        ):
+            result = supervisor._execute_job(job, log_path)
+
+        self.assertEqual((0, "ok"), result)
+        validate.assert_called_once_with("a" * 40)
+        run.assert_called_once()
+
+    def test_opening_identity_failure_stops_before_capture_process(self) -> None:
+        job = self.job(kind="opening_capture", expected_git_head="a" * 40)
+        supervisor = self.supervisor(job)
+
+        with (
+            patch.object(
+                supervisor,
+                "_validate_repository_identity",
+                side_effect=RuntimeError("unexpected canonical HEAD"),
+            ),
+            patch.object(supervisor, "_run_process") as run,
+            self.assertRaisesRegex(RuntimeError, "unexpected canonical HEAD"),
+        ):
+            supervisor._execute_job(job, self.state_dir / "opening.log")
+
+        run.assert_not_called()
 
     def test_hot_reload_accepts_jobs_only_and_rejects_runtime_change(self) -> None:
         first = self.job(kind="nonmarket_canary", job_id="first")

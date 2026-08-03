@@ -313,11 +313,12 @@ def _parse_job(
     prompt_path = _optional_path(payload.get("promptPath"))
     expected_output = str(payload.get("expectedOutput", "")).strip()
 
-    if kind == "shadow_opening":
+    if kind in {"opening_capture", "shadow_opening"}:
         if not GIT_SHA_PATTERN.fullmatch(expected_git_head):
             raise ManifestValidationError(
-                "Shadow openings require a full expectedGitHead."
+                "Opening jobs require a full expectedGitHead."
             )
+    if kind == "shadow_opening":
         if proof_bundle_path is None or not proof_bundle_path.is_dir():
             raise ManifestValidationError(
                 "Shadow openings require an existing proof bundle directory."
@@ -328,6 +329,11 @@ def _parse_job(
             )
         _require_within_repository(proof_bundle_path, repository_root)
         _require_within_repository(task_definition_path, repository_root)
+    elif kind == "opening_capture":
+        if proof_bundle_path or task_definition_path:
+            raise ManifestValidationError(
+                f"Job {job_id!r} cannot carry Shadow opening authority."
+            )
     elif expected_git_head or proof_bundle_path or task_definition_path:
         raise ManifestValidationError(
             f"Job {job_id!r} cannot carry Shadow opening authority."
@@ -692,6 +698,7 @@ class AutomationSupervisor:
         if job.kind == "nonmarket_canary":
             return self._run_nonmarket_canary(log_path)
         if job.kind == "opening_capture":
+            self._validate_repository_identity(job.expected_git_head)
             command = self._opening_capture_command()
             return self._run_process(
                 command,

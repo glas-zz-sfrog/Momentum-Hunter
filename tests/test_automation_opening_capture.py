@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import date, datetime
 from pathlib import Path
@@ -17,6 +18,8 @@ from momentum_hunter.automation_supervisor import parse_manifest
 
 
 class AutomationOpeningCaptureTests(unittest.TestCase):
+    expected_git_head = "a" * 40
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
@@ -44,6 +47,7 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
         jobs = build_opening_capture_jobs(
             start_date=date(2026, 8, 1),
             market_sessions=25,
+            expected_git_head=self.expected_git_head,
         )
 
         dates = [
@@ -69,6 +73,7 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
         jobs = build_opening_capture_jobs(
             start_date=date(2026, 8, 3),
             market_sessions=3,
+            expected_git_head=self.expected_git_head,
             shadow_dates={date(2026, 8, 4)},
         )
 
@@ -99,6 +104,7 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
             payload,
             start_date=date(2026, 8, 1),
             market_sessions=2,
+            expected_git_head=self.expected_git_head,
         )
 
         identifiers = [str(job["jobId"]) for job in planned["jobs"]]
@@ -116,6 +122,7 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
             output_path=output,
             start_date=date(2026, 8, 1),
             market_sessions=30,
+            expected_git_head=self.expected_git_head,
         )
 
         self.assertEqual(original, self.manifest_path.read_bytes())
@@ -127,6 +134,43 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
             30,
             sum(job.kind == "opening_capture" for job in planned.jobs),
         )
+        self.assertTrue(all(
+            job.expected_git_head == self.expected_git_head
+            for job in planned.jobs
+            if job.kind == "opening_capture"
+        ))
+
+    def test_validated_plan_migrates_legacy_unpinned_opening_jobs(self) -> None:
+        legacy = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-legacy",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-07-31T08:35:00-05:00",
+                    "latestStartAt": "2026-07-31T08:40:00-05:00",
+                    "timeoutSeconds": 900,
+                }
+            ]
+        )
+        self.manifest_path.write_text(json.dumps(legacy), encoding="utf-8")
+        original = self.manifest_path.read_bytes()
+        output = self.root / "migrated.json"
+
+        write_validated_plan(
+            manifest_path=self.manifest_path,
+            output_path=output,
+            start_date=date(2026, 8, 1),
+            market_sessions=2,
+            expected_git_head=self.expected_git_head,
+        )
+
+        self.assertEqual(original, self.manifest_path.read_bytes())
+        planned = parse_manifest(output)
+        self.assertEqual(2, len(planned.jobs))
+        self.assertTrue(all(
+            job.expected_git_head == self.expected_git_head
+            for job in planned.jobs
+        ))
 
     def test_installer_and_runner_keep_opening_capture_nontransmitting(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
@@ -139,6 +183,7 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
 
         self.assertIn("-EnableOpeningCaptures", installer)
         self.assertIn('"opening_capture"', installer)
+        self.assertIn("--expected-git-head $gitHead", installer)
         self.assertIn('"UNAVAILABLE"', installer)
         self.assertIn('"opening"', runner)
         self.assertIn("$OpeningRetryCount = 1", runner)
@@ -149,6 +194,18 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
         self.assertNotIn("ArmShadowSelector", installer)
         self.assertNotIn("submit", installer.lower())
         self.assertNotIn("cancel", installer.lower())
+
+    def test_plan_rejects_missing_or_abbreviated_git_identity(self) -> None:
+        for value in ("", "a" * 7, "A" * 40):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                ValueError,
+                "full lowercase Git SHA",
+            ):
+                build_opening_capture_jobs(
+                    start_date=date(2026, 8, 3),
+                    market_sessions=1,
+                    expected_git_head=value,
+                )
 
     def manifest_payload(
         self,
@@ -343,6 +400,65 @@ class OpeningCaptureRunnerTests(unittest.TestCase):
         self.assertTrue(status["openingResultPreserved"])
         self.assertEqual("DEFERRED_AFTER_OPENING", status["state"])
         self.assertIsNone(status["exitCode"])
+
+    def test_deferred_status_write_failure_does_not_invalidate_opening(
+        self,
+    ) -> None:
+        (self.tools / "capture_job.py").write_text(
+            "import time\n"
+            "time.sleep(2)\n"
+            "raise SystemExit(0)\n",
+            encoding="utf-8",
+        )
+        logs_dir = self.root / "MomentumHunterData" / "logs"
+        process = subprocess.Popen(
+            (
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(self.runner),
+                "-Session",
+                "opening",
+                "-ProjectRoot",
+                str(self.root),
+                "-PythonExe",
+                sys.executable,
+                "-OpeningRetryCount",
+                "0",
+            ),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        deadline = time.monotonic() + 10
+        capture_log: Path | None = None
+        while time.monotonic() < deadline:
+            matches = list(logs_dir.glob("capture-opening-*.log"))
+            if matches:
+                capture_log = matches[0]
+                break
+            time.sleep(0.05)
+        self.assertIsNotNone(capture_log)
+        assert capture_log is not None
+        suffix = capture_log.name.removeprefix("capture-opening-").removesuffix(
+            ".log"
+        )
+        blocked_status = logs_dir / f"outcomes-opening-{suffix}.status.json"
+        blocked_status.mkdir()
+
+        stdout, stderr = process.communicate(timeout=30)
+
+        self.assertEqual(0, process.returncode, stdout + stderr)
+        self.assertIn("OpeningAttemptExitCode: 0", stdout)
+        self.assertIn(
+            "WARNING: Opening capture succeeded, but deferred outcome status "
+            "could not be written",
+            stdout,
+        )
+        self.assertIn("ExitCode: 0", stdout)
+        self.assertTrue(blocked_status.is_dir())
 
 
 if __name__ == "__main__":

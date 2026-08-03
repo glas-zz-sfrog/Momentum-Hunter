@@ -113,16 +113,22 @@ try {
         }
     }
     if ($exitCode -eq 0 -and $Session -eq "opening") {
-        @{
-            schemaVersion = 1
-            session = $Session
-            completedAt = (Get-Date -Format o)
-            state = "DEFERRED_AFTER_OPENING"
-            exitCode = $null
-            openingResultPreserved = $true
-            reason = "Outcome maintenance is outside the finite opening-capture deadline."
-        } | ConvertTo-Json | Set-Content -LiteralPath $outcomeStatusPath -Encoding utf8
-        "OutcomeUpdateState: DEFERRED_AFTER_OPENING" | Tee-Object -FilePath $logPath -Append
+        try {
+            @{
+                schemaVersion = 1
+                session = $Session
+                completedAt = (Get-Date -Format o)
+                state = "DEFERRED_AFTER_OPENING"
+                exitCode = $null
+                openingResultPreserved = $true
+                reason = "Outcome maintenance is outside the finite opening-capture deadline."
+            } | ConvertTo-Json | Set-Content -LiteralPath $outcomeStatusPath -Encoding utf8
+            "OutcomeUpdateState: DEFERRED_AFTER_OPENING" | Tee-Object -FilePath $logPath -Append
+        }
+        catch {
+            "WARNING: Opening capture succeeded, but deferred outcome status could not be written: $($_.Exception.GetType().Name)" |
+                Tee-Object -FilePath $logPath -Append
+        }
     }
     elseif ($exitCode -eq 0) {
         "Updating outcomes independently: $(Get-Date -Format o)" | Tee-Object -FilePath $outcomeLogPath
