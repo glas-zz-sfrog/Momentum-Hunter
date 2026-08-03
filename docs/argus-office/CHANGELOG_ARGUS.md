@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Implemented ARGUS-DATA-001 opening evidence integrity on an isolated branch. TradePlan reports now preserve field-level source, provider/receipt clocks, age, authentication/result state, research authority, and separate provider attempts; Yahoo `HTTP_401` no longer obscures Nasdaq-owned values.
+- Added deterministic catalyst attribution. Unproven issuer/sector/peer/customer-supplier relationships are `UNRESOLVED` with evidence-review score authority `BLOCKED`; this does not alter legacy scores or rank order.
+- Added explicit `CAPTURED PRICE`, `SCREENER BID/ASK`, `FRESH PROVIDER QUOTE`, `HYPOTHETICAL PLAN`, and `EXECUTION-INELIGIBLE` evidence output. Compileall, 23 focused, 138 adjacent, and all 1,059 Python tests pass; canonical service/runtime remains untouched pending deliberate integration and job repin.
 - Added ARGUS-SHADOW-024's offline terminal review packet builder. Six explicit persisted inputs produce deterministic, hash-addressed, write-once JSON and Markdown for completed, unfilled, cancelled, invalidated, and terminal no-trade Shadow evidence.
 - Classified review fields as stored fact, deterministic derivation, missing, or review question; bound current sample, fill-model, policy, arm, capture, report, cycle, command, opportunity, trade, plan, risk, order, position, ledger, and outcome identities where persisted.
 - Added fail-closed report tamper, cross-record mismatch, secret-risk, source-mutation, duplicate, conflicting-output, partial-write, and post-write source-race handling. The module adds no network, provider, broker, service, Engine Host, scheduler, WPF, or Codex capability.

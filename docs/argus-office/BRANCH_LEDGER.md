@@ -2,6 +2,17 @@
 
 Date reconciled: 2026-08-03
 
+## ARGUS-DATA-001 Opening Evidence Integrity
+
+`codex/ARGUS-DATA-001-opening-evidence-integrity` is `ACTIVE` and
+`IMPLEMENTED_PENDING_MERGE` from canonical base `2aa4ef3`. It adds report-only
+price provenance and catalyst attribution truth without changing ranking,
+plans, readiness, risk, selection, RVOL, FakeBroker, account, or broker
+semantics. Compileall, 23 focused, 138 adjacent, and all 1,059 Python tests
+pass. The branch may be backed up normally, but integration must remain pending
+until Git Steward can repin the opening manifest and prove a fresh service
+identity without jeopardizing the next capture.
+
 ## ARGUS-SHADOW-024 Offline Terminal Review Packet
 
 The original `codex/ARGUS-SHADOW-024-offline-terminal-review-packet` branch is

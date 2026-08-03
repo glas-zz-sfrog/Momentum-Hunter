@@ -14,6 +14,17 @@ from typing import Iterable
 
 from momentum_hunter.catalyst_clusters import classify_catalyst_headline_detail
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
+from momentum_hunter.evidence_integrity import (
+    CATALYST_SCORE_BLOCKED,
+    EXECUTION_INELIGIBLE,
+    RESEARCH_ONLY,
+    CatalystAttribution,
+    PriceFieldEvidence,
+    classify_catalyst_attribution,
+    evidence_with_age,
+    make_price_evidence,
+    unavailable_price_evidence,
+)
 from momentum_hunter.models import Candidate
 from momentum_hunter.outcomes import PriceBar, fetch_price_bars, build_http_session
 from momentum_hunter.storage import CAPTURES_DIR, candidate_from_dict, format_market_cap
@@ -47,6 +58,11 @@ REPORT_COLUMNS = [
     "News Score",
     "Composite Score",
     "Catalyst Summary",
+    "Catalyst Relationship",
+    "Catalyst Score Authority",
+    "Price Evidence Status",
+    "Price Evidence JSON",
+    "Provider Results",
     "Previous Day High",
     "Previous Day Low",
     "Previous Day Close",
@@ -133,6 +149,8 @@ class MarketTape:
     relative_volume: float | None = None
     source: str = "capture_only"
     warnings: list[str] = field(default_factory=list)
+    field_provenance: dict[str, PriceFieldEvidence] = field(default_factory=dict)
+    provider_results: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -190,6 +208,9 @@ class TradePlanRow:
     likely_outperform_qqq: bool = False
     likely_outperform_smh: bool = False
     opportunity_notes: list[str] = field(default_factory=list)
+    price_evidence: dict[str, PriceFieldEvidence] = field(default_factory=dict)
+    price_evidence_status: str = EXECUTION_INELIGIBLE
+    catalyst_attribution: CatalystAttribution | None = None
 
 
 @dataclass(frozen=True)
@@ -270,6 +291,8 @@ def build_trade_planning_report(
             bars=bars_by_ticker.get(candidate.ticker, []),
             market_tape=market_tape_by_ticker.get(candidate.ticker),
             rvol_type=rvol_type,
+            source_capture_time=str(payload.get("capture_time", "")),
+            as_of=as_of,
         )
         for candidate in candidates
     ]
@@ -304,9 +327,15 @@ def build_trade_plan_row(
     bars: list[PriceBar],
     market_tape: MarketTape | None = None,
     rvol_type: str = UNKNOWN_RVOL,
+    source_capture_time: str = "",
+    as_of: datetime | None = None,
 ) -> TradePlanRow:
     technicals = build_technical_levels(candidate, capture_date=capture_date, bars=bars)
-    base_tape = market_tape or tape_from_candidate(candidate)
+    as_of = as_of or now_central()
+    base_tape = market_tape or tape_from_candidate(
+        candidate,
+        captured_at=source_capture_time,
+    )
     volume_20 = average_daily_volume_20(bars, capture_date=capture_date)
     if base_tape.average_daily_volume_20 is None and volume_20 is not None:
         base_tape = replace(base_tape, average_daily_volume_20=volume_20)
@@ -318,6 +347,7 @@ def build_trade_plan_row(
         industry=candidate.industry,
         sector_sympathy=False,
     )
+    catalyst_attribution = classify_catalyst_attribution(candidate, catalyst)
     plan = build_trade_plan(candidate, technicals, tape, capital=capital)
     composite = composite_score(candidate, technicals, plan, catalyst_detail.confidence_score)
     row = TradePlanRow(
@@ -355,6 +385,14 @@ def build_trade_plan_row(
         likely_outperform_qqq=likely_outperform_qqq(candidate, composite, catalyst_detail.cluster_name),
         likely_outperform_smh=likely_outperform_smh(candidate, composite, catalyst_detail.cluster_name),
         opportunity_notes=opportunity_notes(candidate, technicals, plan, catalyst_detail.cluster_name),
+        price_evidence=build_display_price_evidence(
+            tape,
+            technicals=technicals,
+            plan=plan,
+            generated_at=as_of,
+        ),
+        price_evidence_status=EXECUTION_INELIGIBLE,
+        catalyst_attribution=catalyst_attribution,
     )
     return row
 
@@ -506,16 +544,11 @@ def assign_ranks(rows: list[TradePlanRow]) -> list[TradePlanRow]:
     ranked = []
     for index, row in enumerate(rows, 1):
         ranked.append(
-            TradePlanRow(
-                **{
-                    **asdict(row),
-                    "rank": index,
-                    "technical_levels": row.technical_levels,
-                    "market_tape": row.market_tape,
-                    "trade_plan": row.trade_plan,
-                    "risk_on_rank": risk_on_ranks[row.symbol],
-                    "risk_off_rank": risk_off_ranks[row.symbol],
-                }
+            replace(
+                row,
+                rank=index,
+                risk_on_rank=risk_on_ranks[row.symbol],
+                risk_off_rank=risk_off_ranks[row.symbol],
             )
         )
     return ranked
@@ -612,20 +645,43 @@ def current_trade_price(candidate: Candidate, tape: MarketTape) -> float:
     return candidate.price
 
 
-def tape_from_candidate(candidate: Candidate) -> MarketTape:
+def tape_from_candidate(
+    candidate: Candidate,
+    *,
+    captured_at: str = "",
+) -> MarketTape:
     warnings: list[str] = []
     if candidate.gap_percent is None:
         warnings.append("MISSING_PREMARKET_PERCENT")
     if candidate.premarket_volume is None:
         warnings.append("MISSING_PREMARKET_VOLUME")
+    values = {
+        "last_price": rounded(candidate.price),
+        "premarket_price": premarket_price(candidate),
+    }
+    provenance = {
+        name: make_price_evidence(
+            label=price_field_label(name, source="capture_only"),
+            source="finviz_capture",
+            provider_timestamp=captured_at or None,
+            local_receipt_timestamp=captured_at or None,
+            authentication_status="NOT_APPLICABLE",
+            result_status="CAPTURED",
+            authority=RESEARCH_ONLY,
+        )
+        for name, value in values.items()
+        if value is not None
+    }
     return MarketTape(
-        last_price=rounded(candidate.price),
-        premarket_price=premarket_price(candidate),
+        last_price=values["last_price"],
+        premarket_price=values["premarket_price"],
         premarket_percent=rounded(candidate.gap_percent),
         premarket_volume=candidate.premarket_volume,
         relative_volume=rounded(candidate.relative_volume) if candidate.relative_volume else None,
         source="capture_only",
         warnings=warnings,
+        field_provenance=provenance,
+        provider_results={"finviz_capture": "CAPTURED"},
     )
 
 
@@ -657,7 +713,11 @@ def fetch_nasdaq_market_tape(
     timeout_seconds: float = 20.0,
 ) -> MarketTape:
     if not ticker:
-        return MarketTape(source="nasdaq", warnings=["MISSING_TICKER"])
+        return MarketTape(
+            source="nasdaq",
+            warnings=["MISSING_TICKER"],
+            provider_results={"nasdaq": "MISSING_TICKER"},
+        )
     symbol = ticker.replace(".", "-").upper()
     headers = {
         "User-Agent": (
@@ -712,6 +772,12 @@ def fetch_nasdaq_market_tape(
         premarket_percent_value = parse_percent(primary.get("percentageChange"))
     current_volume = premarket_volume or share_volume
     relative_volume = (current_volume / average_volume) if current_volume and average_volume else None
+    received_at = now_central().isoformat()
+    provider_timestamp = str(
+        primary.get("lastTradeTimestamp")
+        or info_data.get("lastTradeTimestamp")
+        or ""
+    ).strip() or None
     warnings = dedupe(
         tape_warnings(
             premarket_price=premarket_price_value,
@@ -725,8 +791,33 @@ def fetch_nasdaq_market_tape(
         + summary_warnings
         + extended_warnings
     )
+    last_price_value = rounded(parse_money(primary.get("lastSalePrice")))
+    bid_value = rounded(bid)
+    ask_value = rounded(ask)
+    field_sources = {
+        "last_price": "nasdaq_info",
+        "premarket_price": (
+            "nasdaq_extended" if extended_row else "nasdaq_info"
+        ),
+        "current_bid": (
+            "nasdaq_info"
+            if parse_money(primary.get("bidPrice")) is not None
+            else "nasdaq_summary"
+        ),
+        "current_ask": (
+            "nasdaq_info"
+            if parse_money(primary.get("askPrice")) is not None
+            else "nasdaq_summary"
+        ),
+    }
+    field_values = {
+        "last_price": last_price_value,
+        "premarket_price": rounded(premarket_price_value),
+        "current_bid": bid_value,
+        "current_ask": ask_value,
+    }
     return MarketTape(
-        last_price=rounded(parse_money(primary.get("lastSalePrice"))),
+        last_price=last_price_value,
         premarket_price=rounded(premarket_price_value),
         premarket_percent=rounded(premarket_percent_value),
         premarket_volume=premarket_volume,
@@ -734,12 +825,30 @@ def fetch_nasdaq_market_tape(
         average_daily_volume_20=average_volume,
         rvol_numerator=current_volume,
         rvol_denominator=average_volume,
-        current_bid=rounded(bid),
-        current_ask=rounded(ask),
+        current_bid=bid_value,
+        current_ask=ask_value,
         spread_percent=rounded(spread),
         relative_volume=rounded(relative_volume),
         source="nasdaq",
         warnings=warnings,
+        field_provenance={
+            name: make_price_evidence(
+                label=price_field_label(name, source=field_sources[name]),
+                source=field_sources[name],
+                provider_timestamp=provider_timestamp,
+                local_receipt_timestamp=received_at,
+                authentication_status="NOT_REQUIRED",
+                result_status="SUCCESS",
+                authority=RESEARCH_ONLY,
+            )
+            for name, value in field_values.items()
+            if value is not None
+        },
+        provider_results={
+            "nasdaq_info": provider_result("NASDAQ_INFO", info_warnings),
+            "nasdaq_summary": provider_result("NASDAQ_SUMMARY", summary_warnings),
+            "nasdaq_extended": provider_result("NASDAQ_EXTENDED", extended_warnings),
+        },
     )
 
 
@@ -750,7 +859,11 @@ def fetch_yahoo_market_tape(
     timeout_seconds: float = 20.0,
 ) -> MarketTape:
     if not ticker:
-        return MarketTape(source="yahoo_quote", warnings=["MISSING_TICKER"])
+        return MarketTape(
+            source="yahoo_quote",
+            warnings=["MISSING_TICKER"],
+            provider_results={"yahoo_quote": "MISSING_TICKER"},
+        )
     chart_tape = fetch_yahoo_chart_tape(
         session,
         ticker,
@@ -762,17 +875,36 @@ def fetch_yahoo_market_tape(
         response = session.get(url, timeout=timeout_seconds)
         if response.status_code != 200:
             return merge_tapes(
-                quote_tape=MarketTape(source="yahoo_quote", warnings=[f"QUOTE_HTTP_{response.status_code}"]),
+                quote_tape=MarketTape(
+                    source="yahoo_quote",
+                    warnings=[f"QUOTE_HTTP_{response.status_code}"],
+                    provider_results={
+                        "yahoo_quote": f"HTTP_{response.status_code}"
+                    },
+                ),
                 chart_tape=chart_tape,
             )
         result = (response.json().get("quoteResponse", {}).get("result") or [])
     except Exception as exc:
         return merge_tapes(
-            quote_tape=MarketTape(source="yahoo_quote", warnings=[f"QUOTE_FETCH_FAILED:{type(exc).__name__}"]),
+            quote_tape=MarketTape(
+                source="yahoo_quote",
+                warnings=[f"QUOTE_FETCH_FAILED:{type(exc).__name__}"],
+                provider_results={
+                    "yahoo_quote": f"FETCH_FAILED:{type(exc).__name__}"
+                },
+            ),
             chart_tape=chart_tape,
         )
     if not result:
-        return merge_tapes(quote_tape=MarketTape(source="yahoo_quote", warnings=["QUOTE_EMPTY"]), chart_tape=chart_tape)
+        return merge_tapes(
+            quote_tape=MarketTape(
+                source="yahoo_quote",
+                warnings=["QUOTE_EMPTY"],
+                provider_results={"yahoo_quote": "EMPTY"},
+            ),
+            chart_tape=chart_tape,
+        )
     quote = result[0]
     last = first_float(quote, "regularMarketPrice", "postMarketPrice", "preMarketPrice")
     premarket = first_float(quote, "preMarketPrice")
@@ -795,21 +927,52 @@ def fetch_yahoo_market_tape(
         spread=spread,
         relative_volume=relative_volume,
     )
+    received_at = now_central().isoformat()
+    last_provider_timestamp = epoch_timestamp(
+        first_int(quote, "regularMarketTime", "postMarketTime", "preMarketTime")
+    )
+    premarket_provider_timestamp = epoch_timestamp(first_int(quote, "preMarketTime"))
+    field_values = {
+        "last_price": rounded(last),
+        "premarket_price": rounded(premarket),
+        "current_bid": rounded(bid),
+        "current_ask": rounded(ask),
+    }
     quote_tape = MarketTape(
-        last_price=rounded(last),
-        premarket_price=rounded(premarket),
+        last_price=field_values["last_price"],
+        premarket_price=field_values["premarket_price"],
         premarket_percent=rounded(premarket_percent),
         premarket_volume=premarket_volume,
         intraday_volume=regular_volume,
         average_daily_volume_20=average_volume,
         rvol_numerator=premarket_volume or regular_volume,
         rvol_denominator=average_volume,
-        current_bid=rounded(bid),
-        current_ask=rounded(ask),
+        current_bid=field_values["current_bid"],
+        current_ask=field_values["current_ask"],
         spread_percent=rounded(spread),
         relative_volume=rounded(relative_volume),
         source="yahoo_quote",
         warnings=warnings,
+        field_provenance={
+            name: make_price_evidence(
+                label=price_field_label(name, source="yahoo_quote"),
+                source="yahoo_quote",
+                provider_timestamp=(
+                    premarket_provider_timestamp
+                    if name == "premarket_price"
+                    else last_provider_timestamp
+                    if name == "last_price"
+                    else None
+                ),
+                local_receipt_timestamp=received_at,
+                authentication_status="NOT_REQUIRED",
+                result_status="SUCCESS",
+                authority=RESEARCH_ONLY,
+            )
+            for name, value in field_values.items()
+            if value is not None
+        },
+        provider_results={"yahoo_quote": "SUCCESS"},
     )
     return merge_tapes(quote_tape=quote_tape, chart_tape=chart_tape)
 
@@ -825,12 +988,28 @@ def fetch_yahoo_chart_tape(
     try:
         response = session.get(url, timeout=timeout_seconds)
         if response.status_code != 200:
-            return MarketTape(source="yahoo_chart", warnings=[f"CHART_HTTP_{response.status_code}"])
+            return MarketTape(
+                source="yahoo_chart",
+                warnings=[f"CHART_HTTP_{response.status_code}"],
+                provider_results={
+                    "yahoo_chart": f"HTTP_{response.status_code}"
+                },
+            )
         result = (response.json().get("chart", {}).get("result") or [])
     except Exception as exc:
-        return MarketTape(source="yahoo_chart", warnings=[f"CHART_FETCH_FAILED:{type(exc).__name__}"])
+        return MarketTape(
+            source="yahoo_chart",
+            warnings=[f"CHART_FETCH_FAILED:{type(exc).__name__}"],
+            provider_results={
+                "yahoo_chart": f"FETCH_FAILED:{type(exc).__name__}"
+            },
+        )
     if not result:
-        return MarketTape(source="yahoo_chart", warnings=["CHART_EMPTY"])
+        return MarketTape(
+            source="yahoo_chart",
+            warnings=["CHART_EMPTY"],
+            provider_results={"yahoo_chart": "EMPTY"},
+        )
     payload = result[0]
     meta = payload.get("meta", {})
     timestamps = payload.get("timestamp") or []
@@ -877,14 +1056,34 @@ def fetch_yahoo_chart_tape(
         spread=None,
         relative_volume=None,
     )
+    received_at = now_central().isoformat()
+    provider_timestamp = epoch_timestamp(timestamps[-1] if timestamps else None)
+    field_values = {
+        "last_price": rounded(last),
+        "premarket_price": rounded(premarket),
+    }
     return MarketTape(
-        last_price=rounded(last),
-        premarket_price=rounded(premarket),
+        last_price=field_values["last_price"],
+        premarket_price=field_values["premarket_price"],
         premarket_percent=rounded(premarket_percent),
         premarket_volume=volume_value,
         rvol_numerator=volume_value,
         source="yahoo_chart",
         warnings=warnings,
+        field_provenance={
+            name: make_price_evidence(
+                label=price_field_label(name, source="yahoo_chart"),
+                source="yahoo_chart",
+                provider_timestamp=provider_timestamp,
+                local_receipt_timestamp=received_at,
+                authentication_status="NOT_REQUIRED",
+                result_status="SUCCESS",
+                authority=RESEARCH_ONLY,
+            )
+            for name, value in field_values.items()
+            if value is not None
+        },
+        provider_results={"yahoo_chart": "SUCCESS"},
     )
 
 
@@ -916,6 +1115,28 @@ def merge_tapes(*, quote_tape: MarketTape, chart_tape: MarketTape) -> MarketTape
         relative_volume=quote_tape.relative_volume,
         source=source,
         warnings=dedupe(quote_tape.warnings + chart_tape.warnings),
+        field_provenance={
+            name: selected_field_provenance(
+                primary=quote_tape,
+                fallback=chart_tape,
+                field_name=name,
+            )
+            for name in (
+                "last_price",
+                "premarket_price",
+                "current_bid",
+                "current_ask",
+            )
+            if field_value(
+                quote_tape if field_value(quote_tape, name) is not None else chart_tape,
+                name,
+            )
+            is not None
+        },
+        provider_results={
+            **chart_tape.provider_results,
+            **quote_tape.provider_results,
+        },
     )
     return MarketTape(
         last_price=merged.last_price,
@@ -943,6 +1164,8 @@ def merge_tapes(*, quote_tape: MarketTape, chart_tape: MarketTape) -> MarketTape
         )
         + [warning for warning in quote_tape.warnings if warning.startswith("QUOTE_")]
         + ([warning for warning in chart_tape.warnings if warning.startswith("CHART_")] if used_chart or quote_tape.warnings else [])),
+        field_provenance=merged.field_provenance,
+        provider_results=merged.provider_results,
     )
 
 
@@ -963,6 +1186,28 @@ def overlay_tapes(*, primary: MarketTape, fallback: MarketTape) -> MarketTape:
         spread_percent=primary.spread_percent if primary.spread_percent is not None else fallback.spread_percent,
         relative_volume=primary.relative_volume if primary.relative_volume is not None else fallback.relative_volume,
         source=f"{primary.source}+{fallback.source}" if fallback.source not in primary.source else primary.source,
+        field_provenance={
+            name: selected_field_provenance(
+                primary=primary,
+                fallback=fallback,
+                field_name=name,
+            )
+            for name in (
+                "last_price",
+                "premarket_price",
+                "current_bid",
+                "current_ask",
+            )
+            if field_value(
+                primary if field_value(primary, name) is not None else fallback,
+                name,
+            )
+            is not None
+        },
+        provider_results={
+            **fallback.provider_results,
+            **primary.provider_results,
+        },
     )
     provider_warnings = [
         warning
@@ -996,7 +1241,163 @@ def overlay_tapes(*, primary: MarketTape, fallback: MarketTape) -> MarketTape:
             )
             + provider_warnings
         ),
+        field_provenance=merged.field_provenance,
+        provider_results=merged.provider_results,
     )
+
+
+def selected_field_provenance(
+    *,
+    primary: MarketTape,
+    fallback: MarketTape,
+    field_name: str,
+) -> PriceFieldEvidence:
+    selected = primary if field_value(primary, field_name) is not None else fallback
+    evidence = selected.field_provenance.get(field_name)
+    if evidence is not None:
+        return evidence
+    return make_price_evidence(
+        label=unverified_price_field_label(field_name, source=selected.source),
+        source=selected.source,
+        authentication_status="UNKNOWN",
+        result_status=provider_status_for_tape(selected),
+        authority=RESEARCH_ONLY,
+    )
+
+
+def field_value(tape: MarketTape, field_name: str) -> float | None:
+    value = getattr(tape, field_name, None)
+    return float(value) if value is not None else None
+
+
+def provider_status_for_tape(tape: MarketTape) -> str:
+    failures = [
+        value
+        for value in tape.provider_results.values()
+        if value != "SUCCESS" and value != "CAPTURED"
+    ]
+    if failures:
+        return "SOURCE_STATUS_UNRESOLVED"
+    provider_warnings = [
+        warning
+        for warning in tape.warnings
+        if warning.startswith(("QUOTE_", "CHART_", "NASDAQ_"))
+    ]
+    return "SOURCE_STATUS_UNRESOLVED" if provider_warnings else "AVAILABLE"
+
+
+def provider_result(prefix: str, warnings: list[str]) -> str:
+    matching = [warning for warning in warnings if warning.startswith(prefix)]
+    if not matching:
+        return "SUCCESS"
+    return matching[0].removeprefix(f"{prefix}_")
+
+
+def epoch_timestamp(value: int | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromtimestamp(value, tz=now_central().tzinfo).isoformat()
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
+def price_field_label(field_name: str, *, source: str) -> str:
+    if field_name in {"current_bid", "current_ask"} and "capture" in source:
+        return "SCREENER BID/ASK"
+    if source in {"capture_only", "finviz_capture"}:
+        return "CAPTURED PRICE"
+    return "FRESH PROVIDER QUOTE"
+
+
+def unverified_price_field_label(field_name: str, *, source: str) -> str:
+    if field_name in {"current_bid", "current_ask"} and "capture" in source:
+        return "SCREENER BID/ASK"
+    if source in {"capture_only", "finviz_capture"}:
+        return "CAPTURED PRICE"
+    return "PROVIDER VALUE (UNVERIFIED)"
+
+
+def build_display_price_evidence(
+    tape: MarketTape,
+    *,
+    technicals: TechnicalLevels,
+    plan: TradePlan,
+    generated_at: datetime,
+) -> dict[str, PriceFieldEvidence]:
+    evidence: dict[str, PriceFieldEvidence] = {}
+    for field_name in (
+        "last_price",
+        "premarket_price",
+        "current_bid",
+        "current_ask",
+    ):
+        existing = tape.field_provenance.get(field_name)
+        if existing is None:
+            value = field_value(tape, field_name)
+            existing = (
+                make_price_evidence(
+                    label=unverified_price_field_label(field_name, source=tape.source),
+                    source=tape.source,
+                    authentication_status="UNKNOWN",
+                    result_status=provider_status_for_tape(tape),
+                    authority=RESEARCH_ONLY,
+                )
+                if value is not None
+                else unavailable_price_evidence(
+                    label=price_field_label(field_name, source=tape.source),
+                    source=tape.source,
+                )
+            )
+        evidence[field_name] = evidence_with_age(existing, as_of=generated_at)
+
+    generated_timestamp = generated_at.isoformat()
+    technical_source = technicals.source or "technical_level_derivation"
+    for field_name in (
+        "previous_day_high",
+        "previous_day_low",
+        "previous_day_close",
+        "five_day_high",
+        "twenty_day_high",
+        "support_level",
+        "resistance_level",
+    ):
+        value = getattr(technicals, field_name)
+        evidence[field_name] = evidence_with_age(
+            make_price_evidence(
+                label="TECHNICAL EVIDENCE",
+                source=technical_source,
+                local_receipt_timestamp=generated_timestamp,
+                authentication_status="NOT_APPLICABLE",
+                result_status="DERIVED" if value is not None else "UNAVAILABLE",
+                authority=RESEARCH_ONLY,
+            ),
+            as_of=generated_at,
+        )
+
+    for field_name in (
+        "bullish_entry",
+        "bullish_stop",
+        "bullish_target_1",
+        "bullish_target_2",
+    ):
+        value = getattr(plan, field_name)
+        evidence[field_name] = evidence_with_age(
+            make_price_evidence(
+                label="HYPOTHETICAL PLAN",
+                source="trade_plan_derivation",
+                local_receipt_timestamp=generated_timestamp,
+                authentication_status="NOT_APPLICABLE",
+                result_status=(
+                    "DERIVED_HYPOTHETICAL"
+                    if value is not None
+                    else "UNAVAILABLE"
+                ),
+                authority=RESEARCH_ONLY,
+            ),
+            as_of=generated_at,
+        )
+    return evidence
 
 
 def has_core_tape(tape: MarketTape) -> bool:
@@ -1389,6 +1790,20 @@ def report_warnings(rows: list[TradePlanRow], *, fetch_bars: bool, fetch_market_
             warnings.append("Daily OHLC levels were not fetched; support/resistance and entries are conservative estimates.")
     if fetch_market_data and any(row.market_tape.source != "yahoo_quote" or row.market_tape.warnings for row in rows):
         warnings.append("Live/premarket tape was requested; rows with provider gaps are marked do-not-trade or scaffold.")
+    if any(row.price_evidence_status == EXECUTION_INELIGIBLE for row in rows):
+        warnings.append(
+            "Displayed capture/provider prices are research-only and EXECUTION-INELIGIBLE; "
+            "provider-attempt failures do not inherit trust from successful fallback fields."
+        )
+    if any(
+        row.catalyst_attribution is not None
+        and row.catalyst_attribution.score_authority == CATALYST_SCORE_BLOCKED
+        for row in rows
+    ):
+        warnings.append(
+            "One or more catalyst relationships are UNRESOLVED; catalyst score authority is BLOCKED "
+            "for evidence review without changing the legacy composite calculation."
+        )
     warnings.append("Research/planning output only. No broker action or trade recommendation is generated.")
     return dedupe(warnings)
 
@@ -1435,6 +1850,7 @@ def write_json(report: TradePlanningReport, path: Path) -> None:
             "capital_assumption": report.capital_assumption,
             "event_mode": report.event_mode,
             "polling_interval_seconds": report.polling_interval_seconds,
+            "evidence_integrity_schema_version": 1,
             "warnings": report.warnings,
         },
         "top_5_for_capital": [row_to_json(row) for row in report.rows[:5]],
@@ -1465,6 +1881,13 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
     ]
     lines.extend([f"- {warning}" for warning in report.warnings])
     lines.extend(["", "## Execution Readiness", ""])
+    lines.extend(
+        [
+            "Legacy planning-readiness labels are preserved for compatibility. They do not override "
+            "the per-row `EXECUTION-INELIGIBLE` evidence status in this research report.",
+            "",
+        ]
+    )
     lines.extend(readiness_section_lines("Execution Ready Trades", report.rows, "EXECUTION_READY"))
     lines.extend(readiness_section_lines("Planning Scaffolds", report.rows, PLANNING_SCAFFOLD))
     lines.extend(readiness_section_lines("Do-Not-Trade Due To Missing/Poor Data", report.rows, "DO_NOT_TRADE"))
@@ -1481,8 +1904,8 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
             "",
             "## Top 5 Opportunities For $500",
             "",
-            "| Rank | Symbol | Score | Entry | Stop | Target 1 | Target 2 | R/R | Est Shares | Est Risk | Est T1 Reward | Notes |",
-            "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+            "| Rank | Symbol | Score | Evidence | Entry | Stop | Target 1 | Target 2 | R/R | Est Shares | Est Risk | Est T1 Reward | Notes |",
+            "| ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
         ]
     )
     for row in report.rows[:5]:
@@ -1494,6 +1917,7 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
                     str(row.rank),
                     row.symbol,
                     str(row.composite_score),
+                    row.price_evidence_status,
                     money(plan.bullish_entry),
                     money(plan.bullish_stop),
                     money(plan.bullish_target_1),
@@ -1518,18 +1942,22 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
     for row in report.rows:
         plan = row.trade_plan
         tech = row.technical_levels
+        attribution = row.catalyst_attribution
         lines.extend(
             [
                 f"### {row.rank}. {row.symbol} - {row.company}",
                 "",
-                f"- Last Price: {money(row.last_price)}",
-                f"- Premarket Price: {money(row.premarket_price)}",
+                f"- Price Evidence Status: {row.price_evidence_status}",
+                f"- Last Price: {money(row.last_price)} ({price_evidence_summary(row, 'last_price')})",
+                f"- Premarket Price: {money(row.premarket_price)} ({price_evidence_summary(row, 'premarket_price')})",
                 f"- Premarket %: {format_optional(row.premarket_percent)}",
                 f"- Premarket Volume: {format_int(row.premarket_volume)}",
                 f"- Intraday Volume: {format_int(row.intraday_volume)}",
                 f"- 20-Day Average Daily Volume: {format_int(row.average_daily_volume_20)}",
                 f"- RVOL: {format_optional(row.relative_volume)} ({row.rvol_type}; {row.rvol_formula_used})",
-                f"- Bid / Ask / Spread: {money(row.current_bid)} / {money(row.current_ask)} / {format_optional(row.spread_percent)}%",
+                f"- Bid / Ask / Spread: {money(row.current_bid)} ({price_evidence_summary(row, 'current_bid')}) / "
+                f"{money(row.current_ask)} ({price_evidence_summary(row, 'current_ask')}) / {format_optional(row.spread_percent)}%",
+                f"- Provider Attempts: {format_provider_results(row.market_tape.provider_results)}",
                 f"- Relative Volume: {format_optional(row.relative_volume)}",
                 f"- Market Cap: {format_market_cap(row.market_cap or 0) if row.market_cap else 'n/a'}",
                 f"- ATR: {format_optional(row.atr)}",
@@ -1538,12 +1966,20 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
                 f"- Composite Score: {row.composite_score}",
                 f"- Catalyst: {row.catalyst_summary}",
                 f"- Catalyst Cluster: {row.catalyst_cluster} ({row.catalyst_confidence})",
+                f"- Catalyst Source: {attribution.source_publisher if attribution else 'unknown'} | "
+                f"{attribution.source_url if attribution and attribution.source_url else 'no stored URL'}",
+                f"- Catalyst Mentioned / Candidate Ticker: "
+                f"{attribution.mentioned_ticker if attribution and attribution.mentioned_ticker else 'unavailable'} / {row.symbol}",
+                f"- Catalyst Attribution: {attribution.relationship_type if attribution else 'UNRESOLVED'}",
+                f"- Catalyst Attribution Evidence: {attribution.relationship_evidence if attribution else 'No attribution record.'}",
+                f"- Catalyst Score Authority: {attribution.score_authority if attribution else CATALYST_SCORE_BLOCKED}",
                 f"- Previous Day High/Low/Close: {money(tech.previous_day_high)} / {money(tech.previous_day_low)} / {money(tech.previous_day_close)}",
                 f"- 5-Day High / 20-Day High: {money(tech.five_day_high)} / {money(tech.twenty_day_high)}",
                 f"- Support / Resistance: {money(tech.support_level)} / {money(tech.resistance_level)}",
-                f"- Bullish Entry: {money(plan.bullish_entry)}",
-                f"- Bullish Stop: {money(plan.bullish_stop)}",
-                f"- Targets: {money(plan.bullish_target_1)} / {money(plan.bullish_target_2)}",
+                f"- Bullish Entry: {money(plan.bullish_entry)} (HYPOTHETICAL PLAN | EXECUTION-INELIGIBLE)",
+                f"- Bullish Stop: {money(plan.bullish_stop)} (HYPOTHETICAL PLAN | EXECUTION-INELIGIBLE)",
+                f"- Targets: {money(plan.bullish_target_1)} / {money(plan.bullish_target_2)} "
+                "(HYPOTHETICAL PLAN | EXECUTION-INELIGIBLE)",
                 f"- Risk/Reward: {format_optional(plan.risk_reward_ratio)}",
                 f"- Likely Outperform QQQ: {'yes' if row.likely_outperform_qqq else 'no'}",
                 f"- Likely Outperform SMH: {'yes' if row.likely_outperform_smh else 'no'}",
@@ -1552,6 +1988,10 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
                 f"- Readiness: {plan.readiness}",
                 f"- Blocking Reasons: {' | '.join(plan.blocking_reasons) if plan.blocking_reasons else 'none'}",
                 f"- Warnings: {' | '.join(plan.warnings) if plan.warnings else 'none'}",
+                "",
+                "#### Field-Level Price Evidence",
+                "",
+                *price_evidence_table_lines(row),
                 "",
             ]
         )
@@ -1568,6 +2008,72 @@ def _replace_report_text(path: Path, text: str) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def price_evidence_summary(row: TradePlanRow, field_name: str) -> str:
+    evidence = row.price_evidence.get(field_name)
+    if evidence is None:
+        return "UNAVAILABLE | EXECUTION-INELIGIBLE"
+    age = "unknown age" if evidence.age_seconds is None else f"age {evidence.age_seconds:.3f}s"
+    provider_time = evidence.provider_timestamp or "provider time unavailable"
+    receipt_time = evidence.local_receipt_timestamp or "receipt time unavailable"
+    return (
+        f"{evidence.label} | source {evidence.source} | provider {provider_time} | "
+        f"received {receipt_time} | {age} | auth {evidence.authentication_status} | "
+        f"result {evidence.result_status} | {evidence.authority}"
+    )
+
+
+def format_provider_results(results: dict[str, str]) -> str:
+    if not results:
+        return "unknown"
+    return " | ".join(f"{source}={status}" for source, status in sorted(results.items()))
+
+
+def price_evidence_table_lines(row: TradePlanRow) -> list[str]:
+    lines = [
+        "| Field | Value | Label | Source | Provider Time | Receipt Time | Age (s) | Auth | Result | Authority |",
+        "| --- | ---: | --- | --- | --- | --- | ---: | --- | --- | --- |",
+    ]
+    for field_name, evidence in row.price_evidence.items():
+        value = price_evidence_value(row, field_name)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    field_name,
+                    money(value),
+                    markdown_cell(evidence.label),
+                    markdown_cell(evidence.source),
+                    markdown_cell(evidence.provider_timestamp or "unavailable"),
+                    markdown_cell(evidence.local_receipt_timestamp or "unavailable"),
+                    (
+                        f"{evidence.age_seconds:.3f}"
+                        if evidence.age_seconds is not None
+                        else "unavailable"
+                    ),
+                    markdown_cell(evidence.authentication_status),
+                    markdown_cell(evidence.result_status),
+                    markdown_cell(evidence.authority),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def price_evidence_value(row: TradePlanRow, field_name: str) -> float | None:
+    if hasattr(row, field_name):
+        value = getattr(row, field_name)
+    elif hasattr(row.technical_levels, field_name):
+        value = getattr(row.technical_levels, field_name)
+    else:
+        value = getattr(row.trade_plan, field_name, None)
+    return float(value) if value is not None else None
+
+
+def markdown_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\r", " ").replace("\n", " ")
 
 
 def readiness_section_lines(title: str, rows: list[TradePlanRow], readiness_prefix: str) -> list[str]:
@@ -1724,6 +2230,28 @@ def row_to_csv(row: TradePlanRow) -> dict[str, object]:
         "News Score": row.news_score,
         "Composite Score": row.composite_score,
         "Catalyst Summary": row.catalyst_summary,
+        "Catalyst Relationship": (
+            row.catalyst_attribution.relationship_type
+            if row.catalyst_attribution is not None
+            else "UNRESOLVED"
+        ),
+        "Catalyst Score Authority": (
+            row.catalyst_attribution.score_authority
+            if row.catalyst_attribution is not None
+            else CATALYST_SCORE_BLOCKED
+        ),
+        "Price Evidence Status": row.price_evidence_status,
+        "Price Evidence JSON": json.dumps(
+            {
+                name: asdict(evidence)
+                for name, evidence in row.price_evidence.items()
+            },
+            sort_keys=True,
+        ),
+        "Provider Results": json.dumps(
+            row.market_tape.provider_results,
+            sort_keys=True,
+        ),
         "Previous Day High": tech.previous_day_high,
         "Previous Day Low": tech.previous_day_low,
         "Previous Day Close": tech.previous_day_close,
@@ -1788,6 +2316,22 @@ def row_to_json(row: TradePlanRow) -> dict[str, object]:
         },
         "technical_levels": asdict(row.technical_levels),
         "market_tape": asdict(row.market_tape),
+        "evidence_integrity": {
+            "schema_version": 1,
+            "price_evidence_status": row.price_evidence_status,
+            "price_fields": {
+                name: asdict(evidence)
+                for name, evidence in row.price_evidence.items()
+            },
+            "provider_results": row.market_tape.provider_results,
+            "catalyst_attribution": (
+                asdict(row.catalyst_attribution)
+                if row.catalyst_attribution is not None
+                else None
+            ),
+            "plan_label": "HYPOTHETICAL PLAN",
+            "plan_authority": EXECUTION_INELIGIBLE,
+        },
         "trade_plan": asdict(row.trade_plan),
         "fed_event_analysis": {
             "risk_on_rank": row.risk_on_rank,

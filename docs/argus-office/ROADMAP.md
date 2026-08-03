@@ -49,6 +49,22 @@ versus account-aware allocation; and explicit intraday versus swing-plan
 horizons. R031's nonpersisting market-hours candle proof remains the data
 foundation for R032-R034 and sequential breakout research.
 
+ARGUS-DATA-001 opening evidence integrity is `IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-DATA-001-opening-evidence-integrity` from canonical base
+`2aa4ef3`. TradePlan reports now preserve field-level price source, provider
+time, receipt time, age, authentication/result status, and research authority;
+provider attempts remain separate, so a Yahoo `HTTP_401` cannot be mistaken for
+the source of a successful Nasdaq bid/ask. Catalyst rows preserve source article
+metadata, explicit mentioned ticker, candidate identity, relationship type, and
+score authority. Unproven relationships are `UNRESOLVED` / `BLOCKED` without
+changing the legacy score. Monday's four actual catalyst rows all fail that
+attribution gate; CMCSA additionally preserves explicit `DIS` mention. Focused
+23/23, adjacent 81/81 and 57/57, and full 1,059/1,059 Python tests pass. A
+canonical comparison proves rank, composite score, risk-on/off ranks, plan
+values, and readiness are byte-identical to base `2aa4ef3`. This feature branch
+does not alter the installed service, manifest, or pinned opening jobs and must
+not merge until those operational identities can be deliberately repinned.
+
 ARGUS-MONDAY-002 Sunday-readiness hardening is `IMPLEMENTED_AND_VERIFIED` at
 runtime commit `d86f750`. The opening manifest now freezes every ordinary
 opening job to a full lowercase Git SHA, and the supervisor validates that
@@ -548,15 +564,15 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Item | Current truth |
 | --- | --- |
 | Canonical baseline | Synchronized `master`/`origin/master` through SHADOW-024 integration `cd43852` plus this governance closeout. It contains ARGUS-MONDAY-001/002 timing and Sunday-readiness hardening, clock reliability, the passed reboot-without-login proof tooling, production-manifest validation, ARGUS-SERVICE-001 through 007, SHADOW-024's offline terminal packet, strict opening-result enforcement, the installed three-trigger SYSTEM clock task, ARGUS-SHADOW-023 clock/selector/host-response hardening, accepted ARGUS-SHADOW-017 implementation `94f5074`, proof repair `40a26a0`, the WPF workstation through R030, prior Shadow opening repair `2213299`, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active implementation | Monday's capture-only gate passed and SHADOW-024 is integrated. R031 is implemented and backed up through contract `b96f745` plus nonpersisting observer/launch hardening `3272476` and `d6d7217`; its market-hours proof remains pending. R032 production persistence remains blocked until that behavior is frozen. |
+| Active implementation | Monday's capture-only gate passed and SHADOW-024 is integrated. DATA-001 is implemented and Hard-Chew verified on its isolated branch, pending deliberate repin-safe integration. R031 is implemented and backed up through contract `b96f745` plus nonpersisting observer/launch hardening `3272476` and `d6d7217`; its market-hours proof remains pending. R032 production persistence remains blocked until that behavior is frozen. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | The capture-only and integration gates are no longer blocked. Official Shadow selection is blocked by the six analytical-integrity investigations above. R032 is blocked by R031 market-hours evidence. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
+| Blocked by | The capture-only and integration gates are no longer blocked. Official Shadow selection remains blocked by DATA-002 through DATA-005 and acceptance/integration of DATA-001; DATA-001 proves provenance and attribution truth but intentionally does not change ranking. R032 is blocked by R031 market-hours evidence. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03 08:35 ordinary capture finished successfully on its first attempt with required artifacts and no Shadow or brokerage action. Twenty-nine later opening jobs remain independently scheduled. |
-| Immediate operational work | Investigate catalyst-symbol integrity and quote provenance before changing ranking or arming Shadow. Run R031's nonpersisting Streamer/price-history observation during a suitable market window; R032 production persistence remains blocked until it passes. The next ordinary capture remains independently scheduled for 2026-08-04 at 08:35 Central. |
+| Immediate operational work | Preserve the next independently scheduled opening capture on the pinned canonical runtime. Integrate DATA-001 only through a deliberate manifest repin and fresh service identity proof; then begin DATA-002 time-normalized opening RVOL. Run R031's nonpersisting Streamer/price-history observation during a suitable market window; R032 production persistence remains blocked until it passes. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's capture. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
 | Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
-| Data caveat | The Monday report used mixed research enrichment and carried `QUOTE_HTTP_401` on all four candidates; its bid/ask values are not execution-trusted. GOOGL and CMCSA catalyst text appears potentially cross-wired. Opening RVOL used full-day average volume, and the $500-per-row reference sizing is not account-aware. Only `CRWV` has stored minute candles. R031-R033 own the missing actual-candle capability, while R034 retains the destructive-operation interruption gate. |
+| Data caveat | DATA-001 proves Monday's displayed bid/ask came through the Nasdaq-primary/Yahoo-fallback research path while Yahoo's separate quote request returned `HTTP_401`; no current report price is execution-trusted. All four Monday catalyst rows are unresolved, with CMCSA explicitly mentioning `DIS`. Opening RVOL still uses full-day average volume, and the $500-per-row reference sizing is not account-aware. Only `CRWV` has stored minute candles. R031-R033 own the missing actual-candle capability, while R034 retains the destructive-operation interruption gate. |
 
 ### Status Legend
 
