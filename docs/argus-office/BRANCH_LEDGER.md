@@ -10,8 +10,9 @@ terminal capture evidence has now been preserved, so
 `codex/ARGUS-SHADOW-024-post-monday-integration` carries the same offline module
 and synthetic tests on the current canonical baseline for ordinary
 fast-forward integration. The original proof passed compileall, 17 focused,
-168 adjacent Shadow, and all 1,034 Python tests. The reconciliation branch must
-repeat affected and full verification before merge. The packet has no service,
+168 adjacent Shadow, and all 1,034 Python tests. The reconciliation branch passes
+compileall, 17 focused, 225 adjacent, and all 1,051 Python tests and is
+`VERIFIED_PENDING_FAST_FORWARD`. The packet has no service,
 manifest, scheduler, Engine Host, provider, WPF, broker, credential, production
 data, or official Shadow mutation capability.
 

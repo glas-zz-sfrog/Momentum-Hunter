@@ -2,10 +2,12 @@
 
 ## Status
 
-- Branch: `codex/ARGUS-SHADOW-024-offline-terminal-review-packet`
-- Base: canonical frozen `ddc09f8`
-- Classification: `IMPLEMENTED_PENDING_INTEGRATION_AFTER_MONDAY_EVIDENCE`
-- Merge: prohibited until Monday's operational evidence is preserved
+- Original branch: `codex/ARGUS-SHADOW-024-offline-terminal-review-packet` at
+  `48dbcb2` from frozen base `ddc09f8`
+- Reconciliation branch: `codex/ARGUS-SHADOW-024-post-monday-integration` from
+  canonical post-capture base `2006f25`
+- Classification: `VERIFIED_PENDING_FAST_FORWARD`
+- Monday prerequisite: passed; terminal receipt and capture/report evidence preserved
 - Canonical runtime impact: none
 
 ## Implementation
@@ -61,14 +63,13 @@ broker, WPF, or Codex integration.
 ## Verification
 
 - Python compileall: pass.
-- Focused packet suite: 17/17 pass in 10.418 seconds.
+- Focused packet suite on the reconciliation branch: 17/17 pass in 12.146 seconds.
 - Packet plus Shadow lifecycle/selection/opening/readiness/live-marking/proof regressions:
-  168/168 pass in 93.897 seconds.
-- Full Python discovery: 1,034/1,034 pass in 212.792 seconds.
-- First full-discovery attempt: 1,033/1,034 with only the existing installer-path test
-  failing because the separate worktree lacked `.venv`; an ignored junction to the
-  existing environment satisfied that checkout-shape prerequisite, and the isolated
-  test plus full rerun passed.
+  225/225 pass in 108.530 seconds.
+- Full Python discovery: 1,051/1,051 pass in 197.718 seconds.
+- The isolated reconciliation worktree uses an ignored junction to the existing
+  canonical virtual environment solely to satisfy checkout-shape tests; it is not
+  tracked and does not alter runtime behavior.
 - `git diff --check`: pass.
 - Static forbidden-import/method scan: pass.
 - Source-file nonmutation and write-once rollback proof: pass.
@@ -92,6 +93,6 @@ broker, WPF, or Codex integration.
 - The packet can report only evidence the current schemas persist; it marks absent
   ideal results, system downtime, and other optional context as missing.
 - Source records without the current verifiable activation/policy contract fail closed.
-- Integration must be rebased only through an ordinary safe reconciliation after
-  Monday's canonical operational evidence is preserved; no reset, rebase, or force push
-  is authorized.
+- The original frozen branch remains preserved. The reconciliation was applied as a
+  new commit on current `master` history without reset, rebase, branch deletion, or
+  force push and is ready for a clean fast-forward.

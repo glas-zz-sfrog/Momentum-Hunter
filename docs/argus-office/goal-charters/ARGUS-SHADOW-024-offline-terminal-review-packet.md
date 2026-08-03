@@ -59,7 +59,7 @@ derivations, and review questions.
 - Python compileall: pass.
 - Focused packet tests: 17/17 pass.
 - Packet plus adjacent Shadow regression: 168/168 pass.
-- Full Python discovery: 1,034/1,034 pass after providing the isolated worktree's
+- Full Python discovery on the original branch: 1,034/1,034 pass after providing the isolated worktree's
   ignored `.venv` junction required by an existing installer-path test.
 - `git diff --check`: pass.
 - Static network/broker/service/Codex capability scan: pass.
@@ -70,7 +70,9 @@ derivations, and review questions.
 
 ## Status
 
-`IMPLEMENTED_PENDING_INTEGRATION_AFTER_MONDAY_EVIDENCE`
+`VERIFIED_PENDING_FAST_FORWARD` after Monday's terminal evidence passed and the
+current-baseline reconciliation passed 17 focused, 225 adjacent, and 1,051 full
+Python tests.
 
 ## Goal Steward Review
 

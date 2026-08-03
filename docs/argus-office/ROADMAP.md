@@ -208,10 +208,10 @@ proves entitlement, latency, provisional/final behavior, corrections, volume,
 reconnects, and agreement with price history. R032-R034 remain sequenced behind
 that observation.
 
-`ARGUS-SHADOW-024` is `IMPLEMENTED_PENDING_MERGE` on its post-Monday
-reconciliation branch. The deterministic offline packet builder and 17-test
-focused suite are complete; 168 adjacent Shadow tests and all 1,034 Python tests
-passed on the original branch. It reads six explicit files, emits write-once hash-addressed JSON/Markdown,
+`ARGUS-SHADOW-024` is `VERIFIED_PENDING_FAST_FORWARD` on its post-Monday
+reconciliation branch. The deterministic offline packet builder passes 17
+focused tests, 225 adjacent Shadow/Engine Host tests, and all 1,051 Python tests
+on the current baseline. It reads six explicit files, emits write-once hash-addressed JSON/Markdown,
 and has no provider, broker, service, Engine Host, WPF, scheduler, or Codex
 capability. Monday's evidence is now preserved; current-baseline regression,
 protected-path, and secret checks must pass before fast-forward integration.
@@ -737,15 +737,15 @@ activated-empty and unarmed at `0 / 30`, A017 is
 - Report evidence checkpoints at 5, 10, 20, and 30 completed eligible trades. Interim reports evaluate mechanics and evidence quality and must not tune the strategy to the developing sample.
 - Thirty completed eligible trades is an initial engineering gate, not proof of a durable edge, a profitability claim, or permission to transmit any broker order.
 - ARGUS-SHADOW-024 is implemented and Hard-Chew verified; current-baseline
-  reconciliation is pending fast-forward integration.
+  reconciliation is `VERIFIED_PENDING_FAST_FORWARD`.
   It builds deterministic, sanitized, write-once JSON/Markdown packets from one
   terminal trade or no-trade evidence chain. It validates current sample/policy,
   report, handoff, cycle, selection, lifecycle, and input hashes; separates
   facts, derivations, missing values, and questions; and never invokes Codex,
   Schwab, a broker, the service, Engine Host, WPF, or a scheduler. Focused tests
-  pass 17/17, adjacent Shadow tests pass 168/168, and full discovery passes
-  1,034/1,034 on the original branch. Status is
-  `IMPLEMENTED_PENDING_MERGE`; Monday's evidence prerequisite has passed.
+  pass 17/17, adjacent Shadow/Engine Host tests pass 225/225, and full discovery
+  passes 1,051/1,051. Status is `VERIFIED_PENDING_FAST_FORWARD`; Monday's
+  evidence prerequisite has passed.
 
 #### 11B - Schwab Read-Only And Canary Preparation
 
