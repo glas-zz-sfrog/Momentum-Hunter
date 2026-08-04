@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Preserved the successful 2026-08-04 unattended opening capture before integration. It completed on attempt 1 with 11 candidates, clock proof, validated capture/report lineage, score breakdowns, TradePlan JSON/Markdown/CSV, and no Shadow or brokerage action.
+- Fast-forwarded ARGUS-DATA-001 `488cbca` and ARGUS-DATA-001B `fe8c929` into local `master` without rewriting Monday or Tuesday evidence. Compileall, 181 affected tests, all 1,066 Python tests, diff/protected-path/secret checks, synchronized backup, and repinning of the remaining 28 opening jobs bind the unattended lane to this closeout.
+- Set ARGUS-DATA-002 time-normalized opening relative volume as the next Builder task. Existing opening reports remain historical because their partial-session-volume/full-day-average ratio is not execution-authoritative.
 - Implemented ARGUS-DATA-001B on a stacked successor to DATA-001. Unresolved or score-blocked catalyst evidence now contributes zero catalyst points and zero cluster-derived ranking bonuses under a versioned, fingerprinted prospective composite configuration.
 - Added prospective evidence authority gates: current research-only price evidence cannot make a TradePlan execution-eligible, and the automatic Shadow selector rejects legacy, missing, tampered, or contradictory report/candidate authority records before selection.
 - Preserved Monday's immutable report and Tuesday's pinned `2aa4ef3` runtime. Compileall, 70 focused, 191 adjacent, and all 1,066 Python tests pass; no service, manifest, scheduler, provider, account, broker/order, credential, UI, database, raw-capture, or generated-report file changed.

@@ -1,29 +1,28 @@
 # Branch Ledger
 
-Date reconciled: 2026-08-03
+Date reconciled: 2026-08-04
 
 ## ARGUS-DATA-001B Evidence Authority Enforcement
 
-`codex/ARGUS-DATA-001B-evidence-authority-enforcement` is `ACTIVE` and
-`IMPLEMENTED_PENDING_INTEGRATION_AFTER_2026-08-04_CAPTURE`. It is the single
+`codex/ARGUS-DATA-001B-evidence-authority-enforcement` is
+`MERGED_TO_LOCAL_MASTER` at `fe8c929`. It remains the single
 stacked successor to DATA-001 commit `488cbca`, not an independent competing
 implementation. It prospectively removes blocked catalyst evidence from score
 and scenario bonuses, gates research-only price evidence, and makes Shadow
 selection reject missing, legacy, or contradictory authority records. Python
-compileall, 70 focused, 191 adjacent, and all 1,066 tests pass. The branch may
-be backed up normally; do not merge, install, or repin before Tuesday's capture
-on canonical `2aa4ef3` is terminal and preserved.
+compileall, 70 focused, 191 adjacent, and all 1,066 branch tests pass. Tuesday's
+capture on canonical `2aa4ef3` completed and was preserved before the clean
+two-commit fast-forward. The branch is backed up on `origin`.
 
 ## ARGUS-DATA-001 Opening Evidence Integrity
 
-`codex/ARGUS-DATA-001-opening-evidence-integrity` is `ACTIVE` and
-`IMPLEMENTED_PENDING_MERGE` from canonical base `2aa4ef3`. It adds report-only
-price provenance and catalyst attribution truth without changing ranking,
+`codex/ARGUS-DATA-001-opening-evidence-integrity` is
+`MERGED_TO_LOCAL_MASTER` at `488cbca` from canonical base `2aa4ef3`. It adds
+report-only price provenance and catalyst attribution truth without changing ranking,
 plans, readiness, risk, selection, RVOL, FakeBroker, account, or broker
 semantics. Compileall, 23 focused, 138 adjacent, and all 1,059 Python tests
-pass. The branch may be backed up normally, but integration must remain pending
-until Git Steward can repin the opening manifest and prove a fresh service
-identity without jeopardizing the next capture.
+pass. The branch is backed up on `origin`; its successor DATA-001B was merged
+in the same direct fast-forward after Tuesday's terminal capture was preserved.
 
 ## ARGUS-SHADOW-024 Offline Terminal Review Packet
 
