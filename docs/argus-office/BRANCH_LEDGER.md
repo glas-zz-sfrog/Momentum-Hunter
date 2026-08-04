@@ -4,16 +4,17 @@ Date reconciled: 2026-08-04
 
 ## ARGUS-ROADMAP-002 Continuous Intraday Market Awareness
 
-`codex/ARGUS-ROADMAP-002-continuous-intraday-awareness` is `ACTIVE` from clean,
-synchronized canonical base `0bd8a18`. It changes Argus Office documentation
-only and defines the continuous-intraday architecture, one Python-owned Schwab
-Streamer session, candidate lifecycle, event/cadence matrices, immutable plan
-rules, regime/macro/catalyst contracts, R031B adjudication, and the sequenced
-runtime task program. It is not merged and does not alter the installed service,
-28 pinned opening jobs, Engine Host, provider state, candle stores, WPF,
-FakeBroker, official Shadow, account binding, or transmission. Next action:
-complete docs proof, commit, and non-force push the feature branch; integrate
-only through a later deliberate canonical closeout and exact-head service repin.
+`codex/ARGUS-ROADMAP-002-continuous-intraday-awareness` is
+`IMPLEMENTED_PENDING_MERGE` from clean, synchronized canonical base `0bd8a18`.
+Implementation commit `013cafd` is backed up on `origin`. It changes Argus
+Office documentation only and defines the continuous-intraday architecture,
+one Python-owned Schwab Streamer session, candidate lifecycle, event/cadence
+matrices, immutable plan rules, regime/macro/catalyst contracts, R031B
+adjudication, and the sequenced runtime task program. It is not merged and does
+not alter the installed service, 28 pinned opening jobs, Engine Host, provider
+state, candle stores, WPF, FakeBroker, official Shadow, account binding, or
+transmission. Next action: integrate only through a later deliberate canonical
+closeout and exact-head service repin.
 
 ## ARGUS-R031 / R032A Candle Contract Chain
 
