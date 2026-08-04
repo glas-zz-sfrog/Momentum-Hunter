@@ -2,6 +2,42 @@
 
 This file records durable product and operating goals that should survive individual task branches.
 
+## Market Awareness: Operate Continuously, Decide On Material Events
+
+Status: `ACTIVE`; architecture and task contracts implemented pending merge
+
+Goal:
+
+- Make Momentum Hunter continuously aware of watched candidates, market and
+  sector regime, macro events, catalyst changes, and setup evolution throughout
+  the eligible session rather than treating the 08:35 Central opening capture
+  as the whole trading day.
+
+Operator Pain:
+
+- A momentum move can form, fail, pull back, reclaim, or become exhausted in
+  minutes. A morning snapshot alone cannot tell Steven what the market is doing
+  now, and independent provider connections would create inconsistent or stale
+  truth across charts, monitoring, and position marking.
+
+Acceptance Direction:
+
+- Retain 08:35 as an immutable bootstrap and unattended reliability proof.
+- Use one Python-owned Schwab Streamer session and central subscription manager.
+- Separate periodic broad discovery from bounded continuous monitoring.
+- Reevaluate on material candle, catalyst, regime, event, stale, and lifecycle
+  transitions rather than every quote.
+- Persist legal candidate states, evidence fingerprints, and duplicate/noise
+  controls.
+- Keep breakout, pullback, and reclaim as distinct setup identities with
+  immutable versioned TradePlans and a fresh Risk Governor decision.
+- Keep sequential-breakout detection research-only until prospective evidence
+  supports any stronger authority.
+- Begin a new official Shadow sample only after continuous semantics are frozen;
+  never rewrite v1, v2, or v3.
+- Keep WPF and Codex downstream of versioned Python evidence and keep FakeBroker
+  as the only automated execution boundary.
+
 ## Shadow: Observe An Active FakeBroker Position Honestly
 
 Status: `ACTIVE`; implementation, automated proof, WPF visual acceptance,

@@ -2,6 +2,34 @@
 
 Date reconciled: 2026-08-04
 
+## ARGUS-ROADMAP-002 Continuous Intraday Market Awareness
+
+`codex/ARGUS-ROADMAP-002-continuous-intraday-awareness` is `ACTIVE` from clean,
+synchronized canonical base `0bd8a18`. It changes Argus Office documentation
+only and defines the continuous-intraday architecture, one Python-owned Schwab
+Streamer session, candidate lifecycle, event/cadence matrices, immutable plan
+rules, regime/macro/catalyst contracts, R031B adjudication, and the sequenced
+runtime task program. It is not merged and does not alter the installed service,
+28 pinned opening jobs, Engine Host, provider state, candle stores, WPF,
+FakeBroker, official Shadow, account binding, or transmission. Next action:
+complete docs proof, commit, and non-force push the feature branch; integrate
+only through a later deliberate canonical closeout and exact-head service repin.
+
+## ARGUS-R031 / R032A Candle Contract Chain
+
+`codex/ARGUS-R031-schwab-candle-contract` is
+`IMPLEMENTED_PENDING_MARKET_HOURS_PROOF` and pushed at `b96f745`; that commit is
+an inclusive successor to initial contract `a39086c`. The separate current
+candle worktree branch
+`codex/ARGUS-R032A-synthetic-candle-persistence-contract` is pushed and clean
+through provisional persistence `35c59ee`, observer `3272476`, and launch
+hardening `d6d7217`. The observer is R031A: bounded 3-15 minutes,
+dry-run-by-default, explicit-live-switch only, and pinned to
+`websocket-client==1.9.0`. These branches fork from older base `ddc09f8`, are not
+merged to current `master`, and must not be used as installed runtime. R031B
+adjudicates live behavior; R031C then reconciles only compatible work onto the
+current baseline. Classification: `NEEDS_REVIEW` / preserved input to R031C.
+
 ## ARGUS-DATA-001B Evidence Authority Enforcement
 
 `codex/ARGUS-DATA-001B-evidence-authority-enforcement` is
