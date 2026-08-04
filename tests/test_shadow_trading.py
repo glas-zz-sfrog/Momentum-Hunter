@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -40,6 +41,12 @@ from momentum_hunter.shadow_trading import (
     canonical_json,
     shadow_metrics,
     stable_id,
+)
+from momentum_hunter.trade_planning import (
+    COMPOSITE_CONFIGURATION,
+    COMPOSITE_CONFIGURATION_FINGERPRINT,
+    COMPOSITE_PROFILE,
+    EVIDENCE_INTEGRITY_SCHEMA_VERSION,
 )
 from momentum_hunter.workstation_shadow import ShadowWorkspacePaths, ShadowWorkspaceService
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
@@ -1325,8 +1332,35 @@ def report_payload() -> dict:
         },
         "scoring": {
             "composite_score": 91,
+            "composite_profile": COMPOSITE_PROFILE,
+            "composite_configuration_fingerprint": COMPOSITE_CONFIGURATION_FINGERPRINT,
             "catalyst_summary": "Synthetic catalyst",
             "catalyst_cluster": "Synthetic setup",
+            "catalyst_confidence": 80,
+            "authoritative_catalyst_confidence": 80,
+            "catalyst_score_contribution": 4.0,
+        },
+        "evidence_integrity": {
+            "schema_version": EVIDENCE_INTEGRITY_SCHEMA_VERSION,
+            "price_evidence_status": "EXECUTION_ELIGIBLE",
+            "price_fields": {},
+            "provider_results": {"synthetic": "SUCCESS"},
+            "catalyst_attribution": {
+                "source_article": "Synthetic catalyst",
+                "source_publisher": "Synthetic fixture",
+                "source_url": "https://example.test/synthetic",
+                "source_published_at": "2026-07-23T09:55:00-05:00",
+                "mentioned_ticker": "TEST",
+                "mentioned_company": "Synthetic Test Corporation",
+                "candidate_ticker": "TEST",
+                "candidate_company": "Synthetic Test Corporation",
+                "relationship_type": "DIRECT_ISSUER",
+                "relationship_evidence": "Synthetic fixture explicitly binds TEST.",
+                "score_authority": "SUPPORTED",
+            },
+            "authority_blocking_reasons": [],
+            "plan_label": "SYNTHETIC TEST PLAN",
+            "plan_authority": "EXECUTION_ELIGIBLE",
         },
         "trade_plan": {
             "bullish_entry": 10.0,
@@ -1354,6 +1388,10 @@ def report_payload() -> dict:
             "source_provider": "synthetic-test-provider",
             "source_scanner": "Institutional Momentum",
             "market_regime": "risk_on",
+            "composite_profile": COMPOSITE_PROFILE,
+            "composite_configuration_fingerprint": COMPOSITE_CONFIGURATION_FINGERPRINT,
+            "composite_configuration": copy.deepcopy(COMPOSITE_CONFIGURATION),
+            "evidence_integrity_schema_version": EVIDENCE_INTEGRITY_SCHEMA_VERSION,
         },
         "top_5_for_capital": [row],
         "candidates": [row],

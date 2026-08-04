@@ -22,12 +22,19 @@ from momentum_hunter.evidence_integrity import (
 from momentum_hunter.models import Candidate, NewsItem, NewsStack
 from momentum_hunter.outcomes import PriceBar
 from momentum_hunter.trade_planning import (
+    CATALYST_ATTRIBUTION_UNRESOLVED,
+    COMPOSITE_CONFIGURATION_FINGERPRINT,
+    COMPOSITE_PROFILE,
+    DO_NOT_TRADE_UNTRUSTED_EVIDENCE,
+    EVIDENCE_INTEGRITY_SCHEMA_VERSION,
     MarketTape,
+    PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
     build_trade_planning_report,
     composite_score,
     export_trade_planning_report,
     fetch_market_tape,
     overlay_tapes,
+    risk_on_score,
 )
 
 
@@ -147,7 +154,7 @@ class EvidenceIntegrityTests(unittest.TestCase):
         self.assertEqual("SUCCESS", tape.provider_results["nasdaq_info"])
         self.assertIn("QUOTE_HTTP_401", tape.warnings)
 
-    def test_report_exposes_complete_price_and_catalyst_truth_without_rescoring(self) -> None:
+    def test_report_enforces_blocked_catalyst_and_price_authority(self) -> None:
         capture = self.write_capture(
             "GOOGL",
             "Alphabet Inc",
@@ -158,6 +165,9 @@ class EvidenceIntegrityTests(unittest.TestCase):
             current_bid=368.12,
             current_ask=368.26,
             spread_percent=0.04,
+            intraday_volume=1_500_000,
+            average_daily_volume_20=1_000_000,
+            relative_volume=1.5,
             source="nasdaq+yahoo_quote+yahoo_chart",
             warnings=["QUOTE_HTTP_401"],
             provider_results={
@@ -198,6 +208,8 @@ class EvidenceIntegrityTests(unittest.TestCase):
         self.assertEqual(EXECUTION_INELIGIBLE, row.price_evidence_status)
         self.assertEqual(UNRESOLVED, row.catalyst_attribution.relationship_type)
         self.assertEqual(CATALYST_SCORE_BLOCKED, row.catalyst_attribution.score_authority)
+        self.assertEqual(0, row.authoritative_catalyst_confidence)
+        self.assertEqual(0.0, row.catalyst_score_contribution)
         self.assertEqual(
             composite_score(
                 candidate_for(
@@ -207,9 +219,18 @@ class EvidenceIntegrityTests(unittest.TestCase):
                 ),
                 row.technical_levels,
                 row.trade_plan,
-                row.catalyst_confidence,
+                0,
             ),
             row.composite_score,
+        )
+        self.assertEqual(DO_NOT_TRADE_UNTRUSTED_EVIDENCE, row.trade_plan.readiness)
+        self.assertIn(
+            PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
+            row.trade_plan.blocking_reasons,
+        )
+        self.assertIn(
+            CATALYST_ATTRIBUTION_UNRESOLVED,
+            row.trade_plan.blocking_reasons,
         )
         required_fields = {
             "last_price",
@@ -238,6 +259,51 @@ class EvidenceIntegrityTests(unittest.TestCase):
             self.assertTrue(payload["result_status"])
             self.assertEqual(RESEARCH_ONLY, payload["authority"])
 
+    def test_direct_issuer_retains_authorized_catalyst_points(self) -> None:
+        capture = self.write_capture(
+            "MSFT",
+            "Microsoft Corp",
+            "Microsoft raises cloud guidance",
+        )
+
+        row = build_trade_planning_report(
+            capture,
+            as_of=datetime.fromisoformat("2026-08-03T08:35:04-05:00"),
+        ).rows[0]
+
+        self.assertEqual(CATALYST_SCORE_SUPPORTED, row.catalyst_attribution.score_authority)
+        self.assertEqual(row.catalyst_confidence, row.authoritative_catalyst_confidence)
+        self.assertEqual(
+            round(row.catalyst_confidence * 0.05, 2),
+            row.catalyst_score_contribution,
+        )
+        self.assertNotIn(
+            CATALYST_ATTRIBUTION_UNRESOLVED,
+            row.trade_plan.blocking_reasons,
+        )
+        self.assertIn(
+            PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
+            row.trade_plan.blocking_reasons,
+        )
+
+    def test_blocked_ai_cluster_adds_no_risk_on_bonus(self) -> None:
+        capture = self.write_capture(
+            "AMZN",
+            "Amazon.com Inc",
+            "Goldman Sachs has stark message for AI stock investors",
+        )
+
+        row = build_trade_planning_report(
+            capture,
+            as_of=datetime.fromisoformat("2026-08-03T08:35:04-05:00"),
+        ).rows[0]
+
+        self.assertEqual(CATALYST_SCORE_BLOCKED, row.catalyst_attribution.score_authority)
+        self.assertIn("AI", row.catalyst_cluster)
+        self.assertEqual(row.composite_score + 8, risk_on_score(row))
+        self.assertFalse(row.likely_outperform_smh)
+        self.assertIn("research-only", row.opportunity_notes[0])
+
     def test_export_uses_unambiguous_research_only_labels(self) -> None:
         capture = self.write_capture(
             "GOOGL",
@@ -258,6 +324,18 @@ class EvidenceIntegrityTests(unittest.TestCase):
         self.assertIn("HYPOTHETICAL PLAN | EXECUTION-INELIGIBLE", markdown)
         self.assertIn("Catalyst Attribution: UNRESOLVED", markdown)
         self.assertIn("Catalyst Score Authority: BLOCKED", markdown)
+        self.assertIn("Authorized Catalyst Confidence: 0", markdown)
+        self.assertEqual(COMPOSITE_PROFILE, payload["metadata"]["composite_profile"])
+        self.assertEqual(
+            COMPOSITE_CONFIGURATION_FINGERPRINT,
+            payload["metadata"]["composite_configuration_fingerprint"],
+        )
+        self.assertEqual(
+            EVIDENCE_INTEGRITY_SCHEMA_VERSION,
+            payload["metadata"]["evidence_integrity_schema_version"],
+        )
+        self.assertEqual(0, candidate["scoring"]["authoritative_catalyst_confidence"])
+        self.assertEqual(0.0, candidate["scoring"]["catalyst_score_contribution"])
         self.assertEqual(
             EXECUTION_INELIGIBLE,
             candidate["evidence_integrity"]["price_evidence_status"],

@@ -36,6 +36,7 @@ from momentum_hunter.terminal_review_packet import (
     verify_packet_security,
 )
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
+from tests.test_shadow_trading import report_payload as shadow_report_payload
 
 
 DECISION_AT = datetime.fromisoformat("2026-07-30T08:45:00-05:00")
@@ -561,52 +562,10 @@ class TerminalReviewPacketTests(unittest.TestCase):
 
 
 def report_payload() -> dict:
-    row = {
-        "rank": 1,
-        "symbol": "TEST",
-        "company": "Synthetic Test Corporation",
-        "market_data": {
-            "last_price": 9.9,
-            "current_bid": 9.89,
-            "current_ask": 9.91,
-            "spread_percent": 0.2,
-            "relative_volume": 2.0,
-        },
-        "scoring": {
-            "composite_score": 91,
-            "catalyst_summary": "Synthetic catalyst",
-            "catalyst_cluster": "Synthetic setup",
-        },
-        "trade_plan": {
-            "bullish_entry": 10.0,
-            "bullish_stop": 9.5,
-            "bullish_target_1": 10.5,
-            "bullish_target_2": 11.0,
-            "risk_reward_ratio": 1.0,
-            "estimated_shares_for_500": 2.0,
-            "estimated_dollar_risk": 1.0,
-            "estimated_target_1_reward": 1.0,
-            "confidence": "MEDIUM",
-            "tradeability": "MEDIUM",
-            "readiness": "EXECUTION_READY_TRADE",
-            "blocking_reasons": [],
-            "warnings": [],
-        },
-        "opportunity_notes": ["Synthetic test row"],
-    }
-    return {
-        "schema_version": 1,
-        "metadata": {
-            "generated_at": "2026-07-30T08:44:00-05:00",
-            "source_capture_path": "synthetic/capture.json",
-            "source_capture_time": "2026-07-30T08:43:00-05:00",
-            "source_provider": "synthetic-test-provider",
-            "source_scanner": "Institutional Momentum",
-            "market_regime": "risk_on",
-        },
-        "top_5_for_capital": [json.loads(json.dumps(row))],
-        "candidates": [row],
-    }
+    payload = shadow_report_payload()
+    payload["metadata"]["generated_at"] = "2026-07-30T08:44:00-05:00"
+    payload["metadata"]["source_capture_time"] = "2026-07-30T08:43:00-05:00"
+    return payload
 
 
 def quote(

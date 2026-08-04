@@ -14,6 +14,10 @@ from momentum_hunter.autonomy.view_models import (
     candidate_plan_from_report_row,
     stable_trade_plan_id,
 )
+from momentum_hunter.evidence_integrity import (
+    CATALYST_SCORE_SUPPORTED,
+    EXECUTION_ELIGIBLE,
+)
 from momentum_hunter.shadow_market_validity import (
     DecisionCycleStore,
     ShadowMarketValidityPolicy,
@@ -33,7 +37,14 @@ from momentum_hunter.shadow_opening import (
     ShadowOpeningSafetyError,
     trusted_clock_bounds,
 )
-from momentum_hunter.trade_planning import REPORT_SCHEMA_VERSION, parse_datetime
+from momentum_hunter.trade_planning import (
+    COMPOSITE_CONFIGURATION,
+    COMPOSITE_CONFIGURATION_FINGERPRINT,
+    COMPOSITE_PROFILE,
+    EVIDENCE_INTEGRITY_SCHEMA_VERSION,
+    REPORT_SCHEMA_VERSION,
+    parse_datetime,
+)
 from momentum_hunter.shadow_trading import (
     SHADOW_MODE,
     ShadowStateError,
@@ -200,6 +211,7 @@ class AutomaticShadowSelector:
             identity_findings.append(
                 "TradePlan report source-capture identity is missing."
             )
+        identity_findings.extend(report_evidence_authority_findings(metadata))
         if identity_findings:
             return self._record_terminal_cycle(
                 status=SELECTION_INVALID_REPORT,
@@ -524,7 +536,7 @@ class AutomaticShadowSelector:
             source_path=str(report_path),
             source_generated_at=str(metadata.get("generated_at", "")),
         )
-        reasons: list[str] = []
+        reasons: list[str] = list(candidate_evidence_authority_findings(row))
         fatal_warnings: tuple[str, ...] = ()
         informational_warnings: tuple[str, ...] = ()
         risk_payload: dict[str, Any] = {}
@@ -801,6 +813,89 @@ def load_report_object(source_bytes: bytes) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("The trade-planning report must contain an object.")
     return payload
+
+
+def report_evidence_authority_findings(
+    metadata: Mapping[str, Any],
+) -> tuple[str, ...]:
+    findings: list[str] = []
+    if metadata.get("composite_profile") != COMPOSITE_PROFILE:
+        findings.append(
+            "TradePlan report composite profile is missing or not authority-enforced."
+        )
+    if (
+        metadata.get("composite_configuration_fingerprint")
+        != COMPOSITE_CONFIGURATION_FINGERPRINT
+    ):
+        findings.append(
+            "TradePlan report composite configuration fingerprint is missing or unsupported."
+        )
+    if metadata.get("composite_configuration") != COMPOSITE_CONFIGURATION:
+        findings.append(
+            "TradePlan report composite configuration is missing or contradicts its fingerprint."
+        )
+    if (
+        metadata.get("evidence_integrity_schema_version")
+        != EVIDENCE_INTEGRITY_SCHEMA_VERSION
+    ):
+        findings.append(
+            "TradePlan report evidence-integrity schema is missing or unsupported."
+        )
+    return tuple(findings)
+
+
+def candidate_evidence_authority_findings(
+    row: Mapping[str, Any],
+) -> tuple[str, ...]:
+    integrity = row.get("evidence_integrity")
+    if not isinstance(integrity, Mapping):
+        return ("Candidate evidence-integrity record is missing.",)
+
+    findings: list[str] = []
+    if integrity.get("schema_version") != EVIDENCE_INTEGRITY_SCHEMA_VERSION:
+        findings.append("Candidate evidence-integrity schema is missing or unsupported.")
+    if integrity.get("price_evidence_status") != EXECUTION_ELIGIBLE:
+        findings.append("Candidate price evidence is not execution-eligible.")
+    if integrity.get("plan_authority") != EXECUTION_ELIGIBLE:
+        findings.append("Candidate TradePlan authority is not execution-eligible.")
+
+    attribution = integrity.get("catalyst_attribution")
+    if not isinstance(attribution, Mapping):
+        findings.append("Candidate catalyst attribution record is missing.")
+    elif attribution.get("score_authority") != CATALYST_SCORE_SUPPORTED:
+        findings.append("Candidate catalyst attribution is unresolved or score-blocked.")
+
+    scoring = row.get("scoring")
+    if not isinstance(scoring, Mapping):
+        findings.append("Candidate scoring authority record is missing.")
+    else:
+        if scoring.get("composite_profile") != COMPOSITE_PROFILE:
+            findings.append("Candidate composite profile is not authority-enforced.")
+        if (
+            scoring.get("composite_configuration_fingerprint")
+            != COMPOSITE_CONFIGURATION_FINGERPRINT
+        ):
+            findings.append(
+                "Candidate composite configuration fingerprint is missing or unsupported."
+            )
+        confidence = scoring.get("authoritative_catalyst_confidence")
+        if (
+            not isinstance(confidence, int)
+            or isinstance(confidence, bool)
+            or not 0 <= confidence <= 100
+        ):
+            findings.append("Candidate authorized catalyst confidence is invalid.")
+        contribution = scoring.get("catalyst_score_contribution")
+        if not isinstance(contribution, (int, float)) or isinstance(contribution, bool):
+            findings.append("Candidate catalyst score contribution is invalid.")
+        elif isinstance(confidence, int) and round(float(contribution), 2) != round(
+            confidence * 0.05,
+            2,
+        ):
+            findings.append(
+                "Candidate catalyst score contribution contradicts authorized confidence."
+            )
+    return tuple(findings)
 
 
 def result_for_existing_cycle(

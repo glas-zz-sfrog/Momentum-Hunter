@@ -656,6 +656,102 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
             [item["symbol"] for item in cycle["candidate_assessments"]],
         )
 
+    def test_unresolved_catalyst_is_explicitly_ineligible(self) -> None:
+        self.activate()
+        payload = report_payload()
+        row = payload["candidates"][0]
+        row["evidence_integrity"]["catalyst_attribution"]["relationship_type"] = (
+            "UNRESOLVED"
+        )
+        row["evidence_integrity"]["catalyst_attribution"]["score_authority"] = (
+            "BLOCKED"
+        )
+        row["scoring"]["authoritative_catalyst_confidence"] = 0
+        row["scoring"]["catalyst_score_contribution"] = 0.0
+        self.write_report(payload)
+
+        result = self.selector().select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        self.assertIn(
+            "catalyst attribution is unresolved or score-blocked",
+            " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
+        )
+        self.assertEqual((), self.service.store.load().trades)
+
+    def test_research_only_price_and_plan_authority_are_ineligible(self) -> None:
+        self.activate()
+        payload = report_payload()
+        integrity = payload["candidates"][0]["evidence_integrity"]
+        integrity["price_evidence_status"] = "EXECUTION_INELIGIBLE"
+        integrity["plan_authority"] = "EXECUTION_INELIGIBLE"
+        self.write_report(payload)
+
+        result = self.selector().select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        reasons = " ".join(
+            cycle["candidate_assessments"][0]["rejection_reasons"]
+        )
+        self.assertIn("price evidence is not execution-eligible", reasons)
+        self.assertIn("TradePlan authority is not execution-eligible", reasons)
+
+    def test_tampered_catalyst_contribution_is_ineligible(self) -> None:
+        self.activate()
+        payload = report_payload()
+        payload["candidates"][0]["scoring"]["catalyst_score_contribution"] = 99.0
+        self.write_report(payload)
+
+        result = self.selector().select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        self.assertIn(
+            "contradicts authorized confidence",
+            " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
+        )
+
+    def test_legacy_composite_profile_is_invalid_before_selection(self) -> None:
+        self.activate()
+        payload = report_payload()
+        payload["metadata"]["composite_profile"] = "trade-planning-composite-v1"
+        self.write_report(payload)
+
+        result = self.selector().select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_INVALID_REPORT, result.status)
+        self.assertIn("not authority-enforced", result.reason)
+        self.assertEqual((), self.service.store.load().trades)
+
+    def test_tampered_composite_configuration_is_invalid_before_selection(self) -> None:
+        self.activate()
+        payload = report_payload()
+        payload["metadata"]["composite_configuration"]["blocked_catalyst_confidence"] = 75
+        self.write_report(payload)
+
+        result = self.selector().select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_INVALID_REPORT, result.status)
+        self.assertIn("contradicts its fingerprint", result.reason)
+        self.assertEqual((), self.service.store.load().trades)
+
     def test_batch_quote_source_is_called_once_for_candidates_and_benchmarks(self) -> None:
         self.activate()
         payload = report_payload()

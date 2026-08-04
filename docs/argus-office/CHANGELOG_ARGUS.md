@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Implemented ARGUS-DATA-001B on a stacked successor to DATA-001. Unresolved or score-blocked catalyst evidence now contributes zero catalyst points and zero cluster-derived ranking bonuses under a versioned, fingerprinted prospective composite configuration.
+- Added prospective evidence authority gates: current research-only price evidence cannot make a TradePlan execution-eligible, and the automatic Shadow selector rejects legacy, missing, tampered, or contradictory report/candidate authority records before selection.
+- Preserved Monday's immutable report and Tuesday's pinned `2aa4ef3` runtime. Compileall, 70 focused, 191 adjacent, and all 1,066 Python tests pass; no service, manifest, scheduler, provider, account, broker/order, credential, UI, database, raw-capture, or generated-report file changed.
 - Implemented ARGUS-DATA-001 opening evidence integrity on an isolated branch. TradePlan reports now preserve field-level source, provider/receipt clocks, age, authentication/result state, research authority, and separate provider attempts; Yahoo `HTTP_401` no longer obscures Nasdaq-owned values.
 - Added deterministic catalyst attribution. Unproven issuer/sector/peer/customer-supplier relationships are `UNRESOLVED` with evidence-review score authority `BLOCKED`; this does not alter legacy scores or rank order.
 - Added explicit `CAPTURED PRICE`, `SCREENER BID/ASK`, `FRESH PROVIDER QUOTE`, `HYPOTHETICAL PLAN`, and `EXECUTION-INELIGIBLE` evidence output. Compileall, 23 focused, 138 adjacent, and all 1,059 Python tests pass; canonical service/runtime remains untouched pending deliberate integration and job repin.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
 import json
 import math
@@ -16,6 +17,8 @@ from momentum_hunter.catalyst_clusters import classify_catalyst_headline_detail
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.evidence_integrity import (
     CATALYST_SCORE_BLOCKED,
+    CATALYST_SCORE_SUPPORTED,
+    EXECUTION_ELIGIBLE,
     EXECUTION_INELIGIBLE,
     RESEARCH_ONLY,
     CatalystAttribution,
@@ -32,7 +35,33 @@ from momentum_hunter.time_utils import now_central
 
 
 REPORT_SCHEMA_VERSION = 1
-COMPOSITE_PROFILE = "trade-planning-composite-v1"
+EVIDENCE_INTEGRITY_SCHEMA_VERSION = 2
+COMPOSITE_PROFILE = "trade-planning-composite-v2-evidence-authority"
+COMPOSITE_CONFIGURATION = {
+    "profile": COMPOSITE_PROFILE,
+    "weights": {
+        "momentum": 0.42,
+        "news": 0.23,
+        "liquidity": 0.15,
+        "technical": 0.10,
+        "plan_quality": 0.05,
+        "authorized_catalyst": 0.05,
+    },
+    "warning_penalty_points": 3,
+    "warning_penalty_cap": 15,
+    "blocked_catalyst_confidence": 0,
+    "blocked_catalyst_cluster_bonus": 0,
+    "required_price_authority": EXECUTION_ELIGIBLE,
+    "required_integrity_schema": EVIDENCE_INTEGRITY_SCHEMA_VERSION,
+}
+COMPOSITE_CONFIGURATION_JSON = json.dumps(
+    COMPOSITE_CONFIGURATION,
+    sort_keys=True,
+    separators=(",", ":"),
+)
+COMPOSITE_CONFIGURATION_FINGERPRINT = hashlib.sha256(
+    COMPOSITE_CONFIGURATION_JSON.encode("utf-8")
+).hexdigest()
 DEFAULT_CAPITAL = 500.0
 REPORT_COLUMNS = [
     "Rank",
@@ -58,6 +87,9 @@ REPORT_COLUMNS = [
     "News Score",
     "Composite Score",
     "Catalyst Summary",
+    "Observed Catalyst Confidence",
+    "Authorized Catalyst Confidence",
+    "Catalyst Score Contribution",
     "Catalyst Relationship",
     "Catalyst Score Authority",
     "Price Evidence Status",
@@ -103,6 +135,9 @@ EVENT_MODE = "EVENT_MODE"
 EXECUTION_READY_PREMARKET = "EXECUTION_READY_PREMARKET"
 EXECUTION_READY_TRADE = "EXECUTION_READY_TRADE"
 PLANNING_SCAFFOLD = "PLANNING_SCAFFOLD"
+DO_NOT_TRADE_UNTRUSTED_EVIDENCE = "DO_NOT_TRADE_UNTRUSTED_EVIDENCE"
+PRICE_EVIDENCE_EXECUTION_INELIGIBLE = "PRICE_EVIDENCE_EXECUTION_INELIGIBLE"
+CATALYST_ATTRIBUTION_UNRESOLVED = "CATALYST_ATTRIBUTION_UNRESOLVED"
 FED_KEYWORDS = [
     "fed",
     "fomc",
@@ -211,6 +246,8 @@ class TradePlanRow:
     price_evidence: dict[str, PriceFieldEvidence] = field(default_factory=dict)
     price_evidence_status: str = EXECUTION_INELIGIBLE
     catalyst_attribution: CatalystAttribution | None = None
+    authoritative_catalyst_confidence: int = 0
+    catalyst_score_contribution: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -348,8 +385,30 @@ def build_trade_plan_row(
         sector_sympathy=False,
     )
     catalyst_attribution = classify_catalyst_attribution(candidate, catalyst)
-    plan = build_trade_plan(candidate, technicals, tape, capital=capital)
-    composite = composite_score(candidate, technicals, plan, catalyst_detail.confidence_score)
+    authoritative_catalyst_confidence = catalyst_confidence_for_scoring(
+        catalyst_detail.confidence_score,
+        catalyst_attribution,
+    )
+    calculated_plan = build_trade_plan(candidate, technicals, tape, capital=capital)
+    composite = composite_score(
+        candidate,
+        technicals,
+        calculated_plan,
+        authoritative_catalyst_confidence,
+    )
+    price_evidence_status = EXECUTION_INELIGIBLE
+    plan = apply_evidence_authority_gate(
+        calculated_plan,
+        price_evidence_status=price_evidence_status,
+        catalyst_attribution=catalyst_attribution,
+    )
+    authoritative_cluster = catalyst_cluster_for_authority(
+        catalyst_detail.cluster_name,
+        catalyst_attribution,
+    )
+    catalyst_authoritative = (
+        catalyst_attribution.score_authority == CATALYST_SCORE_SUPPORTED
+    )
     row = TradePlanRow(
         rank=0,
         symbol=candidate.ticker,
@@ -382,17 +441,30 @@ def build_trade_plan_row(
         technical_levels=technicals,
         market_tape=tape,
         trade_plan=plan,
-        likely_outperform_qqq=likely_outperform_qqq(candidate, composite, catalyst_detail.cluster_name),
-        likely_outperform_smh=likely_outperform_smh(candidate, composite, catalyst_detail.cluster_name),
-        opportunity_notes=opportunity_notes(candidate, technicals, plan, catalyst_detail.cluster_name),
+        likely_outperform_qqq=likely_outperform_qqq(candidate, composite, authoritative_cluster),
+        likely_outperform_smh=likely_outperform_smh(
+            candidate,
+            composite,
+            authoritative_cluster,
+            catalyst_text=catalyst if catalyst_authoritative else "",
+        ),
+        opportunity_notes=opportunity_notes(
+            candidate,
+            technicals,
+            plan,
+            catalyst_detail.cluster_name,
+            catalyst_authoritative=catalyst_authoritative,
+        ),
         price_evidence=build_display_price_evidence(
             tape,
             technicals=technicals,
             plan=plan,
             generated_at=as_of,
         ),
-        price_evidence_status=EXECUTION_INELIGIBLE,
+        price_evidence_status=price_evidence_status,
         catalyst_attribution=catalyst_attribution,
+        authoritative_catalyst_confidence=authoritative_catalyst_confidence,
+        catalyst_score_contribution=round(authoritative_catalyst_confidence * 0.05, 2),
     )
     return row
 
@@ -497,7 +569,66 @@ def build_trade_plan(candidate: Candidate, technicals: TechnicalLevels, tape: Ma
     )
 
 
-def composite_score(candidate: Candidate, technicals: TechnicalLevels, plan: TradePlan, catalyst_confidence: int) -> int:
+def catalyst_confidence_for_scoring(
+    observed_confidence: int,
+    attribution: CatalystAttribution | None,
+) -> int:
+    if (
+        attribution is None
+        or attribution.score_authority != CATALYST_SCORE_SUPPORTED
+    ):
+        return 0
+    return clamp(observed_confidence, 0, 100)
+
+
+def catalyst_cluster_for_authority(
+    observed_cluster: str,
+    attribution: CatalystAttribution | None,
+) -> str:
+    if (
+        attribution is None
+        or attribution.score_authority != CATALYST_SCORE_SUPPORTED
+    ):
+        return ""
+    return observed_cluster
+
+
+def apply_evidence_authority_gate(
+    plan: TradePlan,
+    *,
+    price_evidence_status: str,
+    catalyst_attribution: CatalystAttribution | None,
+) -> TradePlan:
+    blocking = list(plan.blocking_reasons)
+    if price_evidence_status != EXECUTION_ELIGIBLE:
+        blocking.append(PRICE_EVIDENCE_EXECUTION_INELIGIBLE)
+    if (
+        catalyst_attribution is None
+        or catalyst_attribution.score_authority != CATALYST_SCORE_SUPPORTED
+    ):
+        blocking.append(CATALYST_ATTRIBUTION_UNRESOLVED)
+    blocking = dedupe(blocking)
+    if not blocking:
+        return plan
+    readiness = (
+        plan.readiness
+        if plan.readiness.startswith("DO_NOT_TRADE")
+        else DO_NOT_TRADE_UNTRUSTED_EVIDENCE
+    )
+    return replace(
+        plan,
+        tradeability="LOW",
+        readiness=readiness,
+        blocking_reasons=blocking,
+    )
+
+
+def composite_score(
+    candidate: Candidate,
+    technicals: TechnicalLevels,
+    plan: TradePlan,
+    authorized_catalyst_confidence: int,
+) -> int:
     momentum = clamp(candidate.score, 0, 100)
     news = clamp(candidate.freshness_score or candidate.news_stack.freshness_score, 0, 100)
     liquidity = liquidity_score(candidate)
@@ -510,7 +641,7 @@ def composite_score(candidate: Candidate, technicals: TechnicalLevels, plan: Tra
         + liquidity * 0.15
         + technical * 0.10
         + plan_quality * 0.05
-        + catalyst_confidence * 0.05
+        + authorized_catalyst_confidence * 0.05
         - missing_penalty
     )
     return int(round(clamp(score, 0, 100)))
@@ -557,7 +688,10 @@ def assign_ranks(rows: list[TradePlanRow]) -> list[TradePlanRow]:
 def risk_on_score(row: TradePlanRow) -> float:
     bonus = 0
     sector = row_sector(row)
-    cluster = row.catalyst_cluster.lower()
+    cluster = catalyst_cluster_for_authority(
+        row.catalyst_cluster,
+        row.catalyst_attribution,
+    ).lower()
     if sector in {"technology", "communication services", "consumer cyclical", "financial"}:
         bonus += 8
     if "ai" in cluster or "growth" in cluster:
@@ -590,13 +724,32 @@ def likely_outperform_qqq(candidate: Candidate, composite: int, cluster: str) ->
     )
 
 
-def likely_outperform_smh(candidate: Candidate, composite: int, cluster: str) -> bool:
-    text = f"{candidate.sector} {candidate.industry} {cluster} {catalyst_summary(candidate)}".lower()
+def likely_outperform_smh(
+    candidate: Candidate,
+    composite: int,
+    cluster: str,
+    *,
+    catalyst_text: str = "",
+) -> bool:
+    text = f"{candidate.sector} {candidate.industry} {cluster} {catalyst_text}".lower()
     return composite >= 68 and any(term in text for term in ["semiconductor", "chip", "gpu", "memory", "data center", "ai infrastructure"])
 
 
-def opportunity_notes(candidate: Candidate, technicals: TechnicalLevels, plan: TradePlan, cluster: str) -> list[str]:
-    notes = [f"Catalyst cluster: {cluster}"]
+def opportunity_notes(
+    candidate: Candidate,
+    technicals: TechnicalLevels,
+    plan: TradePlan,
+    cluster: str,
+    *,
+    catalyst_authoritative: bool = True,
+) -> list[str]:
+    notes = [
+        (
+            f"Catalyst cluster: {cluster}"
+            if catalyst_authoritative
+            else f"Catalyst cluster (research-only; no score authority): {cluster}"
+        )
+    ]
     if candidate.freshness_score >= 90:
         notes.append("Fresh news context")
     if candidate.volume >= 20_000_000:
@@ -1802,7 +1955,7 @@ def report_warnings(rows: list[TradePlanRow], *, fetch_bars: bool, fetch_market_
     ):
         warnings.append(
             "One or more catalyst relationships are UNRESOLVED; catalyst score authority is BLOCKED "
-            "for evidence review without changing the legacy composite calculation."
+            "and contributes zero catalyst points or cluster-derived ranking bonuses."
         )
     warnings.append("Research/planning output only. No broker action or trade recommendation is generated.")
     return dedupe(warnings)
@@ -1847,10 +2000,12 @@ def write_json(report: TradePlanningReport, path: Path) -> None:
             "source_provider": report.source_provider,
             "source_scanner": report.source_scanner,
             "composite_profile": report.composite_profile,
+            "composite_configuration_fingerprint": COMPOSITE_CONFIGURATION_FINGERPRINT,
+            "composite_configuration": COMPOSITE_CONFIGURATION,
             "capital_assumption": report.capital_assumption,
             "event_mode": report.event_mode,
             "polling_interval_seconds": report.polling_interval_seconds,
-            "evidence_integrity_schema_version": 1,
+            "evidence_integrity_schema_version": EVIDENCE_INTEGRITY_SCHEMA_VERSION,
             "warnings": report.warnings,
         },
         "top_5_for_capital": [row_to_json(row) for row in report.rows[:5]],
@@ -1872,6 +2027,7 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
         f"- Session: {report.source_session}",
         f"- Scanner: {report.source_scanner}",
         f"- Composite profile: {report.composite_profile}",
+        f"- Composite configuration fingerprint: `{COMPOSITE_CONFIGURATION_FINGERPRINT}`",
         f"- Capital assumption: ${report.capital_assumption:,.2f}",
         f"- Event mode: {'ON' if report.event_mode else 'OFF'}",
         f"- Polling interval: {report.polling_interval_seconds} seconds",
@@ -1883,8 +2039,8 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
     lines.extend(["", "## Execution Readiness", ""])
     lines.extend(
         [
-            "Legacy planning-readiness labels are preserved for compatibility. They do not override "
-            "the per-row `EXECUTION-INELIGIBLE` evidence status in this research report.",
+            "Evidence authority is enforced prospectively. Research-only price evidence or unresolved "
+            "catalyst attribution forces `DO_NOT_TRADE_UNTRUSTED_EVIDENCE`.",
             "",
         ]
     )
@@ -1934,10 +2090,16 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
     lines.extend(["", "## Scenario Ranking", ""])
     lines.extend(["### If Market Is Risk-On After Fed", ""])
     for row in sorted(report.rows, key=lambda item: item.risk_on_rank)[:5]:
-        lines.append(f"{row.risk_on_rank}. {row.symbol} - composite {row.composite_score}; {row.catalyst_cluster}")
+        lines.append(
+            f"{row.risk_on_rank}. {row.symbol} - composite {row.composite_score}; "
+            f"{catalyst_cluster_display(row)}"
+        )
     lines.extend(["", "### If Market Is Risk-Off After Fed", ""])
     for row in sorted(report.rows, key=lambda item: item.risk_off_rank)[:5]:
-        lines.append(f"{row.risk_off_rank}. {row.symbol} - composite {row.composite_score}; {row.catalyst_cluster}")
+        lines.append(
+            f"{row.risk_off_rank}. {row.symbol} - composite {row.composite_score}; "
+            f"{catalyst_cluster_display(row)}"
+        )
     lines.extend(["", "## Full Candidate Plans", ""])
     for row in report.rows:
         plan = row.trade_plan
@@ -1966,6 +2128,8 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
                 f"- Composite Score: {row.composite_score}",
                 f"- Catalyst: {row.catalyst_summary}",
                 f"- Catalyst Cluster: {row.catalyst_cluster} ({row.catalyst_confidence})",
+                f"- Authorized Catalyst Confidence: {row.authoritative_catalyst_confidence}",
+                f"- Catalyst Score Contribution: {row.catalyst_score_contribution}",
                 f"- Catalyst Source: {attribution.source_publisher if attribution else 'unknown'} | "
                 f"{attribution.source_url if attribution and attribution.source_url else 'no stored URL'}",
                 f"- Catalyst Mentioned / Candidate Ticker: "
@@ -2022,6 +2186,15 @@ def price_evidence_summary(row: TradePlanRow, field_name: str) -> str:
         f"received {receipt_time} | {age} | auth {evidence.authentication_status} | "
         f"result {evidence.result_status} | {evidence.authority}"
     )
+
+
+def catalyst_cluster_display(row: TradePlanRow) -> str:
+    if (
+        row.catalyst_attribution is not None
+        and row.catalyst_attribution.score_authority == CATALYST_SCORE_SUPPORTED
+    ):
+        return row.catalyst_cluster
+    return f"{row.catalyst_cluster} [research-only; no ranking bonus]"
 
 
 def format_provider_results(results: dict[str, str]) -> str:
@@ -2230,6 +2403,9 @@ def row_to_csv(row: TradePlanRow) -> dict[str, object]:
         "News Score": row.news_score,
         "Composite Score": row.composite_score,
         "Catalyst Summary": row.catalyst_summary,
+        "Observed Catalyst Confidence": row.catalyst_confidence,
+        "Authorized Catalyst Confidence": row.authoritative_catalyst_confidence,
+        "Catalyst Score Contribution": row.catalyst_score_contribution,
         "Catalyst Relationship": (
             row.catalyst_attribution.relationship_type
             if row.catalyst_attribution is not None
@@ -2310,14 +2486,17 @@ def row_to_json(row: TradePlanRow) -> dict[str, object]:
             "news_score": row.news_score,
             "composite_score": row.composite_score,
             "composite_profile": COMPOSITE_PROFILE,
+            "composite_configuration_fingerprint": COMPOSITE_CONFIGURATION_FINGERPRINT,
             "catalyst_summary": row.catalyst_summary,
             "catalyst_cluster": row.catalyst_cluster,
             "catalyst_confidence": row.catalyst_confidence,
+            "authoritative_catalyst_confidence": row.authoritative_catalyst_confidence,
+            "catalyst_score_contribution": row.catalyst_score_contribution,
         },
         "technical_levels": asdict(row.technical_levels),
         "market_tape": asdict(row.market_tape),
         "evidence_integrity": {
-            "schema_version": 1,
+            "schema_version": EVIDENCE_INTEGRITY_SCHEMA_VERSION,
             "price_evidence_status": row.price_evidence_status,
             "price_fields": {
                 name: asdict(evidence)
@@ -2329,6 +2508,15 @@ def row_to_json(row: TradePlanRow) -> dict[str, object]:
                 if row.catalyst_attribution is not None
                 else None
             ),
+            "authority_blocking_reasons": [
+                reason
+                for reason in row.trade_plan.blocking_reasons
+                if reason
+                in {
+                    PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
+                    CATALYST_ATTRIBUTION_UNRESOLVED,
+                }
+            ],
             "plan_label": "HYPOTHETICAL PLAN",
             "plan_authority": EXECUTION_INELIGIBLE,
         },

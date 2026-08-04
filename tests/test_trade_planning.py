@@ -11,7 +11,12 @@ from unittest.mock import patch
 from momentum_hunter.outcomes import PriceBar
 from momentum_hunter.storage import file_sha256
 from momentum_hunter.trade_planning import (
+    COMPOSITE_CONFIGURATION_FINGERPRINT,
+    COMPOSITE_PROFILE,
+    DO_NOT_TRADE_UNTRUSTED_EVIDENCE,
+    EVIDENCE_INTEGRITY_SCHEMA_VERSION,
     MarketTape,
+    PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
     build_trade_planning_report,
     event_polling_interval_seconds,
     export_trade_planning_report,
@@ -104,8 +109,13 @@ class TradePlanningTests(unittest.TestCase):
         self.assertEqual(10.4, top.trade_plan.bullish_entry)
         self.assertEqual(9.8, top.trade_plan.bullish_stop)
         self.assertEqual(2.0, top.trade_plan.risk_reward_ratio)
-        self.assertEqual("EXECUTION_READY_PREMARKET", top.trade_plan.readiness)
+        self.assertEqual(DO_NOT_TRADE_UNTRUSTED_EVIDENCE, top.trade_plan.readiness)
         self.assertEqual("HIGH", top.trade_plan.confidence)
+        self.assertEqual("LOW", top.trade_plan.tradeability)
+        self.assertIn(
+            PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
+            top.trade_plan.blocking_reasons,
+        )
         self.assertEqual("PREMARKET_RVOL", top.rvol_type)
         self.assertEqual(6.0, top.relative_volume)
         self.assertIn("QUOTE_HTTP_401", top.trade_plan.warnings)
@@ -195,7 +205,15 @@ class TradePlanningTests(unittest.TestCase):
         self.assertTrue(paths["report"].exists())
         self.assertIn("Top 5 Opportunities For $500", paths["report"].read_text(encoding="utf-8"))
         payload = json.loads(paths["json"].read_text(encoding="utf-8"))
-        self.assertEqual("trade-planning-composite-v1", payload["metadata"]["composite_profile"])
+        self.assertEqual(COMPOSITE_PROFILE, payload["metadata"]["composite_profile"])
+        self.assertEqual(
+            COMPOSITE_CONFIGURATION_FINGERPRINT,
+            payload["metadata"]["composite_configuration_fingerprint"],
+        )
+        self.assertEqual(
+            EVIDENCE_INTEGRITY_SCHEMA_VERSION,
+            payload["metadata"]["evidence_integrity_schema_version"],
+        )
         self.assertIn("market_tape", payload["candidates"][0])
         self.assertIn("state_transition_log", payload)
         self.assertIn("fed_news_summary", payload)
@@ -246,7 +264,10 @@ class TradePlanningTests(unittest.TestCase):
         self.assertTrue(report.event_mode)
         self.assertEqual("AAA", report.state_transition_log[0]["symbol"])
         self.assertEqual("PLANNING_SCAFFOLD", report.state_transition_log[0]["old_state"])
-        self.assertEqual("EXECUTION_READY_TRADE", report.state_transition_log[0]["new_state"])
+        self.assertEqual(
+            DO_NOT_TRADE_UNTRUSTED_EVIDENCE,
+            report.state_transition_log[0]["new_state"],
+        )
         self.assertTrue(any("rate" in item["matched_keywords"] or "fed" in item["matched_keywords"] for item in report.fed_news_summary))
 
     def test_price_already_above_entry_generates_reclaim_entry_warning(self) -> None:

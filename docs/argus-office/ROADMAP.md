@@ -42,12 +42,12 @@ action occurred. Order transmission remains `UNAVAILABLE`.
 This releases the temporary canonical integration freeze. It does not arm
 `official-shadow-v3`, which remains `0 / 30`, and it does not promote the
 opening TradePlans beyond `PLANNING_SCAFFOLD`. Before official Shadow selection,
-the active analytical investigation queue is: quote provenance and
-`QUOTE_HTTP_401`; catalyst-to-symbol integrity; missed-breakout versus reclaim
-plan identity; time-normalized opening relative volume; reference simulation
-versus account-aware allocation; and explicit intraday versus swing-plan
-horizons. R031's nonpersisting market-hours candle proof remains the data
-foundation for R032-R034 and sequential breakout research.
+DATA-001 provenance truth must be followed by DATA-001B authority enforcement,
+then time-normalized opening relative volume, missed-breakout versus reclaim
+plan identity, reference simulation versus account-aware allocation, and
+explicit intraday versus swing-plan horizons. R031's nonpersisting market-hours
+candle proof remains the data foundation for R032-R034 and sequential breakout
+research.
 
 ARGUS-DATA-001 opening evidence integrity is `IMPLEMENTED_PENDING_MERGE` on
 `codex/ARGUS-DATA-001-opening-evidence-integrity` from canonical base
@@ -64,6 +64,32 @@ canonical comparison proves rank, composite score, risk-on/off ranks, plan
 values, and readiness are byte-identical to base `2aa4ef3`. This feature branch
 does not alter the installed service, manifest, or pinned opening jobs and must
 not merge until those operational identities can be deliberately repinned.
+
+ARGUS-DATA-001B evidence authority enforcement is
+`IMPLEMENTED_PENDING_INTEGRATION_AFTER_2026-08-04_CAPTURE` on the stacked
+successor `codex/ARGUS-DATA-001B-evidence-authority-enforcement`, based on
+DATA-001 commit `488cbca`. The prospective composite profile gives unresolved
+or score-blocked catalyst evidence zero catalyst points and zero
+cluster-derived ranking bonuses. Current research-only price evidence forces a
+`DO_NOT_TRADE_UNTRUSTED_EVIDENCE` plan gate. The Shadow selector rejects legacy
+or contradictory scoring configuration, unresolved catalyst authority,
+research-only price or plan authority, and inconsistent catalyst contribution
+records before candidate eligibility. Monday's immutable report is preserved;
+under the prospective rule its four blocked catalysts contribute zero and the
+order becomes GOOGL, MSFT, CMCSA, AMZN rather than silently retaining the old
+catalyst influence. Compileall, 70 focused, 191 adjacent, 8 interference-isolated
+candidate-story tests, and all 1,066 Python tests pass.
+
+The installed lane remains frozen for Tuesday's ordinary capture:
+`opening-capture-20260804` is `PENDING` for 08:35 Central with latest start
+08:40 and exact Git head `2aa4ef3`. Canonical `master` and `origin/master` are
+clean and synchronized at that head; the service is Running/Automatic. Neither
+DATA-001 nor DATA-001B may merge, install, restart the service, or repin jobs
+until Tuesday's terminal capture evidence is preserved. Afterward, integrate
+DATA-001 followed by DATA-001B, then deliberately repin the remaining opening
+jobs and prove a fresh service identity before starting DATA-002. Official
+Shadow remains unarmed at `0 / 30`, and order transmission remains
+`UNAVAILABLE`.
 
 ARGUS-MONDAY-002 Sunday-readiness hardening is `IMPLEMENTED_AND_VERIFIED` at
 runtime commit `d86f750`. The opening manifest now freezes every ordinary

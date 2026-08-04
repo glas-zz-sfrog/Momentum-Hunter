@@ -2,6 +2,18 @@
 
 Date reconciled: 2026-08-03
 
+## ARGUS-DATA-001B Evidence Authority Enforcement
+
+`codex/ARGUS-DATA-001B-evidence-authority-enforcement` is `ACTIVE` and
+`IMPLEMENTED_PENDING_INTEGRATION_AFTER_2026-08-04_CAPTURE`. It is the single
+stacked successor to DATA-001 commit `488cbca`, not an independent competing
+implementation. It prospectively removes blocked catalyst evidence from score
+and scenario bonuses, gates research-only price evidence, and makes Shadow
+selection reject missing, legacy, or contradictory authority records. Python
+compileall, 70 focused, 191 adjacent, and all 1,066 tests pass. The branch may
+be backed up normally; do not merge, install, or repin before Tuesday's capture
+on canonical `2aa4ef3` is terminal and preserved.
+
 ## ARGUS-DATA-001 Opening Evidence Integrity
 
 `codex/ARGUS-DATA-001-opening-evidence-integrity` is `ACTIVE` and
