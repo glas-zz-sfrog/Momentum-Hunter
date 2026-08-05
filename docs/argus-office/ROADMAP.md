@@ -70,8 +70,8 @@ legacy, tampered, or contradictory authority records. Monday's and Tuesday's
 pre-integration reports remain immutable historical evidence; they are not
 silently recomputed.
 
-ARGUS-R031B's full 15-minute market-hours proof is
-`IMPLEMENTED_PENDING_MERGE` on the current integration branch. Schwab accepted
+ARGUS-R031B's full 15-minute market-hours proof is `COMPLETE` on local `master`
+through implementation commit `404c589`. Schwab accepted
 one read-only `CHART_EQUITY` subscription for SPY, IWM, and the canonical
 rank-one candidate NVDA. Sixteen one-minute candles per symbol arrived once,
 62.147 to 87.645 seconds after their bar-start timestamp, with complete OHLCV
@@ -103,10 +103,9 @@ jobs are pending with zero failures, zero Shadow jobs are enabled, and order
 transmission is `UNAVAILABLE`. The R031B feature proof is backed up through
 `36c792b`; the expected sole Schwab account ending `2573`, type
 `INDIVIDUAL_CASH`, and unchanged binding passed guarded read-only access. Its
-nonpersisting market-hours observation and adjudication are complete. R032 may
-start only after this current-master integration is merged, backed up, and the
-remaining opening jobs are deliberately repinned once to the material release
-head.
+nonpersisting market-hours observation and adjudication are complete. R032 is
+the next bounded runtime task after final backup and one deliberate repin of
+the remaining opening jobs to this material release head.
 
 Integrated Hard Chew proof passes: Python compileall; 181 affected
 evidence/planning/selection/capture/storage tests; all 1,066 Python tests in
@@ -614,13 +613,13 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Local `master` contains SHADOW-024 plus DATA-001 `488cbca`, DATA-001B `fe8c929`, and the routine-capture ledger policy through `b24ac06`; the remaining opening jobs are pinned to that synchronized head until this material R031B integration is merged and repinned once. It also retains ARGUS-MONDAY-001/002 timing and readiness hardening, clock reliability, reboot-without-login proof, production-manifest validation, ARGUS-SERVICE-001 through 007, strict opening-result enforcement, the SYSTEM clock task, the WPF workstation through R030, and SCHWAB-001/002/002A/003 read-only safeguards. |
-| Active implementation | Wednesday's capture passed and prospectively proved DATA-001/001B's evidence-authority withholding. R031B's 15-minute SPY/IWM/NVDA proof is `ACCEPTED_WITH_LIMITATIONS` and its live-shape repair is backed up through `36c792b`; current-master integration is pending. R032 bounded, reconciled one-minute collection is next. DATA-002 remains the next scoring-evidence task after the continuous-candle foundation. |
+| Canonical baseline | Local `master` contains SHADOW-024, DATA-001 `488cbca`, DATA-001B `fe8c929`, the routine-capture ledger policy, and R031B implementation `404c589`. The remaining opening jobs are pinned once to this closeout's final synchronized release head. It also retains ARGUS-MONDAY-001/002 timing and readiness hardening, clock reliability, reboot-without-login proof, production-manifest validation, ARGUS-SERVICE-001 through 007, strict opening-result enforcement, the SYSTEM clock task, the WPF workstation through R030, and SCHWAB-001/002/002A/003 read-only safeguards. |
+| Active implementation | Wednesday's capture passed and prospectively proved DATA-001/001B's evidence-authority withholding. R031B's 15-minute SPY/IWM/NVDA proof is integrated and `ACCEPTED_WITH_LIMITATIONS`; its live-shape repair is backed up through `36c792b` and integrated at `404c589`. R032 bounded, reconciled one-minute collection is next. DATA-002 remains the next scoring-evidence task after the continuous-candle foundation. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | Official Shadow selection remains blocked by DATA-002 through DATA-005 even though DATA-001/001B are integrated. R032 is no longer blocked by the R031B observation, but it must preserve stream bars as unreconciled and cannot reach WPF or legacy cutover. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03, 2026-08-04, and 2026-08-05 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. Twenty-seven later opening jobs are independently scheduled and pinned to this closeout's final synchronized head. |
-| Immediate operational work | Finish the clean current-master R031B integration, back it up, and repin Thursday plus the remaining opening jobs once to the material release head. Then begin bounded R032 collection and reconciliation; do not start WPF integration or legacy deletion. |
+| Immediate operational work | Begin bounded R032 collection and reconciliation from the final synchronized and repinned release head; do not start WPF integration or legacy deletion. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's, Tuesday's, or Wednesday's capture. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
 | Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
 | Data caveat | DATA-001 proves displayed bid/ask provenance and DATA-001B prevents unresolved catalysts or research-only prices from granting prospective execution authority. Historical Monday/Tuesday reports remain pre-enforcement evidence. Opening RVOL still uses partial-session volume divided by a full-day average, and the $500-per-row reference sizing is not account-aware. Only `CRWV` has stored minute candles. DATA-002 owns RVOL correction; R031-R033 own actual candles; R034 retains the destructive-operation interruption gate. |
@@ -874,8 +873,8 @@ Status: `ACTIVE`; R011-R029 plus Shadow-001/002/003 are `COMPLETE` on local `mas
 
 #### ARGUS-R031 - Schwab Intraday Candle Capability And Contract
 
-Status: `IMPLEMENTED_PENDING_MERGE`; live proof accepted with limitations on
-feature branch through `36c792b`
+Status: `COMPLETE`; implementation integrated on local `master` through
+`404c589`, with live proof accepted with limitations
 
 - Contract implementation identifies Schwab `CHART_EQUITY` WebSocket messages
   as the expected near-live one-minute source and `/pricehistory` as historical
@@ -919,7 +918,7 @@ feature branch through `36c792b`
 
 #### ARGUS-R032 - Schwab Incremental Candle Collector
 
-Status: `NEXT`; R031B is accepted with limitations, integration pending
+Status: `NEXT`; R031B is integrated and accepted with limitations
 
 - Implement a bounded, read-only collector for canonical one-minute OHLCV bars
   only after R031 proves the provider contract. Initial symbols are the current

@@ -12,16 +12,17 @@ adjudicator, launch hardening, reauthorization classification, and live-shape
 repair on frozen base `ddc09f8`. It must not be merged directly because current
 `master` contains later operational and data-integrity work.
 
-`codex/ARGUS-R031B-current-master-integration` is `ACTIVE` from current
-`master` `b24ac06`. It carries only the final proven candle runtime, dependency,
+`codex/ARGUS-R031B-current-master-integration` is
+`MERGED_TO_LOCAL_MASTER` through implementation commit `404c589`. It carries
+only the final proven candle runtime, dependency,
 launcher, and test state plus current governance reconciliation. The live proof
 for SPY/IWM/NVDA is `ACCEPTED_WITH_LIMITATIONS`: 48 comparable OHLC values
 matched price history, five NVDA volumes differed by fractional tails, no
 stream-only canonicality was granted, and the proof invoked no production
 persistence, service, Engine Host, WPF, position, order, or transmission path.
-Next action: finish Hard Chew verification, fast-forward current `master`, push
-normally, then repin the remaining opening jobs once to the material release
-head.
+Hard Chew verification passed before the clean fast-forward. The final
+governance closeout is backed up normally, and the remaining opening jobs are
+repinned once to the resulting material release head.
 
 ## ARGUS-DATA-001B Evidence Authority Enforcement
 
