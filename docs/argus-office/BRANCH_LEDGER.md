@@ -1,6 +1,27 @@
 # Branch Ledger
 
-Date reconciled: 2026-08-04
+Date reconciled: 2026-08-05
+
+## ARGUS-R031/R031B Schwab Candle Contract And Live Proof
+
+The historical stacked branch
+`codex/ARGUS-R031B-live-candle-proof-adjudication` is a
+`PUSHED_FEATURE_BRANCH` through `36c792b`. It preserves the original R031
+contract, synthetic R032A persistence prototype, nonpersisting observer,
+adjudicator, launch hardening, reauthorization classification, and live-shape
+repair on frozen base `ddc09f8`. It must not be merged directly because current
+`master` contains later operational and data-integrity work.
+
+`codex/ARGUS-R031B-current-master-integration` is `ACTIVE` from current
+`master` `b24ac06`. It carries only the final proven candle runtime, dependency,
+launcher, and test state plus current governance reconciliation. The live proof
+for SPY/IWM/NVDA is `ACCEPTED_WITH_LIMITATIONS`: 48 comparable OHLC values
+matched price history, five NVDA volumes differed by fractional tails, no
+stream-only canonicality was granted, and the proof invoked no production
+persistence, service, Engine Host, WPF, position, order, or transmission path.
+Next action: finish Hard Chew verification, fast-forward current `master`, push
+normally, then repin the remaining opening jobs once to the material release
+head.
 
 ## ARGUS-DATA-001B Evidence Authority Enforcement
 

@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Executed and adjudicated the 15-minute R031B Schwab market-hours candle proof for SPY, IWM, and current rank-one candidate NVDA. Forty-eight comparable streamed minutes had exact OHLC agreement with `/pricehistory`; five NVDA volume fields differed only by fractional stream tails, so stream-only canonicality remains false.
+- Aligned the candle parser with observed Schwab Streamer behavior: acknowledgement content may be an object, symbol identity arrives in `key`, sequence may be zero, and fields 1-8 map to sequence, OHLC, volume, chart time, and chart day. Invalid live frames now fail before price-history work.
+- Classified R031B `ACCEPTED_WITH_LIMITATIONS` and made bounded R032 collection the next task. Current-minute finality, reconnect behavior, halt semantics, subscription scaling, and volume reconciliation remain explicit gates. The observer remains manual, nonpersisting, and outside service, Engine Host, WPF, position, order, and transmission paths.
 - Preserved the successful 2026-08-04 unattended opening capture before integration. It completed on attempt 1 with 11 candidates, clock proof, validated capture/report lineage, score breakdowns, TradePlan JSON/Markdown/CSV, and no Shadow or brokerage action.
 - Fast-forwarded ARGUS-DATA-001 `488cbca` and ARGUS-DATA-001B `fe8c929` into local `master` without rewriting Monday or Tuesday evidence. Compileall, 181 affected tests, all 1,066 Python tests, diff/protected-path/secret checks, synchronized backup, and repinning of the remaining 28 opening jobs bind the unattended lane to this closeout.
 - Set ARGUS-DATA-002 time-normalized opening relative volume as the next Builder task. Existing opening reports remain historical because their partial-session-volume/full-day-average ratio is not execution-authoritative.
