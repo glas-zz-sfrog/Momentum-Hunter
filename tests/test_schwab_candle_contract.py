@@ -167,6 +167,41 @@ class SchwabCandleContractTests(unittest.TestCase):
         )
         self.assertEqual(SCHWAB_CHART_EQUITY_SOURCE, candle.source)
 
+    def test_stream_parser_accepts_keyed_symbol_and_rejects_conflict(self) -> None:
+        keyed = stream_payload()
+        row = keyed["data"][0]["content"][0]
+        row["1"] = 0
+
+        candles = parse_chart_equity_messages(
+            [keyed],
+            expected_symbols=["AAPL"],
+        )
+
+        self.assertEqual("AAPL", candles[0].symbol)
+        self.assertEqual(0, candles[0].sequence)
+
+        conflicting = stream_payload()
+        conflicting["data"][0]["content"][0]["0"] = "AAPL"
+        conflicting["data"][0]["content"][0]["key"] = "MSFT"
+        with self.assertRaisesRegex(
+            SchwabCandleContractError,
+            "conflicting symbol identities",
+        ):
+            parse_chart_equity_messages(
+                [conflicting],
+                expected_symbols=["AAPL"],
+            )
+
+        invalid_sequence = stream_payload(sequence=-1)
+        with self.assertRaisesRegex(
+            SchwabCandleContractError,
+            "nonnegative integer",
+        ):
+            parse_chart_equity_messages(
+                [invalid_sequence],
+                expected_symbols=["AAPL"],
+            )
+
     def test_stream_parser_ignores_heartbeat_and_other_services(self) -> None:
         payload = {
             "notify": [{"heartbeat": "1785508260000"}],
@@ -198,8 +233,8 @@ class SchwabCandleContractTests(unittest.TestCase):
 
     def test_stream_parser_rejects_missing_and_nonfinite_fields(self) -> None:
         missing = stream_payload()
-        del missing["data"][0]["content"][0]["5"]
-        with self.assertRaisesRegex(SchwabCandleContractError, "field 5"):
+        del missing["data"][0]["content"][0]["6"]
+        with self.assertRaisesRegex(SchwabCandleContractError, "field 6"):
             parse_chart_equity_messages(
                 [missing],
                 expected_symbols=["AAPL"],
@@ -215,7 +250,7 @@ class SchwabCandleContractTests(unittest.TestCase):
 
     def test_stream_parser_rejects_invalid_ohlc(self) -> None:
         invalid = stream_payload()
-        invalid["data"][0]["content"][0]["2"] = 99.0
+        invalid["data"][0]["content"][0]["3"] = 99.0
 
         with self.assertRaisesRegex(
             SchwabCandleContractError,
@@ -699,13 +734,13 @@ def stream_payload(
                 "command": "SUBS",
                 "content": [
                     {
-                        "0": symbol,
-                        "1": 100.0,
-                        "2": max(101.0, close),
-                        "3": 99.5,
-                        "4": close,
-                        "5": volume,
-                        "6": sequence,
+                        "key": symbol,
+                        "1": sequence,
+                        "2": 100.0,
+                        "3": max(101.0, close),
+                        "4": 99.5,
+                        "5": close,
+                        "6": volume,
                         "7": int(observed.timestamp() * 1000),
                         "8": 12_345,
                     }

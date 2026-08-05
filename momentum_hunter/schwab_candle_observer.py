@@ -40,6 +40,7 @@ from momentum_hunter.schwab_candle_contract import (
     build_nonpersisting_stream_proof,
     build_price_history_parameters,
     normalize_symbols,
+    parse_chart_equity_messages,
     session_for_timestamp,
 )
 from momentum_hunter.scheduling import is_market_open_day
@@ -658,11 +659,19 @@ def require_streamer_acknowledgement(
             "Schwab Streamer acknowledgement did not match the expected request."
         )
     content = matching[0].get("content")
-    if not isinstance(content, list) or len(content) != 1:
+    if isinstance(content, Mapping):
+        acknowledgement = content
+    elif (
+        isinstance(content, list)
+        and len(content) == 1
+        and isinstance(content[0], Mapping)
+    ):
+        acknowledgement = content[0]
+    else:
         raise SchwabCandleObserverResponseError(
             "Schwab Streamer acknowledgement content had an invalid shape."
         )
-    code = content[0].get("code") if isinstance(content[0], Mapping) else None
+    code = acknowledgement.get("code")
     if code not in (0, "0"):
         raise SchwabCandleObserverAuthorizationError(
             "Schwab Streamer rejected the requested read-only operation."
@@ -881,6 +890,10 @@ class SchwabCandleMarketHoursObserver:
                 if payload is None:
                     continue
                 if "data" in payload:
+                    parse_chart_equity_messages(
+                        [payload],
+                        expected_symbols=options.symbols,
+                    )
                     messages.append(payload)
                     receipts.append(_aware_now(self.utc_clock()))
             evaluated_at = _aware_now(self.utc_clock())

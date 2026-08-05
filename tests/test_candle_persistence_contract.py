@@ -367,13 +367,13 @@ def stream_frame(
                 "command": "SUBS",
                 "content": [
                     {
-                        "0": symbol,
-                        "1": close - 0.5,
-                        "2": close + 0.5,
-                        "3": close - 1.0,
-                        "4": close,
-                        "5": 1_000.0 + sequence,
-                        "6": sequence,
+                        "key": symbol,
+                        "1": sequence,
+                        "2": close - 0.5,
+                        "3": close + 0.5,
+                        "4": close - 1.0,
+                        "5": close,
+                        "6": 1_000.0 + sequence,
                         "7": timestamp_ms,
                         "8": 20_260_803,
                     }

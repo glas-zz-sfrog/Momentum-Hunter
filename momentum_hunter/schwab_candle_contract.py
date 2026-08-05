@@ -116,13 +116,13 @@ def official_candle_contract() -> dict[str, object]:
             "commands": ["SUBS", "ADD", "UNSUBS", "VIEW"],
             "symbolsPerKey": "comma-separated uppercase equities",
             "fields": {
-                "0": "symbol",
-                "1": "open",
-                "2": "high",
-                "3": "low",
-                "4": "close",
-                "5": "volume",
-                "6": "sequence",
+                "key": "symbol",
+                "1": "sequence",
+                "2": "open",
+                "3": "high",
+                "4": "low",
+                "5": "close",
+                "6": "volume",
                 "7": "chartTimeEpochMilliseconds",
                 "8": "chartDay",
             },
@@ -880,19 +880,36 @@ def _parse_chart_equity_row(
         raise SchwabCandleContractError(
             "CHART_EQUITY candle had an invalid shape."
         )
-    symbol = str(_field(row, 0)).strip().upper()
+    indexed_symbol = row.get("0", row.get(0))
+    keyed_symbol = row.get("key")
+    if indexed_symbol is None and keyed_symbol is None:
+        raise SchwabCandleContractError(
+            "CHART_EQUITY candle omitted its symbol identity."
+        )
+    if (
+        indexed_symbol is not None
+        and keyed_symbol is not None
+        and str(indexed_symbol).strip().upper()
+        != str(keyed_symbol).strip().upper()
+    ):
+        raise SchwabCandleContractError(
+            "CHART_EQUITY candle returned conflicting symbol identities."
+        )
+    symbol = str(
+        keyed_symbol if keyed_symbol is not None else indexed_symbol
+    ).strip().upper()
     if symbol not in expected_symbols:
         raise SchwabCandleContractError(
             "CHART_EQUITY returned an unexpected symbol."
         )
     candle = SchwabMinuteCandle(
         symbol=symbol,
-        open=_positive_number(_field(row, 1), "open"),
-        high=_positive_number(_field(row, 2), "high"),
-        low=_positive_number(_field(row, 3), "low"),
-        close=_positive_number(_field(row, 4), "close"),
-        volume=_nonnegative_number(_field(row, 5), "volume"),
-        sequence=_positive_integer(_field(row, 6), "sequence"),
+        open=_positive_number(_field(row, 2), "open"),
+        high=_positive_number(_field(row, 3), "high"),
+        low=_positive_number(_field(row, 4), "low"),
+        close=_positive_number(_field(row, 5), "close"),
+        volume=_nonnegative_number(_field(row, 6), "volume"),
+        sequence=_nonnegative_integer(_field(row, 1), "sequence"),
         timestamp=_epoch_milliseconds(_field(row, 7), "chart time"),
         source=SCHWAB_CHART_EQUITY_SOURCE,
     )
@@ -965,11 +982,11 @@ def _finite_number(value: object, name: str) -> float:
     return number
 
 
-def _positive_integer(value: object, name: str) -> int:
+def _nonnegative_integer(value: object, name: str) -> int:
     number = _finite_number(value, name)
-    if number <= 0 or not number.is_integer():
+    if number < 0 or not number.is_integer():
         raise SchwabCandleContractError(
-            f"Candle {name} must be a positive integer."
+            f"Candle {name} must be a nonnegative integer; observed {number!r}."
         )
     return int(number)
 
@@ -991,11 +1008,15 @@ def _epoch_milliseconds(value: object, name: str) -> datetime:
 def _validate_ohlc(candle: SchwabMinuteCandle) -> None:
     if candle.high < max(candle.open, candle.low, candle.close):
         raise SchwabCandleContractError(
-            "Candle high was below another OHLC value."
+            "Candle high was below another OHLC value; "
+            f"observed open={candle.open!r}, high={candle.high!r}, "
+            f"low={candle.low!r}, close={candle.close!r}."
         )
     if candle.low > min(candle.open, candle.high, candle.close):
         raise SchwabCandleContractError(
-            "Candle low was above another OHLC value."
+            "Candle low was above another OHLC value; "
+            f"observed open={candle.open!r}, high={candle.high!r}, "
+            f"low={candle.low!r}, close={candle.close!r}."
         )
 
 

@@ -14,6 +14,7 @@ from unittest.mock import patch
 import requests
 
 from momentum_hunter.schwab_account_discovery import DiscoveredSchwabAccount
+from momentum_hunter.schwab_candle_contract import SchwabCandleContractError
 from momentum_hunter.schwab_candle_observer import (
     EXPECTED_WEBSOCKET_CLIENT_VERSION,
     EXPECTED_STREAMER_HOST,
@@ -104,13 +105,13 @@ def stream_payload(
                 "command": "SUBS",
                 "content": [
                     {
-                        "0": symbol,
-                        "1": 100.0,
-                        "2": max(101.5, close),
-                        "3": 99.5,
-                        "4": close,
-                        "5": volume,
-                        "6": sequence,
+                        "key": symbol,
+                        "1": sequence,
+                        "2": 100.0,
+                        "3": max(101.5, close),
+                        "4": 99.5,
+                        "5": close,
+                        "6": volume,
                         "7": int(timestamp.timestamp() * 1000),
                         "8": 20_308,
                     }
@@ -580,6 +581,17 @@ class SchwabCandleObserverTests(unittest.TestCase):
             command="LOGIN",
             request_id="0",
         )
+        object_content_ack = ack("ADMIN", "LOGIN", "0")
+        object_content_ack["response"][0]["content"] = {
+            "code": 0,
+            "msg": "synthetic",
+        }
+        require_streamer_acknowledgement(
+            object_content_ack,
+            service="ADMIN",
+            command="LOGIN",
+            request_id="0",
+        )
         with self.assertRaises(SchwabCandleObserverAuthorizationError):
             require_streamer_acknowledgement(
                 ack("ADMIN", "LOGIN", "0", code=12),
@@ -864,6 +876,30 @@ class SchwabCandleObserverTests(unittest.TestCase):
         failed = [row for row in proof["priceHistoryRequests"] if row["status"] == "FAIL"]
         self.assertEqual(["IWM"], [row["symbol"] for row in failed])
         self.assertEqual(2, len(proof["updateObservations"]))
+
+    def test_observer_rejects_invalid_live_frame_before_history(self) -> None:
+        invalid = stream_payload("SPY")
+        del invalid["data"][0]["content"][0]["6"]
+        stream = FakeStream(
+            [
+                ack("ADMIN", "LOGIN", "0"),
+                ack("CHART_EQUITY", "SUBS", "1"),
+                invalid,
+            ]
+        )
+        http = FakeHttpTransport()
+
+        with self.assertRaisesRegex(SchwabCandleContractError, "field 6"):
+            SchwabCandleMarketHoursObserver(
+                access_guard=FakeAccessGuard(),
+                http_transport=http,
+                stream_factory=FakeStreamFactory(stream),
+                utc_clock=SteppingClock(OBSERVED_MINUTE + timedelta(seconds=1)),
+                monotonic_clock=SteppingMonotonic(step=10.0),
+            ).observe(self.options())
+
+        self.assertEqual([], http.history_calls)
+        self.assertTrue(stream.closed)
 
     def test_stream_disconnect_preserves_received_candles_and_failure(self) -> None:
         stream = FakeStream(
