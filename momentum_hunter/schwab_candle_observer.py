@@ -60,6 +60,7 @@ from momentum_hunter.schwab_setup import SchwabSetupError
 
 OBSERVER_SCHEMA_VERSION = 1
 OBSERVER_MODE = "SCHWAB_CHART_EQUITY_MARKET_HOURS_OBSERVER"
+EXPECTED_CANDIDATE_REPORT_SESSION = "opening"
 EXPECTED_STREAMER_HOST = "streamer-api.schwab.com"
 EXPECTED_STREAMER_PATH = "/ws"
 MAX_HTTP_RESPONSE_BYTES = 4 * 1024 * 1024
@@ -87,6 +88,30 @@ class SchwabCandleObserverNetworkError(SchwabCandleObserverError):
 
 class SchwabCandleObserverResponseError(SchwabCandleObserverError):
     pass
+
+
+@dataclass(frozen=True)
+class CandidateSourceEvidence:
+    report_name: str
+    report_sha256: str
+    schema_version: int
+    generated_at: datetime
+    source_session: str
+    candidate_symbol: str
+    candidate_rank: int
+
+    def evidence(self) -> dict[str, object]:
+        return {
+            "reportName": self.report_name,
+            "reportSha256": self.report_sha256,
+            "schemaVersion": self.schema_version,
+            "generatedAt": self.generated_at.isoformat(),
+            "sourceSession": self.source_session,
+            "selectionRule": "LOWEST_UNIQUE_POSITIVE_RANK",
+            "candidateSymbol": self.candidate_symbol,
+            "candidateRank": self.candidate_rank,
+            "reportPathIncluded": False,
+        }
 
 
 @dataclass(frozen=True, repr=False)
@@ -157,6 +182,7 @@ class CandleObservationOptions:
     expected_account_ending: str
     duration_seconds: int = DEFAULT_OBSERVATION_SECONDS
     extended_hours: bool = False
+    candidate_source: CandidateSourceEvidence | None = None
 
     @classmethod
     def create(
@@ -166,6 +192,7 @@ class CandleObservationOptions:
         expected_account_ending: str,
         duration_seconds: int = DEFAULT_OBSERVATION_SECONDS,
         extended_hours: bool = False,
+        candidate_source: CandidateSourceEvidence | None = None,
     ) -> "CandleObservationOptions":
         normalized = normalize_symbols(symbols)
         if len(normalized) > MAX_OBSERVER_SYMBOLS:
@@ -187,15 +214,100 @@ class CandleObservationOptions:
             expected_account_ending=ending,
             duration_seconds=duration_seconds,
             extended_hours=extended_hours,
+            candidate_source=candidate_source,
         )
 
     def evidence(self) -> dict[str, object]:
-        return {
+        evidence: dict[str, object] = {
             "symbols": list(self.symbols),
             "expectedAccountEnding": self.expected_account_ending,
             "durationSeconds": self.duration_seconds,
             "extendedHoursAllowed": self.extended_hours,
         }
+        if self.candidate_source is not None:
+            evidence["candidateSource"] = self.candidate_source.evidence()
+        return evidence
+
+
+def load_candidate_source(report_path: Path) -> CandidateSourceEvidence:
+    source = report_path.expanduser().resolve()
+    try:
+        raw = source.read_bytes()
+    except OSError as exc:
+        raise SchwabCandleObserverError(
+            "Hunter candidate report could not be read."
+        ) from exc
+    if not raw or len(raw) > MAX_INPUT_BYTES:
+        raise SchwabCandleObserverError(
+            "Hunter candidate report was empty or exceeded the size limit."
+        )
+    try:
+        payload = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SchwabCandleObserverError(
+            "Hunter candidate report was not valid JSON."
+        ) from exc
+    if not isinstance(payload, Mapping):
+        raise SchwabCandleObserverError(
+            "Hunter candidate report must be a JSON object."
+        )
+    metadata = payload.get("metadata")
+    rows = payload.get("candidates")
+    if not isinstance(metadata, Mapping) or not isinstance(rows, list) or not rows:
+        raise SchwabCandleObserverError(
+            "Hunter candidate report omitted metadata or candidate rows."
+        )
+    source_session = str(metadata.get("source_session", "")).strip().lower()
+    if source_session != EXPECTED_CANDIDATE_REPORT_SESSION:
+        raise SchwabCandleObserverError(
+            "Hunter candidate report was not an opening-session report."
+        )
+    raw_generated_at = metadata.get("generated_at")
+    try:
+        generated_at = datetime.fromisoformat(str(raw_generated_at))
+    except (TypeError, ValueError) as exc:
+        raise SchwabCandleObserverError(
+            "Hunter candidate report generation timestamp was invalid."
+        ) from exc
+    generated_at = _aware_now(generated_at)
+
+    ranked: list[tuple[int, str]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise SchwabCandleObserverError(
+                "Hunter candidate report contained an invalid candidate row."
+            )
+        rank = row.get("rank")
+        if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
+            raise SchwabCandleObserverError(
+                "Hunter candidate report contained an invalid candidate rank."
+            )
+        symbol = normalize_symbols((str(row.get("symbol", "")),))[0]
+        ranked.append((rank, symbol))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    if len(ranked) > 1 and ranked[0][0] == ranked[1][0]:
+        raise SchwabCandleObserverError(
+            "Hunter candidate report did not have a unique top-ranked candidate."
+        )
+    candidate_rank, candidate_symbol = ranked[0]
+    if candidate_symbol in {"SPY", "IWM"}:
+        raise SchwabCandleObserverError(
+            "Hunter candidate report selected a benchmark instead of a candidate."
+        )
+    schema_version = payload.get("schema_version")
+    if isinstance(schema_version, bool) or not isinstance(schema_version, int):
+        raise SchwabCandleObserverError(
+            "Hunter candidate report schema version was invalid."
+        )
+    return CandidateSourceEvidence(
+        report_name=source.name,
+        report_sha256=hashlib.sha256(raw).hexdigest().upper(),
+        schema_version=schema_version,
+        generated_at=generated_at,
+        source_session=source_session,
+        candidate_symbol=candidate_symbol,
+        candidate_rank=candidate_rank,
+    )
 
 
 class StreamConnection(Protocol):
@@ -658,6 +770,20 @@ class SchwabCandleMarketHoursObserver:
         request_started_at = _aware_now(self.utc_clock())
         observed_session = session_for_timestamp(request_started_at)
         market_date = request_started_at.astimezone(EASTERN_TZ).date()
+        if options.candidate_source is not None:
+            if options.candidate_source.generated_at.astimezone(EASTERN_TZ).date() != market_date:
+                raise SchwabCandleObserverError(
+                    "Hunter candidate report did not match the live market date."
+                )
+            expected_symbols = (
+                "SPY",
+                "IWM",
+                options.candidate_source.candidate_symbol,
+            )
+            if options.symbols != expected_symbols:
+                raise SchwabCandleObserverError(
+                    "Observed symbols did not match the frozen Hunter candidate source."
+                )
         if (
             not is_market_open_day(market_date)
             or observed_session == "closed"
@@ -692,6 +818,13 @@ class SchwabCandleMarketHoursObserver:
                 request_id="1",
             )
             stream.send_json(subscription)
+            subscription_fingerprint = hashlib.sha256(
+                json.dumps(
+                    subscription,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest().upper()
             self._receive_ack(
                 stream,
                 service=SCHWAB_CHART_EQUITY_SERVICE,
@@ -804,6 +937,15 @@ class SchwabCandleMarketHoursObserver:
                 "observationOptions": options.evidence(),
                 "accountInvariant": access.evidence(),
                 "streamerBootstrap": bootstrap.evidence(),
+                "subscription": {
+                    "service": SCHWAB_CHART_EQUITY_SERVICE,
+                    "command": "SUBS",
+                    "requestId": "1",
+                    "symbols": list(options.symbols),
+                    "requestFingerprint": subscription_fingerprint,
+                    "acknowledged": True,
+                    "rawIdentifiersIncluded": False,
+                },
                 "implementationIdentity": {
                     **source_identity,
                     "expectedWebsocketClientVersion": (
@@ -886,7 +1028,7 @@ class SchwabCandleMarketHoursObserver:
 
 
 def build_observation_plan(options: CandleObservationOptions) -> dict[str, object]:
-    return {
+    plan: dict[str, object] = {
         "schemaVersion": OBSERVER_SCHEMA_VERSION,
         "mode": f"{OBSERVER_MODE}_PLAN",
         "execute": False,
@@ -914,6 +1056,9 @@ def build_observation_plan(options: CandleObservationOptions) -> dict[str, objec
         "wpfInvoked": False,
         "orderTransmission": "UNAVAILABLE",
     }
+    if options.candidate_source is not None:
+        plan["candidateSource"] = options.candidate_source.evidence()
+    return plan
 
 
 def write_proof_once(proof: Mapping[str, object], output_path: Path) -> Path:
@@ -1039,15 +1184,35 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_OBSERVATION_SECONDS,
     )
     parser.add_argument("--allow-extended-hours", action="store_true")
+    parser.add_argument("--candidate-source-report", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args(argv)
     try:
+        candidate_source = (
+            load_candidate_source(args.candidate_source_report)
+            if args.candidate_source_report is not None
+            else None
+        )
+        symbols = normalize_symbols(args.symbols)
+        if args.execute and candidate_source is None:
+            raise SchwabCandleObserverError(
+                "Live observation requires a frozen Hunter candidate report."
+            )
+        if candidate_source is not None and symbols != (
+            "SPY",
+            "IWM",
+            candidate_source.candidate_symbol,
+        ):
+            raise SchwabCandleObserverError(
+                "Requested symbols did not match the frozen Hunter candidate report."
+            )
         options = CandleObservationOptions.create(
-            args.symbols,
+            symbols,
             expected_account_ending=args.expected_account_ending,
             duration_seconds=args.duration_seconds,
             extended_hours=args.allow_extended_hours,
+            candidate_source=candidate_source,
         )
         if not args.execute:
             result = build_observation_plan(options)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -457,6 +458,20 @@ def build_nonpersisting_stream_proof(
         expected_symbols=expected,
         received_at_by_payload=receipt_times,
     )
+    payload_fingerprints = [
+        {
+            "payloadIndex": payload_index,
+            "receivedAt": receipt_times[payload_index].isoformat(),
+            "sha256": hashlib.sha256(
+                json.dumps(
+                    payload,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest().upper(),
+        }
+        for payload_index, payload in enumerate(payloads)
+    ]
     if any(observation.received_at > evaluated for observation in observations):
         raise SchwabCandleContractError(
             "A Streamer payload receipt was later than proof evaluation."
@@ -584,6 +599,7 @@ def build_nonpersisting_stream_proof(
         "updateObservations": [
             observation.to_evidence() for observation in observations
         ],
+        "payloadFingerprints": payload_fingerprints,
         "minuteSummaries": minute_summaries,
         "observedTimestampGaps": observed_gaps,
         "streamHistoryReconciliation": reconciliation,

@@ -3,6 +3,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$CandidateSymbol,
 
+    [string]$CandidateReportPath = "",
+
     [ValidateRange(180, 900)]
     [int]$DurationSeconds = 300,
 
@@ -31,6 +33,12 @@ if ($candidate -notmatch '^[A-Z0-9][A-Z0-9.-]{0,9}$') {
 if ($candidate -in @("SPY", "IWM")) {
     throw "CandidateSymbol must be a Hunter candidate distinct from SPY and IWM."
 }
+if ($Execute -and [string]::IsNullOrWhiteSpace($CandidateReportPath)) {
+    throw "Live candle observation requires CandidateReportPath."
+}
+if (-not [string]::IsNullOrWhiteSpace($CandidateReportPath)) {
+    $CandidateReportPath = (Resolve-Path -LiteralPath $CandidateReportPath).Path
+}
 
 $python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $observerModule = Join-Path $ProjectRoot "momentum_hunter\schwab_candle_observer.py"
@@ -42,6 +50,7 @@ if (-not (Test-Path -LiteralPath $observerModule -PathType Leaf)) {
 }
 
 $arguments = @(
+    "-P",
     "-B",
     "-m",
     "momentum_hunter.schwab_candle_observer",
@@ -56,6 +65,9 @@ $arguments = @(
 )
 if ($AllowExtendedHours) {
     $arguments += "--allow-extended-hours"
+}
+if (-not [string]::IsNullOrWhiteSpace($CandidateReportPath)) {
+    $arguments += @("--candidate-source-report", $CandidateReportPath)
 }
 
 $originalPythonPath = $env:PYTHONPATH
@@ -119,6 +131,19 @@ try {
 
     & $python @arguments
     $exitCode = $LASTEXITCODE
+    if ($Execute -and $exitCode -eq 0) {
+        & $python @(
+            "-P",
+            "-B",
+            "-m",
+            "momentum_hunter.schwab_candle_adjudication",
+            "--proof",
+            $outputPath,
+            "--output-directory",
+            $OutputDirectory
+        )
+        $exitCode = $LASTEXITCODE
+    }
 }
 finally {
     $env:PYTHONPATH = $originalPythonPath

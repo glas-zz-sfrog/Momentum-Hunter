@@ -984,6 +984,12 @@ class SchwabCandleObserverTests(unittest.TestCase):
         )
         self.assertEqual(0, parse.returncode, parse.stdout + parse.stderr)
         with tempfile.TemporaryDirectory() as unrelated_directory:
+            stale_package = Path(unrelated_directory) / "momentum_hunter"
+            stale_package.mkdir()
+            (stale_package / "__init__.py").write_text(
+                'STALE_CALLER_PACKAGE = True\n',
+                encoding="utf-8",
+            )
             result = subprocess.run(
                 [
                     "powershell.exe",
