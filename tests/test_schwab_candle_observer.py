@@ -26,6 +26,7 @@ from momentum_hunter.schwab_candle_observer import (
     SchwabCandleObserverAuthorizationError,
     SchwabCandleObserverError,
     SchwabCandleObserverNetworkError,
+    SchwabCandleObserverReauthorizationRequired,
     SchwabCandleObserverResponseError,
     StreamerBootstrap,
     WebSocketClientConnection,
@@ -38,6 +39,8 @@ from momentum_hunter.schwab_candle_observer import (
     require_streamer_acknowledgement,
     write_proof_once,
 )
+from momentum_hunter.schwab_market_data import SchwabMarketDataAuthorizationError
+from momentum_hunter.schwab_onboarding import SchwabOAuthResponseError
 from momentum_hunter.schwab_readonly import SchwabAccountBinding
 
 
@@ -489,6 +492,34 @@ class SchwabCandleObserverTests(unittest.TestCase):
             "identity changed",
         ):
             changed.authorize(ACCOUNT_ENDING)
+
+    def test_access_guard_classifies_rejected_refresh_as_reauthorization_required(self) -> None:
+        class RejectedRefreshTokenProvider:
+            def access_token(self) -> str:
+                root = SchwabOAuthResponseError(
+                    "Synthetic Schwab OAuth token exchange HTTP 400."
+                )
+                raise SchwabMarketDataAuthorizationError(
+                    "Synthetic guarded refresh failed."
+                ) from root
+
+        guard = SchwabCandleAccessGuard(
+            token_provider=RejectedRefreshTokenProvider(),
+            binding_store=FakeBindingStore(
+                SchwabAccountBinding(
+                    account_hash=ACCOUNT_HASH,
+                    account_number_last_four=ACCOUNT_ENDING,
+                    account_type="INDIVIDUAL_CASH",
+                )
+            ),
+            discovery_transport=FakeDiscovery([]),
+            details_transport=FakeDetails(),
+        )
+        with self.assertRaisesRegex(
+            SchwabCandleObserverReauthorizationRequired,
+            "interactive reauthorization",
+        ):
+            guard.authorize(ACCOUNT_ENDING)
 
     def test_bootstrap_requires_one_account_expected_host_and_permission(self) -> None:
         parsed = parse_streamer_bootstrap(

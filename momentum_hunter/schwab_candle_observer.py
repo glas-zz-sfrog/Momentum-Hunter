@@ -50,6 +50,7 @@ from momentum_hunter.schwab_market_data import (
 from momentum_hunter.schwab_onboarding import (
     EncryptedSchwabAccountBindingStore,
     SchwabOAuthError,
+    SchwabOAuthResponseError,
 )
 from momentum_hunter.schwab_readonly import (
     EXPECTED_ACCOUNT_TYPE,
@@ -79,6 +80,12 @@ class SchwabCandleObserverError(RuntimeError):
 
 
 class SchwabCandleObserverAuthorizationError(SchwabCandleObserverError):
+    pass
+
+
+class SchwabCandleObserverReauthorizationRequired(
+    SchwabCandleObserverAuthorizationError
+):
     pass
 
 
@@ -374,10 +381,17 @@ class SchwabCandleAccessGuard:
                 )
         except SchwabCandleObserverAuthorizationError:
             raise
+        except SchwabMarketDataAuthorizationError as exc:
+            if _exception_chain_contains(exc, SchwabOAuthResponseError):
+                raise SchwabCandleObserverReauthorizationRequired(
+                    "Schwab OAuth refresh was rejected; interactive reauthorization is required."
+                ) from exc
+            raise SchwabCandleObserverAuthorizationError(
+                "Schwab Streamer account revalidation failed safely."
+            ) from exc
         except (
             SchwabAccountDiscoveryError,
             SchwabAccountValidationError,
-            SchwabMarketDataAuthorizationError,
             SchwabOAuthError,
             SchwabSetupError,
             AccountIsolationError,
@@ -1166,6 +1180,20 @@ def _aware_now(value: datetime) -> datetime:
     return value
 
 
+def _exception_chain_contains(
+    error: BaseException,
+    expected: type[BaseException],
+) -> bool:
+    current: BaseException | None = error
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        if isinstance(current, expected):
+            return True
+        visited.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def _is_stream_notification(payload: Mapping[str, object]) -> bool:
     return "notify" in payload and "response" not in payload
 
@@ -1247,6 +1275,10 @@ def main(argv: list[str] | None = None) -> int:
             "mode": OBSERVER_MODE,
             "status": "FAIL",
             "failure": f"{type(exc).__name__}: {exc}",
+            "reauthorizationRequired": isinstance(
+                exc,
+                SchwabCandleObserverReauthorizationRequired,
+            ),
             "credentialMaterialIncluded": False,
             "rawAccountMetadataIncluded": False,
             "productionDataWritten": False,
