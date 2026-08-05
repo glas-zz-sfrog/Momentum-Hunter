@@ -9,6 +9,7 @@ Supporting records have narrower roles:
 - `BRANCH_LEDGER.md` is the detailed Git and branch-evidence record.
 - `VERIFICATION_QUEUE.md` is the exact deferred Steven-check list; it does not replace Roadmap state or authorize merges.
 - `TASK_LOG.md` and `CHANGELOG_ARGUS.md` are append-only history.
+- Routine opening captures are indexed by their ignored, date-partitioned operational evidence: the terminal service receipt in `C:\ProgramData\MomentumHunter\Automation\state\automation-service-state.json`, `MomentumHunterData/data/captures/<DATE>/opening.*`, `MomentumHunterData/logs/capture-opening-<DATE>-*.log`, and `MomentumHunterData/data/reports/*-<DATE>-opening.*`. These generated records preserve routine capture truth without changing canonical Git identity.
 - Historical architecture notes and release reports remain evidence of their original decisions; they do not override this Roadmap.
 
 ## Delegated Authority And Interruption Policy
@@ -973,8 +974,9 @@ At every substantive task closeout, the responsible agent must:
 2. Move the affected roadmap phase to the correct status without calling branch-only work `COMPLETE`.
 3. Record the concrete next action and any new block or decision gate.
 4. Update `BRANCH_LEDGER.md` only when branch/merge/push state changes, and `TASK_LOG.md` or `CHANGELOG_ARGUS.md` as historical evidence requires.
-5. After every terminal successful ordinary opening capture, record its date, terminal receipt, artifact identity, candidate/result summary, safety outcome, and remaining scheduled-job count in `Now` before reporting the operational lane current.
-6. Cite the resulting Roadmap transition in the final CEO report.
+5. After every terminal ordinary opening capture, verify and preserve its terminal receipt, dated capture/report/log identity, candidate/result summary, and safety outcome in the ignored operational evidence index. A routine successful capture must not trigger a Roadmap commit, canonical Git identity change, or remaining-job repin.
+6. Update `Now` for a capture only when it materially changes a gate, exposes a defect or anomaly, changes runtime capability or schedule, requires repair, or completes a defined evidence milestone. Preserve the already-committed August 5 evidence prospectively; do not rewrite it merely to apply this policy.
+7. Cite any resulting material Roadmap transition in the final CEO report.
 
 ## Protected Areas
 
