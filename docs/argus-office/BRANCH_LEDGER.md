@@ -2,6 +2,20 @@
 
 Date reconciled: 2026-08-05
 
+## ARGUS-R032 Schwab Incremental Candle Collector
+
+`codex/ARGUS-R032-schwab-incremental-candle-collector` is
+`MERGED_TO_LOCAL_MASTER` through the commit titled
+`Add Schwab incremental candle collector` and backed up by ordinary non-force
+push. It adds the bounded collector, separate reconciled evidence store, 30
+focused tests, and material governance closeout on canonical base `06b3fa7`.
+The final exact-code live proof is preserved outside Git and correctly reports
+`PARTIAL` because sparse extended-hours evidence contained visible gaps; stream
+and all five price-history reconciliations passed. No WPF, Engine Host, Shadow,
+score/readiness, broker/order, service/scheduler, legacy-candle, or transmission
+path changed. The remaining ordinary opening jobs are repinned once to the
+resulting synchronized release head. R033 is next.
+
 ## ARGUS-R031/R031B Schwab Candle Contract And Live Proof
 
 The historical stacked branch
