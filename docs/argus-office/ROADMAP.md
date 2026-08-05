@@ -79,12 +79,13 @@ intraday versus swing-plan horizon/risk semantics, and DATA-005 reference
 simulation versus account-aware allocation. Official Shadow remains unarmed at
 `0 / 30` until those evidence gates pass.
 
-This Wednesday reconciliation is documentation-only. After it is committed and
-synchronized, the 27 remaining ordinary opening jobs from 2026-08-06 through
-2026-09-14 must be repinned to that exact canonical head. Installed acceptance
-requires a Running/Automatic service with a fresh heartbeat, Healthy Engine
-Host, Thursday `PENDING` at 08:35 Central with latest start 08:40, zero Shadow
-jobs, and order transmission `UNAVAILABLE`. R031B observer hardening is backed
+This Wednesday reconciliation is documentation-only. Its final synchronized
+commit is the exact head installed for the 27 remaining ordinary opening jobs
+from 2026-08-06 through 2026-09-14. Post-install acceptance passes: the service
+is Running/Automatic with a fresh heartbeat, the Engine Host is Healthy,
+Thursday is `PENDING` at 08:35 Central with latest start 08:40, all 27 opening
+jobs are pending with zero failures, zero Shadow jobs are enabled, and order
+transmission is `UNAVAILABLE`. R031B observer hardening is backed
 up on its feature branch through `cd719a3`; the expected sole Schwab account
 ending `2573`, type `INDIVIDUAL_CASH`, and unchanged binding passed guarded
 reauthorization. Its nonpersisting market-hours candle run remains pending, and
@@ -597,13 +598,13 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Local `master` contains SHADOW-024 plus DATA-001 `488cbca` and DATA-001B `fe8c929` through the synchronized Tuesday reconciliation `0bd8a18`; this Wednesday capture closeout must be synchronized and used to repin the remaining jobs. It also retains ARGUS-MONDAY-001/002 timing and readiness hardening, clock reliability, reboot-without-login proof, production-manifest validation, ARGUS-SERVICE-001 through 007, strict opening-result enforcement, the SYSTEM clock task, the WPF workstation through R030, and SCHWAB-001/002/002A/003 read-only safeguards. |
+| Canonical baseline | Local `master` contains SHADOW-024 plus DATA-001 `488cbca` and DATA-001B `fe8c929` through the Wednesday capture operational closeout; the remaining opening jobs are pinned to this final synchronized head. It also retains ARGUS-MONDAY-001/002 timing and readiness hardening, clock reliability, reboot-without-login proof, production-manifest validation, ARGUS-SERVICE-001 through 007, strict opening-result enforcement, the SYSTEM clock task, the WPF workstation through R030, and SCHWAB-001/002/002A/003 read-only safeguards. |
 | Active implementation | Wednesday's capture passed and prospectively proved DATA-001/001B's evidence-authority withholding. DATA-002 time-normalized opening RVOL remains the next scoring-evidence Builder task. R031 is implemented and backed up through contract `b96f745`, synthetic observer/launch hardening `3272476` and `d6d7217`, and R031B reauthorization classification `cd719a3`; its nonpersisting market-hours proof remains pending. R032 production persistence remains blocked until that behavior is frozen. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | Official Shadow selection remains blocked by DATA-002 through DATA-005 even though DATA-001/001B are integrated. R032 is blocked by R031 market-hours evidence. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
-| Scheduled operational proof | `COMPLETE`: the 2026-08-03, 2026-08-04, and 2026-08-05 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. Twenty-seven later opening jobs remain independently scheduled and require repinning to this closeout's final synchronized head. |
-| Immediate operational work | Commit and synchronize this Wednesday reconciliation, repin the 27 remaining jobs, and prove Thursday `PENDING`. Run R031B's nonpersisting Streamer/price-history observation during a suitable market window; DATA-002 remains the next scoring-evidence implementation, and R032 production persistence remains blocked until R031B passes. |
+| Scheduled operational proof | `COMPLETE`: the 2026-08-03, 2026-08-04, and 2026-08-05 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. Twenty-seven later opening jobs are independently scheduled and pinned to this closeout's final synchronized head. |
+| Immediate operational work | Thursday is already `PENDING` on the final operational identity. Run R031B's nonpersisting Streamer/price-history observation during a suitable market window; DATA-002 remains the next scoring-evidence implementation, and R032 production persistence remains blocked until R031B passes. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's, Tuesday's, or Wednesday's capture. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
 | Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
 | Data caveat | DATA-001 proves displayed bid/ask provenance and DATA-001B prevents unresolved catalysts or research-only prices from granting prospective execution authority. Historical Monday/Tuesday reports remain pre-enforcement evidence. Opening RVOL still uses partial-session volume divided by a full-day average, and the $500-per-row reference sizing is not account-aware. Only `CRWV` has stored minute candles. DATA-002 owns RVOL correction; R031-R033 own actual candles; R034 retains the destructive-operation interruption gate. |
