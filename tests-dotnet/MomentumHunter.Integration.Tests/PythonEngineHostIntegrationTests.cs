@@ -69,11 +69,18 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.True(readOnlyWorkspacePayload.TryGetProperty("replay", out _));
 
             var chartPayload = await firstConnection.GetChartSnapshotAsync("ZZZNOTREAL", "Daily");
-            Assert.Equal(1, chartPayload.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(2, chartPayload.GetProperty("schemaVersion").GetInt32());
             Assert.Equal("ZZZNOTREAL", chartPayload.GetProperty("symbol").GetString());
             Assert.Equal("Daily", chartPayload.GetProperty("interval").GetString());
             Assert.Equal("UNAVAILABLE", chartPayload.GetProperty("state").GetString());
             Assert.Empty(chartPayload.GetProperty("candles").EnumerateArray());
+            Assert.Equal(
+                "UNAVAILABLE",
+                chartPayload.GetProperty("quality").GetProperty("status").GetString());
+            Assert.Contains(
+                "No simulated, legacy, or cross-timeframe fallback",
+                chartPayload.GetProperty("summary").GetString(),
+                StringComparison.Ordinal);
 
             var researchPayload = await firstConnection.GetTechnicalResearchSnapshotAsync("ZZZNOTREAL");
             Assert.Equal(1, researchPayload.GetProperty("schemaVersion").GetInt32());

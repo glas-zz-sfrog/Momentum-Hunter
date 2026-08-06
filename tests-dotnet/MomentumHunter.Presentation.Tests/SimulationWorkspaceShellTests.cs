@@ -88,6 +88,47 @@ public sealed class SimulationWorkspaceShellTests
     }
 
     [Fact]
+    public async Task PeriodicDisplayRefreshReplacesChartQualityWithoutChangingPaneContext()
+    {
+        var client = new StaticSimulationWorkspaceClient(Snapshot(allowed: true));
+        var chartClient = new RecordingChartWorkspaceClient(ChartDataState.Stale);
+        var viewModel = new ShellViewModel(new ThrowingEngineClient(), client, chartClient);
+        await viewModel.InitializeAsync();
+        chartClient.Requests.Clear();
+        chartClient.State = ChartDataState.Partial;
+
+        await viewModel.RefreshChartDisplayAsync();
+
+        Assert.Equal([("NVDA", "5m")], chartClient.Requests);
+        Assert.Equal(ChartDataState.Partial, viewModel.PrimaryChart!.DataState);
+        Assert.Equal("NVDA", viewModel.PrimaryChart.Pane.Symbol);
+        Assert.Equal("5m", viewModel.PrimaryChart.Pane.Interval);
+        Assert.Equal("Schwab Trader API  |  PARTIAL", viewModel.PrimaryChart.ProviderStatusLabel);
+    }
+
+    [Fact]
+    public async Task UserIntervalChangeWaitsForActivePeriodicRefreshAndThenLoadsRequestedContext()
+    {
+        var client = new StaticSimulationWorkspaceClient(Snapshot(allowed: true));
+        var chartClient = new RecordingChartWorkspaceClient(ChartDataState.Available);
+        var viewModel = new ShellViewModel(new ThrowingEngineClient(), client, chartClient);
+        await viewModel.InitializeAsync();
+        chartClient.Requests.Clear();
+        chartClient.BlockNextRequest();
+
+        var periodicRefresh = viewModel.RefreshChartDisplayAsync();
+        await chartClient.BlockedRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var intervalChange = viewModel.ChangeIntervalAsync("1m");
+
+        Assert.False(intervalChange.IsCompleted);
+        chartClient.ReleaseBlockedRequest();
+        await Task.WhenAll(periodicRefresh, intervalChange);
+
+        Assert.Equal([("NVDA", "5m"), ("NVDA", "1m")], chartClient.Requests);
+        Assert.Equal("1m", viewModel.PrimaryChart!.Pane.Interval);
+    }
+
+    [Fact]
     public async Task PaneSynchronizationLabelsUseOperatorLanguage()
     {
         var viewModel = new ShellViewModel(
@@ -251,41 +292,82 @@ public sealed class SimulationWorkspaceShellTests
 
     private sealed class RecordingChartWorkspaceClient : IChartWorkspaceClient
     {
-        private readonly ChartDataState _state;
+        private TaskCompletionSource? _requestRelease;
 
         public RecordingChartWorkspaceClient(ChartDataState state)
         {
-            _state = state;
+            State = state;
         }
+
+        public ChartDataState State { get; set; }
 
         public List<(string Symbol, string Interval)> Requests { get; } = [];
 
-        public Task<ChartSnapshot> GetSnapshotAsync(
+        public TaskCompletionSource BlockedRequestStarted { get; private set; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void BlockNextRequest()
+        {
+            BlockedRequestStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            _requestRelease = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        public void ReleaseBlockedRequest() => _requestRelease?.TrySetResult();
+
+        public async Task<ChartSnapshot> GetSnapshotAsync(
             string symbol,
             string interval,
             CancellationToken cancellationToken = default)
         {
             Requests.Add((symbol, interval));
+            if (_requestRelease is not null)
+            {
+                var release = _requestRelease;
+                BlockedRequestStarted.TrySetResult();
+                await release.Task.WaitAsync(cancellationToken);
+                if (ReferenceEquals(_requestRelease, release))
+                {
+                    _requestRelease = null;
+                }
+            }
             var at = DateTimeOffset.Parse("2026-06-18T20:00:00Z");
-            var candles = _state == ChartDataState.Unavailable
+            var candles = State == ChartDataState.Unavailable
                 ? Array.Empty<CandleSnapshot>()
                 : [
                     new CandleSnapshot(at.AddMinutes(-5), 118.90m, 119.20m, 118.70m, 119.10m, 0),
                     new CandleSnapshot(at, 119.10m, 119.40m, 118.80m, 119.00m, 1500),
                 ];
-            var label = _state.ToString().ToUpperInvariant();
-            return Task.FromResult(new ChartSnapshot(
-                1,
+            var label = State.ToString().ToUpperInvariant();
+            var quality = new ChartQualitySnapshot(
+                State == ChartDataState.Unavailable ? "UNAVAILABLE" : "Schwab Trader API",
+                "Schwab CHART_EQUITY + price history",
+                label,
+                ["2026-06-18"],
+                candles.LastOrDefault()?.Timestamp,
+                null,
+                candles.LastOrDefault()?.Timestamp,
+                candles.LastOrDefault()?.Timestamp,
+                State == ChartDataState.Stale ? 3600m : 0m,
+                State == ChartDataState.Stale,
+                State == ChartDataState.Partial ? 1 : 0,
+                0,
+                0,
+                0,
+                candles.Length,
+                State == ChartDataState.Partial ? ["GAPS:1"] : []);
+            return new ChartSnapshot(
+                2,
                 symbol,
                 interval,
-                _state,
+                State,
                 DateTimeOffset.Parse("2026-07-23T05:03:00Z"),
                 at,
-                _state == ChartDataState.Unavailable
+                State == ChartDataState.Unavailable
                     ? "UNAVAILABLE | No stored bars are available. No simulated fallback was created."
                     : $"{label} | {candles.Length} stored {interval} candle(s) | no provider fetch",
                 new DataLineage("stored-bars.json", at, "Read-only local evidence."),
-                candles));
+                candles,
+                quality);
         }
     }
 

@@ -84,6 +84,7 @@ public enum SimulationResultState
 public enum ChartDataState
 {
     Available,
+    Partial,
     Stale,
     InsufficientData,
     Unavailable,
@@ -189,6 +190,14 @@ public sealed record CandidateSnapshot(
         ReadinessState.StaleData => "Stale",
         _ => "Blocked",
     };
+
+    public string OperatorBadge => Readiness switch
+    {
+        ReadinessState.ReadyForSimulation => "READY",
+        ReadinessState.NeedsEvidence => "NEEDS DATA",
+        ReadinessState.StaleData => "STALE",
+        _ => "BLOCKED",
+    };
 }
 
 public sealed record CandleSnapshot(
@@ -197,7 +206,35 @@ public sealed record CandleSnapshot(
     decimal High,
     decimal Low,
     decimal Close,
-    long Volume);
+    decimal Volume,
+    string State = "RECONCILED",
+    string Source = "UNAVAILABLE",
+    DateTimeOffset? ProviderTimestamp = null,
+    DateTimeOffset? ReceivedAt = null,
+    bool IsCanonical = true,
+    bool IsInProgress = false,
+    bool HasGapBefore = false,
+    IReadOnlyList<string>? DiscrepancyFields = null,
+    int PresentMinuteCount = 1,
+    int ExpectedMinuteCount = 1);
+
+public sealed record ChartQualitySnapshot(
+    string Provider,
+    string SourceLabel,
+    string Status,
+    IReadOnlyList<string> SessionDates,
+    DateTimeOffset? LatestCompletedBarAt,
+    DateTimeOffset? LatestInProgressBarAt,
+    DateTimeOffset? LatestProviderTimestamp,
+    DateTimeOffset? LatestReceiptAt,
+    decimal? AgeSeconds,
+    bool Stale,
+    int GapCount,
+    int CorrectionCount,
+    int UnreconciledCount,
+    int InProgressCount,
+    int CompletedCount,
+    IReadOnlyList<string> Findings);
 
 public sealed record ChartSnapshot(
     int SchemaVersion,
@@ -208,7 +245,8 @@ public sealed record ChartSnapshot(
     DateTimeOffset AsOf,
     string Summary,
     DataLineage DataLineage,
-    IReadOnlyList<CandleSnapshot> Candles);
+    IReadOnlyList<CandleSnapshot> Candles,
+    ChartQualitySnapshot? Quality = null);
 
 public sealed record TechnicalResearchEventSnapshot(
     string EventId,

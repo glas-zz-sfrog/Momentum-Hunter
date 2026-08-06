@@ -375,7 +375,10 @@
                                                             <Run Text="{Binding Catalyst}" />
                                                         </TextBlock>
                                                         <Border Grid.Row="1" Grid.Column="3" Background="#263846" CornerRadius="3" Padding="5,2" Margin="4,4,0,0" HorizontalAlignment="Right">
-                                                            <TextBlock Text="{Binding OperatorState}" Foreground="{StaticResource Teal}" FontSize="10" />
+                                                            <TextBlock Text="{Binding OperatorBadge}"
+                                                                       Foreground="{StaticResource Teal}"
+                                                                       FontSize="10"
+                                                                       ToolTip="{Binding OperatorState}" />
                                                         </Border>
                                                     </Grid>
                                                 </DataTemplate>
@@ -391,6 +394,7 @@
                                 <Border Background="{StaticResource PanelBackground}" Padding="12">
                                     <Grid>
                                         <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="1*" />
                                             <RowDefinition Height="Auto" />
@@ -410,17 +414,96 @@
                                                 <TextBlock Text="{Binding ChartSourceLabel}"
                                                            Foreground="{StaticResource TextMuted}"
                                                            FontSize="11"
-                                                           TextTrimming="CharacterEllipsis"
+                                                           TextWrapping="Wrap"
                                                            ToolTip="{Binding ChartSourceLabel}" />
                                             </StackPanel>
                                         </DockPanel>
-                                        <controls:CandleChart Grid.Row="1"
+                                        <Border Grid.Row="1"
+                                                Margin="0,8,0,0"
+                                                Padding="8,6"
+                                                Background="#121C24"
+                                                BorderBrush="{StaticResource PanelBorder}"
+                                                BorderThickness="1">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <TextBlock Text="{Binding PrimaryChart.ProviderStatusLabel}"
+                                                           FontSize="10"
+                                                           FontWeight="SemiBold"
+                                                           TextWrapping="Wrap">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{StaticResource Teal}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding PrimaryChart.DataState}" Value="{x:Static contracts:ChartDataState.Partial}">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding PrimaryChart.DataState}" Value="{x:Static contracts:ChartDataState.Stale}">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding PrimaryChart.DataState}" Value="{x:Static contracts:ChartDataState.InsufficientData}">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding PrimaryChart.DataState}" Value="{x:Static contracts:ChartDataState.Unavailable}">
+                                                                    <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <TextBlock Grid.Row="1"
+                                                           Text="{Binding PrimaryChart.TimingStatusLabel}"
+                                                           Foreground="{StaticResource TextPrimary}"
+                                                           FontSize="10"
+                                                           Margin="0,3,0,0"
+                                                           TextWrapping="Wrap"
+                                                           ToolTip="{Binding PrimaryChart.TimingStatusLabel}" />
+                                                <TextBlock Grid.Row="2"
+                                                           Text="{Binding PrimaryChart.IntegrityStatusLabel}"
+                                                           FontSize="10"
+                                                           Margin="0,3,0,0"
+                                                           TextWrapping="Wrap"
+                                                           ToolTip="{Binding PrimaryChart.IntegrityStatusLabel}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding PrimaryChart.HasIntegrityFindings}" Value="True">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <TextBlock Grid.Row="3"
+                                                           Text="{Binding PrimaryChart.InProgressStatusLabel}"
+                                                           FontSize="10"
+                                                           Margin="0,3,0,0"
+                                                           TextWrapping="Wrap">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding PrimaryChart.HasInProgressBar}" Value="True">
+                                                                    <Setter Property="Foreground" Value="{StaticResource Amber}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Grid>
+                                        </Border>
+                                        <controls:CandleChart Grid.Row="2"
                                                               Candles="{Binding PrimaryChart.Candles}"
                                                               EmptyStateText="{Binding PrimaryChart.EmptyStateText}"
                                                               Interval="{Binding PrimaryChart.Pane.Interval}"
                                                               InspectedCandle="{Binding PrimaryChart.InspectedBar, Mode=TwoWay}"
                                                               Margin="0,12,0,8" />
-                                        <Border Grid.Row="2"
+                                        <Border Grid.Row="3"
                                                 BorderBrush="{StaticResource PanelBorder}"
                                                 BorderThickness="0,1,0,0"
                                                 Padding="0,7,0,6">
@@ -434,14 +517,15 @@
                                                 <TextBlock Text="{Binding PrimaryChart.ActiveBarSummary}"
                                                            Foreground="{StaticResource TextPrimary}"
                                                            FontSize="11"
-                                                           TextTrimming="CharacterEllipsis"
+                                                           TextWrapping="Wrap"
                                                            ToolTip="{Binding PrimaryChart.ActiveBarSummary}" />
                                             </DockPanel>
                                         </Border>
-                                        <StackPanel Grid.Row="3" Orientation="Horizontal">
-                                            <TextBlock Text="Research display only" Foreground="{StaticResource TextMuted}" FontSize="11" />
-                                            <TextBlock Text="  |  Linked panes update only within their selected link group" Foreground="{StaticResource TextMuted}" FontSize="11" />
-                                        </StackPanel>
+                                        <TextBlock Grid.Row="4"
+                                                   Text="Research display only  |  Linked panes update only within their selected link group"
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   FontSize="11"
+                                                   TextWrapping="Wrap" />
                                     </Grid>
                                 </Border>
                             </avalon:LayoutDocument>

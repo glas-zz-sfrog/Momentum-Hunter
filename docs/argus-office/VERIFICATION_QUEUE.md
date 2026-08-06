@@ -31,6 +31,7 @@ create a rubber-stamp Steven item.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
+| ARGUS-R033 live Schwab chart integration | `AUTOMATED_PASS`; compileall, focused chart tests, a zero-warning Release build, and all 250 .NET tests pass after the density repair. The isolated R032B proof populated 39,165 minute-bar versions and 1,260 daily bars without account/order action. | `MANUAL_PASS`; Steven reviewed the dense live-chart build and directed integration on 2026-08-06 | `VISUAL_ACCEPTED_PENDING_MERGE` on `codex/ARGUS-R033-live-chart-engine-host-integration` | Git Steward must combine R032B/R033 on current master, bind Daily to the Schwab daily store, rerun full proof, and repin the remaining opening jobs. |
 | Monday 2026-08-03 opening-capture readiness | `AUTOMATED_PASS`: opening fail-closed behavior, clock-task hardening, installation, independent live verification, and transient state-receipt lock recovery all pass. Evidence proves SYSTEM principal, exact `w32tm` action, startup delay `PT2M`, daily 08:15/08:25 triggers, wake enabled, no late-start catch-up, five two-minute retries, task result `0`, synchronized NIST time, Running/Automatic service, fresh heartbeat, Healthy Engine Host, 30 pending opening jobs, zero Shadow jobs, and transmission `UNAVAILABLE`. ARGUS-SERVICE-007 passed compileall, 26 focused tests, 74 affected tests, all 1,019 Python tests, a real Windows lock proof, and an installed twelve-lock stress with no process restart or Application error. | `NO_STEVEN_ACTION`; the required UAC interaction passed. Leave the computer powered on and plugged in through 08:40 Central Monday. | `COMPLETE_AND_BACKED_UP` through clock commits `30c25e5`/`3821490` and receipt-lock repair `252cdc7`; installed proof passed at 02:31 Central on 2026-08-01. | No product or visual check remains. Sunday 19:00 is a read-only preflight; Monday 08:35 is the capture and 08:50 is the terminal evidence audit. Observers must not launch, retry, repair, or fabricate evidence. |
 | ARGUS-SERVICE-004/005 reboot-without-login canary | `AUTOMATED_PASS`; the final exact-time 2026-07-31 16:39 Central attempt proved a new kernel boot and service instance, Running/Automatic service, Session 0 execution with zero interactive sessions, completed runtime/Codex receipts, Healthy Engine Host, the unchanged sole `2573` individual cash binding, no position/order request, 30 preserved pending opening jobs, zero Shadow jobs, and transmission `UNAVAILABLE`. Earlier failed/invalid attempts remain preserved separately. | `NO_STEVEN_ACTION`; the reboot/sign-in-screen action is complete and no visual judgment remains. | Repairs through forced-restart commit `e24feed` are backed up; successful proof is archived and the operational gate is `PASS`. | No remaining manual check. The next evidence is the first ordinary 2026-08-03 opening-capture receipt and report; future service manifest job changes hot-reload without another restart. |
 | ARGUS-R030 open positions console | `AUTOMATED_PASS`; zero-warning solution build, all 185 presentation tests, and all 237 .NET tests pass; stale/halted positions remain visible, the source is read-only canonical Shadow/FakeBroker evidence, and source review finds no brokerage/order control | `MANUAL_PASS`; Steven accepted the visible surface on 2026-07-31 | `COMPLETE_AND_BACKED_UP` on canonical `master` through `94e1708` plus Roadmap closeout | Checks 1-8 passed. The populated-row check remains deferred until canonical evidence contains an open Shadow position; do not fabricate production evidence for visual proof. |
@@ -60,6 +61,55 @@ create a rubber-stamp Steven item.
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted visual baseline; subsequent nonvisual roadmap work follows standing delegation |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | Destructive decision not yet due | Future market-data cutover task | Interrupt Steven immediately before deleting the exact legacy paths/rows; visual cutover proof remains manual |
+
+## ARGUS-R033 - Live Schwab Chart Integration
+
+Branch: `codex/ARGUS-R033-live-chart-engine-host-integration`
+
+Automated result: `AUTOMATED_PASS`
+
+Automated proof:
+
+- `ARGUS-R033-live-chart-ui-proof-1180x820.png` - 1180x820, 122242 bytes,
+  SHA-256 `52A369882FF2C320D760E08EF262BB2B0BFD4CEB474152C84F1328E6304920A5`.
+- `ARGUS-R033-live-chart-ui-proof-1920x1080.png` - 1920x1080, 145150 bytes,
+  SHA-256 `9D7701490BE0AB1EE87376A7098AD531543B581165820F3D50F97F04292A6602`.
+- Both are nonblank; automated inspection finds visible candles/wicks/volume,
+  Schwab source, complete quality labels, wrapped latest-bar detail, no unsafe
+  order control, and no residual proof-only Engine Host process.
+
+Steven result: `MANUAL_PASS`
+
+Use the isolated R033 review build and check exactly these seven items:
+
+1. Select `NVDA` and `1m`. Confirm actual stored Schwab proof candles appear
+   with visible bodies, wicks, and volume. The chart must name Schwab as source;
+   it must not mention simulated, legacy, CRWV, quote-derived, or fallback data.
+2. Read the compact quality band above the chart. Confirm provider/state, latest
+   completed bar, receipt time, age, gaps, corrections, unreconciled count, and
+   any in-progress bar are readable without clipping in both restored and
+   maximized layouts.
+3. Switch among `1m`, `5m`, and `15m`. Confirm each chart refreshes and the
+   interval label changes. Sparse 5m/15m evidence may honestly say `PARTIAL` or
+   `INSUFFICIENT`; it must not invent a smooth chart. Select `Daily` and confirm
+   missing daily evidence stays unavailable instead of reusing intraday bars.
+4. Select `SHOP`, `ZETA`, and then `NVDA`. Confirm the unpinned primary chart
+   follows Hunter selection. A symbol without stored candles must show an
+   explicit empty/unavailable state rather than retaining the prior symbol's
+   bars.
+5. Pin the primary chart on `NVDA`, select a different candidate, and confirm
+   the pinned chart remains `NVDA`. Unpin it and confirm it catches up to the
+   current Hunter selection.
+6. Leave the chart open for at least ten seconds. Confirm periodic refresh does
+   not flicker, duplicate panes, reset the selected interval, or steal focus.
+   Changing symbol or interval during refresh must still update promptly.
+7. Confirm R033 added no Buy, Sell, Submit, Replace, Cancel, broker, account, or
+   live-order control. The visible candidate readiness may remain blocked; the
+   chart does not upgrade trade eligibility.
+
+Report `PASS` only when all seven pass. Otherwise report the failed number and
+the exact missing candle, clipping, misleading source/state, stale pane,
+flicker, pin/link error, or unsafe control.
 
 ## ARGUS-R030 - Open Positions Console
 

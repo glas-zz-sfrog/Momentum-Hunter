@@ -32,6 +32,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private WindowDisplayState _windowState;
     private SimulationWorkspaceSnapshot? _simulationWorkspaceSnapshot;
     private ShadowReviewSnapshot? _shadowReviewSnapshot;
+    private readonly SemaphoreSlim _chartRefreshLock = new(1, 1);
     private readonly SemaphoreSlim _shadowRefreshLock = new(1, 1);
     private long _candidateStoryRequestVersion;
 
@@ -1864,6 +1865,19 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private async Task RefreshChartPaneDataAsync(CancellationToken cancellationToken = default)
     {
+        await _chartRefreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            await RefreshChartPaneDataCoreAsync(cancellationToken);
+        }
+        finally
+        {
+            _chartRefreshLock.Release();
+        }
+    }
+
+    private async Task RefreshChartPaneDataCoreAsync(CancellationToken cancellationToken)
+    {
         if (UsesPythonWorkspaceBoundary && _chartWorkspaceClient is null)
         {
             PrimaryChart = null;
@@ -1915,6 +1929,23 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(ChartSourceLabel));
     }
 
+    public async Task RefreshChartDisplayAsync(CancellationToken cancellationToken = default)
+    {
+        if (!await _chartRefreshLock.WaitAsync(0, cancellationToken))
+        {
+            return;
+        }
+
+        try
+        {
+            await RefreshChartPaneDataCoreAsync(cancellationToken);
+        }
+        finally
+        {
+            _chartRefreshLock.Release();
+        }
+    }
+
     private async Task<ChartSnapshot> LoadChartSnapshotAsync(
         string symbol,
         string interval,
@@ -1942,7 +1973,14 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             return await _chartWorkspaceClient!.GetSnapshotAsync(symbol, interval, cancellationToken);
         }
-        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        catch (Exception exception) when (
+            !cancellationToken.IsCancellationRequested
+            && exception is IOException
+                or InvalidDataException
+                or InvalidOperationException
+                or JsonException
+                or System.Net.Sockets.SocketException
+                or OperationCanceledException)
         {
             var now = DateTimeOffset.UtcNow;
             return new ChartSnapshot(

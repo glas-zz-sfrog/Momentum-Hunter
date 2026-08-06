@@ -2,6 +2,24 @@
 
 Date reconciled: 2026-08-05
 
+## ARGUS-R033 Live Chart And Engine Host Integration
+
+`codex/ARGUS-R033-live-chart-engine-host-integration` is `ACTIVE` from clean,
+synchronized canonical base `5442fbb`. Runtime code, Python/.NET tests, and
+branch-local governance are implemented. The branch projects only the R032
+Schwab candle store through Engine Host schema 2 and renders it in WPF with
+deterministic 5m/15m aggregation and explicit source, timing, gap, correction,
+unreconciled, provisional, stale, and unavailable states. Compileall, all 1,177
+Python tests, a zero-warning Release build, and all 247 .NET tests pass. Final
+1180x820 and 1920x1080 proof images are nonblank and show wrapped chart evidence
+plus concise, unclipped readiness badges; Steven's visual acceptance remains.
+
+The branch has not been merged because Steven's WPF visual acceptance remains
+pending. Its ignored proof data is copied from the preserved R032 external
+proof and does not activate a collector or production store. No canonical
+service, scheduler, Engine Host, opening job, broker/order, score/readiness,
+Shadow, database/schema, legacy candle, or transmission path changed.
+
 ## ARGUS-R032 Schwab Incremental Candle Collector
 
 `codex/ARGUS-R032-schwab-incremental-candle-collector` is
