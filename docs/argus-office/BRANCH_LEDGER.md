@@ -424,3 +424,10 @@ Do not start new implementation from:
 - `codex/ARGUS-A002-A003-gateway-machine-console-skeleton`
 
 Use a fresh task branch from local `master` instead.
+
+## 2026-08-06 Candle Backfill Reconciliation
+
+| Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-R032B-schwab-historical-candle-backfill` | Based on synchronized `421149c`; implementation is the feature branch HEAD | No | No | `ACTIVE` | Add bounded Schwab one-minute and daily history after R033 exposed that the R032 live proof contained only transport-scale chart depth. | Back up the feature branch without changing canonical; after Thursday capture, run guarded backfill and reconcile R033. |
+| `codex/ARGUS-R033-live-chart-engine-host-integration` | Preserved dirty worktree based on `5442fbb` | No | No | `NEEDS_REVIEW` | Engine Host/WPF consumer wiring passes automation but Steven rejected the visible result because its isolated data root had two to four minute rows per symbol and no daily source. | Do not commit or merge as accepted. Reconcile after R032B live evidence, then repeat visual QA. |

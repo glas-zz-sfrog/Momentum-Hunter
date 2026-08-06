@@ -72,6 +72,34 @@ class SchwabMinuteCandle:
 
 
 @dataclass(frozen=True)
+class SchwabDailyCandle:
+    symbol: str
+    timestamp: datetime
+    session_date: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    source: str
+
+    def to_evidence(self) -> dict[str, object]:
+        return {
+            "symbol": self.symbol,
+            "timestamp": self.timestamp.isoformat(),
+            "sessionDate": self.session_date,
+            "timeframe": "1d",
+            "open": self.open,
+            "high": self.high,
+            "low": self.low,
+            "close": self.close,
+            "volume": self.volume,
+            "source": self.source,
+            "ohlcvComplete": True,
+        }
+
+
+@dataclass(frozen=True)
 class SchwabStreamCandleObservation:
     arrival_index: int
     payload_index: int
@@ -272,6 +300,31 @@ def build_price_history_parameters(
     }
 
 
+def build_daily_price_history_parameters(
+    symbol: str,
+    *,
+    start_at: datetime,
+    end_at: datetime,
+) -> dict[str, object]:
+    normalized = normalize_symbols((symbol,))[0]
+    start = _aware_datetime(start_at, "daily price-history start")
+    end = _aware_datetime(end_at, "daily price-history end")
+    if end <= start:
+        raise SchwabCandleContractError(
+            "Daily price-history end must be after its start."
+        )
+    return {
+        "symbol": normalized,
+        "periodType": "year",
+        "frequencyType": "daily",
+        "frequency": 1,
+        "startDate": int(start.timestamp() * 1000),
+        "endDate": int(end.timestamp() * 1000),
+        "needExtendedHoursData": False,
+        "needPreviousClose": True,
+    }
+
+
 def parse_chart_equity_messages(
     payloads: Sequence[object],
     *,
@@ -396,12 +449,25 @@ def parse_price_history_response(
     expected_symbol: str,
 ) -> tuple[SchwabMinuteCandle, ...]:
     expected = normalize_symbols((expected_symbol,))[0]
+    rows = _validated_price_history_rows(payload, expected_symbol=expected)
+    candles = tuple(
+        _parse_price_history_row(row, symbol=expected) for row in rows
+    )
+    _require_strict_event_order(candles)
+    return candles
+
+
+def _validated_price_history_rows(
+    payload: object,
+    *,
+    expected_symbol: str,
+) -> list[object]:
     if not isinstance(payload, Mapping):
         raise SchwabCandleContractError(
             "Price-history response had an invalid shape."
         )
     symbol = str(payload.get("symbol", "")).strip().upper()
-    if symbol != expected:
+    if symbol != expected_symbol:
         raise SchwabCandleContractError(
             "Price-history symbol identity did not match the request."
         )
@@ -419,10 +485,25 @@ def parse_price_history_response(
         raise SchwabCandleContractError(
             "Price-history response declared data but returned no candles."
         )
+    return rows
+
+
+def parse_daily_price_history_response(
+    payload: object,
+    *,
+    expected_symbol: str,
+) -> tuple[SchwabDailyCandle, ...]:
+    expected = normalize_symbols((expected_symbol,))[0]
+    rows = _validated_price_history_rows(payload, expected_symbol=expected)
     candles = tuple(
-        _parse_price_history_row(row, symbol=expected) for row in rows
+        _parse_daily_price_history_row(row, symbol=expected) for row in rows
     )
     _require_strict_event_order(candles)
+    session_dates = [candle.session_date for candle in candles]
+    if session_dates != sorted(session_dates) or len(session_dates) != len(set(session_dates)):
+        raise SchwabCandleContractError(
+            "Daily price-history evidence did not contain unique chronological sessions."
+        )
     return candles
 
 
@@ -941,6 +1022,31 @@ def _parse_price_history_row(
     return candle
 
 
+def _parse_daily_price_history_row(
+    row: object,
+    *,
+    symbol: str,
+) -> SchwabDailyCandle:
+    if not isinstance(row, Mapping):
+        raise SchwabCandleContractError(
+            "Daily price-history candle had an invalid shape."
+        )
+    timestamp = _epoch_milliseconds(row.get("datetime"), "datetime")
+    candle = SchwabDailyCandle(
+        symbol=symbol,
+        timestamp=timestamp,
+        session_date=timestamp.astimezone(EASTERN_TZ).date().isoformat(),
+        open=_positive_number(row.get("open"), "open"),
+        high=_positive_number(row.get("high"), "high"),
+        low=_positive_number(row.get("low"), "low"),
+        close=_positive_number(row.get("close"), "close"),
+        volume=_nonnegative_number(row.get("volume"), "volume"),
+        source=SCHWAB_PRICE_HISTORY_SOURCE,
+    )
+    _validate_ohlc(candle)
+    return candle
+
+
 def _field(row: Mapping[object, object], index: int) -> object:
     if str(index) in row:
         return row[str(index)]
@@ -1005,7 +1111,7 @@ def _epoch_milliseconds(value: object, name: str) -> datetime:
         ) from None
 
 
-def _validate_ohlc(candle: SchwabMinuteCandle) -> None:
+def _validate_ohlc(candle: SchwabMinuteCandle | SchwabDailyCandle) -> None:
     if candle.high < max(candle.open, candle.low, candle.close):
         raise SchwabCandleContractError(
             "Candle high was below another OHLC value; "
@@ -1021,12 +1127,12 @@ def _validate_ohlc(candle: SchwabMinuteCandle) -> None:
 
 
 def _require_strict_event_order(
-    candles: Sequence[SchwabMinuteCandle],
+    candles: Sequence[SchwabMinuteCandle | SchwabDailyCandle],
 ) -> None:
     previous: dict[str, datetime] = {}
     identities: set[tuple[str, datetime, int | None]] = set()
     for candle in candles:
-        identity = (candle.symbol, candle.timestamp, candle.sequence)
+        identity = (candle.symbol, candle.timestamp, getattr(candle, "sequence", None))
         if identity in identities:
             raise SchwabCandleContractError(
                 "Candle evidence contained a duplicate event identity."

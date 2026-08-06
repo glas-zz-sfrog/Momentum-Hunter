@@ -242,10 +242,25 @@ class SchwabCandleStore:
                 for candle in items:
                     minute_id = minute_identity(candle)
                     bar = bars.setdefault(minute_id, _new_bar(candle))
-                    version = _history_version(candle, received)
+                    history_versions = list(bar["historyVersions"])
+                    latest = history_versions[-1] if history_versions else None
+                    if latest is not None and latest["candle"] == candle.to_evidence():
+                        duplicates += 1
+                        continue
+                    reasserted_after = None
+                    if any(
+                        item["candle"] == candle.to_evidence()
+                        for item in history_versions
+                    ):
+                        reasserted_after = str(latest["versionId"])
+                    version = _history_version(
+                        candle,
+                        received,
+                        reasserted_after_version_id=reasserted_after,
+                    )
                     existing = {
                         str(item["versionId"]): item
-                        for item in bar["historyVersions"]
+                        for item in history_versions
                     }
                     current = existing.get(str(version["versionId"]))
                     if current is not None:
@@ -493,24 +508,38 @@ def _stream_version(
 def _history_version(
     candle: SchwabMinuteCandle,
     received_at: datetime,
+    *,
+    reasserted_after_version_id: str | None = None,
 ) -> dict[str, object]:
     semantic = {
         "source": SCHWAB_PRICE_HISTORY_SOURCE,
         "candle": candle.to_evidence(),
     }
+    if reasserted_after_version_id is not None:
+        semantic["reassertedAfterVersionId"] = reasserted_after_version_id
     return {
         "versionId": _sha256(_canonical_json_bytes(semantic)),
         "source": SCHWAB_PRICE_HISTORY_SOURCE,
         "firstReceivedAt": received_at.isoformat(),
         "candle": candle.to_evidence(),
+        **(
+            {"reassertedAfterVersionId": reasserted_after_version_id}
+            if reasserted_after_version_id is not None
+            else {}
+        ),
     }
 
 
 def _semantic_version(version: Mapping[str, object]) -> dict[str, object]:
-    return {
+    semantic = {
         "source": version.get("source"),
         "candle": version.get("candle"),
     }
+    if version.get("reassertedAfterVersionId") is not None:
+        semantic["reassertedAfterVersionId"] = version.get(
+            "reassertedAfterVersionId"
+        )
+    return semantic
 
 
 def _refresh_bar(bar: dict[str, object]) -> None:
@@ -653,7 +682,11 @@ def _validate_partition(
                     raise SchwabCandleStoreError(
                         "Schwab candle version identity was repeated."
                     )
-                version_ids.add(version_id)
+                reasserted_after = version.get("reassertedAfterVersionId")
+                if reasserted_after is not None and str(reasserted_after) not in version_ids:
+                    raise SchwabCandleStoreError(
+                        "Schwab candle reassertion did not reference an earlier version."
+                    )
                 expected_id = _sha256(
                     _canonical_json_bytes(_semantic_version(version))
                 )
@@ -661,6 +694,7 @@ def _validate_partition(
                     raise SchwabCandleStoreError(
                         "Schwab candle version hash did not match its evidence."
                     )
+                version_ids.add(version_id)
                 _parse_datetime(version.get("firstReceivedAt"))
                 candle = version.get("candle")
                 if not isinstance(candle, Mapping):

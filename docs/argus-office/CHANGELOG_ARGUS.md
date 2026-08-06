@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Added the isolated R032B Schwab historical candle backfill. It fills the chart-depth gap with bounded `/pricehistory` one-minute and daily OHLCV, preserves exact source/timestamps/corrections and A-B-A reassertions, fails on insufficient depth or tampering, remains plan-only/unscheduled, and does not touch legacy stores or runtime execution paths. R033 visual acceptance is recorded failed pending live backfill and consumer reconciliation.
 - Replaced the unsupported Yahoo Finance v7 quote enrichment with one bounded exact-host Schwab `/marketdata/v1/quotes` batch per TradePlan report. Only matching, fresh, real-time, regular-session, tradable last/bid/ask evidence with valid provider and HTTPS clocks can receive execution-price authority.
 - Kept Nasdaq and Yahoo chart values visible as research-only evidence that can never inherit Schwab authority. Schwab transport, freshness, session, symbol, clock, or shape failures remain explicit and fail closed; historical `QUOTE_HTTP_401` records remain immutable.
 - Reapplied the same authority checks during Active Monitor refresh so research tape cannot promote a row to `EXECUTION_READY_TRADE`. Compileall, 44 focused, 159 adjacent, and all 1,179 Python tests pass; scoring weights, alert thresholds, accounts, orders, transmission, storage schemas, packages, and UI are unchanged.
