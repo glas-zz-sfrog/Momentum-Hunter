@@ -261,6 +261,7 @@ class EngineHostRuntime:
         simulation_workspace_loader: Callable[[], dict[str, Any]] | None = None,
         simulation_runner: Callable[[str], dict[str, Any]] | None = None,
         chart_snapshot_loader: Callable[[str, str], dict[str, Any]] | None = None,
+        enable_automatic_chart_backfill: bool = False,
         shadow_workspace_loader: Callable[[], dict[str, Any]] | None = None,
         shadow_starter: Callable[[str, str], dict[str, Any]] | None = None,
         shadow_observation_runner: Callable[[], dict[str, Any]] | None = None,
@@ -307,8 +308,19 @@ class EngineHostRuntime:
         if chart_snapshot_loader is None:
             from momentum_hunter.workstation_charts import WorkstationChartService
 
-            self._chart_service = WorkstationChartService()
+            if enable_automatic_chart_backfill:
+                from momentum_hunter.automatic_candle_backfill import (
+                    AutomaticCandleBackfillCoordinator,
+                )
+
+                self._chart_backfill_coordinator = AutomaticCandleBackfillCoordinator()
+            else:
+                self._chart_backfill_coordinator = None
+            self._chart_service = WorkstationChartService(
+                backfill_coordinator=self._chart_backfill_coordinator,
+            )
         else:
+            self._chart_backfill_coordinator = None
             self._chart_service = None
         self._chart_snapshot_loader = chart_snapshot_loader or self._chart_service.snapshot
         self._shadow_workspace_service = None
@@ -1093,6 +1105,7 @@ def run_host(*, state_directory: Path, collection_interval_seconds: int = DEFAUL
     runtime = EngineHostRuntime(
         collection_interval_seconds=collection_interval_seconds,
         advance_shadow_after_collection=True,
+        enable_automatic_chart_backfill=True,
     )
     lease = HostLease(state_directory / HOST_LOCK_FILENAME, runtime.host_instance_id)
     if not lease.acquire():

@@ -28,6 +28,8 @@ public sealed class PythonChartWorkspaceClientTests
         Assert.Equal("Schwab Trader API", snapshot.Quality!.Provider);
         Assert.Equal(1, snapshot.Quality.CorrectionCount);
         Assert.Equal(1, snapshot.Quality.InProgressCount);
+        Assert.Equal("RUNNING", snapshot.Quality.HistoryLoadStatus);
+        Assert.Equal("Loading bounded Schwab history.", snapshot.Quality.HistoryLoadDetail);
         Assert.Equal(DateTimeOffset.Parse("2026-08-05T14:31:00Z"), snapshot.Quality.LatestInProgressBarAt);
     }
 
@@ -151,7 +153,9 @@ public sealed class PythonChartWorkspaceClientTests
             "unreconciledCount": 0,
             "inProgressCount": 1,
             "completedCount": 1,
-            "findings": ["CORRECTIONS:1", "IN_PROGRESS_BAR_PRESENT"]
+            "findings": ["CORRECTIONS:1", "IN_PROGRESS_BAR_PRESENT", "HISTORY_LOAD_RUNNING"],
+            "historyLoadStatus": "RUNNING",
+            "historyLoadDetail": "Loading bounded Schwab history."
           },
           "candles": [
             {

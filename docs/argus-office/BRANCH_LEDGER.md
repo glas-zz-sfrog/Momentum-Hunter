@@ -1,6 +1,18 @@
 # Branch Ledger
 
-Date reconciled: 2026-08-05
+Date reconciled: 2026-08-06
+
+## ARGUS-R032C Automatic Candle Backfill
+
+`codex/ARGUS-R032C-automatic-candle-backfill` is
+`ACTIVE / IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE_AND_MERGE` from synchronized
+canonical base `af783da`. It adds one cache-first, coalesced, ten-symbol
+background history queue behind the Engine Host, explicit WPF loading/failure
+evidence, atomic restart recovery, and checkout/account guards. All 1,216
+Python and 251 .NET tests plus the zero-warning Release build pass. Canonical
+runtime, installed Engine Host, and Friday's 26 opening jobs remain unchanged;
+next action is visual acceptance, one focused commit/backup, fast-forward
+integration, elevated Engine Host reload, and live unseen-symbol proof.
 
 ## ARGUS-DATA-001C Schwab TradePlan Quote Authority
 
@@ -16,22 +28,22 @@ package, or UI path changed. Thursday's capture completed on that release; the
 26 remaining opening jobs are repinned once after candle integration.
 
 `codex/ARGUS-R033-live-chart-engine-host-integration` is
-`PUSHED_FEATURE_BRANCH / VISUAL_ACCEPTED_PENDING_INTEGRATION` at `c88faa4`.
+`PUSHED_FEATURE_BRANCH / SUPERSEDED_BY_COMBINED_INTEGRATION` at `c88faa4`.
 It projects the R032 Schwab candle store through Engine Host schema 2, derives
 5m/15m only from stored 1m evidence, and renders a dense bounded viewport with
 explicit source, timing, gap, correction, provisional, stale, and unavailable
 states. Steven accepted the repaired density proof on 2026-08-06. Its runtime
 and tests are being reconciled with R032B on
 `codex/ARGUS-R032B-R033-candle-integration`; do not merge the source feature
-branch separately after that integration lands.
+branch separately; its content is canonical through the combined integration.
 
-`codex/ARGUS-R032B-R033-candle-integration` is `ACTIVE / MERGE_READY` from
-canonical base `421149c`. It contains R032B through `a4a208e`, R033 through
-`ba5afcc`, and the combined Schwab-only Daily reader. Full proof passes at
+`codex/ARGUS-R032B-R033-candle-integration` is `MERGED_TO_LOCAL_MASTER` through
+`af783da` from canonical base `421149c`. It contains R032B through `a4a208e`,
+R033 through `ba5afcc`, and the combined Schwab-only Daily reader. Full proof passes at
 1,203 Python and 250 .NET tests plus a zero-warning Release build; the actual
 isolated five-symbol store returns 180 Daily and 180 intraday display bars per
-symbol. Next action is final commit, ordinary push, fast-forward integration,
-and one exact-head repin of the remaining opening jobs.
+symbol. Local and remote `master` are synchronized at `af783da`; the remaining
+26 opening jobs are pinned there, and R032C is the active successor.
 
 ## ARGUS-R032 Schwab Incremental Candle Collector
 

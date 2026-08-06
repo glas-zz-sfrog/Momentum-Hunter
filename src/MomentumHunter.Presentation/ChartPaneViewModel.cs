@@ -52,6 +52,8 @@ public sealed class ChartPaneViewModel : ObservableObject
 
     public string EmptyStateText => DataState switch
     {
+        _ when IsHistoryLoading => "Loading Schwab candle history...",
+        _ when HasHistoryLoadFailure => "Candle history load failed",
         ChartDataState.InsufficientData => "Insufficient stored candles",
         ChartDataState.Unavailable => "No stored candles available",
         _ => "No deterministic candles available",
@@ -68,7 +70,18 @@ public sealed class ChartPaneViewModel : ObservableObject
 
     public string ProviderStatusLabel => Quality is null
         ? "Source unavailable"
-        : $"{Quality.Provider}  |  {Quality.Status.Replace('_', ' ')}";
+        : IsHistoryLoading
+            ? $"{Quality.Provider}  |  LOADING HISTORY"
+            : HasHistoryLoadFailure
+                ? $"{Quality.Provider}  |  HISTORY LOAD {Quality.HistoryLoadStatus.Replace('_', ' ')}"
+                : $"{Quality.Provider}  |  {Quality.Status.Replace('_', ' ')}";
+
+    public bool IsHistoryLoading => Quality?.HistoryLoadStatus is "QUEUED" or "RUNNING";
+
+    public bool HasHistoryLoadFailure => Quality?.HistoryLoadStatus is "PARTIAL" or "FAILED";
+
+    public string HistoryLoadDetail => Quality?.HistoryLoadDetail
+        ?? "Automatic candle history load status unavailable.";
 
     public string TimingStatusLabel
     {
@@ -164,6 +177,9 @@ public sealed class ChartPaneViewModel : ObservableObject
         OnPropertyChanged(nameof(EmptyStateText));
         OnPropertyChanged(nameof(DetailLabel));
         OnPropertyChanged(nameof(ProviderStatusLabel));
+        OnPropertyChanged(nameof(IsHistoryLoading));
+        OnPropertyChanged(nameof(HasHistoryLoadFailure));
+        OnPropertyChanged(nameof(HistoryLoadDetail));
         OnPropertyChanged(nameof(TimingStatusLabel));
         OnPropertyChanged(nameof(IntegrityStatusLabel));
         OnPropertyChanged(nameof(HasIntegrityFindings));

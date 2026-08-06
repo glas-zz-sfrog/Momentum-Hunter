@@ -29,6 +29,25 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-R032C automatic bounded candle backfill is
+`IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE_AND_MERGE` on branch
+`codex/ARGUS-R032C-automatic-candle-backfill` from canonical `af783da`.
+The Engine Host now renders existing cached bars first, coalesces repeated chart
+requests behind one background symbol load, enforces a ten-symbol ceiling and
+five-minute refresh cooldown, persists restart recovery atomically, and refuses
+to auto-repair untrusted stores. Missing, shallow, or market-hours-stale history
+is loaded through the existing sole-`2573` `INDIVIDUAL_CASH` Schwab guard into
+the source-specific minute and Daily stores. WPF remains a five-second cached
+consumer and shows `LOADING HISTORY` or a bounded failure without making a
+provider call. Synthetic end-to-end proof transitions an immediate empty cache
+snapshot to 30 populated canonical bars after one worker run. Compileall, 59
+focused Python tests, all 1,216 Python tests, 35 focused presentation tests, all
+251 .NET tests, and a zero-warning Release build pass. No scoring, readiness,
+capture, scheduler, Shadow, Risk Governor, position/order, transmission,
+database/schema, credential, legacy-candle, or R034 deletion behavior changed.
+Canonical `master`, the installed Engine Host, and Friday's capture remain on
+`af783da` until visual acceptance and deliberate integration/reload.
+
 Thursday's ordinary unattended capture is `COMPLETE`. The automation service
 started `opening-capture-20260806` at 08:35:00 Central; the capture process
 began at 08:35:01, passed the same-response HTTPS clock gate with 282.958
@@ -1054,7 +1073,7 @@ source commit `c88faa4`
 
 #### ARGUS-R032C - Automatic Bounded Symbol Backfill Queue
 
-Status: `NEXT_BUILDER_SLICE` after R032B/R033 integration
+Status: `IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE_AND_MERGE`
 
 - When a symbol enters the current Hunter candidates, saved watchlist, selected
   chart, or active FakeBroker-position universe, inspect the canonical minute
@@ -1076,6 +1095,13 @@ Status: `NEXT_BUILDER_SLICE` after R032B/R033 integration
 - Prove cache-first rendering, queue coalescing, new-symbol backfill, restart
   recovery, bounded retries, malformed/tampered input, source nonmutation, and
   the transition from loading to populated 1m/5m/15m/Daily snapshots.
+- Implementation proof is complete on the feature branch: one chart request
+  queues work without blocking, repeated five-second requests coalesce, one
+  interrupted job recovers after Engine Host restart, malformed state and
+  tampered candle stores fail closed, and a successful synthetic load repaints
+  from `UNAVAILABLE / LOADING HISTORY` to 30 canonical candles. Integration,
+  installed Engine Host reload, one live unseen-symbol proof, and Steven's
+  visible wording check remain pending.
 
 #### ARGUS-R034 - Legacy Candle Cutover
 

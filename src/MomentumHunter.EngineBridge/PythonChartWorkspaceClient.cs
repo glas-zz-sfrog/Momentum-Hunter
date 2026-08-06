@@ -163,7 +163,9 @@ public static class PythonChartSnapshotMapper
         RequiredInteger(item, "unreconciledCount"),
         RequiredInteger(item, "inProgressCount"),
         RequiredInteger(item, "completedCount"),
-        StringArray(item, "findings"));
+        StringArray(item, "findings"),
+        String(item, "historyLoadStatus") ?? "NOT_REQUESTED",
+        String(item, "historyLoadDetail") ?? "Stored candle history satisfies the automatic-load gate.");
 
     private static ChartDataState State(string state) => state switch
     {

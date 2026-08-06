@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Protocol
+from zoneinfo import ZoneInfo
 
 from momentum_hunter.schwab_candle_store import (
     SCHWAB_CANDLE_STORE_ROOT,
@@ -26,6 +27,14 @@ DAILY_STALE_AFTER = timedelta(days=7)
 SCHWAB_PROVIDER_LABEL = "Schwab Trader API"
 SCHWAB_INTRADAY_SOURCE_LABEL = "Schwab CHART_EQUITY + price history"
 SCHWAB_DAILY_SOURCE_LABEL = "Schwab price history daily OHLC"
+EASTERN_TZ = ZoneInfo("America/New_York")
+MIN_HISTORY_CANDLES = {"1m": 30, "5m": 12, "15m": 8, "Daily": 20}
+
+
+class CandleBackfillCoordinator(Protocol):
+    def request(self, symbol: str, *, reason: str) -> dict[str, object]: ...
+
+    def status(self, symbol: str) -> dict[str, object] | None: ...
 
 
 @dataclass(frozen=True)
@@ -42,9 +51,11 @@ class WorkstationChartService:
         *,
         paths: WorkstationChartPaths | None = None,
         max_candles: int = DEFAULT_MAX_CANDLES,
+        backfill_coordinator: CandleBackfillCoordinator | None = None,
     ) -> None:
         self.paths = paths or WorkstationChartPaths()
         self.max_candles = max(2, int(max_candles))
+        self.backfill_coordinator = backfill_coordinator
         self._candle_store = SchwabCandleStore(self.paths.schwab_candle_store_root)
         self._daily_candle_store = SchwabDailyCandleStore(
             self.paths.schwab_daily_candle_store_root
@@ -61,8 +72,64 @@ class WorkstationChartService:
         clean_interval = normalize_interval(interval)
         observed = as_utc(observed_at or datetime.now(timezone.utc))
         if clean_interval == "Daily":
-            return self._daily_snapshot(clean_symbol, observed)
-        return self._intraday_snapshot(clean_symbol, clean_interval, observed)
+            snapshot = self._daily_snapshot(clean_symbol, observed)
+        else:
+            snapshot = self._intraday_snapshot(clean_symbol, clean_interval, observed)
+        return self._attach_history_load(snapshot, observed)
+
+    def _attach_history_load(
+        self,
+        snapshot: dict[str, Any],
+        observed_at: datetime,
+    ) -> dict[str, Any]:
+        reason = history_request_reason(snapshot, observed_at=observed_at)
+        if self.backfill_coordinator is None:
+            summary = str(snapshot.get("summary", ""))
+            if "unreadable or untrusted" in summary:
+                detail = "Untrusted stored candle evidence is never repaired automatically."
+            else:
+                detail = "Automatic candle history loading is not enabled for this chart service."
+            history_load = {
+                "status": "NOT_REQUESTED",
+                "detail": detail,
+            }
+        elif reason is None:
+            summary = str(snapshot.get("summary", ""))
+            if "unreadable or untrusted" in summary:
+                history_load = {
+                    "status": "NOT_REQUESTED",
+                    "detail": "Untrusted stored candle evidence is never repaired automatically.",
+                }
+            else:
+                previous = self.backfill_coordinator.status(str(snapshot["symbol"]))
+                if previous is not None and str(previous.get("status")) in {
+                    "QUEUED",
+                    "RUNNING",
+                    "COMPLETE",
+                }:
+                    history_load = previous
+                else:
+                    history_load = {
+                        "status": "NOT_REQUESTED",
+                        "detail": "Stored candle history satisfies the automatic-load gate.",
+                    }
+        else:
+            history_load = self.backfill_coordinator.request(
+                str(snapshot["symbol"]),
+                reason=reason,
+            )
+        snapshot["historyLoad"] = history_load
+        quality = snapshot.get("quality")
+        if isinstance(quality, dict):
+            status = str(history_load.get("status", "NOT_REQUESTED"))
+            quality["historyLoadStatus"] = status
+            quality["historyLoadDetail"] = str(history_load.get("detail", ""))
+            if status in {"QUEUED", "RUNNING"}:
+                quality["findings"] = [*quality.get("findings", []), f"HISTORY_LOAD_{status}"]
+                snapshot["summary"] = f"LOADING HISTORY | {snapshot['summary']}"
+            elif status in {"PARTIAL", "FAILED"}:
+                quality["findings"] = [*quality.get("findings", []), f"HISTORY_LOAD_{status}"]
+        return snapshot
 
     def _daily_snapshot(self, symbol: str, observed_at: datetime) -> dict[str, Any]:
         candles, error = self._load_daily_candles(symbol)
@@ -526,6 +593,36 @@ def unavailable_snapshot(
         },
         "candles": [],
     }
+
+
+def history_request_reason(
+    snapshot: Mapping[str, Any],
+    *,
+    observed_at: datetime,
+) -> str | None:
+    state = str(snapshot.get("state", "UNAVAILABLE"))
+    summary = str(snapshot.get("summary", ""))
+    interval = str(snapshot.get("interval", ""))
+    candles = snapshot.get("candles")
+    candle_count = len(candles) if isinstance(candles, list) else 0
+    if "unreadable or untrusted" in summary:
+        return None
+    if state == "UNAVAILABLE":
+        return f"No stored {interval} history is available."
+    minimum = MIN_HISTORY_CANDLES.get(interval, 2)
+    if candle_count < minimum:
+        return f"Stored {interval} history has {candle_count} candle(s); at least {minimum} are required."
+    if state == "STALE" and _within_extended_market_window(observed_at):
+        return f"Stored {interval} history is stale during the extended market window."
+    return None
+
+
+def _within_extended_market_window(observed_at: datetime) -> bool:
+    eastern = as_utc(observed_at).astimezone(EASTERN_TZ)
+    if eastern.weekday() >= 5:
+        return False
+    minute = eastern.hour * 60 + eastern.minute
+    return 4 * 60 <= minute <= 20 * 60 + 5
 
 
 def optional_timestamp(item: Mapping[str, Any] | None, field: str) -> str | None:

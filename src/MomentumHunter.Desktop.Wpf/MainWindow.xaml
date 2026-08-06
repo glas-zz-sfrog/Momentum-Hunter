@@ -434,7 +434,8 @@
                                                 <TextBlock Text="{Binding PrimaryChart.ProviderStatusLabel}"
                                                            FontSize="10"
                                                            FontWeight="SemiBold"
-                                                           TextWrapping="Wrap">
+                                                           TextWrapping="Wrap"
+                                                           ToolTip="{Binding PrimaryChart.HistoryLoadDetail}">
                                                     <TextBlock.Style>
                                                         <Style TargetType="TextBlock">
                                                             <Setter Property="Foreground" Value="{StaticResource Teal}" />

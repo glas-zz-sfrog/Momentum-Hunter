@@ -234,7 +234,9 @@ public sealed record ChartQualitySnapshot(
     int UnreconciledCount,
     int InProgressCount,
     int CompletedCount,
-    IReadOnlyList<string> Findings);
+    IReadOnlyList<string> Findings,
+    string HistoryLoadStatus = "NOT_REQUESTED",
+    string HistoryLoadDetail = "Stored candle history satisfies the automatic-load gate.");
 
 public sealed record ChartSnapshot(
     int SchemaVersion,

@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added R032C cache-first automatic candle history loading behind the Python Engine Host. Missing, shallow, or market-hours-stale chart history queues one coalesced background Schwab backfill under the existing sole-account guard; WPF remains provider-free and refreshes the stored result every five seconds.
+- Added atomic queue state, one interrupted-job restart recovery, a ten-symbol ceiling, five-minute refresh cooldown, bounded provider attempts, explicit `LOADING HISTORY`/failure evidence, checkout-manifest binding, and fail-closed malformed/tampered-state behavior. Synthetic transition proof, all 1,216 Python tests, all 251 .NET tests, and a zero-warning Release build pass; visual acceptance, merge, installed Engine Host reload, and live unseen-symbol proof remain pending.
 - Added R032B bounded `/pricehistory` one-minute and Daily OHLCV backfill with source/timestamp/correction lineage, exact idempotency, tamper checks, and no legacy-store mutation. The guarded five-symbol proof inserted 39,165 minute versions and 1,260 Daily bars without position/order action.
 - Added R033's versioned Python-to-WPF Schwab candle contract, deterministic 5m/15m aggregation, five-second cached refresh, explicit timing/integrity states, and a dense bounded viewport. Steven accepted the repaired 1180x820 and 1920x1080 chart proof on 2026-08-06.
 - Reconciled R032B/R033 and replaced the old Daily reader with the separate validated `schwab-daily-candles-v1` store. Legacy or tampered Daily evidence fails closed; all 1,203 Python and 250 .NET tests and the zero-warning Release build pass. Automatic new-symbol backfill remains R032C.

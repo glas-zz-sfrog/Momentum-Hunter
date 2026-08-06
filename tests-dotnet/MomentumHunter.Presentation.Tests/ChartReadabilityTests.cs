@@ -328,6 +328,72 @@ public sealed class ChartReadabilityTests
     }
 
     [Fact]
+    public void AutomaticHistoryLoadHasPlainVisibleLoadingAndFailureStates()
+    {
+        var pane = Pane("1m");
+        var at = DateTimeOffset.Parse("2026-08-06T14:00:00Z");
+        var loadingQuality = new ChartQualitySnapshot(
+            "UNAVAILABLE",
+            "Schwab CHART_EQUITY + price history",
+            "UNAVAILABLE",
+            [],
+            null,
+            null,
+            null,
+            null,
+            null,
+            true,
+            0,
+            0,
+            0,
+            0,
+            0,
+            ["SOURCE_UNAVAILABLE", "HISTORY_LOAD_QUEUED"],
+            "QUEUED",
+            "No stored 1m history is available.");
+        var loading = new ChartPaneViewModel(
+            pane,
+            new ChartSnapshot(
+                2,
+                pane.Symbol,
+                pane.Interval,
+                ChartDataState.Unavailable,
+                at,
+                at,
+                "LOADING HISTORY | UNAVAILABLE",
+                new DataLineage("Schwab CHART_EQUITY + price history", at, "Expected source."),
+                [],
+                loadingQuality));
+
+        Assert.True(loading.IsHistoryLoading);
+        Assert.Equal("UNAVAILABLE  |  LOADING HISTORY", loading.ProviderStatusLabel);
+        Assert.Equal("Loading Schwab candle history...", loading.EmptyStateText);
+        Assert.Equal("No stored 1m history is available.", loading.HistoryLoadDetail);
+
+        var failedQuality = loadingQuality with
+        {
+            HistoryLoadStatus = "FAILED",
+            HistoryLoadDetail = "Automatic candle history load failed.",
+        };
+        loading.ApplySnapshot(new ChartSnapshot(
+            2,
+            pane.Symbol,
+            pane.Interval,
+            ChartDataState.Unavailable,
+            at,
+            at,
+            "UNAVAILABLE",
+            new DataLineage("Schwab CHART_EQUITY + price history", at, "Expected source."),
+            [],
+            failedQuality));
+
+        Assert.False(loading.IsHistoryLoading);
+        Assert.True(loading.HasHistoryLoadFailure);
+        Assert.Equal("UNAVAILABLE  |  HISTORY LOAD FAILED", loading.ProviderStatusLabel);
+        Assert.Equal("Candle history load failed", loading.EmptyStateText);
+    }
+
+    [Fact]
     public void ChartEvidenceLabelsWrapInsteadOfHidingOperationalDetail()
     {
         var document = XDocument.Load(Path.Combine(

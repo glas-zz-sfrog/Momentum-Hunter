@@ -90,6 +90,34 @@ Accepted checks:
 6. Repeat at restored and maximized layouts and report any clipping, unreadable
    candle, misleading state label, or symbol/interval that lacks depth.
 
+## ARGUS-R032C - Automatic Candle History Loading
+
+Branch: `codex/ARGUS-R032C-automatic-candle-backfill`
+
+Automated result: `AUTOMATED_PASS`
+
+Steven status: `PENDING_VISUAL_ACCEPTANCE`
+
+Check only these visible behaviors in the R032C proof/build:
+
+1. A symbol with no cached bars says `LOADING HISTORY` and `Loading Schwab
+   candle history...`; it must not look frozen or claim that candles already
+   exist.
+2. The loading message, source strip, chart frame, and right-side Trade Plan
+   remain readable without clipping at the normal restored layout.
+3. A failed history request says `HISTORY LOAD FAILED` and does not fabricate a
+   candle, silently fall back to Yahoo/legacy data, or expose account details.
+4. Existing cached symbols continue to render immediately; loading one new
+   symbol must not blank or visibly stall another chart.
+5. No Buy, Sell, Submit, Replace, Cancel, live-order, account-selection, or
+   credential control appears anywhere because of this change.
+
+After merge and the one elevated Engine Host reload, automated live proof will
+select one previously uncached liquid symbol and verify that it transitions to
+populated 1m/5m/15m/Daily Schwab history. That provider/state proof is not a
+second visual approval request unless the visible result differs from this
+accepted surface.
+
 ## ARGUS-R030 - Open Positions Console
 
 Branch: `codex/ARGUS-R030-open-positions-console`

@@ -295,6 +295,98 @@ class WorkstationChartServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             service.snapshot("AAA", "60m")
 
+    def test_missing_history_enqueues_one_background_load_and_reports_loading(self) -> None:
+        coordinator = RecordingBackfillCoordinator(status="QUEUED")
+        service = WorkstationChartService(
+            paths=self.paths,
+            backfill_coordinator=coordinator,
+        )
+
+        snapshot = service.snapshot(
+            "AAA", "1m", observed_at=at("2026-08-06T14:00:00Z")
+        )
+
+        self.assertEqual([("AAA", "No stored 1m history is available.")], coordinator.calls)
+        self.assertEqual("QUEUED", snapshot["historyLoad"]["status"])
+        self.assertEqual("QUEUED", snapshot["quality"]["historyLoadStatus"])
+        self.assertIn("LOADING HISTORY", snapshot["summary"])
+        self.assertIn("HISTORY_LOAD_QUEUED", snapshot["quality"]["findings"])
+
+    def test_shallow_and_market_hours_stale_history_request_backfill(self) -> None:
+        coordinator = RecordingBackfillCoordinator(status="RUNNING")
+        self.append_reconciled("AAA", "2026-08-06T13:30:00Z", 10, 11, 9, 10.5, 100)
+        service = WorkstationChartService(
+            paths=self.paths,
+            backfill_coordinator=coordinator,
+        )
+
+        shallow = service.snapshot(
+            "AAA", "1m", observed_at=at("2026-08-06T13:31:00Z")
+        )
+        for minute in range(1, 31):
+            self.append_reconciled(
+                "BBB",
+                f"2026-08-06T13:{minute:02d}:00Z",
+                10,
+                11,
+                9,
+                10.5,
+                100,
+            )
+        stale = service.snapshot(
+            "BBB", "1m", observed_at=at("2026-08-06T14:00:30Z")
+        )
+
+        self.assertEqual("RUNNING", shallow["historyLoad"]["status"])
+        self.assertEqual("RUNNING", stale["historyLoad"]["status"])
+        self.assertIn("at least 30", coordinator.calls[0][1])
+        self.assertIn("stale during the extended market window", coordinator.calls[1][1])
+
+    def test_stale_history_outside_market_window_does_not_poll_provider(self) -> None:
+        coordinator = RecordingBackfillCoordinator(status="QUEUED")
+        for minute in range(30):
+            self.append_reconciled(
+                "AAA",
+                f"2026-08-06T13:{minute:02d}:00Z",
+                10,
+                11,
+                9,
+                10.5,
+                100,
+            )
+        service = WorkstationChartService(
+            paths=self.paths,
+            backfill_coordinator=coordinator,
+        )
+
+        snapshot = service.snapshot(
+            "AAA", "1m", observed_at=at("2026-08-07T02:00:00Z")
+        )
+
+        self.assertEqual([], coordinator.calls)
+        self.assertEqual("NOT_REQUESTED", snapshot["historyLoad"]["status"])
+
+    def test_untrusted_store_is_never_automatically_repaired(self) -> None:
+        self.append_reconciled("AAA", "2026-08-06T13:30:00Z", 10, 11, 9, 10.5, 100)
+        partition = self.store.partition_path("AAA", "2026-08-06")
+        payload = json.loads(partition.read_text(encoding="utf-8"))
+        payload["bars"][0]["canonicalCandle"]["close"] = 999
+        partition.write_text(json.dumps(payload), encoding="utf-8")
+        coordinator = RecordingBackfillCoordinator(status="QUEUED")
+        service = WorkstationChartService(
+            paths=self.paths,
+            backfill_coordinator=coordinator,
+        )
+
+        snapshot = service.snapshot(
+            "AAA", "1m", observed_at=at("2026-08-06T14:00:00Z")
+        )
+
+        self.assertEqual("UNAVAILABLE", snapshot["state"])
+        self.assertEqual([], coordinator.calls)
+        self.assertEqual("NOT_REQUESTED", snapshot["historyLoad"]["status"])
+        self.assertIn("never repaired automatically", snapshot["historyLoad"]["detail"])
+
     def service(self) -> WorkstationChartService:
         return WorkstationChartService(paths=self.paths)
 
@@ -463,6 +555,33 @@ def minute_record() -> dict:
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+class RecordingBackfillCoordinator:
+    def __init__(self, *, status: str) -> None:
+        self.request_status = status
+        self.calls: list[tuple[str, str]] = []
+
+    def request(self, symbol: str, *, reason: str) -> dict[str, object]:
+        self.calls.append((symbol, reason))
+        return {
+            "schemaVersion": 1,
+            "symbol": symbol,
+            "status": self.request_status,
+            "detail": reason,
+            "requestedAt": "2026-08-06T14:00:00Z",
+            "startedAt": None,
+            "completedAt": None,
+            "attemptCount": 1,
+            "coalesced": False,
+            "networkMayRun": True,
+            "positionsRequested": False,
+            "ordersRequested": False,
+            "orderTransmission": "UNAVAILABLE",
+        }
+
+    def status(self, symbol: str) -> dict[str, object] | None:
+        return None
 
 
 if __name__ == "__main__":
