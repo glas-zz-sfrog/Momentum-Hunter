@@ -22,6 +22,7 @@ from momentum_hunter.schwab_candle_collector import (
     write_result_once,
 )
 from momentum_hunter.schwab_candle_contract import (
+    EASTERN_TZ,
     SCHWAB_CHART_EQUITY_SOURCE,
     SCHWAB_PRICE_HISTORY_SOURCE,
     SchwabMinuteCandle,
@@ -221,6 +222,27 @@ class SchwabCandleStoreTests(unittest.TestCase):
         self.assertEqual("RECONCILED", bars[0]["state"])
         self.assertEqual("HISTORY_ONLY_GAP_FILL", bars[1]["state"])
         self.assertEqual(2, len(self.store.canonical_bars("SPY", "2026-08-05")))
+
+    def test_history_reversion_to_prior_values_becomes_canonical(self) -> None:
+        original = history_candle(close=100.0)
+        self.store.append_history(
+            (original,),
+            received_at=MARKET_MINUTE + timedelta(seconds=60),
+        )
+        self.store.append_history(
+            (history_candle(close=99.0),),
+            received_at=MARKET_MINUTE + timedelta(seconds=90),
+        )
+        reverted = self.store.append_history(
+            (original,),
+            received_at=MARKET_MINUTE + timedelta(seconds=120),
+        )
+        bar = self.store.load_partition("SPY", "2026-08-05")["bars"][0]
+
+        self.assertEqual(1, reverted.inserted_count)
+        self.assertEqual(3, len(bar["historyVersions"]))
+        self.assertEqual(100.0, bar["canonicalCandle"]["close"])
+        self.assertIn("reassertedAfterVersionId", bar["historyVersions"][-1])
 
     def test_eastern_session_date_controls_partition(self) -> None:
         after_midnight_utc = datetime(2026, 8, 6, 0, 30, tzinfo=UTC)
@@ -688,8 +710,17 @@ class SchwabIncrementalCollectorTests(unittest.TestCase):
 
     def test_plan_only_cli_does_not_create_store(self) -> None:
         report = self.root / "report.json"
+        generated_at = datetime.now(UTC).astimezone(EASTERN_TZ).isoformat()
         report.write_text(
-            '{"metadata":{"source_session":"opening","generated_at":"2026-08-05T08:35:00-05:00"},"candidates":[{"rank":1,"symbol":"NVDA"}]}',
+            json.dumps(
+                {
+                    "metadata": {
+                        "source_session": "opening",
+                        "generated_at": generated_at,
+                    },
+                    "candidates": [{"rank": 1, "symbol": "NVDA"}],
+                }
+            ),
             encoding="utf-8",
         )
         store_root = self.root / "not-created"

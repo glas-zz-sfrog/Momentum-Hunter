@@ -37,6 +37,7 @@ from momentum_hunter.schwab_candle_contract import (
     SCHWAB_USER_PREFERENCE_URL,
     SchwabCandleContractError,
     build_chart_equity_subscription,
+    build_daily_price_history_parameters,
     build_nonpersisting_stream_proof,
     build_price_history_parameters,
     normalize_symbols,
@@ -446,6 +447,24 @@ class SchwabCandleHttpTransport:
                 start_at=start_at,
                 end_at=end_at,
                 extended_hours=extended_hours,
+            ),
+        )
+
+    def fetch_daily_price_history(
+        self,
+        access_token: str,
+        symbol: str,
+        *,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> object:
+        return self._get_json(
+            SCHWAB_PRICE_HISTORY_URL,
+            access_token=access_token,
+            params=build_daily_price_history_parameters(
+                symbol,
+                start_at=start_at,
+                end_at=end_at,
             ),
         )
 

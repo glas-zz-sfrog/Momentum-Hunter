@@ -659,6 +659,7 @@ class SchwabCandleObserverTests(unittest.TestCase):
             [
                 FakeResponse(bootstrap_payload()),
                 FakeResponse(history_payload("SPY")),
+                FakeResponse(history_payload("SPY")),
             ]
         )
         transport = SchwabCandleHttpTransport(session=session)
@@ -670,11 +671,19 @@ class SchwabCandleObserverTests(unittest.TestCase):
             end_at=OBSERVED_MINUTE + timedelta(minutes=1),
             extended_hours=False,
         )
-        self.assertEqual(2, len(session.calls))
+        transport.fetch_daily_price_history(
+            ACCESS_TOKEN,
+            "SPY",
+            start_at=OBSERVED_MINUTE - timedelta(days=365),
+            end_at=OBSERVED_MINUTE + timedelta(minutes=1),
+        )
+        self.assertEqual(3, len(session.calls))
         for call in session.calls:
             self.assertFalse(call["allow_redirects"])
             self.assertEqual(f"Bearer {ACCESS_TOKEN}", call["headers"]["Authorization"])
         self.assertEqual("SPY", session.calls[1]["params"]["symbol"])
+        self.assertEqual("daily", session.calls[2]["params"]["frequencyType"])
+        self.assertFalse(session.calls[2]["params"]["needExtendedHoursData"])
 
     def test_http_transport_rejects_redirect_status_and_network_error(self) -> None:
         with self.assertRaises(SchwabCandleObserverResponseError):
