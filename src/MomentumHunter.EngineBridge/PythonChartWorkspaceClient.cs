@@ -45,36 +45,60 @@ public static class PythonChartSnapshotMapper
         }
 
         var schemaVersion = Integer(root, "schemaVersion") ?? 0;
-        if (schemaVersion != 1)
+        if (schemaVersion != 2)
         {
             throw new InvalidDataException($"Unsupported Python chart snapshot schema version: {schemaVersion}.");
         }
 
         var observedAt = Timestamp(root, "observedAt", DateTimeOffset.UtcNow);
         var asOf = Timestamp(root, "asOf", observedAt);
-        var lineage = Object(root, "lineage");
+        var lineage = RequiredObject(root, "lineage");
+        var lineageSource = RequiredString(lineage, "sourceLabel");
+        var stateText = RequiredString(root, "state").Trim().ToUpperInvariant();
+        var state = State(stateText);
+        var quality = Quality(RequiredObject(root, "quality"));
         var candles = Array(root, "candles").Select(Candle).ToArray();
         if (candles.Any(candle => candle.Open <= 0m
             || candle.High < Math.Max(candle.Open, Math.Max(candle.Close, candle.Low))
             || candle.Low > Math.Min(candle.Open, Math.Min(candle.Close, candle.High))
-            || candle.Volume < 0))
+            || candle.Volume < 0m
+            || candle.PresentMinuteCount < 1
+            || candle.ExpectedMinuteCount < candle.PresentMinuteCount
+            || candle.IsInProgress != string.Equals(candle.State, "IN_PROGRESS", StringComparison.Ordinal)))
         {
-            throw new InvalidDataException("The Python chart snapshot contains invalid OHLCV geometry.");
+            throw new InvalidDataException("The Python chart snapshot contains invalid OHLCV or lifecycle geometry.");
+        }
+        var inProgressCount = candles.Count(candle => candle.IsInProgress);
+        var completedCount = candles.Length - inProgressCount;
+        if (!string.Equals(quality.Status, stateText, StringComparison.Ordinal)
+            || !string.Equals(quality.SourceLabel, lineageSource, StringComparison.Ordinal)
+            || quality.CompletedCount != completedCount
+            || quality.InProgressCount != inProgressCount
+            || quality.GapCount != candles.Count(candle => candle.HasGapBefore)
+            || quality.CorrectionCount != candles.Count(candle =>
+                string.Equals(candle.State, "CORRECTED", StringComparison.Ordinal))
+            || quality.UnreconciledCount != candles.Count(candle =>
+                string.Equals(candle.State, "COMPLETED_UNRECONCILED", StringComparison.Ordinal))
+            || (quality.LatestCompletedBarAt is null) != (completedCount == 0)
+            || (quality.LatestInProgressBarAt is null) != (inProgressCount == 0))
+        {
+            throw new InvalidDataException("The Python chart quality metadata contradicts its candle payload.");
         }
 
         return new ChartSnapshot(
             schemaVersion,
             RequiredString(root, "symbol"),
             RequiredString(root, "interval"),
-            State(String(root, "state")),
+            state,
             observedAt,
             asOf,
             String(root, "summary") ?? "Chart evidence summary unavailable.",
             new DataLineage(
-                String(lineage, "sourceLabel") ?? "Unavailable chart source",
+                lineageSource,
                 Timestamp(lineage, "asOf", asOf),
                 String(lineage, "summary") ?? "Chart source lineage unavailable."),
-            candles);
+            candles,
+            quality);
     }
 
     private static CandleSnapshot Candle(JsonElement item)
@@ -84,7 +108,7 @@ public static class PythonChartSnapshotMapper
         var high = Decimal(item, "high");
         var low = Decimal(item, "low");
         var close = Decimal(item, "close");
-        var volume = Long(item, "volume");
+        var volume = Decimal(item, "volume");
         if (timestamp == DateTimeOffset.MinValue
             || open is null
             || high is null
@@ -95,21 +119,74 @@ public static class PythonChartSnapshotMapper
             throw new InvalidDataException("A Python chart candle is missing required OHLCV fields.");
         }
 
-        return new CandleSnapshot(timestamp, open.Value, high.Value, low.Value, close.Value, volume.Value);
+        var state = RequiredString(item, "state").Trim().ToUpperInvariant();
+        var source = RequiredString(item, "source");
+        var providerTimestamp = NullableTimestamp(item, "providerTimestamp")
+            ?? throw new InvalidDataException("A Python chart candle is missing its provider timestamp.");
+        var presentMinuteCount = Integer(item, "presentMinuteCount")
+            ?? throw new InvalidDataException("A Python chart candle is missing its present-minute count.");
+        var expectedMinuteCount = Integer(item, "expectedMinuteCount")
+            ?? throw new InvalidDataException("A Python chart candle is missing its expected-minute count.");
+
+        return new CandleSnapshot(
+            timestamp,
+            open.Value,
+            high.Value,
+            low.Value,
+            close.Value,
+            volume.Value,
+            state,
+            source,
+            providerTimestamp,
+            NullableTimestamp(item, "receivedAt"),
+            RequiredBoolean(item, "isCanonical"),
+            RequiredBoolean(item, "isInProgress"),
+            RequiredBoolean(item, "hasGapBefore"),
+            StringArray(item, "discrepancyFields"),
+            presentMinuteCount,
+            expectedMinuteCount);
     }
 
-    private static ChartDataState State(string? state) => state?.Trim().ToUpperInvariant() switch
+    private static ChartQualitySnapshot Quality(JsonElement item) => new(
+        RequiredString(item, "provider"),
+        RequiredString(item, "sourceLabel"),
+        RequiredString(item, "status").Trim().ToUpperInvariant(),
+        StringArray(item, "sessionDates"),
+        NullableTimestamp(item, "latestCompletedBarAt"),
+        NullableTimestamp(item, "latestInProgressBarAt"),
+        NullableTimestamp(item, "latestProviderTimestamp"),
+        NullableTimestamp(item, "latestReceiptAt"),
+        Decimal(item, "ageSeconds"),
+        RequiredBoolean(item, "stale"),
+        RequiredInteger(item, "gapCount"),
+        RequiredInteger(item, "correctionCount"),
+        RequiredInteger(item, "unreconciledCount"),
+        RequiredInteger(item, "inProgressCount"),
+        RequiredInteger(item, "completedCount"),
+        StringArray(item, "findings"));
+
+    private static ChartDataState State(string state) => state switch
     {
         "AVAILABLE" => ChartDataState.Available,
+        "PARTIAL" => ChartDataState.Partial,
         "STALE" => ChartDataState.Stale,
         "INSUFFICIENT_DATA" => ChartDataState.InsufficientData,
-        _ => ChartDataState.Unavailable,
+        "UNAVAILABLE" => ChartDataState.Unavailable,
+        _ => throw new InvalidDataException($"Unsupported Python chart state: {state}."),
     };
 
     private static JsonElement Object(JsonElement item, string name) =>
         Property(item, name, out var value) && value.ValueKind == JsonValueKind.Object
             ? value
             : default;
+
+    private static JsonElement RequiredObject(JsonElement item, string name)
+    {
+        var value = Object(item, name);
+        return value.ValueKind == JsonValueKind.Object
+            ? value
+            : throw new InvalidDataException($"The Python chart snapshot is missing object '{name}'.");
+    }
 
     private static IEnumerable<JsonElement> Array(JsonElement item, string name) =>
         Property(item, name, out var value) && value.ValueKind == JsonValueKind.Array
@@ -137,20 +214,21 @@ public static class PythonChartSnapshotMapper
             : null;
     }
 
-    private static long? Long(JsonElement item, string name)
+    private static int RequiredInteger(JsonElement item, string name) =>
+        Integer(item, name)
+        ?? throw new InvalidDataException($"The Python chart snapshot is missing integer '{name}'.");
+
+    private static bool RequiredBoolean(JsonElement item, string name)
     {
         if (!Property(item, name, out var value))
         {
-            return null;
+            throw new InvalidDataException($"The Python chart snapshot is missing boolean '{name}'.");
         }
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number))
+        if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
         {
-            return number;
+            return value.GetBoolean();
         }
-        return value.ValueKind == JsonValueKind.String
-            && long.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out number)
-            ? number
-            : null;
+        throw new InvalidDataException($"The Python chart snapshot field '{name}' was not boolean.");
     }
 
     private static decimal? Decimal(JsonElement item, string name)
@@ -177,6 +255,37 @@ public static class PythonChartSnapshotMapper
             out var value)
             ? value
             : fallback;
+
+    private static DateTimeOffset? NullableTimestamp(JsonElement item, string name)
+    {
+        if (!Property(item, name, out var value) || value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+        return DateTimeOffset.TryParse(
+            value.GetString(),
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal,
+            out var parsed)
+            ? parsed
+            : throw new InvalidDataException($"The Python chart snapshot timestamp '{name}' was invalid.");
+    }
+
+    private static IReadOnlyList<string> StringArray(JsonElement item, string name)
+    {
+        if (!Property(item, name, out var value) || value.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidDataException($"The Python chart snapshot is missing string array '{name}'.");
+        }
+        var values = value.EnumerateArray()
+            .Select(entry => entry.ValueKind == JsonValueKind.String ? entry.GetString() : null)
+            .ToArray();
+        if (values.Any(entry => string.IsNullOrWhiteSpace(entry)))
+        {
+            throw new InvalidDataException($"The Python chart snapshot array '{name}' contained an invalid value.");
+        }
+        return values.Select(entry => entry!).ToArray();
+    }
 
     private static bool Property(JsonElement item, string name, out JsonElement value)
     {

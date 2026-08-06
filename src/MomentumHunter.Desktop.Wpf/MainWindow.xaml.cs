@@ -37,6 +37,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
     private readonly IApplicationLifetimeCoordinator _lifetime;
     private readonly Dictionary<string, object> _contentById = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _layoutCaptureTimer;
+    private readonly DispatcherTimer _chartRefreshTimer;
     private readonly DispatcherTimer _shadowReviewTimer;
     private string? _builtInDockLayoutXml;
     private bool _isRestoringDockLayout;
@@ -58,6 +59,13 @@ public partial class MainWindow : Window, IWorkstationPresentation
             _layoutCaptureTimer.Stop();
             CaptureShellState();
         };
+        _chartRefreshTimer = new DispatcherTimer(
+            DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromSeconds(5),
+        };
+        _chartRefreshTimer.Tick += async (_, _) =>
+            await _viewModel.RefreshChartDisplayAsync();
         _shadowReviewTimer = new DispatcherTimer(
             DispatcherPriority.Background)
         {
@@ -65,7 +73,11 @@ public partial class MainWindow : Window, IWorkstationPresentation
         };
         _shadowReviewTimer.Tick += async (_, _) =>
             await _viewModel.RefreshShadowReviewDisplayAsync();
-        Closed += (_, _) => _shadowReviewTimer.Stop();
+        Closed += (_, _) =>
+        {
+            _chartRefreshTimer.Stop();
+            _shadowReviewTimer.Stop();
+        };
         Closing += OnClosing;
         DockManager.LayoutUpdated += (_, _) => ScheduleShellStateCapture();
         DockManager.AnchorableClosing += (_, eventArgs) => HandlePaneClosing(eventArgs.Anchorable, eventArgs);
@@ -87,6 +99,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
         EnsureAdditionalChartDocuments();
         ApplyRegistryVisibility();
         _isInitialized = true;
+        _chartRefreshTimer.Start();
         _shadowReviewTimer.Start();
         CaptureShellState();
     }
@@ -819,9 +832,11 @@ public partial class MainWindow : Window, IWorkstationPresentation
             Foreground = new SolidColorBrush(Color.FromRgb(153, 169, 183)),
             FontSize = 11,
             Margin = new Thickness(12, 2, 12, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
             DataContext = chartViewModel,
         };
         note.SetBinding(TextBlock.TextProperty, new Binding(nameof(ChartPaneViewModel.DetailLabel)));
+        note.SetBinding(FrameworkElement.ToolTipProperty, new Binding(nameof(ChartPaneViewModel.DetailLabel)));
         var inspectionLabel = new TextBlock
         {
             FontFamily = new FontFamily("Segoe UI"),

@@ -31,7 +31,7 @@ create a rubber-stamp Steven item.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
-| ARGUS-R033 live chart integration | `AUTOMATED_PASS` for wiring and rendering; `AUTOMATED_FAIL` for useful data depth because the proof root contained only two to four one-minute rows per symbol and no daily store | `MANUAL_FAIL` on 2026-08-06: 5m showed two sparse candles, 15m showed one candle, and Daily showed none | Preserved unmerged on `codex/ARGUS-R033-live-chart-engine-host-integration`; R032B backfill is implemented separately | No check is currently actionable. After R032B's guarded live backfill and R033 reconciliation, reopen NVDA/SHOP/ZETA plus SPY/IWM and verify meaningful 1m/5m/15m history, populated Daily history, source/timestamp labels, and no legacy/provider mixing. |
+| ARGUS-R033 live Schwab chart integration | `AUTOMATED_PASS`; focused chart proof, all 250 .NET tests, and a zero-warning Release build pass after the density repair. The isolated R032B proof populated 39,165 minute versions and 1,260 daily bars without position/order action. | `MANUAL_PASS`; Steven accepted the dense 1180x820 and 1920x1080 chart on 2026-08-06 | `VISUAL_ACCEPTED_PENDING_INTEGRATION`; source branch `c88faa4` is pushed | Git Steward is combining R032B/R033, binding Daily to the Schwab daily store, rerunning full proof, and repinning the remaining opening jobs. |
 | Monday 2026-08-03 opening-capture readiness | `AUTOMATED_PASS`: opening fail-closed behavior, clock-task hardening, installation, independent live verification, and transient state-receipt lock recovery all pass. Evidence proves SYSTEM principal, exact `w32tm` action, startup delay `PT2M`, daily 08:15/08:25 triggers, wake enabled, no late-start catch-up, five two-minute retries, task result `0`, synchronized NIST time, Running/Automatic service, fresh heartbeat, Healthy Engine Host, 30 pending opening jobs, zero Shadow jobs, and transmission `UNAVAILABLE`. ARGUS-SERVICE-007 passed compileall, 26 focused tests, 74 affected tests, all 1,019 Python tests, a real Windows lock proof, and an installed twelve-lock stress with no process restart or Application error. | `NO_STEVEN_ACTION`; the required UAC interaction passed. Leave the computer powered on and plugged in through 08:40 Central Monday. | `COMPLETE_AND_BACKED_UP` through clock commits `30c25e5`/`3821490` and receipt-lock repair `252cdc7`; installed proof passed at 02:31 Central on 2026-08-01. | No product or visual check remains. Sunday 19:00 is a read-only preflight; Monday 08:35 is the capture and 08:50 is the terminal evidence audit. Observers must not launch, retry, repair, or fabricate evidence. |
 | ARGUS-SERVICE-004/005 reboot-without-login canary | `AUTOMATED_PASS`; the final exact-time 2026-07-31 16:39 Central attempt proved a new kernel boot and service instance, Running/Automatic service, Session 0 execution with zero interactive sessions, completed runtime/Codex receipts, Healthy Engine Host, the unchanged sole `2573` individual cash binding, no position/order request, 30 preserved pending opening jobs, zero Shadow jobs, and transmission `UNAVAILABLE`. Earlier failed/invalid attempts remain preserved separately. | `NO_STEVEN_ACTION`; the reboot/sign-in-screen action is complete and no visual judgment remains. | Repairs through forced-restart commit `e24feed` are backed up; successful proof is archived and the operational gate is `PASS`. | No remaining manual check. The next evidence is the first ordinary 2026-08-03 opening-capture receipt and report; future service manifest job changes hot-reload without another restart. |
 | ARGUS-R030 open positions console | `AUTOMATED_PASS`; zero-warning solution build, all 185 presentation tests, and all 237 .NET tests pass; stale/halted positions remain visible, the source is read-only canonical Shadow/FakeBroker evidence, and source review finds no brokerage/order control | `MANUAL_PASS`; Steven accepted the visible surface on 2026-07-31 | `COMPLETE_AND_BACKED_UP` on canonical `master` through `94e1708` plus Roadmap closeout | Checks 1-8 passed. The populated-row check remains deferred until canonical evidence contains an open Shadow position; do not fabricate production evidence for visual proof. |
@@ -62,19 +62,19 @@ create a rubber-stamp Steven item.
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted visual baseline; subsequent nonvisual roadmap work follows standing delegation |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | Destructive decision not yet due | Future market-data cutover task | Interrupt Steven immediately before deleting the exact legacy paths/rows; visual cutover proof remains manual |
 
-## ARGUS-R033 - Live Chart Data-Depth Recheck
+## ARGUS-R033 - Live Schwab Chart Integration
 
 Branch: `codex/ARGUS-R033-live-chart-engine-host-integration`
 
-Current result: `MANUAL_FAIL / MANUAL_NOT_YET_AVAILABLE`
+Current result: `MANUAL_PASS / INTEGRATION_ACTIVE`
 
-Steven's 2026-08-06 screenshots proved the current isolated chart is not yet a
-useful workstation chart: NVDA had only four one-minute proof rows, 5m rendered
-two sparse candles, 15m rendered one candle, and Daily had no source. Do not ask
-Steven to repeat this review until R032B has run against Schwab, its row/source/
-timestamp evidence passes, and R033 consumes `schwab-daily-candles-v1`.
+Steven's first 2026-08-06 screenshots correctly rejected the sparse transport
+proof. The repaired review used the isolated R032B backfill and a bounded dense
+viewport; Steven accepted the resulting chart and directed integration. The
+remaining nonvisual gate is binding Daily to `schwab-daily-candles-v1` and
+proving the combined branch.
 
-When available, check exactly:
+Accepted checks:
 
 1. Select NVDA, SHOP, ZETA, SPY, and IWM and confirm each has meaningful recent
    1m history rather than one or two proof bars.

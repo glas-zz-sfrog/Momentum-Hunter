@@ -46,6 +46,8 @@ public sealed class ChartPaneViewModel : ObservableObject
 
     public DataLineage? DataLineage { get; private set; }
 
+    public ChartQualitySnapshot? Quality { get; private set; }
+
     public string SourceSummary { get; private set; } = "Chart evidence unavailable.";
 
     public string EmptyStateText => DataState switch
@@ -61,7 +63,46 @@ public sealed class ChartPaneViewModel : ObservableObject
         ? "Pinned chart context"
         : $"Link {Pane.LinkGroup} chart context";
 
-    public string DetailLabel => $"{ContextLabel} | {SourceSummary}";
+    public string DetailLabel =>
+        $"{ContextLabel} | {ProviderStatusLabel} | {TimingStatusLabel} | {IntegrityStatusLabel} | {InProgressStatusLabel}";
+
+    public string ProviderStatusLabel => Quality is null
+        ? "Source unavailable"
+        : $"{Quality.Provider}  |  {Quality.Status.Replace('_', ' ')}";
+
+    public string TimingStatusLabel
+    {
+        get
+        {
+            if (Quality is null)
+            {
+                return "Provider and receipt times unavailable";
+            }
+            var completed = Quality.LatestCompletedBarAt is null
+                ? "No completed bar"
+                : $"Complete {FormatTimestamp(Quality.LatestCompletedBarAt.Value)}";
+            var received = Quality.LatestReceiptAt is null
+                ? "receipt unavailable"
+                : $"received {FormatTimestamp(Quality.LatestReceiptAt.Value)}";
+            var age = Quality.AgeSeconds is null
+                ? "age unavailable"
+                : $"age {FormatAge(Quality.AgeSeconds.Value)}";
+            return $"{completed}  |  {received}  |  {age}";
+        }
+    }
+
+    public string IntegrityStatusLabel => Quality is null
+        ? "Gaps, corrections, and reconciliation unavailable"
+        : $"Gaps {Quality.GapCount:N0}  |  Corrected {Quality.CorrectionCount:N0}  |  Unreconciled {Quality.UnreconciledCount:N0}";
+
+    public bool HasIntegrityFindings => Quality is not null
+        && (Quality.GapCount > 0 || Quality.CorrectionCount > 0 || Quality.UnreconciledCount > 0);
+
+    public string InProgressStatusLabel => Quality?.LatestInProgressBarAt is DateTimeOffset timestamp
+        ? $"In progress {FormatTimestamp(timestamp)}"
+        : "No in-progress bar";
+
+    public bool HasInProgressBar => Quality?.LatestInProgressBarAt is not null;
 
     public CandleSnapshot? LatestBar { get; private set; }
 
@@ -113,13 +154,21 @@ public sealed class ChartPaneViewModel : ObservableObject
     {
         DataState = snapshot.State;
         DataLineage = snapshot.DataLineage;
+        Quality = snapshot.Quality;
         SourceSummary = snapshot.Summary;
         ReplaceCandles(snapshot.Candles);
         OnPropertyChanged(nameof(DataState));
         OnPropertyChanged(nameof(DataLineage));
+        OnPropertyChanged(nameof(Quality));
         OnPropertyChanged(nameof(SourceSummary));
         OnPropertyChanged(nameof(EmptyStateText));
         OnPropertyChanged(nameof(DetailLabel));
+        OnPropertyChanged(nameof(ProviderStatusLabel));
+        OnPropertyChanged(nameof(TimingStatusLabel));
+        OnPropertyChanged(nameof(IntegrityStatusLabel));
+        OnPropertyChanged(nameof(HasIntegrityFindings));
+        OnPropertyChanged(nameof(InProgressStatusLabel));
+        OnPropertyChanged(nameof(HasInProgressBar));
     }
 
     private void OnPanePropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
@@ -154,7 +203,29 @@ public sealed class ChartPaneViewModel : ObservableObject
         $"{FormatTimestamp(candle.Timestamp)}  |  " +
         $"O {FormatPrice(candle.Open)}  H {FormatPrice(candle.High)}  " +
         $"L {FormatPrice(candle.Low)}  C {FormatPrice(candle.Close)}  |  " +
-        $"V {candle.Volume.ToString("N0", CultureInfo.InvariantCulture)}";
+        $"V {FormatVolume(candle.Volume)}  |  {FormatCandleState(candle)}";
+
+    private static string FormatCandleState(CandleSnapshot candle)
+    {
+        var state = candle.State.Replace('_', ' ');
+        if (candle.HasGapBefore)
+        {
+            state += " | GAP BEFORE";
+        }
+        return state;
+    }
+
+    private static string FormatAge(decimal seconds) => seconds switch
+    {
+        < 60m => $"{seconds:N0}s",
+        < 3600m => $"{seconds / 60m:N1}m",
+        _ => $"{seconds / 3600m:N1}h",
+    };
+
+    private static string FormatVolume(decimal value) =>
+        value == decimal.Truncate(value)
+            ? value.ToString("N0", CultureInfo.InvariantCulture)
+            : value.ToString("N2", CultureInfo.InvariantCulture);
 
     private static string FormatPrice(decimal value)
     {

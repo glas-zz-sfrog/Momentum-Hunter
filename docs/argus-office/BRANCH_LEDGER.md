@@ -15,10 +15,15 @@ transmission capability, score weight, alert threshold, database/schema,
 package, or UI path changed. The 27 remaining opening jobs are repinned once to
 the resulting synchronized canonical head after integration.
 
-`codex/ARGUS-R033-live-chart-engine-host-integration` remains `ACTIVE` and
-unmerged. Its automated Python/.NET/build/screenshot proof is complete, but it
-is dirty with intentional feature changes and remains subject to Steven's
-visual acceptance. Do not reset, rebase, or merge it as part of DATA-001C.
+`codex/ARGUS-R033-live-chart-engine-host-integration` is
+`PUSHED_FEATURE_BRANCH / VISUAL_ACCEPTED_PENDING_INTEGRATION` at `c88faa4`.
+It projects the R032 Schwab candle store through Engine Host schema 2, derives
+5m/15m only from stored 1m evidence, and renders a dense bounded viewport with
+explicit source, timing, gap, correction, provisional, stale, and unavailable
+states. Steven accepted the repaired density proof on 2026-08-06. Its runtime
+and tests are being reconciled with R032B on
+`codex/ARGUS-R032B-R033-candle-integration`; do not merge the source feature
+branch separately after that integration lands.
 
 ## ARGUS-R032 Schwab Incremental Candle Collector
 

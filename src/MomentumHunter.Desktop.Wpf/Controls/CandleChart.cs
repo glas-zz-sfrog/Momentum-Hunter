@@ -96,8 +96,8 @@ public sealed class CandleChart : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        var candles = OrderedCandles();
-        if (candles.Length == 0 || !TryGetPlotBounds(out var plotBounds))
+        var allCandles = OrderedCandles();
+        if (allCandles.Length == 0 || !TryGetPlotBounds(out var plotBounds))
         {
             ClearInspection();
             return;
@@ -111,7 +111,15 @@ public sealed class CandleChart : FrameworkElement
         }
 
         var normalizedPosition = (position.X - plotBounds.Left) / plotBounds.Width;
-        var inspection = ChartInspectionScale.SelectNearest(candles, normalizedPosition);
+        var viewport = ChartViewportScale.Create(allCandles, plotBounds.Width);
+        var candlePosition = viewport.ToCandleNormalizedPosition(normalizedPosition);
+        if (candlePosition is null)
+        {
+            ClearInspection();
+            return;
+        }
+
+        var inspection = ChartInspectionScale.SelectNearest(viewport.Candles, candlePosition.Value);
         SetCurrentValue(InspectedCandleProperty, inspection?.Candle);
     }
 
@@ -126,8 +134,8 @@ public sealed class CandleChart : FrameworkElement
         base.OnRender(drawingContext);
         var bounds = new Rect(0, 0, ActualWidth, ActualHeight);
         drawingContext.DrawRectangle(new SolidColorBrush(Color.FromRgb(16, 22, 29)), null, bounds);
-        var candles = OrderedCandles();
-        if (candles.Length == 0)
+        var allCandles = OrderedCandles();
+        if (allCandles.Length == 0)
         {
             DrawEmptyState(drawingContext, bounds, EmptyStateText);
             return;
@@ -139,16 +147,18 @@ public sealed class CandleChart : FrameworkElement
             return;
         }
 
-        var axis = ChartAxisScale.Create(candles, Interval);
         var priceAxisWidth = ActualWidth >= 500 ? 66d : 54d;
         var plotRight = ActualWidth - priceAxisWidth;
         var plotBottom = ActualHeight - TimeAxisHeight;
         var priceBottom = plotBottom - VolumeBandHeight - 4;
         var priceHeight = priceBottom - PlotTop;
         var plotWidth = plotRight - PlotLeft;
+        var viewport = ChartViewportScale.Create(allCandles, plotWidth);
+        var candles = viewport.Candles.ToArray();
+        var axis = ChartAxisScale.Create(candles, Interval);
         var range = Math.Max(0.01m, axis.MaximumPrice - axis.MinimumPrice);
-        var step = plotWidth / candles.Length;
-        var bodyWidth = Math.Clamp(step * 0.62, 1.5, 12);
+        var step = plotWidth / viewport.SlotCount;
+        var bodyWidth = Math.Clamp(step * 0.62, 1.25, 7);
         var gridPen = new Pen(new SolidColorBrush(Color.FromRgb(45, 61, 74)), 1);
         var axisPen = new Pen(new SolidColorBrush(Color.FromRgb(69, 87, 101)), 1);
         var labelBrush = new SolidColorBrush(Color.FromRgb(153, 169, 183));
@@ -163,13 +173,26 @@ public sealed class CandleChart : FrameworkElement
                 new Point(plotRight + 6, Math.Clamp(y - text.Height / 2, 0, ActualHeight - text.Height)));
         }
 
-        foreach (var tick in axis.TimeTicks)
+        var nextTimeLabelLeft = double.PositiveInfinity;
+        foreach (var tick in axis.TimeTicks.Reverse())
         {
-            var x = PlotLeft + plotWidth * tick.Position;
-            drawingContext.DrawLine(gridPen, new Point(x, PlotTop), new Point(x, plotBottom));
+            var tickIndex = Array.FindIndex(candles, candle => candle.Timestamp == tick.Timestamp);
+            if (tickIndex < 0)
+            {
+                continue;
+            }
+
+            var x = PlotLeft + plotWidth * viewport.CenterPosition(tickIndex);
             var text = CreateText(tick.Label, 10, labelBrush);
             var labelX = Math.Clamp(x - text.Width / 2, PlotLeft, plotRight - text.Width);
+            if (labelX + text.Width + 8 > nextTimeLabelLeft)
+            {
+                continue;
+            }
+
+            drawingContext.DrawLine(gridPen, new Point(x, PlotTop), new Point(x, plotBottom));
             drawingContext.DrawText(text, new Point(labelX, plotBottom + 6));
+            nextTimeLabelLeft = labelX;
         }
 
         drawingContext.DrawLine(axisPen, new Point(plotRight, PlotTop), new Point(plotRight, plotBottom));
@@ -182,7 +205,7 @@ public sealed class CandleChart : FrameworkElement
         for (var index = 0; index < candles.Length; index++)
         {
             var candle = candles[index];
-            var x = PlotLeft + index * step + step / 2;
+            var x = PlotLeft + plotWidth * viewport.CenterPosition(index);
             var highY = ToY(candle.High, axis.MinimumPrice, range, PlotTop, priceHeight);
             var lowY = ToY(candle.Low, axis.MinimumPrice, range, PlotTop, priceHeight);
             var openY = ToY(candle.Open, axis.MinimumPrice, range, PlotTop, priceHeight);
@@ -190,11 +213,34 @@ public sealed class CandleChart : FrameworkElement
             var isUp = candle.Close >= candle.Open;
             var brush = new SolidColorBrush(isUp ? Color.FromRgb(74, 199, 182) : Color.FromRgb(221, 106, 106));
             var pen = new Pen(brush, 1);
+            if (candle.IsInProgress)
+            {
+                pen.DashStyle = DashStyles.Dash;
+            }
+            if (candle.HasGapBefore)
+            {
+                var gapPen = new Pen(new SolidColorBrush(Color.FromArgb(190, 217, 164, 65)), 1)
+                {
+                    DashStyle = DashStyles.Dot,
+                };
+                drawingContext.DrawLine(
+                    gapPen,
+                    new Point(Math.Max(PlotLeft, x - step / 2), PlotTop),
+                    new Point(Math.Max(PlotLeft, x - step / 2), plotBottom));
+            }
             drawingContext.DrawLine(pen, new Point(x, highY), new Point(x, lowY));
-            drawingContext.DrawRectangle(brush, null, new Rect(x - bodyWidth / 2, Math.Min(openY, closeY), bodyWidth, Math.Max(1.5, Math.Abs(closeY - openY))));
+            var body = new Rect(x - bodyWidth / 2, Math.Min(openY, closeY), bodyWidth, Math.Max(1.5, Math.Abs(closeY - openY)));
+            drawingContext.DrawRectangle(candle.IsInProgress ? null : brush, pen, body);
+            if (string.Equals(candle.State, "CORRECTED", StringComparison.Ordinal))
+            {
+                drawingContext.DrawRectangle(
+                    null,
+                    new Pen(new SolidColorBrush(Color.FromRgb(217, 164, 65)), 1.5),
+                    body);
+            }
 
             var volumeHeight = maximumVolume > 0
-                ? Math.Max(1, candle.Volume / (double)maximumVolume * (VolumeBandHeight - 4))
+                ? Math.Max(1, (double)(candle.Volume / maximumVolume) * (VolumeBandHeight - 4))
                 : 1;
             var volumeBrush = new SolidColorBrush(Color.FromArgb(100, isUp ? (byte)74 : (byte)221, isUp ? (byte)199 : (byte)106, isUp ? (byte)182 : (byte)106));
             drawingContext.DrawRectangle(volumeBrush, null, new Rect(x - bodyWidth / 2, plotBottom - volumeHeight, bodyWidth, volumeHeight));
@@ -204,7 +250,7 @@ public sealed class CandleChart : FrameworkElement
         if (inspectedIndex >= 0)
         {
             var inspected = candles[inspectedIndex];
-            var x = PlotLeft + inspectedIndex * step + step / 2;
+            var x = PlotLeft + plotWidth * viewport.CenterPosition(inspectedIndex);
             var closeY = ToY(inspected.Close, axis.MinimumPrice, range, PlotTop, priceHeight);
             var crosshairBrush = new SolidColorBrush(Color.FromArgb(210, 232, 186, 73));
             var crosshairPen = new Pen(crosshairBrush, 1)

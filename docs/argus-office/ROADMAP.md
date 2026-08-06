@@ -119,28 +119,25 @@ was the only brokerage read; positions and orders were not requested and order
 transmission remained `UNAVAILABLE`. The proof did not invoke Engine Host, WPF,
 Shadow, scoring/readiness, or the legacy candle store.
 
-Steven's 2026-08-06 R033 visual review exposed a material data-depth gap. The
-isolated review correctly rendered only R032's 60-second extended-hours proof:
-NVDA had four one-minute rows, producing only two sparse 5m candles and one 15m
-candle, while the isolated data root had no daily source. The chart renderer
-did not invent data, but that evidence is not an acceptable workstation chart.
-R033 is therefore `VISUAL_ACCEPTANCE_FAILED_DATA_DEPTH_GATE`; its dirty feature
-worktree remains preserved and unmerged.
+Steven's first 2026-08-06 R033 review correctly rejected the sparse 60-second
+transport proof. The repaired review used a guarded isolated R032B historical
+backfill and a dense six-pixel bounded viewport, producing readable recent 1m
+structure at 1180x820 and 1920x1080. Steven accepted that visual repair and
+directed integration. R033 is `VISUAL_ACCEPTED_PENDING_INTEGRATION` at pushed
+feature commit `c88faa4`.
 
-ARGUS-R032B historical candle backfill is
-`IMPLEMENTED_PENDING_LIVE_BACKFILL_AND_R033_RECONCILIATION` on branch
-`codex/ARGUS-R032B-schwab-historical-candle-backfill`. It adds bounded Schwab
-`/pricehistory` backfill for the documented ten-day one-minute window and a
-one-year daily window, with a separate source-specific daily store, atomic
-writes, exact rerun idempotency, correction/reassertion history, tamper checks,
-and explicit minimum depth. Compileall, 16 focused tests, all 96 Schwab candle
-tests, and all 1,196 Python tests pass. No live provider call, production-data
-write, service/scheduler change, Engine Host/WPF call, legacy-store mutation,
-account position/order query, or transmission occurred. R032B must run only
-after Thursday's pinned opening capture is terminal; R033 must then consume the
-new daily store and return for visual review. DATA-002 remains queued after this
-continuous-candle foundation, R034 remains a separate destructive gate, and
-Official Shadow remains unarmed at `0 / 30`.
+ARGUS-R032B historical candle backfill is `IMPLEMENTED_PENDING_INTEGRATION` at
+pushed feature commit `9f9ac96`. It adds bounded Schwab `/pricehistory`
+backfill for a ten-day one-minute window and a one-year daily window, with a
+separate source-specific daily store, atomic writes, exact rerun idempotency,
+correction/reassertion history, tamper checks, and explicit minimum depth. The
+guarded isolated market-hours proof for NVDA, SHOP, ZETA, SPY, and IWM inserted
+39,165 minute versions and 1,260 daily bars with no findings and no position,
+order, or transmission action. The active integration branch combines R032B
+with R033 and must bind Daily only to `schwab-daily-candles-v1`, rerun full
+Python/.NET proof, and repin the remaining opening jobs before release. R034
+legacy deletion remains a separately approved destructive gate, and Official
+Shadow remains unarmed at `0 / 30`.
 
 The synchronized DATA-001C closeout is the exact head for the 27 remaining
 ordinary opening jobs from 2026-08-06 through 2026-09-14 after one deliberate
