@@ -1,6 +1,6 @@
 # ARGUS-R033 Live Chart And Engine Host Integration
 
-Status: `VISUAL_ACCEPTED_PENDING_MERGE`
+Status: `COMBINED_VERIFIED_PENDING_MASTER_INTEGRATION`
 
 ## Scope
 
@@ -17,8 +17,9 @@ Shadow, touch broker/order behavior, or perform the R034 legacy cutover.
   separately visible when history has not reconciled it.
 - One-minute source bars aggregate deterministically to 5m and 15m without
   crossing session dates. Missing minutes remain gaps rather than interpolation.
-- Daily OHLC remains a separately named source. Missing Daily evidence never
-  falls back to intraday, mock, legacy, or quote-derived candles.
+- Daily reads only the separate, validated R032B `schwab-daily-candles-v1`
+  store. Missing or tampered Daily evidence fails closed and never falls back
+  to intraday, mock, legacy, or quote-derived candles.
 - Engine Host and .NET contracts preserve provider and receipt timestamps,
   canonical/in-progress state, source, gap flags, discrepancy fields, and
   present/expected minute counts.
@@ -43,8 +44,8 @@ Shadow, touch broker/order behavior, or perform the R034 legacy cutover.
 ## Verification
 
 - Python compileall: pass.
-- Focused Python chart tests: 12/12 pass.
-- Full Python discovery: 1,177/1,177 pass in 224.828 seconds after providing the
+- Focused combined chart/backfill tests: 31/31 pass.
+- Full Python discovery: 1,203/1,203 pass in 200.388 seconds after providing the
   isolated worktree its expected `.venv` junction.
 - Focused density/readability tests: 26/26 pass.
 - Full .NET solution: 250/250 pass.
@@ -52,18 +53,18 @@ Shadow, touch broker/order behavior, or perform the R034 legacy cutover.
 - `git diff --check`: pass; only configured LF-to-CRLF worktree notices.
 - A read-only R032B proof populated the isolated chart stores with 39,165
   minute-bar versions and 1,260 daily bars across NVDA, SHOP, ZETA, SPY, and
-  IWM in about ten seconds. The 1m WPF proof renders 180 current-session bars;
-  Daily remains unavailable in this branch until the integration branch binds
-  R033 to R032B's separate Schwab daily store.
+  IWM in about ten seconds. The 1m WPF proof renders 180 current-session bars.
+  The combined service returns 180 validated Daily bars for every proof symbol,
+  names Schwab as provider, and rejects tampered or legacy daily input.
 - Source nonmutation: chart reads leave daily and Schwab inputs byte-identical.
 - Protected-path review: no score, readiness, selection, TradePlan, Shadow,
   broker/order, service/scheduler, database/schema, package, environment,
   raw-capture, generated production report, or legacy-candle path changed.
 
-The first broad Python discovery reported two environment-only failures because
-the separate worktree did not contain `.venv`. A local ignored junction to the
-canonical virtual environment restored the expected script path; both affected
-modules passed 35/35 and the complete rerun passed 1,177/1,177. A self-review
+The first combined broad Python discovery reported two environment-only failures
+because the separate worktree did not contain `.venv`. A local ignored junction
+to the canonical virtual environment restored the expected script path; both
+affected tests passed directly and the complete rerun passed 1,203/1,203. A self-review
 concurrency test initially hung because its test double discarded its own
 release handle; the test-only defect was corrected, orphaned processes scoped
 to the R033 worktree were stopped, and the final focused/full runs passed.
@@ -111,5 +112,6 @@ directed Git Steward to integrate the candle work on 2026-08-06.
 - Can missing Schwab candles fall back to legacy or mock candles? No.
 - Is a collector scheduled or installed? No.
 - Is the legacy CRWV evidence deleted? No.
-- Is the branch merge-ready? Yes. Automated proof and Steven's visual gate pass;
-  integration must still reconcile R032B and re-run the combined proof.
+- Is the combined branch merge-ready? Yes. R032B and R033 are reconciled, Daily
+  uses only the Schwab daily store, automated proof passes, and Steven's visual
+  gate passes.

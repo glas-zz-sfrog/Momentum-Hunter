@@ -1,22 +1,19 @@
 from __future__ import annotations
 
-import json
-import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from momentum_hunter.daily_ohlc import (
-    DAILY_OHLC_SOURCE_PATH,
-    QUALITY_VALID,
-    DailyOhlcRecord,
-    normalize_daily_ohlc_payload,
-)
 from momentum_hunter.schwab_candle_store import (
     SCHWAB_CANDLE_STORE_ROOT,
     SchwabCandleStore,
     SchwabCandleStoreError,
+)
+from momentum_hunter.schwab_daily_candle_store import (
+    SCHWAB_DAILY_CANDLE_STORE_ROOT,
+    SchwabDailyCandleStore,
+    SchwabDailyCandleStoreError,
 )
 
 
@@ -28,13 +25,13 @@ INTRADAY_STALE_AFTER = timedelta(seconds=180)
 DAILY_STALE_AFTER = timedelta(days=7)
 SCHWAB_PROVIDER_LABEL = "Schwab Trader API"
 SCHWAB_INTRADAY_SOURCE_LABEL = "Schwab CHART_EQUITY + price history"
-DAILY_SOURCE_LABEL = "Stored daily OHLC"
+SCHWAB_DAILY_SOURCE_LABEL = "Schwab price history daily OHLC"
 
 
 @dataclass(frozen=True)
 class WorkstationChartPaths:
     schwab_candle_store_root: Path = SCHWAB_CANDLE_STORE_ROOT
-    daily_ohlc_path: Path = DAILY_OHLC_SOURCE_PATH
+    schwab_daily_candle_store_root: Path = SCHWAB_DAILY_CANDLE_STORE_ROOT
 
 
 class WorkstationChartService:
@@ -49,10 +46,9 @@ class WorkstationChartService:
         self.paths = paths or WorkstationChartPaths()
         self.max_candles = max(2, int(max_candles))
         self._candle_store = SchwabCandleStore(self.paths.schwab_candle_store_root)
-        self._cache_lock = threading.RLock()
-        self._daily_signature: tuple[int, int] | None = None
-        self._daily_by_symbol: dict[str, list[DailyOhlcRecord]] = {}
-        self._daily_error: str | None = None
+        self._daily_candle_store = SchwabDailyCandleStore(
+            self.paths.schwab_daily_candle_store_root
+        )
 
     def snapshot(
         self,
@@ -69,61 +65,34 @@ class WorkstationChartService:
         return self._intraday_snapshot(clean_symbol, clean_interval, observed)
 
     def _daily_snapshot(self, symbol: str, observed_at: datetime) -> dict[str, Any]:
-        records, error = self._load_daily_records()
+        candles, error = self._load_daily_candles(symbol)
         if error is not None:
             return unavailable_snapshot(
                 symbol,
                 "Daily",
                 observed_at,
-                DAILY_SOURCE_LABEL,
-                self.paths.daily_ohlc_path,
+                SCHWAB_DAILY_SOURCE_LABEL,
+                self.paths.schwab_daily_candle_store_root,
                 error,
             )
-        candles = [
-            {
-                "timestamp": f"{record.date}T00:00:00Z",
-                "open": record.open,
-                "high": record.high,
-                "low": record.low,
-                "close": record.close,
-                "volume": record.volume or 0,
-                "state": "DAILY_SOURCE",
-                "source": str(record.source or self.paths.daily_ohlc_path.name),
-                "providerTimestamp": f"{record.date}T00:00:00Z",
-                "receivedAt": None,
-                "isCanonical": True,
-                "isInProgress": False,
-                "hasGapBefore": False,
-                "discrepancyFields": [],
-                "presentMinuteCount": 1,
-                "expectedMinuteCount": 1,
-            }
-            for record in records.get(symbol, [])
-            if record.quality_status == QUALITY_VALID
-            and record.open is not None
-            and record.high is not None
-            and record.low is not None
-            and record.close is not None
-        ]
-        candles.sort(key=lambda item: str(item["timestamp"]))
         if not candles:
             return unavailable_snapshot(
                 symbol,
                 "Daily",
                 observed_at,
-                DAILY_SOURCE_LABEL,
-                self.paths.daily_ohlc_path,
-                f"No stored Daily bars are available for {symbol}.",
+                SCHWAB_DAILY_SOURCE_LABEL,
+                self.paths.schwab_daily_candle_store_root,
+                f"No stored Daily Schwab bars are available for {symbol}.",
             )
         return available_snapshot(
             symbol=symbol,
             interval="Daily",
             observed_at=observed_at,
             candles=candles[-self.max_candles :],
-            source_label=DAILY_SOURCE_LABEL,
-            source_path=self.paths.daily_ohlc_path,
-            provider="Persisted daily OHLC source",
-            session_dates=tuple(sorted({str(item["timestamp"])[:10] for item in candles})),
+            source_label=SCHWAB_DAILY_SOURCE_LABEL,
+            source_path=self.paths.schwab_daily_candle_store_root,
+            provider=SCHWAB_PROVIDER_LABEL,
+            session_dates=tuple(sorted({str(item["sessionDate"]) for item in candles})),
             stale_after=DAILY_STALE_AFTER,
         )
 
@@ -193,30 +162,77 @@ class WorkstationChartService:
                 f"Stored Schwab candle source is unreadable or untrusted: {type(exc).__name__}.",
             )
 
-    def _load_daily_records(self) -> tuple[dict[str, list[DailyOhlcRecord]], str | None]:
-        with self._cache_lock:
-            signature = file_signature(self.paths.daily_ohlc_path)
-            if signature is None:
-                return {}, f"Stored daily OHLC source is missing: {self.paths.daily_ohlc_path.name}."
-            if signature == self._daily_signature:
-                return self._daily_by_symbol, self._daily_error
-            try:
-                payload = json.loads(self.paths.daily_ohlc_path.read_text(encoding="utf-8"))
-                imported_at = str(payload.get("generated_at", "")) if isinstance(payload, dict) else ""
-                records = normalize_daily_ohlc_payload(payload, imported_at=imported_at)
-                grouped: dict[str, list[DailyOhlcRecord]] = {}
-                for record in records:
-                    if record.quality_status == QUALITY_VALID:
-                        grouped.setdefault(record.symbol, []).append(record)
-                for items in grouped.values():
-                    items.sort(key=lambda item: item.date)
-                self._daily_by_symbol = grouped
-                self._daily_error = None
-            except (json.JSONDecodeError, OSError, TypeError, ValueError) as exc:
-                self._daily_by_symbol = {}
-                self._daily_error = f"Stored daily OHLC source is unreadable: {type(exc).__name__}."
-            self._daily_signature = signature
-            return self._daily_by_symbol, self._daily_error
+    def _load_daily_candles(
+        self,
+        symbol: str,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        root = self.paths.schwab_daily_candle_store_root
+        path = self._daily_candle_store.symbol_path(symbol)
+        if not root.exists():
+            return [], f"Stored Schwab daily source is missing: {root.name}."
+        if not path.is_file():
+            return [], f"No stored Daily Schwab bars are available for {symbol}."
+        try:
+            payload = self._daily_candle_store.load_symbol(symbol)
+            candles = project_daily_bars(payload)
+            candles.sort(key=lambda item: str(item["timestamp"]))
+            return candles, None
+        except (OSError, SchwabDailyCandleStoreError, TypeError, ValueError) as exc:
+            return (
+                [],
+                f"Stored Schwab daily source is unreadable or untrusted: {type(exc).__name__}.",
+            )
+
+
+def project_daily_bars(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    projected: list[dict[str, Any]] = []
+    for raw_bar in payload.get("bars", []):
+        if not isinstance(raw_bar, Mapping):
+            raise SchwabDailyCandleStoreError("Schwab daily chart bar was invalid.")
+        candle = raw_bar.get("canonicalCandle")
+        versions = raw_bar.get("historyVersions")
+        if not isinstance(candle, Mapping) or not isinstance(versions, list) or not versions:
+            raise SchwabDailyCandleStoreError(
+                "Schwab daily chart bar omitted canonical evidence."
+            )
+        latest_version = versions[-1]
+        first_version = versions[0]
+        if not isinstance(latest_version, Mapping) or not isinstance(first_version, Mapping):
+            raise SchwabDailyCandleStoreError("Schwab daily chart version was invalid.")
+        first_candle = first_version.get("candle")
+        if not isinstance(first_candle, Mapping):
+            raise SchwabDailyCandleStoreError(
+                "Schwab daily chart version omitted candle evidence."
+            )
+        discrepancy_fields = [
+            field
+            for field in ("open", "high", "low", "close", "volume")
+            if first_candle.get(field) != candle.get(field)
+        ]
+        timestamp = str(candle.get("timestamp", ""))
+        required_timestamp(timestamp)
+        projected.append(
+            {
+                "timestamp": timestamp,
+                "sessionDate": str(candle.get("sessionDate", "")),
+                "open": candle.get("open"),
+                "high": candle.get("high"),
+                "low": candle.get("low"),
+                "close": candle.get("close"),
+                "volume": candle.get("volume"),
+                "state": str(raw_bar.get("state", "CANONICAL")),
+                "source": str(candle.get("source", "")),
+                "providerTimestamp": timestamp,
+                "receivedAt": str(latest_version.get("firstReceivedAt", "")),
+                "isCanonical": True,
+                "isInProgress": False,
+                "hasGapBefore": False,
+                "discrepancyFields": discrepancy_fields,
+                "presentMinuteCount": 1,
+                "expectedMinuteCount": 1,
+            }
+        )
+    return projected
 
 
 def available_session_dates(root: Path, symbol: str) -> list[str]:
@@ -539,14 +555,6 @@ def interval_duration_minutes(interval: str) -> int:
     if interval == "Daily":
         return 24 * 60
     return int(interval.removesuffix("m"))
-
-
-def file_signature(path: Path) -> tuple[int, int] | None:
-    try:
-        stat = path.stat()
-    except OSError:
-        return None
-    return stat.st_mtime_ns, stat.st_size
 
 
 def required_timestamp(value: object) -> datetime:

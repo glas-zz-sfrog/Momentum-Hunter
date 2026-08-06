@@ -10,10 +10,12 @@ from pathlib import Path
 from momentum_hunter.schwab_candle_contract import (
     SCHWAB_CHART_EQUITY_SOURCE,
     SCHWAB_PRICE_HISTORY_SOURCE,
+    SchwabDailyCandle,
     SchwabMinuteCandle,
     SchwabStreamCandleObservation,
 )
 from momentum_hunter.schwab_candle_store import SchwabCandleStore, minute_identity
+from momentum_hunter.schwab_daily_candle_store import SchwabDailyCandleStore
 from momentum_hunter.workstation_charts import (
     CHART_SNAPSHOT_SCHEMA_VERSION,
     WorkstationChartPaths,
@@ -29,14 +31,16 @@ class WorkstationChartServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
         root = Path(self.temporary_directory.name)
-        self.daily_path = root / "daily-ohlc-bars.json"
+        self.daily_root = root / "schwab-daily-candles-v1"
+        self.legacy_daily_path = root / "daily-ohlc-bars.json"
         self.candle_root = root / "schwab-candles-v1"
         self.legacy_path = root / "opportunity-minute-bars.json"
         self.paths = WorkstationChartPaths(
             schwab_candle_store_root=self.candle_root,
-            daily_ohlc_path=self.daily_path,
+            schwab_daily_candle_store_root=self.daily_root,
         )
         self.store = SchwabCandleStore(self.candle_root)
+        self.daily_store = SchwabDailyCandleStore(self.daily_root)
 
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
@@ -46,7 +50,7 @@ class WorkstationChartServiceTests(unittest.TestCase):
             [
                 daily_record("AAA", "2026-08-03", 10, 12, 9, 11, 100),
                 daily_record("AAA", "2026-08-04", 11, 13, 10, 12, 200),
-                daily_record("AAA", "2026-08-05", 12, 11, 10, 12, 300),
+                daily_record("AAA", "2026-08-05", 12, 14, 10, 13, 300),
                 daily_record("BBB", "2026-08-04", 20, 21, 19, 20, 400),
             ]
         )
@@ -57,10 +61,11 @@ class WorkstationChartServiceTests(unittest.TestCase):
         self.assertEqual("AAA", snapshot["symbol"])
         self.assertEqual("Daily", snapshot["interval"])
         self.assertEqual("AVAILABLE", snapshot["state"])
-        self.assertEqual(2, len(snapshot["candles"]))
-        self.assertEqual("2026-08-03T00:00:00Z", snapshot["candles"][0]["timestamp"])
-        self.assertEqual("Stored daily OHLC", snapshot["lineage"]["sourceLabel"])
-        self.assertNotIn("Schwab", snapshot["quality"]["provider"])
+        self.assertEqual(3, len(snapshot["candles"]))
+        self.assertEqual("2026-08-03T04:00:00+00:00", snapshot["candles"][0]["timestamp"])
+        self.assertEqual("Schwab price history daily OHLC", snapshot["lineage"]["sourceLabel"])
+        self.assertEqual("Schwab Trader API", snapshot["quality"]["provider"])
+        self.assertEqual(SCHWAB_PRICE_HISTORY_SOURCE, snapshot["candles"][0]["source"])
 
     def test_one_minute_snapshot_uses_history_as_canonical_and_stream_as_provisional(self) -> None:
         self.append_reconciled("AAA", "2026-08-05T14:30:00Z", 10, 11, 9, 10.5, 100)
@@ -184,6 +189,71 @@ class WorkstationChartServiceTests(unittest.TestCase):
             self.assertEqual([], snapshot["candles"])
             self.assertIn("No simulated, legacy, or cross-timeframe fallback", snapshot["summary"])
 
+    def test_daily_correction_is_canonical_and_visibly_marked(self) -> None:
+        self.write_daily([daily_record("AAA", "2026-08-05", 10, 12, 9, 11, 100)])
+        self.daily_store.append_history(
+            (
+                SchwabDailyCandle(
+                    symbol="AAA",
+                    timestamp=at("2026-08-05T04:00:00Z"),
+                    session_date="2026-08-05",
+                    open=10,
+                    high=13,
+                    low=9,
+                    close=12,
+                    volume=110,
+                    source=SCHWAB_PRICE_HISTORY_SOURCE,
+                ),
+            ),
+            received_at=at("2026-08-06T12:00:00Z"),
+        )
+
+        snapshot = self.service().snapshot(
+            "AAA", "Daily", observed_at=at("2026-08-06T16:00:00Z")
+        )
+
+        self.assertEqual("INSUFFICIENT_DATA", snapshot["state"])
+        self.assertEqual("CORRECTED", snapshot["candles"][0]["state"])
+        self.assertEqual(12, snapshot["candles"][0]["close"])
+        self.assertEqual(["high", "close", "volume"], snapshot["candles"][0]["discrepancyFields"])
+        self.assertEqual(1, snapshot["quality"]["correctionCount"])
+
+    def test_daily_tampering_fails_closed(self) -> None:
+        self.write_daily([daily_record("AAA", "2026-08-05", 10, 12, 9, 11, 100)])
+        path = self.daily_store.symbol_path("AAA")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["bars"][0]["canonicalCandle"]["close"] = 999
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+        snapshot = self.service().snapshot(
+            "AAA", "Daily", observed_at=at("2026-08-06T16:00:00Z")
+        )
+
+        self.assertEqual("UNAVAILABLE", snapshot["state"])
+        self.assertEqual([], snapshot["candles"])
+        self.assertIn("unreadable or untrusted", snapshot["summary"])
+
+    def test_legacy_daily_file_is_never_used_as_fallback(self) -> None:
+        self.legacy_daily_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "records": [daily_record("AAA", "2026-08-05", 10, 12, 9, 11, 100)],
+                }
+            ),
+            encoding="utf-8",
+        )
+        before = sha256(self.legacy_daily_path)
+
+        snapshot = self.service().snapshot(
+            "AAA", "Daily", observed_at=at("2026-08-06T16:00:00Z")
+        )
+
+        self.assertEqual("UNAVAILABLE", snapshot["state"])
+        self.assertEqual([], snapshot["candles"])
+        self.assertNotIn(self.legacy_daily_path.name, snapshot["lineage"]["sourceLabel"])
+        self.assertEqual(before, sha256(self.legacy_daily_path))
+
     def test_legacy_candle_file_is_never_used_as_intraday_fallback(self) -> None:
         self.legacy_path.write_text(
             json.dumps({"schema_version": 1, "bars": {"AAA": [minute_record()]}}),
@@ -208,7 +278,8 @@ class WorkstationChartServiceTests(unittest.TestCase):
         self.append_reconciled("AAA", "2026-08-05T14:30:00Z", 10, 11, 9, 10.5, 100)
         self.append_reconciled("AAA", "2026-08-05T14:31:00Z", 10.5, 12, 10, 11, 110)
         partition = self.store.partition_path("AAA", "2026-08-05")
-        before = {path: sha256(path) for path in (self.daily_path, partition)}
+        daily_partition = self.daily_store.symbol_path("AAA")
+        before = {path: sha256(path) for path in (daily_partition, partition)}
 
         service = self.service()
         service.snapshot("AAA", "Daily", observed_at=at("2026-08-05T16:00:00Z"))
@@ -228,15 +299,23 @@ class WorkstationChartServiceTests(unittest.TestCase):
         return WorkstationChartService(paths=self.paths)
 
     def write_daily(self, records: list[dict]) -> None:
-        self.daily_path.write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "generated_at": "2026-08-05T12:00:00Z",
-                    "records": records,
-                }
-            ),
-            encoding="utf-8",
+        candles = [
+            SchwabDailyCandle(
+                symbol=str(record["symbol"]),
+                timestamp=at(f"{record['date']}T04:00:00Z"),
+                session_date=str(record["date"]),
+                open=float(record["open"]),
+                high=float(record["high"]),
+                low=float(record["low"]),
+                close=float(record["close"]),
+                volume=float(record["volume"]),
+                source=SCHWAB_PRICE_HISTORY_SOURCE,
+            )
+            for record in records
+        ]
+        self.daily_store.append_history(
+            candles,
+            received_at=at("2026-08-05T12:00:00Z"),
         )
 
     def append_reconciled(

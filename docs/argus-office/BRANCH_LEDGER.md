@@ -12,8 +12,8 @@ grants authority only after the existing clock/session/freshness/tradability
 proof passes, and prevents Active Monitor research refreshes from bypassing the
 authority gates. Full discovery passes at 1,179/1,179. No account/order method,
 transmission capability, score weight, alert threshold, database/schema,
-package, or UI path changed. The 27 remaining opening jobs are repinned once to
-the resulting synchronized canonical head after integration.
+package, or UI path changed. Thursday's capture completed on that release; the
+26 remaining opening jobs are repinned once after candle integration.
 
 `codex/ARGUS-R033-live-chart-engine-host-integration` is
 `PUSHED_FEATURE_BRANCH / VISUAL_ACCEPTED_PENDING_INTEGRATION` at `c88faa4`.
@@ -24,6 +24,14 @@ states. Steven accepted the repaired density proof on 2026-08-06. Its runtime
 and tests are being reconciled with R032B on
 `codex/ARGUS-R032B-R033-candle-integration`; do not merge the source feature
 branch separately after that integration lands.
+
+`codex/ARGUS-R032B-R033-candle-integration` is `ACTIVE / MERGE_READY` from
+canonical base `421149c`. It contains R032B through `a4a208e`, R033 through
+`ba5afcc`, and the combined Schwab-only Daily reader. Full proof passes at
+1,203 Python and 250 .NET tests plus a zero-warning Release build; the actual
+isolated five-symbol store returns 180 Daily and 180 intraday display bars per
+symbol. Next action is final commit, ordinary push, fast-forward integration,
+and one exact-head repin of the remaining opening jobs.
 
 ## ARGUS-R032 Schwab Incremental Candle Collector
 
