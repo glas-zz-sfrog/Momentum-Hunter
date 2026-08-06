@@ -124,12 +124,23 @@ class ActiveMonitorTests(unittest.TestCase):
         self.assertEqual(10.25, row["market_data"]["last_price"])
         self.assertEqual("test_tape", row["monitor_market_data_refresh"]["source"])
         self.assertEqual("PLANNING_SCAFFOLD", row["monitor_market_data_refresh"]["previous_readiness"])
-        self.assertEqual("EXECUTION_READY_TRADE", row["monitor_market_data_refresh"]["recalculated_readiness"])
-        self.assertEqual("EXECUTION_READY_TRADE", row["trade_plan"]["readiness"])
+        self.assertEqual(
+            "DO_NOT_TRADE_UNTRUSTED_EVIDENCE",
+            row["monitor_market_data_refresh"]["recalculated_readiness"],
+        )
+        self.assertEqual("DO_NOT_TRADE_UNTRUSTED_EVIDENCE", row["trade_plan"]["readiness"])
+        self.assertIn(
+            "PRICE_EVIDENCE_EXECUTION_INELIGIBLE",
+            row["trade_plan"]["blocking_reasons"],
+        )
+        self.assertIn(
+            "PLAN_AUTHORITY_EXECUTION_INELIGIBLE",
+            row["trade_plan"]["blocking_reasons"],
+        )
         self.assertIn("readiness was recalculated", refreshed["metadata"]["monitor_market_data_refresh_warning"])
         self.assertEqual(before, file_sha256(self.raw_capture))
         alert_types = {alert.alert_type for alert in load_alerts(self.alerts_path)}
-        self.assertIn("STATE_PLANNING_SCAFFOLD_TO_EXECUTION_READY_TRADE", alert_types)
+        self.assertNotIn("STATE_PLANNING_SCAFFOLD_TO_EXECUTION_READY_TRADE", alert_types)
         self.assertIn("PRICE_EXPANSION_1PCT_5M", alert_types)
         self.assertIn("PRICE_EXPANSION_2PCT_15M", alert_types)
 

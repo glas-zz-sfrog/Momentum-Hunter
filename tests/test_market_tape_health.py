@@ -30,10 +30,11 @@ class MarketTapeHealthTests(unittest.TestCase):
 
         self.assertFalse(session.trust_env)
 
-    def test_provider_health_report_marks_nasdaq_tape_usable_when_yahoo_quote_is_401(self) -> None:
+    def test_provider_health_report_uses_nasdaq_and_yahoo_chart_without_quote_endpoint(self) -> None:
+        session = HealthSession()
         report = build_market_tape_health_report(
             ["AAA"],
-            session=HealthSession(),
+            session=session,
             generated_at=datetime.fromisoformat("2026-06-18T07:00:00-05:00"),
         )
 
@@ -41,16 +42,17 @@ class MarketTapeHealthTests(unittest.TestCase):
         self.assertEqual(0, report.missing_symbol_count)
         combined = next(item for item in report.attempts if item.provider == "combined")
         nasdaq = next(item for item in report.attempts if item.provider == "nasdaq")
-        yahoo = next(item for item in report.attempts if item.provider == "yahoo_quote_plus_chart")
+        yahoo = next(item for item in report.attempts if item.provider == "yahoo_chart_only")
 
         self.assertTrue(combined.usable_for_alerting)
         self.assertEqual("SUCCESS", combined.status)
-        self.assertIn("QUOTE_HTTP_401", combined.warnings)
+        self.assertNotIn("QUOTE_HTTP_401", combined.warnings)
         self.assertTrue(nasdaq.usable_for_alerting)
         self.assertEqual([], nasdaq.warnings)
         self.assertIn("last_price", nasdaq.fields_returned)
         self.assertEqual("PARTIAL", yahoo.status)
-        self.assertIn("QUOTE_HTTP_401", yahoo.warnings)
+        self.assertNotIn("QUOTE_HTTP_401", yahoo.warnings)
+        self.assertFalse(any("/v7/finance/quote" in url for url in session.urls))
 
     def test_provider_health_export_is_deterministic_and_does_not_mutate_raw_capture(self) -> None:
         before = file_sha256(self.raw_capture)
@@ -65,7 +67,7 @@ class MarketTapeHealthTests(unittest.TestCase):
 
         self.assertEqual(["AAA", "BBB"], payload["report"]["symbols"])
         self.assertEqual("market_tape_health_v1", payload["engine_version"])
-        self.assertEqual(8, len(payload["attempts"]))
+        self.assertEqual(6, len(payload["attempts"]))
         self.assertTrue(paths["csv"].exists())
         self.assertTrue(paths["report"].exists())
         self.assertEqual(before, file_sha256(self.raw_capture))
@@ -81,7 +83,11 @@ class FakeResponse:
 
 
 class HealthSession:
+    def __init__(self) -> None:
+        self.urls: list[str] = []
+
     def get(self, url: str, headers: dict | None = None, timeout: int = 20) -> FakeResponse:
+        self.urls.append(url)
         if "api.nasdaq.com" in url and "/info" in url:
             return FakeResponse(nasdaq_info_payload())
         if "api.nasdaq.com" in url and "/summary" in url:

@@ -9,6 +9,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
+from momentum_hunter.evidence_integrity import (
+    CATALYST_SCORE_SUPPORTED,
+    EXECUTION_ELIGIBLE,
+    evidence_with_age,
+)
 from momentum_hunter.monitor_targets import (
     MonitorTargetReport,
     build_monitor_target_report,
@@ -25,13 +30,18 @@ from momentum_hunter.opportunity_alerts import (
 )
 from momentum_hunter.time_utils import now_central
 from momentum_hunter.trade_planning import (
+    CATALYST_ATTRIBUTION_UNRESOLVED,
+    DO_NOT_TRADE_UNTRUSTED_EVIDENCE,
     MarketTape,
+    PLAN_AUTHORITY_EXECUTION_INELIGIBLE,
+    PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
     TechnicalLevels,
     apply_rvol_policy,
     build_http_session,
     build_trade_planning_report,
     classify_readiness,
     export_trade_planning_report,
+    execution_price_evidence_status,
     fetch_market_tape,
     latest_capture_path,
     parse_datetime,
@@ -509,7 +519,12 @@ def update_trade_candidate_market_tape(item: dict, tape: MarketTape, *, generate
     market_data["twenty_day_average_daily_volume"] = tape_payload.get("average_daily_volume_20")
     item["market_data"] = market_data
     item["market_tape"] = tape_payload
-    old_readiness, new_readiness, confidence, tradeability, blocking_reasons = recalculate_readiness_from_report_row(item, tape)
+    update_refreshed_price_evidence(item, tape, generated_at=generated_at)
+    old_readiness, new_readiness, confidence, tradeability, blocking_reasons = recalculate_readiness_from_report_row(
+        item,
+        tape,
+        generated_at=generated_at,
+    )
     readiness_recalculated = bool(new_readiness)
     readiness_changed = bool(old_readiness and new_readiness and old_readiness != new_readiness)
     if readiness_recalculated:
@@ -537,7 +552,12 @@ def update_trade_candidate_market_tape(item: dict, tape: MarketTape, *, generate
     }
 
 
-def recalculate_readiness_from_report_row(item: dict, tape: MarketTape) -> tuple[str, str, str, str, list[str]]:
+def recalculate_readiness_from_report_row(
+    item: dict,
+    tape: MarketTape,
+    *,
+    generated_at: datetime,
+) -> tuple[str, str, str, str, list[str]]:
     trade_plan = item.get("trade_plan") if isinstance(item.get("trade_plan"), dict) else {}
     old_readiness = str(trade_plan.get("readiness", "") if trade_plan else "")
     technicals = technical_levels_from_report_row(item)
@@ -554,7 +574,52 @@ def recalculate_readiness_from_report_row(item: dict, tape: MarketTape) -> tuple
         current_price=current_price,
         original_entry=original_entry,
     )
+    integrity = item.get("evidence_integrity")
+    integrity = integrity if isinstance(integrity, dict) else {}
+    authority_blockers: list[str] = []
+    if execution_price_evidence_status(tape, as_of=generated_at) != EXECUTION_ELIGIBLE:
+        authority_blockers.append(PRICE_EVIDENCE_EXECUTION_INELIGIBLE)
+    if integrity.get("plan_authority") != EXECUTION_ELIGIBLE:
+        authority_blockers.append(PLAN_AUTHORITY_EXECUTION_INELIGIBLE)
+    attribution = integrity.get("catalyst_attribution")
+    if (
+        not isinstance(attribution, dict)
+        or attribution.get("score_authority") != CATALYST_SCORE_SUPPORTED
+    ):
+        authority_blockers.append(CATALYST_ATTRIBUTION_UNRESOLVED)
+    if authority_blockers:
+        readiness = DO_NOT_TRADE_UNTRUSTED_EVIDENCE
+        confidence = "LOW"
+        tradeability = "LOW"
+        blocking_reasons = dedupe(blocking_reasons + authority_blockers)
     return old_readiness, readiness, confidence, tradeability, blocking_reasons
+
+
+def update_refreshed_price_evidence(
+    item: dict,
+    tape: MarketTape,
+    *,
+    generated_at: datetime,
+) -> None:
+    integrity = item.get("evidence_integrity")
+    if not isinstance(integrity, dict):
+        return
+    integrity = dict(integrity)
+    integrity["price_evidence_status"] = execution_price_evidence_status(
+        tape,
+        as_of=generated_at,
+    )
+    fields = integrity.get("price_fields")
+    fields = dict(fields) if isinstance(fields, dict) else {}
+    for field_name in ("last_price", "current_bid", "current_ask"):
+        evidence = tape.field_provenance.get(field_name)
+        if evidence is not None:
+            fields[field_name] = asdict(
+                evidence_with_age(evidence, as_of=generated_at)
+            )
+    integrity["price_fields"] = fields
+    integrity["provider_results"] = dict(tape.provider_results)
+    item["evidence_integrity"] = integrity
 
 
 def technical_levels_from_report_row(item: dict) -> TechnicalLevels:

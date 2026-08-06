@@ -153,6 +153,10 @@ class TradePlanningTests(unittest.TestCase):
                 "momentum_hunter.trade_planning.fetch_market_tape",
                 return_value=MarketTape(),
             ) as fetch_tape,
+            patch(
+                "momentum_hunter.trade_planning.fetch_schwab_authoritative_market_tapes",
+                return_value={},
+            ) as fetch_schwab,
         ):
             build_trade_planning_report(
                 self.capture_path,
@@ -163,6 +167,7 @@ class TradePlanningTests(unittest.TestCase):
 
         self.assertEqual(2, fetch_bars.call_count)
         self.assertEqual(2, fetch_tape.call_count)
+        fetch_schwab.assert_called_once_with(["AAA", "BBB"], quote_source=None)
         self.assertTrue(
             all(call.kwargs == {"timeout_seconds": 5.0} for call in fetch_bars.call_args_list)
         )
@@ -184,6 +189,10 @@ class TradePlanningTests(unittest.TestCase):
                 "momentum_hunter.trade_planning.fetch_market_tape",
                 return_value=MarketTape(),
             ) as fetch_tape,
+            patch(
+                "momentum_hunter.trade_planning.fetch_schwab_authoritative_market_tapes",
+                return_value={},
+            ) as fetch_schwab,
         ):
             report = build_trade_planning_report(
                 self.capture_path,
@@ -195,6 +204,7 @@ class TradePlanningTests(unittest.TestCase):
         self.assertEqual(2, len(report.rows))
         fetch_bars.assert_called_once()
         fetch_tape.assert_called_once()
+        fetch_schwab.assert_called_once_with(["AAA"], quote_source=None)
 
     def test_exports_csv_json_and_markdown(self) -> None:
         report = build_trade_planning_report(self.capture_path)
@@ -350,35 +360,48 @@ class TradePlanningTests(unittest.TestCase):
         self.assertIn("STATE TRANSITIONS: NONE YET", text)
         self.assertIn("FED NEWS SUMMARY: NO FED HEADLINES DETECTED", text)
 
-    def test_yahoo_quote_tape_parser_calculates_spread_and_relative_volume(self) -> None:
-        tape = fetch_yahoo_market_tape(
-            FakeSession(
-                {
-                    "quoteResponse": {
-                        "result": [
-                            {
+    def test_yahoo_market_tape_uses_chart_only_without_quote_request(self) -> None:
+        session = FakeSession(
+            {
+                "chart": {
+                    "result": [
+                        {
+                            "meta": {
                                 "regularMarketPrice": 10.2,
-                                "regularMarketPreviousClose": 10.0,
-                                "preMarketPrice": 10.4,
-                                "preMarketVolume": 300000,
-                                "bid": 10.39,
-                                "ask": 10.41,
-                                "regularMarketVolume": 1800000,
-                                "averageDailyVolume10Day": 1000000,
-                            }
-                        ]
-                    }
+                                "previousClose": 10.0,
+                                "currentTradingPeriod": {
+                                    "pre": {"start": 1000},
+                                    "regular": {"start": 2000},
+                                },
+                            },
+                            "timestamp": [1100, 1200, 2100],
+                            "indicators": {
+                                "quote": [
+                                    {
+                                        "close": [10.2, 10.4, 10.6],
+                                        "volume": [1000, 2000, 3000],
+                                    }
+                                ]
+                            },
+                        }
+                    ]
                 }
-            ),
+            }
+        )
+        tape = fetch_yahoo_market_tape(
+            session,
             "AAA",
         )
 
         self.assertEqual(10.4, tape.premarket_price)
         self.assertEqual(4.0, tape.premarket_percent)
-        self.assertEqual(300000, tape.premarket_volume)
-        self.assertEqual(0.19, tape.spread_percent)
-        self.assertEqual(1.8, tape.relative_volume)
-        self.assertEqual([], tape.warnings)
+        self.assertEqual(3000, tape.premarket_volume)
+        self.assertIsNone(tape.current_bid)
+        self.assertIsNone(tape.current_ask)
+        self.assertEqual({"yahoo_chart": "SUCCESS"}, tape.provider_results)
+        self.assertEqual(1, len(session.urls))
+        self.assertIn("/v8/finance/chart", session.urls[0])
+        self.assertFalse(any("/v7/finance/quote" in url for url in session.urls))
 
     def test_nasdaq_tape_parser_returns_bid_ask_premarket_volume_and_relative_volume(self) -> None:
         tape = fetch_nasdaq_market_tape(
@@ -434,7 +457,7 @@ class TradePlanningTests(unittest.TestCase):
         self.assertEqual(0.01, tape.relative_volume)
         self.assertEqual([], tape.warnings)
 
-    def test_yahoo_chart_fallback_recovers_premarket_when_quote_is_unauthorized(self) -> None:
+    def test_yahoo_chart_recovers_premarket_without_execution_quote(self) -> None:
         tape = fetch_yahoo_market_tape(
             FakeSession(
                 {
@@ -471,7 +494,7 @@ class TradePlanningTests(unittest.TestCase):
         self.assertEqual(4.0, tape.premarket_percent)
         self.assertEqual(3000, tape.premarket_volume)
         self.assertIn("MISSING_BID_ASK", tape.warnings)
-        self.assertIn("QUOTE_HTTP_401", tape.warnings)
+        self.assertNotIn("QUOTE_HTTP_401", tape.warnings)
 
     def test_wide_spread_blocks_tradeability(self) -> None:
         report = build_trade_planning_report(
@@ -518,8 +541,10 @@ class FakeSession:
     def __init__(self, payload: dict, quote_status: int = 200) -> None:
         self.payload = payload
         self.quote_status = quote_status
+        self.urls: list[str] = []
 
     def get(self, url: str, timeout: int = 20) -> FakeResponse:
+        self.urls.append(url)
         if "/v7/finance/quote" in url:
             return FakeResponse(self.payload, self.quote_status)
         return FakeResponse(self.payload)

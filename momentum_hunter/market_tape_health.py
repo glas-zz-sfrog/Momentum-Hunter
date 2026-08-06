@@ -17,7 +17,6 @@ from momentum_hunter.trade_planning import (
     fetch_market_tape,
     fetch_nasdaq_market_tape,
     fetch_yahoo_chart_tape,
-    fetch_yahoo_market_tape,
 )
 
 
@@ -124,7 +123,6 @@ def provider_fetchers():
     return [
         ("combined", fetch_market_tape),
         ("nasdaq", fetch_nasdaq_market_tape),
-        ("yahoo_quote_plus_chart", fetch_yahoo_market_tape),
         ("yahoo_chart_only", fetch_yahoo_chart_tape),
     ]
 

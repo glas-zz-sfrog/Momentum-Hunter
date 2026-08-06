@@ -143,16 +143,18 @@ class EvidenceIntegrityTests(unittest.TestCase):
         self.assertEqual("HTTP_401", merged.provider_results["yahoo_quote"])
         self.assertIn("QUOTE_HTTP_401", merged.warnings)
 
-    def test_fetch_market_tape_records_401_as_separate_provider_attempt(self) -> None:
-        tape = fetch_market_tape(CombinedProviderSession(), "GOOGL")
+    def test_fetch_market_tape_does_not_call_unsupported_yahoo_quote_endpoint(self) -> None:
+        session = CombinedProviderSession()
+        tape = fetch_market_tape(session, "GOOGL")
 
         self.assertEqual(368.12, tape.current_bid)
         self.assertEqual(368.26, tape.current_ask)
         self.assertEqual("nasdaq_info", tape.field_provenance["current_bid"].source)
         self.assertEqual("SUCCESS", tape.field_provenance["current_bid"].result_status)
-        self.assertEqual("HTTP_401", tape.provider_results["yahoo_quote"])
         self.assertEqual("SUCCESS", tape.provider_results["nasdaq_info"])
-        self.assertIn("QUOTE_HTTP_401", tape.warnings)
+        self.assertNotIn("yahoo_quote", tape.provider_results)
+        self.assertNotIn("QUOTE_HTTP_401", tape.warnings)
+        self.assertFalse(any("/v7/finance/quote" in url for url in session.urls))
 
     def test_report_enforces_blocked_catalyst_and_price_authority(self) -> None:
         capture = self.write_capture(
@@ -436,12 +438,16 @@ class FakeResponse:
 
 
 class CombinedProviderSession:
+    def __init__(self) -> None:
+        self.urls: list[str] = []
+
     def get(
         self,
         url: str,
         headers: dict | None = None,
         timeout: float = 20.0,
     ) -> FakeResponse:
+        self.urls.append(url)
         if "api.nasdaq.com" in url and "/info" in url:
             return FakeResponse(
                 {

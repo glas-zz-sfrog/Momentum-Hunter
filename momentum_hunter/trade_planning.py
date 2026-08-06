@@ -11,7 +11,7 @@ import uuid
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, time
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping, Sequence
 
 from momentum_hunter.catalyst_clusters import classify_catalyst_headline_detail
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
@@ -137,7 +137,13 @@ EXECUTION_READY_TRADE = "EXECUTION_READY_TRADE"
 PLANNING_SCAFFOLD = "PLANNING_SCAFFOLD"
 DO_NOT_TRADE_UNTRUSTED_EVIDENCE = "DO_NOT_TRADE_UNTRUSTED_EVIDENCE"
 PRICE_EVIDENCE_EXECUTION_INELIGIBLE = "PRICE_EVIDENCE_EXECUTION_INELIGIBLE"
+PLAN_AUTHORITY_EXECUTION_INELIGIBLE = "PLAN_AUTHORITY_EXECUTION_INELIGIBLE"
 CATALYST_ATTRIBUTION_UNRESOLVED = "CATALYST_ATTRIBUTION_UNRESOLVED"
+SCHWAB_QUOTE_PROVIDER_KEY = "schwab_quote"
+SCHWAB_QUOTE_CLOCK_PROVIDER_KEY = "schwab_quote_clock"
+SCHWAB_QUOTE_AUTHENTICATION_STATUS = "OAUTH_AUTHENTICATED"
+SCHWAB_QUOTE_SUCCESS = "SUCCESS"
+REQUIRED_EXECUTION_PRICE_FIELDS = ("last_price", "current_bid", "current_ask")
 FED_KEYWORDS = [
     "fed",
     "fomc",
@@ -281,6 +287,7 @@ def build_trade_planning_report(
     previous_state_path: Path | None = None,
     request_timeout_seconds: float = 20.0,
     network_candidate_limit: int | None = None,
+    schwab_quote_source: object | None = None,
 ) -> TradePlanningReport:
     payload = json.loads(capture_path.read_text(encoding="utf-8"))
     candidates = [candidate_from_dict(item) for item in payload.get("candidates", [])]
@@ -318,6 +325,20 @@ def build_trade_planning_report(
                         candidate.ticker,
                         timeout_seconds=request_timeout_seconds,
                     ),
+                )
+        if fetch_market_data:
+            authoritative_tapes = fetch_schwab_authoritative_market_tapes(
+                [candidate.ticker for candidate in network_candidates],
+                quote_source=schwab_quote_source,
+            )
+            for candidate in network_candidates:
+                symbol = candidate.ticker.upper()
+                authority_tape = authoritative_tapes.get(symbol)
+                if authority_tape is None:
+                    continue
+                market_tape_by_ticker[candidate.ticker] = overlay_tapes(
+                    primary=authority_tape,
+                    fallback=market_tape_by_ticker.get(candidate.ticker, MarketTape()),
                 )
 
     rows = [
@@ -396,7 +417,7 @@ def build_trade_plan_row(
         calculated_plan,
         authoritative_catalyst_confidence,
     )
-    price_evidence_status = EXECUTION_INELIGIBLE
+    price_evidence_status = execution_price_evidence_status(tape, as_of=as_of)
     plan = apply_evidence_authority_gate(
         calculated_plan,
         price_evidence_status=price_evidence_status,
@@ -849,7 +870,7 @@ def fetch_market_tape(
         ticker,
         timeout_seconds=timeout_seconds,
     )
-    yahoo_tape = fetch_yahoo_market_tape(
+    yahoo_tape = fetch_yahoo_chart_tape(
         session,
         ticker,
         timeout_seconds=timeout_seconds,
@@ -857,6 +878,192 @@ def fetch_market_tape(
     if has_core_tape(nasdaq_tape):
         return overlay_tapes(primary=nasdaq_tape, fallback=yahoo_tape)
     return overlay_tapes(primary=yahoo_tape, fallback=nasdaq_tape)
+
+
+def fetch_schwab_authoritative_market_tapes(
+    symbols: Sequence[str],
+    *,
+    quote_source: object | None = None,
+    checked_at: datetime | None = None,
+) -> dict[str, MarketTape]:
+    """Return fail-closed execution quote tapes from one guarded Schwab batch."""
+    from momentum_hunter.schwab_market_data import (
+        SCHWAB_QUOTE_SOURCE,
+        SchwabMarketDataError,
+        SchwabMarketDataQuoteSource,
+        build_regular_market_quote_proof,
+        normalize_symbols,
+    )
+
+    normalized = normalize_symbols(symbols)
+    if not normalized:
+        return {}
+    active_source = quote_source or SchwabMarketDataQuoteSource()
+    try:
+        proof = build_regular_market_quote_proof(
+            active_source,
+            normalized,
+            checked_at=checked_at,
+            require_clock_proof=True,
+        )
+    except SchwabMarketDataError as exc:
+        finding = schwab_quote_exception_finding(exc)
+        return {
+            symbol: schwab_quote_failure_tape(
+                source=SCHWAB_QUOTE_SOURCE,
+                findings=[finding],
+            )
+            for symbol in normalized
+        }
+
+    if not isinstance(proof, Mapping):
+        return {
+            symbol: schwab_quote_failure_tape(
+                source=SCHWAB_QUOTE_SOURCE,
+                findings=["PROOF_INVALID"],
+            )
+            for symbol in normalized
+        }
+    clock_findings = proof.get("clockSkewFindings")
+    normalized_clock_findings = (
+        [str(value).strip() for value in clock_findings if str(value).strip()]
+        if isinstance(clock_findings, list)
+        else ["CLOCK_PROOF_INVALID"]
+    )
+    if proof.get("clockSkewProofRequired") is not True:
+        normalized_clock_findings.append("CLOCK_PROOF_NOT_REQUIRED")
+    if str(proof.get("source", "")).strip() != SCHWAB_QUOTE_SOURCE:
+        normalized_clock_findings.append("SOURCE_MISMATCH")
+
+    raw_results = proof.get("quotes")
+    results_by_symbol = {
+        str(item.get("symbol", "")).strip().upper(): item
+        for item in raw_results
+        if isinstance(item, Mapping)
+    } if isinstance(raw_results, list) else {}
+    received_at = str(proof.get("checkedAt", "")).strip()
+    tapes: dict[str, MarketTape] = {}
+    for symbol in normalized:
+        result = results_by_symbol.get(symbol)
+        findings = list(normalized_clock_findings)
+        if result is None:
+            findings.append("QUOTE_MISSING")
+        else:
+            raw_findings = result.get("findings")
+            if isinstance(raw_findings, list):
+                findings.extend(
+                    str(value).strip()
+                    for value in raw_findings
+                    if str(value).strip()
+                )
+            if str(result.get("status", "")).strip() != "PASS":
+                findings.append("QUOTE_PROOF_FAILED")
+            last = finite_positive(result.get("last"))
+            if last is None:
+                findings.append("LAST_MISSING_OR_INVALID")
+        findings = dedupe(findings)
+        if result is None or findings:
+            tapes[symbol] = schwab_quote_failure_tape(
+                source=SCHWAB_QUOTE_SOURCE,
+                findings=findings,
+            )
+            continue
+        tapes[symbol] = schwab_quote_success_tape(
+            result,
+            source=SCHWAB_QUOTE_SOURCE,
+            received_at=received_at,
+        )
+    return tapes
+
+
+def schwab_quote_success_tape(
+    result: Mapping[str, object],
+    *,
+    source: str,
+    received_at: str,
+) -> MarketTape:
+    last = finite_positive(result.get("last"))
+    bid = finite_positive(result.get("bid"))
+    ask = finite_positive(result.get("ask"))
+    if last is None or bid is None or ask is None or ask < bid:
+        return schwab_quote_failure_tape(
+            source=source,
+            findings=["BID_ASK_OR_LAST_INVALID"],
+        )
+    provider_timestamps = {
+        "last_price": str(result.get("providerQuoteTimestamp", "")).strip(),
+        "current_bid": str(result.get("providerBidTimestamp", "")).strip(),
+        "current_ask": str(result.get("providerAskTimestamp", "")).strip(),
+    }
+    values = {
+        "last_price": last,
+        "current_bid": bid,
+        "current_ask": ask,
+    }
+    return MarketTape(
+        last_price=rounded(last),
+        current_bid=rounded(bid),
+        current_ask=rounded(ask),
+        spread_percent=rounded(spread_percent(bid, ask)),
+        source=source,
+        field_provenance={
+            field_name: make_price_evidence(
+                label="FRESH PROVIDER QUOTE",
+                source=source,
+                provider_timestamp=provider_timestamps[field_name],
+                local_receipt_timestamp=received_at,
+                authentication_status=SCHWAB_QUOTE_AUTHENTICATION_STATUS,
+                result_status=SCHWAB_QUOTE_SUCCESS,
+                authority=EXECUTION_ELIGIBLE,
+            )
+            for field_name in values
+        },
+        provider_results={
+            SCHWAB_QUOTE_PROVIDER_KEY: SCHWAB_QUOTE_SUCCESS,
+            SCHWAB_QUOTE_CLOCK_PROVIDER_KEY: "PASS",
+        },
+    )
+
+
+def schwab_quote_failure_tape(*, source: str, findings: Sequence[str]) -> MarketTape:
+    normalized = dedupe(
+        schwab_quote_finding_code(value)
+        for value in findings
+        if str(value).strip()
+    ) or ["UNAVAILABLE"]
+    return MarketTape(
+        source=source,
+        warnings=[f"SCHWAB_QUOTE_{value}" for value in normalized],
+        provider_results={
+            SCHWAB_QUOTE_PROVIDER_KEY: f"BLOCKED:{','.join(normalized)}",
+            SCHWAB_QUOTE_CLOCK_PROVIDER_KEY: (
+                "FAIL" if any("CLOCK" in value for value in normalized) else "UNKNOWN"
+            ),
+        },
+    )
+
+
+def schwab_quote_exception_finding(exc: Exception) -> str:
+    name = type(exc).__name__
+    if "Authorization" in name:
+        return "AUTHORIZATION_FAILED"
+    if "Network" in name:
+        return "NETWORK_FAILED"
+    if "Response" in name:
+        return "RESPONSE_FAILED"
+    return "FETCH_FAILED"
+
+
+def schwab_quote_finding_code(value: object) -> str:
+    text = str(value).strip().upper()
+    return "".join(character if character.isalnum() else "_" for character in text).strip("_")
+
+
+def finite_positive(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    parsed = float(value)
+    return parsed if math.isfinite(parsed) and parsed > 0 else None
 
 
 def fetch_nasdaq_market_tape(
@@ -1011,123 +1218,12 @@ def fetch_yahoo_market_tape(
     *,
     timeout_seconds: float = 20.0,
 ) -> MarketTape:
-    if not ticker:
-        return MarketTape(
-            source="yahoo_quote",
-            warnings=["MISSING_TICKER"],
-            provider_results={"yahoo_quote": "MISSING_TICKER"},
-        )
-    chart_tape = fetch_yahoo_chart_tape(
+    """Compatibility wrapper for Yahoo's chart-only research source."""
+    return fetch_yahoo_chart_tape(
         session,
         ticker,
         timeout_seconds=timeout_seconds,
     )
-    symbol = ticker.replace(".", "-")
-    url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}"
-    try:
-        response = session.get(url, timeout=timeout_seconds)
-        if response.status_code != 200:
-            return merge_tapes(
-                quote_tape=MarketTape(
-                    source="yahoo_quote",
-                    warnings=[f"QUOTE_HTTP_{response.status_code}"],
-                    provider_results={
-                        "yahoo_quote": f"HTTP_{response.status_code}"
-                    },
-                ),
-                chart_tape=chart_tape,
-            )
-        result = (response.json().get("quoteResponse", {}).get("result") or [])
-    except Exception as exc:
-        return merge_tapes(
-            quote_tape=MarketTape(
-                source="yahoo_quote",
-                warnings=[f"QUOTE_FETCH_FAILED:{type(exc).__name__}"],
-                provider_results={
-                    "yahoo_quote": f"FETCH_FAILED:{type(exc).__name__}"
-                },
-            ),
-            chart_tape=chart_tape,
-        )
-    if not result:
-        return merge_tapes(
-            quote_tape=MarketTape(
-                source="yahoo_quote",
-                warnings=["QUOTE_EMPTY"],
-                provider_results={"yahoo_quote": "EMPTY"},
-            ),
-            chart_tape=chart_tape,
-        )
-    quote = result[0]
-    last = first_float(quote, "regularMarketPrice", "postMarketPrice", "preMarketPrice")
-    premarket = first_float(quote, "preMarketPrice")
-    previous_close = first_float(quote, "regularMarketPreviousClose", "preMarketPreviousClose")
-    premarket_percent = first_float(quote, "preMarketChangePercent")
-    if premarket_percent is None and premarket is not None and previous_close:
-        premarket_percent = ((premarket - previous_close) / previous_close) * 100
-    bid = first_float(quote, "bid")
-    ask = first_float(quote, "ask")
-    spread = spread_percent(bid, ask)
-    premarket_volume = first_int(quote, "preMarketVolume")
-    regular_volume = first_int(quote, "regularMarketVolume")
-    average_volume = first_int(quote, "averageDailyVolume10Day", "averageDailyVolume3Month")
-    relative_volume = (regular_volume / average_volume) if regular_volume and average_volume else None
-    warnings = tape_warnings(
-        premarket_price=premarket,
-        premarket_volume=premarket_volume,
-        bid=bid,
-        ask=ask,
-        spread=spread,
-        relative_volume=relative_volume,
-    )
-    received_at = now_central().isoformat()
-    last_provider_timestamp = epoch_timestamp(
-        first_int(quote, "regularMarketTime", "postMarketTime", "preMarketTime")
-    )
-    premarket_provider_timestamp = epoch_timestamp(first_int(quote, "preMarketTime"))
-    field_values = {
-        "last_price": rounded(last),
-        "premarket_price": rounded(premarket),
-        "current_bid": rounded(bid),
-        "current_ask": rounded(ask),
-    }
-    quote_tape = MarketTape(
-        last_price=field_values["last_price"],
-        premarket_price=field_values["premarket_price"],
-        premarket_percent=rounded(premarket_percent),
-        premarket_volume=premarket_volume,
-        intraday_volume=regular_volume,
-        average_daily_volume_20=average_volume,
-        rvol_numerator=premarket_volume or regular_volume,
-        rvol_denominator=average_volume,
-        current_bid=field_values["current_bid"],
-        current_ask=field_values["current_ask"],
-        spread_percent=rounded(spread),
-        relative_volume=rounded(relative_volume),
-        source="yahoo_quote",
-        warnings=warnings,
-        field_provenance={
-            name: make_price_evidence(
-                label=price_field_label(name, source="yahoo_quote"),
-                source="yahoo_quote",
-                provider_timestamp=(
-                    premarket_provider_timestamp
-                    if name == "premarket_price"
-                    else last_provider_timestamp
-                    if name == "last_price"
-                    else None
-                ),
-                local_receipt_timestamp=received_at,
-                authentication_status="NOT_REQUIRED",
-                result_status="SUCCESS",
-                authority=RESEARCH_ONLY,
-            )
-            for name, value in field_values.items()
-            if value is not None
-        },
-        provider_results={"yahoo_quote": "SUCCESS"},
-    )
-    return merge_tapes(quote_tape=quote_tape, chart_tape=chart_tape)
 
 
 def fetch_yahoo_chart_tape(
@@ -1365,7 +1461,7 @@ def overlay_tapes(*, primary: MarketTape, fallback: MarketTape) -> MarketTape:
     provider_warnings = [
         warning
         for warning in primary.warnings + fallback.warnings
-        if warning.startswith(("QUOTE_", "CHART_", "NASDAQ_"))
+        if warning.startswith(("QUOTE_", "CHART_", "NASDAQ_", "SCHWAB_"))
     ]
     return MarketTape(
         last_price=merged.last_price,
@@ -1423,6 +1519,62 @@ def field_value(tape: MarketTape, field_name: str) -> float | None:
     return float(value) if value is not None else None
 
 
+def execution_price_evidence_status(
+    tape: MarketTape,
+    *,
+    as_of: datetime,
+) -> str:
+    """Revalidate the exact Schwab quote fields that can grant price authority."""
+    from momentum_hunter.schwab_market_data import SCHWAB_QUOTE_SOURCE
+    from momentum_hunter.shadow_market_validity import ShadowMarketValidityPolicy
+
+    if as_of.tzinfo is None or as_of.utcoffset() is None:
+        return EXECUTION_INELIGIBLE
+    values = {
+        field_name: finite_positive(field_value(tape, field_name))
+        for field_name in REQUIRED_EXECUTION_PRICE_FIELDS
+    }
+    if any(value is None for value in values.values()):
+        return EXECUTION_INELIGIBLE
+    bid = values["current_bid"]
+    ask = values["current_ask"]
+    if bid is None or ask is None or ask < bid:
+        return EXECUTION_INELIGIBLE
+
+    evidence_rows: list[tuple[PriceFieldEvidence, datetime, datetime]] = []
+    for field_name in REQUIRED_EXECUTION_PRICE_FIELDS:
+        evidence = tape.field_provenance.get(field_name)
+        if evidence is None:
+            return EXECUTION_INELIGIBLE
+        if (
+            evidence.source != SCHWAB_QUOTE_SOURCE
+            or evidence.authority != EXECUTION_ELIGIBLE
+            or evidence.authentication_status != SCHWAB_QUOTE_AUTHENTICATION_STATUS
+            or evidence.result_status != SCHWAB_QUOTE_SUCCESS
+        ):
+            return EXECUTION_INELIGIBLE
+        provider_at = parse_datetime(evidence.provider_timestamp)
+        received_at = parse_datetime(evidence.local_receipt_timestamp)
+        if (
+            provider_at is None
+            or received_at is None
+            or provider_at.tzinfo is None
+            or provider_at.utcoffset() is None
+            or received_at.tzinfo is None
+            or received_at.utcoffset() is None
+        ):
+            return EXECUTION_INELIGIBLE
+        evidence_rows.append((evidence, provider_at, received_at))
+
+    evaluation_at = max([as_of, *(row[2] for row in evidence_rows)])
+    maximum_age = ShadowMarketValidityPolicy().quote_max_age_seconds
+    for _, provider_at, _ in evidence_rows:
+        age_seconds = (evaluation_at - provider_at).total_seconds()
+        if age_seconds < 0 or age_seconds > maximum_age:
+            return EXECUTION_INELIGIBLE
+    return EXECUTION_ELIGIBLE
+
+
 def provider_status_for_tape(tape: MarketTape) -> str:
     failures = [
         value
@@ -1434,7 +1586,7 @@ def provider_status_for_tape(tape: MarketTape) -> str:
     provider_warnings = [
         warning
         for warning in tape.warnings
-        if warning.startswith(("QUOTE_", "CHART_", "NASDAQ_"))
+        if warning.startswith(("QUOTE_", "CHART_", "NASDAQ_", "SCHWAB_"))
     ]
     return "SOURCE_STATUS_UNRESOLVED" if provider_warnings else "AVAILABLE"
 
@@ -1716,11 +1868,14 @@ def classify_readiness(
 
 
 def disallowed_provider_warnings(warnings: list[str]) -> list[str]:
+    # Historical reports may contain this separate failed enrichment attempt.
+    # It remains informational when another provider supplied the selected field.
     allowed = {"QUOTE_HTTP_401"}
     return [
         warning
         for warning in warnings
-        if warning.startswith(("QUOTE_", "CHART_", "NASDAQ_")) and warning not in allowed
+        if warning.startswith(("QUOTE_", "CHART_", "NASDAQ_", "SCHWAB_"))
+        and warning not in allowed
     ]
 
 
