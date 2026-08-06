@@ -62,8 +62,8 @@ or readiness input merely because a separate provider request failed.
 
 ## Status
 
-`COMPLETE` through implementation commit `17e5b50`, subject to routine clean
-integration, backup, and exact-head repinning of the remaining opening jobs.
+`COMPLETE`, integrated, backed up, and exact-head repinned through
+implementation commit `17e5b50` plus its final governance closeout.
 
 ## Goal Steward Review
 

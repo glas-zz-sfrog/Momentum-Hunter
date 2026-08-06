@@ -130,12 +130,12 @@ DATA-002 time-normalized opening relative volume remains queued after the
 continuous-candle foundation. R034 remains the separate destructive legacy-
 cutover gate. Official Shadow remains unarmed at `0 / 30`.
 
-This material R032 release becomes the exact head for the 27 remaining ordinary
-opening jobs from 2026-08-06 through 2026-09-14 after one deliberate repin.
-Post-repin acceptance requires the service Running/Automatic with a fresh
-heartbeat, Engine Host Healthy, Thursday `PENDING` at 08:35 Central with latest
-start 08:40, all 27 opening jobs pending with zero failures, zero Shadow jobs,
-and order transmission `UNAVAILABLE`.
+The synchronized DATA-001C closeout is the exact head for the 27 remaining
+ordinary opening jobs from 2026-08-06 through 2026-09-14 after one deliberate
+post-closeout repin. Acceptance is proven only when the service remains
+Running/Automatic with a fresh heartbeat, Engine Host Healthy, Thursday
+`PENDING` at 08:35 Central with latest start 08:40, all 27 opening jobs pending
+with zero failures, zero Shadow jobs, and order transmission `UNAVAILABLE`.
 
 R032 Hard Chew proof passes Python compileall; 30 focused collector tests; all
 89 Schwab candle contract, observer, adjudication, and collector tests; full

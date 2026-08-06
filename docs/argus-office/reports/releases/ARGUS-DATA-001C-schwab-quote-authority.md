@@ -2,6 +2,9 @@
 
 Status: `COMPLETE`
 
+Integration: clean fast-forward to `master`, ordinary non-force backup push,
+and exact-head repin of all 27 remaining opening jobs after final closeout.
+
 ## Scope
 
 DATA-001C replaces unsupported Yahoo Finance v7 quote enrichment with the

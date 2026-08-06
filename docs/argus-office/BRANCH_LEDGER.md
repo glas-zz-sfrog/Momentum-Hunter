@@ -5,15 +5,15 @@ Date reconciled: 2026-08-05
 ## ARGUS-DATA-001C Schwab TradePlan Quote Authority
 
 `codex/ARGUS-DATA-001C-schwab-quote-authority` is a
-`PUSHED_FEATURE_BRANCH` through implementation commit `17e5b50` pending its
-clean fast-forward into local `master`. It retires the unsupported Yahoo v7
+`MERGED_TO_LOCAL_MASTER` and backed up through implementation commit `17e5b50`
+plus its governance closeout. It retires the unsupported Yahoo v7
 quote attempt, uses one exact-host Schwab quote batch per TradePlan report,
 grants authority only after the existing clock/session/freshness/tradability
 proof passes, and prevents Active Monitor research refreshes from bypassing the
 authority gates. Full discovery passes at 1,179/1,179. No account/order method,
 transmission capability, score weight, alert threshold, database/schema,
-package, or UI path changed. The remaining opening jobs must be repinned once
-to the resulting synchronized canonical head after integration.
+package, or UI path changed. The 27 remaining opening jobs are repinned once to
+the resulting synchronized canonical head after integration.
 
 `codex/ARGUS-R033-live-chart-engine-host-integration` remains `ACTIVE` and
 unmerged. Its automated Python/.NET/build/screenshot proof is complete, but it
