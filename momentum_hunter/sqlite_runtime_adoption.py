@@ -6,7 +6,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from momentum_hunter.alert_outcome_updater import OPPORTUNITY_MINUTE_BARS_PATH
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.data_quality import DATA_QUALITY_LATEST_JSON
 from momentum_hunter.entry_plans import ENTRY_PLANS_PATH
@@ -41,11 +40,11 @@ SURFACES: list[AdoptionSurface] = [
     AdoptionSurface(
         name="Evidence reports",
         classification="SAFE_OPTIONAL",
-        current_source="opportunity-alerts.json, opportunity-minute-bars.json, evidence report JSON",
+        current_source="opportunity-alerts.json, reconciled Schwab candle partitions, evidence report JSON",
         sqlite_source="opportunity_alerts, alert_outcomes, minute_bars, evidence_runs",
-        fallback="Return to JSON alert/minute-bar stores if SQLite is missing, stale, or mismatched.",
+        fallback="Return to JSON alerts and reconciled Schwab candle partitions if SQLite is missing, stale, or mismatched.",
         risk="LOW",
-        recommendation="Safe for CLI/report read-only experiments. Runtime default remains file.",
+        recommendation="Safe for alert/report experiments only. The legacy SQLite minute-bar mirror is retired.",
         required_checks=["alert count parity", "outcome class parity", "unscorable preservation", "minute-bar parity"],
     ),
     AdoptionSurface(
@@ -147,7 +146,7 @@ def build_sqlite_runtime_adoption_dry_run(
     data_dir: Path = DATA_DIR,
     data_quality_report: Path = DATA_QUALITY_LATEST_JSON,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
     analysis_captures_path: Path = ANALYSIS_CSV,
     review_decisions_path: Path = REVIEW_DECISIONS_PATH,
     entry_plans_path: Path = ENTRY_PLANS_PATH,

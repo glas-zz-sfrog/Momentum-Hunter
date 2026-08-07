@@ -7,7 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from momentum_hunter.alert_outcome_updater import OPPORTUNITY_MINUTE_BARS_PATH, load_minute_bars
+from momentum_hunter.alert_outcome_updater import load_minute_bars
+from momentum_hunter.canonical_candle_evidence import load_canonical_minute_bars
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.market_tape_health import (
     MarketTapeHealthAttempt,
@@ -17,10 +18,11 @@ from momentum_hunter.market_tape_health import (
 from momentum_hunter.monitor_targets import build_monitor_target_report
 from momentum_hunter.storage import CAPTURES_DIR
 from momentum_hunter.time_utils import now_central
+from momentum_hunter.schwab_candle_store import SCHWAB_CANDLE_STORE_ROOT
 
 
 DATA_QUALITY_SCHEMA_VERSION = 1
-DATA_QUALITY_ENGINE_VERSION = "data_quality_audit_v1"
+DATA_QUALITY_ENGINE_VERSION = "data_quality_audit_v2"
 DATA_QUALITY_LATEST_JSON = DATA_DIR / "reports" / "data-quality-latest.json"
 DATA_QUALITY_LATEST_MD = DATA_DIR / "reports" / "data-quality-latest.md"
 SCANNER_FIELDS = ["price", "percent_change", "volume", "relative_volume", "market_cap"]
@@ -79,7 +81,8 @@ def build_data_quality_report(
     *,
     market_tape_report: MarketTapeHealthReport | None = None,
     captures_dir: Path = CAPTURES_DIR,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
     generated_at: datetime | None = None,
 ) -> DataQualityReport:
     generated_at = generated_at or now_central()
@@ -94,7 +97,11 @@ def build_data_quality_report(
     scanner_reliability = scanner_field_reliability(capture_rows)
     duplicate_anomalies = duplicate_tickers_within_captures(capture_rows)
     repeated_anomalies = repeated_identical_candidate_rows(capture_rows)
-    minute_coverage = minute_bar_coverage(clean_symbols, minute_bars_path)
+    minute_coverage = minute_bar_coverage(
+        clean_symbols,
+        minute_bars_path,
+        minute_store_root=minute_store_root,
+    )
     usable_count = sum(1 for row in symbol_rows if row.usable_market_tape)
     warnings = build_warnings(
         symbols=clean_symbols,
@@ -333,8 +340,20 @@ def repeated_identical_candidate_rows(rows: list[dict[str, Any]]) -> list[dict[s
     return anomalies[:50]
 
 
-def minute_bar_coverage(symbols: list[str], minute_bars_path: Path) -> dict[str, Any]:
-    bars = load_minute_bars(minute_bars_path)
+def minute_bar_coverage(
+    symbols: list[str],
+    minute_bars_path: Path | None = None,
+    *,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
+) -> dict[str, Any]:
+    bars = (
+        load_minute_bars(minute_bars_path)
+        if minute_bars_path is not None
+        else load_canonical_minute_bars(
+            store_root=minute_store_root,
+            symbols=symbols,
+        )
+    )
     rows = {
         symbol: {
             "bar_count": len(bars.get(symbol, [])),
@@ -343,7 +362,12 @@ def minute_bar_coverage(symbols: list[str], minute_bars_path: Path) -> dict[str,
         for symbol in symbols
     }
     return {
-        "source_path": str(minute_bars_path),
+        "source_path": str(minute_bars_path or minute_store_root),
+        "source_kind": (
+            "EXPLICIT_JSON_FIXTURE"
+            if minute_bars_path is not None
+            else "SCHWAB_RECONCILED_MINUTE_STORE_V1"
+        ),
         "symbols_with_bars": sum(1 for item in rows.values() if item["has_bars"]),
         "symbols_missing_bars": sum(1 for item in rows.values() if not item["has_bars"]),
         "symbols": rows,

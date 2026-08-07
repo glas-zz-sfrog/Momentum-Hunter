@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+from contextlib import closing
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from momentum_hunter.alert_outcome_updater import OPPORTUNITY_MINUTE_BARS_PATH
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.data_quality import DATA_QUALITY_LATEST_JSON
 from momentum_hunter.opportunity_alerts import (
@@ -58,7 +58,7 @@ def build_sqlite_validation_report(
     db_path: Path | None = None,
     data_quality_report: Path = DATA_QUALITY_LATEST_JSON,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
     analysis_captures_path: Path = ANALYSIS_CSV,
     evidence_run_source_paths: list[Path] | None = None,
     system_status_source_paths: list[Path] | None = None,
@@ -73,7 +73,7 @@ def build_sqlite_validation_report(
         warnings.append(f"SQLITE_DATABASE_MISSING:{database}")
         return validation_payload(generated_at, database, schema_version, table_counts, checks, warnings)
 
-    with connect_database(database) as connection:
+    with closing(connect_database(database)) as connection:
         schema_version = current_schema_version(connection)
         evidence_sources = evidence_run_source_paths if evidence_run_source_paths is not None else discover_evidence_run_sources()
         system_status_sources = (
@@ -109,7 +109,10 @@ def build_sqlite_validation_report(
                 system_status_source_paths=system_status_sources,
             ),
             "import_timestamps": import_timestamp_details(connection),
-            "missing_slices": missing_slice_details(table_counts),
+            "missing_slices": missing_slice_details(
+                table_counts,
+                minute_bars_retired=minute_bars_path is None,
+            ),
             "alert_state_counts": alert_state_count_details(connection, alerts_path),
             "minute_bar_symbol_counts": minute_bar_symbol_count_details(connection, minute_bars_path),
             "capture_session_counts": capture_session_count_details(connection, analysis_captures_path),
@@ -165,7 +168,18 @@ def alert_state_checks(connection, source: Path) -> list[ValidationCheck]:
     ]
 
 
-def minute_bars_check(connection, source: Path) -> ValidationCheck:
+def minute_bars_check(connection, source: Path | None) -> ValidationCheck:
+    if source is None:
+        sqlite_count = int(
+            connection.execute("SELECT COUNT(*) AS count FROM minute_bars").fetchone()["count"]
+        )
+        return ValidationCheck(
+            "minute_bars_legacy_mirror",
+            "PASS",
+            0,
+            sqlite_count,
+            "Legacy minute-bar source is intentionally retired; preserved rows await approved R034 cutover.",
+        )
     if not source.exists():
         return ValidationCheck("minute_bars", "WARN", 0, 0, f"Source missing: {source}")
     parsed = parse_minute_bar_source(source)
@@ -237,7 +251,7 @@ def source_file_details(
     *,
     data_quality_report: Path,
     alerts_path: Path,
-    minute_bars_path: Path,
+    minute_bars_path: Path | None,
     analysis_captures_path: Path,
     evidence_run_source_paths: list[Path],
     system_status_source_paths: list[Path],
@@ -245,7 +259,16 @@ def source_file_details(
     return {
         "provider_quality": file_detail(data_quality_report),
         "opportunity_alerts": file_detail(alerts_path),
-        "minute_bars": file_detail(minute_bars_path),
+        "minute_bars": (
+            file_detail(minute_bars_path)
+            if minute_bars_path is not None
+            else {
+                "path": "",
+                "exists": False,
+                "sha256": "",
+                "status": "INTENTIONALLY_RETIRED",
+            }
+        ),
         "analysis_captures": file_detail(analysis_captures_path),
         "evidence_runs": [file_detail(path) for path in evidence_run_source_paths],
         "system_status": [file_detail(path) for path in system_status_source_paths],
@@ -283,7 +306,11 @@ def import_timestamp_details(connection) -> dict[str, dict[str, str]]:
     return details
 
 
-def missing_slice_details(table_counts: dict[str, int]) -> list[str]:
+def missing_slice_details(
+    table_counts: dict[str, int],
+    *,
+    minute_bars_retired: bool = False,
+) -> list[str]:
     expected_tables = [
         "provider_quality_checks",
         "opportunity_alerts",
@@ -294,6 +321,8 @@ def missing_slice_details(table_counts: dict[str, int]) -> list[str]:
         "captures",
         "capture_candidates",
     ]
+    if minute_bars_retired:
+        expected_tables.remove("minute_bars")
     return [table for table in expected_tables if int(table_counts.get(table, 0)) == 0]
 
 
@@ -354,9 +383,12 @@ def alert_state_count_details(connection, source: Path) -> dict[str, dict[str, i
     return {"source": source_counts, "sqlite": sqlite_counts}
 
 
-def minute_bar_symbol_count_details(connection, source: Path) -> dict[str, dict[str, dict[str, Any]]]:
+def minute_bar_symbol_count_details(
+    connection,
+    source: Path | None,
+) -> dict[str, dict[str, dict[str, Any]]]:
     source_counts: dict[str, dict[str, Any]] = {}
-    if source.exists():
+    if source is not None and source.exists():
         parsed = parse_minute_bar_source(source)
         for bar in parsed["bars"]:
             update_symbol_window(source_counts, bar.symbol, bar.timestamp)
@@ -369,7 +401,7 @@ def minute_bar_symbol_count_details(connection, source: Path) -> dict[str, dict[
         GROUP BY symbol
         ORDER BY symbol
         """,
-        (str(source),),
+        (str(source),) if source is not None else ("",),
     ).fetchall():
         sqlite_counts[str(row["symbol"])] = {
             "count": int(row["count"]),
@@ -475,7 +507,7 @@ def validation_payload(
     overall = "FAIL" if "FAIL" in statuses else "WARN" if "WARN" in statuses or warnings else "PASS"
     return {
         "schema_version": 1,
-        "engine_version": "sqlite_validation_v1",
+        "engine_version": "sqlite_validation_v2",
         "generated_at": generated_at,
         "database_path": str(database),
         "sqlite_schema_version": schema_version,

@@ -6,8 +6,8 @@ from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import requests
-
+from momentum_hunter.candle_paths import LEGACY_OPPORTUNITY_MINUTE_BARS_PATH
+from momentum_hunter.canonical_candle_evidence import load_canonical_minute_bars
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.opportunity_alerts import (
     OPPORTUNITY_ALERTS_PATH,
@@ -22,13 +22,13 @@ from momentum_hunter.opportunity_alerts import (
     save_alerts,
     unscorable_outcome,
 )
-from momentum_hunter.outcomes import build_http_session
+from momentum_hunter.schwab_candle_store import SCHWAB_CANDLE_STORE_ROOT
 from momentum_hunter.time_utils import now_central
 
 
-OPPORTUNITY_MINUTE_BARS_PATH = DATA_DIR / "opportunity-minute-bars.json"
+OPPORTUNITY_MINUTE_BARS_PATH = LEGACY_OPPORTUNITY_MINUTE_BARS_PATH
 ALERT_OUTCOME_UPDATE_STATUS_PATH = DATA_DIR / "alert-outcome-update-status.json"
-OUTCOME_UPDATER_VERSION = "alert_outcome_minute_bar_updater_v1"
+OUTCOME_UPDATER_VERSION = "alert_outcome_schwab_minute_bar_updater_v2"
 
 
 @dataclass(frozen=True)
@@ -56,15 +56,23 @@ class AlertOutcomeUpdateReport:
     bars_saved_path: str
     alerts_path: str
     warnings: list[str] = field(default_factory=list)
+    bars_source_path: str = ""
+    bars_source_kind: str = ""
+    legacy_cache_written: bool = False
+
+
+class RetiredMinuteBarSourceError(RuntimeError):
+    """Raised when production code tries to recreate the retired minute cache."""
 
 
 def update_alert_store_from_minute_bars(
     *,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
     bars_by_symbol: dict[str, list[MinutePriceBar]] | None = None,
     fetch_missing_bars: bool = False,
-    session: requests.Session | None = None,
+    session: object | None = None,
     generated_at: datetime | None = None,
     recalculate_completed: bool = False,
     status_path: Path | None = None,
@@ -72,20 +80,46 @@ def update_alert_store_from_minute_bars(
     generated_at = generated_at or now_central()
     alerts = load_alerts(alerts_path)
     warnings: list[str] = []
-    stored_bars = load_minute_bars(minute_bars_path)
+    if minute_bars_path is not None:
+        _require_nonproduction_fixture_path(minute_bars_path)
+        stored_bars = load_minute_bars(minute_bars_path)
+        bars_source_path = str(minute_bars_path)
+        bars_source_kind = "EXPLICIT_JSON_FIXTURE"
+    else:
+        windows = alert_fetch_windows(alerts)
+        canonical = load_canonical_minute_bars(
+            store_root=minute_store_root,
+            windows_by_symbol=windows,
+        )
+        stored_bars = {
+            symbol: [
+                MinutePriceBar(
+                    symbol=bar.symbol,
+                    timestamp=bar.timestamp,
+                    open=bar.open,
+                    high=bar.high,
+                    low=bar.low,
+                    close=bar.close,
+                    volume=int(bar.volume) if bar.volume.is_integer() else None,
+                    source=bar.source,
+                )
+                for bar in bars
+            ]
+            for symbol, bars in canonical.items()
+        }
+        bars_source_path = str(minute_store_root)
+        bars_source_kind = "SCHWAB_RECONCILED_MINUTE_STORE_V1"
     merged_bars = merge_minute_bars(stored_bars, bars_by_symbol or {})
 
     if fetch_missing_bars:
-        http = session or build_http_session()
-        for symbol, window in alert_fetch_windows(alerts).items():
-            if symbol_has_window(merged_bars.get(symbol, []), window[0], window[1]):
-                continue
-            fetched = fetch_yahoo_minute_bars(http, symbol, window[0], window[1])
-            if not fetched:
-                warnings.append(f"NO_MINUTE_BARS_FETCHED:{symbol}")
-            merged_bars = merge_minute_bars(merged_bars, {symbol: fetched})
+        warnings.append("YAHOO_MINUTE_BAR_FETCH_RETIRED_USE_SCHWAB_CANDLE_COLLECTOR")
+    del session
 
-    save_minute_bars(merged_bars, minute_bars_path)
+    bars_saved_path = ""
+    legacy_cache_written = False
+    if minute_bars_path is not None:
+        save_minute_bars(merged_bars, minute_bars_path)
+        bars_saved_path = str(minute_bars_path)
     updated_alerts: list[OpportunityAlert] = []
     updated_count = 0
     for alert in alerts:
@@ -117,9 +151,12 @@ def update_alert_store_from_minute_bars(
         unscorable_alert_count=len(unscorable),
         symbols_processed=symbols_processed,
         bars_loaded_count=sum(len(items) for items in merged_bars.values()),
-        bars_saved_path=str(minute_bars_path),
+        bars_saved_path=bars_saved_path,
         alerts_path=str(alerts_path),
         warnings=dedupe(warnings),
+        bars_source_path=bars_source_path,
+        bars_source_kind=bars_source_kind,
+        legacy_cache_written=legacy_cache_written,
     )
     if status_path is not None:
         save_update_report(report, status_path)
@@ -162,6 +199,9 @@ def load_update_report(path: Path = ALERT_OUTCOME_UPDATE_STATUS_PATH) -> AlertOu
         bars_saved_path=str(report.get("bars_saved_path", "")),
         alerts_path=str(report.get("alerts_path", "")),
         warnings=[str(item) for item in report.get("warnings", [])] if isinstance(report.get("warnings"), list) else [],
+        bars_source_path=str(report.get("bars_source_path", "")),
+        bars_source_kind=str(report.get("bars_source_kind", "")),
+        legacy_cache_written=bool(report.get("legacy_cache_written", False)),
     )
 
 
@@ -287,7 +327,7 @@ def first_bar_at_or_after(bars: list[MinutePriceBar], target_time: datetime) -> 
     return None
 
 
-def load_minute_bars(path: Path = OPPORTUNITY_MINUTE_BARS_PATH) -> dict[str, list[MinutePriceBar]]:
+def load_minute_bars(path: Path) -> dict[str, list[MinutePriceBar]]:
     if not path.exists():
         return {}
     try:
@@ -308,7 +348,8 @@ def load_minute_bars(path: Path = OPPORTUNITY_MINUTE_BARS_PATH) -> dict[str, lis
     return result
 
 
-def save_minute_bars(bars_by_symbol: dict[str, list[MinutePriceBar]], path: Path = OPPORTUNITY_MINUTE_BARS_PATH) -> Path:
+def save_minute_bars(bars_by_symbol: dict[str, list[MinutePriceBar]], path: Path) -> Path:
+    _require_nonproduction_fixture_path(path)
     ensure_app_dirs()
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -337,63 +378,6 @@ def merge_minute_bars(
     return merged
 
 
-def fetch_yahoo_minute_bars(
-    session: requests.Session,
-    symbol: str,
-    start: datetime,
-    end: datetime,
-) -> list[MinutePriceBar]:
-    if not symbol:
-        return []
-    url = (
-        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol.replace('.', '-')}"
-        f"?period1={int(start.timestamp())}&period2={int(end.timestamp())}"
-        "&interval=1m&includePrePost=true&events=history"
-    )
-    try:
-        response = session.get(url, timeout=20)
-    except requests.RequestException:
-        return []
-    if response.status_code != 200:
-        return []
-    try:
-        payload = response.json()
-    except ValueError:
-        return []
-    result = payload.get("chart", {}).get("result") or []
-    if not result:
-        return []
-    timestamps = result[0].get("timestamp") or []
-    quote = (result[0].get("indicators", {}).get("quote") or [{}])[0]
-    bars: list[MinutePriceBar] = []
-    for index, timestamp in enumerate(timestamps):
-        try:
-            raw_open = quote.get("open", [])[index]
-            raw_high = quote.get("high", [])[index]
-            raw_low = quote.get("low", [])[index]
-            raw_close = quote.get("close", [])[index]
-            volumes = quote.get("volume") or []
-            raw_volume = volumes[index] if index < len(volumes) else None
-        except IndexError:
-            continue
-        if None in (raw_open, raw_high, raw_low, raw_close):
-            continue
-        observed_at = datetime.fromtimestamp(int(timestamp), tz=start.tzinfo)
-        bars.append(
-            MinutePriceBar(
-                symbol=symbol.upper(),
-                timestamp=observed_at.isoformat(),
-                open=float(raw_open),
-                high=float(raw_high),
-                low=float(raw_low),
-                close=float(raw_close),
-                volume=int(raw_volume) if raw_volume is not None else None,
-                source="yahoo_chart_1m",
-            )
-        )
-    return bars
-
-
 def alert_fetch_windows(alerts: list[OpportunityAlert]) -> dict[str, tuple[datetime, datetime]]:
     windows: dict[str, tuple[datetime, datetime]] = {}
     for alert in alerts:
@@ -409,14 +393,6 @@ def alert_fetch_windows(alerts: list[OpportunityAlert]) -> dict[str, tuple[datet
         else:
             windows[alert.symbol] = (min(current[0], started), max(current[1], ended))
     return windows
-
-
-def symbol_has_window(bars: list[MinutePriceBar], start: datetime, end: datetime) -> bool:
-    if not bars:
-        return False
-    parsed = [parse_datetime(bar.timestamp) for bar in bars]
-    parsed = [item for item in parsed if item is not None]
-    return bool(parsed and min(parsed) <= start and max(parsed) >= end)
 
 
 def normalize_bars_by_symbol(bars_by_symbol: dict[str, list[MinutePriceBar]]) -> dict[str, list[MinutePriceBar]]:
@@ -480,19 +456,28 @@ def dedupe(values: list[str]) -> list[str]:
     return result
 
 
+def _require_nonproduction_fixture_path(path: Path) -> None:
+    if path.resolve(strict=False) == OPPORTUNITY_MINUTE_BARS_PATH.resolve(strict=False):
+        raise RetiredMinuteBarSourceError(
+            "opportunity-minute-bars.json is retired and cannot be recreated."
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Update Momentum Hunter alert outcomes from minute bars.")
     parser.add_argument("--alerts-path", type=Path, default=OPPORTUNITY_ALERTS_PATH)
-    parser.add_argument("--minute-bars", type=Path, default=OPPORTUNITY_MINUTE_BARS_PATH)
+    parser.add_argument("--minute-bars", type=Path, default=None, help="Explicit synthetic or historical JSON fixture only.")
+    parser.add_argument("--minute-store-root", type=Path, default=SCHWAB_CANDLE_STORE_ROOT)
     parser.add_argument("--status-path", type=Path, default=ALERT_OUTCOME_UPDATE_STATUS_PATH)
     parser.add_argument("--input-bars-json", type=Path, default=None, help="Optional JSON file containing bars keyed by symbol.")
-    parser.add_argument("--fetch-missing-bars", action="store_true", help="Fetch missing 1-minute Yahoo chart bars for pending alerts.")
+    parser.add_argument("--fetch-missing-bars", action="store_true", help="Retired compatibility flag; no provider request is made.")
     args = parser.parse_args(argv)
 
     supplied_bars = load_minute_bars(args.input_bars_json) if args.input_bars_json else {}
     report = update_alert_store_from_minute_bars(
         alerts_path=args.alerts_path,
         minute_bars_path=args.minute_bars,
+        minute_store_root=args.minute_store_root,
         bars_by_symbol=supplied_bars,
         fetch_missing_bars=args.fetch_missing_bars,
         status_path=args.status_path,

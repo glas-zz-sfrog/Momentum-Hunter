@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from momentum_hunter.alert_outcome_updater import OPPORTUNITY_MINUTE_BARS_PATH
+from momentum_hunter.candle_paths import LEGACY_OPPORTUNITY_MINUTE_BARS_PATH
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.data_quality import DATA_QUALITY_LATEST_JSON
 from momentum_hunter.entry_plans import ENTRY_PLANS_PATH
@@ -86,7 +86,7 @@ class MirrorContext:
     reports_dir: Path
     data_quality_report: Path
     alerts_path: Path
-    minute_bars_path: Path
+    minute_bars_path: Path | None
     analysis_captures_path: Path
     review_decisions_path: Path
     entry_plans_path: Path
@@ -100,7 +100,7 @@ def build_sqlite_mirror_freshness_report(
     reports_dir: Path | None = None,
     data_quality_report: Path = DATA_QUALITY_LATEST_JSON,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
     analysis_captures_path: Path = ANALYSIS_CSV,
     review_decisions_path: Path = REVIEW_DECISIONS_PATH,
     entry_plans_path: Path = ENTRY_PLANS_PATH,
@@ -125,7 +125,7 @@ def build_sqlite_mirror_freshness_report(
         analysis_captures_path=analysis_captures_path,
         data_quality_report=data_quality_report,
         alerts_path=alerts_path,
-        minute_bars_path=minute_bars_path,
+        minute_bars_path=minute_bars_path or LEGACY_OPPORTUNITY_MINUTE_BARS_PATH,
         review_decisions_path=review_decisions_path,
         entry_plans_path=entry_plans_path,
     )
@@ -258,8 +258,8 @@ def mirror_specs() -> list[MirrorSpec]:
             "source_file_hash",
             "COALESCE(imported_at, updated_at)",
             expected_minute_bar_count,
-            True,
-            "all-safe",
+            False,
+            "retired-no-import",
         ),
         MirrorSpec(
             "evidence_runs",
@@ -374,6 +374,8 @@ def expected_alert_count(context: MirrorContext) -> tuple[int, list[Path], list[
 
 def expected_minute_bar_count(context: MirrorContext) -> tuple[int, list[Path], list[str]]:
     source = context.minute_bars_path
+    if source is None:
+        return 0, [], ["SOURCE_INTENTIONALLY_RETIRED:opportunity-minute-bars.json"]
     if not source.exists():
         return 0, [], [f"SOURCE_MISSING:{source}"]
     parsed = parse_minute_bar_source(source)

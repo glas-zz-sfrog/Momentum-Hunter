@@ -5,7 +5,6 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from momentum_hunter.alert_outcome_updater import OPPORTUNITY_MINUTE_BARS_PATH
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.data_quality import DATA_QUALITY_LATEST_JSON
 from momentum_hunter.opportunity_alerts import OPPORTUNITY_ALERTS_PATH
@@ -61,7 +60,7 @@ def run_sqlite_migration(
     db_path: Path | None = None,
     data_quality_report: Path = DATA_QUALITY_LATEST_JSON,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
     analysis_captures_path: Path = ANALYSIS_CSV,
     system_status_source_paths: list[Path] | None = None,
     import_provider_quality: bool = True,
@@ -100,6 +99,10 @@ def run_sqlite_migration(
     if import_evidence:
         evidence_result = import_opportunity_alerts(alerts_path, db_path=db_path)
     if import_minute_bar_slice:
+        if minute_bars_path is None:
+            raise ValueError(
+                "The legacy minute-bar SQLite import is retired; supply an explicit historical fixture path."
+            )
         minute_bars_result = import_minute_bars(minute_bars_path, db_path=db_path)
     if import_evidence_run_slice:
         evidence_runs_result = import_evidence_runs(db_path=db_path)
@@ -256,7 +259,7 @@ def write_minute_bars_import_report(payload: dict[str, object], *, json_path: Pa
     lines = [
         "# Momentum Hunter SQLite Minute Bars Import",
         "",
-        "Additive import report. `opportunity-minute-bars.json` remains the active derived minute-bar cache.",
+        "Historical-fixture import report. The legacy minute-bar cache is retired and is not an active source.",
         "",
     ]
     lines.extend(minute_bars_import_markdown_lines(payload))
@@ -575,7 +578,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--db", type=Path, default=SQLITE_DB_PATH)
     parser.add_argument("--data-quality-report", type=Path, default=DATA_QUALITY_LATEST_JSON)
     parser.add_argument("--alerts-path", type=Path, default=OPPORTUNITY_ALERTS_PATH)
-    parser.add_argument("--minute-bars-path", type=Path, default=OPPORTUNITY_MINUTE_BARS_PATH)
+    parser.add_argument("--minute-bars-path", type=Path, default=None, help="Explicit historical fixture path only.")
     parser.add_argument("--analysis-captures-path", type=Path, default=ANALYSIS_CSV)
     parser.add_argument(
         "--slice",
@@ -628,7 +631,7 @@ def main(argv: list[str] | None = None) -> int:
         analysis_captures_path=args.analysis_captures_path,
         import_provider_quality=slice_name == "provider-quality" or run_all,
         import_evidence=slice_name == "evidence" or run_all,
-        import_minute_bar_slice=slice_name == "minute-bars" or run_all,
+        import_minute_bar_slice=slice_name == "minute-bars",
         import_evidence_run_slice=slice_name == "evidence-runs" or run_all,
         import_system_status_slice=slice_name == "system-status" or run_all,
         import_capture_index_slice=slice_name == "capture-index" or run_all,

@@ -28,7 +28,7 @@ from momentum_hunter.time_utils import now_central
 
 
 EVIDENCE_AUTOPILOT_SCHEMA_VERSION = 1
-EVIDENCE_AUTOPILOT_VERSION = "evidence_autopilot_v1"
+EVIDENCE_AUTOPILOT_VERSION = "evidence_autopilot_v2"
 EVIDENCE_AUTOPILOT_STATUS_PATH = DATA_DIR / "evidence-autopilot-status.json"
 
 
@@ -65,7 +65,7 @@ def run_evidence_autopilot(
     status_path: Path = EVIDENCE_AUTOPILOT_STATUS_PATH,
     fetch_missing_market_data: bool = True,
     refresh_target_market_data: bool = True,
-    fetch_missing_bars: bool = True,
+    fetch_missing_bars: bool = False,
     monitor_cycle_runner: Callable[..., MonitorCycleReport] = run_monitor_cycle,
     outcome_updater: Callable[..., AlertOutcomeUpdateReport] = update_alert_store_from_minute_bars,
     evidence_builder: Callable[..., EvidenceHealthReport] = build_evidence_health_report,
@@ -287,14 +287,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--status-path", type=Path, default=EVIDENCE_AUTOPILOT_STATUS_PATH)
     parser.add_argument("--no-fetch-missing-market-data", action="store_true")
     parser.add_argument("--no-refresh-target-market-data", action="store_true")
-    parser.add_argument("--no-fetch-missing-bars", action="store_true")
+    parser.add_argument(
+        "--fetch-missing-bars",
+        action="store_true",
+        help="Retired compatibility flag; the outcome updater will not call a provider.",
+    )
     args = parser.parse_args(argv)
     status = run_evidence_autopilot(
         output_dir=args.output_dir,
         status_path=args.status_path,
         fetch_missing_market_data=not args.no_fetch_missing_market_data,
         refresh_target_market_data=not args.no_refresh_target_market_data,
-        fetch_missing_bars=not args.no_fetch_missing_bars,
+        fetch_missing_bars=args.fetch_missing_bars,
     )
     print(json.dumps(asdict(status), indent=2))
     return 0

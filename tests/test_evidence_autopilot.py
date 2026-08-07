@@ -33,7 +33,7 @@ class EvidenceAutopilotTests(unittest.TestCase):
 
         def outcome_updater(**kwargs) -> AlertOutcomeUpdateReport:
             calls.append("outcome")
-            self.assertTrue(kwargs["fetch_missing_bars"])
+            self.assertFalse(kwargs["fetch_missing_bars"])
             self.assertIsNotNone(kwargs["status_path"])
             return fake_outcome_report()
 

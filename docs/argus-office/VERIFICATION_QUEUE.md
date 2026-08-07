@@ -96,7 +96,7 @@ Branch: `codex/ARGUS-R032C-automatic-candle-backfill`
 
 Automated result: `AUTOMATED_PASS`
 
-Steven status: `PENDING_VISUAL_ACCEPTANCE`
+Steven status: `MANUAL_PASS` on 2026-08-06
 
 Check only these visible behaviors in the R032C proof/build:
 
@@ -111,6 +111,11 @@ Check only these visible behaviors in the R032C proof/build:
    symbol must not blank or visibly stall another chart.
 5. No Buy, Sell, Submit, Replace, Cancel, live-order, account-selection, or
    credential control appears anywhere because of this change.
+
+Result: Steven accepted the isolated 1180x820 proof. He confirmed that the
+left `LOADING HISTORY` state and the intentionally simulated right `HISTORY
+LOAD FAILED` state are acceptable. The proof contacted no provider, account,
+service, scheduler, Engine Host, or production-data path.
 
 After merge and the one elevated Engine Host reload, automated live proof will
 select one previously uncached liquid symbol and verify that it transitions to

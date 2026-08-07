@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
-from momentum_hunter.alert_outcome_updater import OPPORTUNITY_MINUTE_BARS_PATH
+from momentum_hunter.candle_paths import LEGACY_OPPORTUNITY_MINUTE_BARS_PATH
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.schwab_candle_contract import (
     EASTERN_TZ,
@@ -142,7 +142,7 @@ class SchwabCandleStore:
 
     def __init__(self, root: Path = SCHWAB_CANDLE_STORE_ROOT) -> None:
         self.root = root.resolve(strict=False)
-        legacy = OPPORTUNITY_MINUTE_BARS_PATH.resolve(strict=False)
+        legacy = LEGACY_OPPORTUNITY_MINUTE_BARS_PATH.resolve(strict=False)
         if _same_or_ancestor(self.root, legacy) or self.root == legacy:
             raise SchwabCandleStoreError(
                 "Schwab candle storage must not contain the legacy minute-bar cache."

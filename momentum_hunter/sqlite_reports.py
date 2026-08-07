@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from momentum_hunter.alert_outcome_updater import OPPORTUNITY_MINUTE_BARS_PATH
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.data_quality import DATA_QUALITY_LATEST_JSON
 from momentum_hunter.entry_plans import ENTRY_PLANS_PATH
@@ -370,7 +369,7 @@ def build_sqlite_read_model_comparison(
     *,
     db_path: Path | None = None,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
     analysis_captures_path: Path = ANALYSIS_CSV,
     review_decisions_path: Path = REVIEW_DECISIONS_PATH,
     entry_plans_path: Path = ENTRY_PLANS_PATH,
@@ -403,8 +402,11 @@ def build_sqlite_read_model_comparison(
         ]
     )
 
-    file_bar_count = file_minute_bar_count(minute_bars_path)
-    comparisons.append(compare_count("minute_bars", file_bar_count, sqlite_counts.get("minute_bars")))
+    if minute_bars_path is not None:
+        file_bar_count = file_minute_bar_count(minute_bars_path)
+        comparisons.append(compare_count("minute_bars", file_bar_count, sqlite_counts.get("minute_bars")))
+    else:
+        warnings.append("SQLITE_LEGACY_MINUTE_BAR_MIRROR_RETIRED")
 
     file_capture_counts = file_capture_candidate_counts(analysis_captures_path)
     comparisons.append(compare_count("captures", file_capture_counts.get("captures"), sqlite_counts.get("captures")))

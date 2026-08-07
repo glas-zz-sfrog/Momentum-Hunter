@@ -2,17 +2,32 @@
 
 Date reconciled: 2026-08-06
 
+## ARGUS-R034A Legacy Candle Consumer Migration
+
+`codex/ARGUS-R034A-legacy-candle-consumer-migration` is
+`ACTIVE / IMPLEMENTED_PENDING_MERGE` and depends directly on R032C head
+`9f9967a`. It moves active outcome, evidence, research, read-model, Daily-symbol,
+source-registry, and SQLite reporting defaults off the retired CRWV JSON; blocks
+recreation of that exact production path; and adds a read-only cutover verifier.
+The verifier finds the expected 710 CRWV JSON bars, 710 matching SQLite rows,
+12,478 healthy reconciled Schwab bars, zero blocking references, and unchanged
+inputs. Compileall, 44 focused tests, all 1,225 Python tests, all 251 .NET tests,
+diff/protected-path/secret/capability checks pass. No data was archived, deleted,
+or rewritten. Next action is one commit/backup, clean stacked fast-forward,
+runtime repin/reload, unseen-symbol proof, then separate R034 approval.
+
 ## ARGUS-R032C Automatic Candle Backfill
 
 `codex/ARGUS-R032C-automatic-candle-backfill` is
-`ACTIVE / IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE_AND_MERGE` from synchronized
+`ACTIVE / VISUALLY_ACCEPTED_PENDING_INTEGRATION` from synchronized
 canonical base `af783da`. It adds one cache-first, coalesced, ten-symbol
 background history queue behind the Engine Host, explicit WPF loading/failure
 evidence, atomic restart recovery, and checkout/account guards. All 1,216
-Python and 251 .NET tests plus the zero-warning Release build pass. Canonical
-runtime, installed Engine Host, and Friday's 26 opening jobs remain unchanged;
-next action is visual acceptance, one focused commit/backup, fast-forward
-integration, elevated Engine Host reload, and live unseen-symbol proof.
+Python and 251 .NET tests plus the zero-warning Release build pass. Steven
+accepted the isolated loading/failure proof on 2026-08-06. Canonical runtime,
+installed Engine Host, and Friday's 26 opening jobs remain unchanged; its
+commits are the direct parent of R034A and will integrate once through the
+stacked release before the Engine Host reload and live unseen-symbol proof.
 
 ## ARGUS-DATA-001C Schwab TradePlan Quote Authority
 

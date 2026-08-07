@@ -1,6 +1,6 @@
 # ARGUS-R032C Automatic Candle Backfill
 
-Status: `IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE_AND_MERGE`
+Status: `VISUALLY_ACCEPTED_PENDING_INTEGRATION`
 
 ## Result
 
@@ -41,10 +41,13 @@ loading/failure evidence and never receives credentials or calls Schwab.
 
 ## Remaining Gates
 
-1. Steven checks the visible loading/failure wording and layout.
-2. Commit and push the feature branch.
-3. Fast-forward into canonical `master` and repin future capture jobs.
-4. Use one elevated reload so the installed Engine Host runs the integrated
+1. Fast-forward the stacked R032C/R034A release into canonical `master` and
+   repin future capture jobs.
+2. Use one elevated reload so the installed Engine Host runs the integrated
    code.
-5. Select one previously uncached liquid symbol and prove live transition to
+3. Select one previously uncached liquid symbol and prove live transition to
    populated 1m/5m/15m/Daily Schwab history without account/order activity.
+
+Steven accepted the isolated 1180x820 loading/failure proof on 2026-08-06. The
+right-side failure was intentionally synthetic and proved the fail-closed UI;
+it was not a Schwab or production-runtime failure.

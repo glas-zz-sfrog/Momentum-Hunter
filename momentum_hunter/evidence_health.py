@@ -6,7 +6,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from momentum_hunter.alert_outcome_updater import ALERT_OUTCOME_UPDATE_STATUS_PATH, OPPORTUNITY_MINUTE_BARS_PATH, load_update_report
+from momentum_hunter.alert_outcome_updater import ALERT_OUTCOME_UPDATE_STATUS_PATH, load_update_report
+from momentum_hunter.canonical_candle_evidence import canonical_minute_bar_symbols
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.opportunity_alerts import (
     OPPORTUNITY_ALERTS_PATH,
@@ -19,10 +20,11 @@ from momentum_hunter.opportunity_alerts import (
     safe_stamp,
 )
 from momentum_hunter.time_utils import now_central
+from momentum_hunter.schwab_candle_store import SCHWAB_CANDLE_STORE_ROOT
 
 
 EVIDENCE_HEALTH_SCHEMA_VERSION = 1
-EVIDENCE_HEALTH_ENGINE_VERSION = "evidence_health_v1"
+EVIDENCE_HEALTH_ENGINE_VERSION = "evidence_health_v2"
 DEFAULT_STALE_PENDING_HOURS = 24
 
 
@@ -105,7 +107,8 @@ class ReliabilityReport:
 def build_evidence_health_report(
     *,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
     outcome_status_path: Path = ALERT_OUTCOME_UPDATE_STATUS_PATH,
     reports_dir: Path | None = None,
     generated_at: datetime | None = None,
@@ -114,7 +117,12 @@ def build_evidence_health_report(
     generated_at = generated_at or now_central()
     reports_dir = reports_dir or DATA_DIR / "reports"
     alerts = load_alerts(alerts_path)
-    minute_bar_symbols = load_minute_bar_symbols(minute_bars_path)
+    minute_bar_symbols = (
+        load_minute_bar_symbols(minute_bars_path)
+        if minute_bars_path is not None
+        else canonical_minute_bar_symbols(store_root=minute_store_root)
+    )
+    minute_source_path = minute_bars_path or minute_store_root
     completed = [alert for alert in alerts if is_completed_alert(alert)]
     unscorable = [alert for alert in alerts if is_unscorable_alert(alert)]
     pending = [alert for alert in alerts if is_pending_alert(alert)]
@@ -170,7 +178,7 @@ def build_evidence_health_report(
     return EvidenceHealthReport(
         generated_at=generated_at.isoformat(),
         source_alerts_path=str(alerts_path),
-        source_minute_bars_path=str(minute_bars_path),
+        source_minute_bars_path=str(minute_source_path),
         source_outcome_status_path=str(outcome_status_path),
         total_alerts=len(alerts),
         completed_alerts=len(completed),
@@ -583,7 +591,8 @@ def format_reason_counts(counts: dict[str, int]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate Momentum Hunter evidence health and reliability reports.")
     parser.add_argument("--alerts-path", type=Path, default=OPPORTUNITY_ALERTS_PATH)
-    parser.add_argument("--minute-bars-path", type=Path, default=OPPORTUNITY_MINUTE_BARS_PATH)
+    parser.add_argument("--minute-bars-path", type=Path, default=None, help="Explicit synthetic or historical JSON fixture only.")
+    parser.add_argument("--minute-store-root", type=Path, default=SCHWAB_CANDLE_STORE_ROOT)
     parser.add_argument("--outcome-status-path", type=Path, default=ALERT_OUTCOME_UPDATE_STATUS_PATH)
     parser.add_argument("--reports-dir", type=Path, default=DATA_DIR / "reports")
     parser.add_argument("--output-dir", type=Path, default=None)
@@ -597,6 +606,7 @@ def main(argv: list[str] | None = None) -> int:
         health = build_evidence_health_report(
             alerts_path=args.alerts_path,
             minute_bars_path=args.minute_bars_path,
+            minute_store_root=args.minute_store_root,
             outcome_status_path=args.outcome_status_path,
             reports_dir=args.reports_dir,
             generated_at=generated_at,

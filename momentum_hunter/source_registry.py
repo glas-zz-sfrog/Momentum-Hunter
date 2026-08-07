@@ -6,14 +6,16 @@ from typing import Any
 
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.data_quality import DATA_QUALITY_LATEST_JSON
-from momentum_hunter.alert_outcome_updater import ALERT_OUTCOME_UPDATE_STATUS_PATH, OPPORTUNITY_MINUTE_BARS_PATH
+from momentum_hunter.alert_outcome_updater import ALERT_OUTCOME_UPDATE_STATUS_PATH
+from momentum_hunter.candle_paths import LEGACY_OPPORTUNITY_MINUTE_BARS_PATH
 from momentum_hunter.entry_plans import ENTRY_PLANS_PATH
 from momentum_hunter.opportunity_alerts import OPPORTUNITY_ALERTS_PATH
 from momentum_hunter.review import REVIEW_DECISIONS_PATH
 from momentum_hunter.storage import ANALYSIS_CSV, CAPTURE_INTEGRITY_MANIFEST, CAPTURES_DIR
+from momentum_hunter.schwab_candle_store import SCHWAB_CANDLE_STORE_ROOT
 
 
-SOURCE_REGISTRY_VERSION = "source_classification_and_mirror_freshness_v1"
+SOURCE_REGISTRY_VERSION = "source_classification_and_mirror_freshness_v2"
 
 
 @dataclass(frozen=True)
@@ -45,7 +47,8 @@ def registered_source_definitions(
     captures_dir: Path = CAPTURES_DIR,
     data_quality_report: Path = DATA_QUALITY_LATEST_JSON,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path = LEGACY_OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
     review_decisions_path: Path = REVIEW_DECISIONS_PATH,
     entry_plans_path: Path = ENTRY_PLANS_PATH,
     integrity_manifest_path: Path = CAPTURE_INTEGRITY_MANIFEST,
@@ -124,17 +127,31 @@ def registered_source_definitions(
         ),
         SourceDefinition(
             name="opportunity_minute_bars",
-            category="derived_market_data_cache",
-            authority="file_authoritative_derived",
-            mutability="mutable_cache",
+            category="retired_legacy_market_data_cache",
+            authority="retired_historical_source",
+            mutability="write_blocked_pending_archive",
             path=str(minute_bars_path),
             pattern="",
             sqlite_tables=("minute_bars",),
-            importer="import_minute_bars",
-            included_in_all_safe=True,
-            preservation_rule="Preserve as derived evidence cache. It can be rebuilt/refetched separately from raw captures.",
-            cleanup_rule="Re-import idempotently after minute-bar refresh.",
-            notes="Minute bars support alert outcome validation and later analytics.",
+            importer="retired_no_new_imports",
+            included_in_all_safe=False,
+            preservation_rule="Preserve unchanged until the separately approved R034 archive and deletion.",
+            cleanup_rule="Never recreate. Remove active JSON and matching mirror rows only through approved R034 cutover.",
+            notes="Historical CRWV-only cache. Active consumers use reconciled Schwab partitions.",
+        ),
+        SourceDefinition(
+            name="schwab_reconciled_minute_candles",
+            category="canonical_market_data_evidence",
+            authority="provider_reconciled_file_authoritative",
+            mutability="append_only_versioned_partitions",
+            path=str(minute_store_root),
+            pattern="*/*.json",
+            sqlite_tables=(),
+            importer="not_mirrored_v1",
+            included_in_all_safe=False,
+            preservation_rule="Preserve every provider version and canonical reconciliation state.",
+            cleanup_rule="Do not delete or rewrite through legacy cache maintenance.",
+            notes="Prospective active source for outcome, evidence-health, and research consumers.",
         ),
         SourceDefinition(
             name="evidence_run_reports",

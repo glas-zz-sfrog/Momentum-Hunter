@@ -5,13 +5,14 @@ import os
 from pathlib import Path
 from typing import Any
 
-from momentum_hunter.alert_outcome_updater import OPPORTUNITY_MINUTE_BARS_PATH
+from momentum_hunter.canonical_candle_evidence import canonical_minute_bar_count
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.entry_plans import ENTRY_PLANS_PATH
 from momentum_hunter.review import REVIEW_DECISIONS_PATH
 from momentum_hunter.sqlite_store import SQLITE_DB_PATH, normalize_status
 from momentum_hunter.storage import ANALYSIS_CSV
 from momentum_hunter.time_utils import now_central
+from momentum_hunter.schwab_candle_store import SCHWAB_CANDLE_STORE_ROOT
 
 
 READ_MODEL_SOURCE_ENV = "MOMENTUM_HUNTER_READ_MODEL_SOURCE"
@@ -34,7 +35,8 @@ def build_read_model_summary(
     review_decisions_path: Path = REVIEW_DECISIONS_PATH,
     entry_plans_path: Path = ENTRY_PLANS_PATH,
     alerts_path: Path | None = None,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
 ) -> dict[str, Any]:
     mode = resolve_read_model_source(source)
     if report_name not in READ_MODEL_REPORTS:
@@ -58,6 +60,7 @@ def build_read_model_summary(
             entry_plans_path=entry_plans_path,
             alerts_path=alerts_path,
             minute_bars_path=minute_bars_path,
+            minute_store_root=minute_store_root,
             reports=[report_name],
         )
     return file_read_model_summary(
@@ -68,6 +71,7 @@ def build_read_model_summary(
         entry_plans_path=entry_plans_path,
         alerts_path=alerts_path,
         minute_bars_path=minute_bars_path,
+        minute_store_root=minute_store_root,
     )
 
 
@@ -79,12 +83,17 @@ def file_read_model_summary(
     review_decisions_path: Path = REVIEW_DECISIONS_PATH,
     entry_plans_path: Path = ENTRY_PLANS_PATH,
     alerts_path: Path | None = None,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
 ) -> dict[str, Any]:
     if report_name == "candidate-story":
         return file_candidate_story_summary(analysis_captures_path)
     if report_name == "evidence":
-        return file_evidence_summary(alerts_path=alerts_path, minute_bars_path=minute_bars_path)
+        return file_evidence_summary(
+            alerts_path=alerts_path,
+            minute_bars_path=minute_bars_path,
+            minute_store_root=minute_store_root,
+        )
     if report_name == "watchlist":
         return file_watchlist_summary(
             data_dir=data_dir,
@@ -135,7 +144,8 @@ def build_shadow_compare_read_model(
     review_decisions_path: Path = REVIEW_DECISIONS_PATH,
     entry_plans_path: Path = ENTRY_PLANS_PATH,
     alerts_path: Path | None = None,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
     reports: list[str] | None = None,
     validate_sqlite: bool = True,
 ) -> dict[str, Any]:
@@ -178,9 +188,14 @@ def build_shadow_compare_read_model(
             entry_plans_path=entry_plans_path,
             alerts_path=alerts_path,
             minute_bars_path=minute_bars_path,
+            minute_store_root=minute_store_root,
         )
         sqlite_payload = sqlite_read_model_summary(report_name, db_path=database)
-        for field in comparable_fields(report_name):
+        fields = comparable_fields(report_name)
+        if report_name == "evidence" and minute_bars_path is None:
+            fields = [field for field in fields if field[0] != "available_minute_bars"]
+            warnings.append("SQLITE_LEGACY_MINUTE_BAR_MIRROR_RETIRED")
+        for field in fields:
             comparisons.append(compare_shadow_field(report_name, field, file_payload, sqlite_payload))
         missing_data.extend(
             f"{report_name}:{warning}"
@@ -248,22 +263,33 @@ def file_candidate_story_summary(path: Path) -> dict[str, Any]:
     )
 
 
-def file_evidence_summary(*, alerts_path: Path | None, minute_bars_path: Path) -> dict[str, Any]:
+def file_evidence_summary(
+    *,
+    alerts_path: Path | None,
+    minute_bars_path: Path | None,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
+) -> dict[str, Any]:
     generated_at = now_central().isoformat()
     from momentum_hunter.opportunity_alerts import OPPORTUNITY_ALERTS_PATH
     from momentum_hunter.sqlite_reports import file_alert_state_counts, file_minute_bar_count
 
     alerts_source = alerts_path or OPPORTUNITY_ALERTS_PATH
     alert_counts = file_alert_state_counts(alerts_source)
-    minute_count = file_minute_bar_count(minute_bars_path)
+    minute_count = (
+        file_minute_bar_count(minute_bars_path)
+        if minute_bars_path is not None
+        else canonical_minute_bar_count(store_root=minute_store_root)
+    )
     warnings = []
     if not alerts_source.exists():
         warnings.append(f"OPPORTUNITY_ALERTS_SOURCE_MISSING:{alerts_source}")
-    if not minute_bars_path.exists():
+    if minute_bars_path is not None and not minute_bars_path.exists():
         warnings.append(f"MINUTE_BARS_SOURCE_MISSING:{minute_bars_path}")
+    if minute_bars_path is None and not minute_store_root.exists():
+        warnings.append(f"SCHWAB_MINUTE_STORE_MISSING:{minute_store_root}")
     return base_file_payload(
         "evidence",
-        "file_evidence_read_model_v1",
+        "file_evidence_read_model_v2",
         generated_at,
         warnings,
         alert_count=alert_counts.get("alerts") or 0,
@@ -271,6 +297,12 @@ def file_evidence_summary(*, alerts_path: Path | None, minute_bars_path: Path) -
         pending_outcomes=alert_counts.get("pending") or 0,
         unscorable_outcomes=alert_counts.get("unscorable") or 0,
         available_minute_bars=minute_count or 0,
+        minute_bar_source_path=str(minute_bars_path or minute_store_root),
+        minute_bar_source_kind=(
+            "EXPLICIT_JSON_FIXTURE"
+            if minute_bars_path is not None
+            else "SCHWAB_RECONCILED_MINUTE_STORE_V1"
+        ),
     )
 
 

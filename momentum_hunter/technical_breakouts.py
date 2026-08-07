@@ -11,6 +11,7 @@ from statistics import mean, pstdev
 from typing import Any
 
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
+from momentum_hunter.canonical_candle_evidence import load_canonical_minute_bars
 from momentum_hunter.daily_ohlc import (
     DAILY_OHLC_COVERAGE_LATEST_JSON,
     DAILY_OHLC_COVERAGE_LATEST_MD,
@@ -21,15 +22,15 @@ from momentum_hunter.daily_ohlc import (
     write_daily_ohlc_coverage_report,
 )
 from momentum_hunter.time_utils import now_central
+from momentum_hunter.schwab_candle_store import SCHWAB_CANDLE_STORE_ROOT
 
 
-ENGINE_VERSION = "technical_breakout_research_engine_v1"
+ENGINE_VERSION = "technical_breakout_research_engine_v2"
 SCHEMA_VERSION = 1
 
 ANALYSIS_CAPTURES_PATH = DATA_DIR / "analysis-captures.csv"
 ANALYSIS_OUTCOMES_PATH = DATA_DIR / "analysis-outcomes.csv"
 OPPORTUNITY_ALERTS_PATH = DATA_DIR / "opportunity-alerts.json"
-OPPORTUNITY_MINUTE_BARS_PATH = DATA_DIR / "opportunity-minute-bars.json"
 
 TECHNICAL_BREAKOUT_EVENTS_LATEST_JSON = DATA_DIR / "reports" / "technical-breakout-events-latest.json"
 TECHNICAL_BREAKOUT_EVENTS_LATEST_MD = DATA_DIR / "reports" / "technical-breakout-events-latest.md"
@@ -123,7 +124,8 @@ def build_technical_breakout_reports(
     captures_path: Path = ANALYSIS_CAPTURES_PATH,
     outcomes_path: Path = ANALYSIS_OUTCOMES_PATH,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
     daily_bars_path: Path | None = None,
     daily_ohlc_path: Path | None = DAILY_OHLC_SOURCE_PATH,
     output_dir: Path | None = None,
@@ -138,7 +140,33 @@ def build_technical_breakout_reports(
     captures = load_csv_rows(captures_path)
     outcomes = load_csv_rows(outcomes_path)
     alerts = load_json_records(alerts_path, "alerts")
-    minute_bars_by_symbol = load_bar_source(minute_bars_path, default_source="opportunity-minute-bars")
+    if minute_bars_path is not None:
+        minute_bars_by_symbol = load_bar_source(
+            minute_bars_path,
+            default_source="explicit-minute-bar-fixture",
+        )
+        minute_source_path = minute_bars_path
+        minute_source_name = "explicit-minute-bar-fixture"
+    else:
+        canonical = load_canonical_minute_bars(store_root=minute_store_root)
+        minute_bars_by_symbol = {
+            symbol: [
+                TechnicalPriceBar(
+                    symbol=bar.symbol,
+                    timestamp=bar.timestamp,
+                    open=bar.open,
+                    high=bar.high,
+                    low=bar.low,
+                    close=bar.close,
+                    volume=int(bar.volume) if bar.volume.is_integer() else None,
+                    source=bar.source,
+                )
+                for bar in bars
+            ]
+            for symbol, bars in canonical.items()
+        }
+        minute_source_path = minute_store_root
+        minute_source_name = "schwab-reconciled-minute-store-v1"
     requested_symbols = tracked_symbols(captures, alerts, minute_bars_by_symbol)
     if "QQQ" not in requested_symbols:
         requested_symbols.append("QQQ")
@@ -157,6 +185,7 @@ def build_technical_breakout_reports(
         captures=captures,
         alerts=alerts,
         options=options,
+        minute_source_data=minute_source_name,
     )
     studies = study_breakout_events(
         [event for event in events if event.status == BREAKOUT_PRESENT],
@@ -169,7 +198,8 @@ def build_technical_breakout_reports(
         "captures_path": str(captures_path),
         "outcomes_path": str(outcomes_path),
         "alerts_path": str(alerts_path),
-        "minute_bars_path": str(minute_bars_path),
+        "minute_bars_path": str(minute_source_path),
+        "minute_bars_source_kind": minute_source_name,
         "daily_bars_path": str(daily_bars_path) if daily_bars_path else None,
         "daily_ohlc_path": str(daily_ohlc_path) if daily_ohlc_path else None,
     }
@@ -225,6 +255,7 @@ def detect_breakout_events(
     captures: list[dict[str, str]] | None = None,
     alerts: list[dict[str, Any]] | None = None,
     options: BreakoutResearchOptions | None = None,
+    minute_source_data: str = "explicit-minute-bar-fixture",
 ) -> list[BreakoutEvent]:
     options = options or BreakoutResearchOptions()
     daily_bars_by_symbol = daily_bars_by_symbol or {}
@@ -267,7 +298,7 @@ def detect_breakout_events(
                 symbol=symbol,
                 bars=bars,
                 market_regime=market_regimes.get(symbol),
-                source_data="opportunity-minute-bars",
+                source_data=minute_source_data,
                 options=options,
             )
         )
@@ -539,7 +570,7 @@ def detect_intraday_breakout_events(
     symbol: str,
     bars: list[TechnicalPriceBar],
     market_regime: str | None = None,
-    source_data: str = "opportunity-minute-bars",
+    source_data: str = "explicit-minute-bar-fixture",
     options: BreakoutResearchOptions | None = None,
 ) -> list[BreakoutEvent]:
     options = options or BreakoutResearchOptions()
@@ -1481,7 +1512,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--captures", type=Path, default=ANALYSIS_CAPTURES_PATH)
     parser.add_argument("--outcomes", type=Path, default=ANALYSIS_OUTCOMES_PATH)
     parser.add_argument("--alerts", type=Path, default=OPPORTUNITY_ALERTS_PATH)
-    parser.add_argument("--minute-bars", type=Path, default=OPPORTUNITY_MINUTE_BARS_PATH)
+    parser.add_argument("--minute-bars", type=Path, default=None, help="Explicit synthetic or historical JSON fixture only.")
+    parser.add_argument("--minute-store-root", type=Path, default=SCHWAB_CANDLE_STORE_ROOT)
     parser.add_argument("--daily-bars", type=Path, default=None)
     parser.add_argument("--daily-ohlc", type=Path, default=DAILY_OHLC_SOURCE_PATH)
     parser.add_argument("--output-dir", type=Path, default=DATA_DIR / "reports")
@@ -1492,6 +1524,7 @@ def main(argv: list[str] | None = None) -> int:
         outcomes_path=args.outcomes,
         alerts_path=args.alerts,
         minute_bars_path=args.minute_bars,
+        minute_store_root=args.minute_store_root,
         daily_bars_path=args.daily_bars,
         daily_ohlc_path=args.daily_ohlc,
         output_dir=args.output_dir,

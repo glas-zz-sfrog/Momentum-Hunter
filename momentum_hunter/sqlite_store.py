@@ -10,7 +10,6 @@ from typing import Any
 
 from momentum_hunter.alert_outcome_updater import (
     ALERT_OUTCOME_UPDATE_STATUS_PATH,
-    OPPORTUNITY_MINUTE_BARS_PATH,
     MinutePriceBar,
     minute_bar_from_dict,
 )
@@ -604,7 +603,7 @@ def import_opportunity_alerts(
 
 
 def import_minute_bars(
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path,
     *,
     db_path: Path | None = None,
 ) -> MinuteBarsImportResult:
@@ -1263,7 +1262,7 @@ def system_source_module_from_name(name: str) -> str:
     if normalized == "system-readiness-latest.json":
         return "system_readiness_v1"
     if normalized == "data-quality-latest.json":
-        return "data_quality_audit_v1"
+        return "data_quality_audit_v2"
     if normalized.startswith("market-tape-health-"):
         return "market_tape_health_v1"
     return normalize_event_token(Path(name).stem)

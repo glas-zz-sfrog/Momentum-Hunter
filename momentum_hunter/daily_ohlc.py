@@ -12,8 +12,10 @@ from typing import Any
 import requests
 
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
+from momentum_hunter.canonical_candle_evidence import canonical_minute_bar_symbols
 from momentum_hunter.outcomes import build_http_session
 from momentum_hunter.time_utils import now_central
+from momentum_hunter.schwab_candle_store import SCHWAB_CANDLE_STORE_ROOT
 
 
 DAILY_OHLC_ENGINE_VERSION = "daily_ohlc_research_source_v1"
@@ -21,7 +23,6 @@ DAILY_OHLC_SCHEMA_VERSION = 1
 
 ANALYSIS_CAPTURES_PATH = DATA_DIR / "analysis-captures.csv"
 OPPORTUNITY_ALERTS_PATH = DATA_DIR / "opportunity-alerts.json"
-OPPORTUNITY_MINUTE_BARS_PATH = DATA_DIR / "opportunity-minute-bars.json"
 DAILY_OHLC_SOURCE_PATH = DATA_DIR / "daily-ohlc-bars.json"
 DAILY_OHLC_COVERAGE_LATEST_JSON = DATA_DIR / "reports" / "daily-ohlc-coverage-latest.json"
 DAILY_OHLC_COVERAGE_LATEST_MD = DATA_DIR / "reports" / "daily-ohlc-coverage-latest.md"
@@ -533,7 +534,8 @@ def symbols_from_existing_evidence(
     *,
     captures_path: Path = ANALYSIS_CAPTURES_PATH,
     alerts_path: Path = OPPORTUNITY_ALERTS_PATH,
-    minute_bars_path: Path = OPPORTUNITY_MINUTE_BARS_PATH,
+    minute_bars_path: Path | None = None,
+    minute_store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
 ) -> list[str]:
     symbols: set[str] = set()
     if captures_path.exists():
@@ -553,7 +555,7 @@ def symbols_from_existing_evidence(
                 symbol = str(alert.get("symbol") or "").upper().strip()
                 if symbol:
                     symbols.add(symbol)
-    if minute_bars_path.exists():
+    if minute_bars_path is not None and minute_bars_path.exists():
         try:
             payload = json.loads(minute_bars_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -561,6 +563,8 @@ def symbols_from_existing_evidence(
         bars = payload.get("bars", {}) if isinstance(payload, dict) else {}
         if isinstance(bars, dict):
             symbols.update(str(symbol).upper().strip() for symbol in bars if str(symbol).strip())
+    if minute_bars_path is None:
+        symbols.update(canonical_minute_bar_symbols(store_root=minute_store_root))
     return sorted(symbols)
 
 
