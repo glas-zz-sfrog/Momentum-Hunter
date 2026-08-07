@@ -1,6 +1,6 @@
 # ARGUS-R032C Automatic Candle Backfill
 
-Status: `VISUALLY_ACCEPTED_PENDING_INTEGRATION`
+Status: `COMPLETE`
 
 ## Result
 
@@ -39,14 +39,17 @@ loading/failure evidence and never receives credentials or calls Schwab.
 - Failure/restart/tamper: finite failure, one restart recovery, malformed state
   and tampered candle evidence fail closed.
 
-## Remaining Gates
+## Installed Proof
 
-1. Fast-forward the stacked R032C/R034A release into canonical `master` and
-   repin future capture jobs.
-2. Use one elevated reload so the installed Engine Host runs the integrated
-   code.
-3. Select one previously uncached liquid symbol and prove live transition to
-   populated 1m/5m/15m/Daily Schwab history without account/order activity.
+- The stacked R032C/R034A release fast-forwarded into canonical `master`.
+- The guarded Engine Host identity check replaced the stale host and returned a
+  healthy snapshot on the integrated runtime.
+- Previously uncached QQQ transitioned from `QUEUED` with zero candles to
+  `COMPLETE` with 180 stored candles on 1m, 5m, 15m, and Daily.
+- Intraday snapshots correctly reported `STALE` after hours; Daily reported
+  `AVAILABLE`.
+- The live run observed exactly one ending `2573` `INDIVIDUAL_CASH` account,
+  requested neither positions nor orders, and kept transmission `UNAVAILABLE`.
 
 Steven accepted the isolated 1180x820 loading/failure proof on 2026-08-06. The
 right-side failure was intentionally synthetic and proved the fail-closed UI;

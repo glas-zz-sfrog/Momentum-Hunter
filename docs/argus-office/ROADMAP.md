@@ -29,9 +29,8 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-R032C automatic bounded candle backfill is
-`VISUALLY_ACCEPTED_PENDING_INTEGRATION` on branch
-`codex/ARGUS-R032C-automatic-candle-backfill` from canonical `af783da`.
+ARGUS-R032C automatic bounded candle backfill is `COMPLETE` on canonical
+`master` through implementation commits `661b136` and `9f9967a`.
 The Engine Host now renders existing cached bars first, coalesces repeated chart
 requests behind one background symbol load, enforces a ten-symbol ceiling and
 five-minute refresh cooldown, persists restart recovery atomically, and refuses
@@ -48,11 +47,16 @@ database/schema, credential, legacy-candle, or R034 deletion behavior changed.
 Steven accepted the isolated 1180x820 loading/failure proof on 2026-08-06: the
 left side intentionally shows `LOADING HISTORY`, while the right side proves
 the fail-closed `HISTORY LOAD FAILED` state without fabricated candles,
-account identity, or order controls.
+account identity, or order controls. Installed Engine Host proof then requested
+previously uncached `QQQ`: the first snapshot queued history with zero candles,
+and the terminal snapshots returned 180 Schwab candles for 1m, 5m, 15m, and
+Daily. Intraday evidence correctly reported `STALE` after hours while Daily
+reported `AVAILABLE`; the account invariant remained one ending `2573`
+`INDIVIDUAL_CASH` account, positions/orders were not requested, and order
+transmission remained `UNAVAILABLE`.
 
-ARGUS-R034A legacy candle consumer migration is
-`IMPLEMENTED_PENDING_MERGE` on dependent branch
-`codex/ARGUS-R034A-legacy-candle-consumer-migration`. Active outcome,
+ARGUS-R034A legacy candle consumer migration is `COMPLETE` on canonical
+`master` through `1aafca5`. Active outcome,
 evidence-health, data-quality, read-model, research, Daily-symbol discovery,
 source-registry, and SQLite reporting defaults now use reconciled Schwab
 partitions or explicitly classify the old mirror as retired. The outcome
@@ -66,10 +70,11 @@ passes 1,225/1,225, full .NET passes 251/251, compileall and `git diff --check`
 pass, and secret/capability scans are clean. The verifier contains no delete,
 archive-write, provider, account, broker, or database-write capability.
 
-Canonical `master`, the installed Engine Host, and Friday's 26 opening jobs
-remain on `af783da` until this stacked branch is committed, backed up, and
-fast-forwarded. One final repin/reload follows the integrated release so the
-installed host and future captures use the same exact head.
+The stacked release is integrated. The installed Engine Host was replaced
+through its guarded stale-host path and proved the new runtime with the QQQ
+backfill above. The final governance closeout is backed up normally and all 26
+remaining opening jobs are repinned to its synchronized head; Friday remains
+08:35 Central with an 08:40 latest-start boundary.
 
 The earlier read-only R034 preflight correctly found that destructive cutover
 could not safely be a two-file deletion. R034A now closes those consumer and
@@ -723,13 +728,13 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Local and remote `master` are synchronized at `af783da`, containing SHADOW-024, DATA-001/001B/001C, R031B/R032/R032B, and R033 Engine Host/WPF chart consumption. All 26 remaining opening jobs and the installed runtime remain pinned there until the visually accepted R032C plus verified R034A stacked release is committed and fast-forwarded. |
-| Active implementation | Thursday's unattended capture passed. R032C is visually accepted, and dependent R034A is implemented and fully verified on `codex/ARGUS-R034A-legacy-candle-consumer-migration`. The stacked branch is the next clean integration release. DATA-002 follows the continuous-candle foundation and the separately approved R034 cutover. |
+| Canonical baseline | Canonical `master` contains the accepted R032C automatic candle backfill through `9f9967a` and R034A legacy-consumer migration through `1aafca5`. The final governance closeout is synchronized normally, and all 26 future opening jobs are pinned to that final head. |
+| Active implementation | Thursday's unattended capture passed. R032C and R034A are complete, integrated, and installed-runtime proven; previously uncached QQQ populated 180 bars on every supported interval without position/order access. R034 remains a separate destructive approval gate. DATA-002 follows that decision. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | Official Shadow selection remains blocked by DATA-002 through DATA-005. DATA-001C proves quote-source authority only; it does not make hypothetical plans execution-authoritative. R034 remains a separately approved destructive cutover. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
-| Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-06 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. After this integration release, the remaining 26 opening jobs are repinned once to the final synchronized head. |
-| Immediate operational work | Commit and back up R034A, fast-forward the stacked R032C/R034A release, perform one final 26-job repin and Engine Host reload, and prove one unseen-symbol live backfill. Then present R034's exact CRWV JSON/archive/710-row deletion plan for Steven's separate approval. Do not activate unattended broad-universe collection or delete legacy evidence yet. |
+| Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-06 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. The 26 remaining jobs are preserved from 2026-08-07 through 2026-09-14 at the final synchronized head. |
+| Immediate operational work | Present R034's exact CRWV JSON/archive/710-row deletion plan for Steven's separate approval. If approved, execute and prove only that bounded cutover; otherwise proceed to DATA-002 without deleting legacy evidence. Do not activate unattended broad-universe collection. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's through Thursday's captures. The guarded candle proof used only the expected identity check and market-data history; it made no position/order request. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
 | Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
 | Data caveat | DATA-001 proves displayed bid/ask provenance, DATA-001B prevents unresolved catalysts from granting authority, and DATA-001C permits only validated Schwab last/bid/ask to carry execution-price authority. Research tape remains nonauthoritative and the TradePlan itself remains hypothetical/execution-ineligible pending DATA-002 through DATA-005. Historical reports remain immutable. Opening RVOL still uses partial-session volume divided by a full-day average, and the $500-per-row reference sizing is not account-aware. R032C owns automatic bounded queueing and visible loading state; R034A retires legacy consumers without deleting evidence. DATA-002 owns RVOL correction; R034 retains the destructive-operation interruption gate. |
@@ -1104,7 +1109,7 @@ source commit `c88faa4`
 
 #### ARGUS-R032C - Automatic Bounded Symbol Backfill Queue
 
-Status: `VISUALLY_ACCEPTED_PENDING_INTEGRATION`
+Status: `COMPLETE`
 
 - When a symbol enters the current Hunter candidates, saved watchlist, selected
   chart, or active FakeBroker-position universe, inspect the canonical minute
@@ -1126,17 +1131,19 @@ Status: `VISUALLY_ACCEPTED_PENDING_INTEGRATION`
 - Prove cache-first rendering, queue coalescing, new-symbol backfill, restart
   recovery, bounded retries, malformed/tampered input, source nonmutation, and
   the transition from loading to populated 1m/5m/15m/Daily snapshots.
-- Implementation proof is complete on the feature branch: one chart request
+- Implementation proof is complete: one chart request
   queues work without blocking, repeated five-second requests coalesce, one
   interrupted job recovers after Engine Host restart, malformed state and
   tampered candle stores fail closed, and a successful synthetic load repaints
-  from `UNAVAILABLE / LOADING HISTORY` to 30 canonical candles. Integration,
-  installed Engine Host reload, and one live unseen-symbol proof remain
-  pending. Steven accepted the loading/failure visual proof on 2026-08-06.
+  from `UNAVAILABLE / LOADING HISTORY` to 30 canonical candles. Steven accepted
+  the loading/failure visual proof on 2026-08-06. Installed-runtime proof then
+  loaded previously uncached QQQ to 180 stored candles on 1m, 5m, 15m, and
+  Daily; after-hours staleness was represented honestly and no position/order
+  method or transmission capability was used.
 
 #### ARGUS-R034A - Legacy Candle Consumer Migration And Cutover Verifier
 
-Status: `IMPLEMENTED_PENDING_MERGE`; required non-destructive predecessor to R034
+Status: `COMPLETE`; required non-destructive predecessor to R034
 
 - Inventory and migrate every active reader/writer of
   `opportunity-minute-bars.json`. The alert outcome updater must not recreate
@@ -1171,7 +1178,7 @@ Status: `IMPLEMENTED_PENDING_MERGE`; required non-destructive predecessor to R03
   1,225 Python tests, all 251 .NET tests, `git diff --check`, protected-path
   review, source nonmutation, and zero-hit secret/network/account/order scans.
   R034 remains the only destructive step and still requires Steven's explicit
-  approval after integration and installed-runtime verification.
+  approval. R034A is integrated and installed-runtime verification passes.
 
 #### ARGUS-R034 - Legacy Candle Cutover
 

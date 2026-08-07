@@ -1,6 +1,6 @@
 # ARGUS-R034A Legacy Candle Consumer Migration
 
-Status: `IMPLEMENTED_PENDING_MERGE`
+Status: `COMPLETE`
 
 ## Result
 
@@ -53,11 +53,12 @@ destructive approval gate.
 - No generated report, raw capture, package, schema, UI, score, readiness,
   replay, broker, credential, or transmission file changed.
 
-## Remaining Gates
+## Integration Closeout
 
-1. Commit and back up this feature branch.
-2. Fast-forward the stacked R032C/R034A release into canonical `master`.
-3. Repin the 26 remaining opening jobs and reload/verify the installed Engine
-   Host once at the exact final release head.
-4. Complete one live unseen-symbol R032C backfill proof.
-5. Present R034's exact archive/deletion plan to Steven for explicit approval.
+- Feature commit `1aafca5` is backed up and fast-forwarded with its R032C parent.
+- The installed Engine Host is healthy on the integrated runtime, and the
+  previously uncached QQQ proof passes without position/order access.
+- The 26 future 08:35 opening jobs are repinned to the final synchronized
+  closeout head with zero Shadow jobs and transmission `UNAVAILABLE`.
+- R034 remains separate: present its exact archive and 710-row deletion plan to
+  Steven before any destructive action.
