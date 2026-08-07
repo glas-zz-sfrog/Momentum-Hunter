@@ -48,6 +48,18 @@ database/schema, credential, legacy-candle, or R034 deletion behavior changed.
 Canonical `master`, the installed Engine Host, and Friday's capture remain on
 `af783da` until visual acceptance and deliberate integration/reload.
 
+The read-only R034 preflight found that destructive cutover cannot safely be a
+two-file deletion. The active legacy minute artifact remains exactly 710 CRWV
+bars at the recorded SHA-256, and SQLite contains exactly 710 rows bound to
+that path/hash. However, the alert outcome updater can still rewrite that JSON,
+and evidence-health, read-model, source-registry, SQLite validation/reporting,
+and technical-breakout paths still read or validate it. `ARGUS-R034A` therefore
+precedes R034: migrate active consumers or make absence explicit, add a
+nonmutating cutover verifier, and prove the legacy file cannot be recreated.
+`daily-ohlc-bars.json` is a separate 263-symbol/79,298-row research dataset,
+not an active WPF chart source and not an R034 deletion target without a
+separate approved migration.
+
 Thursday's ordinary unattended capture is `COMPLETE`. The automation service
 started `opening-capture-20260806` at 08:35:00 Central; the capture process
 began at 08:35:01, passed the same-response HTTPS clock gate with 282.958
@@ -698,7 +710,7 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | Official Shadow selection remains blocked by DATA-002 through DATA-005. DATA-001C proves quote-source authority only; it does not make hypothetical plans execution-authoritative. R034 remains a separately approved destructive cutover. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-06 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. After this integration release, the remaining 26 opening jobs are repinned once to the final synchronized head. |
-| Immediate operational work | Integrate and back up R032B/R033, repin the remaining opening jobs, and populate the canonical Schwab stores for the current bounded universe. Then implement R032C automatic coalesced backfill for newly seen candidate/watchlist/selected/active symbols. Do not activate unattended broad-universe collection or delete/mix legacy CRWV evidence. |
+| Immediate operational work | Accept and integrate R032C, reload the installed Engine Host once, repin the remaining opening jobs, and prove one unseen-symbol live backfill. Then implement R034A legacy-consumer migration and its nonmutating cutover verifier. Do not activate unattended broad-universe collection or perform the separately approved R034 deletion yet. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's through Thursday's captures. The guarded candle proof used only the expected identity check and market-data history; it made no position/order request. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
 | Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
 | Data caveat | DATA-001 proves displayed bid/ask provenance, DATA-001B prevents unresolved catalysts from granting authority, and DATA-001C permits only validated Schwab last/bid/ask to carry execution-price authority. Research tape remains nonauthoritative and the TradePlan itself remains hypothetical/execution-ineligible pending DATA-002 through DATA-005. Historical reports remain immutable. Opening RVOL still uses partial-session volume divided by a full-day average, and the $500-per-row reference sizing is not account-aware. Backfill is currently explicit; R032C owns automatic bounded queueing and visible loading state. DATA-002 owns RVOL correction; R034 retains the destructive-operation interruption gate. |
@@ -1103,9 +1115,33 @@ Status: `IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE_AND_MERGE`
   installed Engine Host reload, one live unseen-symbol proof, and Steven's
   visible wording check remain pending.
 
+#### ARGUS-R034A - Legacy Candle Consumer Migration And Cutover Verifier
+
+Status: `NOT_STARTED`; required non-destructive predecessor to R034
+
+- Inventory and migrate every active reader/writer of
+  `opportunity-minute-bars.json`. The alert outcome updater must not recreate
+  the file after cutover; evidence-health, read models, source registry,
+  technical-breakout research, and SQLite validation/reporting must consume a
+  source-specific replacement or report the source as intentionally retired.
+- Add a plan-only verifier that reports the exact legacy JSON identity, the
+  exact matching SQLite rows, remaining code/config references, active Schwab
+  store health, archive destination, and rollback conditions. It must make no
+  source, database, provider, account, order, or runtime change.
+- Preserve historical report identity and do not rewrite prior alert outcomes
+  or breakout studies. Missing evidence remains missing; Schwab candles may be
+  used prospectively only through an explicit source/version contract.
+- Prove synthetic absent-file startup, outcome maintenance, evidence health,
+  research reporting, SQLite validation, no recreation, no mixed-source chart,
+  and source nonmutation before asking Steven for R034 deletion approval.
+- Keep `daily-ohlc-bars.json` outside this task. It currently contains 79,298
+  research-only Daily records across 263 symbols (SHA-256
+  `2B1FDC1482D9D98A810D6F06AACDB7E9DE1E6123BE39E5F35634DF34C66BB521`)
+  and is not read by the canonical WPF chart path.
+
 #### ARGUS-R034 - Legacy Candle Cutover
 
-Status: `NOT_STARTED`; destructive-operation gate after R031-R033 pass
+Status: `BLOCKED`; destructive-operation gate after R032C and R034A pass
 
 - Stop and tell Steven the exact active deletion/rebuild targets and practical
   effect immediately before cutover. Approval for R031-R033 does not authorize
