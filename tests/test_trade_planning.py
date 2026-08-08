@@ -17,6 +17,7 @@ from momentum_hunter.trade_planning import (
     EVIDENCE_INTEGRITY_SCHEMA_VERSION,
     MarketTape,
     PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
+    RVOL_EVIDENCE_EXECUTION_INELIGIBLE,
     build_trade_planning_report,
     event_polling_interval_seconds,
     export_trade_planning_report,
@@ -117,7 +118,12 @@ class TradePlanningTests(unittest.TestCase):
             top.trade_plan.blocking_reasons,
         )
         self.assertEqual("PREMARKET_RVOL", top.rvol_type)
-        self.assertEqual(6.0, top.relative_volume)
+        self.assertIsNone(top.relative_volume)
+        self.assertEqual(6.0, top.research_relative_volume)
+        self.assertIn(
+            RVOL_EVIDENCE_EXECUTION_INELIGIBLE,
+            top.trade_plan.blocking_reasons,
+        )
         self.assertIn("QUOTE_HTTP_401", top.trade_plan.warnings)
 
     def test_missing_daily_bars_warns_and_still_builds_scaffold(self) -> None:
@@ -232,6 +238,7 @@ class TradePlanningTests(unittest.TestCase):
         self.assertEqual("PREMARKET_RVOL", rvol_type_for_time(parse_dt("2026-06-17T07:00:00-05:00")))
         self.assertEqual("INTRADAY_RVOL", rvol_type_for_time(parse_dt("2026-06-17T09:00:00-05:00")))
         self.assertEqual("DAILY_RVOL", rvol_type_for_time(parse_dt("2026-06-17T15:10:00-05:00")))
+        self.assertEqual("INTRADAY_RVOL", rvol_type_for_time(parse_dt("2026-06-17T14:00:00+00:00")))
 
     def test_event_mode_polling_schedule(self) -> None:
         self.assertEqual(900, event_polling_interval_seconds(parse_dt("2026-06-17T12:54:00-05:00")))

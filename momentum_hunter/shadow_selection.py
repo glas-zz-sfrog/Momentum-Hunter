@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
@@ -55,6 +55,12 @@ from momentum_hunter.shadow_trading import (
     stable_id,
 )
 from momentum_hunter.time_utils import now_central
+from momentum_hunter.time_normalized_rvol import (
+    TIME_NORMALIZED_RVOL_FORMULA,
+    TIME_NORMALIZED_RVOL_PROFILE,
+    TIME_NORMALIZED_RVOL_SCHEMA_VERSION,
+)
+from momentum_hunter.schwab_candle_contract import EASTERN_TZ, SCHWAB_PRICE_HISTORY_SOURCE
 
 
 SELECTION_STARTED = "TRADE_STARTED"
@@ -859,6 +865,108 @@ def candidate_evidence_authority_findings(
     if integrity.get("plan_authority") != EXECUTION_ELIGIBLE:
         findings.append("Candidate TradePlan authority is not execution-eligible.")
 
+    market_data = row.get("market_data")
+    market_data = market_data if isinstance(market_data, Mapping) else {}
+    rvol = integrity.get("rvol_evidence")
+    if not isinstance(rvol, Mapping):
+        findings.append("Candidate time-normalized RVOL evidence is missing.")
+    else:
+        if rvol.get("schema_version") != TIME_NORMALIZED_RVOL_SCHEMA_VERSION:
+            findings.append("Candidate RVOL evidence schema is missing or unsupported.")
+        if rvol.get("profile") != TIME_NORMALIZED_RVOL_PROFILE:
+            findings.append("Candidate RVOL evidence profile is missing or unsupported.")
+        if rvol.get("status") != EXECUTION_ELIGIBLE:
+            findings.append("Candidate RVOL evidence is not execution-eligible.")
+        if rvol.get("source") != SCHWAB_PRICE_HISTORY_SOURCE:
+            findings.append("Candidate RVOL evidence source is not canonical Schwab price history.")
+        if str(rvol.get("symbol") or "").upper() != str(row.get("symbol") or "").upper():
+            findings.append("Candidate RVOL evidence symbol contradicts the report row.")
+        observed = finite_number(rvol.get("observed_volume"))
+        expected = finite_number(rvol.get("expected_volume"))
+        relative = finite_number(rvol.get("relative_volume"))
+        if observed is None or observed < 0 or expected is None or expected <= 0 or relative is None or relative < 0:
+            findings.append("Candidate RVOL evidence values are missing or invalid.")
+        elif abs(relative - (observed / expected)) > 0.0001:
+            findings.append("Candidate RVOL evidence ratio contradicts its volumes.")
+        baseline_count = positive_int(rvol.get("baseline_session_count"))
+        minimum_count = positive_int(rvol.get("minimum_baseline_sessions"))
+        target_count = positive_int(rvol.get("target_baseline_sessions"))
+        session_minute = positive_int(rvol.get("session_minute"))
+        if (
+            baseline_count is None
+            or minimum_count is None
+            or baseline_count < minimum_count
+        ):
+            findings.append("Candidate RVOL baseline sample is insufficient.")
+        if (
+            target_count is None
+            or minimum_count is None
+            or target_count < minimum_count
+            or (baseline_count is not None and baseline_count > target_count)
+        ):
+            findings.append("Candidate RVOL baseline policy is invalid.")
+        if session_minute is None:
+            findings.append("Candidate RVOL session minute is missing or invalid.")
+        current_count = positive_int(rvol.get("current_bar_count"))
+        expected_count = positive_int(rvol.get("expected_current_bar_count"))
+        if (
+            session_minute is None
+            or current_count != session_minute
+            or expected_count != session_minute
+        ):
+            findings.append("Candidate RVOL elapsed-window bar counts are inconsistent.")
+        if rvol.get("formula") != TIME_NORMALIZED_RVOL_FORMULA:
+            findings.append("Candidate RVOL formula is missing or unsupported.")
+        evidence_findings = rvol.get("findings")
+        if (
+            not isinstance(evidence_findings, (list, tuple))
+            or "TIME_NORMALIZED_RVOL_AVAILABLE" not in evidence_findings
+        ):
+            findings.append("Candidate RVOL availability finding is missing.")
+        current_session_date = iso_date(rvol.get("session_date"))
+        baseline_dates = rvol.get("baseline_session_dates")
+        parsed_baseline_dates = (
+            [iso_date(item) for item in baseline_dates]
+            if isinstance(baseline_dates, (list, tuple))
+            else []
+        )
+        if (
+            baseline_count is None
+            or len(parsed_baseline_dates) != baseline_count
+            or any(item is None for item in parsed_baseline_dates)
+            or len(set(parsed_baseline_dates)) != len(parsed_baseline_dates)
+            or current_session_date is None
+            or any(
+                item is not None and item >= current_session_date
+                for item in parsed_baseline_dates
+            )
+        ):
+            findings.append("Candidate RVOL baseline session dates are invalid.")
+        window_start = parse_datetime(str(rvol.get("window_start") or ""))
+        through_minute = parse_datetime(str(rvol.get("through_minute") or ""))
+        if (
+            window_start is None
+            or through_minute is None
+            or window_start.tzinfo is None
+            or through_minute.tzinfo is None
+            or session_minute is None
+            or int((through_minute - window_start).total_seconds() // 60) + 1
+            != session_minute
+            or current_session_date is None
+            or window_start.astimezone(EASTERN_TZ).date() != current_session_date
+            or through_minute.astimezone(EASTERN_TZ).date() != current_session_date
+        ):
+            findings.append("Candidate RVOL elapsed-window chronology is invalid.")
+        if market_data.get("rvol_authority") != EXECUTION_ELIGIBLE:
+            findings.append("Candidate market-data RVOL authority is not execution-eligible.")
+        market_relative = finite_number(market_data.get("relative_volume"))
+        if (
+            market_relative is None
+            or relative is None
+            or abs(market_relative - round(relative, 2)) > 0.0001
+        ):
+            findings.append("Candidate market-data RVOL contradicts its authority evidence.")
+
     attribution = integrity.get("catalyst_attribution")
     if not isinstance(attribution, Mapping):
         findings.append("Candidate catalyst attribution record is missing.")
@@ -896,6 +1004,30 @@ def candidate_evidence_authority_findings(
                 "Candidate catalyst score contribution contradicts authorized confidence."
             )
     return tuple(findings)
+
+
+def finite_number(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number != number or number in {float("inf"), float("-inf")}:
+        return None
+    return number
+
+
+def positive_int(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+def iso_date(value: object) -> date | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def result_for_existing_cycle(

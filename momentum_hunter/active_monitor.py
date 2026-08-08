@@ -35,6 +35,7 @@ from momentum_hunter.trade_planning import (
     MarketTape,
     PLAN_AUTHORITY_EXECUTION_INELIGIBLE,
     PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
+    RVOL_EVIDENCE_EXECUTION_INELIGIBLE,
     TechnicalLevels,
     apply_rvol_policy,
     build_http_session,
@@ -47,6 +48,7 @@ from momentum_hunter.trade_planning import (
     parse_datetime,
     rvol_type_for_time,
 )
+from momentum_hunter.time_normalized_rvol import load_time_normalized_rvol_evidence
 
 
 MONITOR_CYCLE_SCHEMA_VERSION = 1
@@ -451,12 +453,20 @@ def build_target_market_tapes(
     tapes = {key.upper(): value for key, value in (market_tape_by_symbol or {}).items()}
     session = build_http_session() if fetch_market_data else None
     rvol_type = rvol_type_for_time(generated_at)
+    rvol_evidence = load_time_normalized_rvol_evidence(
+        symbols,
+        as_of=generated_at,
+    )
     for symbol in sorted(symbols):
         tape = tapes.get(symbol)
         if tape is None and session is not None:
             tape = fetch_market_tape(session, symbol)
         if tape is not None:
-            tapes[symbol] = apply_rvol_policy(tape, rvol_type)
+            tapes[symbol] = apply_rvol_policy(
+                tape,
+                rvol_type,
+                rvol_evidence=(tape.rvol_evidence or rvol_evidence.get(symbol)),
+            )
     return tapes
 
 
@@ -579,6 +589,8 @@ def recalculate_readiness_from_report_row(
     authority_blockers: list[str] = []
     if execution_price_evidence_status(tape, as_of=generated_at) != EXECUTION_ELIGIBLE:
         authority_blockers.append(PRICE_EVIDENCE_EXECUTION_INELIGIBLE)
+    if tape.rvol_evidence is None or not tape.rvol_evidence.execution_eligible:
+        authority_blockers.append(RVOL_EVIDENCE_EXECUTION_INELIGIBLE)
     if integrity.get("plan_authority") != EXECUTION_ELIGIBLE:
         authority_blockers.append(PLAN_AUTHORITY_EXECUTION_INELIGIBLE)
     attribution = integrity.get("catalyst_attribution")
@@ -619,6 +631,11 @@ def update_refreshed_price_evidence(
             )
     integrity["price_fields"] = fields
     integrity["provider_results"] = dict(tape.provider_results)
+    integrity["rvol_evidence"] = (
+        asdict(tape.rvol_evidence)
+        if tape.rvol_evidence is not None
+        else None
+    )
     item["evidence_integrity"] = integrity
 
 
@@ -651,13 +668,21 @@ def build_missing_target_coverage_rows(
     market_tape_by_symbol = {key.upper(): value for key, value in (market_tape_by_symbol or {}).items()}
     target_by_symbol = {target.symbol: target for target in target_report.targets}
     session = build_http_session() if fetch_missing_market_data else None
+    rvol_evidence = load_time_normalized_rvol_evidence(
+        missing_symbols,
+        as_of=generated_at,
+    )
     rows: list[dict] = []
     for symbol in missing_symbols:
         tape = market_tape_by_symbol.get(symbol)
         if tape is None and session is not None:
             tape = fetch_market_tape(session, symbol)
         if tape is not None:
-            tape = apply_rvol_policy(tape, rvol_type_for_time(generated_at))
+            tape = apply_rvol_policy(
+                tape,
+                rvol_type_for_time(generated_at),
+                rvol_evidence=(tape.rvol_evidence or rvol_evidence.get(symbol)),
+            )
         rows.append(coverage_row_for_target(symbol, target_by_symbol.get(symbol), tape))
     return rows
 
@@ -731,6 +756,8 @@ def market_tape_payload(tape: MarketTape | None) -> dict:
             "current_ask": None,
             "spread_percent": None,
             "relative_volume": None,
+            "research_relative_volume": None,
+            "rvol_evidence": None,
             "source": "monitor_coverage_missing_tape",
             "warnings": ["MISSING_MARKET_TAPE"],
         }

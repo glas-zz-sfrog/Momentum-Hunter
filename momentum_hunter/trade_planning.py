@@ -31,12 +31,24 @@ from momentum_hunter.evidence_integrity import (
 from momentum_hunter.models import Candidate
 from momentum_hunter.outcomes import PriceBar, fetch_price_bars, build_http_session
 from momentum_hunter.storage import CAPTURES_DIR, candidate_from_dict, format_market_cap
-from momentum_hunter.time_utils import now_central
+from momentum_hunter.time_utils import CENTRAL_TZ, now_central
+from momentum_hunter.time_normalized_rvol import (
+    DAILY_RVOL,
+    INTRADAY_RVOL,
+    LEGACY_RVOL_RESEARCH_ONLY,
+    PREMARKET_RVOL,
+    RVOL_EVIDENCE_EXECUTION_INELIGIBLE,
+    TIME_NORMALIZED_RVOL_PROFILE,
+    TIME_NORMALIZED_RVOL_SCHEMA_VERSION,
+    UNKNOWN_RVOL,
+    TimeNormalizedRvolEvidence,
+    load_time_normalized_rvol_evidence,
+)
 
 
 REPORT_SCHEMA_VERSION = 1
-EVIDENCE_INTEGRITY_SCHEMA_VERSION = 2
-COMPOSITE_PROFILE = "trade-planning-composite-v2-evidence-authority"
+EVIDENCE_INTEGRITY_SCHEMA_VERSION = 3
+COMPOSITE_PROFILE = "trade-planning-composite-v3-time-normalized-rvol"
 COMPOSITE_CONFIGURATION = {
     "profile": COMPOSITE_PROFILE,
     "weights": {
@@ -52,6 +64,9 @@ COMPOSITE_CONFIGURATION = {
     "blocked_catalyst_confidence": 0,
     "blocked_catalyst_cluster_bonus": 0,
     "required_price_authority": EXECUTION_ELIGIBLE,
+    "required_rvol_authority": EXECUTION_ELIGIBLE,
+    "rvol_profile": TIME_NORMALIZED_RVOL_PROFILE,
+    "rvol_schema_version": TIME_NORMALIZED_RVOL_SCHEMA_VERSION,
     "required_integrity_schema": EVIDENCE_INTEGRITY_SCHEMA_VERSION,
 }
 COMPOSITE_CONFIGURATION_JSON = json.dumps(
@@ -76,6 +91,10 @@ REPORT_COLUMNS = [
     "RVOL Numerator",
     "RVOL Denominator",
     "RVOL Type",
+    "RVOL Authority",
+    "RVOL Session Minute",
+    "RVOL Baseline Sessions",
+    "Research-Only RVOL",
     "Current Bid",
     "Current Ask",
     "Spread %",
@@ -127,10 +146,6 @@ RELATIVE_VOLUME_READY_THRESHOLD = 1.2
 PREMARKET_VOLUME_READY_THRESHOLD = 500_000
 PREMARKET_MOVE_READY_THRESHOLD_PCT = 1.0
 PRICE_ENTRY_PROXIMITY_THRESHOLD_PCT = 3.0
-PREMARKET_RVOL = "PREMARKET_RVOL"
-INTRADAY_RVOL = "INTRADAY_RVOL"
-DAILY_RVOL = "DAILY_RVOL"
-UNKNOWN_RVOL = "UNKNOWN_RVOL"
 EVENT_MODE = "EVENT_MODE"
 EXECUTION_READY_PREMARKET = "EXECUTION_READY_PREMARKET"
 EXECUTION_READY_TRADE = "EXECUTION_READY_TRADE"
@@ -182,12 +197,14 @@ class MarketTape:
     average_daily_volume_20: int | None = None
     rvol_formula_used: str = ""
     rvol_numerator: int | None = None
-    rvol_denominator: int | None = None
+    rvol_denominator: float | None = None
     rvol_type: str = UNKNOWN_RVOL
     current_bid: float | None = None
     current_ask: float | None = None
     spread_percent: float | None = None
     relative_volume: float | None = None
+    research_relative_volume: float | None = None
+    rvol_evidence: TimeNormalizedRvolEvidence | None = None
     source: str = "capture_only"
     warnings: list[str] = field(default_factory=list)
     field_provenance: dict[str, PriceFieldEvidence] = field(default_factory=dict)
@@ -226,8 +243,10 @@ class TradePlanRow:
     average_daily_volume_20: int | None
     rvol_formula_used: str
     rvol_numerator: int | None
-    rvol_denominator: int | None
+    rvol_denominator: float | None
     rvol_type: str
+    research_relative_volume: float | None
+    rvol_evidence: TimeNormalizedRvolEvidence
     current_bid: float | None
     current_ask: float | None
     spread_percent: float | None
@@ -288,6 +307,7 @@ def build_trade_planning_report(
     request_timeout_seconds: float = 20.0,
     network_candidate_limit: int | None = None,
     schwab_quote_source: object | None = None,
+    rvol_evidence_by_ticker: Mapping[str, TimeNormalizedRvolEvidence] | None = None,
 ) -> TradePlanningReport:
     payload = json.loads(capture_path.read_text(encoding="utf-8"))
     candidates = [candidate_from_dict(item) for item in payload.get("candidates", [])]
@@ -299,6 +319,16 @@ def build_trade_planning_report(
     rvol_type = rvol_type_for_time(as_of)
     bars_by_ticker = bars_by_ticker or {}
     market_tape_by_ticker = market_tape_by_ticker or {}
+    if rvol_evidence_by_ticker is None:
+        rvol_evidence_by_ticker = load_time_normalized_rvol_evidence(
+            (candidate.ticker for candidate in candidates),
+            as_of=as_of,
+        )
+    else:
+        rvol_evidence_by_ticker = {
+            str(symbol).upper(): evidence
+            for symbol, evidence in rvol_evidence_by_ticker.items()
+        }
 
     if fetch_bars or fetch_market_data:
         session = build_http_session()
@@ -351,6 +381,12 @@ def build_trade_planning_report(
             rvol_type=rvol_type,
             source_capture_time=str(payload.get("capture_time", "")),
             as_of=as_of,
+            rvol_evidence=(
+                market_tape_by_ticker.get(candidate.ticker).rvol_evidence
+                if market_tape_by_ticker.get(candidate.ticker) is not None
+                and market_tape_by_ticker.get(candidate.ticker).rvol_evidence is not None
+                else rvol_evidence_by_ticker.get(candidate.ticker.upper())
+            ),
         )
         for candidate in candidates
     ]
@@ -387,9 +423,24 @@ def build_trade_plan_row(
     rvol_type: str = UNKNOWN_RVOL,
     source_capture_time: str = "",
     as_of: datetime | None = None,
+    rvol_evidence: TimeNormalizedRvolEvidence | None = None,
 ) -> TradePlanRow:
     technicals = build_technical_levels(candidate, capture_date=capture_date, bars=bars)
     as_of = as_of or now_central()
+    if (
+        rvol_evidence is not None
+        and rvol_evidence.symbol.strip().upper() != candidate.ticker.strip().upper()
+    ):
+        rvol_evidence = replace(
+            rvol_evidence,
+            status=EXECUTION_INELIGIBLE,
+            relative_volume=None,
+            findings=tuple(
+                dict.fromkeys(
+                    [*rvol_evidence.findings, "RVOL_EVIDENCE_SYMBOL_MISMATCH"]
+                )
+            ),
+        )
     base_tape = market_tape or tape_from_candidate(
         candidate,
         captured_at=source_capture_time,
@@ -397,7 +448,7 @@ def build_trade_plan_row(
     volume_20 = average_daily_volume_20(bars, capture_date=capture_date)
     if base_tape.average_daily_volume_20 is None and volume_20 is not None:
         base_tape = replace(base_tape, average_daily_volume_20=volume_20)
-    tape = apply_rvol_policy(base_tape, rvol_type)
+    tape = apply_rvol_policy(base_tape, rvol_type, rvol_evidence=rvol_evidence)
     catalyst = catalyst_summary(candidate)
     catalyst_detail = classify_catalyst_headline_detail(
         catalyst,
@@ -410,7 +461,14 @@ def build_trade_plan_row(
         catalyst_detail.confidence_score,
         catalyst_attribution,
     )
-    calculated_plan = build_trade_plan(candidate, technicals, tape, capital=capital)
+    # Preserve historical research-plan shape while the authority gate separately
+    # prevents a legacy RVOL value from granting execution eligibility.
+    planning_tape = (
+        tape
+        if tape.relative_volume is not None
+        else replace(tape, relative_volume=tape.research_relative_volume)
+    )
+    calculated_plan = build_trade_plan(candidate, technicals, planning_tape, capital=capital)
     composite = composite_score(
         candidate,
         technicals,
@@ -422,6 +480,7 @@ def build_trade_plan_row(
         calculated_plan,
         price_evidence_status=price_evidence_status,
         catalyst_attribution=catalyst_attribution,
+        rvol_evidence=tape.rvol_evidence,
     )
     authoritative_cluster = catalyst_cluster_for_authority(
         catalyst_detail.cluster_name,
@@ -446,10 +505,16 @@ def build_trade_plan_row(
         rvol_numerator=tape.rvol_numerator,
         rvol_denominator=tape.rvol_denominator,
         rvol_type=tape.rvol_type,
+        research_relative_volume=tape.research_relative_volume,
+        rvol_evidence=tape.rvol_evidence or TimeNormalizedRvolEvidence(
+            symbol=candidate.ticker,
+            rvol_type=rvol_type,
+            findings=("RVOL_EVIDENCE_NOT_CREATED",),
+        ),
         current_bid=tape.current_bid,
         current_ask=tape.current_ask,
         spread_percent=tape.spread_percent,
-        relative_volume=rounded(tape.relative_volume if tape.relative_volume is not None else candidate.relative_volume),
+        relative_volume=rounded(tape.relative_volume),
         float_shares=candidate.float_shares,
         market_cap=candidate.market_cap,
         atr=rounded(technicals.atr),
@@ -619,10 +684,13 @@ def apply_evidence_authority_gate(
     *,
     price_evidence_status: str,
     catalyst_attribution: CatalystAttribution | None,
+    rvol_evidence: TimeNormalizedRvolEvidence | None,
 ) -> TradePlan:
     blocking = list(plan.blocking_reasons)
     if price_evidence_status != EXECUTION_ELIGIBLE:
         blocking.append(PRICE_EVIDENCE_EXECUTION_INELIGIBLE)
+    if rvol_evidence is None or not rvol_evidence.execution_eligible:
+        blocking.append(RVOL_EVIDENCE_EXECUTION_INELIGIBLE)
     if (
         catalyst_attribution is None
         or catalyst_attribution.score_authority != CATALYST_SCORE_SUPPORTED
@@ -631,9 +699,14 @@ def apply_evidence_authority_gate(
     blocking = dedupe(blocking)
     if not blocking:
         return plan
+    non_authority_missing = [
+        reason
+        for reason in plan.blocking_reasons
+        if reason != "MISSING_RVOL"
+    ]
     readiness = (
         plan.readiness
-        if plan.readiness.startswith("DO_NOT_TRADE")
+        if plan.readiness.startswith("DO_NOT_TRADE") and non_authority_missing
         else DO_NOT_TRADE_UNTRUSTED_EVIDENCE
     )
     return replace(
@@ -655,7 +728,16 @@ def composite_score(
     liquidity = liquidity_score(candidate)
     technical = 75 if technicals.source == "daily_bars" else 45
     plan_quality = 80 if plan.confidence == "MEDIUM" else 55
-    missing_penalty = min(15, 3 * len(plan.warnings))
+    score_warnings = [
+        warning
+        for warning in plan.warnings
+        if warning
+        not in {
+            LEGACY_RVOL_RESEARCH_ONLY,
+            RVOL_EVIDENCE_EXECUTION_INELIGIBLE,
+        }
+    ]
+    missing_penalty = min(15, 3 * len(score_warnings))
     score = (
         momentum * 0.42
         + news * 0.23
@@ -1362,6 +1444,12 @@ def merge_tapes(*, quote_tape: MarketTape, chart_tape: MarketTape) -> MarketTape
         current_ask=quote_tape.current_ask,
         spread_percent=quote_tape.spread_percent,
         relative_volume=quote_tape.relative_volume,
+        research_relative_volume=(
+            quote_tape.research_relative_volume
+            if quote_tape.research_relative_volume is not None
+            else chart_tape.research_relative_volume
+        ),
+        rvol_evidence=quote_tape.rvol_evidence or chart_tape.rvol_evidence,
         source=source,
         warnings=dedupe(quote_tape.warnings + chart_tape.warnings),
         field_provenance={
@@ -1402,6 +1490,8 @@ def merge_tapes(*, quote_tape: MarketTape, chart_tape: MarketTape) -> MarketTape
         current_ask=merged.current_ask,
         spread_percent=merged.spread_percent,
         relative_volume=merged.relative_volume,
+        research_relative_volume=merged.research_relative_volume,
+        rvol_evidence=merged.rvol_evidence,
         source=merged.source,
         warnings=dedupe(tape_warnings(
             premarket_price=merged.premarket_price,
@@ -1434,6 +1524,12 @@ def overlay_tapes(*, primary: MarketTape, fallback: MarketTape) -> MarketTape:
         current_ask=primary.current_ask if primary.current_ask is not None else fallback.current_ask,
         spread_percent=primary.spread_percent if primary.spread_percent is not None else fallback.spread_percent,
         relative_volume=primary.relative_volume if primary.relative_volume is not None else fallback.relative_volume,
+        research_relative_volume=(
+            primary.research_relative_volume
+            if primary.research_relative_volume is not None
+            else fallback.research_relative_volume
+        ),
+        rvol_evidence=primary.rvol_evidence or fallback.rvol_evidence,
         source=f"{primary.source}+{fallback.source}" if fallback.source not in primary.source else primary.source,
         field_provenance={
             name: selected_field_provenance(
@@ -1478,6 +1574,8 @@ def overlay_tapes(*, primary: MarketTape, fallback: MarketTape) -> MarketTape:
         current_ask=merged.current_ask,
         spread_percent=merged.spread_percent,
         relative_volume=merged.relative_volume,
+        research_relative_volume=merged.research_relative_volume,
+        rvol_evidence=merged.rvol_evidence,
         source=merged.source,
         warnings=dedupe(
             tape_warnings(
@@ -1944,7 +2042,12 @@ def within_percent(value: float, target: float, threshold_percent: float) -> boo
 
 
 def rvol_type_for_time(value: datetime) -> str:
-    current = value.timetz().replace(tzinfo=None)
+    localized = (
+        value.replace(tzinfo=CENTRAL_TZ)
+        if value.tzinfo is None or value.utcoffset() is None
+        else value.astimezone(CENTRAL_TZ)
+    )
+    current = localized.timetz().replace(tzinfo=None)
     if current < time(8, 30):
         return PREMARKET_RVOL
     if current < time(15, 0):
@@ -1952,33 +2055,73 @@ def rvol_type_for_time(value: datetime) -> str:
     return DAILY_RVOL
 
 
-def apply_rvol_policy(tape: MarketTape, rvol_type: str) -> MarketTape:
+def apply_rvol_policy(
+    tape: MarketTape,
+    rvol_type: str,
+    *,
+    rvol_evidence: TimeNormalizedRvolEvidence | None = None,
+) -> MarketTape:
     denominator = tape.average_daily_volume_20
     if rvol_type == PREMARKET_RVOL:
         numerator = tape.premarket_volume
-        formula = "premarket_volume / 20_day_average_daily_volume"
     elif rvol_type == INTRADAY_RVOL:
         numerator = tape.intraday_volume
-        formula = "intraday_volume / 20_day_average_daily_volume"
     elif rvol_type == DAILY_RVOL:
         numerator = tape.intraday_volume
-        formula = "daily_volume / 20_day_average_daily_volume"
     else:
         numerator = tape.rvol_numerator
-        formula = "unknown"
-    relative_volume = (numerator / denominator) if numerator is not None and denominator else None
+    legacy_relative_volume = tape.research_relative_volume
+    if legacy_relative_volume is None:
+        legacy_relative_volume = (
+            (numerator / denominator)
+            if numerator is not None and denominator
+            else tape.relative_volume
+        )
+    evidence = rvol_evidence or tape.rvol_evidence
+    if evidence is None:
+        evidence = TimeNormalizedRvolEvidence(
+            rvol_type=rvol_type,
+            findings=("TIME_NORMALIZED_RVOL_EVIDENCE_MISSING",),
+        )
+    if evidence.rvol_type != rvol_type:
+        evidence = replace(
+            evidence,
+            status=EXECUTION_INELIGIBLE,
+            relative_volume=None,
+            findings=tuple(
+                dedupe(list(evidence.findings) + ["RVOL_TYPE_MISMATCH"])
+            ),
+        )
+    eligible = (
+        evidence.execution_eligible
+        and evidence.relative_volume is not None
+        and evidence.observed_volume is not None
+        and evidence.expected_volume is not None
+    )
     warnings = list(tape.warnings)
-    if numerator is None:
-        warnings.append(f"MISSING_{rvol_type}_NUMERATOR")
-    if not denominator:
-        warnings.append("MISSING_20_DAY_AVERAGE_DAILY_VOLUME")
+    if legacy_relative_volume is not None:
+        warnings.append(LEGACY_RVOL_RESEARCH_ONLY)
+    if not eligible:
+        warnings.append(RVOL_EVIDENCE_EXECUTION_INELIGIBLE)
+    authoritative_numerator = evidence.observed_volume if eligible else None
+    authoritative_denominator = evidence.expected_volume if eligible else None
+    premarket_volume = tape.premarket_volume
+    intraday_volume = tape.intraday_volume
+    if eligible and rvol_type == PREMARKET_RVOL:
+        premarket_volume = authoritative_numerator
+    elif eligible:
+        intraday_volume = authoritative_numerator
     return replace(
         tape,
-        relative_volume=rounded(relative_volume),
-        rvol_formula_used=formula,
-        rvol_numerator=numerator,
-        rvol_denominator=denominator,
+        premarket_volume=premarket_volume,
+        intraday_volume=intraday_volume,
+        relative_volume=(rounded(evidence.relative_volume) if eligible else None),
+        research_relative_volume=rounded(legacy_relative_volume),
+        rvol_formula_used=evidence.formula,
+        rvol_numerator=authoritative_numerator,
+        rvol_denominator=authoritative_denominator,
         rvol_type=rvol_type,
+        rvol_evidence=evidence,
         warnings=dedupe(warnings),
     )
 
@@ -2103,6 +2246,11 @@ def report_warnings(rows: list[TradePlanRow], *, fetch_bars: bool, fetch_market_
             "Displayed capture/provider prices are research-only and EXECUTION-INELIGIBLE; "
             "provider-attempt failures do not inherit trust from successful fallback fields."
         )
+    if any(not row.rvol_evidence.execution_eligible for row in rows):
+        warnings.append(
+            "One or more rows lack sufficient time-normalized Schwab minute-volume evidence; "
+            "legacy scanner/provider RVOL remains research-only and cannot grant execution authority."
+        )
     if any(
         row.catalyst_attribution is not None
         and row.catalyst_attribution.score_authority == CATALYST_SCORE_BLOCKED
@@ -2194,8 +2342,9 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
     lines.extend(["", "## Execution Readiness", ""])
     lines.extend(
         [
-            "Evidence authority is enforced prospectively. Research-only price evidence or unresolved "
-            "catalyst attribution forces `DO_NOT_TRADE_UNTRUSTED_EVIDENCE`.",
+            "Evidence authority is enforced prospectively. Research-only price evidence, insufficient "
+            "time-normalized RVOL, or unresolved catalyst attribution forces "
+            "`DO_NOT_TRADE_UNTRUSTED_EVIDENCE`.",
             "",
         ]
     )
@@ -2487,15 +2636,17 @@ def state_transition_lines(transitions: list[dict[str, str]]) -> list[str]:
 
 def rvol_debug_table_lines(rows: list[TradePlanRow]) -> list[str]:
     lines = [
-        "| Symbol | RVOL | Type | Numerator | Denominator | Formula | Premarket Vol | Intraday Vol | 20D Avg Vol |",
-        "| --- | ---: | --- | ---: | ---: | --- | ---: | ---: | ---: |",
+        "| Symbol | Authoritative RVOL | Research RVOL | Authority | Type | Session Minute | Baseline Sessions | Numerator | Denominator | Formula |",
+        "| --- | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
-            f"| {row.symbol} | {format_optional(row.relative_volume)} | {row.rvol_type} | "
-            f"{format_int(row.rvol_numerator)} | {format_int(row.rvol_denominator)} | "
-            f"{row.rvol_formula_used or 'n/a'} | {format_int(row.premarket_volume)} | "
-            f"{format_int(row.intraday_volume)} | {format_int(row.average_daily_volume_20)} |"
+            f"| {row.symbol} | {format_optional(row.relative_volume)} | "
+            f"{format_optional(row.research_relative_volume)} | {row.rvol_evidence.status} | "
+            f"{row.rvol_type} | {row.rvol_evidence.session_minute or 'n/a'} | "
+            f"{row.rvol_evidence.baseline_session_count} / {row.rvol_evidence.minimum_baseline_sessions} | "
+            f"{format_int(row.rvol_numerator)} | {format_optional(row.rvol_denominator)} | "
+            f"{row.rvol_formula_used or 'n/a'} |"
         )
     lines.append("")
     return lines
@@ -2547,6 +2698,10 @@ def row_to_csv(row: TradePlanRow) -> dict[str, object]:
         "RVOL Numerator": row.rvol_numerator,
         "RVOL Denominator": row.rvol_denominator,
         "RVOL Type": row.rvol_type,
+        "RVOL Authority": row.rvol_evidence.status,
+        "RVOL Session Minute": row.rvol_evidence.session_minute,
+        "RVOL Baseline Sessions": row.rvol_evidence.baseline_session_count,
+        "Research-Only RVOL": row.research_relative_volume,
         "Current Bid": row.current_bid,
         "Current Ask": row.current_ask,
         "Spread %": row.spread_percent,
@@ -2628,6 +2783,10 @@ def row_to_json(row: TradePlanRow) -> dict[str, object]:
             "rvol_numerator": row.rvol_numerator,
             "rvol_denominator": row.rvol_denominator,
             "rvol_type": row.rvol_type,
+            "rvol_authority": row.rvol_evidence.status,
+            "rvol_session_minute": row.rvol_evidence.session_minute,
+            "rvol_baseline_sessions": row.rvol_evidence.baseline_session_count,
+            "research_relative_volume": row.research_relative_volume,
             "current_bid": row.current_bid,
             "current_ask": row.current_ask,
             "spread_percent": row.spread_percent,
@@ -2658,6 +2817,7 @@ def row_to_json(row: TradePlanRow) -> dict[str, object]:
                 for name, evidence in row.price_evidence.items()
             },
             "provider_results": row.market_tape.provider_results,
+            "rvol_evidence": asdict(row.rvol_evidence),
             "catalyst_attribution": (
                 asdict(row.catalyst_attribution)
                 if row.catalyst_attribution is not None
@@ -2669,6 +2829,7 @@ def row_to_json(row: TradePlanRow) -> dict[str, object]:
                 if reason
                 in {
                     PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
+                    RVOL_EVIDENCE_EXECUTION_INELIGIBLE,
                     CATALYST_ATTRIBUTION_UNRESOLVED,
                 }
             ],

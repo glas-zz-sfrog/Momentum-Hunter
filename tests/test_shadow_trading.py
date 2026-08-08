@@ -48,6 +48,11 @@ from momentum_hunter.trade_planning import (
     COMPOSITE_PROFILE,
     EVIDENCE_INTEGRITY_SCHEMA_VERSION,
 )
+from momentum_hunter.time_normalized_rvol import (
+    TIME_NORMALIZED_RVOL_PROFILE,
+    TIME_NORMALIZED_RVOL_SCHEMA_VERSION,
+)
+from momentum_hunter.schwab_candle_contract import SCHWAB_PRICE_HISTORY_SOURCE
 from momentum_hunter.workstation_shadow import ShadowWorkspacePaths, ShadowWorkspaceService
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
 
@@ -1329,6 +1334,9 @@ def report_payload() -> dict:
             "current_ask": 9.91,
             "spread_percent": 0.2,
             "relative_volume": 2.0,
+            "rvol_authority": "EXECUTION_ELIGIBLE",
+            "rvol_session_minute": 30,
+            "rvol_baseline_sessions": 5,
         },
         "scoring": {
             "composite_score": 91,
@@ -1345,6 +1353,39 @@ def report_payload() -> dict:
             "price_evidence_status": "EXECUTION_ELIGIBLE",
             "price_fields": {},
             "provider_results": {"synthetic": "SUCCESS"},
+            "rvol_evidence": {
+                "schema_version": TIME_NORMALIZED_RVOL_SCHEMA_VERSION,
+                "profile": TIME_NORMALIZED_RVOL_PROFILE,
+                "status": "EXECUTION_ELIGIBLE",
+                "source": SCHWAB_PRICE_HISTORY_SOURCE,
+                "symbol": "TEST",
+                "rvol_type": "INTRADAY_RVOL",
+                "session_name": "REGULAR",
+                "session_date": "2026-07-23",
+                "session_minute": 30,
+                "window_start": "2026-07-23T13:30:00+00:00",
+                "through_minute": "2026-07-23T13:59:00+00:00",
+                "observed_volume": 200000,
+                "expected_volume": 100000.0,
+                "relative_volume": 2.0,
+                "current_bar_count": 30,
+                "expected_current_bar_count": 30,
+                "baseline_session_count": 5,
+                "minimum_baseline_sessions": 5,
+                "target_baseline_sessions": 20,
+                "baseline_session_dates": [
+                    "2026-07-16",
+                    "2026-07-17",
+                    "2026-07-20",
+                    "2026-07-21",
+                    "2026-07-22",
+                ],
+                "formula": (
+                    "current cumulative canonical minute volume through the last completed session minute "
+                    "/ mean prior-session cumulative volume through the same session minute"
+                ),
+                "findings": ["TIME_NORMALIZED_RVOL_AVAILABLE"],
+            },
             "catalyst_attribution": {
                 "source_article": "Synthetic catalyst",
                 "source_publisher": "Synthetic fixture",

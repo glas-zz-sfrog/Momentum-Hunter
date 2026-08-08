@@ -137,6 +137,12 @@ class ActiveMonitorTests(unittest.TestCase):
             "PLAN_AUTHORITY_EXECUTION_INELIGIBLE",
             row["trade_plan"]["blocking_reasons"],
         )
+        self.assertIn(
+            "RVOL_EVIDENCE_EXECUTION_INELIGIBLE",
+            row["trade_plan"]["blocking_reasons"],
+        )
+        self.assertIsNone(row["market_data"]["relative_volume"])
+        self.assertEqual(1.4, row["market_data"]["research_relative_volume"])
         self.assertIn("readiness was recalculated", refreshed["metadata"]["monitor_market_data_refresh_warning"])
         self.assertEqual(before, file_sha256(self.raw_capture))
         alert_types = {alert.alert_type for alert in load_alerts(self.alerts_path)}

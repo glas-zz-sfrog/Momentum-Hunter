@@ -628,10 +628,12 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         rank_two = copy.deepcopy(payload["candidates"][0])
         rank_two["rank"] = 2
         rank_two["symbol"] = "SECOND"
+        rank_two["evidence_integrity"]["rvol_evidence"]["symbol"] = "SECOND"
         rank_two["scoring"]["composite_score"] = 99
         rank_one = copy.deepcopy(payload["candidates"][0])
         rank_one["rank"] = 1
         rank_one["symbol"] = "FIRST"
+        rank_one["evidence_integrity"]["rvol_evidence"]["symbol"] = "FIRST"
         rank_one["scoring"]["composite_score"] = 80
         payload["candidates"] = [rank_two, rank_one]
         self.quote_source.quotes.update(
@@ -704,6 +706,63 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         self.assertIn("price evidence is not execution-eligible", reasons)
         self.assertIn("TradePlan authority is not execution-eligible", reasons)
 
+    def test_missing_or_ineligible_time_normalized_rvol_is_rejected(self) -> None:
+        self.activate()
+        payload = report_payload()
+        payload["candidates"][0]["evidence_integrity"].pop("rvol_evidence")
+        self.write_report(payload)
+
+        missing = self.selector().select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, missing.status)
+        cycle = self.service.decision_cycle_store.get(missing.decision_cycle_id)
+        self.assertIn(
+            "time-normalized RVOL evidence is missing",
+            " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
+        )
+
+    def test_tampered_time_normalized_rvol_ratio_is_rejected(self) -> None:
+        self.activate()
+        payload = report_payload()
+        payload["candidates"][0]["evidence_integrity"]["rvol_evidence"][
+            "relative_volume"
+        ] = 8.0
+        self.write_report(payload)
+
+        result = self.selector().select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        reasons = " ".join(cycle["candidate_assessments"][0]["rejection_reasons"])
+        self.assertIn("ratio contradicts its volumes", reasons)
+        self.assertIn("market-data RVOL contradicts", reasons)
+
+    def test_tampered_rvol_baseline_identity_is_rejected(self) -> None:
+        self.activate()
+        payload = report_payload()
+        payload["candidates"][0]["evidence_integrity"]["rvol_evidence"][
+            "baseline_session_count"
+        ] = 6
+        self.write_report(payload)
+
+        result = self.selector().select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        self.assertIn(
+            "baseline session dates are invalid",
+            " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
+        )
+
     def test_tampered_catalyst_contribution_is_ineligible(self) -> None:
         self.activate()
         payload = report_payload()
@@ -758,6 +817,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         second = copy.deepcopy(payload["candidates"][0])
         second["rank"] = 2
         second["symbol"] = "SECOND"
+        second["evidence_integrity"]["rvol_evidence"]["symbol"] = "SECOND"
         payload["candidates"].append(second)
         self.write_report(payload)
         source = BatchQuoteSource(
@@ -791,6 +851,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
             row = copy.deepcopy(payload["candidates"][0])
             row["rank"] = 1
             row["symbol"] = symbol
+            row["evidence_integrity"]["rvol_evidence"]["symbol"] = symbol
             row["scoring"]["composite_score"] = score
             rows.append(row)
             self.quote_source.quotes[symbol] = quote_payload(symbol)
@@ -817,10 +878,12 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         low = copy.deepcopy(payload["candidates"][0])
         low["rank"] = 1
         low["symbol"] = "LOW"
+        low["evidence_integrity"]["rvol_evidence"]["symbol"] = "LOW"
         low["scoring"]["composite_score"] = 90.1
         high = copy.deepcopy(payload["candidates"][0])
         high["rank"] = 1
         high["symbol"] = "HIGH"
+        high["evidence_integrity"]["rvol_evidence"]["symbol"] = "HIGH"
         high["scoring"]["composite_score"] = 90.9
         payload["candidates"] = [low, high]
         self.quote_source.quotes.update(
@@ -1408,6 +1471,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         payload["metadata"]["source_capture_time"] = "2026-07-23T10:03:00-05:00"
         payload["metadata"]["generated_at"] = "2026-07-23T10:03:30-05:00"
         payload["candidates"][0]["symbol"] = "OTHER"
+        payload["candidates"][0]["evidence_integrity"]["rvol_evidence"]["symbol"] = "OTHER"
         payload["candidates"][0]["rank"] = 1
         second_path = self.reports_dir / "trade-plan-briefing-second.json"
         second_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -1547,9 +1611,11 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         blocked = copy.deepcopy(eligible)
         blocked["rank"] = 1
         blocked["symbol"] = "BLOCK"
+        blocked["evidence_integrity"]["rvol_evidence"]["symbol"] = "BLOCK"
         blocked["trade_plan"]["bullish_stop"] = None
         eligible["rank"] = 2
         eligible["symbol"] = "TEST"
+        eligible["evidence_integrity"]["rvol_evidence"]["symbol"] = "TEST"
         payload["candidates"] = [blocked, eligible]
         self.write_report(payload)
 

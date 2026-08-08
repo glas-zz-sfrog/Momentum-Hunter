@@ -29,6 +29,33 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-DATA-002 time-normalized opening RVOL is `COMPLETE` on canonical
+`master` through the release titled `Add time-normalized opening RVOL
+authority`. Prospective TradePlan reports now compare cumulative canonical
+Schwab minute volume only with identical elapsed-session windows from prior
+sessions. Evidence records source, symbol, session minute, observed and
+expected volume, formula, baseline dates, and sufficiency; five complete prior
+sessions are the minimum and twenty are the target. Missing current minutes,
+too few complete baselines, source/type/symbol mismatch, invalid chronology,
+or tampering fails closed. The former partial-session/full-day ratio remains
+visible only as `LEGACY_RVOL_RESEARCH_ONLY` and cannot grant readiness or
+selection authority. Active Monitor preserves the same blocker, and Shadow
+independently revalidates the evidence chain before eligibility. Historical
+captures and reports are unchanged. Full Python discovery passed 1,236 tests
+before the final cross-symbol hardening; final compileall and 58 focused RVOL/
+selector tests pass afterward, along with all 251 .NET tests. No score weights,
+alert thresholds, UI, account/order, transmission, database/schema, package,
+credential, generated report, raw capture, or legacy-candle data changed.
+
+Friday's ordinary unattended capture is `COMPLETE`, extending the opening
+program to five consecutive first-attempt successes from August 3 through
+August 7. `opening-capture-20260807` ran from 08:35:00 to 08:35:03 Central,
+returned exit code `0`, and produced the required capture, score, and TradePlan
+artifacts. The scanner returned zero candidates, so no hypothetical plan,
+selector action, Shadow state, position/order request, broker action, or
+transmission occurred. Twenty-five scheduled captures remain; Monday August 10
+is next at 08:35 Central.
+
 ARGUS-R032C automatic bounded candle backfill is `COMPLETE` on canonical
 `master` through implementation commits `661b136` and `9f9967a`.
 The Engine Host now renders existing cached bars first, coalesces repeated chart
@@ -72,9 +99,9 @@ archive-write, provider, account, broker, or database-write capability.
 
 The stacked release is integrated. The installed Engine Host was replaced
 through its guarded stale-host path and proved the new runtime with the QQQ
-backfill above. The final governance closeout is backed up normally and all 26
-remaining opening jobs are repinned to its synchronized head; Friday remains
-08:35 Central with an 08:40 latest-start boundary.
+backfill above. Its governance closeout was backed up normally and the then-26
+opening jobs were repinned to that synchronized head. Friday subsequently
+completed; the current 25 jobs will be repinned to the final DATA-002 head.
 
 The earlier read-only R034 preflight correctly found that destructive cutover
 could not safely be a two-file deletion. R034A now closes those consumer and
@@ -207,13 +234,12 @@ order, or transmission action. Daily is bound only to
 before integration. R034 legacy deletion remains a separately approved
 destructive gate, and Official Shadow remains unarmed at `0 / 30`.
 
-Canonical `af783da` was installed and became the exact capture/runtime baseline
-before R032C work began. The remaining 26 ordinary opening jobs from 2026-08-07
-through 2026-09-14 are pinned there. They will be repinned once, after the
-stacked R032C/R034A release reaches its final synchronized head. Acceptance
-requires a Running/Automatic service with fresh heartbeat, Healthy Engine Host,
-Friday `PENDING` at 08:35 Central with latest start 08:40, all 26 jobs pending,
-zero Shadow jobs, and order transmission `UNAVAILABLE`.
+Canonical `af783da` was the historical capture/runtime baseline before R032C.
+The 26 jobs that originally began on 2026-08-07 were subsequently repinned to
+the integrated R032C/R034A release. Friday completed successfully; the current
+acceptance boundary is 25 future jobs beginning Monday 2026-08-10, a Running/
+Automatic service with fresh heartbeat, Healthy Engine Host, zero Shadow jobs,
+and order transmission `UNAVAILABLE` at the final DATA-002 head.
 
 R032 Hard Chew proof passes Python compileall; 30 focused collector tests; all
 89 Schwab candle contract, observer, adjudication, and collector tests; full
@@ -728,16 +754,16 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Canonical `master` contains the accepted R032C automatic candle backfill through `9f9967a` and R034A legacy-consumer migration through `1aafca5`. The final governance closeout is synchronized normally, and all 26 future opening jobs are pinned to that final head. |
-| Active implementation | Thursday's unattended capture passed. R032C and R034A are complete, integrated, and installed-runtime proven; previously uncached QQQ populated 180 bars on every supported interval without position/order access. R034 remains a separate destructive approval gate. DATA-002 follows that decision. |
+| Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, and DATA-002 time-normalized RVOL authority. The final synchronized DATA-002 head is the intended runtime pin for all 25 future opening jobs. |
+| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-002 is complete; DATA-003 breakout-versus-reclaim plan identity is next. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | Official Shadow selection remains blocked by DATA-002 through DATA-005. DATA-001C proves quote-source authority only; it does not make hypothetical plans execution-authoritative. R034 remains a separately approved destructive cutover. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
-| Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-06 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. The 26 remaining jobs are preserved from 2026-08-07 through 2026-09-14 at the final synchronized head. |
-| Immediate operational work | Present R034's exact CRWV JSON/archive/710-row deletion plan for Steven's separate approval. If approved, execute and prove only that bounded cutover; otherwise proceed to DATA-002 without deleting legacy evidence. Do not activate unattended broad-universe collection. |
+| Blocked by | Official Shadow selection remains blocked by DATA-003 through DATA-005. DATA-002 authority also remains fail-closed on any session lacking complete current-window bars and at least five comparable baseline sessions. R034 remains a separately approved destructive cutover. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
+| Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-07 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. The 25 remaining jobs run from 2026-08-10 through 2026-09-14 at the final synchronized head. |
+| Immediate operational work | Integrate and repin DATA-002, then begin DATA-003 breakout-versus-reclaim plan identity. Present R034's exact CRWV JSON/archive/710-row deletion plan only when Steven is ready for the separate destructive decision. Do not activate unattended broad-universe collection. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's through Thursday's captures. The guarded candle proof used only the expected identity check and market-data history; it made no position/order request. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
 | Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
-| Data caveat | DATA-001 proves displayed bid/ask provenance, DATA-001B prevents unresolved catalysts from granting authority, and DATA-001C permits only validated Schwab last/bid/ask to carry execution-price authority. Research tape remains nonauthoritative and the TradePlan itself remains hypothetical/execution-ineligible pending DATA-002 through DATA-005. Historical reports remain immutable. Opening RVOL still uses partial-session volume divided by a full-day average, and the $500-per-row reference sizing is not account-aware. R032C owns automatic bounded queueing and visible loading state; R034A retires legacy consumers without deleting evidence. DATA-002 owns RVOL correction; R034 retains the destructive-operation interruption gate. |
+| Data caveat | DATA-001 proves displayed bid/ask provenance, DATA-001B prevents unresolved catalysts from granting authority, DATA-001C permits only validated Schwab last/bid/ask to carry execution-price authority, and DATA-002 permits only time-normalized canonical Schwab volume to carry RVOL authority. Legacy RVOL remains research-only and insufficient candle history fails closed. The TradePlan remains hypothetical/execution-ineligible pending DATA-003 through DATA-005, and the $500-per-row reference sizing is not account-aware. Historical reports remain immutable. R034 retains the destructive-operation interruption gate. |
 
 ### Status Legend
 
