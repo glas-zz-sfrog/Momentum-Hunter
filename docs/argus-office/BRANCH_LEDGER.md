@@ -5,8 +5,8 @@ Date reconciled: 2026-08-07
 ## ARGUS-DATA-002 Time-Normalized Opening RVOL
 
 `codex/ARGUS-DATA-002-time-normalized-opening-rvol` is
-`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` from synchronized base
-`ad900e1`. It replaces execution authority from the legacy partial-session/
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` at `876eb2e` from synchronized
+base `ad900e1`. It replaces execution authority from the legacy partial-session/
 full-day ratio with versioned same-elapsed-window evidence read from canonical
 Schwab minute bars, while preserving the old value as research-only. Active
 Monitor and Shadow enforce the same fail-closed boundary; Shadow independently
@@ -14,7 +14,9 @@ validates source, symbol, formula, chronology, baseline identity, counts, and
 ratio. Full Python discovery passed 1,236 tests before the final cross-symbol
 guard; final compileall and 58 focused tests pass afterward, with all 251 .NET
 tests green. No UI, broker/order, transmission, schema, package, credential,
-generated report, capture, or legacy-candle data changed. DATA-003 is next.
+generated report, capture, or legacy-candle data changed. Canonical `master`
+adds only this governance closeout after `876eb2e`; all 25 future captures are
+repinned to that final synchronized head. DATA-003 is next.
 
 ## ARGUS-R034A Legacy Candle Consumer Migration
 

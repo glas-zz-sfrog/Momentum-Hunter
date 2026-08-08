@@ -59,3 +59,12 @@ remain unchanged.
   bounded collection and history-loading path.
 - Official Shadow remains unarmed and blocked by DATA-003 through DATA-005.
 - R034 legacy archive/deletion remains a separate Steven approval gate.
+
+## Integration Closeout
+
+- Feature commit `876eb2e` is pushed and fast-forwarded into canonical `master`.
+- Local and remote `master` are synchronized and clean.
+- The guarded Engine Host snapshot accepts the current runtime identity.
+- All 25 future opening jobs are pending from Monday 2026-08-10 through
+  2026-09-14 at the final synchronized closeout head.
+- Zero Shadow jobs are enabled and order transmission remains `UNAVAILABLE`.
