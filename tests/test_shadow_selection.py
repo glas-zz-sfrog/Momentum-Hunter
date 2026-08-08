@@ -406,6 +406,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
             root / "engine_host.py",
             root / "engine_host_client.py",
             root / "models.py",
+            root / "intraday_trade_plan.py",
             root / "scheduling.py",
             root / "schwab_market_data.py",
             root / "shadow_arm_ceremony.py",
@@ -754,6 +755,42 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         reasons = " ".join(cycle["candidate_assessments"][0]["rejection_reasons"])
         self.assertIn("contradicts the TradePlan", reasons)
         self.assertIn("fingerprint is invalid", reasons)
+
+    def test_missing_intraday_plan_identity_is_rejected(self) -> None:
+        self.activate()
+        payload = report_payload()
+        payload["candidates"][0]["evidence_integrity"].pop(
+            "intraday_plan_evidence"
+        )
+        self.write_report(payload)
+
+        result = self.selector().select(self.report_path, decision_at=self.decision_at)
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        self.assertIn(
+            "intraday plan evidence is missing",
+            " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
+        )
+
+    def test_tampered_intraday_plan_timing_is_rejected(self) -> None:
+        self.activate()
+        payload = report_payload()
+        for location in (
+            payload["candidates"][0]["evidence_integrity"]["intraday_plan_evidence"],
+            payload["candidates"][0]["trade_plan"]["intraday_evidence"],
+        ):
+            location["entry_expires_at"] = "2026-07-23T14:00:00-05:00"
+        self.write_report(payload)
+
+        result = self.selector().select(self.report_path, decision_at=self.decision_at)
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        self.assertIn(
+            "INTRADAY_PLAN_FINGERPRINT_INVALID",
+            " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
+        )
 
     def test_unconfirmed_reclaim_cannot_start_shadow_trade(self) -> None:
         self.activate()
@@ -1330,6 +1367,11 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         payload["metadata"]["generated_at"] = "2026-11-27T10:59:00-06:00"
         payload["metadata"]["source_capture_time"] = (
             "2026-11-27T10:58:00-06:00"
+        )
+        bind_setup_identity(
+            payload["candidates"][0],
+            created_at=at("2026-11-27T10:59:00-06:00"),
+            early_close=True,
         )
         report = self.write_report(
             payload,

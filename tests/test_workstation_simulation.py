@@ -4,8 +4,10 @@ import hashlib
 import json
 import tempfile
 import unittest
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from momentum_hunter.engine_host import (
     COMMAND_RUN_SIMULATION,
@@ -18,6 +20,11 @@ from momentum_hunter.workstation_simulation import (
     SIMULATION_WORKSPACE_SCHEMA_VERSION,
     SimulationWorkspaceService,
 )
+from momentum_hunter.intraday_trade_plan import (
+    CONTINUATION_BREAKOUT,
+    build_intraday_plan_evidence,
+)
+from momentum_hunter.trade_setup_identity import TradeSetupEvidence
 
 
 class SimulationWorkspaceServiceTests(unittest.TestCase):
@@ -56,7 +63,11 @@ class SimulationWorkspaceServiceTests(unittest.TestCase):
             paths, _ = setup_workspace(Path(directory))
             service = SimulationWorkspaceService(paths=paths)
 
-            result = service.run_simulation("nvda")
+            with patch(
+                "momentum_hunter.autonomy.risk_governor.now_central",
+                return_value=datetime.fromisoformat("2026-07-17T10:00:00-05:00"),
+            ):
+                result = service.run_simulation("nvda")
 
             self.assertEqual("Completed", result["state"])
             self.assertEqual("NVDA", result["symbol"])
@@ -148,6 +159,18 @@ def report_payload(*, stop: float | None, additional_candidates: list[dict] | No
 
 
 def candidate_row(*, stop: float | None = 171.42, symbol: str = "NVDA") -> dict:
+    setup = TradeSetupEvidence(fingerprint="a" * 64)
+    intraday = build_intraday_plan_evidence(
+        symbol=symbol,
+        setup_family=CONTINUATION_BREAKOUT,
+        created_at=datetime.fromisoformat("2026-07-17T09:30:00-05:00"),
+        planned_entry=176.42,
+        stop_price=stop if stop is not None else 171.42,
+        target_prices=(186.42, 191.42),
+        source_setup_fingerprint=setup.fingerprint,
+        source_level_kind="SYNTHETIC_CONTINUATION_RANGE",
+        source_evidence_ids=("synthetic-candle-range",),
+    )
     return {
         "symbol": symbol,
         "company": "NVIDIA Corporation",
@@ -173,6 +196,8 @@ def candidate_row(*, stop: float | None = 171.42, symbol: str = "NVDA") -> dict:
             "readiness": "EXECUTION_READY_TRADE",
             "blocking_reasons": [],
             "warnings": [],
+            "setup_evidence": asdict(setup),
+            "intraday_evidence": asdict(intraday),
         },
         "opportunity_notes": ["Stored note"],
     }

@@ -50,7 +50,7 @@ from momentum_hunter.shadow_market_validity import (
     validate_arm_record,
 )
 from momentum_hunter.time_utils import now_central
-from momentum_hunter.trade_planning import TradePlan, parse_datetime
+from momentum_hunter.trade_planning import TradePlan, parse_datetime, trade_plan_from_dict
 
 
 SHADOW_SCHEMA_VERSION = 1
@@ -337,7 +337,7 @@ class ShadowTrade:
     last_reason: str = ""
 
     def trade_plan(self) -> TradePlan:
-        return TradePlan(**json.loads(self.trade_plan_json))
+        return trade_plan_from_dict(json.loads(self.trade_plan_json))
 
     def risk_result_payload(self) -> dict[str, Any]:
         payload = json.loads(self.risk_result_json)

@@ -19,6 +19,10 @@ from momentum_hunter.engine_host import (
     COMMAND_START_SHADOW_TRADE,
     EngineHostRuntime,
 )
+from momentum_hunter.intraday_trade_plan import (
+    CONTINUATION_BREAKOUT,
+    build_intraday_plan_evidence,
+)
 from momentum_hunter.shadow_market_validity import (
     SHADOW_SELECTOR_ARM_CONFIRMATION,
 )
@@ -1324,7 +1328,13 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
         self.assertNotIn("submit_order", capabilities)
 
 
-def bind_setup_identity(row: dict, *, symbol: str | None = None) -> dict:
+def bind_setup_identity(
+    row: dict,
+    *,
+    symbol: str | None = None,
+    created_at: datetime | None = None,
+    early_close: bool = False,
+) -> dict:
     """Keep a synthetic report row's setup chain internally consistent."""
 
     if symbol is not None:
@@ -1356,6 +1366,25 @@ def bind_setup_identity(row: dict, *, symbol: str | None = None) -> dict:
     }
     row["evidence_integrity"]["setup_evidence"] = copy.deepcopy(setup)
     trade_plan["setup_evidence"] = copy.deepcopy(setup)
+    intraday = asdict(
+        build_intraday_plan_evidence(
+            symbol=symbol,
+            setup_family=CONTINUATION_BREAKOUT,
+            created_at=created_at or datetime.fromisoformat("2026-07-23T09:59:00-05:00"),
+            planned_entry=float(trade_plan["bullish_entry"]),
+            stop_price=float(trade_plan["bullish_stop"]),
+            target_prices=(
+                float(trade_plan["bullish_target_1"]),
+                float(trade_plan["bullish_target_2"]),
+            ),
+            source_setup_fingerprint=setup["fingerprint"],
+            source_level_kind="SYNTHETIC_CONTINUATION_RANGE",
+            source_evidence_ids=("synthetic-candle-range",),
+            early_close=early_close,
+        )
+    )
+    row["evidence_integrity"]["intraday_plan_evidence"] = copy.deepcopy(intraday)
+    trade_plan["intraday_evidence"] = copy.deepcopy(intraday)
     return row
 
 
@@ -1559,6 +1588,10 @@ def completed_auditable_trade(
         payload["metadata"]["generated_at"] = (
             decision - timedelta(minutes=1)
         ).isoformat()
+        bind_setup_identity(
+            payload["candidates"][0],
+            created_at=decision - timedelta(minutes=1),
+        )
         report.write_text(json.dumps(payload), encoding="utf-8")
         service = ShadowTradingService(
             store=ShadowStateStore(root / "state.json"),

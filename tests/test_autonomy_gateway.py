@@ -100,7 +100,7 @@ class ArgusGatewayTests(unittest.TestCase):
         self.assertNotEqual("Missing", self.ladder_value("Entry/limit"))
         self.assertNotEqual("Missing", self.ladder_value("Stop/invalidation"))
         self.assertEqual("None. Any future Steven edit requires Risk Governor re-check.", self.ladder_value("Manual override state"))
-        self.assertIn(self.ladder_value("Risk Governor status"), {"Needs review", "Simulation-only"})
+        self.assertEqual("Blocked", self.ladder_value("Risk Governor status"))
         self.assertGreater(self.window.argus_risk_gate_table.rowCount(), 0)
         self.assertIn("candidate_selected", self.window.argus_machine_log.toPlainText())
 
@@ -139,39 +139,19 @@ class ArgusGatewayTests(unittest.TestCase):
         self.assertNotIn("submit_live", after_actions)
         self.assertNotIn("fake_order_submitted", after_actions)
 
-    def test_simulation_button_runs_fake_order_and_updates_log(self) -> None:
+    def test_simulation_button_blocks_plan_without_intraday_context(self) -> None:
         self.window.candidates = sample_candidates()
         self.window.open_argus_machine_console()
 
         self.button("argusCandidateButton_AMD").click()
         self.app.processEvents()
 
-        self.assertTrue(self.window.argus_run_simulation_button.isEnabled())
+        self.assertFalse(self.window.argus_run_simulation_button.isEnabled())
         self.window.argus_run_simulation_button.click()
         self.app.processEvents()
-
-        self.assertEqual(1, self.window.argus_simulation_table.rowCount())
-        self.assertTrue(self.table_value(self.window.argus_simulation_table, 0, 0).startswith("fake-"))
-        self.assertEqual("AMD", self.table_value(self.window.argus_simulation_table, 0, 1))
-        self.assertEqual("buy", self.table_value(self.window.argus_simulation_table, 0, 2))
-        self.assertEqual("filled", self.table_value(self.window.argus_simulation_table, 0, 4))
-        self.assertEqual("Simulation Lab", self.table_value(self.window.argus_simulation_table, 0, 5))
-        self.assertTrue(self.table_value(self.window.argus_simulation_table, 0, 6))
-        self.assertTrue(self.table_value(self.window.argus_simulation_table, 0, 7))
-        self.assertEqual(1, self.window.argus_simulation_positions_table.rowCount())
-        self.assertEqual("AMD", self.table_value(self.window.argus_simulation_positions_table, 0, 0))
-        self.assertIn("FakeBroker only", self.table_value(self.window.argus_simulation_positions_table, 0, 3))
-        event_names = {
-            self.table_value(self.window.argus_simulation_events_table, row, 0)
-            for row in range(self.window.argus_simulation_events_table.rowCount())
-        }
-        self.assertIn("simulated_order_previewed", event_names)
-        self.assertIn("fake_order_submitted", event_names)
-        self.assertIn("Auditor: PASS", self.label("argusAuditorStatusLabel").text())
-        self.assertEqual("PASS", self.audit_value("Paper advancement gate"))
-        self.assertIn("fake_order_submitted", self.window.argus_machine_log.toPlainText())
-        self.assertIn("execution_audited", self.window.argus_machine_log.toPlainText())
-        self.assertIn("AMD", self.window.argus_machine_log.toPlainText())
+        self.assertEqual(0, self.window.argus_simulation_table.rowCount())
+        self.assertEqual(0, self.window.argus_simulation_positions_table.rowCount())
+        self.assertNotIn("fake_order_submitted", self.window.argus_machine_log.toPlainText())
 
     def test_auditor_warns_before_final_simulation_outcome(self) -> None:
         self.window.candidates = sample_candidates()

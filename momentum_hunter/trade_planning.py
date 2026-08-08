@@ -14,6 +14,11 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from momentum_hunter.catalyst_clusters import classify_catalyst_headline_detail
+from momentum_hunter.canonical_candle_evidence import (
+    CanonicalCandleEvidenceError,
+    CanonicalMinuteBar,
+    load_canonical_minute_bars,
+)
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.evidence_integrity import (
     CATALYST_SCORE_BLOCKED,
@@ -29,7 +34,22 @@ from momentum_hunter.evidence_integrity import (
     unavailable_price_evidence,
 )
 from momentum_hunter.models import Candidate
+from momentum_hunter.intraday_trade_plan import (
+    DO_NOT_TRADE_MISSED_ENTRY,
+    EASTERN_TZ,
+    INTRADAY_PLAN_EXECUTION_INELIGIBLE,
+    INTRADAY_PLAN_PROFILE,
+    INTRADAY_PLAN_SCHEMA_VERSION,
+    MISSED_ENTRY,
+    OPENING_BREAKOUT,
+    TECHNICAL_DRIVER,
+    IntradayPlanEvidence,
+    build_intraday_plan_evidence,
+    build_opening_breakout_plan_evidence,
+    unavailable_intraday_plan,
+)
 from momentum_hunter.outcomes import PriceBar, fetch_price_bars, build_http_session
+from momentum_hunter.scheduling import is_nyse_early_close
 from momentum_hunter.storage import CAPTURES_DIR, candidate_from_dict, format_market_cap
 from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 from momentum_hunter.time_normalized_rvol import (
@@ -58,8 +78,8 @@ from momentum_hunter.trade_setup_identity import (
 
 
 REPORT_SCHEMA_VERSION = 1
-EVIDENCE_INTEGRITY_SCHEMA_VERSION = 4
-COMPOSITE_PROFILE = "trade-planning-composite-v4-setup-identity"
+EVIDENCE_INTEGRITY_SCHEMA_VERSION = 5
+COMPOSITE_PROFILE = "trade-planning-composite-v5-intraday-horizon"
 COMPOSITE_CONFIGURATION = {
     "profile": COMPOSITE_PROFILE,
     "weights": {
@@ -81,6 +101,9 @@ COMPOSITE_CONFIGURATION = {
     "required_setup_authority": EXECUTION_ELIGIBLE,
     "setup_profile": TRADE_SETUP_PROFILE,
     "setup_schema_version": TRADE_SETUP_SCHEMA_VERSION,
+    "required_intraday_plan_authority": EXECUTION_ELIGIBLE,
+    "intraday_plan_profile": INTRADAY_PLAN_PROFILE,
+    "intraday_plan_schema_version": INTRADAY_PLAN_SCHEMA_VERSION,
     "required_integrity_schema": EVIDENCE_INTEGRITY_SCHEMA_VERSION,
 }
 COMPOSITE_CONFIGURATION_JSON = json.dumps(
@@ -140,6 +163,15 @@ REPORT_COLUMNS = [
     "Original Breakout Level",
     "Setup Confirmation",
     "Setup Fingerprint",
+    "Plan Horizon",
+    "Intraday Setup Family",
+    "Intraday Setup Driver",
+    "Intraday Lifecycle",
+    "Intraday Entry Valid From",
+    "Intraday Entry Expires At",
+    "Intraday Forced Flat At",
+    "Intraday Plan ID",
+    "Intraday Plan Fingerprint",
     "Bullish Entry",
     "Bullish Stop",
     "Bullish Target 1",
@@ -246,6 +278,25 @@ class TradePlan:
     blocking_reasons: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     setup_evidence: TradeSetupEvidence = field(default_factory=TradeSetupEvidence)
+    intraday_evidence: IntradayPlanEvidence = field(default_factory=IntradayPlanEvidence)
+
+
+def trade_plan_from_dict(payload: Mapping[str, object]) -> TradePlan:
+    normalized = dict(payload)
+    raw_setup = normalized.get("setup_evidence")
+    if isinstance(raw_setup, Mapping):
+        setup = dict(raw_setup)
+        if isinstance(setup.get("findings"), list):
+            setup["findings"] = tuple(setup["findings"])
+        normalized["setup_evidence"] = TradeSetupEvidence(**setup)
+    raw_intraday = normalized.get("intraday_evidence")
+    if isinstance(raw_intraday, Mapping):
+        intraday = dict(raw_intraday)
+        for field_name in ("target_prices", "source_evidence_ids", "findings"):
+            if isinstance(intraday.get(field_name), list):
+                intraday[field_name] = tuple(intraday[field_name])
+        normalized["intraday_evidence"] = IntradayPlanEvidence(**intraday)
+    return TradePlan(**normalized)
 
 
 @dataclass(frozen=True)
@@ -328,6 +379,7 @@ def build_trade_planning_report(
     network_candidate_limit: int | None = None,
     schwab_quote_source: object | None = None,
     rvol_evidence_by_ticker: Mapping[str, TimeNormalizedRvolEvidence] | None = None,
+    intraday_bars_by_ticker: Mapping[str, Sequence[CanonicalMinuteBar]] | None = None,
 ) -> TradePlanningReport:
     payload = json.loads(capture_path.read_text(encoding="utf-8"))
     candidates = [candidate_from_dict(item) for item in payload.get("candidates", [])]
@@ -339,6 +391,18 @@ def build_trade_planning_report(
     rvol_type = rvol_type_for_time(as_of)
     bars_by_ticker = bars_by_ticker or {}
     market_tape_by_ticker = market_tape_by_ticker or {}
+    source_session = str(payload.get("session", ""))
+    if intraday_bars_by_ticker is None:
+        intraday_bars_by_ticker = load_intraday_plan_bars(
+            tuple(candidate.ticker for candidate in candidates),
+            as_of=as_of,
+            source_session=source_session,
+        )
+    else:
+        intraday_bars_by_ticker = {
+            str(symbol).upper(): tuple(items)
+            for symbol, items in intraday_bars_by_ticker.items()
+        }
     if rvol_evidence_by_ticker is None:
         rvol_evidence_by_ticker = load_time_normalized_rvol_evidence(
             (candidate.ticker for candidate in candidates),
@@ -400,7 +464,9 @@ def build_trade_planning_report(
             market_tape=market_tape_by_ticker.get(candidate.ticker),
             rvol_type=rvol_type,
             source_capture_time=str(payload.get("capture_time", "")),
+            source_session=source_session,
             as_of=as_of,
+            intraday_bars=intraday_bars_by_ticker.get(candidate.ticker.upper(), ()),
             rvol_evidence=(
                 market_tape_by_ticker.get(candidate.ticker).rvol_evidence
                 if market_tape_by_ticker.get(candidate.ticker) is not None
@@ -442,8 +508,10 @@ def build_trade_plan_row(
     market_tape: MarketTape | None = None,
     rvol_type: str = UNKNOWN_RVOL,
     source_capture_time: str = "",
+    source_session: str = "",
     as_of: datetime | None = None,
     rvol_evidence: TimeNormalizedRvolEvidence | None = None,
+    intraday_bars: Sequence[CanonicalMinuteBar] = (),
 ) -> TradePlanRow:
     technicals = build_technical_levels(candidate, capture_date=capture_date, bars=bars)
     as_of = as_of or now_central()
@@ -488,7 +556,16 @@ def build_trade_plan_row(
         if tape.relative_volume is not None
         else replace(tape, relative_volume=tape.research_relative_volume)
     )
-    calculated_plan = build_trade_plan(candidate, technicals, planning_tape, capital=capital)
+    calculated_plan = build_trade_plan(
+        candidate,
+        technicals,
+        planning_tape,
+        capital=capital,
+        as_of=as_of,
+        source_session=source_session,
+        intraday_bars=intraday_bars,
+        catalyst_attribution=catalyst_attribution,
+    )
     composite = composite_score(
         candidate,
         technicals,
@@ -502,6 +579,7 @@ def build_trade_plan_row(
         catalyst_attribution=catalyst_attribution,
         rvol_evidence=tape.rvol_evidence,
         setup_evidence=calculated_plan.setup_evidence,
+        intraday_evidence=calculated_plan.intraday_evidence,
     )
     authoritative_cluster = catalyst_cluster_for_authority(
         catalyst_detail.cluster_name,
@@ -615,7 +693,17 @@ def build_technical_levels(candidate: Candidate, *, capture_date: str, bars: lis
     )
 
 
-def build_trade_plan(candidate: Candidate, technicals: TechnicalLevels, tape: MarketTape, *, capital: float) -> TradePlan:
+def build_trade_plan(
+    candidate: Candidate,
+    technicals: TechnicalLevels,
+    tape: MarketTape,
+    *,
+    capital: float,
+    as_of: datetime,
+    source_session: str,
+    intraday_bars: Sequence[CanonicalMinuteBar],
+    catalyst_attribution: CatalystAttribution | None,
+) -> TradePlan:
     warnings = dedupe(list(technicals.warnings) + list(tape.warnings))
     price = current_trade_price(candidate, tape)
     setup_evidence = build_trade_setup_evidence(
@@ -624,6 +712,15 @@ def build_trade_plan(candidate: Candidate, technicals: TechnicalLevels, tape: Ma
         breakout_level=technicals.resistance_level,
         invalidation_level=technicals.support_level,
         source=technicals.source,
+    )
+    intraday_evidence = build_current_intraday_plan_evidence(
+        candidate=candidate,
+        technicals=technicals,
+        setup_evidence=setup_evidence,
+        as_of=as_of,
+        source_session=source_session,
+        intraday_bars=intraday_bars,
+        catalyst_attribution=catalyst_attribution,
     )
     if price <= 0:
         return TradePlan(
@@ -641,12 +738,17 @@ def build_trade_plan(candidate: Candidate, technicals: TechnicalLevels, tape: Ma
             ["MISSING_PRICE"],
             ["MISSING_PRICE"],
             setup_evidence,
+            intraday_evidence,
         )
     original_entry = technicals.resistance_level or (price * 1.005)
     entry = setup_evidence.planned_entry or original_entry
     if setup_evidence.setup_type == RECLAIM_REQUIRED_SETUP:
         warnings.append("PRICE_ALREADY_ABOVE_ENTRY")
-    stop = technicals.support_level or (entry - (technicals.atr or price * 0.02))
+    stop = (
+        intraday_evidence.stop_price
+        if intraday_evidence.execution_eligible
+        else technicals.support_level or (entry - (technicals.atr or price * 0.02))
+    )
     if stop >= entry:
         stop = entry - max(technicals.atr or price * 0.02, price * 0.01)
         warnings.append("STOP_ADJUSTED_BELOW_ENTRY")
@@ -667,9 +769,19 @@ def build_trade_plan(candidate: Candidate, technicals: TechnicalLevels, tape: Ma
             dedupe(warnings + ["INVALID_RISK"]),
             dedupe(warnings + ["INVALID_RISK"]),
             setup_evidence,
+            intraday_evidence,
         )
-    target_1 = entry + (risk * 2)
-    target_2 = entry + (risk * 3)
+    target_1 = (
+        intraday_evidence.target_prices[0]
+        if intraday_evidence.execution_eligible
+        else entry + (risk * 2)
+    )
+    target_2 = (
+        intraday_evidence.target_prices[1]
+        if intraday_evidence.execution_eligible
+        and len(intraday_evidence.target_prices) > 1
+        else entry + (risk * 3)
+    )
     shares = capital / entry if entry else None
     dollar_risk = risk * shares if shares is not None else None
     reward_1 = (target_1 - entry) * shares if shares is not None else None
@@ -696,7 +808,139 @@ def build_trade_plan(candidate: Candidate, technicals: TechnicalLevels, tape: Ma
         blocking_reasons=blocking_reasons,
         warnings=dedupe(warnings),
         setup_evidence=setup_evidence,
+        intraday_evidence=intraday_evidence,
     )
+
+
+def build_current_intraday_plan_evidence(
+    *,
+    candidate: Candidate,
+    technicals: TechnicalLevels,
+    setup_evidence: TradeSetupEvidence,
+    as_of: datetime,
+    source_session: str,
+    intraday_bars: Sequence[CanonicalMinuteBar],
+    catalyst_attribution: CatalystAttribution | None,
+) -> IntradayPlanEvidence:
+    """Bind the current opening report to DATA-004 without guessing later setups."""
+
+    catalyst_fingerprint = catalyst_attribution_fingerprint(catalyst_attribution)
+    if str(source_session).lower() not in {"opening", "shadow"}:
+        return unavailable_intraday_plan(
+            symbol=candidate.ticker,
+            finding="INTRADAY_CONTINUOUS_SETUP_CONTEXT_REQUIRED",
+            source_setup_fingerprint=setup_evidence.fingerprint,
+        )
+    if setup_evidence.setup_type == RECLAIM_REQUIRED_SETUP:
+        entry = setup_evidence.planned_entry
+        stop = setup_evidence.invalidation_level
+        if entry is None or stop is None or stop >= entry:
+            return unavailable_intraday_plan(
+                symbol=candidate.ticker,
+                finding="MISSED_BREAKOUT_LEVELS_INVALID",
+                source_setup_fingerprint=setup_evidence.fingerprint,
+            )
+        risk = entry - stop
+        return build_intraday_plan_evidence(
+            symbol=candidate.ticker,
+            setup_family=OPENING_BREAKOUT,
+            created_at=as_of,
+            planned_entry=entry,
+            stop_price=stop,
+            target_prices=(entry + risk, entry + (risk * 2)),
+            source_setup_fingerprint=setup_evidence.fingerprint,
+            source_level_kind="DAILY_BREAKOUT_MISSED_BEFORE_INTRADAY_PLAN",
+            source_evidence_ids=(f"setup:{setup_evidence.fingerprint}",),
+            observed_price=setup_evidence.observed_price,
+            setup_driver=TECHNICAL_DRIVER,
+            catalyst_relationship_type=(
+                catalyst_attribution.relationship_type
+                if catalyst_attribution is not None
+                else ""
+            ),
+            catalyst_score_authority=(
+                catalyst_attribution.score_authority
+                if catalyst_attribution is not None
+                else ""
+            ),
+            catalyst_attribution_fingerprint=catalyst_fingerprint,
+            early_close=is_nyse_early_close(as_of.astimezone(EASTERN_TZ).date()),
+            lifecycle_status=MISSED_ENTRY,
+        )
+    if setup_evidence.setup_type != BREAKOUT_SETUP:
+        return unavailable_intraday_plan(
+            symbol=candidate.ticker,
+            finding="INTRADAY_SOURCE_SETUP_UNAVAILABLE",
+            source_setup_fingerprint=setup_evidence.fingerprint,
+        )
+    if setup_evidence.planned_entry is None:
+        return unavailable_intraday_plan(
+            symbol=candidate.ticker,
+            finding="INTRADAY_SOURCE_ENTRY_UNAVAILABLE",
+            source_setup_fingerprint=setup_evidence.fingerprint,
+        )
+    return build_opening_breakout_plan_evidence(
+        symbol=candidate.ticker,
+        created_at=as_of,
+        planned_entry=setup_evidence.planned_entry,
+        source_setup_fingerprint=setup_evidence.fingerprint,
+        minute_bars=intraday_bars,
+        setup_driver=TECHNICAL_DRIVER,
+        catalyst_relationship_type=(
+            catalyst_attribution.relationship_type
+            if catalyst_attribution is not None
+            else ""
+        ),
+        catalyst_score_authority=(
+            catalyst_attribution.score_authority
+            if catalyst_attribution is not None
+            else ""
+        ),
+        catalyst_attribution_fingerprint=catalyst_fingerprint,
+        early_close=is_nyse_early_close(as_of.astimezone(EASTERN_TZ).date()),
+    )
+
+
+def catalyst_attribution_fingerprint(
+    attribution: CatalystAttribution | None,
+) -> str:
+    """Bind a catalyst-driven plan to the exact persisted attribution record."""
+
+    if attribution is None:
+        return ""
+    payload = json.dumps(
+        asdict(attribution), sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    return hashlib.sha256(
+        f"catalyst-attribution-v1\x1f{payload}".encode("utf-8")
+    ).hexdigest()
+
+
+def load_intraday_plan_bars(
+    symbols: Sequence[str],
+    *,
+    as_of: datetime,
+    source_session: str,
+) -> dict[str, tuple[CanonicalMinuteBar, ...]]:
+    """Read only the bounded current-session bars needed by an opening plan."""
+
+    if str(source_session).lower() not in {"opening", "shadow"}:
+        return {}
+    eastern = as_of.astimezone(EASTERN_TZ)
+    window_start = datetime.combine(eastern.date(), time(9, 30), tzinfo=EASTERN_TZ)
+    windows = {
+        str(symbol).strip().upper(): (window_start, as_of)
+        for symbol in symbols
+        if str(symbol).strip()
+    }
+    try:
+        loaded = load_canonical_minute_bars(windows_by_symbol=windows)
+    except CanonicalCandleEvidenceError:
+        return {}
+    return {
+        symbol: tuple(items)
+        for symbol, items in loaded.items()
+    }
 
 
 def catalyst_confidence_for_scoring(
@@ -730,6 +974,7 @@ def apply_evidence_authority_gate(
     catalyst_attribution: CatalystAttribution | None,
     rvol_evidence: TimeNormalizedRvolEvidence | None,
     setup_evidence: TradeSetupEvidence | None,
+    intraday_evidence: IntradayPlanEvidence | None,
 ) -> TradePlan:
     blocking = list(plan.blocking_reasons)
     if price_evidence_status != EXECUTION_ELIGIBLE:
@@ -738,6 +983,8 @@ def apply_evidence_authority_gate(
         blocking.append(RVOL_EVIDENCE_EXECUTION_INELIGIBLE)
     if setup_evidence is None or not setup_evidence.execution_eligible:
         blocking.append(SETUP_IDENTITY_EXECUTION_INELIGIBLE)
+    if intraday_evidence is None or not intraday_evidence.execution_eligible:
+        blocking.append(INTRADAY_PLAN_EXECUTION_INELIGIBLE)
     if (
         setup_evidence is not None
         and setup_evidence.setup_type == RECLAIM_REQUIRED_SETUP
@@ -756,7 +1003,12 @@ def apply_evidence_authority_gate(
         for reason in plan.blocking_reasons
         if reason != "MISSING_RVOL"
     ]
-    if RECLAIM_CONFIRMATION_REQUIRED in blocking:
+    if (
+        intraday_evidence is not None
+        and intraday_evidence.lifecycle_status == MISSED_ENTRY
+    ):
+        readiness = DO_NOT_TRADE_MISSED_ENTRY
+    elif RECLAIM_CONFIRMATION_REQUIRED in blocking:
         readiness = DO_NOT_TRADE_SETUP_UNCONFIRMED
     else:
         readiness = (
@@ -2520,6 +2772,12 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
                 f"- Setup Confirmation: {plan.setup_evidence.confirmation_status} | {plan.setup_evidence.confirmation_rule or 'unavailable'}",
                 f"- Setup Invalidation: {money(plan.setup_evidence.invalidation_level)} | {plan.setup_evidence.invalidation_rule or 'unavailable'}",
                 f"- Setup Fingerprint: `{plan.setup_evidence.fingerprint or 'unavailable'}`",
+                f"- Plan Horizon / Family / Driver: {plan.intraday_evidence.horizon} / {plan.intraday_evidence.setup_family} / {plan.intraday_evidence.setup_driver}",
+                f"- Intraday Lifecycle: {plan.intraday_evidence.lifecycle_status} | authority {plan.intraday_evidence.status}",
+                f"- Entry Validity: {plan.intraday_evidence.entry_valid_from or 'unavailable'} through {plan.intraday_evidence.entry_expires_at or 'unavailable'}",
+                f"- Forced Flat: {plan.intraday_evidence.forced_flat_at or 'unavailable'}",
+                f"- Intraday Plan ID: `{plan.intraday_evidence.plan_id or 'unavailable'}`",
+                f"- Intraday Plan Fingerprint: `{plan.intraday_evidence.fingerprint or 'unavailable'}`",
                 f"- Bullish Entry: {money(plan.bullish_entry)} (HYPOTHETICAL PLAN | EXECUTION-INELIGIBLE)",
                 f"- Bullish Stop: {money(plan.bullish_stop)} (HYPOTHETICAL PLAN | EXECUTION-INELIGIBLE)",
                 f"- Targets: {money(plan.bullish_target_1)} / {money(plan.bullish_target_2)} "
@@ -2826,6 +3084,15 @@ def row_to_csv(row: TradePlanRow) -> dict[str, object]:
         "Original Breakout Level": plan.setup_evidence.breakout_level,
         "Setup Confirmation": plan.setup_evidence.confirmation_status,
         "Setup Fingerprint": plan.setup_evidence.fingerprint,
+        "Plan Horizon": plan.intraday_evidence.horizon,
+        "Intraday Setup Family": plan.intraday_evidence.setup_family,
+        "Intraday Setup Driver": plan.intraday_evidence.setup_driver,
+        "Intraday Lifecycle": plan.intraday_evidence.lifecycle_status,
+        "Intraday Entry Valid From": plan.intraday_evidence.entry_valid_from,
+        "Intraday Entry Expires At": plan.intraday_evidence.entry_expires_at,
+        "Intraday Forced Flat At": plan.intraday_evidence.forced_flat_at,
+        "Intraday Plan ID": plan.intraday_evidence.plan_id,
+        "Intraday Plan Fingerprint": plan.intraday_evidence.fingerprint,
         "Bullish Entry": plan.bullish_entry,
         "Bullish Stop": plan.bullish_stop,
         "Bullish Target 1": plan.bullish_target_1,
@@ -2900,6 +3167,7 @@ def row_to_json(row: TradePlanRow) -> dict[str, object]:
             "provider_results": row.market_tape.provider_results,
             "rvol_evidence": asdict(row.rvol_evidence),
             "setup_evidence": asdict(row.trade_plan.setup_evidence),
+            "intraday_plan_evidence": asdict(row.trade_plan.intraday_evidence),
             "catalyst_attribution": (
                 asdict(row.catalyst_attribution)
                 if row.catalyst_attribution is not None
@@ -2913,6 +3181,7 @@ def row_to_json(row: TradePlanRow) -> dict[str, object]:
                     PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
                     RVOL_EVIDENCE_EXECUTION_INELIGIBLE,
                     SETUP_IDENTITY_EXECUTION_INELIGIBLE,
+                    INTRADAY_PLAN_EXECUTION_INELIGIBLE,
                     RECLAIM_CONFIRMATION_REQUIRED,
                     CATALYST_ATTRIBUTION_UNRESOLVED,
                 }

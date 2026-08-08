@@ -5,6 +5,10 @@ from datetime import datetime
 from uuid import uuid4
 
 from momentum_hunter.time_utils import now_central
+from momentum_hunter.intraday_trade_plan import (
+    IntradayPlanEvidence,
+    intraday_plan_decision_findings,
+)
 from momentum_hunter.trade_planning import TradePlan
 
 
@@ -48,9 +52,11 @@ def evaluate_trade_plan(
     manual_override_pending: bool = False,
     checked_at: datetime | None = None,
 ) -> RiskGovernorResult:
+    evaluated_at = checked_at or now_central()
     warnings = list(plan.warnings) + list(plan.blocking_reasons)
     gates = [
         data_freshness_gate(warnings),
+        intraday_plan_gate(plan.intraday_evidence, checked_at=evaluated_at),
         required_value_gate("Stop defined", plan.bullish_stop, "A hard stop is required before simulation."),
         required_value_gate("Max risk", plan.estimated_dollar_risk, "Estimated dollar risk is required before simulation."),
         required_value_gate("Risk/reward", plan.risk_reward_ratio, "Risk/reward must be known before simulation."),
@@ -68,7 +74,7 @@ def evaluate_trade_plan(
         status = "Simulation-only"
     return RiskGovernorResult(
         result_id=f"risk-{uuid4().hex[:12]}",
-        timestamp=(checked_at or now_central()).isoformat(),
+        timestamp=evaluated_at.isoformat(),
         ticker=ticker,
         trade_plan_id=trade_plan_id,
         mode=mode,
@@ -91,6 +97,22 @@ def data_freshness_gate(warnings: list[str]) -> RiskGate:
     if matched:
         return RiskGate("Data freshness", "Needs review", " | ".join(matched))
     return RiskGate("Data freshness", "Ready", "No stale-data blocker detected in the selected TradePlan.")
+
+
+def intraday_plan_gate(
+    evidence: IntradayPlanEvidence,
+    *,
+    checked_at: datetime,
+) -> RiskGate:
+    findings = intraday_plan_decision_findings(evidence, decision_at=checked_at)
+    if findings:
+        reason = " | ".join(findings)
+        return RiskGate("Intraday plan", "Blocked", reason)
+    return RiskGate(
+        "Intraday plan",
+        "Pass",
+        f"{evidence.setup_family} remains active through {evidence.entry_expires_at}.",
+    )
 
 
 def required_value_gate(name: str, value: object | None, missing_reason: str) -> RiskGate:

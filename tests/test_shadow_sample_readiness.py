@@ -48,6 +48,7 @@ from momentum_hunter.trade_planning import parse_datetime
 from momentum_hunter.time_utils import now_central
 from tests.test_shadow_trading import (
     at,
+    bind_setup_identity,
     completed_auditable_trade,
     completed_trade,
     report_payload,
@@ -606,6 +607,14 @@ class ShadowSampleReadinessTests(unittest.TestCase):
         payload = report_payload()
         payload["metadata"]["source_capture_time"] = "2026-07-24T09:58:00-05:00"
         payload["metadata"]["generated_at"] = "2026-07-24T09:59:00-05:00"
+        for row in (
+            payload["candidates"][0],
+            payload["top_5_for_capital"][0],
+        ):
+            bind_setup_identity(
+                row,
+                created_at=at("2026-07-24T09:59:00-05:00"),
+            )
         self.report_path.write_text(json.dumps(payload), encoding="utf-8")
         service = self.service()
         self.activate(

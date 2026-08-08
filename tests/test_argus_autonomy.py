@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import inspect
 import unittest
+from dataclasses import replace
+from datetime import datetime
 
 from momentum_hunter.autonomy.auditor import audit_execution_ledger, audit_paper_advancement_gate, audit_simulation_chain
 from momentum_hunter.autonomy.ledger import ExecutionLedgerEvent
@@ -24,6 +26,11 @@ from momentum_hunter.autonomy.view_models import (
     stable_trade_plan_id,
 )
 from momentum_hunter.models import Candidate, NewsItem, NewsStack
+from momentum_hunter.intraday_trade_plan import (
+    CONTINUATION_BREAKOUT,
+    IntradayPlanEvidence,
+    build_intraday_plan_evidence,
+)
 from momentum_hunter.trade_planning import TradePlan
 from momentum_hunter.trade_setup_identity import TradeSetupEvidence
 from tests.test_shadow_trading import report_payload
@@ -60,7 +67,10 @@ class ArgusAutonomyTests(unittest.TestCase):
         self.assertIn(candidate.trade_plan.setup_evidence.fingerprint, candidate.trade_plan_id)
 
     def test_legacy_plan_without_setup_identity_keeps_stable_id_shape(self) -> None:
-        plan = complete_trade_plan()
+        plan = complete_trade_plan(
+            setup_evidence=TradeSetupEvidence(),
+            intraday_evidence=IntradayPlanEvidence(),
+        )
 
         self.assertEqual(
             "tp-AAA-10_0000-9_5000-11_0000-EXECUTION_READY_TRADE",
@@ -93,14 +103,25 @@ class ArgusAutonomyTests(unittest.TestCase):
     def test_risk_governor_blocks_missing_risk_only(self) -> None:
         plan = complete_trade_plan(estimated_dollar_risk=None)
 
-        result = evaluate_trade_plan(plan, ticker="AAA", trade_plan_id="tp-AAA")
+        result = evaluate_trade_plan(
+            plan,
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            checked_at=datetime.fromisoformat("2026-06-30T08:35:00-05:00"),
+        )
 
         self.assertEqual("Blocked", result.status)
         self.assertFalse(result.allows_simulation)
         self.assertTrue(any(gate.name == "Max risk" and gate.state == "Blocked" for gate in result.gates))
 
     def test_risk_governor_blocks_live_mode(self) -> None:
-        result = evaluate_trade_plan(complete_trade_plan(), ticker="AAA", trade_plan_id="tp-AAA", mode="Live Preview")
+        result = evaluate_trade_plan(
+            complete_trade_plan(),
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            mode="Live Preview",
+            checked_at=datetime.fromisoformat("2026-06-30T08:35:00-05:00"),
+        )
 
         self.assertEqual("Blocked", result.status)
         self.assertFalse(result.allows_simulation)
@@ -112,11 +133,26 @@ class ArgusAutonomyTests(unittest.TestCase):
             ticker="AAA",
             trade_plan_id="tp-AAA",
             manual_override_pending=True,
+            checked_at=datetime.fromisoformat("2026-06-30T08:35:00-05:00"),
         )
 
         self.assertEqual("Blocked", result.status)
         self.assertFalse(result.allows_simulation)
         self.assertTrue(any(gate.name == "Manual override" and gate.state == "Blocked" for gate in result.gates))
+
+    def test_risk_governor_blocks_plan_after_setup_expiry(self) -> None:
+        result = evaluate_trade_plan(
+            complete_trade_plan(),
+            ticker="AAA",
+            trade_plan_id="tp-AAA",
+            checked_at=datetime.fromisoformat("2026-06-30T09:16:00-05:00"),
+        )
+
+        self.assertEqual("Blocked", result.status)
+        self.assertIn(
+            "INTRADAY_DECISION_OUTSIDE_ENTRY_VALIDITY",
+            " | ".join(result.reasons),
+        )
 
     def test_execution_ledger_serializes_events(self) -> None:
         ledger = ExecutionLedger()
@@ -170,7 +206,7 @@ class ArgusAutonomyTests(unittest.TestCase):
         self.assertEqual(1, len(adapter.get_positions()))
 
     def test_simulation_engine_records_pass_and_audits_chain(self) -> None:
-        candidate = build_candidate_plans_from_candidates(sample_candidates())[0]
+        candidate = valid_report_candidate()
         ledger = ExecutionLedger()
         engine = SimulationLabEngine(adapter=FakeBrokerAdapter(), ledger=ledger)
 
@@ -188,7 +224,7 @@ class ArgusAutonomyTests(unittest.TestCase):
         self.assertTrue(all(event.risk_result_id == candidate.risk_result.result_id for event in order_events))
 
     def test_simulation_engine_records_fake_rejection(self) -> None:
-        candidate = build_candidate_plans_from_candidates(sample_candidates())[0]
+        candidate = valid_report_candidate()
         ledger = ExecutionLedger()
         engine = SimulationLabEngine(adapter=FakeBrokerAdapter(reject_symbols={candidate.ticker}), ledger=ledger)
 
@@ -505,6 +541,7 @@ def sample_candidate(ticker: str, price: float, score: int) -> Candidate:
 
 
 def complete_trade_plan(**overrides: object) -> TradePlan:
+    setup = TradeSetupEvidence(fingerprint="a" * 64)
     values = {
         "bullish_entry": 10.0,
         "bullish_stop": 9.5,
@@ -519,9 +556,39 @@ def complete_trade_plan(**overrides: object) -> TradePlan:
         "readiness": "EXECUTION_READY_TRADE",
         "blocking_reasons": [],
         "warnings": [],
+        "setup_evidence": setup,
+        "intraday_evidence": build_intraday_plan_evidence(
+            symbol="AAA",
+            setup_family=CONTINUATION_BREAKOUT,
+            created_at=datetime.fromisoformat("2026-06-30T08:30:00-05:00"),
+            planned_entry=10.0,
+            stop_price=9.5,
+            target_prices=(11.0, 11.5),
+            source_setup_fingerprint=setup.fingerprint,
+            source_level_kind="SYNTHETIC_CONTINUATION_RANGE",
+            source_evidence_ids=("synthetic-candle-range",),
+        ),
     }
     values.update(overrides)
     return TradePlan(**values)
+
+
+def valid_report_candidate():
+    candidate = candidate_plan_from_report_row(
+        report_payload()["candidates"][0],
+        rank=1,
+        source_name="synthetic.json",
+        source_path="synthetic.json",
+        source_generated_at="2026-07-23T09:59:00-05:00",
+    )
+    assert candidate is not None
+    risk = evaluate_trade_plan(
+        candidate.trade_plan,
+        ticker=candidate.ticker,
+        trade_plan_id=candidate.trade_plan_id,
+        checked_at=datetime.fromisoformat("2026-07-23T09:59:30-05:00"),
+    )
+    return replace(candidate, risk_result=risk)
 
 
 def order_like_event(*, event_id: str) -> ExecutionLedgerEvent:

@@ -36,7 +36,10 @@ from momentum_hunter.terminal_review_packet import (
     verify_packet_security,
 )
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
-from tests.test_shadow_trading import report_payload as shadow_report_payload
+from tests.test_shadow_trading import (
+    bind_setup_identity,
+    report_payload as shadow_report_payload,
+)
 
 
 DECISION_AT = datetime.fromisoformat("2026-07-30T08:45:00-05:00")
@@ -336,6 +339,14 @@ class TerminalReviewPacketTests(unittest.TestCase):
         root.mkdir(parents=True, exist_ok=True)
         report_path = root / "trade-plan-briefing-synthetic.json"
         report = report_payload()
+        for row in (
+            report["candidates"][0],
+            report["top_5_for_capital"][0],
+        ):
+            bind_setup_identity(
+                row,
+                created_at=DECISION_AT - timedelta(minutes=1),
+            )
         if kind in {"no_eligible", "risk_blocked"}:
             report["candidates"][0]["trade_plan"]["bullish_stop"] = None
             report["top_5_for_capital"][0]["trade_plan"]["bullish_stop"] = None

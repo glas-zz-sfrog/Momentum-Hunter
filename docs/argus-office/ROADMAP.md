@@ -29,6 +29,23 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-DATA-004 same-session intraday TradePlan semantics is `COMPLETE` through
+the release titled `Add intraday TradePlan horizon semantics`. The versioned
+`INTRADAY` contract supports `OPENING_BREAKOUT`, `CONTINUATION_BREAKOUT`,
+`PULLBACK`, and `RECLAIM`, plus properly attributed catalyst-driven plans.
+Opening is the first producer, not the horizon model. Setup-aware validity,
+expiry, stop/target rules, forced-flat boundaries, lifecycle transitions,
+source evidence, predecessor identity, plan ID, and record fingerprint are
+prospective and fail closed. An already-crossed opening level becomes immutable
+`MISSED_ENTRY`; a later reclaim must be a new plan with a terminal breakout
+predecessor and explicit replacement reason. Risk Governor, Active Monitor,
+workstation simulation, and Shadow enforce the same timing and identity
+contract. Full verification passes 1,271 Python and 251 .NET tests. Scoring,
+rank, alerts, RVOL, UI, capture/scheduler/service behavior, providers, accounts,
+orders, transmission, database/schema, packages, credentials, raw captures,
+generated reports, and historical evidence are unchanged. DATA-005 account-aware
+allocation and sizing is next.
+
 ARGUS-DATA-003 breakout-versus-reclaim plan identity is `COMPLETE` on
 canonical `master` through the release titled `Add breakout and reclaim setup
 identity`. A prospective TradePlan now preserves its completed-Daily breakout
@@ -42,8 +59,8 @@ Shadow independently rejects missing, contradictory, legacy, cross-symbol, or
 tampered setup evidence. Full verification passes 1,250 Python and 251 .NET
 tests. Score weights, rank, alerts, UI, capture/scheduler/service behavior,
 accounts, orders, transmission, schemas, packages, credentials, raw captures,
-generated reports, and historical reports are unchanged. DATA-004 intraday
-plan horizon and lifecycle semantics is next; DATA-005 remains the account-aware
+generated reports, and historical reports are unchanged. DATA-004 now supplies
+the prospective same-session lifecycle; DATA-005 remains the account-aware
 allocator gate.
 
 ARGUS-DATA-002 time-normalized opening RVOL is `COMPLETE` on canonical
@@ -771,16 +788,16 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, and DATA-003 breakout/reclaim setup identity. All 25 future opening jobs are pinned to the final synchronized DATA-003 closeout head. |
-| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-003 is complete; DATA-004 intraday plan horizon and lifecycle semantics is next. R034 remains a separate destructive approval gate. |
+| Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, and DATA-004 same-session intraday TradePlan semantics. All 25 future opening jobs are pinned to the final synchronized DATA-004 closeout head. |
+| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-004 is complete; DATA-005 account-aware allocation and sizing is next. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | Official Shadow selection remains blocked by DATA-004 and DATA-005. DATA-002 authority remains fail-closed on any session lacking complete current-window bars and at least five comparable baseline sessions; DATA-003 reclaim identity remains blocked until real chronology proves a pullback and recross. R034 remains a separately approved destructive cutover. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
+| Blocked by | Official Shadow selection remains blocked by DATA-005. DATA-002 authority remains fail-closed on any session lacking complete current-window bars and at least five comparable baseline sessions; DATA-004 requires real chronology and a new successor identity before a reclaim can become active. R034 remains a separately approved destructive cutover. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-07 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. The 25 remaining jobs run from 2026-08-10 through 2026-09-14 at the final synchronized head. |
-| Immediate operational work | Begin DATA-004 intraday plan horizon and lifecycle semantics. Present R034's exact CRWV JSON/archive/710-row deletion plan only when Steven is ready for the separate destructive decision. Do not activate unattended broad-universe collection. |
+| Immediate operational work | Begin DATA-005 account-aware allocation and sizing. Present R034's exact CRWV JSON/archive/710-row deletion plan only when Steven is ready for the separate destructive decision. Do not activate unattended broad-universe collection. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's through Thursday's captures. The guarded candle proof used only the expected identity check and market-data history; it made no position/order request. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
 | Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
-| Data caveat | DATA-001 proves displayed bid/ask provenance, DATA-001B prevents unresolved catalysts from granting authority, DATA-001C permits only validated Schwab last/bid/ask to carry execution-price authority, DATA-002 permits only time-normalized canonical Schwab volume to carry RVOL authority, and DATA-003 preserves the original Daily breakout level while blocking unconfirmed reclaims. Legacy RVOL remains research-only and insufficient candle history fails closed. The TradePlan remains hypothetical/execution-ineligible pending DATA-004 and DATA-005, and the $500-per-row reference sizing is not account-aware. Historical reports remain immutable. R034 retains the destructive-operation interruption gate. |
+| Data caveat | DATA-001 proves displayed bid/ask provenance, DATA-001B prevents unresolved catalysts from granting authority, DATA-001C permits only validated Schwab last/bid/ask to carry execution-price authority, DATA-002 permits only time-normalized canonical Schwab volume to carry RVOL authority, DATA-003 preserves the original Daily breakout level, and DATA-004 binds setup-aware same-session timing while requiring a new successor identity for reclaim. Legacy RVOL remains research-only and insufficient candle history fails closed. The TradePlan remains hypothetical/execution-ineligible pending DATA-005, and the $500-per-row reference sizing is not account-aware. Historical reports remain immutable. R034 retains the destructive-operation interruption gate. |
 
 ### Status Legend
 

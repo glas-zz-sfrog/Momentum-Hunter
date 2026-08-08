@@ -16,7 +16,7 @@ from momentum_hunter.opportunity_alerts import (
     PriceObservation,
     load_price_observations,
 )
-from momentum_hunter.scheduling import is_market_open_day
+from momentum_hunter.scheduling import is_market_open_day, is_nyse_early_close
 from momentum_hunter.shadow_opening import clock_skew_findings
 from momentum_hunter.trade_planning import parse_datetime
 
@@ -228,6 +228,7 @@ def runtime_build_hash(paths: Iterable[Path] | None = None) -> str:
             root / "engine_host.py",
             root / "engine_host_client.py",
             root / "models.py",
+            root / "intraday_trade_plan.py",
             root / "scheduling.py",
             root / "schwab_market_data.py",
             root / "shadow_arm_ceremony.py",
@@ -497,27 +498,6 @@ def forced_exit_deadline(
         else active.forced_exit_eastern
     )
     return datetime.combine(eastern.date(), deadline, tzinfo=EASTERN_TZ)
-
-
-def is_nyse_early_close(value: date) -> bool:
-    reviewed_calendars = {
-        2026: {
-            date(2026, 11, 27),
-            date(2026, 12, 24),
-        },
-        2027: {
-            date(2027, 11, 26),
-        },
-        2028: {
-            date(2028, 7, 3),
-            date(2028, 11, 24),
-        },
-    }
-    if value.year not in reviewed_calendars:
-        raise ValueError(
-            f"NYSE early-close calendar is not frozen for {value.year}."
-        )
-    return value in reviewed_calendars[value.year]
 
 
 def opportunity_identity(

@@ -4,12 +4,20 @@ import json
 import shutil
 import unittest
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 from momentum_hunter.outcomes import PriceBar
+from momentum_hunter.canonical_candle_evidence import CanonicalMinuteBar
+from momentum_hunter.intraday_trade_plan import (
+    INTRADAY_PLAN_EXECUTION_INELIGIBLE,
+    MISSED_ENTRY,
+    OPENING_BREAKOUT,
+    PENDING_ENTRY,
+)
 from momentum_hunter.storage import file_sha256
+from momentum_hunter.schwab_candle_contract import SCHWAB_PRICE_HISTORY_SOURCE
 from momentum_hunter.trade_planning import (
     COMPOSITE_CONFIGURATION_FINGERPRINT,
     COMPOSITE_PROFILE,
@@ -137,6 +145,77 @@ class TradePlanningTests(unittest.TestCase):
         )
         self.assertIn("QUOTE_HTTP_401", top.trade_plan.warnings)
 
+    def test_opening_report_uses_intraday_range_for_same_session_risk(self) -> None:
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        payload["session"] = "opening"
+        payload["capture_time"] = "2026-06-17T08:35:00-05:00"
+        self.capture_path.write_text(json.dumps(payload), encoding="utf-8")
+        report = build_trade_planning_report(
+            self.capture_path,
+            bars_by_ticker={
+                "AAA": [PriceBar("2026-06-16", high=10.4, low=9.8, close=10.1, volume=100_000)]
+            },
+            market_tape_by_ticker={
+                "AAA": MarketTape(last_price=10.20, source="test"),
+            },
+            intraday_bars_by_ticker={"AAA": canonical_opening_bars()},
+            as_of=parse_dt("2026-06-17T08:35:00-05:00"),
+        )
+
+        plan = next(row for row in report.rows if row.symbol == "AAA").trade_plan
+        self.assertEqual(OPENING_BREAKOUT, plan.intraday_evidence.setup_family)
+        self.assertEqual(PENDING_ENTRY, plan.intraday_evidence.lifecycle_status)
+        self.assertEqual(10.4, plan.bullish_entry)
+        self.assertEqual(10.0, plan.bullish_stop)
+        self.assertEqual(10.8, plan.bullish_target_1)
+        self.assertEqual(11.2, plan.bullish_target_2)
+        self.assertNotIn(
+            INTRADAY_PLAN_EXECUTION_INELIGIBLE,
+            plan.blocking_reasons,
+        )
+
+    def test_opening_report_without_five_bars_fails_intraday_plan_closed(self) -> None:
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        payload["session"] = "opening"
+        payload["capture_time"] = "2026-06-17T08:35:00-05:00"
+        self.capture_path.write_text(json.dumps(payload), encoding="utf-8")
+        report = build_trade_planning_report(
+            self.capture_path,
+            bars_by_ticker={
+                "AAA": [PriceBar("2026-06-16", high=10.4, low=9.8, close=10.1, volume=100_000)]
+            },
+            market_tape_by_ticker={"AAA": MarketTape(last_price=10.20, source="test")},
+            intraday_bars_by_ticker={"AAA": canonical_opening_bars()[:-1]},
+            as_of=parse_dt("2026-06-17T08:35:00-05:00"),
+        )
+
+        plan = next(row for row in report.rows if row.symbol == "AAA").trade_plan
+        self.assertIn(INTRADAY_PLAN_EXECUTION_INELIGIBLE, plan.blocking_reasons)
+        self.assertIn(
+            "OPENING_RANGE_FIVE_COMPLETED_BARS_REQUIRED",
+            plan.intraday_evidence.findings,
+        )
+
+    def test_already_crossed_opening_breakout_remains_missed_not_rewritten(self) -> None:
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        payload["session"] = "opening"
+        payload["capture_time"] = "2026-06-17T08:35:00-05:00"
+        self.capture_path.write_text(json.dumps(payload), encoding="utf-8")
+        report = build_trade_planning_report(
+            self.capture_path,
+            bars_by_ticker={
+                "AAA": [PriceBar("2026-06-16", high=10.4, low=9.8, close=10.1, volume=100_000)]
+            },
+            market_tape_by_ticker={"AAA": MarketTape(last_price=10.20, source="test")},
+            intraday_bars_by_ticker={"AAA": canonical_opening_bars(high=10.45)},
+            as_of=parse_dt("2026-06-17T08:35:00-05:00"),
+        )
+
+        plan = next(row for row in report.rows if row.symbol == "AAA").trade_plan
+        self.assertEqual(MISSED_ENTRY, plan.intraday_evidence.lifecycle_status)
+        self.assertEqual(10.4, plan.bullish_entry)
+        self.assertEqual("DO_NOT_TRADE_MISSED_ENTRY", plan.readiness)
+
     def test_missing_daily_bars_warns_and_still_builds_scaffold(self) -> None:
         report = build_trade_planning_report(self.capture_path, as_of=parse_dt("2026-06-17T07:00:00-05:00"))
 
@@ -250,9 +329,14 @@ class TradePlanningTests(unittest.TestCase):
             payload["candidates"][0]["evidence_integrity"]["setup_evidence"],
             payload["candidates"][0]["trade_plan"]["setup_evidence"],
         )
+        self.assertEqual(
+            payload["candidates"][0]["evidence_integrity"]["intraday_plan_evidence"],
+            payload["candidates"][0]["trade_plan"]["intraday_evidence"],
+        )
         csv_header = paths["csv"].read_text(encoding="utf-8").splitlines()[0]
         self.assertIn("Setup Type", csv_header)
         self.assertIn("Setup Fingerprint", csv_header)
+        self.assertIn("Intraday Plan Fingerprint", csv_header)
         self.assertIn("state_transition_log", payload)
         self.assertIn("fed_news_summary", payload)
 
@@ -608,6 +692,25 @@ class RouteSession:
 
 def parse_dt(value: str) -> datetime:
     return datetime.fromisoformat(value)
+
+
+def canonical_opening_bars(*, high: float = 10.30) -> tuple[CanonicalMinuteBar, ...]:
+    start = parse_dt("2026-06-17T09:30:00-04:00")
+    return tuple(
+        CanonicalMinuteBar(
+            symbol="AAA",
+            timestamp=(start + timedelta(minutes=index)).isoformat(),
+            open=10.10,
+            high=high,
+            low=10.00,
+            close=10.20,
+            volume=10_000 + index,
+            source=SCHWAB_PRICE_HISTORY_SOURCE,
+            state="RECONCILED",
+            session_date="2026-06-17",
+        )
+        for index in range(5)
+    )
 
 
 def candidate_payload(

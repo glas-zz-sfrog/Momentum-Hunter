@@ -1,6 +1,21 @@
 # Branch Ledger
 
-Date reconciled: 2026-08-07
+Date reconciled: 2026-08-08
+
+## ARGUS-DATA-004 Intraday TradePlan Horizon
+
+`codex/ARGUS-DATA-004-intraday-plan-horizon` is
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` from synchronized base
+`c61b559`. It adds one prospective same-session `INTRADAY` contract for opening
+breakout, continuation breakout, pullback, reclaim, and supported catalyst
+setups. Timing, expiry, forced-flat, lifecycle, source and predecessor identity,
+plan ID, and fingerprint are independently enforced through report, Risk
+Governor, Active Monitor, simulation, and Shadow. Missed breakouts are immutable
+and reclaim requires a new successor plan. Compileall, all 1,271 Python tests,
+and all 251 .NET tests pass. No score, rank, alert, RVOL, UI, capture/scheduler,
+provider, account/order, transmission, schema, package, credential, raw-capture,
+or generated-data behavior changed. All 25 future opening jobs are repinned to
+the final synchronized DATA-004 closeout head. DATA-005 is next.
 
 ## ARGUS-DATA-003 Breakout Versus Reclaim Identity
 

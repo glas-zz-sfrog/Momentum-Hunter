@@ -14,6 +14,10 @@ from momentum_hunter.evidence_integrity import (
     EXECUTION_ELIGIBLE,
     evidence_with_age,
 )
+from momentum_hunter.intraday_trade_plan import (
+    INTRADAY_PLAN_EXECUTION_INELIGIBLE,
+    intraday_plan_decision_findings,
+)
 from momentum_hunter.monitor_targets import (
     MonitorTargetReport,
     build_monitor_target_report,
@@ -47,6 +51,7 @@ from momentum_hunter.trade_planning import (
     latest_capture_path,
     parse_datetime,
     rvol_type_for_time,
+    trade_plan_from_dict,
 )
 from momentum_hunter.time_normalized_rvol import load_time_normalized_rvol_evidence
 from momentum_hunter.trade_setup_identity import (
@@ -603,6 +608,16 @@ def recalculate_readiness_from_report_row(
         authority_blockers.append(RVOL_EVIDENCE_EXECUTION_INELIGIBLE)
     if setup.get("status") != EXECUTION_ELIGIBLE:
         authority_blockers.append(SETUP_IDENTITY_EXECUTION_INELIGIBLE)
+    try:
+        parsed_plan = trade_plan_from_dict(trade_plan)
+    except (TypeError, ValueError):
+        authority_blockers.append(INTRADAY_PLAN_EXECUTION_INELIGIBLE)
+    else:
+        if intraday_plan_decision_findings(
+            parsed_plan.intraday_evidence,
+            decision_at=generated_at,
+        ):
+            authority_blockers.append(INTRADAY_PLAN_EXECUTION_INELIGIBLE)
     existing_blockers = trade_plan.get("blocking_reasons")
     existing_blockers = (
         existing_blockers if isinstance(existing_blockers, list) else []

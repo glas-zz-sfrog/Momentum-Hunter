@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Mapping
 
@@ -14,6 +15,7 @@ from momentum_hunter.trade_planning import (
     TradePlanRow,
     assign_ranks,
     build_trade_plan_row,
+    trade_plan_from_dict,
 )
 from momentum_hunter.trade_setup_identity import TradeSetupEvidence
 
@@ -73,6 +75,7 @@ def build_candidate_plans_from_report(
     *,
     limit: int | None = 5,
     include_all_candidates: bool = False,
+    risk_checked_at: datetime | None = None,
 ) -> list[Top5CandidatePlan]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -95,6 +98,7 @@ def build_candidate_plans_from_report(
             source_name=path.name,
             source_path=str(path),
             source_generated_at=str(metadata.get("generated_at", "")),
+            risk_checked_at=risk_checked_at,
         )
         if plan is not None:
             plans.append(plan)
@@ -108,20 +112,13 @@ def candidate_plan_from_report_row(
     source_name: str,
     source_path: str,
     source_generated_at: str = "",
+    risk_checked_at: datetime | None = None,
 ) -> Top5CandidatePlan | None:
     raw_plan = row.get("trade_plan")
     if not isinstance(raw_plan, dict):
         return None
     try:
-        normalized_plan = dict(raw_plan)
-        raw_setup = normalized_plan.get("setup_evidence")
-        if isinstance(raw_setup, dict):
-            normalized_setup = dict(raw_setup)
-            findings = normalized_setup.get("findings")
-            if isinstance(findings, list):
-                normalized_setup["findings"] = tuple(findings)
-            normalized_plan["setup_evidence"] = TradeSetupEvidence(**normalized_setup)
-        trade_plan = TradePlan(**normalized_plan)
+        trade_plan = trade_plan_from_dict(raw_plan)
     except TypeError:
         return None
     symbol = str(row.get("symbol") or "").upper()
@@ -137,6 +134,7 @@ def candidate_plan_from_report_row(
         ticker=symbol,
         trade_plan_id=trade_plan_id,
         mode=SIMULATION_MODE,
+        checked_at=risk_checked_at,
     )
     source_bits = [f"Report: {source_name}", f"Composite: {composite}", f"Readiness: {trade_plan.readiness}"]
     if source_generated_at:
@@ -230,6 +228,9 @@ def stable_trade_plan_id(ticker: str, plan: TradePlan) -> str:
     setup_identity = setup_fingerprint(plan.setup_evidence)
     if setup_identity != "NO_SETUP_IDENTITY":
         parts.append(setup_identity)
+    intraday_identity = str(getattr(plan.intraday_evidence, "plan_id", "") or "")
+    if intraday_identity:
+        parts.append(intraday_identity)
     return "tp-" + "-".join(parts).replace(".", "_").replace(" ", "_")
 
 

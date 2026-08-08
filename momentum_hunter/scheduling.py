@@ -328,6 +328,29 @@ def is_market_open_day(value: date) -> bool:
     return value not in nyse_full_day_holidays(value.year)
 
 
+def is_nyse_early_close(value: date) -> bool:
+    """Return the frozen reviewed early-close calendar used by plan/session gates."""
+
+    reviewed_calendars = {
+        2026: {
+            date(2026, 11, 27),
+            date(2026, 12, 24),
+        },
+        2027: {
+            date(2027, 11, 26),
+        },
+        2028: {
+            date(2028, 7, 3),
+            date(2028, 11, 24),
+        },
+    }
+    if value.year not in reviewed_calendars:
+        raise ValueError(
+            f"NYSE early-close calendar is not frozen for {value.year}."
+        )
+    return value in reviewed_calendars[value.year]
+
+
 def nyse_full_day_holidays(year: int) -> set[date]:
     holidays = {
         observed_fixed_holiday(year, 1, 1),

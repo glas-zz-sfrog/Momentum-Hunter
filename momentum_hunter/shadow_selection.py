@@ -18,6 +18,13 @@ from momentum_hunter.evidence_integrity import (
     CATALYST_SCORE_SUPPORTED,
     EXECUTION_ELIGIBLE,
 )
+from momentum_hunter.intraday_trade_plan import (
+    INTRADAY_PLAN_PROFILE,
+    INTRADAY_PLAN_SCHEMA_VERSION,
+    IntradayPlanEvidence,
+    intraday_plan_decision_findings,
+    intraday_plan_validation_findings,
+)
 from momentum_hunter.shadow_market_validity import (
     DecisionCycleStore,
     ShadowMarketValidityPolicy,
@@ -582,6 +589,12 @@ class AutomaticShadowSelector:
                 plan_fingerprint=plan_fingerprint,
                 decision_at=decision_at,
             )
+            reasons.extend(
+                intraday_plan_decision_findings(
+                    plan.intraday_evidence,
+                    decision_at=decision_at,
+                )
+            )
             risk = evaluate_trade_plan(
                 plan,
                 ticker=symbol,
@@ -881,6 +894,7 @@ def candidate_evidence_authority_findings(
     if integrity.get("plan_authority") != EXECUTION_ELIGIBLE:
         findings.append("Candidate TradePlan authority is not execution-eligible.")
     findings.extend(trade_setup_authority_findings(row, integrity))
+    findings.extend(intraday_plan_authority_findings(row, integrity))
 
     market_data = row.get("market_data")
     market_data = market_data if isinstance(market_data, Mapping) else {}
@@ -1021,6 +1035,67 @@ def candidate_evidence_authority_findings(
                 "Candidate catalyst score contribution contradicts authorized confidence."
             )
     return tuple(findings)
+
+
+def intraday_plan_authority_findings(
+    row: Mapping[str, Any],
+    integrity: Mapping[str, Any],
+) -> tuple[str, ...]:
+    evidence_payload = integrity.get("intraday_plan_evidence")
+    if not isinstance(evidence_payload, Mapping):
+        return ("Candidate intraday plan evidence is missing.",)
+    trade_plan = row.get("trade_plan")
+    trade_plan = trade_plan if isinstance(trade_plan, Mapping) else {}
+    plan_payload = trade_plan.get("intraday_evidence")
+    findings: list[str] = []
+    if not isinstance(plan_payload, Mapping):
+        findings.append("Candidate TradePlan intraday evidence is missing.")
+    elif dict(plan_payload) != dict(evidence_payload):
+        findings.append("Candidate intraday evidence contradicts the TradePlan.")
+    if evidence_payload.get("schema_version") != INTRADAY_PLAN_SCHEMA_VERSION:
+        findings.append("Candidate intraday plan schema is missing or unsupported.")
+    if evidence_payload.get("profile") != INTRADAY_PLAN_PROFILE:
+        findings.append("Candidate intraday plan profile is missing or unsupported.")
+    if evidence_payload.get("status") != EXECUTION_ELIGIBLE:
+        findings.append("Candidate intraday plan is not execution-eligible.")
+    if str(evidence_payload.get("symbol") or "").upper() != str(row.get("symbol") or "").upper():
+        findings.append("Candidate intraday plan symbol contradicts the report row.")
+    expected_fields = set(IntradayPlanEvidence.__dataclass_fields__)
+    if set(evidence_payload) != expected_fields:
+        findings.append("Candidate intraday plan fields are incomplete or unsupported.")
+        return tuple(dict.fromkeys(findings))
+    try:
+        normalized = dict(evidence_payload)
+        for field_name in ("target_prices", "source_evidence_ids", "findings"):
+            if isinstance(normalized.get(field_name), list):
+                normalized[field_name] = tuple(normalized[field_name])
+        evidence = IntradayPlanEvidence(**normalized)
+    except (TypeError, ValueError):
+        findings.append("Candidate intraday plan evidence cannot be parsed.")
+        return tuple(dict.fromkeys(findings))
+    findings.extend(intraday_plan_validation_findings(evidence))
+    setup_payload = integrity.get("setup_evidence")
+    setup_payload = setup_payload if isinstance(setup_payload, Mapping) else {}
+    if evidence.source_setup_fingerprint != setup_payload.get("fingerprint"):
+        findings.append("Candidate intraday plan does not bind the setup fingerprint.")
+    plan_entry = finite_number(trade_plan.get("bullish_entry"))
+    plan_stop = finite_number(trade_plan.get("bullish_stop"))
+    targets = tuple(evidence.target_prices)
+    plan_target_1 = finite_number(trade_plan.get("bullish_target_1"))
+    plan_target_2 = finite_number(trade_plan.get("bullish_target_2"))
+    if plan_entry is None or evidence.planned_entry is None or abs(plan_entry - evidence.planned_entry) > 0.0001:
+        findings.append("Candidate TradePlan entry contradicts intraday plan evidence.")
+    if plan_stop is None or evidence.stop_price is None or abs(plan_stop - evidence.stop_price) > 0.0001:
+        findings.append("Candidate TradePlan stop contradicts intraday plan evidence.")
+    if (
+        len(targets) < 2
+        or plan_target_1 is None
+        or plan_target_2 is None
+        or abs(plan_target_1 - targets[0]) > 0.0001
+        or abs(plan_target_2 - targets[1]) > 0.0001
+    ):
+        findings.append("Candidate TradePlan targets contradict intraday plan evidence.")
+    return tuple(dict.fromkeys(findings))
 
 
 def trade_setup_authority_findings(

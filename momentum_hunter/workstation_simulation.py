@@ -38,7 +38,7 @@ class SimulationWorkspaceService:
 
     def snapshot(self, *, observed_at: datetime | None = None) -> dict[str, Any]:
         workspace = build_read_only_workspace_snapshot(paths=self._paths, observed_at=observed_at)
-        candidates = self._candidate_plans()
+        candidates = self._candidate_plans(risk_checked_at=observed_at)
         ledger_events = [ledger_event_payload(event) for event in self._simulation_engine.ledger.events]
         if ledger_events:
             workspace["activity"] = [ledger_activity(event) for event in reversed(ledger_events)] + list(workspace["activity"])
@@ -94,10 +94,19 @@ class SimulationWorkspaceService:
             "ledgerEvents": [ledger_event_payload(event) for event in self._simulation_engine.ledger.events],
         }
 
-    def _candidate_plans(self) -> list[Top5CandidatePlan]:
+    def _candidate_plans(
+        self,
+        *,
+        risk_checked_at: datetime | None = None,
+    ) -> list[Top5CandidatePlan]:
         report_path = latest_trade_report_path(self._paths.reports_dir)
         return (
-            build_candidate_plans_from_report(report_path, limit=None, include_all_candidates=True)
+            build_candidate_plans_from_report(
+                report_path,
+                limit=None,
+                include_all_candidates=True,
+                risk_checked_at=risk_checked_at,
+            )
             if report_path
             else []
         )
