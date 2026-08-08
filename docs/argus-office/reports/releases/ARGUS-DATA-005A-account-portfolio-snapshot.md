@@ -1,6 +1,6 @@
 # ARGUS-DATA-005A Fresh Account And Portfolio Snapshot
 
-Status: `VERIFIED_PENDING_RELEASE`
+Status: `COMPLETE` on canonical `master` through `dff993c`
 
 ## Result
 
@@ -67,8 +67,10 @@ balance values, OAuth token, client secret, or credentials.
 - No submit, cancel, replace, order-status, or order-list method was added.
 - The runtime hash includes this source so a stale Engine Host cannot claim the
   current allocation boundary.
-- The installed service requires a controlled supervisor refresh after this
-  release; opening capture itself does not depend on Engine Host availability.
+- The installed service was refreshed under UAC after release. One
+  authenticated current-build Engine Host owns the matching endpoint, lock,
+  process, and listener; it is Healthy and idle. Opening capture remains
+  independent of Engine Host availability.
 
 ## Remaining Gate
 

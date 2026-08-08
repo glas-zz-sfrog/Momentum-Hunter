@@ -63,5 +63,6 @@ or invalid Shadow commitment stops the decision and is visible as an anomaly.
 
 ## Status
 
-`VERIFIED_PENDING_RELEASE`. Activation remains blocked on Steven's explicit
-numeric policy and is not part of this task.
+`COMPLETE` on canonical `master` through `dff993c`, with backup, exact-head
+opening-job repin, and installed-runtime refresh verified. Activation remains
+blocked on Steven's explicit numeric policy and is not part of this task.

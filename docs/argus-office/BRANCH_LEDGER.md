@@ -5,7 +5,9 @@ Date reconciled: 2026-08-08
 ## ARGUS-DATA-005A Fresh Account And Portfolio Snapshot
 
 `codex/ARGUS-DATA-005A-account-portfolio-snapshot` is
-`VERIFIED_PENDING_FAST_FORWARD` from synchronized base `3437a5d`. It adds one
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH`; implementation `dff993c` was
+built from synchronized base `3437a5d` and is followed only by the material
+operational closeout. It adds one
 exact-host GET-only bound-account snapshot, redacted dual-clock context,
 read-only Official Shadow commitment derivation, fail-closed brokerage anomaly
 handling, and fresh-per-decision allocation input. The source is included in
@@ -15,8 +17,11 @@ scheduler, Engine Host commands, or WPF. Compileall, 73 focused/runtime tests,
 confirmed one expected cash account, zero brokerage positions, zero Shadow
 commitments, and transmission unavailable without retaining identity, balance,
 token, or credential values. No policy default, order capability, or allocation
-activation was added. Next action is clean fast-forward integration, backup,
-one exact-head opening-job repin, and controlled installed-supervisor refresh.
+activation was added. The branch was integrated by clean fast-forward, both
+branch and `master` were pushed normally, all 25 opening jobs were repinned to
+the final synchronized closeout head, and the installed supervisor refresh
+proved one current healthy idle host. Next action is Steven's explicit numeric
+policy decision.
 
 ## ARGUS-DATA-005 Account-Aware Allocation
 
