@@ -70,8 +70,9 @@ a FakeBroker order.
 
 ## Status
 
-`IMPLEMENTED_PENDING_MERGE`. Activation remains blocked on a separately chosen
-numeric policy and a fresh read-only account/portfolio snapshot source.
+`COMPLETE` after verified clean fast-forward integration at implementation
+commit `a2e5020`. Activation remains blocked on a separately chosen numeric
+policy and a fresh read-only account/portfolio snapshot source.
 
 ## Goal Steward Review
 

@@ -1,6 +1,6 @@
 # ARGUS-DATA-005 Account-Aware Allocation
 
-Status: `IMPLEMENTED_PENDING_MERGE`
+Status: `COMPLETE` through implementation commit `a2e5020`
 
 ## Result
 
