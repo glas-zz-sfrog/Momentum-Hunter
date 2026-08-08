@@ -25,6 +25,12 @@ from momentum_hunter.trade_planning import (
     fetch_yahoo_market_tape,
     rvol_type_for_time,
 )
+from momentum_hunter.trade_setup_identity import (
+    BREAKOUT_SETUP,
+    DO_NOT_TRADE_SETUP_UNCONFIRMED,
+    RECLAIM_CONFIRMATION_REQUIRED,
+    RECLAIM_REQUIRED_SETUP,
+)
 
 
 class TradePlanningTests(unittest.TestCase):
@@ -110,6 +116,11 @@ class TradePlanningTests(unittest.TestCase):
         self.assertEqual(10.4, top.trade_plan.bullish_entry)
         self.assertEqual(9.8, top.trade_plan.bullish_stop)
         self.assertEqual(2.0, top.trade_plan.risk_reward_ratio)
+        self.assertEqual(BREAKOUT_SETUP, top.trade_plan.setup_evidence.setup_type)
+        self.assertEqual(10.4, top.trade_plan.setup_evidence.breakout_level)
+        self.assertEqual(10.4, top.trade_plan.setup_evidence.planned_entry)
+        self.assertFalse(top.trade_plan.setup_evidence.requires_pullback)
+        self.assertEqual(64, len(top.trade_plan.setup_evidence.fingerprint))
         self.assertEqual(DO_NOT_TRADE_UNTRUSTED_EVIDENCE, top.trade_plan.readiness)
         self.assertEqual("HIGH", top.trade_plan.confidence)
         self.assertEqual("LOW", top.trade_plan.tradeability)
@@ -219,7 +230,11 @@ class TradePlanningTests(unittest.TestCase):
         self.assertTrue(paths["csv"].exists())
         self.assertTrue(paths["json"].exists())
         self.assertTrue(paths["report"].exists())
-        self.assertIn("Top 5 Opportunities For $500", paths["report"].read_text(encoding="utf-8"))
+        markdown = paths["report"].read_text(encoding="utf-8")
+        self.assertIn("Top 5 Opportunities For $500", markdown)
+        self.assertIn("Setup Type:", markdown)
+        self.assertIn("Original Breakout Level:", markdown)
+        self.assertIn("Setup Fingerprint:", markdown)
         payload = json.loads(paths["json"].read_text(encoding="utf-8"))
         self.assertEqual(COMPOSITE_PROFILE, payload["metadata"]["composite_profile"])
         self.assertEqual(
@@ -231,6 +246,13 @@ class TradePlanningTests(unittest.TestCase):
             payload["metadata"]["evidence_integrity_schema_version"],
         )
         self.assertIn("market_tape", payload["candidates"][0])
+        self.assertEqual(
+            payload["candidates"][0]["evidence_integrity"]["setup_evidence"],
+            payload["candidates"][0]["trade_plan"]["setup_evidence"],
+        )
+        csv_header = paths["csv"].read_text(encoding="utf-8").splitlines()[0]
+        self.assertIn("Setup Type", csv_header)
+        self.assertIn("Setup Fingerprint", csv_header)
         self.assertIn("state_transition_log", payload)
         self.assertIn("fed_news_summary", payload)
 
@@ -282,7 +304,7 @@ class TradePlanningTests(unittest.TestCase):
         self.assertEqual("AAA", report.state_transition_log[0]["symbol"])
         self.assertEqual("PLANNING_SCAFFOLD", report.state_transition_log[0]["old_state"])
         self.assertEqual(
-            DO_NOT_TRADE_UNTRUSTED_EVIDENCE,
+            DO_NOT_TRADE_SETUP_UNCONFIRMED,
             report.state_transition_log[0]["new_state"],
         )
         self.assertTrue(any("rate" in item["matched_keywords"] or "fed" in item["matched_keywords"] for item in report.fed_news_summary))
@@ -312,7 +334,20 @@ class TradePlanningTests(unittest.TestCase):
 
         top = next(row for row in report.rows if row.symbol == "AAA")
         self.assertIn("PRICE_ALREADY_ABOVE_ENTRY", top.trade_plan.warnings)
-        self.assertGreater(top.trade_plan.bullish_entry or 0, 10.7)
+        self.assertEqual(10.4, top.trade_plan.bullish_entry)
+        self.assertLess(top.trade_plan.bullish_entry or 0, 10.7)
+        self.assertEqual(RECLAIM_REQUIRED_SETUP, top.trade_plan.setup_evidence.setup_type)
+        self.assertEqual(10.4, top.trade_plan.setup_evidence.breakout_level)
+        self.assertEqual(10.4, top.trade_plan.setup_evidence.planned_entry)
+        self.assertTrue(top.trade_plan.setup_evidence.requires_pullback)
+        self.assertEqual(
+            DO_NOT_TRADE_SETUP_UNCONFIRMED,
+            top.trade_plan.readiness,
+        )
+        self.assertIn(
+            RECLAIM_CONFIRMATION_REQUIRED,
+            top.trade_plan.blocking_reasons,
+        )
 
     def test_empty_event_sections_use_explicit_messages(self) -> None:
         quiet_capture = self.root / "quiet-morning.json"

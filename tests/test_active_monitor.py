@@ -4,12 +4,14 @@ import json
 import shutil
 import unittest
 import uuid
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
 from momentum_hunter.active_monitor import (
     MonitorCycleReport,
     load_active_monitor_status,
+    recalculate_readiness_from_report_row,
     run_monitor_cycle,
     run_monitor_loop,
 )
@@ -18,6 +20,11 @@ from momentum_hunter.opportunity_alerts import load_alerts
 from momentum_hunter.review import CandidateIdentity, ReviewDecision, ReviewStatus, save_review_decisions
 from momentum_hunter.storage import file_sha256
 from momentum_hunter.trade_planning import MarketTape
+from momentum_hunter.trade_setup_identity import (
+    DO_NOT_TRADE_SETUP_UNCONFIRMED,
+    RECLAIM_CONFIRMATION_REQUIRED,
+    build_trade_setup_evidence,
+)
 
 
 class ActiveMonitorTests(unittest.TestCase):
@@ -149,6 +156,44 @@ class ActiveMonitorTests(unittest.TestCase):
         self.assertNotIn("STATE_PLANNING_SCAFFOLD_TO_EXECUTION_READY_TRADE", alert_types)
         self.assertIn("PRICE_EXPANSION_1PCT_5M", alert_types)
         self.assertIn("PRICE_EXPANSION_2PCT_15M", alert_types)
+
+    def test_reclaim_blocker_survives_active_monitor_price_refresh(self) -> None:
+        item = trade_candidate("AAA", "EXECUTION_READY_TRADE", price=10.70)
+        setup = build_trade_setup_evidence(
+            symbol="AAA",
+            observed_price=10.70,
+            breakout_level=10.40,
+            invalidation_level=9.80,
+            source="daily_bars",
+        )
+        item["technical_levels"].update(
+            {
+                "source": "daily_bars",
+                "resistance_level": 10.40,
+                "support_level": 9.80,
+            }
+        )
+        item["trade_plan"].update(
+            {
+                "bullish_entry": 10.40,
+                "bullish_stop": 9.80,
+                "setup_evidence": asdict(setup),
+            }
+        )
+        item["evidence_integrity"] = {
+            "setup_evidence": asdict(setup),
+            "plan_authority": "EXECUTION_ELIGIBLE",
+            "catalyst_attribution": {"score_authority": "SUPPORTED"},
+        }
+
+        _, readiness, _, _, blockers = recalculate_readiness_from_report_row(
+            item,
+            market_tape(price=10.85, volume=2_000_000),
+            generated_at=datetime.fromisoformat("2026-06-17T10:04:00-05:00"),
+        )
+
+        self.assertEqual(DO_NOT_TRADE_SETUP_UNCONFIRMED, readiness)
+        self.assertIn(RECLAIM_CONFIRMATION_REQUIRED, blockers)
 
     def test_cycle_exports_reports(self) -> None:
         self.write_review_decisions([("AAA", ReviewStatus.WATCHLIST)])

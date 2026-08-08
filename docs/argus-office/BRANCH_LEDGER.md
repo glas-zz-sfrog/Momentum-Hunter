@@ -2,6 +2,22 @@
 
 Date reconciled: 2026-08-07
 
+## ARGUS-DATA-003 Breakout Versus Reclaim Identity
+
+`codex/ARGUS-DATA-003-breakout-reclaim-identity` is
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` from synchronized base
+`ef851dd`. It preserves the original completed-Daily breakout level, assigns a
+versioned and fingerprinted setup identity, classifies already-exceeded levels
+as `RECLAIM_REQUIRED`, and keeps them fail-closed until a real pullback and
+recross can be observed. Active Monitor preserves the blocker and Shadow
+independently rejects missing, contradictory, cross-symbol, legacy, or tampered
+setup evidence. Compileall, 143 focused/adjacent tests, all 1,250 Python tests,
+and all 251 .NET tests pass. No score weight, alert, UI, account/order,
+transmission, service/scheduler, database/schema, package, credential, raw
+capture, generated report, or historical report changed. All 25 future opening
+jobs are repinned to the final synchronized DATA-003 closeout head. DATA-004 is
+next.
+
 ## ARGUS-DATA-002 Time-Normalized Opening RVOL
 
 `codex/ARGUS-DATA-002-time-normalized-opening-rvol` is

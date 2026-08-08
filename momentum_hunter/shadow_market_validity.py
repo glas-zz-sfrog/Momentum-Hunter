@@ -236,6 +236,8 @@ def runtime_build_hash(paths: Iterable[Path] | None = None) -> str:
             root / "shadow_selection.py",
             root / "shadow_trading.py",
             root / "storage.py",
+            root / "trade_planning.py",
+            root / "trade_setup_identity.py",
             root / "workstation_shadow.py",
             project_root / "tools" / "capture_job.py",
             project_root / "tools" / "install_capture_tasks.ps1",

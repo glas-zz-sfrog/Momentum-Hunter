@@ -44,11 +44,22 @@ from momentum_hunter.time_normalized_rvol import (
     TimeNormalizedRvolEvidence,
     load_time_normalized_rvol_evidence,
 )
+from momentum_hunter.trade_setup_identity import (
+    BREAKOUT_SETUP,
+    DO_NOT_TRADE_SETUP_UNCONFIRMED,
+    RECLAIM_CONFIRMATION_REQUIRED,
+    RECLAIM_REQUIRED_SETUP,
+    SETUP_IDENTITY_EXECUTION_INELIGIBLE,
+    TRADE_SETUP_PROFILE,
+    TRADE_SETUP_SCHEMA_VERSION,
+    TradeSetupEvidence,
+    build_trade_setup_evidence,
+)
 
 
 REPORT_SCHEMA_VERSION = 1
-EVIDENCE_INTEGRITY_SCHEMA_VERSION = 3
-COMPOSITE_PROFILE = "trade-planning-composite-v3-time-normalized-rvol"
+EVIDENCE_INTEGRITY_SCHEMA_VERSION = 4
+COMPOSITE_PROFILE = "trade-planning-composite-v4-setup-identity"
 COMPOSITE_CONFIGURATION = {
     "profile": COMPOSITE_PROFILE,
     "weights": {
@@ -67,6 +78,9 @@ COMPOSITE_CONFIGURATION = {
     "required_rvol_authority": EXECUTION_ELIGIBLE,
     "rvol_profile": TIME_NORMALIZED_RVOL_PROFILE,
     "rvol_schema_version": TIME_NORMALIZED_RVOL_SCHEMA_VERSION,
+    "required_setup_authority": EXECUTION_ELIGIBLE,
+    "setup_profile": TRADE_SETUP_PROFILE,
+    "setup_schema_version": TRADE_SETUP_SCHEMA_VERSION,
     "required_integrity_schema": EVIDENCE_INTEGRITY_SCHEMA_VERSION,
 }
 COMPOSITE_CONFIGURATION_JSON = json.dumps(
@@ -121,6 +135,11 @@ REPORT_COLUMNS = [
     "20-Day High",
     "Support Level",
     "Resistance Level",
+    "Setup Type",
+    "Setup Authority",
+    "Original Breakout Level",
+    "Setup Confirmation",
+    "Setup Fingerprint",
     "Bullish Entry",
     "Bullish Stop",
     "Bullish Target 1",
@@ -226,6 +245,7 @@ class TradePlan:
     readiness: str
     blocking_reasons: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    setup_evidence: TradeSetupEvidence = field(default_factory=TradeSetupEvidence)
 
 
 @dataclass(frozen=True)
@@ -481,6 +501,7 @@ def build_trade_plan_row(
         price_evidence_status=price_evidence_status,
         catalyst_attribution=catalyst_attribution,
         rvol_evidence=tape.rvol_evidence,
+        setup_evidence=calculated_plan.setup_evidence,
     )
     authoritative_cluster = catalyst_cluster_for_authority(
         catalyst_detail.cluster_name,
@@ -597,13 +618,34 @@ def build_technical_levels(candidate: Candidate, *, capture_date: str, bars: lis
 def build_trade_plan(candidate: Candidate, technicals: TechnicalLevels, tape: MarketTape, *, capital: float) -> TradePlan:
     warnings = dedupe(list(technicals.warnings) + list(tape.warnings))
     price = current_trade_price(candidate, tape)
+    setup_evidence = build_trade_setup_evidence(
+        symbol=candidate.ticker,
+        observed_price=price,
+        breakout_level=technicals.resistance_level,
+        invalidation_level=technicals.support_level,
+        source=technicals.source,
+    )
     if price <= 0:
-        return TradePlan(None, None, None, None, None, None, None, None, "LOW", "LOW", "DO_NOT_TRADE_MISSING_DATA", ["MISSING_PRICE"], ["MISSING_PRICE"])
+        return TradePlan(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "LOW",
+            "LOW",
+            "DO_NOT_TRADE_MISSING_DATA",
+            ["MISSING_PRICE"],
+            ["MISSING_PRICE"],
+            setup_evidence,
+        )
     original_entry = technicals.resistance_level or (price * 1.005)
-    entry = original_entry
-    if price > original_entry:
+    entry = setup_evidence.planned_entry or original_entry
+    if setup_evidence.setup_type == RECLAIM_REQUIRED_SETUP:
         warnings.append("PRICE_ALREADY_ABOVE_ENTRY")
-        entry = price * 1.001
     stop = technicals.support_level or (entry - (technicals.atr or price * 0.02))
     if stop >= entry:
         stop = entry - max(technicals.atr or price * 0.02, price * 0.01)
@@ -624,6 +666,7 @@ def build_trade_plan(candidate: Candidate, technicals: TechnicalLevels, tape: Ma
             "DO_NOT_TRADE_POOR_DATA",
             dedupe(warnings + ["INVALID_RISK"]),
             dedupe(warnings + ["INVALID_RISK"]),
+            setup_evidence,
         )
     target_1 = entry + (risk * 2)
     target_2 = entry + (risk * 3)
@@ -652,6 +695,7 @@ def build_trade_plan(candidate: Candidate, technicals: TechnicalLevels, tape: Ma
         readiness=readiness,
         blocking_reasons=blocking_reasons,
         warnings=dedupe(warnings),
+        setup_evidence=setup_evidence,
     )
 
 
@@ -685,12 +729,20 @@ def apply_evidence_authority_gate(
     price_evidence_status: str,
     catalyst_attribution: CatalystAttribution | None,
     rvol_evidence: TimeNormalizedRvolEvidence | None,
+    setup_evidence: TradeSetupEvidence | None,
 ) -> TradePlan:
     blocking = list(plan.blocking_reasons)
     if price_evidence_status != EXECUTION_ELIGIBLE:
         blocking.append(PRICE_EVIDENCE_EXECUTION_INELIGIBLE)
     if rvol_evidence is None or not rvol_evidence.execution_eligible:
         blocking.append(RVOL_EVIDENCE_EXECUTION_INELIGIBLE)
+    if setup_evidence is None or not setup_evidence.execution_eligible:
+        blocking.append(SETUP_IDENTITY_EXECUTION_INELIGIBLE)
+    if (
+        setup_evidence is not None
+        and setup_evidence.setup_type == RECLAIM_REQUIRED_SETUP
+    ):
+        blocking.append(RECLAIM_CONFIRMATION_REQUIRED)
     if (
         catalyst_attribution is None
         or catalyst_attribution.score_authority != CATALYST_SCORE_SUPPORTED
@@ -704,11 +756,14 @@ def apply_evidence_authority_gate(
         for reason in plan.blocking_reasons
         if reason != "MISSING_RVOL"
     ]
-    readiness = (
-        plan.readiness
-        if plan.readiness.startswith("DO_NOT_TRADE") and non_authority_missing
-        else DO_NOT_TRADE_UNTRUSTED_EVIDENCE
-    )
+    if RECLAIM_CONFIRMATION_REQUIRED in blocking:
+        readiness = DO_NOT_TRADE_SETUP_UNCONFIRMED
+    else:
+        readiness = (
+            plan.readiness
+            if plan.readiness.startswith("DO_NOT_TRADE") and non_authority_missing
+            else DO_NOT_TRADE_UNTRUSTED_EVIDENCE
+        )
     return replace(
         plan,
         tradeability="LOW",
@@ -864,7 +919,9 @@ def opportunity_notes(
     elif plan.readiness == EXECUTION_READY_TRADE:
         notes.append("Intraday execution-ready tape and levels available")
     if "PRICE_ALREADY_ABOVE_ENTRY" in plan.warnings:
-        notes.append("Price already exceeded original breakout; entry was reset to a pullback/reclaim level")
+        notes.append(
+            "Price already exceeded the original breakout; the original level is preserved and a pullback/reclaim must be observed before entry"
+        )
     if plan.readiness in {EXECUTION_READY_PREMARKET, EXECUTION_READY_TRADE}:
         pass
     elif plan.readiness.startswith("DO_NOT_TRADE"):
@@ -2251,6 +2308,19 @@ def report_warnings(rows: list[TradePlanRow], *, fetch_bars: bool, fetch_market_
             "One or more rows lack sufficient time-normalized Schwab minute-volume evidence; "
             "legacy scanner/provider RVOL remains research-only and cannot grant execution authority."
         )
+    if any(not row.trade_plan.setup_evidence.execution_eligible for row in rows):
+        warnings.append(
+            "One or more rows lack authoritative Daily-bar setup identity; estimated levels "
+            "cannot grant execution authority."
+        )
+    if any(
+        row.trade_plan.setup_evidence.setup_type == RECLAIM_REQUIRED_SETUP
+        for row in rows
+    ):
+        warnings.append(
+            "One or more rows already exceed their original breakout level; the level is "
+            "preserved and entry remains blocked until a pullback-and-reclaim is observed."
+        )
     if any(
         row.catalyst_attribution is not None
         and row.catalyst_attribution.score_authority == CATALYST_SCORE_BLOCKED
@@ -2444,6 +2514,12 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
                 f"- Previous Day High/Low/Close: {money(tech.previous_day_high)} / {money(tech.previous_day_low)} / {money(tech.previous_day_close)}",
                 f"- 5-Day High / 20-Day High: {money(tech.five_day_high)} / {money(tech.twenty_day_high)}",
                 f"- Support / Resistance: {money(tech.support_level)} / {money(tech.resistance_level)}",
+                f"- Setup Type: {plan.setup_evidence.setup_type}",
+                f"- Setup Authority: {plan.setup_evidence.status}",
+                f"- Original Breakout Level: {money(plan.setup_evidence.breakout_level)}",
+                f"- Setup Confirmation: {plan.setup_evidence.confirmation_status} | {plan.setup_evidence.confirmation_rule or 'unavailable'}",
+                f"- Setup Invalidation: {money(plan.setup_evidence.invalidation_level)} | {plan.setup_evidence.invalidation_rule or 'unavailable'}",
+                f"- Setup Fingerprint: `{plan.setup_evidence.fingerprint or 'unavailable'}`",
                 f"- Bullish Entry: {money(plan.bullish_entry)} (HYPOTHETICAL PLAN | EXECUTION-INELIGIBLE)",
                 f"- Bullish Stop: {money(plan.bullish_stop)} (HYPOTHETICAL PLAN | EXECUTION-INELIGIBLE)",
                 f"- Targets: {money(plan.bullish_target_1)} / {money(plan.bullish_target_2)} "
@@ -2745,6 +2821,11 @@ def row_to_csv(row: TradePlanRow) -> dict[str, object]:
         "20-Day High": tech.twenty_day_high,
         "Support Level": tech.support_level,
         "Resistance Level": tech.resistance_level,
+        "Setup Type": plan.setup_evidence.setup_type,
+        "Setup Authority": plan.setup_evidence.status,
+        "Original Breakout Level": plan.setup_evidence.breakout_level,
+        "Setup Confirmation": plan.setup_evidence.confirmation_status,
+        "Setup Fingerprint": plan.setup_evidence.fingerprint,
         "Bullish Entry": plan.bullish_entry,
         "Bullish Stop": plan.bullish_stop,
         "Bullish Target 1": plan.bullish_target_1,
@@ -2818,6 +2899,7 @@ def row_to_json(row: TradePlanRow) -> dict[str, object]:
             },
             "provider_results": row.market_tape.provider_results,
             "rvol_evidence": asdict(row.rvol_evidence),
+            "setup_evidence": asdict(row.trade_plan.setup_evidence),
             "catalyst_attribution": (
                 asdict(row.catalyst_attribution)
                 if row.catalyst_attribution is not None
@@ -2830,6 +2912,8 @@ def row_to_json(row: TradePlanRow) -> dict[str, object]:
                 in {
                     PRICE_EVIDENCE_EXECUTION_INELIGIBLE,
                     RVOL_EVIDENCE_EXECUTION_INELIGIBLE,
+                    SETUP_IDENTITY_EXECUTION_INELIGIBLE,
+                    RECLAIM_CONFIRMATION_REQUIRED,
                     CATALYST_ATTRIBUTION_UNRESOLVED,
                 }
             ],

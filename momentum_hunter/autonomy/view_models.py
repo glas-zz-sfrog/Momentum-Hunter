@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from momentum_hunter.models import Candidate
 from momentum_hunter.time_utils import now_central
@@ -15,6 +15,7 @@ from momentum_hunter.trade_planning import (
     assign_ranks,
     build_trade_plan_row,
 )
+from momentum_hunter.trade_setup_identity import TradeSetupEvidence
 
 from momentum_hunter.autonomy.risk_governor import RiskGovernorResult, SIMULATION_MODE, evaluate_trade_plan
 
@@ -112,7 +113,15 @@ def candidate_plan_from_report_row(
     if not isinstance(raw_plan, dict):
         return None
     try:
-        trade_plan = TradePlan(**raw_plan)
+        normalized_plan = dict(raw_plan)
+        raw_setup = normalized_plan.get("setup_evidence")
+        if isinstance(raw_setup, dict):
+            normalized_setup = dict(raw_setup)
+            findings = normalized_setup.get("findings")
+            if isinstance(findings, list):
+                normalized_setup["findings"] = tuple(findings)
+            normalized_plan["setup_evidence"] = TradeSetupEvidence(**normalized_setup)
+        trade_plan = TradePlan(**normalized_plan)
     except TypeError:
         return None
     symbol = str(row.get("symbol") or "").upper()
@@ -218,7 +227,18 @@ def stable_trade_plan_id(ticker: str, plan: TradePlan) -> str:
         format_identity_value(plan.bullish_target_1),
         plan.readiness or "UNKNOWN",
     ]
+    setup_identity = setup_fingerprint(plan.setup_evidence)
+    if setup_identity != "NO_SETUP_IDENTITY":
+        parts.append(setup_identity)
     return "tp-" + "-".join(parts).replace(".", "_").replace(" ", "_")
+
+
+def setup_fingerprint(evidence: TradeSetupEvidence | Mapping[str, object] | object) -> str:
+    if isinstance(evidence, TradeSetupEvidence):
+        return evidence.fingerprint or "NO_SETUP_IDENTITY"
+    if isinstance(evidence, Mapping):
+        return str(evidence.get("fingerprint") or "NO_SETUP_IDENTITY")
+    return "NO_SETUP_IDENTITY"
 
 
 def setup_label(cluster: str, plan: TradePlan) -> str:

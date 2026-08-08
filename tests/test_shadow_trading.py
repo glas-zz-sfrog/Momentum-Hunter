@@ -53,6 +53,7 @@ from momentum_hunter.time_normalized_rvol import (
     TIME_NORMALIZED_RVOL_SCHEMA_VERSION,
 )
 from momentum_hunter.schwab_candle_contract import SCHWAB_PRICE_HISTORY_SOURCE
+from momentum_hunter.trade_setup_identity import build_trade_setup_evidence
 from momentum_hunter.workstation_shadow import ShadowWorkspacePaths, ShadowWorkspaceService
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
 
@@ -1323,6 +1324,41 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
         self.assertNotIn("submit_order", capabilities)
 
 
+def bind_setup_identity(row: dict, *, symbol: str | None = None) -> dict:
+    """Keep a synthetic report row's setup chain internally consistent."""
+
+    if symbol is not None:
+        row["symbol"] = symbol
+        row["evidence_integrity"]["rvol_evidence"]["symbol"] = symbol
+    symbol = str(row["symbol"])
+    market_data = row["market_data"]
+    trade_plan = row["trade_plan"]
+    setup = asdict(
+        build_trade_setup_evidence(
+            symbol=symbol,
+            observed_price=float(market_data["last_price"]),
+            breakout_level=float(trade_plan["bullish_entry"]),
+            invalidation_level=float(trade_plan["bullish_stop"]),
+            source="daily_bars",
+        )
+    )
+    row["technical_levels"] = {
+        "previous_day_high": float(trade_plan["bullish_entry"]),
+        "previous_day_low": float(trade_plan["bullish_stop"]),
+        "previous_day_close": float(market_data["last_price"]),
+        "five_day_high": float(trade_plan["bullish_entry"]),
+        "twenty_day_high": float(trade_plan["bullish_entry"]),
+        "atr": round(float(trade_plan["bullish_entry"]) - float(trade_plan["bullish_stop"]), 2),
+        "support_level": float(trade_plan["bullish_stop"]),
+        "resistance_level": float(trade_plan["bullish_entry"]),
+        "source": "daily_bars",
+        "warnings": [],
+    }
+    row["evidence_integrity"]["setup_evidence"] = copy.deepcopy(setup)
+    trade_plan["setup_evidence"] = copy.deepcopy(setup)
+    return row
+
+
 def report_payload() -> dict:
     row = {
         "rank": 1,
@@ -1420,6 +1456,7 @@ def report_payload() -> dict:
         },
         "opportunity_notes": ["Synthetic test row"],
     }
+    bind_setup_identity(row)
     return {
         "schema_version": 1,
         "metadata": {

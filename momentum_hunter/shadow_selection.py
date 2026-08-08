@@ -61,6 +61,22 @@ from momentum_hunter.time_normalized_rvol import (
     TIME_NORMALIZED_RVOL_SCHEMA_VERSION,
 )
 from momentum_hunter.schwab_candle_contract import EASTERN_TZ, SCHWAB_PRICE_HISTORY_SOURCE
+from momentum_hunter.trade_setup_identity import (
+    BREAKOUT_CONFIRMATION_RULE,
+    BREAKOUT_SETUP,
+    DAILY_LEVEL_SOURCE,
+    DO_NOT_TRADE_SETUP_UNCONFIRMED,
+    INVALIDATION_RULE,
+    PENDING_BREAKOUT,
+    RECLAIM_CONFIRMATION_REQUIRED,
+    RECLAIM_CONFIRMATION_RULE,
+    RECLAIM_NOT_CONFIRMED,
+    RECLAIM_REQUIRED_SETUP,
+    TRADE_SETUP_PROFILE,
+    TRADE_SETUP_SCHEMA_VERSION,
+    TradeSetupEvidence,
+    trade_setup_fingerprint,
+)
 
 
 SELECTION_STARTED = "TRADE_STARTED"
@@ -864,6 +880,7 @@ def candidate_evidence_authority_findings(
         findings.append("Candidate price evidence is not execution-eligible.")
     if integrity.get("plan_authority") != EXECUTION_ELIGIBLE:
         findings.append("Candidate TradePlan authority is not execution-eligible.")
+    findings.extend(trade_setup_authority_findings(row, integrity))
 
     market_data = row.get("market_data")
     market_data = market_data if isinstance(market_data, Mapping) else {}
@@ -1003,6 +1020,131 @@ def candidate_evidence_authority_findings(
             findings.append(
                 "Candidate catalyst score contribution contradicts authorized confidence."
             )
+    return tuple(findings)
+
+
+def trade_setup_authority_findings(
+    row: Mapping[str, Any],
+    integrity: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """Validate the immutable setup identity before Shadow can consider a row."""
+
+    setup = integrity.get("setup_evidence")
+    if not isinstance(setup, Mapping):
+        return ("Candidate setup identity is missing.",)
+
+    findings: list[str] = []
+    trade_plan = row.get("trade_plan")
+    trade_plan = trade_plan if isinstance(trade_plan, Mapping) else {}
+    plan_setup = trade_plan.get("setup_evidence")
+    if not isinstance(plan_setup, Mapping):
+        findings.append("Candidate TradePlan setup identity is missing.")
+    elif dict(plan_setup) != dict(setup):
+        findings.append("Candidate setup identity contradicts the TradePlan.")
+
+    if setup.get("schema_version") != TRADE_SETUP_SCHEMA_VERSION:
+        findings.append("Candidate setup identity schema is missing or unsupported.")
+    if setup.get("profile") != TRADE_SETUP_PROFILE:
+        findings.append("Candidate setup identity profile is missing or unsupported.")
+    if setup.get("status") != EXECUTION_ELIGIBLE:
+        findings.append("Candidate setup identity is not execution-eligible.")
+    if setup.get("source") != DAILY_LEVEL_SOURCE:
+        findings.append("Candidate setup identity does not use completed Daily bars.")
+    if str(setup.get("symbol") or "").upper() != str(row.get("symbol") or "").upper():
+        findings.append("Candidate setup identity symbol contradicts the report row.")
+
+    observed = finite_number(setup.get("observed_price"))
+    breakout = finite_number(setup.get("breakout_level"))
+    planned_entry = finite_number(setup.get("planned_entry"))
+    invalidation = finite_number(setup.get("invalidation_level"))
+    if any(value is None or value <= 0 for value in (observed, breakout, planned_entry, invalidation)):
+        findings.append("Candidate setup identity levels are missing or invalid.")
+    elif invalidation >= breakout:
+        findings.append("Candidate setup invalidation is not below the breakout level.")
+
+    if breakout is not None and planned_entry is not None and abs(breakout - planned_entry) > 0.0001:
+        findings.append("Candidate planned entry does not preserve the breakout level.")
+    plan_entry = finite_number(trade_plan.get("bullish_entry"))
+    plan_stop = finite_number(trade_plan.get("bullish_stop"))
+    if breakout is None or plan_entry is None or abs(breakout - plan_entry) > 0.0001:
+        findings.append("Candidate TradePlan entry contradicts the setup breakout level.")
+    if invalidation is None or plan_stop is None or abs(invalidation - plan_stop) > 0.0001:
+        findings.append("Candidate TradePlan stop contradicts the setup invalidation level.")
+
+    technicals = row.get("technical_levels")
+    technicals = technicals if isinstance(technicals, Mapping) else {}
+    resistance = finite_number(technicals.get("resistance_level"))
+    support = finite_number(technicals.get("support_level"))
+    if technicals.get("source") != DAILY_LEVEL_SOURCE:
+        findings.append("Candidate technical levels do not use completed Daily bars.")
+    if breakout is None or resistance is None or abs(breakout - resistance) > 0.0001:
+        findings.append("Candidate breakout level contradicts Daily resistance.")
+    if invalidation is None or support is None or abs(invalidation - support) > 0.0001:
+        findings.append("Candidate invalidation level contradicts Daily support.")
+    if setup.get("invalidation_rule") != INVALIDATION_RULE:
+        findings.append("Candidate setup invalidation rule is missing or unsupported.")
+
+    evidence_findings = setup.get("findings")
+    evidence_findings = (
+        tuple(str(item) for item in evidence_findings)
+        if isinstance(evidence_findings, (list, tuple))
+        else ()
+    )
+    setup_type = setup.get("setup_type")
+    requires_pullback = setup.get("requires_pullback")
+    blocking_reasons = trade_plan.get("blocking_reasons")
+    blocking_reasons = (
+        tuple(str(item) for item in blocking_reasons)
+        if isinstance(blocking_reasons, (list, tuple))
+        else ()
+    )
+    if setup_type == BREAKOUT_SETUP:
+        if observed is None or breakout is None or observed > breakout:
+            findings.append("Candidate breakout identity contradicts its observed price.")
+        if setup.get("confirmation_status") != PENDING_BREAKOUT:
+            findings.append("Candidate breakout confirmation status is unsupported.")
+        if setup.get("confirmation_rule") != BREAKOUT_CONFIRMATION_RULE:
+            findings.append("Candidate breakout confirmation rule is unsupported.")
+        if requires_pullback is not False:
+            findings.append("Candidate breakout identity incorrectly requires a pullback.")
+        if "BREAKOUT_LEVEL_AHEAD" not in evidence_findings:
+            findings.append("Candidate breakout availability finding is missing.")
+        if RECLAIM_CONFIRMATION_REQUIRED in blocking_reasons:
+            findings.append("Candidate breakout TradePlan carries a contradictory reclaim blocker.")
+    elif setup_type == RECLAIM_REQUIRED_SETUP:
+        if observed is None or breakout is None or observed <= breakout:
+            findings.append("Candidate reclaim identity contradicts its observed price.")
+        if setup.get("confirmation_status") != RECLAIM_NOT_CONFIRMED:
+            findings.append("Candidate reclaim confirmation status is unsupported.")
+        if setup.get("confirmation_rule") != RECLAIM_CONFIRMATION_RULE:
+            findings.append("Candidate reclaim confirmation rule is unsupported.")
+        if requires_pullback is not True:
+            findings.append("Candidate reclaim identity does not require a pullback.")
+        if (
+            "PRICE_ALREADY_ABOVE_BREAKOUT_LEVEL" not in evidence_findings
+            or RECLAIM_CONFIRMATION_REQUIRED not in evidence_findings
+        ):
+            findings.append("Candidate reclaim findings are incomplete.")
+        if RECLAIM_CONFIRMATION_REQUIRED not in blocking_reasons:
+            findings.append("Candidate reclaim TradePlan is missing its confirmation blocker.")
+        if trade_plan.get("readiness") != DO_NOT_TRADE_SETUP_UNCONFIRMED:
+            findings.append("Candidate reclaim TradePlan readiness is not fail-closed.")
+    else:
+        findings.append("Candidate setup type is missing or unsupported.")
+
+    expected_fields = set(TradeSetupEvidence.__dataclass_fields__)
+    if set(setup) != expected_fields:
+        findings.append("Candidate setup identity fields are incomplete or unsupported.")
+    else:
+        try:
+            normalized = dict(setup)
+            normalized["findings"] = evidence_findings
+            evidence = TradeSetupEvidence(**normalized)
+        except (TypeError, ValueError):
+            findings.append("Candidate setup identity cannot be parsed.")
+        else:
+            if evidence.fingerprint != trade_setup_fingerprint(evidence):
+                findings.append("Candidate setup identity fingerprint is invalid.")
     return tuple(findings)
 
 

@@ -17,9 +17,16 @@ from momentum_hunter.autonomy.broker import (
 from momentum_hunter.autonomy.ledger import ExecutionLedger
 from momentum_hunter.autonomy.risk_governor import evaluate_trade_plan
 from momentum_hunter.autonomy.simulation import SimulationLabEngine
-from momentum_hunter.autonomy.view_models import build_candidate_plans_from_candidates, ladder_rows_for_candidate
+from momentum_hunter.autonomy.view_models import (
+    build_candidate_plans_from_candidates,
+    candidate_plan_from_report_row,
+    ladder_rows_for_candidate,
+    stable_trade_plan_id,
+)
 from momentum_hunter.models import Candidate, NewsItem, NewsStack
 from momentum_hunter.trade_planning import TradePlan
+from momentum_hunter.trade_setup_identity import TradeSetupEvidence
+from tests.test_shadow_trading import report_payload
 
 
 class ArgusAutonomyTests(unittest.TestCase):
@@ -34,6 +41,31 @@ class ArgusAutonomyTests(unittest.TestCase):
         rows = {row.field: row.value for row in ladder_rows_for_candidate(plans[0])}
         self.assertNotEqual("Missing", rows["Entry/limit"])
         self.assertNotEqual("Missing", rows["Stop/invalidation"])
+
+    def test_report_plan_parses_versioned_setup_identity(self) -> None:
+        row = report_payload()["candidates"][0]
+        candidate = candidate_plan_from_report_row(
+            row,
+            rank=1,
+            source_name="synthetic.json",
+            source_path="synthetic.json",
+        )
+
+        self.assertIsNotNone(candidate)
+        self.assertIsInstance(candidate.trade_plan.setup_evidence, TradeSetupEvidence)
+        self.assertEqual(
+            row["trade_plan"]["setup_evidence"]["fingerprint"],
+            candidate.trade_plan.setup_evidence.fingerprint,
+        )
+        self.assertIn(candidate.trade_plan.setup_evidence.fingerprint, candidate.trade_plan_id)
+
+    def test_legacy_plan_without_setup_identity_keeps_stable_id_shape(self) -> None:
+        plan = complete_trade_plan()
+
+        self.assertEqual(
+            "tp-AAA-10_0000-9_5000-11_0000-EXECUTION_READY_TRADE",
+            stable_trade_plan_id("AAA", plan),
+        )
 
     def test_risk_governor_blocks_missing_stop_and_max_risk(self) -> None:
         plan = TradePlan(

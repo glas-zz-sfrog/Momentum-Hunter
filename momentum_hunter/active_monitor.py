@@ -49,6 +49,12 @@ from momentum_hunter.trade_planning import (
     rvol_type_for_time,
 )
 from momentum_hunter.time_normalized_rvol import load_time_normalized_rvol_evidence
+from momentum_hunter.trade_setup_identity import (
+    DO_NOT_TRADE_SETUP_UNCONFIRMED,
+    RECLAIM_CONFIRMATION_REQUIRED,
+    RECLAIM_REQUIRED_SETUP,
+    SETUP_IDENTITY_EXECUTION_INELIGIBLE,
+)
 
 
 MONITOR_CYCLE_SCHEMA_VERSION = 1
@@ -575,7 +581,13 @@ def recalculate_readiness_from_report_row(
     if current_price is None:
         market = item.get("market_data") if isinstance(item.get("market_data"), dict) else {}
         current_price = parse_float(market.get("last_price") or market.get("premarket_price"))
-    original_entry = parse_float(trade_plan.get("bullish_entry") if trade_plan else None)
+    integrity = item.get("evidence_integrity")
+    integrity = integrity if isinstance(integrity, dict) else {}
+    setup = integrity.get("setup_evidence")
+    setup = setup if isinstance(setup, dict) else {}
+    original_entry = parse_float(setup.get("breakout_level"))
+    if original_entry is None:
+        original_entry = parse_float(trade_plan.get("bullish_entry") if trade_plan else None)
     if original_entry is None:
         original_entry = technicals.resistance_level
     readiness, confidence, tradeability, blocking_reasons = classify_readiness(
@@ -584,13 +596,22 @@ def recalculate_readiness_from_report_row(
         current_price=current_price,
         original_entry=original_entry,
     )
-    integrity = item.get("evidence_integrity")
-    integrity = integrity if isinstance(integrity, dict) else {}
     authority_blockers: list[str] = []
     if execution_price_evidence_status(tape, as_of=generated_at) != EXECUTION_ELIGIBLE:
         authority_blockers.append(PRICE_EVIDENCE_EXECUTION_INELIGIBLE)
     if tape.rvol_evidence is None or not tape.rvol_evidence.execution_eligible:
         authority_blockers.append(RVOL_EVIDENCE_EXECUTION_INELIGIBLE)
+    if setup.get("status") != EXECUTION_ELIGIBLE:
+        authority_blockers.append(SETUP_IDENTITY_EXECUTION_INELIGIBLE)
+    existing_blockers = trade_plan.get("blocking_reasons")
+    existing_blockers = (
+        existing_blockers if isinstance(existing_blockers, list) else []
+    )
+    if (
+        setup.get("setup_type") == RECLAIM_REQUIRED_SETUP
+        or RECLAIM_CONFIRMATION_REQUIRED in existing_blockers
+    ):
+        authority_blockers.append(RECLAIM_CONFIRMATION_REQUIRED)
     if integrity.get("plan_authority") != EXECUTION_ELIGIBLE:
         authority_blockers.append(PLAN_AUTHORITY_EXECUTION_INELIGIBLE)
     attribution = integrity.get("catalyst_attribution")
@@ -600,7 +621,11 @@ def recalculate_readiness_from_report_row(
     ):
         authority_blockers.append(CATALYST_ATTRIBUTION_UNRESOLVED)
     if authority_blockers:
-        readiness = DO_NOT_TRADE_UNTRUSTED_EVIDENCE
+        readiness = (
+            DO_NOT_TRADE_SETUP_UNCONFIRMED
+            if RECLAIM_CONFIRMATION_REQUIRED in authority_blockers
+            else DO_NOT_TRADE_UNTRUSTED_EVIDENCE
+        )
         confidence = "LOW"
         tradeability = "LOW"
         blocking_reasons = dedupe(blocking_reasons + authority_blockers)

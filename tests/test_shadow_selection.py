@@ -54,7 +54,7 @@ from momentum_hunter.workstation_shadow import (
     ShadowWorkspacePaths,
     ShadowWorkspaceService,
 )
-from tests.test_shadow_trading import report_payload
+from tests.test_shadow_trading import bind_setup_identity, report_payload
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
 
 
@@ -414,6 +414,8 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
             root / "shadow_selection.py",
             root / "shadow_trading.py",
             root / "storage.py",
+            root / "trade_planning.py",
+            root / "trade_setup_identity.py",
             root / "workstation_shadow.py",
             project_root / "tools" / "capture_job.py",
             project_root / "tools" / "install_capture_tasks.ps1",
@@ -627,13 +629,11 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         payload = report_payload()
         rank_two = copy.deepcopy(payload["candidates"][0])
         rank_two["rank"] = 2
-        rank_two["symbol"] = "SECOND"
-        rank_two["evidence_integrity"]["rvol_evidence"]["symbol"] = "SECOND"
+        bind_setup_identity(rank_two, symbol="SECOND")
         rank_two["scoring"]["composite_score"] = 99
         rank_one = copy.deepcopy(payload["candidates"][0])
         rank_one["rank"] = 1
-        rank_one["symbol"] = "FIRST"
-        rank_one["evidence_integrity"]["rvol_evidence"]["symbol"] = "FIRST"
+        bind_setup_identity(rank_one, symbol="FIRST")
         rank_one["scoring"]["composite_score"] = 80
         payload["candidates"] = [rank_two, rank_one]
         self.quote_source.quotes.update(
@@ -721,6 +721,59 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         cycle = self.service.decision_cycle_store.get(missing.decision_cycle_id)
         self.assertIn(
             "time-normalized RVOL evidence is missing",
+            " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
+        )
+
+    def test_missing_setup_identity_is_rejected(self) -> None:
+        self.activate()
+        payload = report_payload()
+        payload["candidates"][0]["evidence_integrity"].pop("setup_evidence")
+        self.write_report(payload)
+
+        result = self.selector().select(self.report_path, decision_at=self.decision_at)
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        self.assertIn(
+            "setup identity is missing",
+            " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
+        )
+
+    def test_tampered_setup_identity_fingerprint_is_rejected(self) -> None:
+        self.activate()
+        payload = report_payload()
+        payload["candidates"][0]["evidence_integrity"]["setup_evidence"][
+            "observed_price"
+        ] = 9.8
+        self.write_report(payload)
+
+        result = self.selector().select(self.report_path, decision_at=self.decision_at)
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        reasons = " ".join(cycle["candidate_assessments"][0]["rejection_reasons"])
+        self.assertIn("contradicts the TradePlan", reasons)
+        self.assertIn("fingerprint is invalid", reasons)
+
+    def test_unconfirmed_reclaim_cannot_start_shadow_trade(self) -> None:
+        self.activate()
+        payload = report_payload()
+        row = payload["candidates"][0]
+        row["market_data"]["last_price"] = 10.20
+        bind_setup_identity(row)
+        row["trade_plan"]["readiness"] = "DO_NOT_TRADE_SETUP_UNCONFIRMED"
+        row["trade_plan"]["blocking_reasons"] = [
+            "RECLAIM_CONFIRMATION_REQUIRED"
+        ]
+        self.write_report(payload)
+
+        result = self.selector().select(self.report_path, decision_at=self.decision_at)
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        self.assertEqual((), self.service.store.load().trades)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        self.assertIn(
+            "RECLAIM_CONFIRMATION_REQUIRED",
             " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
         )
 
@@ -816,8 +869,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         payload = report_payload()
         second = copy.deepcopy(payload["candidates"][0])
         second["rank"] = 2
-        second["symbol"] = "SECOND"
-        second["evidence_integrity"]["rvol_evidence"]["symbol"] = "SECOND"
+        bind_setup_identity(second, symbol="SECOND")
         payload["candidates"].append(second)
         self.write_report(payload)
         source = BatchQuoteSource(
@@ -850,8 +902,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         for symbol, score in (("ZZZ", 90), ("AAA", 90), ("MID", 95)):
             row = copy.deepcopy(payload["candidates"][0])
             row["rank"] = 1
-            row["symbol"] = symbol
-            row["evidence_integrity"]["rvol_evidence"]["symbol"] = symbol
+            bind_setup_identity(row, symbol=symbol)
             row["scoring"]["composite_score"] = score
             rows.append(row)
             self.quote_source.quotes[symbol] = quote_payload(symbol)
@@ -877,13 +928,11 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         payload = report_payload()
         low = copy.deepcopy(payload["candidates"][0])
         low["rank"] = 1
-        low["symbol"] = "LOW"
-        low["evidence_integrity"]["rvol_evidence"]["symbol"] = "LOW"
+        bind_setup_identity(low, symbol="LOW")
         low["scoring"]["composite_score"] = 90.1
         high = copy.deepcopy(payload["candidates"][0])
         high["rank"] = 1
-        high["symbol"] = "HIGH"
-        high["evidence_integrity"]["rvol_evidence"]["symbol"] = "HIGH"
+        bind_setup_identity(high, symbol="HIGH")
         high["scoring"]["composite_score"] = 90.9
         payload["candidates"] = [low, high]
         self.quote_source.quotes.update(
@@ -1470,8 +1519,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         payload["metadata"]["source_capture_path"] = "synthetic/second-capture.json"
         payload["metadata"]["source_capture_time"] = "2026-07-23T10:03:00-05:00"
         payload["metadata"]["generated_at"] = "2026-07-23T10:03:30-05:00"
-        payload["candidates"][0]["symbol"] = "OTHER"
-        payload["candidates"][0]["evidence_integrity"]["rvol_evidence"]["symbol"] = "OTHER"
+        bind_setup_identity(payload["candidates"][0], symbol="OTHER")
         payload["candidates"][0]["rank"] = 1
         second_path = self.reports_dir / "trade-plan-briefing-second.json"
         second_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -1610,12 +1658,10 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         eligible = copy.deepcopy(payload["candidates"][0])
         blocked = copy.deepcopy(eligible)
         blocked["rank"] = 1
-        blocked["symbol"] = "BLOCK"
-        blocked["evidence_integrity"]["rvol_evidence"]["symbol"] = "BLOCK"
+        bind_setup_identity(blocked, symbol="BLOCK")
         blocked["trade_plan"]["bullish_stop"] = None
         eligible["rank"] = 2
-        eligible["symbol"] = "TEST"
-        eligible["evidence_integrity"]["rvol_evidence"]["symbol"] = "TEST"
+        bind_setup_identity(eligible, symbol="TEST")
         payload["candidates"] = [blocked, eligible]
         self.write_report(payload)
 

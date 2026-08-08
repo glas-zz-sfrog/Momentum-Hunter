@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added DATA-003's versioned breakout-versus-reclaim setup identity. TradePlans preserve the original completed-Daily breakout level instead of chasing above current price; already-exceeded levels become `RECLAIM_REQUIRED` and remain fail-closed until a real pullback-and-recross can be observed.
+- Bound setup schema/profile/source/levels/rules/findings/fingerprint into report, plan, stable-ID, Active Monitor, runtime-build, and Shadow validation paths. Compileall, 143 focused/adjacent tests, all 1,250 Python tests, and all 251 .NET tests pass; scoring weights, alerts, accounts/orders, UI, schedules, schemas, credentials, raw captures, and historical reports remain unchanged.
 - Added DATA-002's versioned time-normalized opening RVOL evidence from terminal canonical Schwab minute bars. It compares current cumulative volume only with identical elapsed-session windows, requires at least five complete prior sessions, targets twenty, records source/symbol/window/baseline identity, and fails closed on missing or contradictory evidence.
 - Kept the former partial-session/full-day ratio visible only as `LEGACY_RVOL_RESEARCH_ONLY`; it cannot grant TradePlan readiness or Shadow eligibility. Active Monitor preserves the authority blocker, and Shadow independently rejects missing, tampered, cross-symbol, cross-session, or insufficient evidence.
 - Preserved Friday August 7 as the fifth consecutive successful unattended opening capture. It completed on attempt 1 with zero candidates, complete required artifacts, no Shadow or brokerage action, and 25 future captures remaining.
