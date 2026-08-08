@@ -2,6 +2,20 @@
 
 Date reconciled: 2026-08-08
 
+## ARGUS-DATA-005 Account-Aware Allocation
+
+`codex/ARGUS-DATA-005-account-aware-allocation` is
+`IMPLEMENTED_PENDING_MERGE` from synchronized base `fc8a114`. It adds a
+versioned, fail-closed account-allocation contract, removes executable `$500`
+reference sizing from simulation and Shadow, freezes policy/context/allocation
+fingerprints and quantity, and audits evidence chronology and tampering. Full
+verification passes compileall, `git diff --check`, all 1,296 Python tests, and
+all 251 .NET tests. No provider/account call, real broker method, transmission,
+score/rank/alert/RVOL change, DATA-004 timing/setup change, schema/package,
+credential, UI, raw-capture, generated-report, or historical-evidence change
+occurred. Integrate by clean fast-forward only; activation remains blocked on
+Steven's numeric policy and a fresh read-only account/portfolio snapshot source.
+
 ## ARGUS-DATA-004 Intraday TradePlan Horizon
 
 `codex/ARGUS-DATA-004-intraday-plan-horizon` is

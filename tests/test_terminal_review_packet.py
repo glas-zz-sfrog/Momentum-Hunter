@@ -36,6 +36,7 @@ from momentum_hunter.terminal_review_packet import (
     verify_packet_security,
 )
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
+from tests.test_account_allocation import SyntheticAllocationSource
 from tests.test_shadow_trading import (
     bind_setup_identity,
     report_payload as shadow_report_payload,
@@ -391,6 +392,7 @@ class TerminalReviewPacketTests(unittest.TestCase):
         selector = AutomaticShadowSelector(
             service,
             quote_source=_ClockedQuoteSource(quote_at),
+            allocation_source=SyntheticAllocationSource(quantity=2),
         )
         selection = selector.select(report_path, decision_at=DECISION_AT)
 

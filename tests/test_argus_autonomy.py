@@ -3,8 +3,13 @@ from __future__ import annotations
 import inspect
 import unittest
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from momentum_hunter.account_allocation import (
+    AccountAllocationContext,
+    AccountAllocationPolicy,
+    build_account_allocation_decision,
+)
 from momentum_hunter.autonomy.auditor import audit_execution_ledger, audit_paper_advancement_gate, audit_simulation_chain
 from momentum_hunter.autonomy.ledger import ExecutionLedgerEvent
 from momentum_hunter.autonomy.broker import (
@@ -210,7 +215,11 @@ class ArgusAutonomyTests(unittest.TestCase):
         ledger = ExecutionLedger()
         engine = SimulationLabEngine(adapter=FakeBrokerAdapter(), ledger=ledger)
 
-        result = engine.run_candidate(candidate)
+        result = engine.run_candidate(
+            candidate,
+            allocation=allocation_for_candidate(candidate),
+            decision_at=simulation_decision_at(),
+        )
         audit = audit_simulation_chain(ledger, ticker=candidate.ticker, trade_plan_id=candidate.trade_plan_id)
         order_events = [
             event for event in ledger.events if event.requested_action in {"simulated_order_previewed", "fake_order_submitted"}
@@ -223,12 +232,68 @@ class ArgusAutonomyTests(unittest.TestCase):
         self.assertTrue(all(event.trade_plan_id == candidate.trade_plan_id for event in order_events))
         self.assertTrue(all(event.risk_result_id == candidate.risk_result.result_id for event in order_events))
 
+    def test_simulation_auditor_rejects_tampered_or_duplicate_allocation_evidence(self) -> None:
+        candidate = valid_report_candidate()
+        ledger = ExecutionLedger()
+        SimulationLabEngine(adapter=FakeBrokerAdapter(), ledger=ledger).run_candidate(
+            candidate,
+            allocation=allocation_for_candidate(candidate),
+            decision_at=simulation_decision_at(),
+        )
+        events = ledger.events
+        allocation = next(
+            event
+            for event in events
+            if event.requested_action == "account_allocation_authorized"
+        )
+        tampered = replace(
+            allocation,
+            payload={**allocation.payload, "quantity": True},
+        )
+        tampered_ledger = ExecutionLedger(
+            [tampered if event is allocation else event for event in events]
+        )
+        duplicate_ledger = ExecutionLedger(
+            [
+                event
+                for item in events
+                for event in ([item, item] if item is allocation else [item])
+            ]
+        )
+
+        tampered_report = audit_simulation_chain(
+            tampered_ledger,
+            ticker=candidate.ticker,
+            trade_plan_id=candidate.trade_plan_id,
+        )
+        duplicate_report = audit_simulation_chain(
+            duplicate_ledger,
+            ticker=candidate.ticker,
+            trade_plan_id=candidate.trade_plan_id,
+        )
+
+        self.assertFalse(tampered_report.passed)
+        self.assertTrue(
+            any(finding.field == "quantity" for finding in tampered_report.findings)
+        )
+        self.assertFalse(duplicate_report.passed)
+        self.assertTrue(
+            any(
+                finding.field == "account_allocation"
+                for finding in duplicate_report.findings
+            )
+        )
+
     def test_simulation_engine_records_fake_rejection(self) -> None:
         candidate = valid_report_candidate()
         ledger = ExecutionLedger()
         engine = SimulationLabEngine(adapter=FakeBrokerAdapter(reject_symbols={candidate.ticker}), ledger=ledger)
 
-        result = engine.run_candidate(candidate)
+        result = engine.run_candidate(
+            candidate,
+            allocation=allocation_for_candidate(candidate),
+            decision_at=simulation_decision_at(),
+        )
 
         self.assertEqual("rejected", result.status)
         self.assertIn("FakeBroker configured rejection", result.submitted_order.reason)
@@ -257,6 +322,21 @@ class ArgusAutonomyTests(unittest.TestCase):
         self.assertNotIn("simulated_order_previewed", {event.requested_action for event in ledger.events})
         self.assertNotIn("fake_order_submitted", {event.requested_action for event in ledger.events})
 
+    def test_simulation_engine_rejects_missing_account_allocation_before_broker_calls(self) -> None:
+        candidate = valid_report_candidate()
+        ledger = ExecutionLedger()
+        adapter = FakeBrokerAdapter()
+
+        result = SimulationLabEngine(adapter=adapter, ledger=ledger).run_candidate(
+            candidate,
+            decision_at=simulation_decision_at(),
+        )
+
+        self.assertEqual("blocked", result.status)
+        self.assertIn("ACCOUNT_ALLOCATION_EVIDENCE_MISSING", result.message)
+        self.assertEqual([], adapter.list_orders())
+        self.assertIn("allocation_blocked", {event.event_type for event in ledger.events})
+
     def test_simulation_engine_rejects_transmit_capable_adapter_before_broker_calls(self) -> None:
         candidate = build_candidate_plans_from_candidates(sample_candidates())[0]
         ledger = ExecutionLedger()
@@ -284,7 +364,11 @@ class ArgusAutonomyTests(unittest.TestCase):
     def test_paper_advancement_gate_passes_complete_simulation_chain(self) -> None:
         candidate = build_candidate_plans_from_candidates(sample_candidates())[0]
         ledger = ExecutionLedger()
-        SimulationLabEngine(adapter=FakeBrokerAdapter(), ledger=ledger).run_candidate(candidate)
+        SimulationLabEngine(adapter=FakeBrokerAdapter(), ledger=ledger).run_candidate(
+            candidate,
+            allocation=allocation_for_candidate(candidate),
+            decision_at=simulation_decision_at(),
+        )
 
         report = audit_paper_advancement_gate(ledger, ticker=candidate.ticker, trade_plan_id=candidate.trade_plan_id)
 
@@ -589,6 +673,49 @@ def valid_report_candidate():
         checked_at=datetime.fromisoformat("2026-07-23T09:59:30-05:00"),
     )
     return replace(candidate, risk_result=risk)
+
+
+def simulation_decision_at() -> datetime:
+    return datetime.fromisoformat("2026-07-23T09:59:30-05:00")
+
+
+def allocation_for_candidate(candidate):
+    decision_at = simulation_decision_at()
+    return build_account_allocation_decision(
+        trade_plan_id=candidate.trade_plan_id,
+        entry_price=candidate.trade_plan.bullish_entry,
+        stop_price=candidate.trade_plan.bullish_stop,
+        target_price=candidate.trade_plan.bullish_target_1,
+        policy=AccountAllocationPolicy(
+            policy_id="synthetic-simulation-unit-risk",
+            fixed_unit_risk_dollars=25.0,
+            max_position_notional_dollars=500.0,
+            minimum_cash_reserve_dollars=0.0,
+            max_total_open_risk_dollars=25.0,
+            daily_loss_limit_dollars=50.0,
+            max_open_positions=1,
+            max_balance_age_seconds=30,
+        ),
+        context=AccountAllocationContext(
+            binding_fingerprint="a" * 64,
+            account_ending="2573",
+            account_type="INDIVIDUAL_CASH",
+            authorized_account_count=1,
+            cash_available=500.0,
+            buying_power=500.0,
+            liquidation_value=500.0,
+            committed_notional=0.0,
+            committed_open_risk=0.0,
+            open_position_count=0,
+            realized_pnl_today=0.0,
+            provider_timestamp=(decision_at - timedelta(seconds=2)).isoformat(),
+            portfolio_timestamp=(decision_at - timedelta(seconds=2)).isoformat(),
+            receipt_timestamp=(decision_at - timedelta(seconds=1)).isoformat(),
+            source="SYNTHETIC_TEST_ACCOUNT",
+            portfolio_source="SYNTHETIC_TEST_PORTFOLIO",
+        ),
+        decision_at=decision_at,
+    )
 
 
 def order_like_event(*, event_id: str) -> ExecutionLedgerEvent:

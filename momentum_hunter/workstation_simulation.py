@@ -11,12 +11,14 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
+from momentum_hunter.account_allocation import AccountAllocationDecision
 from momentum_hunter.autonomy.auditor import AuditReport, audit_simulation_chain
 from momentum_hunter.autonomy.ledger import ExecutionLedgerEvent
 from momentum_hunter.autonomy.risk_governor import RiskGovernorResult
 from momentum_hunter.autonomy.simulation import SimulationLabEngine, SimulationResult
 from momentum_hunter.autonomy.view_models import Top5CandidatePlan, build_candidate_plans_from_report
 from momentum_hunter.monitor_targets import latest_trade_report_path
+from momentum_hunter.time_utils import now_central
 from momentum_hunter.workstation_read_models import WorkstationReadModelPaths, build_read_only_workspace_snapshot
 
 
@@ -32,9 +34,11 @@ class SimulationWorkspaceService:
         *,
         paths: WorkstationReadModelPaths | None = None,
         simulation_engine: SimulationLabEngine | None = None,
+        allocation_source: object | None = None,
     ) -> None:
         self._paths = paths or WorkstationReadModelPaths.from_data_dir()
         self._simulation_engine = simulation_engine or SimulationLabEngine()
+        self._allocation_source = allocation_source
 
     def snapshot(self, *, observed_at: datetime | None = None) -> dict[str, Any]:
         workspace = build_read_only_workspace_snapshot(paths=self._paths, observed_at=observed_at)
@@ -76,7 +80,26 @@ class SimulationWorkspaceService:
                 "ledgerEvents": [ledger_event_payload(event) for event in self._simulation_engine.ledger.events],
             }
 
-        result = self._simulation_engine.run_candidate(candidate)
+        decision_at = now_central()
+        allocation: AccountAllocationDecision | None = None
+        if self._allocation_source is not None:
+            try:
+                allocator = getattr(self._allocation_source, "allocate", self._allocation_source)
+                allocation = allocator(
+                    symbol=candidate.ticker,
+                    trade_plan_id=candidate.trade_plan_id,
+                    entry_price=candidate.trade_plan.bullish_entry,
+                    stop_price=candidate.trade_plan.bullish_stop,
+                    target_price=candidate.trade_plan.bullish_target_1,
+                    decision_at=decision_at,
+                )
+            except Exception:
+                allocation = None
+        result = self._simulation_engine.run_candidate(
+            candidate,
+            allocation=allocation,
+            decision_at=decision_at,
+        )
         audit = audit_simulation_chain(
             self._simulation_engine.ledger,
             ticker=candidate.ticker,
@@ -122,10 +145,15 @@ def candidate_plan_payload(candidate: Top5CandidatePlan) -> dict[str, Any]:
         "target": plan.bullish_target_1,
         "target2": plan.bullish_target_2,
         "riskPerShare": risk_per_share(plan.bullish_entry, plan.bullish_stop),
-        "simulatedQuantity": safe_quantity(plan.estimated_shares_for_500),
+        "simulatedQuantity": 0,
+        "referenceQuantityFor500": plan.estimated_shares_for_500,
         "rewardToRisk": plan.risk_reward_ratio,
         "sourceReadinessLabel": plan.readiness,
-        "primaryAction": "Run FakeBroker simulation" if candidate.risk_result.allows_simulation else "Risk review required",
+        "primaryAction": (
+            "Account allocation required"
+            if candidate.risk_result.allows_simulation
+            else "Risk review required"
+        ),
         "warnings": list(candidate.warnings),
         "risk": risk_payload(candidate.risk_result),
     }
@@ -181,7 +209,3 @@ def risk_per_share(entry: float | None, stop: float | None) -> float | None:
     if entry is None or stop is None:
         return None
     return round(entry - stop, 4)
-
-
-def safe_quantity(value: float | None) -> int:
-    return max(0, int(value or 0))

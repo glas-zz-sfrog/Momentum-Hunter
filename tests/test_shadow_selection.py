@@ -56,6 +56,7 @@ from momentum_hunter.workstation_shadow import (
 )
 from tests.test_shadow_trading import bind_setup_identity, report_payload
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
+from tests.test_account_allocation import SyntheticAllocationSource
 
 
 class DictQuoteSource:
@@ -150,6 +151,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
                 "IWM": quote_payload("IWM", bid=225.00, ask=225.02),
             }
         )
+        self.allocation_source = SyntheticAllocationSource()
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -201,6 +203,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         return AutomaticShadowSelector(
             self.service,
             quote_source=self.quote_source,
+            allocation_source=self.allocation_source,
         )
 
     def test_write_once_arm_record_replaces_source_code_switch(self) -> None:
@@ -405,6 +408,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         expected_paths = (
             root / "engine_host.py",
             root / "engine_host_client.py",
+            root / "account_allocation.py",
             root / "models.py",
             root / "intraday_trade_plan.py",
             root / "scheduling.py",
@@ -502,6 +506,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         result = AutomaticShadowSelector(
             self.service,
             quote_source=source,
+            allocation_source=self.allocation_source,
         ).select(
             self.report_path,
             decision_at=self.decision_at,
@@ -555,6 +560,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         result = AutomaticShadowSelector(
             self.service,
             quote_source=source,
+            allocation_source=self.allocation_source,
         ).select(
             self.report_path,
             decision_at=self.decision_at,
@@ -577,6 +583,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         result = AutomaticShadowSelector(
             self.service,
             quote_source=source,
+            allocation_source=self.allocation_source,
         ).select(
             self.report_path,
             decision_at=self.decision_at,
@@ -683,6 +690,60 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         self.assertIn(
             "catalyst attribution is unresolved or score-blocked",
             " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
+        )
+        self.assertEqual((), self.service.store.load().trades)
+
+    def test_missing_account_allocation_is_explicitly_ineligible(self) -> None:
+        self.activate()
+        self.write_report()
+        selector = AutomaticShadowSelector(
+            self.service,
+            quote_source=self.quote_source,
+        )
+
+        result = selector.select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        assessment = cycle["candidate_assessments"][0]
+        self.assertEqual("BLOCKED", assessment["account_allocation"]["status"])
+        self.assertIn(
+            "ACCOUNT_ALLOCATION_EVIDENCE_MISSING",
+            assessment["account_allocation"]["blockers"],
+        )
+        self.assertIn(
+            "ACCOUNT_ALLOCATION_EVIDENCE_MISSING",
+            assessment["rejection_reasons"],
+        )
+        self.assertEqual((), self.service.store.load().trades)
+
+    def test_malformed_account_allocation_is_explicitly_ineligible(self) -> None:
+        class MalformedAllocationSource:
+            def allocate(self, **_kwargs):
+                return {"quantity": 2}
+
+        self.activate()
+        self.write_report()
+        selector = AutomaticShadowSelector(
+            self.service,
+            quote_source=self.quote_source,
+            allocation_source=MalformedAllocationSource(),
+        )
+
+        result = selector.select(
+            self.report_path,
+            decision_at=self.decision_at,
+        )
+
+        self.assertEqual(SELECTION_NO_ELIGIBLE_CANDIDATE, result.status)
+        cycle = self.service.decision_cycle_store.get(result.decision_cycle_id)
+        assessment = cycle["candidate_assessments"][0]
+        self.assertIn(
+            "ACCOUNT_ALLOCATION_EVIDENCE_INVALID",
+            assessment["rejection_reasons"],
         )
         self.assertEqual((), self.service.store.load().trades)
 
@@ -921,6 +982,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         result = AutomaticShadowSelector(
             self.service,
             quote_source=source,
+            allocation_source=self.allocation_source,
         ).select(
             self.report_path,
             decision_at=self.decision_at,
@@ -1132,6 +1194,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
                 selector = AutomaticShadowSelector(
                     service,
                     quote_source=self.quote_source,
+                    allocation_source=self.allocation_source,
                 )
                 try:
                     result = selector.select(path, decision_at=self.decision_at)
@@ -1170,6 +1233,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         valid_result = AutomaticShadowSelector(
             valid_service,
             quote_source=self.quote_source,
+            allocation_source=self.allocation_source,
         ).select(valid_path, decision_at=self.decision_at)
         cycle = valid_service.decision_cycle_store.get(
             valid_result.decision_cycle_id
@@ -1198,6 +1262,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
                     "IWM": quote_payload("IWM"),
                 }
             ),
+            allocation_source=self.allocation_source,
         ).select(mismatch_path, decision_at=self.decision_at)
         mismatch_cycle = mismatch_service.decision_cycle_store.get(
             mismatch_result.decision_cycle_id
@@ -1246,6 +1311,7 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
                             "IWM": quote_payload("IWM"),
                         }
                     ),
+                    allocation_source=self.allocation_source,
                 )
 
                 result = selector.select(path, decision_at=self.decision_at)

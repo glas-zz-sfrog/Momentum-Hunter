@@ -27,7 +27,7 @@ from momentum_hunter.workstation_shadow import (
     ShadowWorkspacePaths,
     ShadowWorkspaceService,
 )
-from tests.test_shadow_trading import at, quote, report_payload
+from tests.test_shadow_trading import allocation_for_report, at, quote, report_payload
 
 
 class RecordingQuoteSource:
@@ -89,11 +89,17 @@ class ShadowLiveMarkingTests(unittest.TestCase):
                 minimum_fill_delay_seconds=1,
             ),
         )
+        decision_at = at("2026-07-23T10:00:00-05:00")
         self.service.start_trade(
             self.report,
             symbol="TEST",
             simulation_command_id="shadow-live-mark",
-            decision_at=at("2026-07-23T10:00:00-05:00"),
+            decision_at=decision_at,
+            account_allocation=allocation_for_report(
+                self.report,
+                symbol="TEST",
+                decision_at=decision_at,
+            ),
         )
 
     def tearDown(self) -> None:

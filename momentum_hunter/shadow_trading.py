@@ -20,6 +20,11 @@ from pathlib import Path
 from statistics import mean
 from typing import Any, Iterable, Mapping
 
+from momentum_hunter.account_allocation import (
+    AccountAllocationDecision,
+    account_allocation_decision_from_dict,
+    account_allocation_decision_findings,
+)
 from momentum_hunter.autonomy.auditor import AuditFinding, AuditReport, audit_execution_ledger
 from momentum_hunter.autonomy.ledger import ExecutionLedger, ExecutionLedgerEvent
 from momentum_hunter.autonomy.risk_governor import RiskGovernorResult, evaluate_trade_plan
@@ -285,6 +290,9 @@ class ShadowOrderTicket:
     decision_cycle_id: str = ""
     opportunity_id: str = ""
     selection_quote_json: str = ""
+    account_allocation_fingerprint: str = ""
+    allocation_policy_fingerprint: str = ""
+    account_context_fingerprint: str = ""
     exact_ticket_entered: str = ""
     operator_modifications: str = ""
     paper_money_result: str = ""
@@ -325,6 +333,10 @@ class ShadowTrade:
     decision_cycle_id: str = ""
     opportunity_id: str = ""
     selection_quote_json: str = ""
+    account_allocation_json: str = ""
+    account_allocation_fingerprint: str = ""
+    allocation_policy_fingerprint: str = ""
+    account_context_fingerprint: str = ""
     risk_rejection_reasons: tuple[str, ...] = ()
     order: ShadowOrder | None = None
     position: ShadowPosition | None = None
@@ -639,8 +651,13 @@ def shadow_selection_policy_definition() -> dict[str, Any]:
             "bullish_entry",
             "bullish_stop",
             "bullish_target_1",
-            "positive_estimated_shares_for_500",
         ],
+        "required_account_allocation": {
+            "profile": "account-aware-fixed-unit-risk-v1",
+            "whole_shares_only": True,
+            "fresh_bound_account_context": True,
+            "missing_or_invalid": "BLOCK",
+        },
         "market_validity": shadow_market_policy_definition(),
         "constitution_version": SHADOW_CONSTITUTION_VERSION,
         "constitution_hash": shadow_constitution_hash(),
@@ -1452,6 +1469,7 @@ class ShadowTradingService:
         selector_arm_id: str = "",
         constitution_hash: str = "",
         selection_quote_json: str = "",
+        account_allocation: AccountAllocationDecision | None = None,
     ) -> ShadowTrade:
         self._refresh_sample_activation()
         active_selection_policy: ShadowSelectionPolicy | None = None
@@ -1599,6 +1617,26 @@ class ShadowTradingService:
         plan_json = canonical_json(plan_payload)
         plan_fingerprint = hashlib.sha256(plan_json.encode("utf-8")).hexdigest()
         trade_plan_id = stable_trade_plan_id(normalized_symbol, candidate.trade_plan)
+        allocation_findings = account_allocation_decision_findings(
+            account_allocation,
+            trade_plan_id=trade_plan_id,
+            entry_price=candidate.trade_plan.bullish_entry,
+            stop_price=candidate.trade_plan.bullish_stop,
+            target_price=candidate.trade_plan.bullish_target_1,
+            decision_at=decision_at,
+        )
+        if not isinstance(account_allocation, AccountAllocationDecision):
+            account_allocation = None
+        allocation_json = (
+            canonical_json(asdict(account_allocation))
+            if account_allocation is not None
+            else ""
+        )
+        allocation_fingerprint = (
+            account_allocation.fingerprint
+            if account_allocation is not None
+            else ""
+        )
         risk_seed = stable_id("risk", evidence_snapshot_id, trade_plan_id)
         evaluated_risk = evaluate_trade_plan(
             candidate.trade_plan,
@@ -1615,6 +1653,7 @@ class ShadowTradingService:
             normalized_symbol,
             plan_fingerprint,
             sample_definition_json,
+            allocation_fingerprint or "ACCOUNT_ALLOCATION_MISSING",
         ]
         if active_selection_policy is not None:
             request_fingerprint_parts.append(
@@ -1715,13 +1754,18 @@ class ShadowTradingService:
                 ),
             },
         )
-        quantity = int(candidate.trade_plan.estimated_shares_for_500 or 0)
+        quantity = (
+            account_allocation.evidence.quantity
+            if account_allocation is not None and not allocation_findings
+            else 0
+        )
         warning_assessment = classify_warnings(
             candidate.trade_plan.warnings,
             candidate.trade_plan.blocking_reasons,
         )
         can_start = (
             risk.allows_simulation
+            and not allocation_findings
             and quantity > 0
             and candidate.trade_plan.bullish_entry is not None
             and candidate.trade_plan.bullish_stop is not None
@@ -1789,10 +1833,39 @@ class ShadowTradingService:
                 decision_cycle_id=decision_cycle_id,
                 opportunity_id=opportunity_id,
                 selection_quote_json=selection_quote_json,
+                account_allocation_fingerprint=allocation_fingerprint,
+                allocation_policy_fingerprint=(
+                    account_allocation.policy.fingerprint
+                    if account_allocation is not None
+                    else ""
+                ),
+                account_context_fingerprint=(
+                    account_allocation.context.fingerprint
+                    if account_allocation is not None
+                    else ""
+                ),
+            )
+            allocation_event = make_ledger_event(
+                shadow_trade_id,
+                index=1,
+                timestamp=decision_at.isoformat(),
+                event_type="account_allocation_authorized",
+                symbol=normalized_symbol,
+                trade_plan_id=trade_plan_id,
+                risk_result_id=risk.result_id,
+                requested_action="account_allocation_authorized",
+                result=account_allocation.evidence.status,
+                reason="Account-aware fixed-unit-risk allocation passed.",
+                payload={
+                    "allocation_fingerprint": allocation_fingerprint,
+                    "policy_fingerprint": account_allocation.policy.fingerprint,
+                    "account_context_fingerprint": account_allocation.context.fingerprint,
+                    "quantity": quantity,
+                },
             )
             preview_event = make_ledger_event(
                 shadow_trade_id,
-                index=1,
+                index=2,
                 timestamp=decision_at.isoformat(),
                 event_type="simulated_order_created",
                 symbol=normalized_symbol,
@@ -1805,7 +1878,7 @@ class ShadowTradingService:
             )
             submit_event = make_ledger_event(
                 shadow_trade_id,
-                index=2,
+                index=3,
                 timestamp=decision_at.isoformat(),
                 event_type="fake_order_submitted",
                 symbol=normalized_symbol,
@@ -1817,17 +1890,18 @@ class ShadowTradingService:
                 payload={"order_id": order.order_id, "quantity": quantity, "filled_quantity": 0},
             )
             status = "pending_entry"
-            events = (risk_event, preview_event, submit_event)
+            events = (risk_event, allocation_event, preview_event, submit_event)
             rejection_reasons: tuple[str, ...] = ()
             last_reason = order.reason
         else:
             order = None
             ticket = None
-            reason = (
-                " | ".join(risk.reasons)
-                if not risk.allows_simulation
-                else "TradePlan lacks a positive simulation quantity, entry, stop, or target 1."
-            )
+            if not risk.allows_simulation:
+                reason = " | ".join(risk.reasons)
+            elif allocation_findings:
+                reason = " | ".join(allocation_findings)
+            else:
+                reason = "TradePlan lacks an authorized quantity, entry, stop, or target 1."
             block_event = make_ledger_event(
                 shadow_trade_id,
                 index=1,
@@ -1843,7 +1917,11 @@ class ShadowTradingService:
             )
             status = "blocked"
             events = (risk_event, block_event)
-            rejection_reasons = tuple(risk.reasons) if not risk.allows_simulation else (reason,)
+            rejection_reasons = (
+                tuple(risk.reasons)
+                if not risk.allows_simulation
+                else tuple(allocation_findings) or (reason,)
+            )
             last_reason = reason
         scoring = row.get("scoring", {}) if isinstance(row.get("scoring"), dict) else {}
         setup_type = str(scoring.get("catalyst_cluster") or candidate.setup_label or "unknown")
@@ -1900,6 +1978,18 @@ class ShadowTradingService:
             decision_cycle_id=decision_cycle_id,
             opportunity_id=opportunity_id,
             selection_quote_json=selection_quote_json,
+            account_allocation_json=allocation_json,
+            account_allocation_fingerprint=allocation_fingerprint,
+            allocation_policy_fingerprint=(
+                account_allocation.policy.fingerprint
+                if account_allocation is not None
+                else ""
+            ),
+            account_context_fingerprint=(
+                account_allocation.context.fingerprint
+                if account_allocation is not None
+                else ""
+            ),
             risk_rejection_reasons=rejection_reasons,
             order=order,
             ticket=ticket,
@@ -3006,6 +3096,7 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
     findings.extend(automatic_selection_findings(trade))
     findings.extend(frozen_evidence_findings(trade))
     findings.extend(frozen_plan_findings(trade))
+    findings.extend(frozen_account_allocation_findings(trade))
     expected_shadow_trade_id = stable_id("shadow-trade", trade.simulation_command_id, trade.evidence_snapshot_id)
     if trade.shadow_trade_id != expected_shadow_trade_id:
         findings.append(AuditFinding(trade.shadow_trade_id, "shadow_trade_id", "Shadow Trade identity does not match its command and evidence identities."))
@@ -3058,6 +3149,9 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
             trade.ticket.decision_cycle_id,
             trade.ticket.opportunity_id,
             trade.ticket.selection_quote_json,
+            trade.ticket.account_allocation_fingerprint,
+            trade.ticket.allocation_policy_fingerprint,
+            trade.ticket.account_context_fingerprint,
         )
         trade_selection = (
             trade.selection_policy_recorded_at,
@@ -3068,6 +3162,9 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
             trade.decision_cycle_id,
             trade.opportunity_id,
             trade.selection_quote_json,
+            trade.account_allocation_fingerprint,
+            trade.allocation_policy_fingerprint,
+            trade.account_context_fingerprint,
         )
         if ticket_selection != trade_selection:
             findings.append(
@@ -3316,6 +3413,129 @@ def frozen_plan_findings(trade: ShadowTrade) -> list[AuditFinding]:
     candidate_plan = candidate_payload.get("trade_plan")
     if not isinstance(candidate_plan, dict) or canonical_json(candidate_plan) != trade.trade_plan_json:
         findings.append(AuditFinding(trade.shadow_trade_id, "trade_plan_json", "Frozen TradePlan does not match the candidate evidence snapshot."))
+    return findings
+
+
+def frozen_account_allocation_findings(trade: ShadowTrade) -> list[AuditFinding]:
+    if trade.order is None:
+        return []
+    findings: list[AuditFinding] = []
+    if not all(
+        (
+            trade.account_allocation_json,
+            trade.account_allocation_fingerprint,
+            trade.allocation_policy_fingerprint,
+            trade.account_context_fingerprint,
+        )
+    ):
+        return [
+            AuditFinding(
+                trade.shadow_trade_id,
+                "account_allocation",
+                "Order exists without complete frozen account-allocation evidence.",
+            )
+        ]
+    try:
+        raw = json.loads(trade.account_allocation_json)
+        if not isinstance(raw, dict):
+            raise ValueError("Allocation evidence must be an object.")
+        decision = account_allocation_decision_from_dict(raw)
+        plan = trade.trade_plan()
+        decision_at = require_datetime(
+            trade.decision_timestamp,
+            "Shadow Trade decision timestamp",
+        )
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return [
+            AuditFinding(
+                trade.shadow_trade_id,
+                "account_allocation",
+                "Frozen account-allocation evidence is invalid.",
+            )
+        ]
+    if decision.fingerprint != trade.account_allocation_fingerprint:
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "account_allocation_fingerprint",
+                "Frozen account-allocation fingerprint does not match its evidence.",
+            )
+        )
+    if decision.policy.fingerprint != trade.allocation_policy_fingerprint:
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "allocation_policy_fingerprint",
+                "Frozen allocation policy fingerprint does not match.",
+            )
+        )
+    if decision.context.fingerprint != trade.account_context_fingerprint:
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "account_context_fingerprint",
+                "Frozen account context fingerprint does not match.",
+            )
+        )
+    allocation_findings = account_allocation_decision_findings(
+        decision,
+        trade_plan_id=trade.trade_plan_id,
+        entry_price=plan.bullish_entry,
+        stop_price=plan.bullish_stop,
+        target_price=plan.bullish_target_1,
+        decision_at=decision_at,
+    )
+    for message in allocation_findings:
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "account_allocation",
+                message,
+            )
+        )
+    if decision.evidence.quantity != trade.order.quantity:
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "account_allocation",
+                "Allocated quantity does not match the Shadow order.",
+            )
+        )
+    allocation_events = [
+        event
+        for event in trade.ledger_events
+        if event.requested_action == "account_allocation_authorized"
+    ]
+    if len(allocation_events) != 1:
+        findings.append(
+            AuditFinding(
+                trade.shadow_trade_id,
+                "account_allocation",
+                "Expected exactly one authorized account-allocation ledger event.",
+            )
+        )
+    else:
+        payload = allocation_events[0].payload
+        ledger_quantity = payload.get("quantity")
+        quantity_is_valid = (
+            isinstance(ledger_quantity, int)
+            and not isinstance(ledger_quantity, bool)
+        )
+        if any(
+            str(payload.get(key, "")) != expected
+            for key, expected in (
+                ("allocation_fingerprint", trade.account_allocation_fingerprint),
+                ("policy_fingerprint", trade.allocation_policy_fingerprint),
+                ("account_context_fingerprint", trade.account_context_fingerprint),
+            )
+        ) or not quantity_is_valid or ledger_quantity != trade.order.quantity:
+            findings.append(
+                AuditFinding(
+                    trade.shadow_trade_id,
+                    "account_allocation",
+                    "Allocation ledger evidence does not match the frozen decision.",
+                )
+            )
     return findings
 
 
@@ -4158,6 +4378,16 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
         decision_cycle_id=str(payload.get("decision_cycle_id", "")),
         opportunity_id=str(payload.get("opportunity_id", "")),
         selection_quote_json=str(payload.get("selection_quote_json", "")),
+        account_allocation_json=str(payload.get("account_allocation_json", "")),
+        account_allocation_fingerprint=str(
+            payload.get("account_allocation_fingerprint", "")
+        ),
+        allocation_policy_fingerprint=str(
+            payload.get("allocation_policy_fingerprint", "")
+        ),
+        account_context_fingerprint=str(
+            payload.get("account_context_fingerprint", "")
+        ),
         risk_rejection_reasons=tuple(str(item) for item in payload.get("risk_rejection_reasons", [])),
         order=ShadowOrder(**order_payload) if isinstance(order_payload, dict) else None,
         position=ShadowPosition(**position_payload) if isinstance(position_payload, dict) else None,

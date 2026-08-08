@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
+from momentum_hunter.account_allocation import (
+    AccountAllocationDecision,
+    account_allocation_decision_findings,
+)
 from momentum_hunter.autonomy.broker import BrokerAdapter, BrokerOrder, BrokerOrderRequest, FakeBrokerAdapter
 from momentum_hunter.autonomy.ledger import ExecutionLedger
 from momentum_hunter.autonomy.risk_governor import SIMULATION_MODE
 from momentum_hunter.autonomy.view_models import Top5CandidatePlan
+from momentum_hunter.time_utils import now_central
 
 
 @dataclass(frozen=True)
@@ -21,7 +27,14 @@ class SimulationLabEngine:
         self.adapter = adapter or FakeBrokerAdapter()
         self.ledger = ledger or ExecutionLedger()
 
-    def run_candidate(self, candidate: Top5CandidatePlan) -> SimulationResult:
+    def run_candidate(
+        self,
+        candidate: Top5CandidatePlan,
+        *,
+        allocation: AccountAllocationDecision | None = None,
+        decision_at: datetime | None = None,
+    ) -> SimulationResult:
+        evaluated_at = decision_at or now_central()
         risk = candidate.risk_result
         self.ledger.record(
             event_type="risk_gate_evaluated",
@@ -61,9 +74,49 @@ class SimulationLabEngine:
                 reason=" | ".join(risk.reasons),
             )
             return SimulationResult("blocked", f"{candidate.ticker} blocked: {' | '.join(risk.reasons)}")
-        request = build_simulation_order_request(candidate)
+        allocation_findings = account_allocation_decision_findings(
+            allocation,
+            trade_plan_id=candidate.trade_plan_id,
+            entry_price=candidate.trade_plan.bullish_entry,
+            stop_price=candidate.trade_plan.bullish_stop,
+            target_price=candidate.trade_plan.bullish_target_1,
+            decision_at=evaluated_at,
+        )
+        if allocation_findings:
+            reason = " | ".join(allocation_findings)
+            self.ledger.record(
+                event_type="allocation_blocked",
+                mode=SIMULATION_MODE,
+                ticker=candidate.ticker,
+                trade_plan_id=candidate.trade_plan_id,
+                risk_result_id=risk.result_id,
+                broker_adapter=self.adapter.metadata.adapter_name,
+                requested_action="simulation_blocked",
+                result="blocked",
+                reason=reason,
+            )
+            return SimulationResult("blocked", f"{candidate.ticker} blocked: {reason}")
+        assert allocation is not None
+        self.ledger.record(
+            event_type="account_allocation_authorized",
+            mode=SIMULATION_MODE,
+            ticker=candidate.ticker,
+            trade_plan_id=candidate.trade_plan_id,
+            risk_result_id=risk.result_id,
+            broker_adapter=self.adapter.metadata.adapter_name,
+            requested_action="account_allocation_authorized",
+            result=allocation.evidence.status,
+            reason="Account-aware fixed-unit-risk allocation passed.",
+            payload={
+                "allocation_fingerprint": allocation.fingerprint,
+                "policy_fingerprint": allocation.policy.fingerprint,
+                "account_context_fingerprint": allocation.context.fingerprint,
+                "quantity": allocation.evidence.quantity,
+            },
+        )
+        request = build_simulation_order_request(candidate, allocation=allocation)
         if request is None:
-            reason = "TradePlan lacks entry price or estimated shares for a simulation order preview."
+            reason = "TradePlan lacks an entry price or authorized account allocation."
             self.ledger.record(
                 event_type="execution_blocked",
                 mode=SIMULATION_MODE,
@@ -135,11 +188,15 @@ def simulation_adapter_block_reason(adapter: BrokerAdapter) -> str:
     return " ".join(problems)
 
 
-def build_simulation_order_request(candidate: Top5CandidatePlan) -> BrokerOrderRequest | None:
+def build_simulation_order_request(
+    candidate: Top5CandidatePlan,
+    *,
+    allocation: AccountAllocationDecision | None,
+) -> BrokerOrderRequest | None:
     plan = candidate.trade_plan
-    if plan.bullish_entry is None or plan.estimated_shares_for_500 is None:
+    if plan.bullish_entry is None or allocation is None or not allocation.evidence.authorized:
         return None
-    quantity = int(plan.estimated_shares_for_500)
+    quantity = allocation.evidence.quantity
     if quantity <= 0:
         return None
     return BrokerOrderRequest(

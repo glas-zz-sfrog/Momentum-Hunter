@@ -76,10 +76,12 @@ class ShadowWorkspaceService:
         paths: ShadowWorkspacePaths | None = None,
         service: ShadowTradingService | None = None,
         quote_source: ShadowQuoteSource | ShadowBatchQuoteSource | None = None,
+        allocation_source: object | None = None,
     ) -> None:
         production_defaults = paths is None and service is None
         self.paths = paths or ShadowWorkspacePaths.from_data_dir()
         self.service = service or ShadowTradingService(store=ShadowStateStore(self.paths.state_path))
+        self.allocation_source = allocation_source
         self._lock = threading.RLock()
         if quote_source is not None:
             self.quote_source = quote_source
@@ -103,10 +105,17 @@ class ShadowWorkspaceService:
             report_path = latest_trade_report_path(self.paths.reports_dir)
             if report_path is None:
                 raise ValueError("No persisted trade-planning report is available for Shadow Trading.")
+            decision_at = now_central()
             trade = self.service.start_trade(
                 report_path,
                 symbol=symbol,
                 simulation_command_id=simulation_command_id,
+                decision_at=decision_at,
+                account_allocation=self._account_allocation(
+                    report_path,
+                    symbol=symbol,
+                    decision_at=decision_at,
+                ),
             )
             return {
                 "mode": SHADOW_MODE,
@@ -123,7 +132,48 @@ class ShadowWorkspaceService:
             return AutomaticShadowSelector(
                 self.service,
                 quote_source=self.quote_source,
+                allocation_source=self.allocation_source,
             ).select(report_path).to_dict()
+
+    def _account_allocation(
+        self,
+        report_path: Path,
+        *,
+        symbol: str,
+        decision_at: datetime,
+    ):
+        if self.allocation_source is None:
+            return None
+        from momentum_hunter.autonomy.view_models import build_candidate_plans_from_report
+
+        normalized_symbol = symbol.strip().upper()
+        candidate = next(
+            (
+                item
+                for item in build_candidate_plans_from_report(
+                    report_path,
+                    limit=None,
+                    include_all_candidates=True,
+                    risk_checked_at=decision_at,
+                )
+                if item.ticker == normalized_symbol
+            ),
+            None,
+        )
+        if candidate is None:
+            return None
+        allocator = getattr(self.allocation_source, "allocate", self.allocation_source)
+        try:
+            return allocator(
+                symbol=candidate.ticker,
+                trade_plan_id=candidate.trade_plan_id,
+                entry_price=candidate.trade_plan.bullish_entry,
+                stop_price=candidate.trade_plan.bullish_stop,
+                target_price=candidate.trade_plan.bullish_target_1,
+                decision_at=decision_at,
+            )
+        except Exception:
+            return None
 
     def record_collection_attempt(
         self,

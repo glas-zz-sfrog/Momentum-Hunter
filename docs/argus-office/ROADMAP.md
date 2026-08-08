@@ -29,6 +29,25 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-DATA-005 account-aware allocation is `IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-DATA-005-account-aware-allocation`. The versioned
+`account-aware-fixed-unit-risk-v1` contract replaces executable `$500`
+reference sizing with a separately fingerprinted allocation decision. Whole
+shares are bounded by fixed/remaining risk, cash or buying power after reserve
+and commitments, and per-position notional limit. Policy, account context,
+allocation, and quantity are frozen through simulation and Shadow; Risk
+Governor must precede allocation, and allocation must precede FakeBroker
+preview/submission. Missing, stale, future, malformed, mismatched, over-limit,
+or transmit-capable evidence blocks before order creation. The pure Schwab
+bridge consumes already validated read models and performs no account or
+network call. Full verification passes 1,296 Python and 251 .NET tests.
+Scoring, rank, alerts, RVOL, DATA-004 setup/timing/replacement semantics,
+providers, capture/service/scheduler, real broker behavior, database/schema,
+packages, credentials, raw captures, generated reports, and historical
+evidence are unchanged. Activation remains blocked until Steven chooses the
+numeric risk policy and a fresh read-only account/portfolio snapshot source is
+installed; no production numeric defaults were invented.
+
 ARGUS-DATA-004 same-session intraday TradePlan semantics is `COMPLETE` through
 the release titled `Add intraday TradePlan horizon semantics`. The versioned
 `INTRADAY` contract supports `OPENING_BREAKOUT`, `CONTINUATION_BREAKOUT`,
@@ -43,8 +62,8 @@ workstation simulation, and Shadow enforce the same timing and identity
 contract. Full verification passes 1,271 Python and 251 .NET tests. Scoring,
 rank, alerts, RVOL, UI, capture/scheduler/service behavior, providers, accounts,
 orders, transmission, database/schema, packages, credentials, raw captures,
-generated reports, and historical evidence are unchanged. DATA-005 account-aware
-allocation and sizing is next.
+generated reports, and historical evidence are unchanged. DATA-005 now consumes
+this contract without narrowing it to opening momentum.
 
 ARGUS-DATA-003 breakout-versus-reclaim plan identity is `COMPLETE` on
 canonical `master` through the release titled `Add breakout and reclaim setup
@@ -789,15 +808,15 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Item | Current truth |
 | --- | --- |
 | Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, and DATA-004 same-session intraday TradePlan semantics. All 25 future opening jobs are pinned to the final synchronized DATA-004 closeout head. |
-| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-004 is complete; DATA-005 account-aware allocation and sizing is next. R034 remains a separate destructive approval gate. |
+| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-005 account-aware allocation is implemented and fully verified on its feature branch, pending clean integration. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | Official Shadow selection remains blocked by DATA-005. DATA-002 authority remains fail-closed on any session lacking complete current-window bars and at least five comparable baseline sessions; DATA-004 requires real chronology and a new successor identity before a reclaim can become active. R034 remains a separately approved destructive cutover. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
+| Blocked by | Official Shadow selection remains blocked until DATA-005 is integrated, Steven chooses the numeric allocation policy, and a fresh read-only account/portfolio snapshot source is installed. DATA-002 authority remains fail-closed on any session lacking complete current-window bars and at least five comparable baseline sessions; DATA-004 requires real chronology and a new successor identity before a reclaim can become active. R034 remains a separately approved destructive cutover. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-07 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. The 25 remaining jobs run from 2026-08-10 through 2026-09-14 at the final synchronized head. |
-| Immediate operational work | Begin DATA-005 account-aware allocation and sizing. Present R034's exact CRWV JSON/archive/710-row deletion plan only when Steven is ready for the separate destructive decision. Do not activate unattended broad-universe collection. |
+| Immediate operational work | Integrate verified DATA-005 without activating it, then obtain Steven's numeric allocation-policy decision and build the bounded fresh account/portfolio snapshot source. Follow with the separate visual truthfulness repair for the simulation action and legacy `$500` label. Present R034's exact CRWV JSON/archive/710-row deletion plan only when Steven is ready for the destructive decision. |
 | Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's through Thursday's captures. The guarded candle proof used only the expected identity check and market-data history; it made no position/order request. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
-| Steven action | No routine nonvisual approval is pending. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
-| Data caveat | DATA-001 proves displayed bid/ask provenance, DATA-001B prevents unresolved catalysts from granting authority, DATA-001C permits only validated Schwab last/bid/ask to carry execution-price authority, DATA-002 permits only time-normalized canonical Schwab volume to carry RVOL authority, DATA-003 preserves the original Daily breakout level, and DATA-004 binds setup-aware same-session timing while requiring a new successor identity for reclaim. Legacy RVOL remains research-only and insufficient candle history fails closed. The TradePlan remains hypothetical/execution-ineligible pending DATA-005, and the $500-per-row reference sizing is not account-aware. Historical reports remain immutable. R034 retains the destructive-operation interruption gate. |
+| Steven action | Choose DATA-005's fixed unit risk, maximum position notional, minimum cash reserve, maximum total open risk, daily-loss limit, maximum open positions, and maximum account-evidence age before activation. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
+| Data caveat | DATA-001 proves displayed bid/ask provenance, DATA-001B prevents unresolved catalysts from granting authority, DATA-001C permits only validated Schwab last/bid/ask to carry execution-price authority, DATA-002 permits only time-normalized canonical Schwab volume to carry RVOL authority, DATA-003 preserves the original Daily breakout level, and DATA-004 binds setup-aware same-session timing while requiring a new successor identity for reclaim. DATA-005 makes `$500` reference sizing nonexecutable and requires fresh bound account evidence. Legacy RVOL remains research-only and insufficient candle history fails closed. Historical reports remain immutable. R034 retains the destructive-operation interruption gate. |
 
 ### Status Legend
 

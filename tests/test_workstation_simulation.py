@@ -25,6 +25,7 @@ from momentum_hunter.intraday_trade_plan import (
     build_intraday_plan_evidence,
 )
 from momentum_hunter.trade_setup_identity import TradeSetupEvidence
+from tests.test_account_allocation import SyntheticAllocationSource
 
 
 class SimulationWorkspaceServiceTests(unittest.TestCase):
@@ -41,6 +42,9 @@ class SimulationWorkspaceServiceTests(unittest.TestCase):
             plan = assert_single(snapshot["plans"])
             self.assertEqual("NVDA", plan["symbol"])
             self.assertEqual(176.42, plan["entry"])
+            self.assertEqual(0, plan["simulatedQuantity"])
+            self.assertEqual(2.833, plan["referenceQuantityFor500"])
+            self.assertEqual("Account allocation required", plan["primaryAction"])
             self.assertTrue(plan["risk"]["allowsSimulation"])
             self.assertEqual(97, assert_single(snapshot["workspace"]["candidates"])["score"])
             self.assertEqual(before, sha256(report_path))
@@ -61,7 +65,10 @@ class SimulationWorkspaceServiceTests(unittest.TestCase):
     def test_completed_simulation_records_risk_preview_submit_and_passing_audit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             paths, _ = setup_workspace(Path(directory))
-            service = SimulationWorkspaceService(paths=paths)
+            service = SimulationWorkspaceService(
+                paths=paths,
+                allocation_source=SyntheticAllocationSource(),
+            )
 
             with patch(
                 "momentum_hunter.autonomy.risk_governor.now_central",
@@ -74,7 +81,15 @@ class SimulationWorkspaceServiceTests(unittest.TestCase):
             self.assertTrue(result["audit"]["passed"])
             self.assertEqual("FakeBrokerAdapter", result["ledgerEvents"][-1]["broker_adapter"])
             actions = {event["requested_action"] for event in result["ledgerEvents"]}
-            self.assertEqual({"risk_gate_evaluated", "simulated_order_previewed", "fake_order_submitted"}, actions)
+            self.assertEqual(
+                {
+                    "risk_gate_evaluated",
+                    "account_allocation_authorized",
+                    "simulated_order_previewed",
+                    "fake_order_submitted",
+                },
+                actions,
+            )
 
     def test_blocked_plan_records_risk_then_block_without_fake_order(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -85,6 +100,66 @@ class SimulationWorkspaceServiceTests(unittest.TestCase):
             self.assertTrue(result["audit"]["passed"])
             actions = {event["requested_action"] for event in result["ledgerEvents"]}
             self.assertIn("risk_gate_evaluated", actions)
+            self.assertIn("simulation_blocked", actions)
+            self.assertNotIn("simulated_order_previewed", actions)
+            self.assertNotIn("fake_order_submitted", actions)
+
+    def test_allocation_source_failure_blocks_without_fake_order(self) -> None:
+        class BrokenAllocationSource:
+            def allocate(self, **_kwargs):
+                raise RuntimeError("synthetic allocator failure")
+
+        with tempfile.TemporaryDirectory() as directory:
+            paths, _ = setup_workspace(Path(directory))
+            decision_at = datetime.fromisoformat("2026-07-17T10:00:00-05:00")
+            with (
+                patch(
+                    "momentum_hunter.autonomy.risk_governor.now_central",
+                    return_value=decision_at,
+                ),
+                patch(
+                    "momentum_hunter.workstation_simulation.now_central",
+                    return_value=decision_at,
+                ),
+            ):
+                result = SimulationWorkspaceService(
+                    paths=paths,
+                    allocation_source=BrokenAllocationSource(),
+                ).run_simulation("NVDA")
+
+            self.assertEqual("Blocked", result["state"])
+            actions = {event["requested_action"] for event in result["ledgerEvents"]}
+            self.assertIn("simulation_blocked", actions)
+            self.assertNotIn("simulated_order_previewed", actions)
+            self.assertNotIn("fake_order_submitted", actions)
+            self.assertNotIn("synthetic allocator failure", result["summary"])
+
+    def test_malformed_allocation_source_blocks_without_fake_order(self) -> None:
+        class MalformedAllocationSource:
+            def allocate(self, **_kwargs):
+                return {"quantity": 2}
+
+        with tempfile.TemporaryDirectory() as directory:
+            paths, _ = setup_workspace(Path(directory))
+            decision_at = datetime.fromisoformat("2026-07-17T10:00:00-05:00")
+            with (
+                patch(
+                    "momentum_hunter.autonomy.risk_governor.now_central",
+                    return_value=decision_at,
+                ),
+                patch(
+                    "momentum_hunter.workstation_simulation.now_central",
+                    return_value=decision_at,
+                ),
+            ):
+                result = SimulationWorkspaceService(
+                    paths=paths,
+                    allocation_source=MalformedAllocationSource(),
+                ).run_simulation("NVDA")
+
+            self.assertEqual("Blocked", result["state"])
+            self.assertIn("ACCOUNT_ALLOCATION_EVIDENCE_INVALID", result["summary"])
+            actions = {event["requested_action"] for event in result["ledgerEvents"]}
             self.assertIn("simulation_blocked", actions)
             self.assertNotIn("simulated_order_previewed", actions)
             self.assertNotIn("fake_order_submitted", actions)

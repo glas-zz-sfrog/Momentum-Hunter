@@ -19,6 +19,7 @@ from momentum_hunter.engine_host import (
     COMMAND_START_SHADOW_TRADE,
     EngineHostRuntime,
 )
+from momentum_hunter.autonomy.view_models import stable_trade_plan_id
 from momentum_hunter.intraday_trade_plan import (
     CONTINUATION_BREAKOUT,
     build_intraday_plan_evidence,
@@ -51,6 +52,7 @@ from momentum_hunter.trade_planning import (
     COMPOSITE_CONFIGURATION_FINGERPRINT,
     COMPOSITE_PROFILE,
     EVIDENCE_INTEGRITY_SCHEMA_VERSION,
+    trade_plan_from_dict,
 )
 from momentum_hunter.time_normalized_rvol import (
     TIME_NORMALIZED_RVOL_PROFILE,
@@ -60,6 +62,10 @@ from momentum_hunter.schwab_candle_contract import SCHWAB_PRICE_HISTORY_SOURCE
 from momentum_hunter.trade_setup_identity import build_trade_setup_evidence
 from momentum_hunter.workstation_shadow import ShadowWorkspacePaths, ShadowWorkspaceService
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
+from tests.test_account_allocation import (
+    SyntheticAllocationSource,
+    synthetic_quantity_allocation_decision,
+)
 
 
 class _BatchMarketQuoteSource:
@@ -119,6 +125,26 @@ class _ClockedQuoteSource:
         )
 
 
+def allocation_for_report(
+    report_path: Path,
+    *,
+    symbol: str,
+    decision_at: datetime,
+):
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    rows = payload.get("candidates") or payload.get("top_5_for_capital") or []
+    row = next(item for item in rows if str(item.get("symbol", "")).upper() == symbol.upper())
+    plan = trade_plan_from_dict(row["trade_plan"])
+    return synthetic_quantity_allocation_decision(
+        trade_plan_id=stable_trade_plan_id(symbol, plan),
+        entry_price=plan.bullish_entry,
+        stop_price=plan.bullish_stop,
+        target_price=plan.bullish_target_1,
+        decision_at=decision_at,
+        quantity=2,
+    )
+
+
 class ShadowTradingLifecycleTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -142,11 +168,17 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         return ShadowTradingService(store=ShadowStateStore(self.state_path), policy=self.policy)
 
     def start(self, *, command_id: str = "shadow-command-1", symbol: str = "TEST"):
+        decision_at = at("2026-07-23T10:00:00-05:00")
         return self.service().start_trade(
             self.report_path,
             symbol=symbol,
             simulation_command_id=command_id,
-            decision_at=at("2026-07-23T10:00:00-05:00"),
+            decision_at=decision_at,
+            account_allocation=allocation_for_report(
+                self.report_path,
+                symbol=symbol,
+                decision_at=decision_at,
+            ),
         )
 
     def test_start_freezes_source_evidence_and_assigns_every_required_identifier(self) -> None:
@@ -171,7 +203,10 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         self.assertEqual(1, trade.sample_metadata.evidence_schema_version)
         self.assertFalse(trade.sample_metadata.official_sample_authorized)
         self.assertEqual(91, trade.evidence.candidate_payload()["scoring"]["composite_score"])
-        self.assertEqual(before, hashlib.sha256(trade.evidence.source_report_json.encode("utf-8")).hexdigest())
+        self.assertEqual(
+            before,
+            hashlib.sha256(trade.evidence.source_report_json.encode("utf-8")).hexdigest(),
+        )
         receipt = self.service().store.load().command_receipts[0]
         self.assertEqual(
             stable_id(
@@ -180,6 +215,7 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
                 trade.symbol,
                 trade.plan_fingerprint,
                 canonical_json(asdict(trade.sample_metadata)),
+                trade.account_allocation_fingerprint,
             ),
             receipt.request_fingerprint,
         )
@@ -192,6 +228,61 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         frozen = json.loads(reloaded["evidence"]["candidate_json"])
         self.assertEqual(91, frozen["scoring"]["composite_score"])
 
+    def test_missing_account_allocation_blocks_before_order_creation(self) -> None:
+        decision_at = at("2026-07-23T10:00:00-05:00")
+
+        trade = self.service().start_trade(
+            self.report_path,
+            symbol="TEST",
+            simulation_command_id="missing-allocation",
+            decision_at=decision_at,
+        )
+
+        self.assertEqual("blocked", trade.status)
+        self.assertIsNone(trade.order)
+        self.assertIsNone(trade.ticket)
+        self.assertIn("ACCOUNT_ALLOCATION_EVIDENCE_MISSING", trade.last_reason)
+        self.assertTrue(audit_shadow_trade(trade).passed)
+
+    def test_frozen_allocation_tampering_and_quantity_mismatch_fail_audit(self) -> None:
+        trade = self.start(command_id="allocation-audit")
+        raw = json.loads(trade.account_allocation_json)
+        raw["context"]["cash_available"] = 999.0
+        tampered = replace(
+            trade,
+            account_allocation_json=json.dumps(raw, sort_keys=True),
+        )
+        wrong_quantity = replace(
+            trade,
+            order=replace(trade.order, quantity=trade.order.quantity + 1),
+        )
+        allocation_event = next(
+            event
+            for event in trade.ledger_events
+            if event.requested_action == "account_allocation_authorized"
+        )
+        malformed_event = replace(
+            allocation_event,
+            payload={**allocation_event.payload, "quantity": "two"},
+        )
+        malformed_ledger = replace(
+            trade,
+            ledger_events=tuple(
+                malformed_event if event is allocation_event else event
+                for event in trade.ledger_events
+            ),
+        )
+
+        self.assertFalse(audit_shadow_trade(tampered).passed)
+        self.assertFalse(audit_shadow_trade(wrong_quantity).passed)
+        self.assertFalse(audit_shadow_trade(malformed_ledger).passed)
+        self.assertTrue(
+            any(
+                finding.field == "account_allocation"
+                for finding in audit_shadow_trade(wrong_quantity).findings
+            )
+        )
+
     def test_duplicate_command_is_idempotent_across_restart_and_conflicting_reuse_fails(self) -> None:
         first = self.start()
         restarted = self.service()
@@ -199,7 +290,12 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
             self.report_path,
             symbol="TEST",
             simulation_command_id="shadow-command-1",
-            decision_at=at("2026-07-23T10:30:00-05:00"),
+            decision_at=at("2026-07-23T10:00:00-05:00"),
+            account_allocation=allocation_for_report(
+                self.report_path,
+                symbol="TEST",
+                decision_at=at("2026-07-23T10:00:00-05:00"),
+            ),
         )
         self.assertEqual(first, repeated)
         self.assertEqual(1, len(restarted.snapshot()["trades"]))
@@ -213,6 +309,11 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
                 symbol="TEST",
                 simulation_command_id="shadow-command-1",
                 decision_at=at("2026-07-23T10:30:00-05:00"),
+                account_allocation=allocation_for_report(
+                    self.report_path,
+                    symbol="TEST",
+                    decision_at=at("2026-07-23T10:30:00-05:00"),
+                ),
             )
 
     def test_quote_at_or_before_decision_cannot_fill_and_limit_may_remain_unfilled(self) -> None:
@@ -263,6 +364,11 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
                     symbol="TEST",
                     simulation_command_id=f"command-{index}",
                     decision_at=at("2026-07-23T10:00:00-05:00"),
+                    account_allocation=allocation_for_report(
+                        self.report_path,
+                        symbol="TEST",
+                        decision_at=at("2026-07-23T10:00:00-05:00"),
+                    ),
                 )
                 service.process_quote(supplied_quote, received_at=received_at)
                 trade = service.snapshot()["trades"][0]
@@ -278,6 +384,11 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
             symbol="TEST",
             simulation_command_id="missing-command",
             decision_at=at("2026-07-23T10:00:00-05:00"),
+            account_allocation=allocation_for_report(
+                self.report_path,
+                symbol="TEST",
+                decision_at=at("2026-07-23T10:00:00-05:00"),
+            ),
         )
         missing_service.process_missing_quote("TEST", observed_at=at("2026-07-23T10:01:00-05:00"))
         first_missing = missing_service.snapshot()["trades"][0]
@@ -480,6 +591,11 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
                     symbol="TEST",
                     simulation_command_id=f"limits-{index}",
                     decision_at=at("2026-07-23T10:00:00-05:00"),
+                    account_allocation=allocation_for_report(
+                        self.report_path,
+                        symbol="TEST",
+                        decision_at=at("2026-07-23T10:00:00-05:00"),
+                    ),
                 )
                 service.process_quote(
                     quote("2026-07-23T10:01:00-05:00", bid=9.94, ask=9.95),
@@ -539,7 +655,7 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         trade = self.start(command_id="missing-target")
         self.assertEqual("blocked", trade.status)
         self.assertIsNone(trade.order)
-        self.assertIn("target 1", trade.last_reason)
+        self.assertIn("ALLOCATION_TARGET_INVALID", trade.last_reason)
 
     def test_malformed_restart_state_fails_closed(self) -> None:
         self.state_path.write_text('{"schema_version":999,"trades":[]}', encoding="utf-8")
@@ -878,6 +994,48 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
         self.assertIs(source, workspace.quote_source)
         self.assertEqual([], source.calls)
 
+    def test_workspace_start_requires_injected_allocation_and_uses_exact_quantity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "reports"
+            reports.mkdir()
+            report = reports / "trade-plan-briefing-test.json"
+            report.write_text(json.dumps(report_payload()), encoding="utf-8")
+            paths = ShadowWorkspacePaths(
+                reports,
+                root / "observations.json",
+                root / "shadow-state.json",
+            )
+            decision_at = at("2026-07-23T10:00:00-05:00")
+            with patch(
+                "momentum_hunter.workstation_shadow.now_central",
+                return_value=decision_at,
+            ):
+                blocked = ShadowWorkspaceService(paths=paths).start(
+                    "TEST",
+                    "workspace-no-allocation",
+                )
+            self.assertEqual("blocked", blocked["state"])
+            self.assertIsNone(blocked["trade"]["order"])
+
+            allocated_paths = ShadowWorkspacePaths(
+                reports,
+                root / "observations-allocated.json",
+                root / "shadow-state-allocated.json",
+            )
+            with patch(
+                "momentum_hunter.workstation_shadow.now_central",
+                return_value=decision_at,
+            ):
+                started = ShadowWorkspaceService(
+                    paths=allocated_paths,
+                    allocation_source=SyntheticAllocationSource(quantity=2),
+                ).start("TEST", "workspace-with-allocation")
+
+            self.assertEqual("pending_entry", started["state"])
+            self.assertEqual(2, started["trade"]["order"]["quantity"])
+            self.assertTrue(started["trade"]["account_allocation_fingerprint"])
+
     def test_persisted_monitor_observation_advances_active_trade(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -917,6 +1075,11 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
                 symbol="TEST",
                 simulation_command_id="workspace-command",
                 decision_at=at("2026-07-23T10:00:00-05:00"),
+                account_allocation=allocation_for_report(
+                    report,
+                    symbol="TEST",
+                    decision_at=at("2026-07-23T10:00:00-05:00"),
+                ),
             )
             workspace = ShadowWorkspaceService(
                 paths=ShadowWorkspacePaths(reports, observations, root / "shadow-state.json"),
@@ -963,6 +1126,11 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
                 symbol="TEST",
                 simulation_command_id="missing-provider-time",
                 decision_at=at("2026-07-23T10:00:00-05:00"),
+                account_allocation=allocation_for_report(
+                    report,
+                    symbol="TEST",
+                    decision_at=at("2026-07-23T10:00:00-05:00"),
+                ),
             )
             workspace = ShadowWorkspaceService(
                 paths=ShadowWorkspacePaths(
@@ -1033,6 +1201,11 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
                 symbol="TEST",
                 simulation_command_id="latest-provider-quote",
                 decision_at=at("2026-07-23T10:00:00-05:00"),
+                account_allocation=allocation_for_report(
+                    report,
+                    symbol="TEST",
+                    decision_at=at("2026-07-23T10:00:00-05:00"),
+                ),
             )
             workspace = ShadowWorkspaceService(
                 paths=ShadowWorkspacePaths(
@@ -1084,6 +1257,11 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
                 symbol="TEST",
                 simulation_command_id="provider-workspace",
                 decision_at=at("2026-07-23T10:00:00-05:00"),
+                account_allocation=allocation_for_report(
+                    report,
+                    symbol="TEST",
+                    decision_at=at("2026-07-23T10:00:00-05:00"),
+                ),
             )
             observations = root / "missing-observations.json"
             workspace = ShadowWorkspaceService(
@@ -1164,6 +1342,11 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
                 symbol="TEST",
                 simulation_command_id="provider-mismatch",
                 decision_at=at("2026-07-23T10:00:00-05:00"),
+                account_allocation=allocation_for_report(
+                    report,
+                    symbol="TEST",
+                    decision_at=at("2026-07-23T10:00:00-05:00"),
+                ),
             )
             workspace = ShadowWorkspaceService(
                 paths=ShadowWorkspacePaths(
@@ -1274,6 +1457,11 @@ class ShadowWorkspaceIntegrationTests(unittest.TestCase):
                 symbol="TEST",
                 simulation_command_id="provider-nonfinite",
                 decision_at=at("2026-07-23T10:00:00-05:00"),
+                account_allocation=allocation_for_report(
+                    report,
+                    symbol="TEST",
+                    decision_at=at("2026-07-23T10:00:00-05:00"),
+                ),
             )
             workspace = ShadowWorkspaceService(
                 paths=ShadowWorkspacePaths(
@@ -1539,11 +1727,17 @@ def completed_trade(index: int, *, executable_pnl: float):
         report = root / "report.json"
         report.write_text(json.dumps(report_payload()), encoding="utf-8")
         service = ShadowTradingService(store=ShadowStateStore(root / "state.json"))
+        decision_at = at(f"2026-07-{(index % 20) + 1:02d}T10:00:00-05:00")
         trade = service.start_trade(
             report,
             symbol="TEST",
             simulation_command_id=f"metrics-{index}",
-            decision_at=at(f"2026-07-{(index % 20) + 1:02d}T10:00:00-05:00"),
+            decision_at=decision_at,
+            account_allocation=allocation_for_report(
+                report,
+                symbol="TEST",
+                decision_at=decision_at,
+            ),
         )
     outcome = ShadowOutcome(
         outcome_id=trade.outcome_id,
@@ -1647,6 +1841,7 @@ def completed_auditable_trade(
                     }
                 )
             ),
+            allocation_source=SyntheticAllocationSource(),
         ).select(report, decision_at=decision)
         trade = next(
             item

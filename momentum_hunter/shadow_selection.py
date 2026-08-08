@@ -9,6 +9,10 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
+from momentum_hunter.account_allocation import (
+    AccountAllocationDecision,
+    account_allocation_decision_findings,
+)
 from momentum_hunter.autonomy.risk_governor import evaluate_trade_plan
 from momentum_hunter.autonomy.view_models import (
     candidate_plan_from_report_row,
@@ -118,6 +122,19 @@ class BatchQuoteSource(Protocol):
     ) -> dict[str, dict[str, Any]]: ...
 
 
+class AccountAllocationSource(Protocol):
+    def allocate(
+        self,
+        *,
+        symbol: str,
+        trade_plan_id: str,
+        entry_price: float | None,
+        stop_price: float | None,
+        target_price: float | None,
+        decision_at: datetime,
+    ) -> AccountAllocationDecision: ...
+
+
 @dataclass(frozen=True)
 class AutomaticShadowSelectionResult:
     status: str
@@ -177,11 +194,13 @@ class AutomaticShadowSelector:
         service: ShadowTradingService,
         *,
         quote_source: QuoteSource | Callable[..., dict[str, Any] | None],
+        allocation_source: AccountAllocationSource | Callable[..., AccountAllocationDecision] | None = None,
         decision_store: DecisionCycleStore | None = None,
         market_policy: ShadowMarketValidityPolicy | None = None,
     ) -> None:
         self.service = service
         self.quote_source = quote_source
+        self.allocation_source = allocation_source
         self.decision_store = decision_store or service.decision_cycle_store
         self.market_policy = market_policy or ShadowMarketValidityPolicy()
 
@@ -367,20 +386,22 @@ class AutomaticShadowSelector:
                 terminal_cycle_status=SELECTION_CLOCK_SKEW_BLOCKED,
             )
         assessments: list[dict[str, Any]] = []
+        allocation_decisions: dict[int, AccountAllocationDecision] = {}
         for persisted_index, row in canonical_rows:
             symbol = str(row.get("symbol", "")).strip().upper()
-            assessments.append(
-                self._assess_candidate(
-                    row,
-                    persisted_index=persisted_index,
-                    report_path=report_path,
-                    metadata=metadata,
-                    decision_at=decision_at,
-                    quote_evaluated_at=quote_evaluated_at,
-                    existing_trades=state.trades,
-                    quote=cycle_quotes.get(symbol),
-                )
+            assessment, allocation_decision = self._assess_candidate(
+                row,
+                persisted_index=persisted_index,
+                report_path=report_path,
+                metadata=metadata,
+                decision_at=decision_at,
+                quote_evaluated_at=quote_evaluated_at,
+                existing_trades=state.trades,
+                quote=cycle_quotes.get(symbol),
             )
+            assessments.append(assessment)
+            if allocation_decision is not None:
+                allocation_decisions[persisted_index] = allocation_decision
 
         eligible = [
             item for item in assessments if item.get("eligible") is True
@@ -492,6 +513,7 @@ class AutomaticShadowSelector:
                 selector_arm_id=arm.arm_id,
                 constitution_hash=arm.constitution_hash,
                 selection_quote_json=canonical_json(selected["quote"]),
+                account_allocation=allocation_decisions.get(selected["persisted_index"]),
             )
             if trade.status == "blocked" or trade.data_quality_state == "BLOCKED":
                 raise ShadowStateError(
@@ -553,7 +575,7 @@ class AutomaticShadowSelector:
         quote_evaluated_at: datetime,
         existing_trades: tuple[ShadowTrade, ...],
         quote: dict[str, Any] | None,
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], AccountAllocationDecision | None]:
         canonical_rank = int(row["rank"])
         scoring = row.get("scoring") if isinstance(row.get("scoring"), dict) else {}
         symbol = str(row.get("symbol", "")).strip().upper()
@@ -571,6 +593,11 @@ class AutomaticShadowSelector:
         risk_payload: dict[str, Any] = {}
         opportunity_id = ""
         plan_fingerprint = ""
+        allocation_decision: AccountAllocationDecision | None = None
+        allocation_payload: dict[str, Any] = {
+            "status": "BLOCKED",
+            "blockers": ["ACCOUNT_ALLOCATION_EVIDENCE_MISSING"],
+        }
         if candidate is None:
             reasons.append("Candidate does not contain a valid persisted TradePlan.")
         else:
@@ -608,37 +635,85 @@ class AutomaticShadowSelector:
             }
             if not risk.allows_simulation or risk.status != "Simulation-only":
                 reasons.extend(risk.reasons or ("Risk Governor did not allow simulation.",))
+            trade_plan_id = stable_trade_plan_id(symbol, plan)
+            if self.allocation_source is not None:
+                allocator = getattr(self.allocation_source, "allocate", self.allocation_source)
+                try:
+                    allocation_decision = allocator(
+                        symbol=symbol,
+                        trade_plan_id=trade_plan_id,
+                        entry_price=plan.bullish_entry,
+                        stop_price=plan.bullish_stop,
+                        target_price=plan.bullish_target_1,
+                        decision_at=decision_at,
+                    )
+                except Exception as exc:
+                    reasons.append(f"ACCOUNT_ALLOCATION_SOURCE_FAILED:{type(exc).__name__}")
+                    allocation_decision = None
+            allocation_findings = account_allocation_decision_findings(
+                allocation_decision,
+                trade_plan_id=trade_plan_id,
+                entry_price=plan.bullish_entry,
+                stop_price=plan.bullish_stop,
+                target_price=plan.bullish_target_1,
+                decision_at=decision_at,
+            )
+            if not isinstance(allocation_decision, AccountAllocationDecision):
+                allocation_decision = None
+            reasons.extend(allocation_findings)
+            if allocation_decision is not None:
+                allocation_payload = {
+                    "status": allocation_decision.evidence.status,
+                    "quantity": allocation_decision.evidence.quantity,
+                    "allocation_fingerprint": allocation_decision.fingerprint,
+                    "policy_fingerprint": allocation_decision.policy.fingerprint,
+                    "account_context_fingerprint": allocation_decision.context.fingerprint,
+                    "blockers": list(allocation_decision.evidence.blockers),
+                }
             try:
-                quantity = int(plan.estimated_shares_for_500 or 0)
+                quantity = (
+                    allocation_decision.evidence.quantity
+                    if allocation_decision is not None
+                    else 0
+                )
                 entry = float(plan.bullish_entry)
                 stop = float(plan.bullish_stop)
                 target = float(plan.bullish_target_1)
             except (TypeError, ValueError, OverflowError):
                 reasons.append(
-                    "TradePlan lacks a positive quantity and numeric entry, stop, or target."
+                    "TradePlan lacks an authorized quantity and numeric entry, stop, or target."
                 )
             else:
-                reasons.extend(
-                    validate_selection_quote(
-                        quote,
-                        decision_at=quote_evaluated_at,
-                        entry=entry,
-                        stop=stop,
-                        target=target,
-                        quantity=quantity,
-                        maximum_spread_percent=self.service.policy.max_spread_percent,
-                        buying_power=self.service.policy.buying_power,
-                        expected_symbol=symbol,
-                        policy=self.market_policy,
+                if allocation_decision is not None and not allocation_findings:
+                    reasons.extend(
+                        validate_selection_quote(
+                            quote,
+                            decision_at=quote_evaluated_at,
+                            entry=entry,
+                            stop=stop,
+                            target=target,
+                            quantity=quantity,
+                            maximum_spread_percent=self.service.policy.max_spread_percent,
+                            buying_power=(
+                                allocation_decision.evidence.effective_cash_available
+                                or 0.0
+                            ),
+                            expected_symbol=symbol,
+                            policy=self.market_policy,
+                        )
                     )
-                )
             reasons.extend(
                 portfolio_findings(
                     existing_trades,
                     symbol=symbol,
                     opportunity_id=opportunity_id,
                     decision_at=decision_at,
-                    daily_loss_limit=self.service.policy.daily_loss_limit,
+                    daily_loss_limit=(
+                        allocation_decision.policy.daily_loss_limit_dollars
+                        if allocation_decision is not None
+                        and allocation_decision.policy.daily_loss_limit_dollars is not None
+                        else float("inf")
+                    ),
                 )
             )
         reasons = list(dict.fromkeys(str(item) for item in reasons if str(item)))
@@ -658,6 +733,7 @@ class AutomaticShadowSelector:
             "fatal_warnings": list(fatal_warnings),
             "informational_warnings": list(informational_warnings),
             "risk": risk_payload,
+            "account_allocation": allocation_payload,
             "quote": quote,
             "quote_source": (
                 str(quote.get("source", ""))
@@ -673,7 +749,7 @@ class AutomaticShadowSelector:
             ),
             "opportunity_id": opportunity_id,
             "plan_fingerprint": plan_fingerprint,
-        }
+        }, allocation_decision
 
     def _quote(
         self,

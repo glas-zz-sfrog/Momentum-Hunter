@@ -47,6 +47,7 @@ from momentum_hunter.shadow_trading import (
 from momentum_hunter.trade_planning import parse_datetime
 from momentum_hunter.time_utils import now_central
 from tests.test_shadow_trading import (
+    allocation_for_report,
     at,
     bind_setup_identity,
     completed_auditable_trade,
@@ -54,6 +55,7 @@ from tests.test_shadow_trading import (
     report_payload,
 )
 from tests.shadow_proof_fixtures import write_synthetic_proof_artifacts
+from tests.test_account_allocation import SyntheticAllocationSource
 
 
 class ClockedQuoteSource:
@@ -154,6 +156,11 @@ class ShadowSampleReadinessTests(unittest.TestCase):
                 symbol="TEST",
                 simulation_command_id=command_id,
                 decision_at=decision_at,
+                account_allocation=allocation_for_report(
+                    self.report_path,
+                    symbol="TEST",
+                    decision_at=decision_at,
+                ),
             )
         if not service.selector_is_armed():
             service.arm_automatic_selector(
@@ -192,6 +199,7 @@ class ShadowSampleReadinessTests(unittest.TestCase):
                     }
                 )
             ),
+            allocation_source=SyntheticAllocationSource(quantity=2),
         )
         result = selector.select(
             self.report_path,

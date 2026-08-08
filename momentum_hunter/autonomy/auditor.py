@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
+from momentum_hunter.account_allocation import ALLOCATION_AUTHORIZED
 from momentum_hunter.autonomy.ledger import ExecutionLedger, ExecutionLedgerEvent
 from momentum_hunter.autonomy.risk_governor import SIMULATION_MODE
 
@@ -80,11 +82,64 @@ def audit_simulation_chain(ledger: ExecutionLedger, *, ticker: str, trade_plan_i
         findings.append(AuditFinding("chain", "trade_plan_id", "Missing TradePlan identifier for simulation audit."))
     if "risk_gate_evaluated" not in actions:
         findings.append(AuditFinding("chain", "risk_result_id", "Missing Risk Governor event before simulation."))
+    allocation_events = [
+        event
+        for event in events
+        if event.requested_action == "account_allocation_authorized"
+    ]
+    if "fake_order_submitted" in actions:
+        if len(allocation_events) != 1:
+            findings.append(
+                AuditFinding(
+                    "chain",
+                    "account_allocation",
+                    "Exactly one authorized account allocation is required before fake order submission.",
+                )
+            )
+        else:
+            findings.extend(audit_account_allocation_event(allocation_events[0]))
     if not ({"fake_order_submitted", "simulation_blocked"} & actions):
         findings.append(AuditFinding("chain", "result", "Missing final simulation order or blocked outcome."))
     findings.extend(audit_simulation_chronology(events))
     findings.extend(audit_execution_ledger(ExecutionLedger(events)).findings)
     return AuditReport("PASS" if not findings else "FAIL", findings)
+
+
+def audit_account_allocation_event(
+    event: ExecutionLedgerEvent,
+) -> list[AuditFinding]:
+    findings = audit_order_like_event(event)
+    if event.result != ALLOCATION_AUTHORIZED:
+        findings.append(
+            AuditFinding(
+                event.event_id,
+                "account_allocation",
+                "Account allocation event is not authorized.",
+            )
+        )
+    for field_name in (
+        "allocation_fingerprint",
+        "policy_fingerprint",
+        "account_context_fingerprint",
+    ):
+        if not re.fullmatch(r"[0-9a-f]{64}", str(event.payload.get(field_name, ""))):
+            findings.append(
+                AuditFinding(
+                    event.event_id,
+                    field_name,
+                    "Account allocation fingerprint is missing or invalid.",
+                )
+            )
+    quantity = event.payload.get("quantity")
+    if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
+        findings.append(
+            AuditFinding(
+                event.event_id,
+                "quantity",
+                "Account allocation quantity must be a positive whole share count.",
+            )
+        )
+    return findings
 
 
 def audit_simulation_chronology(events: list[ExecutionLedgerEvent]) -> list[AuditFinding]:
@@ -93,6 +148,7 @@ def audit_simulation_chronology(events: list[ExecutionLedgerEvent]) -> list[Audi
     for index, event in enumerate(events):
         indexed_actions.setdefault(event.requested_action, []).append(index)
     risk_indexes = indexed_actions.get("risk_gate_evaluated", [])
+    allocation_indexes = indexed_actions.get("account_allocation_authorized", [])
     preview_indexes = indexed_actions.get("simulated_order_previewed", [])
     submit_indexes = indexed_actions.get("fake_order_submitted", [])
     blocked_indexes = indexed_actions.get("simulation_blocked", [])
@@ -104,6 +160,25 @@ def audit_simulation_chronology(events: list[ExecutionLedgerEvent]) -> list[Audi
         findings.append(
             AuditFinding("chain", "chronology", "Risk Governor evidence must precede preview, submit, or block evidence.")
         )
+    if preview_indexes or submit_indexes:
+        if allocation_indexes and min(allocation_indexes) < first_risk:
+            findings.append(
+                AuditFinding(
+                    "chain",
+                    "chronology",
+                    "Risk Governor evidence must precede account allocation evidence.",
+                )
+            )
+        if allocation_indexes and any(
+            index < min(allocation_indexes) for index in preview_indexes + submit_indexes
+        ):
+            findings.append(
+                AuditFinding(
+                    "chain",
+                    "chronology",
+                    "Authorized account allocation must precede preview and submit evidence.",
+                )
+            )
     if submit_indexes and not preview_indexes:
         findings.append(AuditFinding("chain", "preview_order", "Missing simulated preview before fake submit evidence."))
     elif submit_indexes and preview_indexes and min(submit_indexes) < min(preview_indexes):
