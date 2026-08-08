@@ -2,6 +2,22 @@
 
 Date reconciled: 2026-08-08
 
+## ARGUS-DATA-005A Fresh Account And Portfolio Snapshot
+
+`codex/ARGUS-DATA-005A-account-portfolio-snapshot` is
+`VERIFIED_PENDING_FAST_FORWARD` from synchronized base `3437a5d`. It adds one
+exact-host GET-only bound-account snapshot, redacted dual-clock context,
+read-only Official Shadow commitment derivation, fail-closed brokerage anomaly
+handling, and fresh-per-decision allocation input. The source is included in
+runtime identity but is not wired into selection, simulation, Shadow, service,
+scheduler, Engine Host commands, or WPF. Compileall, 73 focused/runtime tests,
+210 adjacent tests, and all 1,314 Python tests pass. A nonpersisting live proof
+confirmed one expected cash account, zero brokerage positions, zero Shadow
+commitments, and transmission unavailable without retaining identity, balance,
+token, or credential values. No policy default, order capability, or allocation
+activation was added. Next action is clean fast-forward integration, backup,
+one exact-head opening-job repin, and controlled installed-supervisor refresh.
+
 ## ARGUS-DATA-005 Account-Aware Allocation
 
 `codex/ARGUS-DATA-005-account-aware-allocation` is

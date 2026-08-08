@@ -228,6 +228,7 @@ def runtime_build_hash(paths: Iterable[Path] | None = None) -> str:
             root / "engine_host.py",
             root / "engine_host_client.py",
             root / "account_allocation.py",
+            root / "account_allocation_snapshot.py",
             root / "models.py",
             root / "intraday_trade_plan.py",
             root / "scheduling.py",
