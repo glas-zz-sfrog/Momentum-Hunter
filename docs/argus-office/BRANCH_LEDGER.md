@@ -1,6 +1,20 @@
 # Branch Ledger
 
-Date reconciled: 2026-08-08
+Date reconciled: 2026-08-09
+
+## ARGUS-ROADMAP-002 Current-Master Reconciliation
+
+`codex/ARGUS-ROADMAP-002-current-master-reconciliation` is
+`IMPLEMENTED_PENDING_INTEGRATION / NOT_MERGED` from clean synchronized
+canonical base `1d0ca95`. It
+preserves the validated continuous-intraday architecture and task contracts
+from divergent source head `bae053b` while replacing stale implementation
+status with current canonical and validated-branch truth. The source branch and
+its exact hashes remain preserved. This branch is docs/governance only; it does
+not alter runtime, provider, account, credential, broker, order, service,
+scheduler, Engine Host, WPF, Shadow, schema, package, capture, or generated
+evidence. Hard Chew proof passes; back up the feature branch and wait for the
+serialized integration window.
 
 ## ARGUS-BROKER-ALPACA-001 Roadmap Reconciliation
 

@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Reconciled the validated continuous-intraday architecture from divergent source head `bae053b` onto current canonical base `1d0ca95` without importing stale Roadmap/governance state. Exact source hashes are preserved; R031B is historical complete, the canonical candle/DATA stack is current, and MONITOR/REGIME/EVENT/CATALYST remain accurately identified as validated pending integration.
+- Replaced the old morning-to-continuous linear plan with the actual dependency graph: Schwab remains read-only market-data authority, Alpaca Paper remains a separately gated execution-research provider, FakeBroker remains canonical, BREAKOUT-001 remains research-only, and live transmission remains unauthorized. No runtime, test, provider, account, credential, broker/order, service, scheduler, Engine Host, WPF, schema, package, capture, or generated evidence changed.
 - Reconciled the execution roadmap around ARGUS-BROKER-ALPACA-001. Alpaca Paper is the preferred fractional execution laboratory pending official documentation, secure Paper-only onboarding, and direct lifecycle proof; live Alpaca trading remains unauthorized.
 - Preserved Schwab as the proven market-data foundation and DATA-005B as provider-neutral engineering precursor work. Whole-share quantity, one-position concurrency, and the proposed `$2/$95/$5/$2/$4/1/30s` values remain provisional policies rather than permanent strategy laws.
 - Split future evidence into separately fingerprinted canary-realistic and strategy-research Paper lanes, with explicit broker capabilities, ideal/provider/final quantities, multi-position and rank-conditioned research, conservative execution evidence, and no retrospective trade manufacture.
