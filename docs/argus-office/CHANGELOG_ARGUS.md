@@ -233,5 +233,14 @@
   Host, 30 pending opening jobs, zero Shadow jobs, and unavailable order
   transmission after the clock repair.
 
+## 2026-08-09 - Worktree Hygiene Audit
+
+- Added a complete hash-addressed inventory of all 74 registered Git worktrees.
+- Separated canonical/active preserves, clean merged candidates, clean remote-
+  backed parked work, local-only history, and dirty individual-review work.
+- Added a conservative worktree-only Batch A retirement proposal that retains
+  every branch and requires a separate exact Steven approval.
+- Removed or changed no worktree, branch, file, runtime, service, or scheduler.
+
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.

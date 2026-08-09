@@ -584,3 +584,14 @@ Use a fresh task branch from local `master` instead.
 | --- | --- | --- | --- | --- | --- | --- |
 | `codex/ARGUS-R032B-schwab-historical-candle-backfill` | Based on synchronized `421149c`; implementation is the feature branch HEAD | No | No | `ACTIVE` | Add bounded Schwab one-minute and daily history after R033 exposed that the R032 live proof contained only transport-scale chart depth. | Back up the feature branch without changing canonical; after Thursday capture, run guarded backfill and reconcile R033. |
 | `codex/ARGUS-R033-live-chart-engine-host-integration` | Preserved dirty worktree based on `5442fbb` | No | No | `NEEDS_REVIEW` | Engine Host/WPF consumer wiring passes automation but Steven rejected the visible result because its isolated data root had two to four minute rows per symbol and no daily source. | Do not commit or merge as accepted. Reconcile after R032B live evidence, then repeat visual QA. |
+
+## 2026-08-09 Worktree Hygiene Inventory
+
+| Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-WORKTREE-HYGIENE-001-inventory` | Base `1d0ca95`; audit at branch head | No | No | `IMPLEMENTED_PENDING_CEO_RETIREMENT_DECISION` | Classify all 74 registered worktrees and propose a no-delete staged retirement plan. | Back up this docs-only audit; take no retirement action until an exact Steven approval and fresh preflight. |
+
+Inventory summary: 19 clean/merged Batch A candidates, 17 clean/unmerged exact-
+remote parked candidates, one clean local-only preserve, 22 dirty individual-
+review worktrees, 14 canonical/active preserves, and this audit worktree. The
+full row set is in `reports/audits/ARGUS-WORKTREE-HYGIENE-001-inventory.json`.

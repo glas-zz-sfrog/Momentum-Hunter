@@ -1170,3 +1170,28 @@ Physical results:
 
 This launcher change grants no credential, OAuth, account, broker, Paper, Live,
 order, provider-fetch, sample-start, merge, or push authority.
+
+## WORKTREE-HYGIENE-001 Retirement Decision
+
+Status: `AUTOMATED_PASS / CONSEQUENTIAL_GIT_DECISION_PENDING`.
+
+Automated evidence:
+
+- All 74 registered worktrees are inventoried exactly once.
+- Canonical is clean/synchronized; service manifest remains unchanged.
+- Zero paths are missing, inaccessible, locked, prunable, or remote-diverged.
+- The recommended Batch A contains exactly 19 clean worktrees whose HEAD is
+  already contained by `master`.
+- No worktree, branch, dirty path, or registration changed during inspection.
+
+Recommended decision, only when Steven wants the cleanup performed:
+
+`APPROVE WORKTREE-HYGIENE-001 BATCH A WORKTREE-ONLY RETIREMENT; RETAIN ALL BRANCHES`
+
+That decision authorizes a fresh no-drift preflight and removal of only the 19
+named Batch A worktree registrations/directories. It does not authorize branch
+deletion, Batch B, dirty checkout handling, detached checkout handling, reset,
+stash, prune, force removal, canonical modification, or runtime modification.
+
+No action is required merely to continue Momentum Hunter development; this is a
+consequential Git cleanup decision, not a blocker.
