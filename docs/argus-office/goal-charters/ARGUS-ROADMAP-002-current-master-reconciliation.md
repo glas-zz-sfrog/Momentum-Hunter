@@ -61,7 +61,7 @@ or gated, and which provider/execution boundaries still apply.
 - [x] Every local Markdown reference resolves or is explicitly external.
 - [x] Contradiction, stale-status, protected-path, secret, and diff checks pass.
 - [x] Canonical master, service manifest, and installed runtime remain unchanged.
-- [ ] Feature branch is committed and backed up without merge.
+- [x] Feature branch is committed and backed up without merge.
 
 ## Evidence Depth
 

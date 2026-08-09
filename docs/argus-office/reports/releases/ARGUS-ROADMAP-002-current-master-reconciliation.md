@@ -4,8 +4,9 @@
 
 `IMPLEMENTED_PENDING_INTEGRATION`
 
-The feature branch is safe to back up but must not merge while the scheduled
-runtime pin is active. No runtime or installed state changed.
+Implementation commit `1cf60ea` is backed up on the feature branch. The branch
+must not merge while the scheduled runtime pin is active. No runtime or
+installed state changed.
 
 ## Outcome
 
