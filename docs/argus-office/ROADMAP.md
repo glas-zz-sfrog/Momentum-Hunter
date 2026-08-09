@@ -29,6 +29,48 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-BROKER-ALPACA-001 is the approved execution-research direction. Alpaca is
+the preferred execution-provider candidate for fractional Paper execution,
+pending official-documentation research, secure Paper-only onboarding, and
+direct Alpaca Paper lifecycle proof. This is not authorization for live Alpaca
+trading, funding, money movement, or a live endpoint. Steven and the Vice
+President are handling creation of the Alpaca account externally and will ask
+Codex for assistance if needed; Momentum Hunter must not request, persist, or
+inspect credentials until that handoff occurs. Schwab's proven authentication,
+read-only account binding, quote, Streamer candle, `/pricehistory`, canonical
+candle, chart, and continuous-monitoring work remains the market-data
+foundation. Strategy logic remains broker-neutral:
+
+```text
+Schwab market data -> Momentum Hunter engine -> provider-capability boundary -> Alpaca Paper
+```
+
+ARGUS-DATA-005B is `ACTIVE_ENGINEERING_PRECURSOR` on the isolated
+`codex/ARGUS-DATA-005B-shadow-allocation-activation` worktree from synchronized
+base `91e461f`. Its current uncommitted, tested scope preserves one fresh
+account snapshot per decision cycle, reuse of that immutable snapshot across
+all candidate assessments, fail-closed source behavior, and a write-once
+allocation-policy identity. Compileall and 80 focused tests pass. No numeric
+policy, selector arm, Shadow trade, provider adapter, credential, service,
+scheduler, or transmission capability has been activated. The proposed
+`$2 / $95 / $5 / $2 / $4 / 1 position / 30-second account age` values remain a
+canary-realistic policy candidate only. Whole-share quantity and one-position
+concurrency remain configurable engineering policies, not permanent strategy
+laws. DATA-005B must be reconciled into provider-neutral allocator
+infrastructure before Alpaca adapter work begins.
+
+The next execution program has two separately versioned lanes. The
+canary-realistic lane asks what the eventual small supervised account could
+actually execute under fresh buying power and conservative limits. The
+strategy-research Paper lane asks which independently eligible opportunities
+have expectancy without allowing the tiny canary balance to censor higher-
+priced symbols. The lanes require separate policy/configuration fingerprints,
+capital and concurrency limits, and performance summaries. A result from one
+lane may never count in the other. The first post-integration Paper work is an
+engineering/activation sample; the final continuous-intraday 30-trade sample
+does not begin under a temporary whole-share, single-position, opening-heavy,
+or unproven provider model.
+
 ARGUS-DATA-005A fresh account/portfolio evidence is `COMPLETE` on canonical
 `master` through `dff993c`. The new exact-host,
 GET-only source revalidates the immutable ending `2573` `INDIVIDUAL_CASH`
@@ -43,7 +85,8 @@ observed exactly one expected account, zero brokerage positions, zero Shadow
 commitments, and transmission `UNAVAILABLE`; no full account identity, balance,
 token, or credential was retained in the proof. Compileall, 73 focused/runtime
 identity tests, 210 adjacent tests, and all 1,314 Python tests pass. Activation
-remains blocked until Steven chooses every numeric DATA-005 policy value. The
+remains blocked pending DATA-005B reconciliation and separately frozen
+canary-realistic and strategy-research policies after Alpaca capability proof. The
 feature and canonical branches are backed up, all 25 future opening jobs are
 pinned to the final synchronized closeout head, and the installed service was
 restarted under UAC. Its
@@ -54,9 +97,11 @@ transmission `UNAVAILABLE`.
 ARGUS-DATA-005 account-aware allocation is `COMPLETE` on canonical `master`
 through implementation commit `a2e5020`. The versioned
 `account-aware-fixed-unit-risk-v1` contract replaces executable `$500`
-reference sizing with a separately fingerprinted allocation decision. Whole
-shares are bounded by fixed/remaining risk, cash or buying power after reserve
-and commitments, and per-position notional limit. Policy, account context,
+reference sizing with a separately fingerprinted allocation decision. Its
+current whole-share quantization is a provider-policy implementation, not a
+permanent strategy constraint. Quantity is bounded by fixed/remaining risk,
+cash or buying power after reserve and commitments, and per-position notional
+limit. Policy, account context,
 allocation, and quantity are frozen through simulation and Shadow; Risk
 Governor must precede allocation, and allocation must precede FakeBroker
 preview/submission. Missing, stale, future, malformed, mismatched, over-limit,
@@ -68,8 +113,11 @@ providers, capture/service/scheduler, real broker behavior, database/schema,
 packages, credentials, raw captures, generated reports, and historical
 evidence are unchanged. DATA-005A now supplies the bounded fresh read-only
 account/portfolio source, but it is not activated and no production numeric
-defaults were invented. Activation remains blocked until Steven chooses the
-numeric risk policy.
+defaults were invented. The allocator must next preserve distinct
+`idealRiskQuantity`, `providerExecutableQuantity`, and
+`finalAuthorizedQuantity`, with fractional precision and order-type support
+coming only from explicit provider capabilities. Unknown capability fails
+closed.
 
 ARGUS-DATA-004 same-session intraday TradePlan semantics is `COMPLETE` through
 the release titled `Add intraday TradePlan horizon semantics`. The versioned
@@ -831,20 +879,22 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Item | Current truth |
 | --- | --- |
 | Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, DATA-004 same-session intraday TradePlan semantics, DATA-005 account-aware allocation enforcement, and DATA-005A fresh account/portfolio evidence. All 25 future opening jobs are pinned to the final synchronized closeout head. |
-| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-005A is complete, backed up, repinned, and installed-runtime verified; allocation activation remains blocked only on Steven's explicit numeric policy. R034 remains a separate destructive approval gate. |
+| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-005A is complete, backed up, repinned, and installed-runtime verified. DATA-005B is an isolated provider-neutral engineering precursor with 80 focused tests passing and no activation. ARGUS-BROKER-ALPACA-001 is the approved next execution-research sequence; Alpaca account creation is being handled externally by Steven and the Vice President. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
-| Active decision | Keep `official-shadow-v3` unarmed until quote provenance, catalyst attribution, setup identity, opening RVOL, sizing, and plan horizon are trustworthy. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | Official Shadow selection remains blocked until Steven chooses the numeric DATA-005 allocation policy; DATA-005A supplies the fresh source but does not activate it. DATA-002 authority remains fail-closed on any session lacking complete current-window bars and at least five comparable baseline sessions; DATA-004 requires real chronology and a new successor identity before a reclaim can become active. R034 remains a separately approved destructive cutover. Phase 13 remains separately blocked by Schwab's lack of paperMoney/sandbox API support and the recorded credential-remediation gate. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
+| Active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Do not begin the final strategy sample under the temporary whole-share/single-position/opening-heavy model. Reconcile DATA-005B as provider-neutral infrastructure, prove Alpaca Paper capabilities and lifecycle, then create fresh prospective engineering and strategy-sample identities. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
+| Blocked by | Alpaca execution work is blocked on official capability research and Paper-only account/credential handoff, not on Schwab market data. Fractional protective-order, cancel/replace, restart/reconciliation, endpoint-isolation, and partial-fill behavior must be proven directly in Paper before adapter capability can be trusted. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-07 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. The 25 remaining jobs run from 2026-08-10 through 2026-09-14 at the final synchronized head. |
-| Immediate operational work | Obtain Steven's numeric DATA-005 allocation-policy decision without activating live transmission, then perform the separate visual truthfulness repair for the simulation action and legacy `$500` label. Present R034's exact CRWV JSON/archive/710-row deletion plan only when Steven is ready for the destructive decision. |
-| Broker state | Schwab OAuth and the immutable `2573` `INDIVIDUAL_CASH` binding remain read-only. No account, position, preview, or order request occurred in Monday's through Thursday's captures. The guarded candle proof used only the expected identity check and market-data history; it made no position/order request. No transmitting method exists. The previously surfaced, unrotated Client Secret remains an explicit blocker for future transmitting code. |
-| Steven action | Choose DATA-005's fixed unit risk, maximum position notional, minimum cash reserve, maximum total open risk, daily-loss limit, maximum open positions, and maximum account-evidence age before activation. Any brokerage anomaly, real-order proposal, destructive R034 candle cutover, or visual change remains a separate interruption gate. |
-| Data caveat | DATA-001 proves displayed bid/ask provenance, DATA-001B prevents unresolved catalysts from granting authority, DATA-001C permits only validated Schwab last/bid/ask to carry execution-price authority, DATA-002 permits only time-normalized canonical Schwab volume to carry RVOL authority, DATA-003 preserves the original Daily breakout level, and DATA-004 binds setup-aware same-session timing while requiring a new successor identity for reclaim. DATA-005 makes `$500` reference sizing nonexecutable; DATA-005A supplies fresh bound account and Shadow-portfolio evidence but remains inactive until the numeric policy is explicit. Legacy RVOL remains research-only and insufficient candle history fails closed. Historical reports remain immutable. R034 retains the destructive-operation interruption gate. |
+| Immediate operational work | Preserve Monday's ordinary opening-capture schedule unchanged. Close DATA-005B only as provider-neutral precursor infrastructure; do not freeze its provisional numeric values. Next, use official Alpaca documentation to build the capability contract, then await the external Paper-account credential handoff before any authenticated Paper proof. Present R034's exact deletion plan only when Steven is ready. |
+| Broker state | Schwab OAuth and immutable `2573` `INDIVIDUAL_CASH` binding remain read-only market-data/account evidence. No transmitting Schwab method exists. Alpaca is not configured, no Alpaca credential is present, and no Alpaca endpoint or order is reachable. Future Alpaca work is PAPER_ONLY with an exact paper-host allowlist; a live adapter cannot be enabled by a boolean switch. |
+| Steven action | Steven and the Vice President are opening the Alpaca account and will request assistance if needed. Interrupt Steven before funding, money movement, any live endpoint/order, unexpected brokerage scope, destructive R034 cutover, or visual acceptance. Do not interrupt for ordinary Paper-only local credential setup after the expected account handoff. |
+| Data caveat | Schwab remains authoritative for proven quote/candle evidence while execution-provider capability remains separate. DATA-001 through DATA-004 retain their provenance, RVOL, setup, and same-session chronology gates. DATA-005 makes `$500` reference sizing nonexecutable; DATA-005A supplies fresh bound-account/portfolio evidence. Fractional support may alter provider-executable quantity prospectively but may never rewrite old allocation or Shadow evidence. Legacy RVOL remains research-only; insufficient candle history and unknown broker capability fail closed. |
 
 ### Status Legend
 
 - `NOT_STARTED`: no implementation has begun.
 - `ACTIVE`: work is underway on the named branch.
+- `ACTIVE_ENGINEERING_PRECURSOR`: useful provider-neutral implementation is in progress, but consequential policy and activation remain intentionally unfrozen.
+- `ACTIVE_PROVIDER_RESEARCH`: official contract research or isolated provider proof is the current implementation lane; production authority has not been granted.
 - `IMPLEMENTED_PENDING_MERGE`: work is committed and verified on a branch but has not yet been integrated. Proven nonvisual work may integrate automatically; visual work waits for Steven's manual acceptance.
 - `COMPLETE`: work is merged into local `master` and verified.
 - `BLOCKED`: a stated gate or CEO decision prevents work from starting.
@@ -1053,8 +1103,14 @@ activated-empty and unarmed at `0 / 30`, A017 is
   execution on the repaired job-ID defect. The final exact-time forced-restart
   attempt at 2026-07-31 16:39 Central passes every verifier gate and is
   archived without deleting the failed or invalid attempts.
-- A016 selected Schwab/thinkorswim continuity. Schwab Support confirmed that Trader API cannot access paperMoney and has no retail sandbox, so A017 is `BLOCKED_VENDOR_CAPABILITY`.
-- FakeBroker is the only automated boundary. thinkorswim paperMoney is manual ticket and fill-model reconciliation only; no interim Alpaca path is approved.
+- A016's Schwab/thinkorswim continuity decision is superseded for execution
+  research by ARGUS-BROKER-ALPACA-001. Schwab Support's confirmation that Trader
+  API cannot access paperMoney and has no retail sandbox remains true; Schwab
+  remains the proven market-data source rather than the Paper execution lab.
+- FakeBroker remains the only currently integrated automated execution boundary.
+  Alpaca Paper is now the preferred next execution laboratory pending official
+  documentation and direct Paper proof. thinkorswim remains optional manual
+  visual/paperMoney reconciliation and is not a runtime dependency.
 - SCHWAB-001/002/002A/003, live `CASH` validation, immutable binding, and bound-refresh safety are integrated. The production app, loopback callback, certificate trust, OAuth, DPAPI vault, and sole `2573` `INDIVIDUAL_CASH` binding are active and read-only.
 - Account discovery and validation fail closed on any unexpected account count, suffix, type, hash, position, or permission. Sensitive account and balance values remain suppressed.
 - The Client Secret was surfaced to the browser-automation channel during portal research. No credential or token was found in Git, but no rotation occurred. Read-only use continues under the recorded risk; transmitting code is blocked until Schwab supplies rotation, replacement, or explicit vendor remediation.
@@ -1064,7 +1120,7 @@ activated-empty and unarmed at `0 / 30`, A017 is
 
 #### Standing Authorization And Branch Discipline
 
-- Standing-authorized nonvisual work includes bounded Shadow implementation/repair, evidence collection, 5/10/20/30 reports, manual paperMoney reconciliation artifacts, authenticated read-only Schwab calls, OAuth refresh, exact canary binding when one `2573` CASH account revalidates, broker-preview research that official documentation proves nontransmitting, tests, reports, Roadmap updates, commits, clean fast-forward merges, and non-force pushes.
+- Standing-authorized nonvisual work includes bounded Shadow implementation/repair, evidence collection, Paper-only Alpaca documentation/adapter/lifecycle work after expected credential handoff, manual paperMoney reconciliation artifacts, authenticated read-only Schwab calls, OAuth refresh, exact canary binding when one `2573` CASH account revalidates, tests, reports, Roadmap updates, commits, clean fast-forward merges, and non-force pushes. Funding, live endpoints, live orders, and money movement remain explicit interruption gates.
 - Steven checkpoints apply to GUI/visual acceptance and the anomaly/consequence list in this Roadmap. Real broker transmission, destructive data/schema operations, credential or provider-app revocation, paid services, and protected semantic expansion remain interruption gates.
 - Keep one active implementation branch and at most one stacked successor. Begin new work from the integrated local baseline. The official Shadow sample may begin automatically after every frozen prerequisite passes; any failed or ambiguous prerequisite interrupts Steven.
 - R027 must preserve both validated parents: current Shadow `master` and R026. R026 and TEST-001 become source/audit branches after combined verification; do not rebase or rewrite either history merely for linearity.
@@ -1306,11 +1362,48 @@ Status: `BLOCKED`; destructive-operation gate after R032C and R034A pass
 
 ### Phase 13 - Broker Execution Validation Gate
 
-Status: `BLOCKED_VENDOR_CAPABILITY`
+Status: `ACTIVE_PROVIDER_RESEARCH / PAPER_ACCOUNT_HANDOFF_PENDING`
 
-- The future evidence ladder is: (1) FakeBroker prospective Shadow Trading; (2) manual thinkorswim paperMoney ticket/reconciliation; (3) Schwab contract emulator, complete on local `master`; (4) synthetic one-use HTTPS loopback callback, certificate lifecycle, and browser-proof tooling, complete on local `master`; (5) production-local certificate staging, exact CurrentUser trust installation, and browser-warning-free proof, `PASS`; (6) credential onboarding and OAuth, complete on local `master` in SCHWAB-002; (7) standing-authorized Schwab authenticated read-only account discovery; (8) exact single-canary-account isolation proof; (9) broker preview only if official documentation proves a nontransmitting endpoint; (10) a Steven-approved supervised live canary order; (11) reconciliation, audit review, and token-revocation drill; and (12) repeated supervised canary cycles.
-- Schwab Trader API cannot access paperMoney and has no retail sandbox. Manual thinkorswim paperMoney reconciliation is evidence collection, not an automated API execution path.
-- Authenticated reads and proven nontransmitting preview work may advance automatically when expected invariants hold. Real order transmission never auto-advances and requires a concrete Steven decision after the complete evidence chain is shown.
+- ARGUS-BROKER-ALPACA-001 sequence: reconcile DATA-005B as provider-neutral
+  infrastructure; prove official Alpaca account/Paper/live separation and every
+  fractional order capability independently; create a secure PAPER_ONLY host and
+  credential boundary; implement a bounded BrokerAdapter; prove market/limit,
+  stop/stop-limit, profit-taking, partial fill, cancel/replace or cancel-resubmit,
+  exact liquidation, forced-flat, restart/reconnect, reconciliation, network
+  interruption, and idempotency; then freeze separate canary-realistic and
+  strategy-research policies and begin a fresh prospective Paper engineering
+  sample.
+- Broker capabilities are explicit data, never inferred. The capability model
+  must distinguish fractional quantity precision and support for market, limit,
+  stop, stop-limit, take-profit, bracket, OCO, OTO/OTOCO, replacement,
+  extended-hours, status streaming, and broker-resident protection. Unknown is
+  blocked. Strategy code must not branch on a provider name.
+- Allocation preserves `idealRiskQuantity`, `providerExecutableQuantity`, and
+  `finalAuthorizedQuantity`. Risk and setup quality define the ideal quantity;
+  broker precision/order support defines executability; account/portfolio policy
+  defines final authorization. Stock price alone is not a global universe gate.
+- Paper research must preserve every independently eligible candidate and support
+  prospective top-three/rank-conditioned analysis under a versioned configurable
+  concurrency policy. It must not assume Rank 1, one position, three positions,
+  or any fixed maximum is optimal. Counterfactuals remain separate and no
+  retrospective trade may be manufactured.
+- The canary-realistic and strategy-research lanes have separate capital, risk,
+  concurrency, rank-participation, provider/fill, sample, and report identities.
+  Material changes start a new prospective identity. Alpaca Paper results remain
+  distinct from Momentum Hunter's conservative executable result and are not
+  proof of live profitability.
+- Paper mode uses an exact paper-host allowlist, separate local secrets, and
+  structural rejection of live hosts. No secret may enter Git, logs, screenshots,
+  evidence, chat, or documentation. No live adapter is enabled by a boolean flip.
+- Schwab market-data and DATA-004 continuous same-session semantics remain in
+  force. The 8:35 capture is a bootstrap, not the only trading window; missed
+  breakouts remain immutable and new continuation/pullback/reclaim setups require
+  new prospective evidence, setup ID, TradePlan, and Risk decision.
+- Final classification after direct Paper proof is one of
+  `ALPACA_PAPER_FRACTIONAL_EXECUTION_PROVEN`,
+  `ALPACA_PAPER_FRACTIONAL_EXECUTION_PROVEN_WITH_LIMITATIONS`,
+  `ALPACA_PAPER_FRACTIONAL_EXECUTION_UNSUITABLE`, or
+  `ADDITIONAL_VENDOR_PROOF_REQUIRED`.
 
 ### Phase 14 - Unattended Live Execution
 

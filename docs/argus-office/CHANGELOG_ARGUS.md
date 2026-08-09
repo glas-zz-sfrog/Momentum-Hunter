@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Reconciled the execution roadmap around ARGUS-BROKER-ALPACA-001. Alpaca Paper is the preferred fractional execution laboratory pending official documentation, secure Paper-only onboarding, and direct lifecycle proof; live Alpaca trading remains unauthorized.
+- Preserved Schwab as the proven market-data foundation and DATA-005B as provider-neutral engineering precursor work. Whole-share quantity, one-position concurrency, and the proposed `$2/$95/$5/$2/$4/1/30s` values remain provisional policies rather than permanent strategy laws.
+- Split future evidence into separately fingerprinted canary-realistic and strategy-research Paper lanes, with explicit broker capabilities, ideal/provider/final quantities, multi-position and rank-conditioned research, conservative execution evidence, and no retrospective trade manufacture.
 - Added DATA-005A's exact-host, GET-only fresh account/positions snapshot and read-only Official Shadow portfolio derivation. It revalidates the single ending `2573` cash binding, preserves provider/receipt chronology, and fails closed on changed identity, unexpected positions, malformed balances, or invalid frozen commitment evidence.
 - Proved the source with compileall, 73 focused/runtime tests, 210 adjacent tests, all 1,314 Python tests, and a nonpersisting live one-account/zero-position/zero-commitment check. The source remains disconnected from runtime allocation; no numeric policy, order method, transmission capability, UI, score/RVOL/TradePlan semantic, service/scheduler command, schema/package, credential, raw evidence, or historical output changed.
 - Added DATA-005's versioned account-aware allocation gate. Explicit fixed-unit-risk, cash/buying-power, reserve, commitment, total-risk, daily-loss, position-count, freshness, and notional limits now determine a positive whole-share quantity; missing policy or account evidence fails closed.

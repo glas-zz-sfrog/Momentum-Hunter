@@ -2,6 +2,35 @@
 
 Date reconciled: 2026-08-08
 
+## ARGUS-BROKER-ALPACA-001 Roadmap Reconciliation
+
+`codex/ARGUS-BROKER-ALPACA-001-roadmap-reconciliation` is
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` from clean, synchronized
+canonical base `91e461f`. It records Alpaca Paper as the preferred
+execution laboratory pending official capability and Paper-account proof,
+preserves Schwab as the market-data foundation, splits canary-realistic and
+strategy-research lanes, and keeps live Alpaca transmission unauthorized. This
+branch is governance-only and touches no runtime, credential, provider, account,
+order, scheduler, service, schema, package, source evidence, or generated data.
+After the clean fast-forward and non-force backup push, all 25 future opening
+jobs were repinned to the synchronized governance head and the running service
+observed the first job as `PENDING`; no service reinstall or restart occurred.
+
+## ARGUS-DATA-005B Shadow Allocation Activation
+
+`codex/ARGUS-DATA-005B-shadow-allocation-activation` is
+`ACTIVE_ENGINEERING_PRECURSOR / NOT_ACTIVATED` in a separate worktree from
+`91e461f`. Its current uncommitted provider-neutral work freezes one fresh
+account context per decision cycle, reuses it across candidate assessments,
+fails closed on source error, and adds write-once allocation-policy identity.
+Compileall and 80 focused tests pass. It has no numeric production policy,
+selector arm, Shadow trade, credential, provider adapter, service/scheduler
+change, or transmission capability. Reconcile it narrowly under the Alpaca
+direction; do not discard it or freeze whole-share/single-position behavior as
+permanent strategy law. Its next closeout must preserve the provider-neutral
+precursor and defer broker quantization plus separate numeric policy activation
+until Alpaca Paper capabilities are proven.
+
 ## ARGUS-DATA-005A Fresh Account And Portfolio Snapshot
 
 `codex/ARGUS-DATA-005A-account-portfolio-snapshot` is
