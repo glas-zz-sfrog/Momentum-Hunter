@@ -46,13 +46,13 @@ Operating rules:
 | Broker safety | Schwab remains read-only market/account evidence. Alpaca work is Paper-only. Real-order transmission is `UNAVAILABLE`; no live Alpaca endpoint or order is authorized. |
 | Alpaca Paper | Secure onboarding `39576d9` and fractional proof `256d442` are validated. A003 head `1abb4dd` includes harness `7ccbad5` and adjudication `94c7c77`; direct regular-hours lifecycle acceptance is waiting on market hours. |
 | Allocation | Provider-neutral allocation and multi-position research contracts are validated at `046b127`. A separate older activation worktree has seven uncommitted code/test files and is preserved untouched pending reconciliation and A003 evidence. |
-| Continuous intraday | Schwab candles, backfill, dense WPF charts, DATA-002 through DATA-005A, and opening automation are canonical. MONITOR `d2b77c2`, REGIME `f4deb18`, and EVENT `b6e861a` are validated, pushed, dormant, and unmerged. |
-| Active implementation | No implementation slot is currently occupied. `ARGUS-ROADMAP-003` is verified at `b74f72a` and `IMPLEMENTED_PENDING_MERGE` in Lane I. |
-| Highest Ready work | CATALYST-002A provider-neutral catalyst revisions; BREAKOUT-001 research-only sequential events; UI-STREAMLINE-001 against truthful synthetic/canonical states; current-baseline reconciliation planning. |
+| Continuous intraday | Schwab candles, backfill, dense WPF charts, DATA-002 through DATA-005A, and opening automation are canonical. MONITOR `d2b77c2`, CATALYST `97ab34d`, REGIME `f4deb18`, and EVENT `b6e861a` are validated, pushed, dormant, and unmerged. |
+| Active implementation | No implementation slot is currently occupied. CATALYST-002A is proven at `97ab34d`; `ARGUS-ROADMAP-003` remains `IMPLEMENTED_PENDING_MERGE` in Lane I. |
+| Highest Ready work | ROADMAP-002 current-baseline reconciliation; BREAKOUT-001 research-only sequential events; UI-STREAMLINE-001 against truthful synthetic/canonical states; worktree hygiene planning. |
 | External-time gate | A003 direct Paper lifecycle acceptance waits for an eligible regular-market session. This blocks only A003 acceptance and dependent integration/activation. |
 | Steven gates | R034 destructive legacy cutover; future visual acceptance; any brokerage anomaly; any live order; any unattended-live decision. |
 
-Worktree truth: Git currently knows 69 worktrees, of which 47 are clean and 22
+Worktree truth: Git currently knows 70 worktrees, of which 48 are clean and 22
 are dirty. Most are historical review/feature checkouts, not active development.
 They are preserved, not deleted or reset. The current implementation budget
 counts only explicitly active tasks, not every historical checkout.
@@ -172,7 +172,6 @@ risk order, not permission to bypass integration or activation gates.
 
 | Priority | Task | Lane | Bounded scope and expected output | Dependencies satisfied | Parallel-safe with | Integration constraint |
 | --- | --- | --- | --- | --- | --- | --- |
-| P1 | CATALYST-002A | A | Provider-neutral immutable catalyst/revision/attribution/authority records, material-delta events, stale/outage rules, synthetic tests. | DATA-001/001B canonical; MONITOR contract validated. | Lanes C, F, H, I | No provider intake, scoring authority, or runtime activation. |
 | P1 | ROADMAP-002-RECONCILE | I | Prepare a current-master reconciliation of the validated continuous-intraday architecture files from `bae053b`; preserve source hashes and reverify references. | Architecture validated; canonical truth known. | Lanes A, C, D, F, H | Merge waits for scheduled-runtime pin window and serialized integration. |
 | P2 | BREAKOUT-001 | H | Research-only sequential impulse/breakout/miss/failure/pullback/reclaim/exhaustion evidence over canonical bars and stable setup identity. | R032 canonical; MONITOR setup contract validated. | Lanes C, F, I | No score/readiness/plan/order authority; stacked lineage must be reconciled before integration. |
 | P2 | UI-STREAMLINE-001 | F | Quiet integrated workstation hierarchy using only existing canonical or explicit synthetic states. | WPF shell and truthful state contracts exist. | Lanes A, C, H, I | Steven visual acceptance required; no fabricated provider/account/execution state. |
@@ -186,7 +185,7 @@ throughput would create avoidable reconciliation risk.
 
 | Lane | Purpose | Current state | Current or next work |
 | --- | --- | --- | --- |
-| A - Market Data And Monitoring | Schwab Streamer, candles, reconciliation, discovery, monitoring, catalysts. | ACTIVE / PARALLEL-READY | Canonical candle stack complete; MONITOR validated; CATALYST-002A Ready. |
+| A - Market Data And Monitoring | Schwab Streamer, candles, reconciliation, discovery, monitoring, catalysts. | VALIDATED_PENDING_INTEGRATION | Canonical candle stack complete; MONITOR and CATALYST-002A validated; CATALYST-002B waits for provider proof. |
 | B - Strategy And TradePlan | Setup identity, DATA-004 horizon, breakout/pullback/reclaim, immutable plans. | ACTIVE / PARALLEL-READY | DATA-003/004 complete; BREAKOUT-001 Ready; PLAN-002 waiting on evidence chain. |
 | C - Risk / Allocation / Portfolio | Provider-neutral quantities, freshness, buying power, aggregate risk, concurrency. | VALIDATED_PENDING_INTEGRATION | DATA-005B provider-neutral head `046b127`; activation branch preserved dirty and gated. |
 | D - Broker / Execution Providers | Broker capabilities, Alpaca Paper lifecycle, future live canary. | WAITING_EXTERNAL_TIME | A003 direct Paper lifecycle proof at next eligible regular-market session. |
@@ -211,7 +210,7 @@ contract. The longer records that follow explain the highest-consequence gates.
 | REGIME-001-INTEGRATION | WAITING_INTEGRATION_WINDOW | MONITOR commit order and runtime pin | INTEGRATION + INSTALLATION | Canonical REGIME module | All isolated development | MONITOR order, current-base reverify, integration window | Research and provider-neutral work |
 | EVENT-001-INTEGRATION | WAITING_INTEGRATION_WINDOW | REGIME/MONITOR commit order and runtime pin | INTEGRATION + INSTALLATION | Canonical EVENT module | All isolated development | Exact stack order, full reverify, integration window | Catalyst, research, UI, governance |
 | EVENT-002-SOURCE-AND-POLICY | WAITING_PROVIDER_EVIDENCE | Authoritative source and prospective policy | VERIFICATION + ACTIVATION | Production event context | Dormant model and all unrelated lanes | Source contract plus policy proof | Provider research and unavailable-state UI |
-| CATALYST-002B-PROVIDER | WAITING_PROVIDER_EVIDENCE | Accepted catalyst source contract | VERIFICATION + ACTIVATION | Live catalyst intake | CATALYST-002A and unrelated work | Provider/source proof and bounded cadence | Synthetic intake and authority tests |
+| CATALYST-002B-PROVIDER | WAITING_PROVIDER_EVIDENCE | Accepted catalyst source contract | VERIFICATION + ACTIVATION | Live catalyst intake | CATALYST integration and unrelated work | Provider/source proof, CATALYST-002A integration, and bounded cadence | Synthetic intake and authority tests |
 | BREAKOUT-002 | WAITING_DEPENDENCY | Sufficient prospective BREAKOUT-001 cohort | DEVELOPMENT | Outcome conclusions | BREAKOUT-001 and other lanes | Frozen cohort/denominator minimum met | Analysis fixtures and integrity tooling |
 | PLAN-002 | WAITING_DEPENDENCY | Integrated authority/context/setup chain | DEVELOPMENT + ACTIVATION | Continuous authoritative plans | Research, Paper proof, UI, governance | Prerequisites integrated; identities frozen | Synthetic version/supersession tests |
 | SHADOW-025 | WAITING_DEPENDENCY | Full authority chain and sample constitution | ACTIVATION | New official sample | Implementation/evidence preparation | M1 finish line and new prospective IDs | Report/proof-bundle preparation |
@@ -502,6 +501,7 @@ is one candidate at a time; no row authorizes a merge by itself.
 | Alpaca A003 lifecycle | `1abb4dd` includes `7ccbad5` + `94c7c77` | Synthetic/adjudication verified; pushed; direct proof pending | Successful direct regular-hours proof with terminal zero positions/orders | Yes | No | Direct evidence scan plus full branch verification |
 | DATA-005B provider-neutral allocation | `046b127` | 33 focused, 199 adjacent, 1,424 full tests; pushed | A003 acceptance; policy split; current-master reconciliation | Yes | No | Full allocator/Paper/Shadow suite |
 | MONITOR-001 | `d2b77c2` | 38 focused, 195 adjacent, 1,352 full; clean/pushed | Serialized integration window | Yes | No | Current-master full tests before merge |
+| CATALYST-002A | `97ab34d` includes implementation `c53a24b` and MONITOR | 43 focused, 158 bounded, 1,395 full; clean/pushed/dormant | MONITOR first; reconcile the REGIME/EVENT sibling stack in one serialized integration window | Yes | No | Current-master full tests and provider/runtime boundary scan before merge |
 | REGIME-001 | `f4deb18` includes MONITOR | 29 focused, 145 adjacent, 1,381 full; clean/pushed | MONITOR order; serialized integration window | Yes | No | Current-master full tests before merge |
 | EVENT-001 | `b6e861a` includes REGIME + MONITOR | 30 focused, 167 adjacent, 1,411 full; clean/pushed | Preserve commit order; serialized integration window | Yes | No | Current-master full tests before merge |
 
@@ -536,7 +536,7 @@ flowchart TD
     D5BINT --> PAPERENG[Paper engineering sample]
 
     MASTER --> MON[MONITOR-001 validated]
-    MON --> CAT[CATALYST-002A]
+    MON --> CAT[CATALYST-002A validated 97ab34d]
     MON --> BR1[BREAKOUT-001]
     BR1 --> BR2{Sufficient prospective events}
     BR2 --> PLAN[PLAN-002]
@@ -561,7 +561,7 @@ flowchart TD
 
 Important nondependencies:
 
-- CATALYST-002A, BREAKOUT-001, UI-STREAMLINE-001, and governance work do not
+- Validated CATALYST-002A, BREAKOUT-001, UI-STREAMLINE-001, and governance work do not
   depend on A003 live acceptance.
 - A003 live acceptance does not depend on Codex, the WPF UI, Shadow activation,
   or a service/runtime merge.
@@ -585,8 +585,8 @@ Integration sections are scheduling projections of these records.
 | REGIME-001-INTEGRATION | H | P1 | WAITING_INTEGRATION_WINDOW | MONITOR commit order; validated `f4deb18` | Versioned regime context |
 | EVENT-001-INTEGRATION | H | P1 | WAITING_INTEGRATION_WINDOW | REGIME/MONITOR commit order; validated `b6e861a` | Dormant event context |
 | EVENT-002-SOURCE-AND-POLICY | A | P2 | WAITING_PROVIDER_EVIDENCE | EVENT-001; source/policy proof | Production event context |
-| CATALYST-002A | A | P1 | READY | DATA-001/001B; MONITOR contract | Provider-neutral continuous catalyst evidence |
-| CATALYST-002B-PROVIDER | A | P2 | WAITING_PROVIDER_EVIDENCE | CATALYST-002A; source contract | Live catalyst intake |
+| CATALYST-002A | A | P1 | IMPLEMENTED_PENDING_INTEGRATION | DATA-001/001B; MONITOR contract; validated `97ab34d` | Provider-neutral continuous catalyst evidence |
+| CATALYST-002B-PROVIDER | A | P2 | WAITING_PROVIDER_EVIDENCE | CATALYST-002A integration; source contract | Live catalyst intake |
 | BREAKOUT-001 | H | P2 | READY | Canonical candles; MONITOR identity | Prospective sequence corpus |
 | BREAKOUT-002 | H | P2 | WAITING_DEPENDENCY | Sufficient BREAKOUT-001 events | Sequential event study |
 | PLAN-002 | B | P1 | WAITING_DEPENDENCY | MONITOR, DATA-002, REGIME, EVENT, CATALYST, setup evidence | Continuous immutable plans |
