@@ -42,9 +42,22 @@ Required evidence includes commands run, test results, files changed, screenshot
 Specialists produce role-specific artifacts and may include recommendations inside those artifacts. QA may write tests only when explicitly assigned. Release Scribe updates logs, reports, and checklists but does not approve merges.
 
 ## Roadmap Reconciliation
-`ROADMAP.md` is the single current-status authority. Before starting substantive work, the Orchestrator reads its `Now` section and Git Steward reconciles any branch or commit mismatch. Before a substantive task is reported complete, implemented pending merge, merged, or blocked, Release Scribe updates the Roadmap from actual Git and verification evidence.
+`ROADMAP.md` is the single current-status authority. Before starting substantive work, the Orchestrator reads `Executive Now`, the Ready Queue, and the applicable lane/gate records; Git Steward reconciles any branch, worktree, runtime-pin, or commit mismatch. Before a substantive task is reported complete, implemented pending merge, merged, or waiting, Release Scribe updates the Roadmap from actual Git and verification evidence.
 
 `BRANCH_LEDGER.md` records branch evidence; `TASK_LOG.md` and `CHANGELOG_ARGUS.md` record history. They do not replace the Roadmap's current state or next-action decision.
+
+Momentum Hunter uses parallel pipeline execution. A gate applies only to its
+documented development, verification, integration, installation, activation,
+Paper, live, or destructive scope. Every waiting task records what it blocks,
+what it does not block, its resume evidence, and useful work while waiting.
+Global blocked status is allowed only when every unfinished task has been
+dependency-evaluated and the Ready Queue is empty.
+
+At most three implementation worktrees are active by default, each in a
+different primary lane. One canonical integration lane serializes merge,
+runtime installation, and consequential activation. Validated remote-backed
+history is not rebased; a newer master requires a fresh reconciliation branch,
+recorded source commits, bounded conflict resolution, and complete reverification.
 
 ## Deferred Operator Verification
 `VERIFICATION_QUEUE.md` is the durable, item-by-item list of Steven's deferred visual/manual checks and anomaly decisions. Every visual change must record the exact screen, action, expected result, forbidden or unchanged behavior, automated evidence, and current manual status. Routine nonvisual work records automated evidence and does not create a Steven approval item.

@@ -46,8 +46,10 @@ Protected areas require explicit task scope and Hard Chew proof: core scoring lo
 ## Roadmap Authority And Reporting
 - `docs/argus-office/ROADMAP.md` is the sole authoritative current-status and next-work document. `CURRENT_STATE.md` is retired.
 - `docs/argus-office/VERIFICATION_QUEUE.md` is the authoritative list of deferred Steven visual/manual checks and anomaly decisions. Routine nonvisual proof belongs in automated evidence and does not create a Steven approval item.
-- Before starting substantive work, read the Roadmap `Now` section and reconcile any mismatch with Git before relying on it.
+- Before starting substantive work, read Roadmap `Executive Now`, the Ready Queue, and the applicable lane/gate records; reconcile any mismatch with Git, worktrees, runtime pins, or external evidence before relying on it.
 - Before reporting a substantive task complete, update the Roadmap from actual branch, commit, test, merge, push, and next-action evidence. Branch-only work must be `IMPLEMENTED_PENDING_MERGE`, not `COMPLETE`.
+- Treat the Roadmap as a parallel pipeline scheduler: gate only the documented consequence, keep all independent Ready tasks visible, and call the project globally blocked only when every unfinished task is dependency-evaluated and the Ready Queue is empty.
+- Permit at most three active implementation worktrees by default, each with a different primary lane and recorded base/protected paths/dependencies. Keep one serialized canonical integration lane.
 - For every visual or physically user-verifiable change, add exact numbered operator checks to the Verification Queue and keep automated evidence separate from Steven's manual result. Nonvisual changes require automated evidence, not a rubber-stamp manual item.
 - Never ask Steven to broadly "check the app." State what to open, what action to take, what should appear, what must remain absent or locked, and how to report a failure.
 - Give Steven detailed progress updates for substantive work: what is being checked or changed, why it matters, evidence found, verification planned, and unresolved risk.

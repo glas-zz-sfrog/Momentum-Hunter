@@ -2,6 +2,32 @@
 
 This file records durable product and operating goals that should survive individual task branches.
 
+## Governance: Gate Consequences Without Idling The Project
+
+Status: Active
+
+Goal: Momentum Hunter should operate as a dependency graph with multiple Ready
+workstreams and one safe canonical integration lane.
+
+Operator Pain: A market-hours, provider, visual, CEO, destructive, or runtime-
+pin gate should not make Steven wonder whether the whole project has stopped or
+leave unrelated engineering idle.
+
+Acceptance Direction:
+
+- Every unfinished task has one primary lane, explicit dependencies, and a
+  scoped state.
+- Every waiting task says what the gate blocks, what it does not block, how it
+  resumes, and what can proceed while waiting.
+- The Roadmap always exposes all Ready tasks, not only the highest-priority
+  waiting task.
+- At most three implementation worktrees are active by default, while one
+  canonical integration lane serializes merge and installation.
+- Global blocked status is allowed only when every unfinished task has been
+  evaluated and the Ready Queue is empty.
+- Historical chronology remains in ledgers and release evidence so the Roadmap
+  stays readable as a scheduler.
+
 ## Shadow: Observe An Active FakeBroker Position Honestly
 
 Status: `ACTIVE`; implementation, automated proof, WPF visual acceptance,

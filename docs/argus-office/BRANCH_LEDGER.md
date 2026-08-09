@@ -1,6 +1,47 @@
 # Branch Ledger
 
-Date reconciled: 2026-08-08
+Date reconciled: 2026-08-09
+
+## ARGUS-ROADMAP-003 Parallel Pipeline Refactor
+
+`codex/ARGUS-ROADMAP-003-parallel-pipeline-refactor` is `ACTIVE` in a separate
+governance worktree from clean synchronized canonical base `1d0ca95`. Its scope
+is docs/config governance only. It reorganizes the Roadmap into milestone,
+Ready, Active, Waiting, Integration, gate, dependency, inventory, and update-
+protocol views. It must not merge while the installed service's 25 opening jobs
+remain pinned to `1d0ca95` without a deliberate integration/repin window.
+
+## 2026-08-09 Worktree And Integration Reconciliation
+
+Git reports 69 checked-out worktrees: 47 clean and 22 dirty. Most old Temp and
+review worktrees are historical, not active implementation. No worktree or
+branch was deleted, reset, stashed, rebased, or repurposed during this audit.
+
+Current scheduler-relevant branch truth:
+
+| Branch | HEAD | Git state | Roadmap classification |
+| --- | --- | --- | --- |
+| `master` | `1d0ca95` | Clean; equals `origin/master` | Canonical and installed runtime pin |
+| `codex/ARGUS-BROKER-ALPACA-001-paper-onboarding` | `39576d9` | Clean; pushed; 1 ahead of master | Validated cumulative Alpaca stack; integration waits for A003 |
+| `codex/ARGUS-BROKER-ALPACA-002-fractional-capability` | `256d442` | Clean; pushed; 2 ahead of master | Direct fractional limit/cancel proof; integration waits for A003 |
+| `codex/ARGUS-BROKER-ALPACA-003-paper-lifecycle-proof` | `1abb4dd` | Clean; pushed; 5 ahead of master | Synthetic/adjudication complete; direct market-hours acceptance waiting |
+| `codex/ARGUS-DATA-005B-provider-neutral-allocation` | `046b127` | Clean; pushed; 7 ahead of master | Validated provider-neutral allocation/evidence; waits for A003 and reconciliation |
+| `codex/ARGUS-DATA-005B-shadow-allocation-activation` | `91e461f` plus 7 dirty files | Uncommitted; no upstream; older base | Preserved `WAITING_DEPENDENCY / NEEDS_RECONCILIATION`; do not continue or discard directly |
+| `codex/ARGUS-ROADMAP-002-continuous-intraday-awareness` | `bae053b` | Clean; pushed; divergent 25/2 from master | Validated architecture requiring a fresh current-master reconciliation |
+| `codex/ARGUS-MONITOR-001-candidate-lifecycle` | `d2b77c2` | Clean; pushed; 2 ahead of master | Validated dormant integration candidate |
+| `codex/ARGUS-REGIME-001-rolling-market-sector-regime` | `f4deb18` | Clean; pushed; 4 ahead of master | Validated stack including MONITOR |
+| `codex/ARGUS-EVENT-001-versioned-macro-event-context` | `b6e861a` | Clean; pushed; 6 ahead of master | Validated stack including REGIME and MONITOR |
+
+A003 identity is reconciled: `7ccbad5` created the direct lifecycle harness,
+`94c7c77` added evidence-backed capability adjudication, and branch head
+`1abb4dd` adds automatic adjudicated-registry output and contains both earlier
+commits. The direct regular-hours proof must test exact source identity
+`1abb4dd`; the two hashes are not competing branch heads.
+
+Historical candle, WPF, Shadow, service, and DATA branches already represented
+on canonical master remain preserved for evidence but do not enter the current
+Integration Queue merely because their worktrees still exist. Old dirty review
+worktrees require a separate no-delete hygiene task before any cleanup.
 
 ## ARGUS-BROKER-ALPACA-001 Roadmap Reconciliation
 
