@@ -2,6 +2,15 @@
 
 Date reconciled: 2026-08-08
 
+## ARGUS-BREAKOUT-001 Sequential Breakout Research
+
+`codex/ARGUS-BREAKOUT-001-sequential-research` is
+`IMPLEMENTED_PENDING_INTEGRATION` and intentionally stacked on the validated
+MONITOR implementation `b71feb0`. It adds dormant research-only sequence
+evidence and synthetic tests; no existing runtime imports it. Reconcile MONITOR
+lineage and the runtime pin before merge. Feature-branch backup is pending the
+final closeout commit.
+
 ## ARGUS-BROKER-ALPACA-001 Roadmap Reconciliation
 
 `codex/ARGUS-BROKER-ALPACA-001-roadmap-reconciliation` is

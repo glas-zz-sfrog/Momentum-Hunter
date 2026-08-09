@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added BREAKOUT-001's dormant sequential research evidence over canonical completed minute bars. It preserves MONITOR opportunity/setup identity across impulse, opening/continuation breakout, missed entry, failure, pullback, reclaim, exhaustion, and explicit gap/unavailable states with prior-window triggers, immutable lineage, versioned policy, deterministic IDs, atomic persistence, and no execution authority.
+- Proved the research boundary with compileall, 20 focused tests, 188 adjacent candle/monitor/plan tests, and all 1,372 Python tests. No existing runtime imports the module; no score, readiness, plan, selection, provider, broker/order, service, scheduler, UI, schema, credential, source data, or production output changed.
 - Reconciled the execution roadmap around ARGUS-BROKER-ALPACA-001. Alpaca Paper is the preferred fractional execution laboratory pending official documentation, secure Paper-only onboarding, and direct lifecycle proof; live Alpaca trading remains unauthorized.
 - Preserved Schwab as the proven market-data foundation and DATA-005B as provider-neutral engineering precursor work. Whole-share quantity, one-position concurrency, and the proposed `$2/$95/$5/$2/$4/1/30s` values remain provisional policies rather than permanent strategy laws.
 - Split future evidence into separately fingerprinted canary-realistic and strategy-research Paper lanes, with explicit broker capabilities, ideal/provider/final quantities, multi-position and rank-conditioned research, conservative execution evidence, and no retrospective trade manufacture.
