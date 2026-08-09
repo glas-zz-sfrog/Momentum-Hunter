@@ -103,10 +103,12 @@ allocation contracts that preserve `idealRiskQuantity`,
 `providerExecutableQuantity`, and `finalAuthorizedQuantity`; capability-driven
 fractional/whole-share quantization; cash, buying-power, freshness, aggregate
 risk, daily-loss, notional, and configurable-concurrency gates; rank-preserving
-multi-position Paper research evidence; and separate
+multi-position Paper research evidence that consumes one shared account budget
+across admitted candidates and preserves explicit aggregate notional/open-risk
+blocks; and separate
 `ALPACA_PAPER_EXECUTION_RESULT` versus
-`MH_CONSERVATIVE_EXECUTABLE_RESULT` domains. Compileall, 27 focused tests, 142
-bounded regressions, and all 1,418 Python tests pass. No numeric production
+`MH_CONSERVATIVE_EXECUTABLE_RESULT` domains. Compileall, 33 focused tests, 199
+bounded regressions, and all 1,424 Python tests pass. No numeric production
 policy, Alpaca-specific capability, selector arm, Shadow trade, provider call,
 credential, service, scheduler, UI, or transmission path is activated. The
 older dirty `codex/ARGUS-DATA-005B-shadow-allocation-activation` worktree at
@@ -952,7 +954,7 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Item | Current truth |
 | --- | --- |
 | Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, DATA-004 same-session intraday TradePlan semantics, DATA-005 account-aware allocation enforcement, and DATA-005A fresh account/portfolio evidence. All 25 future opening jobs are pinned to the final synchronized closeout head. |
-| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-005A is complete, backed up, repinned, and installed-runtime verified. DATA-005B provider-neutral allocation and Paper-research contracts are implemented offline on an isolated branch with 27 focused, 142 bounded-regression, and all 1,418 Python tests passing; activation and integration remain deferred. Secure Canary Alpaca Paper onboarding is backed up at `39576d9`; ARGUS-BROKER-ALPACA-002 directly proved fractional limit creation, client-ID recovery, and cancellation. The stacked A003 lifecycle harness at exact test source `1abb4dd` passes all synthetic and regression gates but awaits direct market-hours Paper adjudication. Project development is active. R034 remains a separate destructive approval gate. |
+| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-005A is complete, backed up, repinned, and installed-runtime verified. DATA-005B provider-neutral allocation and Paper-research contracts are implemented offline on an isolated branch with shared multi-position notional/risk budgets and 33 focused, 199 bounded-regression, and all 1,424 Python tests passing; activation and integration remain deferred. Secure Canary Alpaca Paper onboarding is backed up at `39576d9`; ARGUS-BROKER-ALPACA-002 directly proved fractional limit creation, client-ID recovery, and cancellation. The stacked A003 lifecycle harness at exact test source `1abb4dd` passes all synthetic and regression gates but awaits direct market-hours Paper adjudication. Project development is active. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Do not begin the final strategy sample under the temporary whole-share/single-position/opening-heavy model. DATA-005B's provider-neutral architecture may be built and tested offline while A003 live acceptance waits for market hours; integration, numeric policies, and sample identities wait for direct capability adjudication. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | Only A003 direct Paper acceptance and dependent integration are externally blocked by market hours. Direct evidence is still required for market fills, protective stop/stop-limit hosting, replacement, partial-fill behavior, exact liquidation, and provider restart/reconciliation. The broader continuous-intraday/Alpaca roadmap is not blocked. Broker-resident linked protection and status streaming remain separate unknowns. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
