@@ -94,3 +94,11 @@ isolated task branch/worktree.
   `E99E65A302B97A5D866071C3C1B37C8519972F8D55966EAC08772A1F6F093B47`.
 
 No application regression suite is required because no runtime file changed.
+
+## Commit And Integration State
+
+- Implementation commit: `b74f72a Refactor roadmap for parallel pipeline execution`.
+- The feature branch is the only backup target; canonical `master` is not
+  merged or pushed by this task.
+- ROADMAP-003 is `IMPLEMENTED_PENDING_MERGE` until one serialized integration
+  window reconciles it against current master and the scheduled-runtime pin.

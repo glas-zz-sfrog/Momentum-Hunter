@@ -4,12 +4,15 @@ Date reconciled: 2026-08-09
 
 ## ARGUS-ROADMAP-003 Parallel Pipeline Refactor
 
-`codex/ARGUS-ROADMAP-003-parallel-pipeline-refactor` is `ACTIVE` in a separate
-governance worktree from clean synchronized canonical base `1d0ca95`. Its scope
-is docs/config governance only. It reorganizes the Roadmap into milestone,
-Ready, Active, Waiting, Integration, gate, dependency, inventory, and update-
-protocol views. It must not merge while the installed service's 25 opening jobs
-remain pinned to `1d0ca95` without a deliberate integration/repin window.
+`codex/ARGUS-ROADMAP-003-parallel-pipeline-refactor` is
+`IMPLEMENTED_PENDING_MERGE` in a separate governance worktree from clean
+synchronized canonical base `1d0ca95`. Implementation commit `b74f72a` is
+docs/config governance only and passed scheduler, reference, contradiction,
+protected-path, secret, Git, and runtime-nonmutation checks. It reorganizes the
+Roadmap into milestone, Ready, Active, Waiting, Integration, gate, dependency,
+inventory, and update-protocol views. It must not merge while the installed
+service's 25 opening jobs remain pinned to `1d0ca95` without a deliberate
+integration/repin window.
 
 ## 2026-08-09 Worktree And Integration Reconciliation
 

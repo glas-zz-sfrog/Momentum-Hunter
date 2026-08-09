@@ -47,7 +47,7 @@ Operating rules:
 | Alpaca Paper | Secure onboarding `39576d9` and fractional proof `256d442` are validated. A003 head `1abb4dd` includes harness `7ccbad5` and adjudication `94c7c77`; direct regular-hours lifecycle acceptance is waiting on market hours. |
 | Allocation | Provider-neutral allocation and multi-position research contracts are validated at `046b127`. A separate older activation worktree has seven uncommitted code/test files and is preserved untouched pending reconciliation and A003 evidence. |
 | Continuous intraday | Schwab candles, backfill, dense WPF charts, DATA-002 through DATA-005A, and opening automation are canonical. MONITOR `d2b77c2`, REGIME `f4deb18`, and EVENT `b6e861a` are validated, pushed, dormant, and unmerged. |
-| Active implementation | `ARGUS-ROADMAP-003` is active in Lane I. No provider, Paper, Shadow, service, scheduler, Engine Host, or production-data action is part of this refactor. |
+| Active implementation | No implementation slot is currently occupied. `ARGUS-ROADMAP-003` is verified at `b74f72a` and `IMPLEMENTED_PENDING_MERGE` in Lane I. |
 | Highest Ready work | CATALYST-002A provider-neutral catalyst revisions; BREAKOUT-001 research-only sequential events; UI-STREAMLINE-001 against truthful synthetic/canonical states; current-baseline reconciliation planning. |
 | External-time gate | A003 direct Paper lifecycle acceptance waits for an eligible regular-market session. This blocks only A003 acceptance and dependent integration/activation. |
 | Steven gates | R034 destructive legacy cutover; future visual acceptance; any brokerage anomaly; any live order; any unattended-live decision. |
@@ -178,10 +178,9 @@ risk order, not permission to bypass integration or activation gates.
 | P2 | UI-STREAMLINE-001 | F | Quiet integrated workstation hierarchy using only existing canonical or explicit synthetic states. | WPF shell and truthful state contracts exist. | Lanes A, C, H, I | Steven visual acceptance required; no fabricated provider/account/execution state. |
 | P3 | WORKTREE-HYGIENE-001 | I | Produce a no-delete classification of historical worktrees and a CEO-approved retirement plan for stale/dirty checkouts. | Full worktree inventory exists. | All non-Git lanes | No deletion, reset, stash, or branch removal without separate approval. |
 
-Selection note: ARGUS-ROADMAP-003 currently occupies one implementation slot.
-Starting another Ready task is allowed when it uses a separate lane and does not
-touch the canonical runtime or collide with the dirty allocation activation
-worktree.
+Selection note: no implementation slot is currently occupied. Up to three
+noncolliding Ready tasks fit the default budget; use fewer when additional
+throughput would create avoidable reconciliation risk.
 
 ## 5. Active Workstream Lanes
 
@@ -195,7 +194,7 @@ worktree.
 | F - Operator UI | WPF charts, candidate/plan/position state, workspace simplification. | PARALLEL-READY | Current WPF/candle UI canonical; UI-STREAMLINE-001 Ready and visual-gated. |
 | G - Operations / Reliability | Service, scheduler, wake/clock, health, capture program. | OPERATIONAL | Service healthy; 25 captures pending; integration/install pin currently active. |
 | H - Research | Breakouts, RVOL, regime, counterfactuals, event studies. | ACTIVE / PARALLEL-READY | DATA-002 canonical; REGIME validated; BREAKOUT-001 Ready. |
-| I - Security / Governance | Credentials, provider isolation, destructive gates, Git/release evidence. | ACTIVE | ARGUS-ROADMAP-003 active; Roadmap-002 reconciliation and worktree hygiene Ready. |
+| I - Security / Governance | Credentials, provider isolation, destructive gates, Git/release evidence. | READY + INTEGRATION WAIT | ARGUS-ROADMAP-003 verified pending merge; Roadmap-002 reconciliation and worktree hygiene Ready. |
 
 ## 6. Waiting / Gated Queue
 
@@ -496,6 +495,7 @@ is one candidate at a time; no row authorizes a merge by itself.
 
 | Task / branch | Validated identity | Validation state | Integration prerequisite | Runtime pin | Visual gate | Revalidation |
 | --- | --- | --- | --- | --- | --- | --- |
+| ROADMAP-003 parallel pipeline governance | `b74f72a` plus branch-local closeout | Docs/governance verification passed; feature branch backup only | Serialized integration window on current master | Yes | No | Diff, reference, contradiction, inventory, and secret scans |
 | ROADMAP-002 continuous architecture | `bae053b` (includes `013cafd`) | Docs verified; pushed; divergent from current master | Fresh reconciliation branch; preserve architecture/task-contract files | Yes | No | Full reference/contradiction scan on current master |
 | Alpaca A001 secure onboarding | `39576d9` | Code/tests verified; pushed | Integrate only as cumulative A001-A003 chain after A003 live acceptance | Yes | No | Full current-baseline code/security tests |
 | Alpaca A002 fractional capability | `256d442` | Direct fractional limit/cancel proof; zero residual state; pushed | A003 live acceptance and cumulative chain reconciliation | Yes | No | Secret/endpoint/order safety and full tests |
@@ -575,7 +575,7 @@ Integration sections are scheduling projections of these records.
 
 | Task | Primary lane | Priority | State | Depends on | Unlocks |
 | --- | --- | --- | --- | --- | --- |
-| ROADMAP-003 | I | P0 | ACTIVE | Canonical/runtime reconciliation | Parallel pipeline governance |
+| ROADMAP-003 | I | P0 | IMPLEMENTED_PENDING_MERGE | Canonical/runtime reconciliation | Parallel pipeline governance |
 | ROADMAP-002-RECONCILE | I | P1 | READY | Validated `bae053b`; current master | Canonical continuous architecture artifacts |
 | ALPACA-A003-LIVE-ACCEPTANCE | D | P0 | WAITING_EXTERNAL_TIME | A001/A002/A003 code | A003 acceptance |
 | ALPACA-A003-INTEGRATION | D | P1 | WAITING_PROVIDER_EVIDENCE | A003 live pass | Accepted Paper capability baseline |

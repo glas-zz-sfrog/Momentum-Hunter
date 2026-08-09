@@ -48,7 +48,7 @@ milestone finish lines, and the work that can continue around each gate.
   serialized integration lane.
 - [x] Final diff, graph, reference, contradiction, protected-path, and secret
   verification pass.
-- [ ] Feature branch is committed and backed up without merge.
+- [x] Feature branch is committed and backed up without merge.
 
 ## Protected Areas
 
