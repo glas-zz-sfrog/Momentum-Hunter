@@ -1,6 +1,31 @@
 # Branch Ledger
 
-Date reconciled: 2026-08-08
+Date reconciled: 2026-08-09
+
+## ARGUS-BROKER-ALPACA-002 Fractional Capability Foundation
+
+`codex/ARGUS-BROKER-ALPACA-002-fractional-capability` is
+`IMPLEMENTED_PENDING_INTEGRATION / PUSHED_FEATURE_BRANCH` stacked on secure
+onboarding commit `39576d9`. It adds only the provider-neutral capability
+registry, isolated exact-host Alpaca Paper adapter, bounded proof command,
+tests, and governance evidence. A direct `$1.00` maximum SPY fractional
+limit/cancel proof passed, including exact client-order lookup and a clean final
+state with zero positions and zero open orders. No live host, research-account
+credential, Engine Host, Shadow, service, scheduler, WPF, or production order
+path is reachable. Integration remains deferred so canonical Monday capture
+jobs stay pinned to `1d0ca95`; the next branch must prove market fills,
+protective orders, lifecycle recovery, and remaining capabilities independently.
+
+## ARGUS-BROKER-ALPACA-001 Secure Paper Onboarding
+
+`codex/ARGUS-BROKER-ALPACA-001-paper-onboarding` is
+`IMPLEMENTED_PENDING_MERGE / PUSHED_FEATURE_BRANCH` at `39576d9`. It stores only
+the Canary Paper credentials under lane-specific CurrentUser DPAPI, uses a
+masked local Paste-button dialog, and proved one redacted exact-host account
+read with active status, `$100` cash, and `$100` buying power. The rotated first
+credential pair is not present in Git, evidence, or local active storage. The
+strategy-research slot remains empty and disabled; no order method exists on
+the onboarding surface.
 
 ## ARGUS-BROKER-ALPACA-001 Roadmap Reconciliation
 

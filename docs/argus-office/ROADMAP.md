@@ -29,16 +29,41 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-BROKER-ALPACA-001 is the approved execution-research direction. Secure
-Paper-only onboarding is `IMPLEMENTED_PENDING_MERGE` on
+ARGUS-BROKER-ALPACA-001 secure Paper onboarding is
+`IMPLEMENTED_PENDING_MERGE` and backed up at `39576d9` on
 `codex/ARGUS-BROKER-ALPACA-001-paper-onboarding`. The exact Paper host accepted
-one credential-free account read for the separately identified
+the redacted one-request account canary for the separately identified
 `CANARY_REALISTIC` lane and returned active status, `$100` cash, and `$100`
-buying power. The `STRATEGY_RESEARCH` credential slot remains empty and has no
-onboarding command in this slice. No position or order endpoint was called, no
-order method exists, and the live host is structurally rejected. This is not
-authorization for live Alpaca trading, funding, money movement, or a live
-endpoint. Schwab's proven authentication,
+buying power. The first exposed provider key pair was rotated; the corrected
+pair is stored only under lane-specific CurrentUser DPAPI. The
+`STRATEGY_RESEARCH` credential slot remains empty and has no onboarding command.
+
+ARGUS-BROKER-ALPACA-002 is `IMPLEMENTED_PENDING_INTEGRATION` on the stacked
+`codex/ARGUS-BROKER-ALPACA-002-fractional-capability` worktree. It adds a
+provider-neutral fail-closed capability registry, an isolated exact-host
+Alpaca Paper adapter, and a write-once capability-proof command. The live host,
+research lane, extended hours, advanced order classes, and all runtime wiring
+are structurally blocked. A direct Canary Paper proof authenticated the exact
+Paper host, observed active/fractionable SPY with zero positions and zero open
+orders, submitted `0.5` SPY shares at a deliberately nonmarketable `$2.00`
+limit, recovered the same order by client ID, canceled it, and finished with
+zero positions and zero open orders. The implementation-bound proof is
+`FRACTIONAL_LIMIT_CANCEL_PROVEN`, provider-evidence SHA-256
+`BCCE4479632CC45A6CCAB1DA71E4689C1E6C327CBD1BF13D1F9E45855AAD0BCD`, and
+contains no credential or account identity. Compileall, 21 focused tests, 151
+bounded adjacent tests, and all 1,359 Python tests pass.
+
+Only Paper environment isolation, fractional quantity, fractional limit,
+client-order lookup, and cancellation are `PROVEN`. Fractional precision depth,
+market fills, filled limits, stops, stop-limits, profit taking, replace
+semantics, partial fills, streaming, broker-resident protection, position
+recovery, and exact liquidation remain `DOCUMENTED_UNPROVEN` or `UNKNOWN`.
+The next broker task is a separate market-hours Alpaca Paper lifecycle slice;
+it must prove those capabilities independently and may not begin a final Paper
+strategy sample. No Alpaca code is installed, merged into canonical `master`,
+or reachable from Engine Host, Shadow, scheduler, service, WPF, or production
+execution. This is not authorization for live Alpaca trading, funding, money
+movement, or a live endpoint. Schwab's proven authentication,
 read-only account binding, quote, Streamer candle, `/pricehistory`, canonical
 candle, chart, and continuous-monitoring work remains the market-data
 foundation. Strategy logic remains broker-neutral:
@@ -59,7 +84,8 @@ scheduler, or transmission capability has been activated. The proposed
 canary-realistic policy candidate only. Whole-share quantity and one-position
 concurrency remain configurable engineering policies, not permanent strategy
 laws. DATA-005B must be reconciled into provider-neutral allocator
-infrastructure before Alpaca adapter work begins.
+infrastructure before any Alpaca runtime integration or Paper sample begins.
+Its isolation does not block the completed provider-capability laboratory proof.
 
 The next execution program has two separately versioned lanes. The
 canary-realistic lane asks what the eventual small supervised account could
@@ -82,9 +108,12 @@ rejects whitespace/control characters, clears a credential clipboard value on
 successful storage, and encrypts the result with lane-specific CurrentUser
 DPAPI entropy. The corrected one-request canary passed. Compileall, 24 focused
 tests, 72 adjacent broker/allocation tests, and all 1,335 Python tests pass.
-The next task is the bounded Alpaca Paper capability model and BrokerAdapter,
-followed by direct fractional lifecycle proof. Unknown capabilities remain
-blocked until observed.
+The secure onboarding and first bounded limit/cancel proof are complete on
+feature branches. Unknown capabilities remain blocked until observed. The next
+slice is market-hours fractional entry/fill, protective-stop, replace or
+cancel/resubmit, exact liquidation, restart/reconciliation, partial-fill, and
+interruption proof, followed by provider-capability-driven quantity
+quantization and separate canary/research policy proposals.
 
 ARGUS-DATA-005A fresh account/portfolio evidence is `COMPLETE` on canonical
 `master` through `dff993c`. The new exact-host,
@@ -894,14 +923,14 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Item | Current truth |
 | --- | --- |
 | Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, DATA-004 same-session intraday TradePlan semantics, DATA-005 account-aware allocation enforcement, and DATA-005A fresh account/portfolio evidence. All 25 future opening jobs are pinned to the final synchronized closeout head. |
-| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-005A is complete, backed up, repinned, and installed-runtime verified. DATA-005B is an isolated provider-neutral engineering precursor with 80 focused tests passing and no activation. ARGUS-BROKER-ALPACA-001 is the approved next execution-research sequence; Alpaca account creation is being handled externally by Steven and the Vice President. R034 remains a separate destructive approval gate. |
+| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-005A is complete, backed up, repinned, and installed-runtime verified. DATA-005B remains an isolated provider-neutral engineering precursor with 80 focused tests passing and no activation. Secure Canary Alpaca Paper onboarding is backed up at `39576d9`; the stacked ARGUS-BROKER-ALPACA-002 adapter/capability branch has directly proven fractional limit creation, exact client-ID recovery, and cancellation without runtime integration. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Do not begin the final strategy sample under the temporary whole-share/single-position/opening-heavy model. Reconcile DATA-005B as provider-neutral infrastructure, prove Alpaca Paper capabilities and lifecycle, then create fresh prospective engineering and strategy-sample identities. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | Alpaca execution work is blocked on official capability research and Paper-only account/credential handoff, not on Schwab market data. Fractional protective-order, cancel/replace, restart/reconciliation, endpoint-isolation, and partial-fill behavior must be proven directly in Paper before adapter capability can be trusted. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
+| Blocked by | Onboarding, exact Paper endpoint isolation, fractional quantity/limit, client-ID lookup, and cancellation are no longer blocked. Market fills, protective orders, stop/stop-limit, replace or cancel/resubmit, partial fills, exact liquidation, provider restart/reconciliation, and broker-resident protection remain capability gates before runtime integration or a Paper sample. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-07 08:35 ordinary captures all finished successfully on their first attempt with required artifacts and no Shadow or brokerage action. The 25 remaining jobs run from 2026-08-10 through 2026-09-14 at the final synchronized head. |
-| Immediate operational work | Preserve Monday's ordinary opening-capture schedule unchanged. Close DATA-005B only as provider-neutral precursor infrastructure; do not freeze its provisional numeric values. Next, use official Alpaca documentation to build the capability contract, then await the external Paper-account credential handoff before any authenticated Paper proof. Present R034's exact deletion plan only when Steven is ready. |
-| Broker state | Schwab OAuth and immutable `2573` `INDIVIDUAL_CASH` binding remain read-only market-data/account evidence. No transmitting Schwab method exists. Alpaca is not configured, no Alpaca credential is present, and no Alpaca endpoint or order is reachable. Future Alpaca work is PAPER_ONLY with an exact paper-host allowlist; a live adapter cannot be enabled by a boolean switch. |
-| Steven action | Steven and the Vice President are opening the Alpaca account and will request assistance if needed. Interrupt Steven before funding, money movement, any live endpoint/order, unexpected brokerage scope, destructive R034 cutover, or visual acceptance. Do not interrupt for ordinary Paper-only local credential setup after the expected account handoff. |
+| Immediate operational work | Preserve Monday's ordinary opening-capture schedule unchanged. Back up the isolated ARGUS-BROKER-ALPACA-002 branch without merging it. Next, prove the remaining fractional lifecycle capabilities in a separate market-hours Paper branch, then reconcile DATA-005B as provider-neutral precursor infrastructure and propose separate numeric Canary and research policies. Present R034's exact deletion plan only when Steven is ready. |
+| Broker state | Schwab OAuth and immutable `2573` `INDIVIDUAL_CASH` binding remain read-only market-data/account evidence. No transmitting Schwab method exists. The Canary Alpaca Paper credential is encrypted outside Git and the exact Paper host has accepted a bounded fractional limit/cancel proof; zero positions and zero open orders remain. The research credential slot is empty. No Alpaca code is installed or runtime-reachable, and the live Alpaca host cannot be enabled by a mode flip. |
+| Steven action | No routine nonvisual approval is pending. Interrupt Steven before funding, money movement, any live endpoint/order, unexpected brokerage scope, destructive R034 cutover, or visual acceptance. Do not ask Steven to re-enter the stored Canary credential. |
 | Data caveat | Schwab remains authoritative for proven quote/candle evidence while execution-provider capability remains separate. DATA-001 through DATA-004 retain their provenance, RVOL, setup, and same-session chronology gates. DATA-005 makes `$500` reference sizing nonexecutable; DATA-005A supplies fresh bound-account/portfolio evidence. Fractional support may alter provider-executable quantity prospectively but may never rewrite old allocation or Shadow evidence. Legacy RVOL remains research-only; insufficient candle history and unknown broker capability fail closed. |
 
 ### Status Legend
