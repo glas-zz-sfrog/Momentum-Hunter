@@ -47,12 +47,12 @@ Operating rules:
 | Alpaca Paper | Secure onboarding `39576d9` and fractional proof `256d442` are validated. A003 head `1abb4dd` includes harness `7ccbad5` and adjudication `94c7c77`; direct regular-hours lifecycle acceptance is waiting on market hours. |
 | Allocation | Provider-neutral allocation and multi-position research contracts are validated at `046b127`. A separate older activation worktree has seven uncommitted code/test files and is preserved untouched pending reconciliation and A003 evidence. |
 | Continuous intraday | Schwab candles, backfill, dense WPF charts, DATA-002 through DATA-005A, and opening automation are canonical. MONITOR `d2b77c2`, CATALYST `97ab34d`, REGIME `f4deb18`, EVENT `b6e861a`, and BREAKOUT `7492683` are validated, pushed, dormant, and unmerged. |
-| Active implementation | One of three implementation slots is occupied. UI-STREAMLINE-001 is committed locally at `989cb7c`, fully automated-proven, and waiting only for Steven visual acceptance; it is deliberately unpushed and unmerged. BREAKOUT-001 remains proven/backed up at `7492683`, and ROADMAP-002 remains reconciled at `e706b68`; both wait for serialized integration. |
-| Highest Ready work | WORKTREE-HYGIENE-001 no-delete classification and retirement plan. |
+| Active implementation | One of three implementation slots remains occupied by visual-gated UI-STREAMLINE-001 at clean local `989cb7c`; it is deliberately unpushed and unmerged. WORKTREE-HYGIENE-001 is complete as a no-delete audit at pushed `5c71b06`; no retirement is authorized. BREAKOUT-001 remains proven/backed up at `7492683`, and ROADMAP-002 remains reconciled at `e706b68`; validated work waits for serialized integration. |
+| Highest Ready work | None. Every unfinished inventory item is represented below in the Waiting/Gated Queue or Integration Queue. The project is active: Monday's A003 market-hours proof and scheduled opening capture are external-time work, while UI and cleanup have narrow Steven gates. |
 | External-time gate | A003 direct Paper lifecycle acceptance waits for an eligible regular-market session. This blocks only A003 acceptance and dependent integration/activation. |
-| Steven gates | UI-STREAMLINE-001 visual acceptance; R034 destructive legacy cutover; any brokerage anomaly; any live order; any unattended-live decision. |
+| Steven gates | UI-STREAMLINE-001 visual acceptance; optional WORKTREE-HYGIENE-001 Batch A worktree-only retirement; R034 destructive legacy cutover; any brokerage anomaly; any live order; any unattended-live decision. |
 
-Worktree truth: Git currently knows 73 worktrees, of which 51 are clean and 22
+Worktree truth: Git currently knows 74 worktrees, of which 52 are clean and 22
 are dirty. Most are historical review/feature checkouts, not active development.
 They are preserved, not deleted or reset. The current implementation budget
 counts only explicitly active tasks, not every historical checkout.
@@ -172,12 +172,12 @@ risk order, not permission to bypass integration or activation gates.
 
 | Priority | Task | Lane | Bounded scope and expected output | Dependencies satisfied | Parallel-safe with | Integration constraint |
 | --- | --- | --- | --- | --- | --- | --- |
-| P3 | WORKTREE-HYGIENE-001 | I | Produce a no-delete classification of historical worktrees and a CEO-approved retirement plan for stale/dirty checkouts. | Full worktree inventory exists. | All non-Git lanes | No deletion, reset, stash, or branch removal without separate approval. |
+| - | None | - | Every unfinished task is currently integration-gated, provider/time-gated, evidence-gated, destructive-gated, visual-gated, or decision-gated. | Dependency evaluation complete through WORKTREE-HYGIENE-001 `5c71b06`. | - | Recalculate after the next gate transition or integration window. |
 
 Selection note: UI-STREAMLINE-001 occupies one implementation slot while its
-visual decision is pending. Up to two additional noncolliding Ready tasks fit
-the default budget; use fewer when additional throughput would create avoidable
-reconciliation risk.
+visual decision is pending. The other two slots are available, but no inventoried
+task is Ready after dependency evaluation. Do not manufacture scope merely to
+fill them; recalculate after the A003, UI, integration, or CEO gate changes.
 
 ## 5. Active Workstream Lanes
 
@@ -191,7 +191,7 @@ reconciliation risk.
 | F - Operator UI | WPF charts, candidate/plan/position state, workspace simplification. | IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE | UI-STREAMLINE-001 `989cb7c` passes 3 focused and all 254 .NET tests, zero-warning Release build, and nonblank `1180x820` proof; branch remains local/unmerged/unpushed until Steven accepts the visible hierarchy. |
 | G - Operations / Reliability | Service, scheduler, wake/clock, health, capture program. | OPERATIONAL | Service healthy; 25 captures pending; integration/install pin currently active. |
 | H - Research | Breakouts, RVOL, regime, counterfactuals, event studies. | VALIDATED_PENDING_INTEGRATION / PARALLEL-READY | DATA-002 canonical; REGIME and BREAKOUT-001 `7492683` are validated; BREAKOUT-002 waits for a sufficient prospective cohort. |
-| I - Security / Governance | Credentials, provider isolation, destructive gates, Git/release evidence. | VALIDATED_PENDING_INTEGRATION + READY | ARGUS-ROADMAP-003 and ROADMAP-002 reconciliation are verified pending merge; worktree hygiene remains Ready. |
+| I - Security / Governance | Credentials, provider isolation, destructive gates, Git/release evidence. | VALIDATED_PENDING_INTEGRATION / DECISION_GATED | ARGUS-ROADMAP-003 and ROADMAP-002 reconciliation are verified pending merge. WORKTREE-HYGIENE-001 `5c71b06` inventories all 74 worktrees with no deletion; optional Batch A waits for exact Steven approval. |
 
 ## 6. Waiting / Gated Queue
 
@@ -420,14 +420,14 @@ While waiting: keep R034A verifier and legacy evidence unchanged.
 
 ### UI-VISUAL-ACCEPTANCE
 
-Task: Accept future WPF/UI changes.
+Task: Accept UI-STREAMLINE-001 workstation hierarchy at `989cb7c`.
 
 Lane: F
 
 Priority: task-specific.
 
-State: `WAITING_VISUAL_ACCEPTANCE` only after an implementation has automated
-proof and exact operator checks.
+State: `WAITING_VISUAL_ACCEPTANCE`; 3 focused and all 254 .NET tests, the
+zero-warning Release build, and nonblank `1180x820` synthetic proof pass.
 
 Gate scope: `INTEGRATION` for visual behavior.
 
@@ -438,6 +438,33 @@ Does NOT block: other lanes or nonvisual work.
 Resume condition: Steven performs the numbered checks and reports pass/failure.
 
 While waiting: preserve the branch and continue noncolliding work.
+
+### WORKTREE-HYGIENE-BATCH-A
+
+Task: Optional worktree-only retirement of the 19 clean, merged paths named in
+WORKTREE-HYGIENE-001 `5c71b06`.
+
+Lane: I
+
+Priority: P3
+
+State: `WAITING_CEO_DECISION`
+
+Gate: exact Steven approval followed by immediate no-drift revalidation.
+
+Gate scope: `DESTRUCTIVE_GIT_WORKTREE_OPERATION`
+
+Blocks: only the optional reduction from 74 to 55 registered worktrees.
+
+Does NOT block: development, integration planning, A003 proof, scheduled
+captures, UI acceptance, research, Paper work, or runtime operations.
+
+Resume condition: Steven states `APPROVE WORKTREE-HYGIENE-001 BATCH A
+WORKTREE-ONLY RETIREMENT; RETAIN ALL BRANCHES`, and every named path is still
+clean, merged, process-free, and outside the canonical/installed lane.
+
+While waiting: retain all worktrees and branches; do not reset, stash, prune,
+force-remove, or act on dirty/detached/local-only checkouts.
 
 ### SCHWAB-PAPER-ADAPTER
 
@@ -505,6 +532,7 @@ is one candidate at a time; no row authorizes a merge by itself.
 | EVENT-001 | `b6e861a` includes REGIME + MONITOR | 30 focused, 167 adjacent, 1,411 full; clean/pushed | Preserve commit order; serialized integration window | Yes | No | Current-master full tests before merge |
 | BREAKOUT-001 | `7492683` includes implementation `2d9b616` and MONITOR `b71feb0` | 20 focused, 188 adjacent, 1,372 full; clean/pushed/dormant | MONITOR first; reconcile stacked lineage in a serialized integration window | Yes | No | Current-master full tests plus research-authority and source-nonmutation scans |
 | UI-STREAMLINE-001 | `989cb7c` | 3 focused and 254 full .NET tests pass; zero-warning Release build; nonblank `1180x820` synthetic offscreen proof; clean/local only | Steven passes the six exact checks in `VERIFICATION_QUEUE.md`, then current-master revalidation in a serialized integration window | Yes | Yes | Focused hierarchy, full .NET, minimum-size visual, secret/capability, and canonical-nonmutation checks |
+| WORKTREE-HYGIENE-001 | `5c71b06` | Complete 74-row inventory, exact category reconciliation, live Batch A recheck, docs-only diff, secret scan, and canonical/service nonmutation pass; clean/pushed | Serialized current-master reconciliation because sibling UI/governance branches append shared docs; cleanup decision is separate | Yes | No | Recount, JSON/report hash, changed-path, secret, canonical/service, and no-worktree-removal checks |
 
 Superseded branches and historical review worktrees remain discoverable in
 [BRANCH_LEDGER.md](BRANCH_LEDGER.md). They do not enter this queue merely
@@ -519,6 +547,7 @@ because their worktree still exists.
 | G-SHADOW-ACTIVATE | New sample constitution | ACTIVATION | SHADOW-025 start/counting | Implementation and evidence preparation | Full authority chain, proof bundle, prospective identities |
 | G-R034 | Exact legacy archive/delete plan | DESTRUCTIVE_OPERATION | Legacy deletion/rebuild | All non-destructive work | Steven approval of named targets and rollback |
 | G-UI | Steven visual acceptance | INTEGRATION | Specific UI task acceptance | Nonvisual and other-lane work | Numbered manual pass |
+| G-WORKTREE-BATCH-A | Exact 19-path worktree-only retirement | DESTRUCTIVE_GIT_WORKTREE_OPERATION | Optional worktree-count reduction only | Development, captures, Paper proof, integration planning, UI, runtime | Exact Steven phrase plus immediate clean/merged/process/path revalidation; retain all branches |
 | G-EVENT-SOURCE | Authoritative calendar source/policy | VERIFICATION + ACTIVATION | Production event context | Dormant model and other lanes | Source and prospective policy proof |
 | G-LIVE | Explicit supervised/unattended authorization | LIVE_EXECUTION | All real orders/unattended trading | Paper, Shadow, research, UI, data | Milestone evidence plus exact CEO decision |
 | G-GIT-RECONCILE | Divergent/dirty historical branch | INTEGRATION | Direct merge of that branch | Read-only classification and fresh reconciliation | New branch from current master, exact cherry-picks where suitable, full reverify |
@@ -599,7 +628,8 @@ Integration sections are scheduling projections of these records.
 | LIVE-CANARY-PREPARATION | D | P4 | WAITING_DEPENDENCY | M2-M4 | M5 readiness review |
 | SUPERVISED-LIVE-CANARY | D | P4 | WAITING_CEO_DECISION | M5 + exact authorization | M6 evidence |
 | UNATTENDED-LIVE | D | P4 | WAITING_CEO_DECISION | M6 + separate charter | M7 decision |
-| WORKTREE-HYGIENE-001 | I | P3 | READY | Reconciled inventory | Reduced branch/worktree ambiguity |
+| WORKTREE-HYGIENE-001 | I | P3 | IMPLEMENTED_PENDING_INTEGRATION | Validated/pushed `5c71b06`; no-delete audit complete | Complete inventory and retirement plan |
+| WORKTREE-HYGIENE-BATCH-A | I | P3 | WAITING_CEO_DECISION | Exact approval plus fresh no-drift proof | Optional 19-worktree reduction; all branches retained |
 
 Capability groups:
 
