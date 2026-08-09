@@ -104,6 +104,26 @@
 | 2026-07-26 | ARGUS-SHADOW-007 - Clarify activation versus selector readiness. | codex/ARGUS-SHADOW-007-status-truthfulness -> master -> origin/master | Builder / QA Regression / Git Steward / Release Scribe | Complete and backed up | Added explicit read-only selector-arm, automatic-collection, official-trade, collection-state, readiness-scope, and next-gate fields to `sample-status`. Production proof returns `NOT_ARMED` and false collection flags while preserving the sole activation file and `0 / 30`; 27 focused, 123 adjacent, 844 full Python, and 216 .NET tests pass. |
 | 2026-07-26 | ARGUS-SHADOW-008 - Build the production selector proof bundle. | codex/ARGUS-SHADOW-008-proof-bundle-assembly -> master -> origin/master | Builder / QA Regression / Git Steward / Release Scribe | Complete and backed up | Added schema-v2 live/injected quote provenance and a nontransmitting two-stage bundle CLI. Static preparation requires clean synchronized canonical `master`, retained visual acceptance, required commit ancestry, and 28 named tests before atomically creating 11 proofs; finalization accepts only the exact current candidate plus SPY/IWM live Schwab proof and runs the canonical verifier without arming. Compileall, 26 focused, 28 gate, 123 adjacent, 854 full Python, and 216 .NET tests pass; production remains `NOT_ARMED` at `0 / 30`. |
 
+## 2026-08-09 - ARGUS-BROKER-ALPACA-001 Paper Onboarding
+
+- Created two fixed Alpaca Paper credential domains: `CANARY_REALISTIC` for the
+  `$100` execution canary and reserved `STRATEGY_RESEARCH` for the separate
+  `$100,000` research account. The research slot remains empty and disabled.
+- Added lane-specific Windows CurrentUser DPAPI encryption, exact Paper-host
+  enforcement, structural live-host rejection, and a one-request read-only
+  account canary with no order or position method.
+- Rotated the first key pair after it was exposed outside local entry. Diagnosed
+  Windows hidden-console `Ctrl+V` as a one-character control-code paste, added a
+  masked local Paste-button dialog, and added a regression that rejects control
+  characters before storage.
+- Authenticated the corrected Canary slot against the exact Paper endpoint. The
+  sanitized result was active with `$100` cash and `$100` buying power; no
+  identity, credential, position, order, or live-host evidence was emitted.
+- Verification: compileall passes; 24 focused tests, 72 adjacent tests, and all
+  1,335 Python tests pass. No service, scheduler, Engine Host, Schwab, Shadow,
+  scoring, readiness, alert, UI workstation, database, or generated-report path
+  changed.
+
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.
 ## 2026-07-27 - ARGUS-SHADOW-013 Opening Ceremony Hardening

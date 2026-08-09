@@ -29,14 +29,16 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-BROKER-ALPACA-001 is the approved execution-research direction. Alpaca is
-the preferred execution-provider candidate for fractional Paper execution,
-pending official-documentation research, secure Paper-only onboarding, and
-direct Alpaca Paper lifecycle proof. This is not authorization for live Alpaca
-trading, funding, money movement, or a live endpoint. Steven and the Vice
-President are handling creation of the Alpaca account externally and will ask
-Codex for assistance if needed; Momentum Hunter must not request, persist, or
-inspect credentials until that handoff occurs. Schwab's proven authentication,
+ARGUS-BROKER-ALPACA-001 is the approved execution-research direction. Secure
+Paper-only onboarding is `IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-BROKER-ALPACA-001-paper-onboarding`. The exact Paper host accepted
+one credential-free account read for the separately identified
+`CANARY_REALISTIC` lane and returned active status, `$100` cash, and `$100`
+buying power. The `STRATEGY_RESEARCH` credential slot remains empty and has no
+onboarding command in this slice. No position or order endpoint was called, no
+order method exists, and the live host is structurally rejected. This is not
+authorization for live Alpaca trading, funding, money movement, or a live
+endpoint. Schwab's proven authentication,
 read-only account binding, quote, Streamer candle, `/pricehistory`, canonical
 candle, chart, and continuous-monitoring work remains the market-data
 foundation. Strategy logic remains broker-neutral:
@@ -70,6 +72,19 @@ lane may never count in the other. The first post-integration Paper work is an
 engineering/activation sample; the final continuous-intraday 30-trade sample
 does not begin under a temporary whole-share, single-position, opening-heavy,
 or unproven provider model.
+
+The first generated Canary key pair was exposed outside the local-entry
+boundary and was provider-rotated without use. The initial hidden-console paste
+implementation then stored Windows `Ctrl+V` as a one-character control code;
+two account reads failed safely with HTTP 401 and no account body. The local
+entry path now uses a masked Windows dialog with explicit Paste buttons,
+rejects whitespace/control characters, clears a credential clipboard value on
+successful storage, and encrypts the result with lane-specific CurrentUser
+DPAPI entropy. The corrected one-request canary passed. Compileall, 24 focused
+tests, 72 adjacent broker/allocation tests, and all 1,335 Python tests pass.
+The next task is the bounded Alpaca Paper capability model and BrokerAdapter,
+followed by direct fractional lifecycle proof. Unknown capabilities remain
+blocked until observed.
 
 ARGUS-DATA-005A fresh account/portfolio evidence is `COMPLETE` on canonical
 `master` through `dff993c`. The new exact-host,
@@ -1362,7 +1377,7 @@ Status: `BLOCKED`; destructive-operation gate after R032C and R034A pass
 
 ### Phase 13 - Broker Execution Validation Gate
 
-Status: `ACTIVE_PROVIDER_RESEARCH / PAPER_ACCOUNT_HANDOFF_PENDING`
+Status: `PAPER_AUTHENTICATED / FRACTIONAL_CAPABILITY_PROOF_NEXT`
 
 - ARGUS-BROKER-ALPACA-001 sequence: reconcile DATA-005B as provider-neutral
   infrastructure; prove official Alpaca account/Paper/live separation and every

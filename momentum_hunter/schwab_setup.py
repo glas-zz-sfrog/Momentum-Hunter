@@ -80,14 +80,27 @@ class _DataBlob(ctypes.Structure):
 class WindowsDpapiProtector:
     """Windows-current-user encryption without third-party packages."""
 
+    def __init__(
+        self,
+        *,
+        entropy: bytes = DPAPI_ENTROPY,
+        description: str = "Momentum Hunter Schwab setup",
+    ) -> None:
+        if not entropy or not isinstance(entropy, bytes):
+            raise SchwabSetupError("Windows DPAPI entropy must be nonempty bytes.")
+        if not description or not isinstance(description, str):
+            raise SchwabSetupError("Windows DPAPI description must be nonempty text.")
+        self._entropy = entropy
+        self._description = description
+
     def protect(self, plaintext: bytes) -> bytes:
         self._require_windows()
         input_blob, input_buffer = self._blob(plaintext)
-        entropy_blob, entropy_buffer = self._blob(DPAPI_ENTROPY)
+        entropy_blob, entropy_buffer = self._blob(self._entropy)
         output_blob = _DataBlob()
         result = ctypes.windll.crypt32.CryptProtectData(
             ctypes.byref(input_blob),
-            "Momentum Hunter Schwab setup",
+            self._description,
             ctypes.byref(entropy_blob),
             None,
             None,
@@ -105,7 +118,7 @@ class WindowsDpapiProtector:
     def unprotect(self, ciphertext: bytes) -> bytes:
         self._require_windows()
         input_blob, input_buffer = self._blob(ciphertext)
-        entropy_blob, entropy_buffer = self._blob(DPAPI_ENTROPY)
+        entropy_blob, entropy_buffer = self._blob(self._entropy)
         output_blob = _DataBlob()
         result = ctypes.windll.crypt32.CryptUnprotectData(
             ctypes.byref(input_blob),

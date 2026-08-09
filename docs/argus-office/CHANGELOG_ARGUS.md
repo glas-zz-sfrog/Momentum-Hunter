@@ -233,5 +233,14 @@
   Host, 30 pending opening jobs, zero Shadow jobs, and unavailable order
   transmission after the clock repair.
 
+- Added secure two-lane Alpaca Paper onboarding with an authenticated `$100`
+  Canary account, a reserved untouched strategy-research slot, lane-specific
+  DPAPI encryption, exact Paper-host enforcement, and no order capability.
+- Replaced the Windows hidden-console credential prompt after direct proof that
+  `Ctrl+V` was stored as a control character; the masked local dialog supports
+  explicit clipboard paste and rejects control or whitespace characters.
+- Preserved the exposed first Paper key incident as sanitized governance truth;
+  the pair was provider-rotated and no credential value entered Git or evidence.
+
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.
