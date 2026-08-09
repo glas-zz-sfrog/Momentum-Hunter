@@ -47,12 +47,12 @@ Operating rules:
 | Alpaca Paper | Secure onboarding `39576d9` and fractional proof `256d442` are validated. A003 head `1abb4dd` includes harness `7ccbad5` and adjudication `94c7c77`; direct regular-hours lifecycle acceptance is waiting on market hours. |
 | Allocation | Provider-neutral allocation and multi-position research contracts are validated at `046b127`. A separate older activation worktree has seven uncommitted code/test files and is preserved untouched pending reconciliation and A003 evidence. |
 | Continuous intraday | Schwab candles, backfill, dense WPF charts, DATA-002 through DATA-005A, and opening automation are canonical. MONITOR `d2b77c2`, CATALYST `97ab34d`, REGIME `f4deb18`, EVENT `b6e861a`, and BREAKOUT `7492683` are validated, pushed, dormant, and unmerged. |
-| Active implementation | No implementation slot is currently occupied. BREAKOUT-001 is proven and backed up at `7492683`; ROADMAP-002 is reconciled at `e706b68`; both wait for serialized integration. `ARGUS-ROADMAP-003` remains `IMPLEMENTED_PENDING_MERGE` in Lane I. |
-| Highest Ready work | UI-STREAMLINE-001 against truthful synthetic/canonical states; worktree hygiene planning. |
+| Active implementation | One of three implementation slots is occupied. UI-STREAMLINE-001 is committed locally at `989cb7c`, fully automated-proven, and waiting only for Steven visual acceptance; it is deliberately unpushed and unmerged. BREAKOUT-001 remains proven/backed up at `7492683`, and ROADMAP-002 remains reconciled at `e706b68`; both wait for serialized integration. |
+| Highest Ready work | WORKTREE-HYGIENE-001 no-delete classification and retirement plan. |
 | External-time gate | A003 direct Paper lifecycle acceptance waits for an eligible regular-market session. This blocks only A003 acceptance and dependent integration/activation. |
-| Steven gates | R034 destructive legacy cutover; future visual acceptance; any brokerage anomaly; any live order; any unattended-live decision. |
+| Steven gates | UI-STREAMLINE-001 visual acceptance; R034 destructive legacy cutover; any brokerage anomaly; any live order; any unattended-live decision. |
 
-Worktree truth: Git currently knows 72 worktrees, of which 50 are clean and 22
+Worktree truth: Git currently knows 73 worktrees, of which 51 are clean and 22
 are dirty. Most are historical review/feature checkouts, not active development.
 They are preserved, not deleted or reset. The current implementation budget
 counts only explicitly active tasks, not every historical checkout.
@@ -172,12 +172,12 @@ risk order, not permission to bypass integration or activation gates.
 
 | Priority | Task | Lane | Bounded scope and expected output | Dependencies satisfied | Parallel-safe with | Integration constraint |
 | --- | --- | --- | --- | --- | --- | --- |
-| P2 | UI-STREAMLINE-001 | F | Quiet integrated workstation hierarchy using only existing canonical or explicit synthetic states. | WPF shell and truthful state contracts exist. | Lanes A, C, H, I | Steven visual acceptance required; no fabricated provider/account/execution state. |
 | P3 | WORKTREE-HYGIENE-001 | I | Produce a no-delete classification of historical worktrees and a CEO-approved retirement plan for stale/dirty checkouts. | Full worktree inventory exists. | All non-Git lanes | No deletion, reset, stash, or branch removal without separate approval. |
 
-Selection note: no implementation slot is currently occupied. Up to three
-noncolliding Ready tasks fit the default budget; use fewer when additional
-throughput would create avoidable reconciliation risk.
+Selection note: UI-STREAMLINE-001 occupies one implementation slot while its
+visual decision is pending. Up to two additional noncolliding Ready tasks fit
+the default budget; use fewer when additional throughput would create avoidable
+reconciliation risk.
 
 ## 5. Active Workstream Lanes
 
@@ -188,7 +188,7 @@ throughput would create avoidable reconciliation risk.
 | C - Risk / Allocation / Portfolio | Provider-neutral quantities, freshness, buying power, aggregate risk, concurrency. | VALIDATED_PENDING_INTEGRATION | DATA-005B provider-neutral head `046b127`; activation branch preserved dirty and gated. |
 | D - Broker / Execution Providers | Broker capabilities, Alpaca Paper lifecycle, future live canary. | WAITING_EXTERNAL_TIME | A003 direct Paper lifecycle proof at next eligible regular-market session. |
 | E - Shadow / Evidence / Statistics | Prospective samples, rank evidence, conservative/Paper comparison, terminal packets. | ACTIVE / PARALLEL-READY | SHADOW-024 canonical; research contracts validated; SHADOW-025 waiting on continuous authority chain. |
-| F - Operator UI | WPF charts, candidate/plan/position state, workspace simplification. | PARALLEL-READY | Current WPF/candle UI canonical; UI-STREAMLINE-001 Ready and visual-gated. |
+| F - Operator UI | WPF charts, candidate/plan/position state, workspace simplification. | IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE | UI-STREAMLINE-001 `989cb7c` passes 3 focused and all 254 .NET tests, zero-warning Release build, and nonblank `1180x820` proof; branch remains local/unmerged/unpushed until Steven accepts the visible hierarchy. |
 | G - Operations / Reliability | Service, scheduler, wake/clock, health, capture program. | OPERATIONAL | Service healthy; 25 captures pending; integration/install pin currently active. |
 | H - Research | Breakouts, RVOL, regime, counterfactuals, event studies. | VALIDATED_PENDING_INTEGRATION / PARALLEL-READY | DATA-002 canonical; REGIME and BREAKOUT-001 `7492683` are validated; BREAKOUT-002 waits for a sufficient prospective cohort. |
 | I - Security / Governance | Credentials, provider isolation, destructive gates, Git/release evidence. | VALIDATED_PENDING_INTEGRATION + READY | ARGUS-ROADMAP-003 and ROADMAP-002 reconciliation are verified pending merge; worktree hygiene remains Ready. |
@@ -504,6 +504,7 @@ is one candidate at a time; no row authorizes a merge by itself.
 | REGIME-001 | `f4deb18` includes MONITOR | 29 focused, 145 adjacent, 1,381 full; clean/pushed | MONITOR order; serialized integration window | Yes | No | Current-master full tests before merge |
 | EVENT-001 | `b6e861a` includes REGIME + MONITOR | 30 focused, 167 adjacent, 1,411 full; clean/pushed | Preserve commit order; serialized integration window | Yes | No | Current-master full tests before merge |
 | BREAKOUT-001 | `7492683` includes implementation `2d9b616` and MONITOR `b71feb0` | 20 focused, 188 adjacent, 1,372 full; clean/pushed/dormant | MONITOR first; reconcile stacked lineage in a serialized integration window | Yes | No | Current-master full tests plus research-authority and source-nonmutation scans |
+| UI-STREAMLINE-001 | `989cb7c` | 3 focused and 254 full .NET tests pass; zero-warning Release build; nonblank `1180x820` synthetic offscreen proof; clean/local only | Steven passes the six exact checks in `VERIFICATION_QUEUE.md`, then current-master revalidation in a serialized integration window | Yes | Yes | Focused hierarchy, full .NET, minimum-size visual, secret/capability, and canonical-nonmutation checks |
 
 Superseded branches and historical review worktrees remain discoverable in
 [BRANCH_LEDGER.md](BRANCH_LEDGER.md). They do not enter this queue merely
@@ -592,7 +593,7 @@ Integration sections are scheduling projections of these records.
 | PLAN-002 | B | P1 | WAITING_DEPENDENCY | MONITOR, DATA-002, REGIME, EVENT, CATALYST, setup evidence | Continuous immutable plans |
 | SHADOW-025 | E | P1 | WAITING_DEPENDENCY | Full continuous authority chain | New FakeBroker prospective sample |
 | PAPER-ENGINEERING-001 | D | P1 | WAITING_DEPENDENCY | A003 + DATA-005B integration | Prospective Paper trade/no-trade evidence |
-| UI-STREAMLINE-001 | F | P2 | READY | Existing canonical/synthetic view models | Quieter workstation UI |
+| UI-STREAMLINE-001 | F | P2 | IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE | Validated local `989cb7c`; Steven's six visual checks | Quieter workstation UI |
 | R034 | A | P3 | WAITING_DESTRUCTIVE_APPROVAL | R034A complete; exact CEO approval | Final legacy cutover |
 | SCHWAB-PAPER-ADAPTER | D | P4 | WAITING_VENDOR_CAPABILITY | Vendor sandbox/paper capability | Same-provider automated Paper path |
 | LIVE-CANARY-PREPARATION | D | P4 | WAITING_DEPENDENCY | M2-M4 | M5 readiness review |
