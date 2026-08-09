@@ -81,20 +81,30 @@ foundation. Strategy logic remains broker-neutral:
 Schwab market data -> Momentum Hunter engine -> provider-capability boundary -> Alpaca Paper
 ```
 
-ARGUS-DATA-005B is `ACTIVE_ENGINEERING_PRECURSOR` on the isolated
-`codex/ARGUS-DATA-005B-shadow-allocation-activation` worktree from synchronized
-base `91e461f`. Its current uncommitted, tested scope preserves one fresh
-account snapshot per decision cycle, reuse of that immutable snapshot across
-all candidate assessments, fail-closed source behavior, and a write-once
-allocation-policy identity. Compileall and 80 focused tests pass. No numeric
-policy, selector arm, Shadow trade, provider adapter, credential, service,
-scheduler, or transmission capability has been activated. The proposed
-`$2 / $95 / $5 / $2 / $4 / 1 position / 30-second account age` values remain a
-canary-realistic policy candidate only. Whole-share quantity and one-position
-concurrency remain configurable engineering policies, not permanent strategy
-laws. DATA-005B must be reconciled into provider-neutral allocator
-infrastructure before any Alpaca runtime integration or Paper sample begins.
-Its isolation does not block the completed provider-capability laboratory proof.
+Project status is `PROJECT_DEVELOPMENT_ACTIVE`. The direct A003 market-hours
+acceptance and integration gates are closed; DATA-005B reconciliation is now
+the active offline engineering lane.
+
+ARGUS-DATA-005B provider-neutral allocation preparation is
+`IMPLEMENTED_PENDING_CURRENT_BASE_VERIFICATION` on
+`codex/ARGUS-DATA-005B-current-master-integration`, reconciled from the proven
+offline branch at `046b127`. It adds dormant `AccountSnapshot`,
+`BrokerCapabilities`, and
+allocation contracts that preserve `idealRiskQuantity`,
+`providerExecutableQuantity`, and `finalAuthorizedQuantity`; capability-driven
+fractional/whole-share quantization; cash, buying-power, freshness, aggregate
+risk, daily-loss, notional, and configurable-concurrency gates; rank-preserving
+multi-position Paper research evidence; and separate
+`ALPACA_PAPER_EXECUTION_RESULT` versus
+`MH_CONSERVATIVE_EXECUTABLE_RESULT` domains. Compileall, 27 focused tests, 142
+bounded regressions, and all 1,418 Python tests pass. No numeric production
+policy, Alpaca-specific capability, selector arm, Shadow trade, provider call,
+credential, service, scheduler, UI, or transmission path is activated. The
+older dirty `codex/ARGUS-DATA-005B-shadow-allocation-activation` worktree at
+`91e461f` remains preserved for source comparison and must not be integrated as
+is. Its useful cycle-snapshot semantics remain a separate review input; its
+provisional whole-share, single-position, and numeric values are not strategy
+law.
 
 The next execution program has two separately versioned lanes. The
 canary-realistic lane asks what the eventual small supervised account could
@@ -117,12 +127,10 @@ rejects whitespace/control characters, clears a credential clipboard value on
 successful storage, and encrypts the result with lane-specific CurrentUser
 DPAPI entropy. The corrected one-request canary passed. Compileall, 24 focused
 tests, 72 adjacent broker/allocation tests, and all 1,335 Python tests pass.
-The secure onboarding and first bounded limit/cancel proof are complete on
-feature branches. Unknown capabilities remain blocked until observed. The next
-slice is market-hours fractional entry/fill, protective-stop, replace or
-cancel/resubmit, exact liquidation, restart/reconciliation, partial-fill, and
-interruption proof, followed by provider-capability-driven quantity
-quantization and separate canary/research policy proposals.
+Secure onboarding and the bounded A002/A003 direct Paper proofs are complete and
+integrated. Unknown capabilities remain blocked. DATA-005B's offline
+architecture is now being reconciled onto the accepted current base; provider-
+specific runtime wiring remains a later audited slice.
 
 ARGUS-DATA-005A fresh account/portfolio evidence is `COMPLETE` on canonical
 `master` through `dff993c`. The new exact-host,
@@ -932,9 +940,9 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Item | Current truth |
 | --- | --- |
 | Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, DATA-004 same-session intraday TradePlan semantics, DATA-005 account-aware allocation enforcement, DATA-005A fresh account/portfolio evidence, and the directly proven A001-A003 Alpaca Paper foundation. All 24 future opening jobs are pinned to the final synchronized closeout head. |
-| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-005A is complete, backed up, repinned, and installed-runtime verified. The directly proven A001-A003 Paper foundation is integrated on canonical `master`: one bounded `$1.00` SPY lifecycle proved fractional market/limit/stop/stop-limit, replacement, cancellation, client-order identity, and exact liquidation, ending with zero positions and zero open orders. DATA-005B is the next active provider-neutral allocation task; its existing isolated precursor has 80 focused tests passing and no activation. R034 remains a separate destructive approval gate. |
+| Active implementation | Five consecutive unattended captures through Friday August 7 passed. DATA-005A and the directly proven A001-A003 Paper foundation are complete. DATA-005B provider-neutral allocation and Paper-research contracts are reconciled onto a current-base feature branch; current-base verification and integration are in progress with no activation. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
-| Active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Do not begin the final strategy sample under the temporary whole-share/single-position/opening-heavy model. Reconcile DATA-005B as provider-neutral infrastructure, prove Alpaca Paper capabilities and lifecycle, then create fresh prospective engineering and strategy-sample identities. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
+| Active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Do not begin the final strategy sample under the temporary whole-share/single-position/opening-heavy model. Finish DATA-005B as provider-neutral infrastructure, then create separately versioned Paper engineering and strategy-sample identities. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | The direct A003 lifecycle and integration gates are closed. Runtime Paper decisions still require provider-neutral DATA-005B reconciliation, frozen Canary allocation/risk policy, and an audited adapter-to-Risk-Governor/ledger path. Partial-fill and provider-restart behavior remain synthetic-only; broker-resident linked protection and status streaming remain separate unknowns. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-10 08:35 ordinary captures finished successfully with required artifacts and no Shadow or brokerage action. The 24 remaining jobs run from 2026-08-11 through 2026-09-14 at the final synchronized head; Tuesday is `PENDING`, zero Shadow jobs are enabled, and transmission is `UNAVAILABLE`. |
 | Immediate operational work | Reconcile DATA-005B as provider-neutral allocation infrastructure. Freeze separate Canary and research policy identities before wiring Risk Governor, allocation, Alpaca Paper, ledger, and the Paper engineering sample. Present R034's exact deletion plan only when Steven is ready. |
