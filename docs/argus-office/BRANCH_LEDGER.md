@@ -71,8 +71,10 @@ observed the first job as `PENDING`; no service reinstall or restart occurred.
 `IMPLEMENTED_PENDING_A003_ACCEPTANCE_AND_INTEGRATION` from exact A003 head
 `1abb4dd`. It adds only dormant provider-neutral allocation, multi-position
 Paper-research, and dual-result evidence contracts plus synthetic tests.
-Compileall, 27 focused tests, 142 adjacent regressions, and all 1,418 Python
-tests pass. No provider call, Paper mutation, Alpaca-specific capability
+Compileall, 33 focused tests, 199 adjacent regressions, and all 1,424 Python
+tests pass. Rank-ordered admissions consume one shared account-context
+notional/open-risk budget rather than reusing each candidate's individual
+budget. No provider call, Paper mutation, Alpaca-specific capability
 promotion, selector arm, Shadow state, service, scheduler, UI, credential, or
 order path is connected. Integration and numeric policy activation wait for
 the direct A003 adjudication.

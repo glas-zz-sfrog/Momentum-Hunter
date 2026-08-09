@@ -19,20 +19,22 @@
   unavailable.
 - `paper_research_evidence.py` preserves canonical rank, independent eligibility,
   lineage, allocation blockers, and configurable portfolio admission without
-  activation or order creation.
+  activation or order creation. Every candidate must share one allocation
+  policy, account snapshot, and capability registry. Rank-ordered admissions
+  consume cumulative notional and open-risk budgets; a budget-withheld candidate
+  does not consume a concurrency slot or erase its independent eligibility.
 - Alpaca Paper execution and MH conservative executable results remain separate
   evidence domains and explicitly prohibit combined statistics.
 
 ## Verification
 
 - Python compileall: pass.
-- New focused tests: 27/27 pass.
+- New focused tests: 33/33 pass.
 - Existing allocator, account snapshot, Shadow selector, Alpaca adapter, and
-  lifecycle regressions: 142/142 pass.
-- Full Python discovery: 1,418/1,418 pass in 216.089 seconds after an ignored
-  worktree-local `.venv` junction satisfied two checkout-shape tests. An earlier
-  run exposed only that missing-junction environment issue; both affected tests
-  passed once the isolated checkout had its expected interpreter path.
+  lifecycle regressions: 199/199 pass.
+- Full Python discovery: 1,424/1,424 pass in 269.059 seconds from the exact
+  revised worktree state. The ignored worktree-local `.venv` junction points to
+  the canonical dependency environment and creates no tracked file.
 - Generic import scan: new modules are referenced only by each other and tests.
 - Network/order/runtime scan: no callable provider, broker, service, scheduler,
   Engine Host, Shadow, or WPF integration.

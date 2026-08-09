@@ -21,9 +21,13 @@
   1/2/3 identity and independent eligibility under multi-position limits, plus
   separate `ALPACA_PAPER_EXECUTION_RESULT` and
   `MH_CONSERVATIVE_EXECUTABLE_RESULT` contracts whose statistics cannot be
-  combined. Compileall, 27 focused tests, 142 bounded regressions, and all 1,418
-  Python tests pass; no provider, account, order, Shadow, service, scheduler,
-  Engine Host, WPF, credential, or production runtime path is wired.
+  combined. Rank-ordered admissions now bind to one shared allocation-policy,
+  account-snapshot, and capability context; consume cumulative notional and
+  open-risk budgets; and preserve explicit portfolio-limit blockers without
+  erasing independent eligibility. Compileall, 33 focused tests, 199 bounded
+  regressions, and all 1,424 Python tests pass; no provider, account, order,
+  Shadow, service, scheduler, Engine Host, WPF, credential, or production
+  runtime path is wired.
 - Reconciled A003 source identity: `7ccbad5` is the original harness,
   `94c7c77` adds adjudication, and `1abb4dd` includes both plus automatic
   capability-registry output. The accepted direct lifecycle was run from this

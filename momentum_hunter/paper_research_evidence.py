@@ -9,18 +9,20 @@ from enum import Enum
 import re
 
 from momentum_hunter.provider_neutral_allocation import (
+    AllocationStatus,
     ProviderNeutralAllocationDecision,
     decimal_text,
     evidence_fingerprint,
 )
 
 
-PAPER_RESEARCH_SCHEMA_VERSION = 1
+PAPER_RESEARCH_SCHEMA_VERSION = 2
 
 
 class CandidateDisposition(str, Enum):
     WOULD_ADMIT = "WOULD_ADMIT"
     WITHHELD_CONCURRENCY = "WITHHELD_CONCURRENCY"
+    WITHHELD_PORTFOLIO_LIMIT = "WITHHELD_PORTFOLIO_LIMIT"
     INELIGIBLE = "INELIGIBLE"
     RANK_NOT_PARTICIPATING = "RANK_NOT_PARTICIPATING"
 
@@ -72,8 +74,12 @@ class ProspectiveCandidateRecord:
     disposition: CandidateDisposition
     allocation_status: str
     final_authorized_quantity: Decimal
+    allocation_request_fingerprint: str
     allocation_fingerprint: str
     allocation_blockers: tuple[str, ...]
+    proposed_position_notional: Decimal | None
+    proposed_open_risk: Decimal | None
+    portfolio_blockers: tuple[str, ...]
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -91,8 +97,16 @@ class ProspectiveCandidateRecord:
             "finalAuthorizedQuantity": decimal_text(
                 self.final_authorized_quantity
             ),
+            "allocationRequestFingerprint": (
+                self.allocation_request_fingerprint
+            ),
             "allocationFingerprint": self.allocation_fingerprint,
             "allocationBlockers": list(self.allocation_blockers),
+            "proposedPositionNotional": decimal_text(
+                self.proposed_position_notional
+            ),
+            "proposedOpenRisk": decimal_text(self.proposed_open_risk),
+            "portfolioBlockers": list(self.portfolio_blockers),
         }
 
 
@@ -100,7 +114,16 @@ class ProspectiveCandidateRecord:
 class PaperResearchPortfolioEvidence:
     decision_cycle_id: str
     policy_fingerprint: str
+    allocation_policy_fingerprint: str
+    account_snapshot_fingerprint: str
+    capability_registry_fingerprint: str
     existing_open_positions: int
+    starting_effective_cash_available: Decimal | None
+    starting_effective_open_risk_available: Decimal | None
+    admitted_position_notional: Decimal
+    admitted_open_risk: Decimal
+    remaining_effective_cash_available: Decimal | None
+    remaining_effective_open_risk_available: Decimal | None
     records: tuple[ProspectiveCandidateRecord, ...]
     activated: bool = field(default=False, init=False)
     orders_created: bool = field(default=False, init=False)
@@ -116,7 +139,28 @@ class PaperResearchPortfolioEvidence:
             "schemaVersion": self.schema_version,
             "decisionCycleId": self.decision_cycle_id,
             "policyFingerprint": self.policy_fingerprint,
+            "allocationPolicyFingerprint": self.allocation_policy_fingerprint,
+            "accountSnapshotFingerprint": self.account_snapshot_fingerprint,
+            "capabilityRegistryFingerprint": (
+                self.capability_registry_fingerprint
+            ),
             "existingOpenPositions": self.existing_open_positions,
+            "startingEffectiveCashAvailable": decimal_text(
+                self.starting_effective_cash_available
+            ),
+            "startingEffectiveOpenRiskAvailable": decimal_text(
+                self.starting_effective_open_risk_available
+            ),
+            "admittedPositionNotional": decimal_text(
+                self.admitted_position_notional
+            ),
+            "admittedOpenRisk": decimal_text(self.admitted_open_risk),
+            "remainingEffectiveCashAvailable": decimal_text(
+                self.remaining_effective_cash_available
+            ),
+            "remainingEffectiveOpenRiskAvailable": decimal_text(
+                self.remaining_effective_open_risk_available
+            ),
             "records": [item.to_dict() for item in self.records],
             "activated": self.activated,
             "ordersCreated": self.orders_created,
@@ -142,34 +186,96 @@ def build_paper_research_portfolio_evidence(
         raise ValueError("Existing open-position count is invalid.")
     if not candidates:
         raise ValueError("Prospective research candidates are required.")
-    cycle_ids = {item.decision_cycle_id for item in candidates}
-    candidate_ids = {item.candidate_id for item in candidates}
-    ranks = [item.canonical_rank for item in candidates]
-    if len(cycle_ids) != 1 or "" in cycle_ids:
-        raise ValueError("Candidates must share one decision-cycle identity.")
-    if len(candidate_ids) != len(candidates) or "" in candidate_ids:
-        raise ValueError("Candidate identities must be unique and nonempty.")
-    if len(set(ranks)) != len(ranks) or any(
-        isinstance(rank, bool) or rank <= 0 for rank in ranks
-    ):
-        raise ValueError("Canonical candidate ranks must be unique and positive.")
     for candidate in candidates:
         _validate_candidate(candidate)
+    cycle_ids = [item.decision_cycle_id for item in candidates]
+    candidate_ids = [item.candidate_id for item in candidates]
+    ranks = [item.canonical_rank for item in candidates]
+    if len(set(cycle_ids)) != 1:
+        raise ValueError("Candidates must share one decision-cycle identity.")
+    if len(set(candidate_ids)) != len(candidates):
+        raise ValueError("Candidate identities must be unique and nonempty.")
+    if any(
+        not isinstance(rank, int)
+        or isinstance(rank, bool)
+        or rank <= 0
+        for rank in ranks
+    ):
+        raise ValueError("Canonical candidate ranks must be unique and positive.")
+    if len(set(ranks)) != len(ranks):
+        raise ValueError("Canonical candidate ranks must be unique and positive.")
+
+    allocation_policy_fingerprint = _shared_fingerprint(
+        candidates,
+        "policy_fingerprint",
+        "allocation-policy",
+    )
+    account_snapshot_fingerprint = _shared_fingerprint(
+        candidates,
+        "account_snapshot_fingerprint",
+        "account-snapshot",
+    )
+    capability_registry_fingerprint = _shared_fingerprint(
+        candidates,
+        "capability_registry_fingerprint",
+        "capability-registry",
+    )
+    request_fingerprints = [
+        candidate.allocation.request_fingerprint for candidate in candidates
+    ]
+    if len(set(request_fingerprints)) != len(request_fingerprints):
+        raise ValueError("Allocation request fingerprints must be unique.")
+
+    starting_cash, starting_open_risk = _shared_portfolio_budgets(candidates)
+    remaining_cash = starting_cash
+    remaining_open_risk = starting_open_risk
+    admitted_notional = Decimal("0")
+    admitted_open_risk = Decimal("0")
 
     available_slots = max(
         0, policy.max_concurrent_positions - existing_open_positions
     )
     records: list[ProspectiveCandidateRecord] = []
     for candidate in sorted(candidates, key=lambda item: item.canonical_rank):
-        if not candidate.independently_eligible or not candidate.allocation.authorized:
+        proposed_notional = candidate.allocation.position_notional
+        proposed_open_risk = candidate.allocation.total_risk
+        portfolio_blockers: list[str] = []
+        if (
+            not candidate.independently_eligible
+            or not _allocation_is_authorized(candidate.allocation)
+        ):
             disposition = CandidateDisposition.INELIGIBLE
         elif candidate.canonical_rank not in policy.participating_ranks:
             disposition = CandidateDisposition.RANK_NOT_PARTICIPATING
         elif available_slots <= 0:
             disposition = CandidateDisposition.WITHHELD_CONCURRENCY
         else:
-            disposition = CandidateDisposition.WOULD_ADMIT
-            available_slots -= 1
+            if (
+                proposed_notional is None
+                or proposed_open_risk is None
+                or remaining_cash is None
+                or remaining_open_risk is None
+            ):
+                raise ValueError(
+                    "Admissible candidate is missing portfolio budget evidence."
+                )
+            if proposed_notional > remaining_cash:
+                portfolio_blockers.append(
+                    "PAPER_RESEARCH_AGGREGATE_NOTIONAL_LIMIT"
+                )
+            if proposed_open_risk > remaining_open_risk:
+                portfolio_blockers.append(
+                    "PAPER_RESEARCH_AGGREGATE_OPEN_RISK_LIMIT"
+                )
+            if portfolio_blockers:
+                disposition = CandidateDisposition.WITHHELD_PORTFOLIO_LIMIT
+            else:
+                disposition = CandidateDisposition.WOULD_ADMIT
+                available_slots -= 1
+                remaining_cash -= proposed_notional
+                remaining_open_risk -= proposed_open_risk
+                admitted_notional += proposed_notional
+                admitted_open_risk += proposed_open_risk
         records.append(
             ProspectiveCandidateRecord(
                 candidate_id=candidate.candidate_id,
@@ -186,14 +292,29 @@ def build_paper_research_portfolio_evidence(
                 final_authorized_quantity=(
                     candidate.allocation.final_authorized_quantity
                 ),
+                allocation_request_fingerprint=(
+                    candidate.allocation.request_fingerprint
+                ),
                 allocation_fingerprint=candidate.allocation.fingerprint,
                 allocation_blockers=candidate.allocation.blockers,
+                proposed_position_notional=proposed_notional,
+                proposed_open_risk=proposed_open_risk,
+                portfolio_blockers=tuple(portfolio_blockers),
             )
         )
     return PaperResearchPortfolioEvidence(
-        decision_cycle_id=next(iter(cycle_ids)),
+        decision_cycle_id=cycle_ids[0],
         policy_fingerprint=policy.fingerprint,
+        allocation_policy_fingerprint=allocation_policy_fingerprint,
+        account_snapshot_fingerprint=account_snapshot_fingerprint,
+        capability_registry_fingerprint=capability_registry_fingerprint,
         existing_open_positions=existing_open_positions,
+        starting_effective_cash_available=starting_cash,
+        starting_effective_open_risk_available=starting_open_risk,
+        admitted_position_notional=admitted_notional,
+        admitted_open_risk=admitted_open_risk,
+        remaining_effective_cash_available=remaining_cash,
+        remaining_effective_open_risk_available=remaining_open_risk,
         records=tuple(records),
     )
 
@@ -311,6 +432,14 @@ def _validate_candidate(candidate: ProspectiveResearchCandidate) -> None:
             raise ValueError("Candidate evidence identities must be nonempty.")
     if not _sha256_text(candidate.source_evidence_fingerprint):
         raise ValueError("Candidate source-evidence fingerprint must be SHA-256 text.")
+    for name, value in (
+        ("request", candidate.allocation.request_fingerprint),
+        ("policy", candidate.allocation.policy_fingerprint),
+        ("account", candidate.allocation.account_snapshot_fingerprint),
+        ("capability", candidate.allocation.capability_registry_fingerprint),
+    ):
+        if not _sha256_text(value):
+            raise ValueError(f"Allocation {name} fingerprint must be SHA-256 text.")
     if not isinstance(candidate.independently_eligible, bool):
         raise ValueError("Candidate independent eligibility must be explicit.")
     if candidate.independently_eligible and candidate.eligibility_blockers:
@@ -319,6 +448,103 @@ def _validate_candidate(candidate: ProspectiveResearchCandidate) -> None:
         raise ValueError("Ineligible candidate must preserve at least one blocker.")
     if any(not _nonempty_text(item) for item in candidate.eligibility_blockers):
         raise ValueError("Candidate eligibility blockers must be nonempty.")
+    if not isinstance(candidate.allocation.status, AllocationStatus):
+        raise ValueError("Allocation status is invalid.")
+    if (
+        not isinstance(candidate.allocation.blockers, tuple)
+        or any(not _nonempty_text(item) for item in candidate.allocation.blockers)
+    ):
+        raise ValueError("Allocation blockers must be a tuple of nonempty values.")
+    final_quantity = _nonnegative_decimal(
+        candidate.allocation.final_authorized_quantity
+    )
+    if final_quantity is None:
+        raise ValueError("Allocation final quantity must be finite and nonnegative.")
+    if candidate.allocation.status is AllocationStatus.BLOCKED and final_quantity != 0:
+        raise ValueError("Blocked allocation cannot preserve an authorized quantity.")
+    if candidate.allocation.status is AllocationStatus.AUTHORIZED and (
+        final_quantity <= 0 or candidate.allocation.blockers
+    ):
+        raise ValueError("Authorized allocation has contradictory status evidence.")
+    if _allocation_is_authorized(candidate.allocation):
+        position_notional = _positive_decimal(
+            candidate.allocation.position_notional
+        )
+        total_risk = _positive_decimal(candidate.allocation.total_risk)
+        effective_cash = _nonnegative_decimal(
+            candidate.allocation.effective_cash_available
+        )
+        effective_open_risk = _nonnegative_decimal(
+            candidate.allocation.effective_open_risk_available
+        )
+        if (
+            position_notional is None
+            or total_risk is None
+            or effective_cash is None
+            or effective_open_risk is None
+        ):
+            raise ValueError(
+                "Authorized allocation requires complete finite portfolio budgets."
+            )
+        if position_notional > effective_cash or total_risk > effective_open_risk:
+            raise ValueError(
+                "Authorized allocation exceeds its individual portfolio budget."
+            )
+
+
+def _shared_fingerprint(
+    candidates: tuple[ProspectiveResearchCandidate, ...],
+    attribute: str,
+    label: str,
+) -> str:
+    values = {
+        getattr(candidate.allocation, attribute) for candidate in candidates
+    }
+    if len(values) != 1:
+        raise ValueError(
+            f"Candidates must share one {label} fingerprint."
+        )
+    return next(iter(values))
+
+
+def _shared_portfolio_budgets(
+    candidates: tuple[ProspectiveResearchCandidate, ...],
+) -> tuple[Decimal | None, Decimal | None]:
+    authorized = [
+        candidate.allocation
+        for candidate in candidates
+        if _allocation_is_authorized(candidate.allocation)
+    ]
+    if not authorized:
+        return None, None
+    cash_values = {
+        _nonnegative_decimal(allocation.effective_cash_available)
+        for allocation in authorized
+    }
+    risk_values = {
+        _nonnegative_decimal(allocation.effective_open_risk_available)
+        for allocation in authorized
+    }
+    if None in cash_values or len(cash_values) != 1:
+        raise ValueError(
+            "Authorized allocations must share one effective cash budget."
+        )
+    if None in risk_values or len(risk_values) != 1:
+        raise ValueError(
+            "Authorized allocations must share one effective open-risk budget."
+        )
+    return next(iter(cash_values)), next(iter(risk_values))
+
+
+def _allocation_is_authorized(
+    allocation: ProviderNeutralAllocationDecision,
+) -> bool:
+    final_quantity = _positive_decimal(allocation.final_authorized_quantity)
+    return (
+        allocation.status is AllocationStatus.AUTHORIZED
+        and final_quantity is not None
+        and not allocation.blockers
+    )
 
 
 def _validate_execution_result(result: ExecutionResultEvidence) -> None:
