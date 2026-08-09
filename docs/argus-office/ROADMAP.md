@@ -70,8 +70,10 @@ forced-flat tests pass. A pure offline adjudicator now requires the exact
 fingerprinted lifecycle/event/provider-receipt chain, clean final-flat state,
 and frozen command identities before promoting only directly observed
 capabilities; bracket/OCO/OTO, streaming, linked protection, and every other
-unobserved capability remain unproven. Compileall, 76 focused Alpaca-stack
-tests, and all 1,390 Python tests pass. Because 2026-08-09 is Sunday, no direct
+unobserved capability remain unproven. The lifecycle CLI emits that adjudicated
+registry automatically after a successful proof without altering the persisted
+source report. Compileall, 77 focused Alpaca-stack tests, and all 1,391 Python
+tests pass. Because 2026-08-09 is Sunday, no direct
 provider lifecycle was run and no remaining capability is promoted from
 unproven. No Alpaca code is
 installed, merged into canonical `master`, or reachable from Engine Host,

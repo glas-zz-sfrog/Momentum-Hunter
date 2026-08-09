@@ -10,8 +10,9 @@
   tests, 151 adjacent tests, and all 1,385 Python tests. Added a second-pass
   offline adjudicator that rejects tampered, dirty, incomplete, or receipt-free
   reports and promotes only capabilities present in the exact direct lifecycle
-  chain; 20 lifecycle tests, 76 focused Alpaca-stack tests, and all 1,390 Python
-  tests now pass. Canonical `master`, the
+  chain. A successful CLI run now emits the derived registry without modifying
+  the persisted report; 21 lifecycle tests, 77 focused Alpaca-stack tests, and
+  all 1,391 Python tests now pass. Canonical `master`, the
   installed service/manifest, all 25 opening jobs, and zero-Shadow-job state
   remain unchanged.
 - Kept every unobserved lifecycle capability unproven. The direct provider run

@@ -1033,6 +1033,14 @@ def adjudicate_lifecycle_capabilities(
     )
 
 
+def build_adjudicated_lifecycle_result(
+    report: Mapping[str, object],
+) -> dict[str, object]:
+    result = dict(report)
+    result["capabilityRegistry"] = adjudicate_lifecycle_capabilities(report).to_dict()
+    return result
+
+
 def _required_mapping(value: object, label: str) -> dict[str, object]:
     if not isinstance(value, Mapping):
         raise AlpacaPaperLifecycleError(
@@ -1381,10 +1389,11 @@ def main(argv: list[str] | None = None) -> int:
             output_directory=args.output_dir,
             plan_path=args.plan,
         )
+        result = build_adjudicated_lifecycle_result(report)
     except (AlpacaPaperBrokerError, AlpacaPaperLifecycleError) as exc:
         print(f"Alpaca Paper lifecycle proof stopped safely: {exc}")
         return 1
-    print(json.dumps(report, indent=2, sort_keys=True))
+    print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 

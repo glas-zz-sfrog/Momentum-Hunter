@@ -25,6 +25,7 @@ from momentum_hunter.alpaca_paper_lifecycle import (
     AlpacaPaperLifecycleError,
     _report_fingerprint,
     adjudicate_lifecycle_capabilities,
+    build_adjudicated_lifecycle_result,
     create_lifecycle_plan,
     load_lifecycle_plan,
     run_paper_lifecycle_proof,
@@ -486,6 +487,21 @@ class AlpacaPaperLifecycleRunnerTests(unittest.TestCase):
                 CAPABILITY_BROKER_RESIDENT_PROTECTION,
             ):
                 self.assertIsNot(CapabilityState.PROVEN, registry.get(capability).state)
+
+    def test_adjudicated_result_is_self_contained_and_does_not_mutate_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            report = self._direct_report(Path(temp))
+            before = deepcopy(report)
+            result = build_adjudicated_lifecycle_result(report)
+            self.assertEqual(before, report)
+            self.assertEqual(
+                CapabilityState.PROVEN.value,
+                next(
+                    item["state"]
+                    for item in result["capabilityRegistry"]["capabilities"]
+                    if item["name"] == CAPABILITY_FRACTIONAL_STOP
+                ),
+            )
 
     def test_adjudication_rejects_tampered_report(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

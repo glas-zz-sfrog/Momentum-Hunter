@@ -20,6 +20,8 @@ hardens the isolated Alpaca adapter with:
 - distant stop, stop-limit, target, replacement, and cancel checks;
 - a pure offline capability adjudicator that requires the exact fingerprinted
   identity, event, receipt, and final-flat chain before promotion;
+- automatic CLI emission of the adjudicated registry after success without
+  mutating the persisted source report;
 - write-once final/failure evidence outside Git.
 
 The planned direct proof is one `$1.00` notional SPY market entry in the
@@ -53,11 +55,11 @@ Synthetic tests prove:
 
 - Compileall: pass.
 - Adapter tests: `32 / 32` pass.
-- Lifecycle tests: `20 / 20` pass.
-- Focused onboarding/adapter/lifecycle stack: `76 / 76` pass.
+- Lifecycle tests: `21 / 21` pass.
+- Focused onboarding/adapter/lifecycle stack: `77 / 77` pass.
 - Adjacent Paper/onboarding/allocation/TradePlan/simulation tests:
   `151 / 151` pass.
-- Full Python discovery: `1,390 / 1,390` pass in 255.889 seconds.
+- Full Python discovery: `1,391 / 1,391` pass.
 - `git diff --check`: pass.
 - Protected-path scan: no Engine Host, scheduler, service, Shadow, scoring,
   readiness, schema, package, WPF, or production configuration files changed.

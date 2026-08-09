@@ -8,10 +8,11 @@ Date reconciled: 2026-08-09
 `IMPLEMENTED_PENDING_MARKET_HOURS_PROOF`. It is stacked on A002 `256d442` and
 adds only an isolated Paper adapter hardening layer, lifecycle harness,
 synthetic tests, and branch-local governance evidence. Compileall, 32 adapter
-tests, 20 lifecycle tests, 76 focused Alpaca-stack tests, and all 1,390 Python
+tests, 21 lifecycle tests, 77 focused Alpaca-stack tests, and all 1,391 Python
 tests pass. The offline capability adjudicator requires exact frozen command
 identity, ordered lifecycle events, allowlisted direct provider receipts, and a
-clean final-flat state; it leaves every unobserved capability unproven.
+clean final-flat state; the CLI emits its registry only after success and leaves
+every unobserved capability unproven.
 No direct provider lifecycle was attempted on Sunday, so remaining fractional
 market/protective/replacement/liquidation capabilities are still unproven. No
 live host, Engine Host, Shadow, service, scheduler, WPF, or production order
