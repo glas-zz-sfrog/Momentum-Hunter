@@ -4,7 +4,7 @@
 
 `IMPLEMENTED_PENDING_INTEGRATION`
 
-Implementation commit: `PENDING_THIS_COMMIT`
+Implementation commit: `2d9b616`
 
 Stacked dependency: MONITOR implementation `b71feb0`
 
