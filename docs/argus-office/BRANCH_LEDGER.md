@@ -2,6 +2,20 @@
 
 Date reconciled: 2026-08-09
 
+## ARGUS-BROKER-ALPACA-003 Paper Lifecycle Harness
+
+`codex/ARGUS-BROKER-ALPACA-003-paper-lifecycle-proof` is
+`IMPLEMENTED_PENDING_MARKET_HOURS_PROOF`. It is stacked on A002 `256d442` and
+adds only an isolated Paper adapter hardening layer, lifecycle harness,
+synthetic tests, and branch-local governance evidence. Compileall, 32 adapter
+tests, 15 lifecycle tests, 151 adjacent tests, and all 1,385 Python tests pass.
+No direct provider lifecycle was attempted on Sunday, so remaining fractional
+market/protective/replacement/liquidation capabilities are still unproven. No
+live host, Engine Host, Shadow, service, scheduler, WPF, or production order
+path is reachable. Next action: ordinary non-force feature backup, then one
+bounded direct Paper lifecycle during a safe regular-market window; do not
+merge or install before adjudication.
+
 ## ARGUS-BROKER-ALPACA-002 Fractional Capability Foundation
 
 `codex/ARGUS-BROKER-ALPACA-002-fractional-capability` is

@@ -27,6 +27,7 @@ from momentum_hunter.alpaca_paper_broker import (
     AlpacaPaperBrokerRequestError,
     AlpacaPaperBrokerResponseError,
     AlpacaPaperOrderRequest,
+    PaperOrderResolutionState,
     authorize_paper_capability_probe,
 )
 from momentum_hunter.alpaca_paper_onboarding import (
@@ -122,6 +123,19 @@ def _asset_payload(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _position_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "symbol": "SPY",
+        "qty": "0.004321",
+        "side": "long",
+        "avg_entry_price": "231.43",
+        "market_value": "1.00",
+        "current_price": "231.50",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def _order_payload(
     *,
     order_id: str = ORDER_ID,
@@ -131,14 +145,16 @@ def _order_payload(
     limit_price: str | None = "2.00",
     canceled_at: str | None = None,
     replaces: str | None = None,
+    side: str = "buy",
+    order_type: str = "limit",
 ) -> dict[str, object]:
     return {
         "id": order_id,
         "client_order_id": client_order_id,
         "symbol": "SPY",
         "asset_class": "us_equity",
-        "side": "buy",
-        "type": "limit",
+        "side": side,
+        "type": order_type,
         "order_class": "simple",
         "time_in_force": "day",
         "status": status,
@@ -158,11 +174,16 @@ def _order_payload(
     }
 
 
-def _adapter(session: _Session) -> AlpacaPaperBrokerAdapter:
+def _adapter(
+    session: _Session,
+    *,
+    evidence_sink=None,
+) -> AlpacaPaperBrokerAdapter:
     return AlpacaPaperBrokerAdapter(
         lane=AlpacaPaperLane.CANARY_REALISTIC,
         credentials=_Credentials(),  # type: ignore[arg-type]
         session=session,  # type: ignore[arg-type]
+        evidence_sink=evidence_sink,
     )
 
 
@@ -259,6 +280,47 @@ class AlpacaPaperBrokerTests(unittest.TestCase):
         with self.assertRaises(AlpacaPaperBrokerRequestError):
             authorization.validate(_request(limit_price=Decimal("2.01")))
 
+    def test_market_exit_can_be_bounded_by_exact_position_quantity(self) -> None:
+        authorization = authorize_paper_capability_probe(
+            confirmation=PAPER_PROBE_CONFIRMATION,
+            maximum_notional=Decimal("1.00"),
+            maximum_quantity=Decimal("0.004321"),
+            allowed_sides=("sell",),
+        )
+        exit_request = _request(
+            side="sell",
+            order_type="market",
+            quantity=Decimal("0.004321"),
+            limit_price=None,
+        )
+        authorization.validate(exit_request)
+        with self.assertRaises(AlpacaPaperBrokerRequestError):
+            authorization.validate(
+                _request(
+                    side="sell",
+                    order_type="market",
+                    quantity=Decimal("0.004322"),
+                    limit_price=None,
+                )
+            )
+
+        high_target = _request(
+            side="sell",
+            quantity=Decimal("0.004321"),
+            limit_price=Decimal("500.00"),
+        )
+        authorization.validate(high_target)
+
+    def test_fractional_position_is_read_from_exact_symbol_endpoint(self) -> None:
+        session = _Session([_Response(_position_payload())])
+        position = _adapter(session).get_position("spy")
+        self.assertEqual(Decimal("0.004321"), position.quantity)
+        self.assertEqual("long", position.side)
+        self.assertEqual(
+            f"{ALPACA_PAPER_BASE_URL}/v2/positions/SPY",
+            session.calls[0][1],
+        )
+
     def test_readonly_requests_use_exact_host_headers_and_no_redirect(self) -> None:
         session = _Session(
             [
@@ -280,6 +342,28 @@ class AlpacaPaperBrokerTests(unittest.TestCase):
             self.assertFalse(kwargs["allow_redirects"])
             self.assertEqual(KEY_ID, kwargs["headers"]["APCA-API-KEY-ID"])
             self.assertEqual(SECRET_KEY, kwargs["headers"]["APCA-API-SECRET-KEY"])
+
+    def test_provider_receipts_are_allowlisted_and_drop_account_identity(self) -> None:
+        receipts = []
+        payload = _account_payload(
+            id="full-account-id",
+            account_number="full-account-number",
+            credential=KEY_ID,
+        )
+        _adapter(
+            _Session([_Response(payload)]),
+            evidence_sink=receipts.append,
+        ).get_account()
+        self.assertEqual(1, len(receipts))
+        self.assertEqual("synthetic-request-id", receipts[0].request_id)
+        self.assertTrue(receipts[0].request_id_present)
+        self.assertTrue(receipts[0].received_at.endswith("+00:00"))
+        encoded = json.dumps(receipts[0].payload, sort_keys=True)
+        self.assertIn('"status": "ACTIVE"', encoded)
+        self.assertNotIn("full-account-id", encoded)
+        self.assertNotIn("full-account-number", encoded)
+        self.assertNotIn(KEY_ID, encoded)
+        self.assertNotIn(SECRET_KEY, encoded)
 
     def test_provider_errors_and_network_failures_are_redacted(self) -> None:
         session = _Session(
@@ -332,6 +416,86 @@ class AlpacaPaperBrokerTests(unittest.TestCase):
             _adapter(session).submit_order(_request(), authorization=_authorization())
         self.assertEqual(1, len(session.calls))
 
+    def test_idempotent_submit_recovers_existing_order_without_post(self) -> None:
+        session = _Session([_Response(_order_payload())])
+        resolution = _adapter(session).submit_order_idempotently(
+            _request(),
+            authorization=_authorization(),
+        )
+        self.assertEqual(PaperOrderResolutionState.RECOVERED, resolution.state)
+        self.assertEqual(["GET"], [call[0] for call in session.calls])
+
+    def test_idempotent_submit_posts_only_after_exact_not_found(self) -> None:
+        session = _Session(
+            [
+                _Response({"code": 40410000, "message": "order not found"}, status_code=404),
+                _Response(_order_payload()),
+            ]
+        )
+        resolution = _adapter(session).submit_order_idempotently(
+            _request(),
+            authorization=_authorization(),
+        )
+        self.assertEqual(PaperOrderResolutionState.SUBMITTED, resolution.state)
+        self.assertEqual(["GET", "POST"], [call[0] for call in session.calls])
+
+    def test_ambiguous_submit_recovers_by_client_id_without_second_post(self) -> None:
+        not_found = _Response(
+            {"code": 40410000, "message": "order not found"},
+            status_code=404,
+        )
+        session = _Session(
+            [
+                not_found,
+                requests.ConnectionError("response lost after submit"),
+                _Response(_order_payload()),
+            ]
+        )
+        resolution = _adapter(session).submit_order_idempotently(
+            _request(),
+            authorization=_authorization(),
+        )
+        self.assertEqual(
+            PaperOrderResolutionState.RECOVERED_AFTER_AMBIGUOUS_SUBMIT,
+            resolution.state,
+        )
+        self.assertEqual(1, sum(call[0] == "POST" for call in session.calls))
+
+    def test_unknown_ambiguous_submit_fails_without_resubmission(self) -> None:
+        session = _Session(
+            [
+                _Response(
+                    {"code": 40410000, "message": "order not found"},
+                    status_code=404,
+                ),
+                requests.ConnectionError("response lost after submit"),
+                _Response(
+                    {"code": 40410000, "message": "order not found"},
+                    status_code=404,
+                ),
+            ]
+        )
+        with self.assertRaisesRegex(
+            AlpacaPaperBrokerResponseError,
+            "outcome is unknown",
+        ):
+            _adapter(session).submit_order_idempotently(
+                _request(),
+                authorization=_authorization(),
+            )
+        self.assertEqual(1, sum(call[0] == "POST" for call in session.calls))
+
+    def test_recovered_order_must_match_frozen_request(self) -> None:
+        session = _Session([_Response(_order_payload(qty="0.4"))])
+        with self.assertRaisesRegex(
+            AlpacaPaperBrokerResponseError,
+            "contradicts",
+        ):
+            _adapter(session).submit_order_idempotently(
+                _request(),
+                authorization=_authorization(),
+            )
+
     def test_cancel_checks_ownership_and_reads_terminal_order(self) -> None:
         canceled = _order_payload(
             status="canceled",
@@ -377,6 +541,108 @@ class AlpacaPaperBrokerTests(unittest.TestCase):
         self.assertEqual(REPLACEMENT_ID, order.order_id)
         self.assertEqual("PATCH", session.calls[1][0])
         self.assertNotIn("qty", session.calls[1][2]["json"])
+
+    def test_quantity_bounded_exit_can_replace_high_target_price(self) -> None:
+        original = _order_payload(
+            status="new",
+            qty="0.004321",
+            limit_price="500.00",
+            side="sell",
+        )
+        replacement_client = "mh-paper-capability-exit-replacement"
+        replacement = _order_payload(
+            order_id=REPLACEMENT_ID,
+            client_order_id=replacement_client,
+            status="new",
+            qty="0.004321",
+            limit_price="510.00",
+            replaces=ORDER_ID,
+            side="sell",
+        )
+        authorization = authorize_paper_capability_probe(
+            confirmation=PAPER_PROBE_CONFIRMATION,
+            maximum_notional=Decimal("1.00"),
+            allowed_sides=("sell",),
+            maximum_quantity=Decimal("0.004321"),
+        )
+        session = _Session([_Response(original), _Response(replacement)])
+        order = _adapter(session).replace_order(
+            ORDER_ID,
+            limit_price=Decimal("510.00"),
+            client_order_id=replacement_client,
+            authorization=authorization,
+        )
+        self.assertEqual(REPLACEMENT_ID, order.order_id)
+
+    def test_idempotent_replace_recovers_existing_without_patch(self) -> None:
+        replacement_client = "mh-paper-capability-exit-replacement"
+        replacement = _order_payload(
+            order_id=REPLACEMENT_ID,
+            client_order_id=replacement_client,
+            status="new",
+            qty="0.004321",
+            limit_price="510.00",
+            replaces=ORDER_ID,
+            side="sell",
+        )
+        authorization = authorize_paper_capability_probe(
+            confirmation=PAPER_PROBE_CONFIRMATION,
+            maximum_notional=Decimal("1.00"),
+            allowed_sides=("sell",),
+            maximum_quantity=Decimal("0.004321"),
+        )
+        session = _Session([_Response(replacement)])
+        resolution = _adapter(session).replace_order_idempotently(
+            ORDER_ID,
+            limit_price=Decimal("510.00"),
+            client_order_id=replacement_client,
+            authorization=authorization,
+        )
+        self.assertEqual(PaperOrderResolutionState.RECOVERED, resolution.state)
+        self.assertEqual(["GET"], [call[0] for call in session.calls])
+
+    def test_ambiguous_replace_recovers_without_second_patch(self) -> None:
+        replacement_client = "mh-paper-capability-exit-replacement"
+        original = _order_payload(
+            status="new",
+            qty="0.004321",
+            limit_price="500.00",
+            side="sell",
+        )
+        replacement = _order_payload(
+            order_id=REPLACEMENT_ID,
+            client_order_id=replacement_client,
+            status="new",
+            qty="0.004321",
+            limit_price="510.00",
+            replaces=ORDER_ID,
+            side="sell",
+        )
+        authorization = authorize_paper_capability_probe(
+            confirmation=PAPER_PROBE_CONFIRMATION,
+            maximum_notional=Decimal("1.00"),
+            allowed_sides=("sell",),
+            maximum_quantity=Decimal("0.004321"),
+        )
+        session = _Session(
+            [
+                _Response({"code": 40410000, "message": "order not found"}, status_code=404),
+                _Response(original),
+                requests.ConnectionError("replacement response lost"),
+                _Response(replacement),
+            ]
+        )
+        resolution = _adapter(session).replace_order_idempotently(
+            ORDER_ID,
+            limit_price=Decimal("510.00"),
+            client_order_id=replacement_client,
+            authorization=authorization,
+        )
+        self.assertEqual(
+            PaperOrderResolutionState.RECOVERED_AFTER_AMBIGUOUS_SUBMIT,
+            resolution.state,
+        )
+        self.assertEqual(1, sum(call[0] == "PATCH" for call in session.calls))
 
     def test_restart_reconciles_owned_order_by_client_id_without_mutation(self) -> None:
         first_process = _adapter(_Session([_Response(_order_payload())]))

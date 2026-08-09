@@ -1,6 +1,18 @@
 # Argus Changelog
 
 ## Unreleased
+- Added the isolated A003 Alpaca Paper lifecycle harness with a write-once
+  one-dollar SPY plan, frozen client-order identities, market-hours gate,
+  idempotent submit/replace recovery, partial-fill handling, distant
+  stop/stop-limit/target checks, bounded exact liquidation, sanitized provider
+  receipts, and write-once external evidence.
+- Proved the implementation synthetically with 32 adapter tests, 15 lifecycle
+  tests, 151 adjacent tests, and all 1,385 Python tests. Canonical `master`, the
+  installed service/manifest, all 25 opening jobs, and zero-Shadow-job state
+  remain unchanged.
+- Kept every unobserved lifecycle capability unproven. The direct provider run
+  waits for a safe regular-market window; no live host, runtime integration,
+  Paper strategy sample, account identity, or credential value was introduced.
 - Added a provider-neutral, fail-closed broker capability registry plus an isolated Canary-only Alpaca Paper adapter. The adapter accepts only the exact Paper host, rejects the live host and research lane structurally, blocks advanced and extended-hours orders, bounds mutations by owned client IDs and maximum notional, and is not wired into Engine Host, Shadow, service, scheduler, WPF, or production execution.
 - Proved the first direct Alpaca Paper lifecycle slice with `0.5` SPY shares at a deliberately nonmarketable `$2.00` limit: fractional quantity and limit acceptance, exact client-order lookup, cancellation, and a clean final state with zero positions and zero open orders. Implementation and provider evidence are fingerprinted in a secret-free write-once local proof; 21 focused, 151 adjacent, and all 1,359 Python tests pass.
 - Kept every unobserved capability fail-closed. Fractional market/fill behavior, stops, stop-limits, profit taking, replace semantics, partial fills, advanced order classes, streaming, broker-resident protection, position recovery, exact liquidation, and strategy/runtime integration remain separate work.

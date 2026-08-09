@@ -6,8 +6,10 @@ import json
 import math
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Mapping
+from enum import Enum
+from typing import Callable, Mapping
 from urllib.parse import quote
 from uuid import UUID
 
@@ -74,6 +76,23 @@ class AlpacaPaperBrokerResponseError(AlpacaPaperBrokerError):
         super().__init__(message)
         self.http_status = http_status
         self.provider_code = provider_code
+
+
+class PaperOrderResolutionState(str, Enum):
+    SUBMITTED = "SUBMITTED"
+    RECOVERED = "RECOVERED"
+    RECOVERED_AFTER_AMBIGUOUS_SUBMIT = "RECOVERED_AFTER_AMBIGUOUS_SUBMIT"
+
+
+@dataclass(frozen=True)
+class AlpacaPaperProviderReceipt:
+    method: str
+    path: str
+    http_status: int
+    request_id: str | None
+    request_id_present: bool
+    received_at: str
+    payload: object | None
 
 
 @dataclass(frozen=True)
@@ -233,10 +252,17 @@ class AlpacaPaperOrder:
 
 
 @dataclass(frozen=True)
+class PaperOrderResolution:
+    state: PaperOrderResolutionState
+    order: AlpacaPaperOrder
+
+
+@dataclass(frozen=True)
 class PaperCapabilityAuthorization:
     lane: AlpacaPaperLane
     maximum_notional: Decimal
     allowed_sides: tuple[str, ...]
+    maximum_quantity: Decimal | None = None
     client_order_prefix: str = PAPER_PROBE_CLIENT_PREFIX
 
     def validate(self, request: AlpacaPaperOrderRequest) -> None:
@@ -252,10 +278,28 @@ class PaperCapabilityAuthorization:
             raise AlpacaPaperBrokerRequestError(
                 "Paper order ID is outside the owned capability-proof namespace."
             )
+        if self.maximum_quantity is not None and request.quantity is not None:
+            if request.quantity > self.maximum_quantity:
+                raise AlpacaPaperBrokerRequestError(
+                    "Paper order exceeds the authorized position-reducing quantity."
+                )
         estimated = _maximum_request_notional(request)
-        if estimated is None or estimated > self.maximum_notional:
+        quantity_bounded_exit = (
+            request.side == "sell"
+            and request.quantity is not None
+            and self.maximum_quantity is not None
+        )
+        if estimated is None and not quantity_bounded_exit:
             raise AlpacaPaperBrokerRequestError(
-                "Paper order exceeds or cannot prove the authorized notional bound."
+                "Paper order cannot prove its authorized notional or exit-quantity bound."
+            )
+        if (
+            estimated is not None
+            and estimated > self.maximum_notional
+            and not quantity_bounded_exit
+        ):
+            raise AlpacaPaperBrokerRequestError(
+                "Paper order exceeds the authorized notional bound."
             )
 
 
@@ -264,18 +308,22 @@ def authorize_paper_capability_probe(
     confirmation: str,
     maximum_notional: Decimal = Decimal("1.00"),
     allowed_sides: tuple[str, ...] = ("buy",),
+    maximum_quantity: Decimal | None = None,
 ) -> PaperCapabilityAuthorization:
     if confirmation != PAPER_PROBE_CONFIRMATION:
         raise AlpacaPaperBrokerRequestError(
             "The exact bounded Paper capability confirmation was not provided."
         )
     _require_positive_decimal(maximum_notional, "maximum notional")
+    if maximum_quantity is not None:
+        _require_positive_decimal(maximum_quantity, "maximum quantity")
     if not allowed_sides or any(side not in {"buy", "sell"} for side in allowed_sides):
         raise AlpacaPaperBrokerRequestError("Paper capability sides are invalid.")
     return PaperCapabilityAuthorization(
         lane=AlpacaPaperLane.CANARY_REALISTIC,
         maximum_notional=maximum_notional,
         allowed_sides=allowed_sides,
+        maximum_quantity=maximum_quantity,
     )
 
 
@@ -290,6 +338,7 @@ class AlpacaPaperBrokerAdapter:
         session: requests.Session | None = None,
         base_url: str = ALPACA_PAPER_BASE_URL,
         timeout: tuple[float, float] = HTTP_TIMEOUT,
+        evidence_sink: Callable[[AlpacaPaperProviderReceipt], None] | None = None,
     ) -> None:
         if lane is not AlpacaPaperLane.CANARY_REALISTIC:
             raise AlpacaPaperBrokerEndpointError(
@@ -310,6 +359,7 @@ class AlpacaPaperBrokerAdapter:
             self.session.trust_env = False
         self.base_url = base_url
         self.timeout = timeout
+        self.evidence_sink = evidence_sink
 
     def get_account(self) -> AlpacaPaperAccount:
         payload, _request_id = self._request("GET", "/v2/account", expected=(200,))
@@ -329,6 +379,15 @@ class AlpacaPaperBrokerAdapter:
         if not isinstance(payload, list):
             raise AlpacaPaperBrokerResponseError("Paper positions response had invalid shape.")
         return [_parse_position(item) for item in payload]
+
+    def get_position(self, symbol: str) -> AlpacaPaperPosition:
+        normalized = _normalized_symbol(symbol)
+        payload, _request_id = self._request(
+            "GET",
+            f"/v2/positions/{quote(normalized, safe='')}",
+            expected=(200,),
+        )
+        return _parse_position(payload)
 
     def list_orders(
         self,
@@ -379,6 +438,17 @@ class AlpacaPaperBrokerAdapter:
         )
         return _parse_order(payload, request_id_present=bool(request_id))
 
+    def try_get_order_by_client_id(
+        self,
+        client_order_id: str,
+    ) -> AlpacaPaperOrder | None:
+        try:
+            return self.get_order_by_client_id(client_order_id)
+        except AlpacaPaperBrokerResponseError as exc:
+            if exc.http_status == 404:
+                return None
+            raise
+
     def submit_order(
         self,
         request: AlpacaPaperOrderRequest,
@@ -399,6 +469,36 @@ class AlpacaPaperBrokerAdapter:
                 "Paper submit response contradicted the requested client order ID."
             )
         return order
+
+    def submit_order_idempotently(
+        self,
+        request: AlpacaPaperOrderRequest,
+        *,
+        authorization: PaperCapabilityAuthorization,
+    ) -> PaperOrderResolution:
+        authorization.validate(request)
+        existing = self.try_get_order_by_client_id(request.client_order_id)
+        if existing is not None:
+            _require_owned_order(existing, authorization)
+            _require_order_matches_request(existing, request)
+            return PaperOrderResolution(PaperOrderResolutionState.RECOVERED, existing)
+        try:
+            submitted = self.submit_order(request, authorization=authorization)
+        except AlpacaPaperBrokerResponseError as submit_error:
+            recovered = self.try_get_order_by_client_id(request.client_order_id)
+            if recovered is None:
+                raise AlpacaPaperBrokerResponseError(
+                    "Paper submission outcome is unknown; no automatic resubmission is allowed.",
+                    http_status=submit_error.http_status,
+                    provider_code="SUBMISSION_OUTCOME_UNKNOWN",
+                ) from None
+            _require_owned_order(recovered, authorization)
+            _require_order_matches_request(recovered, request)
+            return PaperOrderResolution(
+                PaperOrderResolutionState.RECOVERED_AFTER_AMBIGUOUS_SUBMIT,
+                recovered,
+            )
+        return PaperOrderResolution(PaperOrderResolutionState.SUBMITTED, submitted)
 
     def cancel_order(
         self,
@@ -445,7 +545,12 @@ class AlpacaPaperBrokerAdapter:
                 "Notional Paper orders require cancel/resubmit and cannot be replaced."
             )
         estimated = existing.quantity * limit_price
-        if estimated > authorization.maximum_notional:
+        quantity_bounded_exit = (
+            existing.side == "sell"
+            and authorization.maximum_quantity is not None
+            and existing.quantity <= authorization.maximum_quantity
+        )
+        if estimated > authorization.maximum_notional and not quantity_bounded_exit:
             raise AlpacaPaperBrokerRequestError(
                 "Replacement would exceed the authorized Paper notional bound."
             )
@@ -469,6 +574,53 @@ class AlpacaPaperBrokerAdapter:
                 "Paper replace response contradicted the original order ID."
             )
         return replacement
+
+    def replace_order_idempotently(
+        self,
+        order_id: str,
+        *,
+        limit_price: Decimal,
+        client_order_id: str,
+        authorization: PaperCapabilityAuthorization,
+    ) -> PaperOrderResolution:
+        existing_replacement = self.try_get_order_by_client_id(client_order_id)
+        if existing_replacement is not None:
+            _require_owned_order(existing_replacement, authorization)
+            _require_replacement_matches(
+                existing_replacement,
+                order_id=order_id,
+                limit_price=limit_price,
+            )
+            return PaperOrderResolution(
+                PaperOrderResolutionState.RECOVERED,
+                existing_replacement,
+            )
+        try:
+            replacement = self.replace_order(
+                order_id,
+                limit_price=limit_price,
+                client_order_id=client_order_id,
+                authorization=authorization,
+            )
+        except AlpacaPaperBrokerResponseError as replace_error:
+            recovered = self.try_get_order_by_client_id(client_order_id)
+            if recovered is None:
+                raise AlpacaPaperBrokerResponseError(
+                    "Paper replacement outcome is unknown; no automatic retry is allowed.",
+                    http_status=replace_error.http_status,
+                    provider_code="REPLACEMENT_OUTCOME_UNKNOWN",
+                ) from None
+            _require_owned_order(recovered, authorization)
+            _require_replacement_matches(
+                recovered,
+                order_id=order_id,
+                limit_price=limit_price,
+            )
+            return PaperOrderResolution(
+                PaperOrderResolutionState.RECOVERED_AFTER_AMBIGUOUS_SUBMIT,
+                recovered,
+            )
+        return PaperOrderResolution(PaperOrderResolutionState.SUBMITTED, replacement)
 
     def _request(
         self,
@@ -514,6 +666,12 @@ class AlpacaPaperBrokerAdapter:
                 "The Alpaca Paper response exceeded the bounded size limit.",
                 http_status=response.status_code,
             )
+        self._record_provider_receipt(
+            method=method,
+            path=path,
+            response=response,
+            credentials=credentials,
+        )
         if response.status_code not in expected:
             raise _provider_error(response, credentials)
         request_id = response.headers.get("X-Request-ID", "")
@@ -525,6 +683,45 @@ class AlpacaPaperBrokerAdapter:
             raise AlpacaPaperBrokerResponseError(
                 "The Alpaca Paper response was not valid JSON.",
                 http_status=response.status_code,
+            ) from None
+
+    def _record_provider_receipt(
+        self,
+        *,
+        method: str,
+        path: str,
+        response: object,
+        credentials: AlpacaPaperCredentials,
+    ) -> None:
+        if self.evidence_sink is None:
+            return
+        status_code = int(getattr(response, "status_code", 0))
+        payload: object | None = None
+        if status_code != 204:
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = None
+        raw_request_id = str(
+            getattr(response, "headers", {}).get("X-Request-ID", "")
+        ).strip()
+        request_id = _redact(raw_request_id[:128], credentials) or None
+        receipt = AlpacaPaperProviderReceipt(
+            method=method.upper(),
+            path=path,
+            http_status=status_code,
+            request_id=request_id,
+            request_id_present=request_id is not None,
+            received_at=datetime.now(timezone.utc).isoformat(),
+            payload=_sanitize_provider_payload(path, payload, credentials),
+        )
+        try:
+            self.evidence_sink(receipt)
+        except Exception:
+            raise AlpacaPaperBrokerResponseError(
+                "The sanitized Alpaca Paper provider receipt could not be preserved.",
+                http_status=status_code,
+                provider_code="EVIDENCE_SINK_FAILED",
             ) from None
 
 
@@ -540,6 +737,9 @@ def _require_allowed_request(method: str, path: str) -> None:
     if (normalized_method, path) in exact:
         return
     if re.fullmatch(r"/v2/assets/[A-Z][A-Z0-9.\-]{0,14}", path):
+        if normalized_method == "GET":
+            return
+    if re.fullmatch(r"/v2/positions/[A-Z][A-Z0-9.\-]{0,14}", path):
         if normalized_method == "GET":
             return
     if re.fullmatch(r"/v2/orders/[0-9a-fA-F\-]{36}", path):
@@ -629,6 +829,99 @@ def _parse_order(payload: object, *, request_id_present: bool) -> AlpacaPaperOrd
     )
 
 
+def _sanitize_provider_payload(
+    path: str,
+    payload: object,
+    credentials: AlpacaPaperCredentials,
+) -> object | None:
+    if payload is None:
+        return None
+    if isinstance(payload, list):
+        return [
+            _sanitize_provider_payload(path, item, credentials)
+            for item in payload
+        ]
+    if not isinstance(payload, Mapping):
+        return None
+    error_fields = {"code", "message"}
+    account_fields = {
+        "status",
+        "cash",
+        "buying_power",
+        "account_blocked",
+        "trading_blocked",
+        "trade_suspended_by_user",
+    }
+    asset_fields = {
+        "symbol",
+        "class",
+        "exchange",
+        "status",
+        "tradable",
+        "fractionable",
+        "marginable",
+        "shortable",
+        "easy_to_borrow",
+        "attributes",
+    }
+    position_fields = {
+        "symbol",
+        "qty",
+        "side",
+        "avg_entry_price",
+        "market_value",
+        "current_price",
+    }
+    order_fields = {
+        "id",
+        "client_order_id",
+        "symbol",
+        "asset_class",
+        "side",
+        "type",
+        "order_class",
+        "time_in_force",
+        "status",
+        "qty",
+        "notional",
+        "filled_qty",
+        "filled_avg_price",
+        "limit_price",
+        "stop_price",
+        "submitted_at",
+        "updated_at",
+        "filled_at",
+        "canceled_at",
+        "replaced_at",
+        "replaced_by",
+        "replaces",
+    }
+    if error_fields.intersection(payload):
+        allowed = error_fields
+    elif path == "/v2/account":
+        allowed = account_fields
+    elif path.startswith("/v2/assets/"):
+        allowed = asset_fields
+    elif path == "/v2/positions" or path.startswith("/v2/positions/"):
+        allowed = position_fields
+    elif path.startswith("/v2/orders"):
+        allowed = order_fields
+    else:
+        return None
+    sanitized: dict[str, object | None] = {}
+    for key in sorted(allowed):
+        if key not in payload:
+            continue
+        value = payload[key]
+        if isinstance(value, str):
+            sanitized[key] = _redact(value, credentials)
+        elif isinstance(value, (bool, int, float)) or value is None:
+            sanitized[key] = value
+        elif isinstance(value, list) and all(isinstance(item, str) for item in value):
+            sanitized[key] = [_redact(item, credentials) for item in value]
+    return sanitized
+
+
 def _provider_error(
     response: object,
     credentials: AlpacaPaperCredentials,
@@ -687,6 +980,59 @@ def _require_owned_order(
     if not order.client_order_id.startswith(authorization.client_order_prefix):
         raise AlpacaPaperBrokerRequestError(
             "Provider order is outside the owned capability-proof namespace."
+        )
+
+
+def _require_order_matches_request(
+    order: AlpacaPaperOrder,
+    request: AlpacaPaperOrderRequest,
+) -> None:
+    expected_identity = (
+        request.client_order_id,
+        request.symbol,
+        request.side,
+        request.order_type,
+        request.order_class,
+        request.time_in_force,
+        request.limit_price,
+        request.stop_price,
+    )
+    actual_identity = (
+        order.client_order_id,
+        order.symbol,
+        order.side,
+        order.order_type,
+        order.order_class,
+        order.time_in_force,
+        order.limit_price,
+        order.stop_price,
+    )
+    quantity_matches = (
+        request.quantity is None or order.quantity == request.quantity
+    )
+    notional_matches = (
+        request.notional is None or order.notional == request.notional
+    )
+    if (
+        actual_identity != expected_identity
+        or not quantity_matches
+        or not notional_matches
+    ):
+        raise AlpacaPaperBrokerResponseError(
+            "Recovered Paper order contradicts the requested command."
+        )
+
+
+def _require_replacement_matches(
+    order: AlpacaPaperOrder,
+    *,
+    order_id: str,
+    limit_price: Decimal,
+) -> None:
+    normalized_order_id = _normalized_uuid(order_id, "replaced order ID")
+    if order.replaces != normalized_order_id or order.limit_price != limit_price:
+        raise AlpacaPaperBrokerResponseError(
+            "Recovered Paper replacement contradicts the requested command."
         )
 
 
