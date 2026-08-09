@@ -589,7 +589,7 @@ Use a fresh task branch from local `master` instead.
 
 | Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `codex/ARGUS-WORKTREE-HYGIENE-001-inventory` | Base `1d0ca95`; audit at branch head | No | No | `IMPLEMENTED_PENDING_CEO_RETIREMENT_DECISION` | Classify all 74 registered worktrees and propose a no-delete staged retirement plan. | Back up this docs-only audit; take no retirement action until an exact Steven approval and fresh preflight. |
+| `codex/ARGUS-WORKTREE-HYGIENE-001-inventory` | Implementation `5c71b06`; closeout at branch head | Yes | No | `IMPLEMENTED_PENDING_CEO_RETIREMENT_DECISION` | Classify all 74 registered worktrees and propose a no-delete staged retirement plan. | Take no retirement action until an exact Steven approval and fresh preflight. |
 
 Inventory summary: 19 clean/merged Batch A candidates, 17 clean/unmerged exact-
 remote parked candidates, one clean local-only preserve, 22 dirty individual-
