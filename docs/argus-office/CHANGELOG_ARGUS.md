@@ -23,6 +23,8 @@
   unchanged and inactive.
 
 ## Unreleased
+- Added BREAKOUT-001's dormant sequential research evidence over canonical completed minute bars. It preserves MONITOR opportunity/setup identity across impulse, opening/continuation breakout, missed entry, failure, pullback, reclaim, exhaustion, and explicit gap/unavailable states with prior-window triggers, immutable lineage, versioned policy, deterministic IDs, atomic persistence, and no execution authority.
+- Proved the research boundary with compileall, 20 focused tests, 188 adjacent candle/monitor/plan tests, and all 1,372 Python tests. No existing runtime imports the module; no score, readiness, plan, selection, provider, broker/order, service, scheduler, UI, schema, credential, source data, or production output changed.
 - Fast-forwarded the directly proven A001-A003 Paper stack into canonical
   `master` after compileall, 53 immediate tests, all 1,391 Python tests,
   protected-path review, exact-credential scan, and independent zero-position/
