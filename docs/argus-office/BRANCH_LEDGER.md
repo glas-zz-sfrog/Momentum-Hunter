@@ -2,6 +2,19 @@
 
 Date reconciled: 2026-08-09
 
+## ARGUS-CATALYST-002A Provider-Neutral Catalyst Evidence
+
+`codex/ARGUS-CATALYST-002A-provider-neutral-evidence` is
+`IMPLEMENTED_PENDING_INTEGRATION` at implementation commit `c53a24b`, stacked
+on validated MONITOR closeout `d2b77c2`. It adds dormant immutable catalyst
+observations, revisions, supplied attribution/authority, source availability,
+freshness snapshots, content deduplication, and deterministic material deltas.
+Compileall, 43 focused tests, 158 bounded tests, and all 1,395 Python tests
+pass. No existing runtime imports the module; no provider, scoring, broker,
+order, service, scheduler, Engine Host, WPF, Shadow, credential, schema, or
+production-data path changed. Preserve the pushed feature branch and integrate
+only after MONITOR during a serialized runtime-pinning window.
+
 ## ARGUS-MONITOR-001 Candidate Lifecycle
 
 `codex/ARGUS-MONITOR-001-candidate-lifecycle` is

@@ -56,7 +56,7 @@ because a provider recovered.
   readiness, plan, Risk Governor, selector, or order capability.
 - [x] Compile, focused, adjacent, full, protected-path, diff, and secret checks
   pass before commit.
-- [ ] Feature branch is backed up without merge or runtime installation.
+- [x] Feature branch is backed up without merge or runtime installation.
 
 ## Protected Areas
 
