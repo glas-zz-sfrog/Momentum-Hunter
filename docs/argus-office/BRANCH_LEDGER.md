@@ -2,6 +2,21 @@
 
 Date reconciled: 2026-08-09
 
+## ARGUS-EVENT-001 Versioned Macro-Event Context
+
+`codex/ARGUS-EVENT-001-versioned-macro-event-context` is
+`IMPLEMENTED_PENDING_INTEGRATION` at `ea30d71`, stacked on REGIME-001 closeout
+`f4deb18`, MONITOR-001 closeout `d2b77c2`, and ultimately synchronized canonical
+base `1d0ca95`. It adds a dormant offline versioned event calendar, exact
+source/revision/window/scope evidence, a fully embedded caller policy, four
+approved context states, fail-closed stale/missing-rule behavior, append-only
+atomic storage, and score-neutral bounded candidate fan-out. Compileall, 30
+focused tests, 167 bounded adjacent tests, and all 1,411 Python tests pass. No
+provider, scoring, recommendation, TradePlan, risk, broker/order, service,
+scheduler, Engine Host, Shadow, WPF, schema, credential, or production-data
+path changed. Back up the feature branch normally; do not merge or activate it
+before the frozen integration lane is reconciled.
+
 ## ARGUS-REGIME-001 Rolling Market And Sector Regime
 
 `codex/ARGUS-REGIME-001-rolling-market-sector-regime` is

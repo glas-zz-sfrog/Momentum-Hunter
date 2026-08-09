@@ -42,6 +42,20 @@ Paper state, and production data remain unchanged by the parallel work below.
 Integration is frozen where A003 evidence requires it; bounded offline
 development is not frozen.
 
+ARGUS-EVENT-001 versioned macro-event context is
+`IMPLEMENTED_PENDING_INTEGRATION` on stacked feature branch
+`codex/ARGUS-EVENT-001-versioned-macro-event-context` at implementation commit
+`ea30d71`. The dormant offline calendar preserves source and revision identity,
+provider/receipt clocks, event/risk/observation windows, importance, scope, and
+stale/unknown state; a fully persisted caller policy may produce only `NORMAL`,
+`CAUTION`, `BLOCK_NEW_ENTRY`, or `DATA_STALE`. Missing rules and unsafe evidence
+fail closed, candidate fan-out is bounded and scope-specific, and the context
+has no scoring or trade-initiation authority. Compileall, 30 focused tests, 167
+bounded lifecycle/regime/plan/selector tests, and all 1,411 Python tests pass.
+Canonical integration remains frozen; `CATALYST-002` is the next approved
+offline development slice while Monday A003 acceptance remains the separate
+market-hours gate.
+
 ARGUS-REGIME-001 rolling market and sector context is
 `IMPLEMENTED_PENDING_INTEGRATION` on stacked feature branch
 `codex/ARGUS-REGIME-001-rolling-market-sector-regime` at implementation commit
@@ -1454,6 +1468,36 @@ Status: `IMPLEMENTED_PENDING_INTEGRATION` at `a4b3de0`
   reconciled. `EVENT-001` may proceed offline as the next parallel development
   slice; Monday A003 direct Paper acceptance remains separately market-hours
   blocked.
+
+#### ARGUS-EVENT-001 - Versioned Macro-Event Context
+
+Status: `IMPLEMENTED_PENDING_INTEGRATION` at `ea30d71`
+
+- The isolated stacked branch models Federal Reserve decisions and speakers,
+  inflation and jobs releases, relevant Treasury auctions, company earnings,
+  market holidays, early closes, and separately approved categories without
+  contacting a calendar provider or choosing production windows.
+- Every immutable event binds stable source/event/revision identity,
+  provider/receipt clocks, scheduled/risk/observation windows, importance,
+  market/sector/symbol scope, evidence state, and fingerprint. Calendar
+  snapshots preserve source identity, validity, sequence, predecessor, and
+  revision history in atomic append-only evidence.
+- A complete caller-supplied consequence policy is embedded and fingerprinted.
+  It may produce only `NORMAL`, `CAUTION`, `BLOCK_NEW_ENTRY`, or `DATA_STALE`;
+  unknown/stale events and active categories without a rule must be
+  `DATA_STALE`, never silently normal.
+- Market scope applies globally; sector and symbol events cannot leak to
+  unrelated candidates. Bounded fan-out preserves candidate order and context
+  always carries score authority `NONE` and trade-initiation capability false.
+- Lookahead, contradictory windows or scope, invalid source chronology,
+  repeated revision identity, stale calendars, chain/sequence tampering, and
+  atomic-write failure all fail closed. Exact replay is deterministic and
+  duplicate append is byte-stable.
+- Compileall, 30 focused tests, 167 bounded adjacent tests, and all 1,411 Python
+  tests pass. No existing runtime imports the module.
+- Do not merge or activate EVENT-001 before the frozen integration lane is
+  reconciled. `CATALYST-002` may proceed offline next; Monday A003 direct Paper
+  acceptance remains separately market-hours blocked.
 
 ### Phase 13 - Broker Execution Validation Gate
 
