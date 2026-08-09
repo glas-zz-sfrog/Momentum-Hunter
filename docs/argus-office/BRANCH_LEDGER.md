@@ -1,6 +1,20 @@
 # Branch Ledger
 
-Date reconciled: 2026-08-08
+Date reconciled: 2026-08-09
+
+## ARGUS-MONITOR-001 Candidate Lifecycle
+
+`codex/ARGUS-MONITOR-001-candidate-lifecycle` is
+`IMPLEMENTED_PENDING_INTEGRATION` at `b71feb0` from clean synchronized canonical
+base `1d0ca95`. It adds dormant provider-neutral opportunity/setup lifecycle
+identity, legal transitions, atomic append-only evidence, versioned
+cooldown/hysteresis/minimum-delta policy, exact replay/no-change behavior,
+stale/recovery rules, and separate discovery/monitoring outage evidence. It is
+not imported by existing runtime and has no provider, broker, order, scoring,
+selector, service, scheduler, Engine Host, Shadow, WPF, credential, schema, or
+production-data capability. Compileall, 38 focused tests, 195 adjacent tests,
+and all 1,352 Python tests pass. Preserve and back up the feature branch; do not
+merge or activate it before the frozen integration lane is reconciled.
 
 ## ARGUS-BROKER-ALPACA-001 Roadmap Reconciliation
 

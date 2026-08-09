@@ -29,35 +29,58 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-BROKER-ALPACA-001 is the approved execution-research direction. Alpaca is
-the preferred execution-provider candidate for fractional Paper execution,
-pending official-documentation research, secure Paper-only onboarding, and
-direct Alpaca Paper lifecycle proof. This is not authorization for live Alpaca
-trading, funding, money movement, or a live endpoint. Steven and the Vice
-President are handling creation of the Alpaca account externally and will ask
-Codex for assistance if needed; Momentum Hunter must not request, persist, or
-inspect credentials until that handoff occurs. Schwab's proven authentication,
-read-only account binding, quote, Streamer candle, `/pricehistory`, canonical
-candle, chart, and continuous-monitoring work remains the market-data
-foundation. Strategy logic remains broker-neutral:
+Current classifications are:
+
+```text
+A003_LIVE_ACCEPTANCE_BLOCKED_BY_MARKET_HOURS
+PROJECT_DEVELOPMENT_ACTIVE
+```
+
+Canonical `master` and `origin/master` are clean and synchronized at
+`1d0ca95`. The installed service, Monday opening jobs, Shadow state, Alpaca
+Paper state, and production data remain unchanged by the parallel work below.
+Integration is frozen where A003 evidence requires it; bounded offline
+development is not frozen.
+
+ARGUS-BROKER-ALPACA-001 secure Paper-only onboarding is implemented and backed
+up on feature commit `39576d9`; the Canary credential slot is encrypted with
+Windows current-user DPAPI and no credential value is tracked. ARGUS-BROKER-
+ALPACA-002 directly proved one owned `0.5`-share nonmarketable Paper limit order,
+client-order-ID recovery, cancellation, and terminal zero positions/open orders
+on feature commit `256d442`. These branches remain unmerged and disconnected
+from Momentum Hunter runtime. They do not authorize a live Alpaca endpoint.
+
+ARGUS-BROKER-ALPACA-003 is implemented and backed up on exact source
+`1abb4dd`. Git ancestry proves that `1abb4dd` includes original harness
+`7ccbad5` and strict adjudication commit `94c7c77`; Monday must test `1abb4dd`,
+not either earlier head. The remaining A003 gate is one bounded regular-market
+Paper lifecycle with terminal zero residual positions/orders, exact Paper-host
+identity, sanitized evidence, and automatic adjudication. Do not merge A001-
+A003, submit another Paper order, activate Shadow, or freeze provider-specific
+execution semantics before that proof passes.
+
+Schwab's proven authentication, read-only account binding, quote, Streamer
+candle, `/pricehistory`, canonical candle, chart, and continuous-monitoring work
+remains the market-data foundation. Strategy logic remains broker-neutral:
 
 ```text
 Schwab market data -> Momentum Hunter engine -> provider-capability boundary -> Alpaca Paper
 ```
 
-ARGUS-DATA-005B is `ACTIVE_ENGINEERING_PRECURSOR` on the isolated
-`codex/ARGUS-DATA-005B-shadow-allocation-activation` worktree from synchronized
-base `91e461f`. Its current uncommitted, tested scope preserves one fresh
-account snapshot per decision cycle, reuse of that immutable snapshot across
-all candidate assessments, fail-closed source behavior, and a write-once
-allocation-policy identity. Compileall and 80 focused tests pass. No numeric
-policy, selector arm, Shadow trade, provider adapter, credential, service,
-scheduler, or transmission capability has been activated. The proposed
-`$2 / $95 / $5 / $2 / $4 / 1 position / 30-second account age` values remain a
-canary-realistic policy candidate only. Whole-share quantity and one-position
-concurrency remain configurable engineering policies, not permanent strategy
-laws. DATA-005B must be reconciled into provider-neutral allocator
-infrastructure before Alpaca adapter work begins.
+ARGUS-DATA-005B provider-neutral allocation preparation is
+`IMPLEMENTED_PENDING_A003_ACCEPTANCE_AND_INTEGRATION` on backed-up branch
+`codex/ARGUS-DATA-005B-provider-neutral-allocation` at `046b127`, based on
+exact A003 source `1abb4dd`. It preserves `idealRiskQuantity`,
+`providerExecutableQuantity`, and `finalAuthorizedQuantity`; capability-driven
+fractional/whole-share quantization; buying-power, freshness, aggregate-risk,
+daily-loss, notional, and configurable-concurrency gates; rank-preserving
+multi-position research evidence; and separate Alpaca Paper versus conservative
+Momentum Hunter result domains. Compileall, 33 focused tests, 199 bounded
+regressions, and all 1,424 Python tests pass. No numeric production policy,
+provider call, selector arm, Shadow trade, service, scheduler, UI, or
+transmission path is activated. The older
+`codex/ARGUS-DATA-005B-shadow-allocation-activation` worktree remains preserved
+for comparison and must not be integrated as-is.
 
 The next execution program has two separately versioned lanes. The
 canary-realistic lane asks what the eventual small supervised account could
@@ -1360,9 +1383,40 @@ Status: `BLOCKED`; destructive-operation gate after R032C and R034A pass
 - Migrate individual proven workflows to the WPF shell only after their Python contracts and operator proof are complete.
 - Retire corresponding Qt screens incrementally, with acceptance evidence and rollback paths. Do not perform a broad rewrite.
 
+#### ARGUS-MONITOR-001 - Candidate Lifecycle And Event Coordinator
+
+Status: `IMPLEMENTED_PENDING_INTEGRATION` at `b71feb0`
+
+- Isolated branch `codex/ARGUS-MONITOR-001-candidate-lifecycle` adds a dormant,
+  provider-neutral coordinator for `DISCOVERED`, `WATCHING`, impulse, breakout,
+  pullback, reclaim, execution-eligible, missed, exhaustion, failure,
+  invalidation, cooldown, and stale states.
+- Opportunity identity is stable by symbol, market session, and originating
+  evidence family. Setup identity is separately sequenced and preserves
+  predecessor links so a missed or failed breakout cannot be silently relabeled
+  as a pullback or reclaim.
+- Atomic append-only JSON evidence validates chronology, legal transitions,
+  policy and record fingerprints, deterministic event IDs, exact duplicate
+  replay, stale/recovery boundaries, and setup-family semantics. Discovery and
+  monitoring outages are recorded separately and cannot erase watch state or be
+  backfilled as decisions.
+- Cooldown, hysteresis, and minimum-delta policy are versioned on every event;
+  an existing cooldown remains governed by the policy persisted on its
+  predecessor event. Quote-only events are structurally prohibited from
+  creating decision cycles.
+- Compileall, 38 focused tests, 195 adjacent monitoring/plan/selector/host
+  tests, and all 1,352 Python tests pass. No existing runtime imports the module;
+  no provider, broker, order, scoring, selector, service, scheduler, Engine Host,
+  Shadow, WPF, package, schema, credential, or production-data path changed.
+- Do not merge or wire MONITOR-001 before the frozen integration lane is
+  reconciled. After integration, use it as the identity/event substrate for
+  rolling regime, catalyst refresh, sequential breakout research, and later
+  immutable intraday plan versions; it does not itself detect or authorize a
+  setup.
+
 ### Phase 13 - Broker Execution Validation Gate
 
-Status: `ACTIVE_PROVIDER_RESEARCH / PAPER_ACCOUNT_HANDOFF_PENDING`
+Status: `A003_LIVE_ACCEPTANCE_BLOCKED_BY_MARKET_HOURS / PROJECT_DEVELOPMENT_ACTIVE`
 
 - ARGUS-BROKER-ALPACA-001 sequence: reconcile DATA-005B as provider-neutral
   infrastructure; prove official Alpaca account/Paper/live separation and every

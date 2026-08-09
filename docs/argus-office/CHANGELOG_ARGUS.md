@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Added MONITOR-001's dormant provider-neutral candidate lifecycle coordinator at `b71feb0`: stable opportunity/setup/predecessor identity, legal state transitions, atomic append-only evidence, deterministic event IDs, policy fingerprints, replay/no-change semantics, stale/recovery boundaries, and separate discovery/monitoring outage events.
+- Proved that discovery refresh cannot demote watch state, missed/failed breakouts require separate pullback/reclaim identities, quote-only events cannot create decision cycles, old cooldowns keep their persisted policy, and rehashed identity/policy tampering fails closed. Compileall, 38 focused tests, 195 adjacent tests, and all 1,352 Python tests pass; no runtime integration or provider/broker/order capability was added.
 - Reconciled the execution roadmap around ARGUS-BROKER-ALPACA-001. Alpaca Paper is the preferred fractional execution laboratory pending official documentation, secure Paper-only onboarding, and direct lifecycle proof; live Alpaca trading remains unauthorized.
 - Preserved Schwab as the proven market-data foundation and DATA-005B as provider-neutral engineering precursor work. Whole-share quantity, one-position concurrency, and the proposed `$2/$95/$5/$2/$4/1/30s` values remain provisional policies rather than permanent strategy laws.
 - Split future evidence into separately fingerprinted canary-realistic and strategy-research Paper lanes, with explicit broker capabilities, ideal/provider/final quantities, multi-position and rank-conditioned research, conservative execution evidence, and no retrospective trade manufacture.
