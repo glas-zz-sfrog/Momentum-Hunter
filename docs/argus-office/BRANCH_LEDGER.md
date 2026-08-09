@@ -2,6 +2,20 @@
 
 Date reconciled: 2026-08-09
 
+## ARGUS-REGIME-001 Rolling Market And Sector Regime
+
+`codex/ARGUS-REGIME-001-rolling-market-sector-regime` is
+`IMPLEMENTED_PENDING_INTEGRATION` at `a4b3de0`, stacked on MONITOR-001 closeout
+`d2b77c2` and ultimately on synchronized canonical base `1d0ca95`. It adds a
+dormant offline regime engine over terminal canonical bars, a fully embedded
+versioned policy, all seven approved labels, deterministic transition and
+tamper evidence, append-only atomic storage, and score-neutral bounded candidate
+fan-out. Compileall, 29 focused tests, 145 bounded adjacent tests, and all 1,381
+Python tests pass. No provider, scoring, recommendation, TradePlan, risk,
+broker/order, service, scheduler, Engine Host, Shadow, WPF, schema, credential,
+or production-data path changed. The branch may be backed up normally but must
+not be merged or activated before the frozen integration lane is reconciled.
+
 ## ARGUS-MONITOR-001 Candidate Lifecycle
 
 `codex/ARGUS-MONITOR-001-candidate-lifecycle` is

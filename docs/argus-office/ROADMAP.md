@@ -42,6 +42,20 @@ Paper state, and production data remain unchanged by the parallel work below.
 Integration is frozen where A003 evidence requires it; bounded offline
 development is not frozen.
 
+ARGUS-REGIME-001 rolling market and sector context is
+`IMPLEMENTED_PENDING_INTEGRATION` on stacked feature branch
+`codex/ARGUS-REGIME-001-rolling-market-sector-regime` at implementation commit
+`a4b3de0`. The dormant engine derives only from terminal canonical bars under a
+fully persisted caller-supplied policy; records all seven approved labels,
+sufficiency, source/bar identity, transition reason, and event-risk context;
+and exposes score-neutral context to a bounded watched-candidate set. It has no
+provider, scoring, recommendation, TradePlan, risk, broker, service, scheduler,
+Engine Host, Shadow, WPF, or production-data integration. Compileall, 29 focused
+tests, 145 bounded candle/lifecycle/research tests, and all 1,381 Python tests
+pass. Canonical integration remains frozen; parallel development may continue
+with `EVENT-001` while Monday A003 acceptance remains the separate market-hours
+gate.
+
 ARGUS-BROKER-ALPACA-001 secure Paper-only onboarding is implemented and backed
 up on feature commit `39576d9`; the Canary credential slot is encrypted with
 Windows current-user DPAPI and no credential value is tracked. ARGUS-BROKER-
@@ -1413,6 +1427,33 @@ Status: `IMPLEMENTED_PENDING_INTEGRATION` at `b71feb0`
   rolling regime, catalyst refresh, sequential breakout research, and later
   immutable intraday plan versions; it does not itself detect or authorize a
   setup.
+
+#### ARGUS-REGIME-001 - Rolling Market And Sector Regime
+
+Status: `IMPLEMENTED_PENDING_INTEGRATION` at `a4b3de0`
+
+- The isolated stacked branch derives `RISK_ON`, `RISK_OFF`, `MIXED`,
+  `SECTOR_ROTATION`, `VOLATILITY_SHOCK`, `EVENT_RISK`, or `DATA_STALE` only from
+  terminal canonical bar evidence and an explicit versioned policy supplied by
+  the caller. No numeric production policy is activated.
+- Every immutable snapshot binds the full policy definition and fingerprint,
+  benchmark and sector symbols, exact source/bar identities, input fingerprint,
+  evaluation and latest-bar clocks, sufficiency/confidence, prior snapshot,
+  transition reason, external event-risk identity, and per-symbol metrics.
+- Missing benchmark depth, future/provisional bars, stale evidence, internal
+  gaps, cross-symbol skew, mixed source identity, backward chronology, chain
+  tampering, and atomic-write failure all fail closed. Exact replay is
+  deterministic and byte-stable.
+- Bounded fan-out preserves watched-candidate order and sector availability,
+  requests reevaluation only after a prospective regime transition, and always
+  carries score authority `NONE`. Regime context is not a trade recommendation.
+- Compileall, 29 focused tests, 145 bounded candle/lifecycle/research tests, and
+  all 1,381 Python tests pass. The module is dormant and not imported by existing
+  runtime code.
+- Do not merge or activate REGIME-001 before the frozen integration lane is
+  reconciled. `EVENT-001` may proceed offline as the next parallel development
+  slice; Monday A003 direct Paper acceptance remains separately market-hours
+  blocked.
 
 ### Phase 13 - Broker Execution Validation Gate
 
