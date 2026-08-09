@@ -18,6 +18,8 @@ hardens the isolated Alpaca adapter with:
 - a write-once plan created before provider mutation;
 - bounded polling, partial-fill recognition, and three finite flatten IDs;
 - distant stop, stop-limit, target, replacement, and cancel checks;
+- a pure offline capability adjudicator that requires the exact fingerprinted
+  identity, event, receipt, and final-flat chain before promotion;
 - write-once final/failure evidence outside Git.
 
 The planned direct proof is one `$1.00` notional SPY market entry in the
@@ -43,15 +45,19 @@ Synthetic tests prove:
 8. A provider interruption preserves failure evidence and performs bounded
    cleanup.
 9. Final evidence contains no account identity or credential-shaped values.
+10. Tampered, dirty, receipt-free, and incomplete lifecycle reports cannot
+    promote capabilities; unexercised bracket/OCO/OTO, streaming, and linked
+    protection remain unproven.
 
 ## Verification
 
 - Compileall: pass.
 - Adapter tests: `32 / 32` pass.
-- Lifecycle tests: `15 / 15` pass.
+- Lifecycle tests: `20 / 20` pass.
+- Focused onboarding/adapter/lifecycle stack: `76 / 76` pass.
 - Adjacent Paper/onboarding/allocation/TradePlan/simulation tests:
   `151 / 151` pass.
-- Full Python discovery: `1,385 / 1,385` pass in 292.763 seconds.
+- Full Python discovery: `1,390 / 1,390` pass in 255.889 seconds.
 - `git diff --check`: pass.
 - Protected-path scan: no Engine Host, scheduler, service, Shadow, scoring,
   readiness, schema, package, WPF, or production configuration files changed.
@@ -76,6 +82,13 @@ behavior, restart reconciliation, and exact liquidation remain
 `DOCUMENTED_UNPROVEN` or `UNKNOWN` until one direct regular-market proof passes.
 Bracket/OCO/OTO, streaming, extended hours, and broker-resident linked
 protection remain outside this slice.
+
+The offline adjudicator will promote only Paper environment, fractional
+quantity/market/limit/stop/stop-limit, price replacement, cancellation, and
+client-order identity when the final report contains the exact successful
+provider receipt and lifecycle chain. It does not treat a classification label
+alone as proof and does not infer native take-profit, bracket, OCO, OTO,
+streaming, overnight, or linked-protection support.
 
 ## Next Action
 

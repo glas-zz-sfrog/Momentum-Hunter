@@ -7,7 +7,11 @@
   stop/stop-limit/target checks, bounded exact liquidation, sanitized provider
   receipts, and write-once external evidence.
 - Proved the implementation synthetically with 32 adapter tests, 15 lifecycle
-  tests, 151 adjacent tests, and all 1,385 Python tests. Canonical `master`, the
+  tests, 151 adjacent tests, and all 1,385 Python tests. Added a second-pass
+  offline adjudicator that rejects tampered, dirty, incomplete, or receipt-free
+  reports and promotes only capabilities present in the exact direct lifecycle
+  chain; 20 lifecycle tests, 76 focused Alpaca-stack tests, and all 1,390 Python
+  tests now pass. Canonical `master`, the
   installed service/manifest, all 25 opening jobs, and zero-Shadow-job state
   remain unchanged.
 - Kept every unobserved lifecycle capability unproven. The direct provider run

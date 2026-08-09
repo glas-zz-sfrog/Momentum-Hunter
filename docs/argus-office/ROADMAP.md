@@ -66,9 +66,14 @@ polling, partial-fill recognition, distant stop/stop-limit/target hosting,
 price-only replacement, three finite exact-quantity flatten attempts, sanitized
 provider receipts, and write-once final/failure evidence outside Git. Synthetic
 restart, interruption, orphan-state, partial-fill, tamper, duplicate-run, and
-forced-flat tests pass; compileall, 151 adjacent tests, and all 1,385 Python
-tests pass. Because 2026-08-09 is Sunday, no direct provider lifecycle was run
-and no remaining capability is promoted from unproven. No Alpaca code is
+forced-flat tests pass. A pure offline adjudicator now requires the exact
+fingerprinted lifecycle/event/provider-receipt chain, clean final-flat state,
+and frozen command identities before promoting only directly observed
+capabilities; bracket/OCO/OTO, streaming, linked protection, and every other
+unobserved capability remain unproven. Compileall, 76 focused Alpaca-stack
+tests, and all 1,390 Python tests pass. Because 2026-08-09 is Sunday, no direct
+provider lifecycle was run and no remaining capability is promoted from
+unproven. No Alpaca code is
 installed, merged into canonical `master`, or reachable from Engine Host,
 Shadow, scheduler, service, WPF, or production execution. This is not
 authorization for live Alpaca trading, funding, money movement, or a live

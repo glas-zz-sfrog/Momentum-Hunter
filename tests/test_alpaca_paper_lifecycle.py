@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+from copy import deepcopy
 import tempfile
 import unittest
 from dataclasses import replace
@@ -22,10 +23,26 @@ from momentum_hunter.alpaca_paper_broker import (
 from momentum_hunter.alpaca_paper_lifecycle import (
     PAPER_LIFECYCLE_CONFIRMATION,
     AlpacaPaperLifecycleError,
+    _report_fingerprint,
+    adjudicate_lifecycle_capabilities,
     create_lifecycle_plan,
     load_lifecycle_plan,
     run_paper_lifecycle_proof,
     write_lifecycle_plan,
+)
+from momentum_hunter.broker_capabilities import (
+    CAPABILITY_BROKER_RESIDENT_PROTECTION,
+    CAPABILITY_FRACTIONAL_BRACKET,
+    CAPABILITY_FRACTIONAL_LIMIT,
+    CAPABILITY_FRACTIONAL_MARKET,
+    CAPABILITY_FRACTIONAL_OCO,
+    CAPABILITY_FRACTIONAL_OTO,
+    CAPABILITY_FRACTIONAL_QUANTITY,
+    CAPABILITY_FRACTIONAL_REPLACE,
+    CAPABILITY_FRACTIONAL_STOP,
+    CAPABILITY_FRACTIONAL_STOP_LIMIT,
+    CAPABILITY_ORDER_STATUS_STREAM,
+    CapabilityState,
 )
 from momentum_hunter.alpaca_paper_onboarding import AlpacaPaperAccount
 from momentum_hunter.time_utils import CENTRAL_TZ
@@ -33,6 +50,18 @@ from momentum_hunter.time_utils import CENTRAL_TZ
 
 MARKET_TIME = datetime(2026, 8, 10, 10, 0, tzinfo=CENTRAL_TZ)
 WEEKEND_TIME = datetime(2026, 8, 9, 10, 0, tzinfo=CENTRAL_TZ)
+
+
+def _receipt(method: str, path: str, status: int) -> dict[str, object]:
+    return {
+        "method": method,
+        "path": path,
+        "httpStatus": status,
+        "requestId": "synthetic-request-id",
+        "requestIdPresent": True,
+        "receivedAt": "2026-08-10T15:00:00+00:00",
+        "payload": None,
+    }
 
 
 class _FakeLifecycleAdapter:
@@ -411,6 +440,89 @@ class AlpacaPaperLifecycleRunnerTests(unittest.TestCase):
             current_time=MARKET_TIME,
             sleep=lambda _seconds: None,
         )
+
+    def _direct_report(self, directory: Path) -> dict[str, object]:
+        report = self._run(_FakeLifecycleAdapter(), directory)
+        execution = report["execution"]
+        assert isinstance(execution, dict)
+        stop_id = execution["protectiveStop"]["orderId"]
+        stop_limit_id = execution["protectiveStopLimit"]["orderId"]
+        replacement_id = execution["targetReplacement"]["orderId"]
+        report["providerReceipts"] = [
+            _receipt("GET", "/v2/account", 200),
+            _receipt("GET", "/v2/assets/SPY", 200),
+            _receipt("GET", "/v2/positions", 200),
+            _receipt("GET", "/v2/orders", 200),
+            _receipt("GET", "/v2/orders:by_client_order_id", 404),
+            *[_receipt("POST", "/v2/orders", 200) for _index in range(5)],
+            _receipt("PATCH", f"/v2/orders/{replacement_id}", 200),
+            _receipt("DELETE", f"/v2/orders/{stop_id}", 204),
+            _receipt("DELETE", f"/v2/orders/{stop_limit_id}", 204),
+            _receipt("DELETE", f"/v2/orders/{replacement_id}", 204),
+        ]
+        report["fingerprint"] = _report_fingerprint(report)
+        return report
+
+    def test_direct_report_promotes_only_observed_lifecycle_capabilities(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            report = self._direct_report(Path(temp))
+            before = deepcopy(report)
+            registry = adjudicate_lifecycle_capabilities(report)
+            self.assertEqual(before, report)
+            for capability in (
+                CAPABILITY_FRACTIONAL_QUANTITY,
+                CAPABILITY_FRACTIONAL_MARKET,
+                CAPABILITY_FRACTIONAL_LIMIT,
+                CAPABILITY_FRACTIONAL_STOP,
+                CAPABILITY_FRACTIONAL_STOP_LIMIT,
+                CAPABILITY_FRACTIONAL_REPLACE,
+            ):
+                self.assertEqual(CapabilityState.PROVEN, registry.get(capability).state)
+            for capability in (
+                CAPABILITY_FRACTIONAL_BRACKET,
+                CAPABILITY_FRACTIONAL_OCO,
+                CAPABILITY_FRACTIONAL_OTO,
+                CAPABILITY_ORDER_STATUS_STREAM,
+                CAPABILITY_BROKER_RESIDENT_PROTECTION,
+            ):
+                self.assertIsNot(CapabilityState.PROVEN, registry.get(capability).state)
+
+    def test_adjudication_rejects_tampered_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            report = self._direct_report(Path(temp))
+            report["finalPositions"] = 1
+            with self.assertRaisesRegex(AlpacaPaperLifecycleError, "fingerprint"):
+                adjudicate_lifecycle_capabilities(report)
+
+    def test_adjudication_rejects_dirty_final_state_even_with_new_fingerprint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            report = self._direct_report(Path(temp))
+            report["finalOpenOrders"] = 1
+            report["fingerprint"] = _report_fingerprint(report)
+            with self.assertRaisesRegex(AlpacaPaperLifecycleError, "clean Paper-only"):
+                adjudicate_lifecycle_capabilities(report)
+
+    def test_adjudication_rejects_missing_direct_provider_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            report = self._direct_report(Path(temp))
+            report["providerReceipts"] = []
+            report["fingerprint"] = _report_fingerprint(report)
+            with self.assertRaisesRegex(AlpacaPaperLifecycleError, "provider receipts"):
+                adjudicate_lifecycle_capabilities(report)
+
+    def test_adjudication_rejects_incomplete_lifecycle_event_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            report = self._direct_report(Path(temp))
+            report["events"] = [
+                item
+                for item in report["events"]
+                if item["event"] != "PROTECTIVE_STOP_HOSTED"
+            ]
+            report["fingerprint"] = _report_fingerprint(report)
+            with self.assertRaisesRegex(
+                AlpacaPaperLifecycleError, "PROTECTIVE_STOP_HOSTED"
+            ):
+                adjudicate_lifecycle_capabilities(report)
 
     def test_closed_market_gate_blocks_before_network_or_files(self) -> None:
         adapter = _FakeLifecycleAdapter()

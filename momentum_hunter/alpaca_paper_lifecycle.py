@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, time as clock_time, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 from uuid import uuid4
 
 from momentum_hunter.alpaca_paper_broker import (
@@ -26,7 +26,22 @@ from momentum_hunter.alpaca_paper_broker import (
     PaperOrderResolution,
     authorize_paper_capability_probe,
 )
+from momentum_hunter.alpaca_fractional_proof import documented_capability_registry
 from momentum_hunter.alpaca_paper_onboarding import AlpacaPaperLane
+from momentum_hunter.broker_capabilities import (
+    CAPABILITY_CANCEL,
+    CAPABILITY_CLIENT_ORDER_ID,
+    CAPABILITY_FRACTIONAL_LIMIT,
+    CAPABILITY_FRACTIONAL_MARKET,
+    CAPABILITY_FRACTIONAL_QUANTITY,
+    CAPABILITY_FRACTIONAL_REPLACE,
+    CAPABILITY_FRACTIONAL_STOP,
+    CAPABILITY_FRACTIONAL_STOP_LIMIT,
+    CAPABILITY_PAPER_ENVIRONMENT,
+    BrokerCapability,
+    BrokerCapabilityRegistry,
+    CapabilityState,
+)
 from momentum_hunter.scheduling import is_market_open_day, is_nyse_early_close
 from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 
@@ -285,6 +300,7 @@ def run_paper_lifecycle_proof(
         "orderTransmissionScope": "ALPACA_PAPER_CAPABILITY_LAB_ONLY",
         "accountIdentityIncluded": False,
         "credentialValuesIncluded": False,
+        "maximumEntryNotional": "1.00",
     }
     report["fingerprint"] = _report_fingerprint(report)
     _assert_sanitized(report)
@@ -804,6 +820,365 @@ def _report_fingerprint(report: dict[str, object]) -> str:
     canonical.pop("fingerprint", None)
     canonical.pop("outputPath", None)
     return _sha256(canonical)
+
+
+def adjudicate_lifecycle_capabilities(
+    report: Mapping[str, object],
+) -> BrokerCapabilityRegistry:
+    """Promote only capabilities proven by a complete direct Paper lifecycle report."""
+
+    candidate = dict(report)
+    _assert_sanitized(candidate)
+    if candidate.get("fingerprint") != _report_fingerprint(candidate):
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence fingerprint is invalid."
+        )
+    required_identity = {
+        "schemaVersion": LIFECYCLE_SCHEMA_VERSION,
+        "classification": "ALPACA_PAPER_LIFECYCLE_PROVEN",
+        "lane": AlpacaPaperLane.CANARY_REALISTIC.value,
+        "provider": "ALPACA_TRADING_API",
+        "environment": "PAPER_ONLY",
+        "paperHostOnly": True,
+        "liveHostReachable": False,
+        "anomaly": False,
+        "failure": None,
+        "finalStateVerified": True,
+        "finalPositions": 0,
+        "finalOpenOrders": 0,
+        "cleanAfterProof": True,
+        "runtimeWiring": False,
+        "orderTransmissionScope": "ALPACA_PAPER_CAPABILITY_LAB_ONLY",
+        "accountIdentityIncluded": False,
+        "credentialValuesIncluded": False,
+    }
+    if any(candidate.get(key) != value for key, value in required_identity.items()):
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence is not a clean Paper-only final proof."
+        )
+
+    execution = _required_mapping(candidate.get("execution"), "execution")
+    if execution.get("exactLiquidation") is not True:
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence does not prove exact liquidation."
+        )
+    symbol = str(candidate.get("symbol", "")).strip().upper()
+    if not symbol:
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has no symbol."
+        )
+    proof_id = str(candidate.get("proofId", ""))
+    plan_fingerprint = str(candidate.get("planFingerprint", ""))
+    if not _PROOF_ID_PATTERN.fullmatch(proof_id) or not re.fullmatch(
+        r"[0-9A-F]{64}", plan_fingerprint
+    ):
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has invalid frozen identity."
+        )
+    command_prefix = f"mh-paper-capability-lc-{proof_id.rsplit('-', 1)[-1]}"
+    entry = _required_order_summary(
+        execution.get("entryOrder"),
+        label="entry",
+        symbol=symbol,
+        side="buy",
+        order_type="market",
+        client_suffix="-entry",
+        statuses={"filled", "canceled"},
+    )
+    entry_quantity = _positive_decimal(entry.get("filledQuantity"), "entry fill")
+    if entry.get("clientOrderId") != f"{command_prefix}-entry":
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has a mismatched entry command ID."
+        )
+    position_quantity = _positive_decimal(
+        execution.get("positionQuantity"), "position quantity"
+    )
+    if entry_quantity != position_quantity or entry_quantity == entry_quantity.to_integral_value():
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence does not prove an exact fractional position."
+        )
+    if _positive_decimal(execution.get("entryFilledQuantity"), "entry quantity") != entry_quantity:
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has contradictory entry quantities."
+        )
+
+    stop = _required_order_summary(
+        execution.get("protectiveStop"),
+        label="protective stop",
+        symbol=symbol,
+        side="sell",
+        order_type="stop",
+        client_suffix="-stop",
+        statuses={"canceled"},
+    )
+    stop_limit = _required_order_summary(
+        execution.get("protectiveStopLimit"),
+        label="protective stop-limit",
+        symbol=symbol,
+        side="sell",
+        order_type="stop_limit",
+        client_suffix="-stop-limit",
+        statuses={"canceled"},
+    )
+    replacement = _required_order_summary(
+        execution.get("targetReplacement"),
+        label="target replacement",
+        symbol=symbol,
+        side="sell",
+        order_type="limit",
+        client_suffix="-replace",
+        statuses={"canceled"},
+    )
+    expected_commands = {
+        "protective stop": f"{command_prefix}-stop",
+        "protective stop-limit": f"{command_prefix}-stop-limit",
+        "target replacement": f"{command_prefix}-replace",
+    }
+    for label, order in (
+        ("protective stop", stop),
+        ("protective stop-limit", stop_limit),
+        ("target replacement", replacement),
+    ):
+        if (
+            order.get("clientOrderId") != expected_commands[label]
+            or _positive_decimal(order.get("quantity"), f"{label} quantity")
+            != position_quantity
+        ):
+            raise AlpacaPaperLifecycleError(
+                f"Paper lifecycle capability evidence has a mismatched {label} quantity."
+            )
+    if stop.get("stopPrice") is None:
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has no protective stop price."
+        )
+    if stop_limit.get("stopPrice") is None or stop_limit.get("limitPrice") is None:
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has incomplete stop-limit prices."
+        )
+    if replacement.get("limitPrice") is None or not replacement.get("replaces"):
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has no verified target replacement."
+        )
+
+    exits = execution.get("exitOrders")
+    if not isinstance(exits, list) or not exits:
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has no liquidation orders."
+        )
+    exit_filled = Decimal("0")
+    for index, raw_exit in enumerate(exits, start=1):
+        exit_order = _required_order_summary(
+            raw_exit,
+            label=f"exit {index}",
+            symbol=symbol,
+            side="sell",
+            order_type="market",
+            client_suffix=None,
+            statuses={"filled", "canceled"},
+        )
+        client_order_id = str(exit_order.get("clientOrderId", ""))
+        if client_order_id != f"{command_prefix}-exit-{index}":
+            raise AlpacaPaperLifecycleError(
+                "Paper lifecycle capability evidence has an invalid liquidation command ID."
+            )
+        exit_filled += _positive_decimal(
+            exit_order.get("filledQuantity"), f"exit {index} fill"
+        )
+    if exit_filled != position_quantity:
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence does not prove exact fractional liquidation."
+        )
+
+    _require_lifecycle_event_chain(candidate.get("events"))
+    _require_provider_receipt_chain(candidate.get("providerReceipts"), symbol=symbol)
+
+    proof = f"paper-lifecycle-proof-sha256:{candidate['fingerprint']}"
+    proven_values = {
+        CAPABILITY_PAPER_ENVIRONMENT: (
+            "exact Paper-only lifecycle reached a verified flat final state"
+        ),
+        CAPABILITY_FRACTIONAL_QUANTITY: (
+            f"fractional quantity {position_quantity:f} entered and liquidated exactly"
+        ),
+        CAPABILITY_FRACTIONAL_MARKET: (
+            "fractional market entry and exact market liquidation filled"
+        ),
+        CAPABILITY_FRACTIONAL_LIMIT: "standalone fractional limit target was accepted",
+        CAPABILITY_FRACTIONAL_STOP: "standalone fractional stop was accepted and canceled",
+        CAPABILITY_FRACTIONAL_STOP_LIMIT: (
+            "standalone fractional stop-limit was accepted and canceled"
+        ),
+        CAPABILITY_FRACTIONAL_REPLACE: "fractional limit price replacement was accepted",
+        CAPABILITY_CANCEL: "fractional stop, stop-limit, and replacement orders were canceled",
+        CAPABILITY_CLIENT_ORDER_ID: "frozen client order IDs were preserved through the lifecycle",
+    }
+    capabilities: list[BrokerCapability] = []
+    for capability in documented_capability_registry().capabilities:
+        value = proven_values.get(capability.name)
+        if value is None:
+            capabilities.append(capability)
+            continue
+        capabilities.append(
+            BrokerCapability(
+                capability.name,
+                CapabilityState.PROVEN,
+                value,
+                (proof, *capability.evidence),
+            )
+        )
+    return BrokerCapabilityRegistry.build(
+        provider="ALPACA_TRADING_API",
+        environment="PAPER_ONLY",
+        capabilities=capabilities,
+    )
+
+
+def _required_mapping(value: object, label: str) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        raise AlpacaPaperLifecycleError(
+            f"Paper lifecycle capability evidence has invalid {label}."
+        )
+    return dict(value)
+
+
+def _positive_decimal(value: object, label: str) -> Decimal:
+    try:
+        result = Decimal(str(value))
+    except Exception:
+        raise AlpacaPaperLifecycleError(
+            f"Paper lifecycle capability evidence has invalid {label}."
+        ) from None
+    if not result.is_finite() or result <= 0:
+        raise AlpacaPaperLifecycleError(
+            f"Paper lifecycle capability evidence has invalid {label}."
+        )
+    return result
+
+
+def _required_order_summary(
+    value: object,
+    *,
+    label: str,
+    symbol: str,
+    side: str,
+    order_type: str,
+    client_suffix: str | None,
+    statuses: set[str],
+) -> dict[str, object]:
+    order = _required_mapping(value, label)
+    client_order_id = str(order.get("clientOrderId", ""))
+    if (
+        order.get("symbol") != symbol
+        or order.get("side") != side
+        or order.get("type") != order_type
+        or order.get("status") not in statuses
+        or order.get("requestIdPresent") is not True
+        or not str(order.get("orderId", "")).strip()
+        or not client_order_id
+        or (client_suffix is not None and not client_order_id.endswith(client_suffix))
+    ):
+        raise AlpacaPaperLifecycleError(
+            f"Paper lifecycle capability evidence has invalid {label} order evidence."
+        )
+    return order
+
+
+def _require_lifecycle_event_chain(value: object) -> None:
+    if not isinstance(value, list) or any(not isinstance(item, Mapping) for item in value):
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has invalid events."
+        )
+    names = [str(item.get("event", "")) for item in value]
+    entry_event = (
+        "ENTRY_RESOLVED"
+        if "ENTRY_RESOLVED" in names
+        else "RECOVERED_EXISTING_POSITION"
+    )
+    required = (
+        "PREFLIGHT_PASSED",
+        entry_event,
+        "PROTECTIVE_STOP_HOSTED",
+        "PROTECTIVE_STOP_CANCEL_REQUESTED",
+        "PROTECTIVE_STOP_LIMIT_HOSTED",
+        "PROTECTIVE_STOP_LIMIT_CANCEL_REQUESTED",
+        "TARGET_HOSTED",
+        "TARGET_REPLACED",
+        "TARGET_REPLACEMENT_CANCEL_REQUESTED",
+        "EXIT_RESOLVED",
+    )
+    cursor = -1
+    for event in required:
+        try:
+            cursor = names.index(event, cursor + 1)
+        except ValueError:
+            raise AlpacaPaperLifecycleError(
+                f"Paper lifecycle capability evidence is missing event {event}."
+            ) from None
+
+
+def _require_provider_receipt_chain(value: object, *, symbol: str) -> None:
+    if not isinstance(value, list) or not value or any(
+        not isinstance(item, Mapping) for item in value
+    ):
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has no direct provider receipts."
+        )
+    mutation_counts = {"POST": 0, "PATCH": 0, "DELETE": 0}
+    observed_reads: set[str] = set()
+    for raw_receipt in value:
+        receipt = dict(raw_receipt)
+        method = str(receipt.get("method", "")).upper()
+        path = str(receipt.get("path", ""))
+        status = receipt.get("httpStatus")
+        try:
+            from momentum_hunter.alpaca_paper_broker import _require_allowed_request
+
+            _require_allowed_request(method, path)
+        except Exception:
+            raise AlpacaPaperLifecycleError(
+                "Paper lifecycle capability evidence contains a non-Paper request path."
+            ) from None
+        expected = {
+            "POST": {200},
+            "PATCH": {200},
+            "DELETE": {204},
+            "GET": {200, 404},
+        }
+        if method not in expected or status not in expected[method]:
+            raise AlpacaPaperLifecycleError(
+                "Paper lifecycle capability evidence contains an unsuccessful provider receipt."
+            )
+        if not str(receipt.get("receivedAt", "")).strip():
+            raise AlpacaPaperLifecycleError(
+                "Paper lifecycle capability evidence contains an undated provider receipt."
+            )
+        if method in mutation_counts:
+            mutation_counts[method] += 1
+        elif method == "GET":
+            if path in {
+                "/v2/account",
+                "/v2/positions",
+                "/v2/orders",
+                "/v2/orders:by_client_order_id",
+                f"/v2/assets/{symbol}",
+            }:
+                observed_reads.add(path)
+    if (
+        mutation_counts["POST"] < 4
+        or mutation_counts["PATCH"] < 1
+        or mutation_counts["DELETE"] < 3
+        or observed_reads
+        != {
+            "/v2/account",
+            "/v2/positions",
+            "/v2/orders",
+            "/v2/orders:by_client_order_id",
+            f"/v2/assets/{symbol}",
+        }
+    ):
+        raise AlpacaPaperLifecycleError(
+            "Paper lifecycle capability evidence has an incomplete provider mutation chain."
+        )
 
 
 def _sha256(value: object) -> str:
