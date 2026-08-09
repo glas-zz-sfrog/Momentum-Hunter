@@ -5,7 +5,7 @@ Date reconciled: 2026-08-09
 ## ARGUS-BROKER-ALPACA-003 Paper Lifecycle Harness
 
 `codex/ARGUS-BROKER-ALPACA-003-paper-lifecycle-proof` is
-`IMPLEMENTED_PENDING_MARKET_HOURS_PROOF`. It is stacked on A002 `256d442` and
+`A003_LIVE_ACCEPTANCE_BLOCKED_BY_MARKET_HOURS`. It is stacked on A002 `256d442` and
 adds only an isolated Paper adapter hardening layer, lifecycle harness,
 synthetic tests, and branch-local governance evidence. Compileall, 32 adapter
 tests, 21 lifecycle tests, 77 focused Alpaca-stack tests, and all 1,391 Python
@@ -13,6 +13,9 @@ tests pass. The offline capability adjudicator requires exact frozen command
 identity, ordered lifecycle events, allowlisted direct provider receipts, and a
 clean final-flat state; the CLI emits its registry only after success and leaves
 every unobserved capability unproven.
+`7ccbad5` is the original harness, `94c7c77` adds strict adjudication, and
+`1abb4dd` adds automatic registry output. `7ccbad5` and `94c7c77` are ancestors
+of `1abb4dd`; the exact source identity for Monday's direct proof is `1abb4dd`.
 No direct provider lifecycle was attempted on Sunday, so remaining fractional
 market/protective/replacement/liquidation capabilities are still unproven. No
 live host, Engine Host, Shadow, service, scheduler, WPF, or production order
@@ -61,8 +64,18 @@ observed the first job as `PENDING`; no service reinstall or restart occurred.
 
 ## ARGUS-DATA-005B Shadow Allocation Activation
 
+`codex/ARGUS-DATA-005B-provider-neutral-allocation` is
+`IMPLEMENTED_PENDING_A003_ACCEPTANCE_AND_INTEGRATION` from exact A003 head
+`1abb4dd`. It adds only dormant provider-neutral allocation, multi-position
+Paper-research, and dual-result evidence contracts plus synthetic tests.
+Compileall, 27 focused tests, 142 adjacent regressions, and all 1,418 Python
+tests pass. No provider call, Paper mutation, Alpaca-specific capability
+promotion, selector arm, Shadow state, service, scheduler, UI, credential, or
+order path is connected. Integration and numeric policy activation wait for
+the direct A003 adjudication.
+
 `codex/ARGUS-DATA-005B-shadow-allocation-activation` is
-`ACTIVE_ENGINEERING_PRECURSOR / NOT_ACTIVATED` in a separate worktree from
+`PRESERVED_DIRTY_PRECURSOR / DO_NOT_INTEGRATE_AS_IS` in a separate worktree from
 `91e461f`. Its current uncommitted provider-neutral work freezes one fresh
 account context per decision cycle, reuses it across candidate assessments,
 fails closed on source error, and adds write-once allocation-policy identity.
@@ -71,8 +84,9 @@ selector arm, Shadow trade, credential, provider adapter, service/scheduler
 change, or transmission capability. Reconcile it narrowly under the Alpaca
 direction; do not discard it or freeze whole-share/single-position behavior as
 permanent strategy law. Its next closeout must preserve the provider-neutral
-precursor and defer broker quantization plus separate numeric policy activation
-until Alpaca Paper capabilities are proven.
+  precursor and defer broker quantization plus separate numeric policy activation
+  until Alpaca Paper capabilities are proven. Preserve it without reset,
+  discard, or accidental integration.
 
 ## ARGUS-DATA-005A Fresh Account And Portfolio Snapshot
 

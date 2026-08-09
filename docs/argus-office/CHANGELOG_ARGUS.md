@@ -1,6 +1,24 @@
 # Argus Changelog
 
 ## Unreleased
+- Added dormant provider-neutral DATA-005B allocation contracts with explicit
+  `AccountSnapshot`, broker capabilities, and three quantity stages:
+  `idealRiskQuantity`, `providerExecutableQuantity`, and
+  `finalAuthorizedQuantity`. Synthetic policies cover fractional or whole-share
+  increments, buying power, reserve, freshness, aggregate open risk, daily loss,
+  per-position notional, and configurable concurrency without selecting a
+  provider or numeric production policy.
+- Added nonactivating prospective Paper research evidence that preserves Rank
+  1/2/3 identity and independent eligibility under multi-position limits, plus
+  separate `ALPACA_PAPER_EXECUTION_RESULT` and
+  `MH_CONSERVATIVE_EXECUTABLE_RESULT` contracts whose statistics cannot be
+  combined. Compileall, 27 focused tests, 142 bounded regressions, and all 1,418
+  Python tests pass; no provider, account, order, Shadow, service, scheduler,
+  Engine Host, WPF, credential, or production runtime path is wired.
+- Reconciled A003 source identity: `7ccbad5` is the original harness,
+  `94c7c77` adds adjudication, and `1abb4dd` includes both plus automatic
+  capability-registry output. Monday's direct market-hours proof must test
+  `1abb4dd`. A003 acceptance is time-blocked; project development remains active.
 - Added the isolated A003 Alpaca Paper lifecycle harness with a write-once
   one-dollar SPY plan, frozen client-order identities, market-hours gate,
   idempotent submit/replace recovery, partial-fill handling, distant
