@@ -1,5 +1,10 @@
 # Argus Changelog
 
+- Integrated and backed up ARGUS-BROKER-ALPACA-004, froze the versioned Canary
+  Paper engineering sample, repinned the opening schedule, and installed the
+  first exact-head Paper job behind the August 11 opening capture. Read-only
+  activation preflight found an active `$100` Paper account with zero positions
+  and zero open orders; no prospective order has yet been submitted.
 - Built the first complete prospective Canary Alpaca Paper engineering path:
   trusted Schwab evidence, same-session TradePlan, Paper Risk Governor,
   provider-neutral fractional allocation, deterministic selection, Paper entry,

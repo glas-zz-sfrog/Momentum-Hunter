@@ -2,13 +2,15 @@
 
 ## ARGUS-BROKER-ALPACA-004 Paper Engineering
 
-`codex/ARGUS-BROKER-ALPACA-004-paper-engineering` is `ACTIVE` from synchronized
-canonical base `e6d8af1`. It contains the Hard-Chew-proven Paper Risk,
+`codex/ARGUS-BROKER-ALPACA-004-paper-engineering` is
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` through implementation commit
+`93f944c` from synchronized canonical base `e6d8af1`. It contains the
+Hard-Chew-proven Paper Risk,
 allocation, execution, recovery, lifecycle-monitor, and Automation Service
 wiring for the canary engineering sample. No provider mutation occurred during
-implementation. Next action is one clean fast-forward integration and
-non-force backup, followed by installed-service refresh, sample freeze, and a
-same-head opening-dependent prospective Paper job. Do not use this branch for
+implementation. Canonical `master` and the feature branch are backed up; the
+running service hot-loaded the new path, the sample is frozen, and the August 11
+same-head opening-dependent prospective Paper job is pending. Do not use this branch for
 Alpaca live trading or the final continuous-intraday strategy sample.
 
 

@@ -40,9 +40,13 @@ installer refuses manifest mutation while another automation job is running.
 - `git diff --check`: PASS.
 - Provider calls and Paper orders during implementation: zero.
 
-## Remaining Activation Work
+## Activation State
 
-Integrate and back up the branch, refresh the installed service, freeze the
-versioned engineering sample, install the next same-head Paper job, and preserve
-the first prospective provider result. This release does not authorize or make
-reachable an Alpaca live order.
+Implementation commit `93f944c` is integrated and backed up. The running
+service hot-loaded the new job kind, sample
+`alpaca-paper-engineering-20260810-v1` is frozen from the accepted A003 proof,
+and the August 11 Paper job is pending behind the same-date opening capture.
+Read-only activation preflight found an active `$100` Canary Paper account with
+zero positions and zero open orders. The remaining step is the first prospective
+provider decision. This release does not authorize or make reachable an Alpaca
+live order.
