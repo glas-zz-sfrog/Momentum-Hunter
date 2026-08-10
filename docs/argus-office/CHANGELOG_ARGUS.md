@@ -1,6 +1,11 @@
 # Argus Changelog
 
 ## Unreleased
+- Fast-forwarded the directly proven A001-A003 Paper stack into canonical
+  `master` after compileall, 53 immediate tests, all 1,391 Python tests,
+  protected-path review, exact-credential scan, and independent zero-position/
+  zero-order reconciliation passed. No runtime imports the Paper adapter and no
+  live endpoint or strategy sample was enabled.
 - Added the isolated A003 Alpaca Paper lifecycle harness with a write-once
   one-dollar SPY plan, frozen client-order identities, market-hours gate,
   idempotent submit/replace recovery, partial-fill handling, distant

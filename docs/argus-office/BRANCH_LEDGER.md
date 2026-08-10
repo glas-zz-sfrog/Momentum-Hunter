@@ -5,7 +5,8 @@ Date reconciled: 2026-08-10
 ## ARGUS-BROKER-ALPACA-003 Paper Lifecycle Harness
 
 `codex/ARGUS-BROKER-ALPACA-003-paper-lifecycle-proof` is
-`DIRECT_PROOF_COMPLETE_PENDING_INTEGRATION`. It is stacked on A002 `256d442` and
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` through direct-proof closeout
+`c62eb93`. It is stacked on A002 `256d442` and
 adds only an isolated Paper adapter hardening layer, lifecycle harness,
 synthetic tests, and branch-local governance evidence. Compileall, 32 adapter
 tests, 21 lifecycle tests, 77 focused Alpaca-stack tests, and all 1,391 Python
@@ -20,27 +21,29 @@ completed. Persisted and independent checks found zero positions and zero open
 orders, with no credential or account identity in evidence. Final-evidence
 SHA-256 is `A1A4CDDFC60BF03DDC7D23B0F9AF548F64B107DF34E88287477E548B75A54414`.
 No live host, Engine Host, Shadow, service, scheduler, WPF, or production order
-path is reachable. Next action: clean fast-forward integration, backup, opening-
-job repin, then provider-neutral DATA-005B reconciliation.
+path is reachable. The stack fast-forwarded cleanly into canonical `master`;
+next action is final-head opening-job repin, then provider-neutral DATA-005B
+reconciliation.
 
 ## ARGUS-BROKER-ALPACA-002 Fractional Capability Foundation
 
 `codex/ARGUS-BROKER-ALPACA-002-fractional-capability` is
-`IMPLEMENTED_PENDING_INTEGRATION / PUSHED_FEATURE_BRANCH` stacked on secure
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` through the A003 stack, on secure
 onboarding commit `39576d9`. It adds only the provider-neutral capability
 registry, isolated exact-host Alpaca Paper adapter, bounded proof command,
 tests, and governance evidence. A direct `$1.00` maximum SPY fractional
 limit/cancel proof passed, including exact client-order lookup and a clean final
 state with zero positions and zero open orders. No live host, research-account
 credential, Engine Host, Shadow, service, scheduler, WPF, or production order
-path is reachable. Integration remains deferred so canonical Monday capture
-jobs stay pinned to `1d0ca95`; the next branch must prove market fills,
-protective orders, lifecycle recovery, and remaining capabilities independently.
+path is reachable. The successor A003 direct proof establishes bounded market
+fill, protective order, replacement, and exact-liquidation capabilities;
+remaining unknowns stay fail closed.
 
 ## ARGUS-BROKER-ALPACA-001 Secure Paper Onboarding
 
 `codex/ARGUS-BROKER-ALPACA-001-paper-onboarding` is
-`IMPLEMENTED_PENDING_MERGE / PUSHED_FEATURE_BRANCH` at `39576d9`. It stores only
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` through the A003 stack. Its
+implementation commit is `39576d9`. It stores only
 the Canary Paper credentials under lane-specific CurrentUser DPAPI, uses a
 masked local Paste-button dialog, and proved one redacted exact-host account
 read with active status, `$100` cash, and `$100` buying power. The rotated first

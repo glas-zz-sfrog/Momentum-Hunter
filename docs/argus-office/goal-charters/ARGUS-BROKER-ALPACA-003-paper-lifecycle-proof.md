@@ -72,7 +72,7 @@ without blindly submitting a duplicate command.
 
 ## Status
 
-`DIRECT_PROOF_COMPLETE_PENDING_INTEGRATION` on
+`COMPLETE` on canonical `master`; the proven source remains backed up on
 `codex/ARGUS-BROKER-ALPACA-003-paper-lifecycle-proof`. Direct proof
 `alpaca-paper-lifecycle-78aaade645ee4fd697a338d3` is
 `ALPACA_PAPER_LIFECYCLE_PROVEN`, ends flat with zero open orders, and contains

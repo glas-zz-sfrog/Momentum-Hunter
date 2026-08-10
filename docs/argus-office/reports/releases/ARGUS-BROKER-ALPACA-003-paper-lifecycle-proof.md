@@ -2,7 +2,7 @@
 
 ## Classification
 
-`DIRECT_PROOF_COMPLETE_PENDING_INTEGRATION`
+`COMPLETE`
 
 ## Implementation
 
@@ -113,8 +113,8 @@ streaming, overnight, or linked-protection support.
 
 ## Next Action
 
-Commit and back up the direct-proof closeout, then fast-forward the verified
-A001-A003 stack into canonical `master`, repin future ordinary opening jobs to
-the final synchronized head, and resume provider-neutral DATA-005B allocation
-work. Do not wire a Paper strategy sample until the allocation, Risk Governor,
-ledger, and policy gates are explicitly versioned and tested.
+The verified A001-A003 stack is integrated on canonical `master` and backed up.
+Repin future ordinary opening jobs to the final synchronized closeout head,
+then resume provider-neutral DATA-005B allocation work. Do not wire a Paper
+strategy sample until the allocation, Risk Governor, ledger, and policy gates
+are explicitly versioned and tested.
