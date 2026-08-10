@@ -114,6 +114,15 @@ class AllocationRequest:
 
 @dataclass(frozen=True)
 class ProviderNeutralAllocationDecision:
+    decision_cycle_id: str
+    candidate_id: str
+    canonical_rank: int
+    symbol: str
+    trade_plan_id: str
+    risk_decision_id: str
+    account_lane: str
+    provider: str
+    environment: str
     request_fingerprint: str
     policy_fingerprint: str
     account_snapshot_fingerprint: str
@@ -151,6 +160,15 @@ class ProviderNeutralAllocationDecision:
         payload: dict[str, object] = {
             "schemaVersion": self.schema_version,
             "profile": self.profile,
+            "decisionCycleId": self.decision_cycle_id,
+            "candidateId": self.candidate_id,
+            "canonicalRank": self.canonical_rank,
+            "symbol": self.symbol,
+            "tradePlanId": self.trade_plan_id,
+            "riskDecisionId": self.risk_decision_id,
+            "accountLane": self.account_lane,
+            "provider": self.provider,
+            "environment": self.environment,
             "requestFingerprint": self.request_fingerprint,
             "policyFingerprint": self.policy_fingerprint,
             "accountSnapshotFingerprint": self.account_snapshot_fingerprint,
@@ -301,6 +319,15 @@ def allocate_provider_neutral_position(
         else None
     )
     return ProviderNeutralAllocationDecision(
+        decision_cycle_id=request.decision_cycle_id,
+        candidate_id=request.candidate_id,
+        canonical_rank=request.canonical_rank,
+        symbol=request.symbol,
+        trade_plan_id=request.trade_plan_id,
+        risk_decision_id=request.risk_decision_id,
+        account_lane=account.lane,
+        provider=capabilities.provider,
+        environment=capabilities.environment,
         request_fingerprint=request.fingerprint,
         policy_fingerprint=policy.fingerprint,
         account_snapshot_fingerprint=account.fingerprint,

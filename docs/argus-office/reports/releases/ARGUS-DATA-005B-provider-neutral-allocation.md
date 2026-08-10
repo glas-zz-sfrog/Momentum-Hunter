@@ -2,9 +2,10 @@
 
 ## Status
 
-- Branch: `codex/ARGUS-DATA-005B-provider-neutral-allocation`
-- Base and exact A003 live-proof source: `1abb4dd`
-- Classification: `IMPLEMENTED_PENDING_A003_ACCEPTANCE_AND_INTEGRATION`
+- Branch: `codex/ARGUS-DATA-005B-current-master-integration`
+- Base: synchronized A003 operational closeout `e0f6e33`
+- Reconciled source: `codex/ARGUS-DATA-005B-provider-neutral-allocation` at `046b127`
+- Classification: `IMPLEMENTED_PENDING_MERGE`
 - Project development: `PROJECT_DEVELOPMENT_ACTIVE`
 - Runtime integration: none
 
@@ -25,16 +26,22 @@
   does not consume a concurrency slot or erase its independent eligibility.
 - Alpaca Paper execution and MH conservative executable results remain separate
   evidence domains and explicitly prohibit combined statistics.
+- Hard Chew self-review found that the original dormant decision carried only
+  opaque lineage fingerprints. The narrow fix now preserves explicit cycle,
+  candidate, rank, symbol, TradePlan, Risk decision, account lane, provider,
+  and environment identity; candidate/allocation and canary/research-lane
+  mismatches fail closed before admission or result pairing.
 
 ## Verification
 
 - Python compileall: pass.
-- New focused tests: 33/33 pass.
+- New focused tests: 36/36 pass.
 - Existing allocator, account snapshot, Shadow selector, Alpaca adapter, and
-  lifecycle regressions: 199/199 pass.
-- Full Python discovery: 1,424/1,424 pass in 269.059 seconds from the exact
-  revised worktree state. The ignored worktree-local `.venv` junction points to
-  the canonical dependency environment and creates no tracked file.
+  lifecycle regressions: 202/202 pass.
+- Full Python discovery: 1,427/1,427 pass in 232.579 seconds from the exact
+  revised current-base worktree state. The ignored worktree-local `.venv`
+  junction points to the canonical dependency environment and creates no
+  tracked file.
 - Generic import scan: new modules are referenced only by each other and tests.
 - Network/order/runtime scan: no callable provider, broker, service, scheduler,
   Engine Host, Shadow, or WPF integration.
@@ -48,9 +55,8 @@ both earlier commits are included in `1abb4dd`; Monday must test `1abb4dd`.
 
 ## Remaining Gates
 
-- Run one bounded direct A003 lifecycle during regular market hours.
-- Require zero residual positions/orders, sanitation, exact Paper-host identity,
-  and terminal adjudication before integration.
-- Freeze provider-specific semantics and separate numeric Canary/research
-  policies only from observed capabilities.
+- Fast-forward this verified dormant infrastructure into canonical `master`.
+- Freeze separate numeric Canary/research policies from observed capabilities.
+- Add an audited Risk Governor/allocation/Alpaca Paper/ledger wiring slice before
+  any prospective Paper engineering sample.
 - Do not activate Shadow or begin a Paper sample as part of this branch.

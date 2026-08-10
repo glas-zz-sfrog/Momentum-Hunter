@@ -34,6 +34,15 @@ def allocation(
 ) -> ProviderNeutralAllocationDecision:
     quantity = Decimal("0.250") if authorized else Decimal("0")
     return ProviderNeutralAllocationDecision(
+        decision_cycle_id="cycle-1",
+        candidate_id=f"candidate-{candidate_number}",
+        canonical_rank=candidate_number,
+        symbol=f"SYM{candidate_number}",
+        trade_plan_id=f"plan-{candidate_number}",
+        risk_decision_id=f"risk-{candidate_number}",
+        account_lane="PAPER_RESEARCH",
+        provider="ALPACA",
+        environment="PAPER",
         request_fingerprint=f"{candidate_number:X}" * 64,
         policy_fingerprint=policy_fingerprint,
         account_snapshot_fingerprint=account_fingerprint,
@@ -103,6 +112,7 @@ def result(
     return ExecutionResultEvidence(
         result_type=result_type,
         result_id=f"result-{result_type.value}",
+        lane="PAPER_RESEARCH",
         decision_cycle_id="cycle-1",
         candidate_id=candidate_id,
         trade_plan_id="plan-1",
@@ -119,6 +129,45 @@ def result(
 
 
 class PaperResearchEvidenceTests(unittest.TestCase):
+    def test_candidate_and_allocation_lineage_must_match(self) -> None:
+        mismatches = (
+            {"decision_cycle_id": "other-cycle"},
+            {"candidate_id": "other-candidate"},
+            {"canonical_rank": 2},
+            {"symbol": "OTHER"},
+            {"trade_plan_id": "other-plan"},
+            {"risk_decision_id": "other-risk"},
+        )
+        for changes in mismatches:
+            with self.subTest(changes=changes):
+                with self.assertRaisesRegex(ValueError, "lineage differ"):
+                    build_paper_research_portfolio_evidence(
+                        policy=research_policy(),
+                        candidates=(
+                            candidate(
+                                1,
+                                allocation_value=replace(allocation(), **changes),
+                            ),
+                        ),
+                        existing_open_positions=0,
+                    )
+
+    def test_policy_lane_must_match_allocation_account_lane(self) -> None:
+        with self.assertRaisesRegex(ValueError, "account lane differ"):
+            build_paper_research_portfolio_evidence(
+                policy=replace(research_policy(), lane="CANARY_REALISTIC"),
+                candidates=(candidate(1),),
+                existing_open_positions=0,
+            )
+
+    def test_policy_schema_must_be_current(self) -> None:
+        with self.assertRaisesRegex(ValueError, "schema is unsupported"):
+            build_paper_research_portfolio_evidence(
+                policy=replace(research_policy(), schema_version=1),
+                candidates=(candidate(1),),
+                existing_open_positions=0,
+            )
+
     def test_rank_one_two_three_are_preserved_with_independent_eligibility(self) -> None:
         evidence = build_paper_research_portfolio_evidence(
             policy=research_policy(max_positions=2),
@@ -477,6 +526,11 @@ class PaperResearchEvidenceTests(unittest.TestCase):
                     ExecutionResultType.MH_CONSERVATIVE_EXECUTABLE_RESULT,
                     candidate_id="other-candidate",
                 ),
+            )
+        with self.assertRaisesRegex(ValueError, "prospective identity"):
+            pair_execution_results(
+                result(ExecutionResultType.ALPACA_PAPER_EXECUTION_RESULT),
+                replace(conservative, lane="CANARY_REALISTIC"),
             )
 
     def test_invalid_execution_result_evidence_is_rejected(self) -> None:

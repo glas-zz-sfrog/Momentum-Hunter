@@ -138,6 +138,15 @@ class ProviderNeutralAllocationTests(unittest.TestCase):
         self.assertEqual(Decimal("5"), decision.ideal_risk_quantity)
         self.assertEqual(Decimal("5.000"), decision.provider_executable_quantity)
         self.assertEqual(Decimal("4.500"), decision.final_authorized_quantity)
+        self.assertEqual("cycle-1", decision.decision_cycle_id)
+        self.assertEqual("candidate-1", decision.candidate_id)
+        self.assertEqual(1, decision.canonical_rank)
+        self.assertEqual("TEST", decision.symbol)
+        self.assertEqual("plan-1", decision.trade_plan_id)
+        self.assertEqual("risk-1", decision.risk_decision_id)
+        self.assertEqual("CANARY_REALISTIC", decision.account_lane)
+        self.assertEqual("SYNTHETIC_BROKER", decision.provider)
+        self.assertEqual("PAPER", decision.environment)
         self.assertEqual(
             "4.5", decision.to_dict()["finalAuthorizedQuantity"]
         )

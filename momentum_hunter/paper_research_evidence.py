@@ -113,6 +113,9 @@ class ProspectiveCandidateRecord:
 @dataclass(frozen=True)
 class PaperResearchPortfolioEvidence:
     decision_cycle_id: str
+    lane: str
+    provider: str
+    environment: str
     policy_fingerprint: str
     allocation_policy_fingerprint: str
     account_snapshot_fingerprint: str
@@ -138,6 +141,9 @@ class PaperResearchPortfolioEvidence:
         payload: dict[str, object] = {
             "schemaVersion": self.schema_version,
             "decisionCycleId": self.decision_cycle_id,
+            "lane": self.lane,
+            "provider": self.provider,
+            "environment": self.environment,
             "policyFingerprint": self.policy_fingerprint,
             "allocationPolicyFingerprint": self.allocation_policy_fingerprint,
             "accountSnapshotFingerprint": self.account_snapshot_fingerprint,
@@ -186,8 +192,6 @@ def build_paper_research_portfolio_evidence(
         raise ValueError("Existing open-position count is invalid.")
     if not candidates:
         raise ValueError("Prospective research candidates are required.")
-    for candidate in candidates:
-        _validate_candidate(candidate)
     cycle_ids = [item.decision_cycle_id for item in candidates]
     candidate_ids = [item.candidate_id for item in candidates]
     ranks = [item.canonical_rank for item in candidates]
@@ -204,6 +208,8 @@ def build_paper_research_portfolio_evidence(
         raise ValueError("Canonical candidate ranks must be unique and positive.")
     if len(set(ranks)) != len(ranks):
         raise ValueError("Canonical candidate ranks must be unique and positive.")
+    for candidate in candidates:
+        _validate_candidate(candidate)
 
     allocation_policy_fingerprint = _shared_fingerprint(
         candidates,
@@ -225,6 +231,11 @@ def build_paper_research_portfolio_evidence(
     ]
     if len(set(request_fingerprints)) != len(request_fingerprints):
         raise ValueError("Allocation request fingerprints must be unique.")
+    account_lane = _shared_text(candidates, "account_lane", "account lane")
+    if account_lane != policy.lane:
+        raise ValueError("Paper research policy and allocation account lane differ.")
+    provider = _shared_text(candidates, "provider", "provider")
+    environment = _shared_text(candidates, "environment", "environment")
 
     starting_cash, starting_open_risk = _shared_portfolio_budgets(candidates)
     remaining_cash = starting_cash
@@ -304,6 +315,9 @@ def build_paper_research_portfolio_evidence(
         )
     return PaperResearchPortfolioEvidence(
         decision_cycle_id=cycle_ids[0],
+        lane=account_lane,
+        provider=provider,
+        environment=environment,
         policy_fingerprint=policy.fingerprint,
         allocation_policy_fingerprint=allocation_policy_fingerprint,
         account_snapshot_fingerprint=account_snapshot_fingerprint,
@@ -323,6 +337,7 @@ def build_paper_research_portfolio_evidence(
 class ExecutionResultEvidence:
     result_type: ExecutionResultType
     result_id: str
+    lane: str
     decision_cycle_id: str
     candidate_id: str
     trade_plan_id: str
@@ -372,6 +387,7 @@ def pair_execution_results(
         raise ValueError("Conservative result has the wrong evidence domain.")
     identity = (
         paper.decision_cycle_id,
+        paper.lane,
         paper.candidate_id,
         paper.trade_plan_id,
         paper.symbol,
@@ -379,6 +395,7 @@ def pair_execution_results(
     )
     if identity != (
         conservative.decision_cycle_id,
+        conservative.lane,
         conservative.candidate_id,
         conservative.trade_plan_id,
         conservative.symbol,
@@ -400,6 +417,8 @@ def pair_execution_results(
 
 
 def _validate_research_policy(policy: PaperResearchPolicy) -> None:
+    if policy.schema_version != PAPER_RESEARCH_SCHEMA_VERSION:
+        raise ValueError("Paper research policy schema is unsupported.")
     if not _nonempty_text(policy.policy_id) or not _nonempty_text(policy.lane):
         raise ValueError("Paper research policy identity is required.")
     if (
@@ -450,6 +469,32 @@ def _validate_candidate(candidate: ProspectiveResearchCandidate) -> None:
         raise ValueError("Candidate eligibility blockers must be nonempty.")
     if not isinstance(candidate.allocation.status, AllocationStatus):
         raise ValueError("Allocation status is invalid.")
+    allocation_identity = (
+        candidate.allocation.decision_cycle_id,
+        candidate.allocation.candidate_id,
+        candidate.allocation.canonical_rank,
+        candidate.allocation.symbol,
+        candidate.allocation.trade_plan_id,
+        candidate.allocation.risk_decision_id,
+    )
+    if allocation_identity != (
+        candidate.decision_cycle_id,
+        candidate.candidate_id,
+        candidate.canonical_rank,
+        candidate.symbol,
+        candidate.trade_plan_id,
+        candidate.risk_decision_id,
+    ):
+        raise ValueError("Candidate and allocation lineage differ.")
+    if any(
+        not _nonempty_text(value)
+        for value in (
+            candidate.allocation.account_lane,
+            candidate.allocation.provider,
+            candidate.allocation.environment,
+        )
+    ):
+        raise ValueError("Allocation lane and provider identity are required.")
     if (
         not isinstance(candidate.allocation.blockers, tuple)
         or any(not _nonempty_text(item) for item in candidate.allocation.blockers)
@@ -507,6 +552,19 @@ def _shared_fingerprint(
     return next(iter(values))
 
 
+def _shared_text(
+    candidates: tuple[ProspectiveResearchCandidate, ...],
+    attribute: str,
+    label: str,
+) -> str:
+    values = {getattr(candidate.allocation, attribute) for candidate in candidates}
+    value = next(iter(values), None)
+    if len(values) != 1 or not _nonempty_text(value):
+        raise ValueError(f"Candidates must share one nonempty {label}.")
+    assert isinstance(value, str)
+    return value
+
+
 def _shared_portfolio_budgets(
     candidates: tuple[ProspectiveResearchCandidate, ...],
 ) -> tuple[Decimal | None, Decimal | None]:
@@ -550,6 +608,7 @@ def _allocation_is_authorized(
 def _validate_execution_result(result: ExecutionResultEvidence) -> None:
     for value in (
         result.result_id,
+        result.lane,
         result.decision_cycle_id,
         result.candidate_id,
         result.trade_plan_id,

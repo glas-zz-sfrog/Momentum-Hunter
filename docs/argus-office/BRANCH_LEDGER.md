@@ -65,19 +65,26 @@ After the clean fast-forward and non-force backup push, all 25 future opening
 jobs were repinned to the synchronized governance head and the running service
 observed the first job as `PENDING`; no service reinstall or restart occurred.
 
-## ARGUS-DATA-005B Shadow Allocation Activation
+## ARGUS-DATA-005B Provider-Neutral Allocation
 
-`codex/ARGUS-DATA-005B-provider-neutral-allocation` is
-`IMPLEMENTED_PENDING_A003_ACCEPTANCE_AND_INTEGRATION` from exact A003 head
-`1abb4dd`. It adds only dormant provider-neutral allocation, multi-position
+`codex/ARGUS-DATA-005B-current-master-integration` is
+`IMPLEMENTED_PENDING_MERGE` from synchronized A003 closeout `e0f6e33`. It
+reconciles the pushed source branch onto the directly proven Paper foundation
+and adds only dormant provider-neutral allocation, multi-position
 Paper-research, and dual-result evidence contracts plus synthetic tests.
-Compileall, 33 focused tests, 199 adjacent regressions, and all 1,424 Python
-tests pass. Rank-ordered admissions consume one shared account-context
-notional/open-risk budget rather than reusing each candidate's individual
-budget. No provider call, Paper mutation, Alpaca-specific capability
-promotion, selector arm, Shadow state, service, scheduler, UI, credential, or
-order path is connected. Integration and numeric policy activation wait for
-the direct A003 adjudication.
+Rank-ordered admissions consume one shared account-context notional/open-risk
+budget rather than reusing each candidate's individual budget. Hard Chew
+self-review added explicit candidate/allocation lineage, account lane,
+provider, and environment evidence; cross-lineage and cross-lane combinations
+fail closed. Compileall, 36 focused tests, 202 adjacent regressions, and all
+1,427 Python tests pass. No provider call, Paper mutation, Alpaca-specific
+capability promotion, selector arm, Shadow state, service, scheduler, UI,
+credential, or order path is connected. Numeric policy activation and runtime
+wiring remain separate tasks.
+
+`codex/ARGUS-DATA-005B-provider-neutral-allocation` is a
+`PUSHED_FEATURE_BRANCH / SUPERSEDED_BY_CURRENT_BASE_RECONCILIATION` at
+`046b127`; its useful implementation is included in the current-base branch.
 
 `codex/ARGUS-DATA-005B-shadow-allocation-activation` is
 `PRESERVED_DIRTY_PRECURSOR / DO_NOT_INTEGRATE_AS_IS` in a separate worktree from

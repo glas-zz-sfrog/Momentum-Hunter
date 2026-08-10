@@ -24,8 +24,11 @@
   combined. Rank-ordered admissions now bind to one shared allocation-policy,
   account-snapshot, and capability context; consume cumulative notional and
   open-risk budgets; and preserve explicit portfolio-limit blockers without
-  erasing independent eligibility. Compileall, 33 focused tests, 199 bounded
-  regressions, and all 1,424 Python tests pass; no provider, account, order,
+  erasing independent eligibility. Hard Chew self-review added explicit
+  candidate/allocation lineage and account-lane/provider/environment evidence;
+  cross-lineage or cross-lane combinations now fail closed. Compileall, 36
+  focused tests, 202 bounded regressions, and all 1,427 Python tests pass on
+  the current A003-integrated base; no provider, account, order,
   Shadow, service, scheduler, Engine Host, WPF, credential, or production
   runtime path is wired.
 - Reconciled A003 source identity: `7ccbad5` is the original harness,
