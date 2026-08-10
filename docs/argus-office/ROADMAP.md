@@ -34,6 +34,9 @@ Operating rules:
    execution.
 7. The whole project may be called blocked only after every unfinished task is
    dependency-evaluated and the Ready Queue is empty.
+8. Prefer one authoritative provider per functional job. Add another provider
+   only for a documented capability, reliability, validation, or coverage gap;
+   never average or vote providers merely because multiple feeds exist.
 
 ## 2. Executive Now
 
@@ -44,6 +47,7 @@ Operating rules:
 | Scheduled evidence | 25 enabled opening captures remain, all pinned to `1d0ca95`; next is 2026-08-10 at 08:35 Central and coverage ends 2026-09-14. Zero Shadow jobs are enabled. |
 | Shadow | Historical v1/v2/v3 definitions are preserved. Current prospective Shadow is not armed; no current cycle, handoff, order, position, trade, or outcome exists. Official count remains `0 / 30`. |
 | Broker safety | Schwab remains read-only market/account evidence. Alpaca work is Paper-only. Real-order transmission is `UNAVAILABLE`; no live Alpaca endpoint or order is authorized. |
+| Provider authority | Schwab owns strategy market-data truth; Alpaca Paper owns only Paper order/fill/position/buying-power truth. Execution quotes may be preserved separately as execution evidence, but provider count cannot boost confidence or rewrite a TradePlan. |
 | Alpaca Paper | Secure onboarding `39576d9` and fractional proof `256d442` are validated. A003 head `1abb4dd` includes harness `7ccbad5` and adjudication `94c7c77`; direct regular-hours lifecycle acceptance is waiting on market hours. |
 | Allocation | Provider-neutral allocation and multi-position research contracts are validated at `046b127`. A separate older activation worktree has seven uncommitted code/test files and is preserved untouched pending reconciliation and A003 evidence. |
 | Continuous intraday | Schwab candles, backfill, dense WPF charts, DATA-002 through DATA-005A, and opening automation are canonical. MONITOR `d2b77c2`, CATALYST `97ab34d`, REGIME `f4deb18`, EVENT `b6e861a`, and BREAKOUT `7492683` are validated, pushed, dormant, and unmerged. |
@@ -596,6 +600,9 @@ Important nondependencies:
 - A003 live acceptance does not depend on Codex, the WPF UI, Shadow activation,
   or a service/runtime merge.
 - R034 deletion does not precede strategy, Paper, or research work.
+- The provider-minimalism guardrail does not block A003, Schwab data work,
+  provider-neutral adapters, Paper research, or continuous monitoring. It
+  governs only future proposals to add or elevate a provider.
 
 ## 10. Phase / Capability Inventory
 
@@ -641,6 +648,19 @@ Capability groups:
 - Phase 12: incremental WPF/candle/continuous capability migration.
 - Phase 13: Paper execution validation and prospective Paper research.
 - Phase 14: supervised and unattended live gates.
+
+### Future Architecture Guardrails
+
+`PROVIDER-MINIMALISM` is recorded as
+`FUTURE_IDEA_RECORDED_NO_RUNTIME_CHANGE`, not as an active task or sequential
+gate. The preferred role model is Schwab for strategy market data, Alpaca Paper
+for Paper execution truth, an explicitly approved future live broker for live
+execution truth, attributed sources for catalyst truth, and a separately
+approved source for overnight context only if a real coverage gap is proven.
+Any future provider proposal must name the problem, current source limitation,
+proposed capability, cost, authority role, and exit condition. A formal
+cross-provider divergence system remains conditional on prospective evidence
+of a consequential discrepancy.
 
 ## 11. Completed Capability Summary
 

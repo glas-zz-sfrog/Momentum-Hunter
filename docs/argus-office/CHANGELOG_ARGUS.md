@@ -1,6 +1,7 @@
 # Argus Changelog
 
 ## Unreleased
+- Recorded provider minimalism as a future architectural guardrail: Schwab remains strategy market-data authority, Alpaca Paper remains execution-mechanics truth, execution quotes stay separate, and additional providers require a documented problem, named authority role, cost, and exit condition. No active gate or runtime behavior changed.
 - Reorganized the authoritative Roadmap as a parallel pipeline scheduler with nine durable lanes, seven milestone finish lines, a multi-item Ready Queue, scoped Waiting records, an evidence-backed Integration Queue, a gate register, and a directed dependency graph. External time and approval gates now block only their documented consequences.
 - Revised branch/worktree governance to permit at most three active implementation worktrees by default while retaining one serialized canonical integration lane. Added current-master reconciliation rules for validated remote-backed branches and preserved all 69 observed worktrees without cleanup or history rewriting.
 - Reconciled the execution roadmap around ARGUS-BROKER-ALPACA-001. Alpaca Paper is the preferred fractional execution laboratory pending official documentation, secure Paper-only onboarding, and direct lifecycle proof; live Alpaca trading remains unauthorized.

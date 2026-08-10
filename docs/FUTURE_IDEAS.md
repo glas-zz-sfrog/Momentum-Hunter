@@ -120,17 +120,42 @@ This file tracks deferred ideas. Do not remove items without explicit justificat
 ## Data Quality
 
 - Provider raw snapshot capture
-- Multi-provider verification
-- Yahoo Finance provider
+- Conditional cross-provider verification only when prospective evidence identifies a consequential ambiguity that the current authoritative source cannot resolve
+- Yahoo Finance only for a future named coverage or validation gap that Schwab cannot reasonably close; never as default strategy authority or a redundant vote
 - Raw news timestamp audit improvements
 - Runtime/version guard to detect stale GUI processes creating legacy captures without calendar metadata
 
-## Broker-Grade Market Data Validation Layer
+## Provider Architecture
+
+Priority: HIGH architectural guardrail.
+
+- Prefer one authoritative source per functional job:
+  - Schwab for strategy market data
+  - Alpaca Paper for Paper order, fill, position, and buying-power truth
+  - A separately approved live broker for future live execution truth
+  - Explicitly attributed source evidence for news and catalysts
+  - A separately approved source for overnight context only when a real coverage gap is demonstrated
+- Do not add a provider, quote path, or candle path merely because another feed exists or agrees with the current feed.
+- Do not average provider prices, vote providers, boost confidence from provider count, or treat overlapping exchange feeds as independent evidence.
+- Preserve an execution broker's contemporaneous quote as execution evidence when available, but keep it separate from the Schwab evidence that formed the TradePlan.
+- Do not rewrite or blend the TradePlan from the execution quote and do not create a divergence threshold before prospective evidence demonstrates a problem.
+- Use Alpaca Paper to prove execution mechanics such as fractional submission, order types, protective orders, partial fills, cancel/replace, restart/recovery, exact liquidation, buying power, multi-position behavior, and reconciliation.
+- Do not treat Paper fills or Paper profitability as strategy-edge proof. Strategy evidence remains prospective and includes chronology, no-trade decisions, losses, winners, rank-conditioned outcomes, regime context, realistic spread/slippage, and execution limitations.
+- Treat overnight or Sunday-market evidence as `CONTEXT / RESEARCH` until separately validated for greater authority.
+- Require every future provider proposal to state:
+  - `PROBLEM` - the exact unresolved capability, reliability, validation, or coverage deficiency
+  - `CURRENT SOURCE` - why the current authority cannot reasonably close the gap
+  - `PROPOSED SOURCE` - the specific capability supplied
+  - `COST` - engineering, complexity, subscriptions, credentials, reliability, and testing
+  - `AUTHORITY` - the one named role the provider would own
+  - `EXIT` - the condition under which the provider would be removed
+
+## Conditional Execution-Source Validation
 
 Problem:
-Momentum Hunter currently relies on public market-data sources such as Nasdaq web data and Yahoo chart data. These are acceptable for screening, monitoring, alert generation, paper validation, and outcome testing.
+If prospective execution evidence shows repeated material disagreement, stale-source ambiguity, unexplained slippage, or execution failures, Momentum Hunter may need a bounded comparison between its authoritative Schwab strategy evidence and execution-source evidence.
 
-However, public feeds may differ from broker/execution feeds in:
+Possible discrepancies include:
 
 - Bid/ask values
 - Quote timestamps
@@ -138,17 +163,8 @@ However, public feeds may differ from broker/execution feeds in:
 - After-hours data
 - Data latency
 
-Future Goal:
-Add a broker-grade validation layer that compares Momentum Hunter's market data against execution-source data.
-
-Potential providers:
-
-- Schwab API
-- Interactive Brokers
-- Polygon
-- IEX Cloud
-- Nasdaq official feeds
-- Fidelity, if usable data access exists
+Future Conditional Goal:
+Add only the smallest diagnostic needed to explain a proven discrepancy. This is not authorization for a permanent provider-voting system or redundant production market-data stack.
 
 Validation checks:
 
@@ -160,10 +176,10 @@ Validation checks:
 - Alert timing differences
 
 Success Criteria:
-Momentum Hunter can report whether an alert would have been detected at approximately the same time using broker-grade market data.
+Momentum Hunter can explain a documented consequential discrepancy without averaging prices, voting providers, increasing confidence from provider count, or changing strategy authority retrospectively.
 
 Long-Term Requirement:
-Before automated trading is enabled, require broker-grade quote confirmation for all execution-ready trade signals.
+Before a second provider gains production authority, prove the gap, assign the provider one named job, define removal criteria, and approve the resulting capability and security cost separately.
 
 ## Data Platform
 
