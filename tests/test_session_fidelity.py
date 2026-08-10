@@ -205,6 +205,8 @@ class SessionFidelityTests(unittest.TestCase):
         settings = installer.split("$settings =", 1)[1].split("if (-not $Execute)", 1)[0]
         self.assertNotIn("-StartWhenAvailable", settings)
         self.assertIn('reusedExistingLanes = @("D_OPENING_CAPTURE", "I_OVERNIGHT_002")', installer)
+        self.assertIn('Assert-CleanCommit -Root $ProjectRoot', installer)
+        self.assertIn('Assert-FileHash -Path (Join-Path $ProjectRoot "momentum_hunter\\session_fidelity.py")', installer)
 
     def test_alpaca_adapter_is_context_only_and_redacts_credentials(self) -> None:
         root = Path(__file__).resolve().parents[1]

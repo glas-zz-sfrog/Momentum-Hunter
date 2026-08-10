@@ -42,6 +42,43 @@ $runner = Join-Path $ProjectRoot "tools\run_session_fidelity_checkpoint.ps1"
 if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) {
     throw "The session-fidelity task runner is unavailable."
 }
+
+function Assert-CleanCommit {
+    param([string]$Root, [string]$Expected, [string]$Label)
+    $actual = (& git -C $Root rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $actual -ne $Expected.ToLowerInvariant()) {
+        throw "$Label does not match its frozen Git commit."
+    }
+    $dirty = & git -C $Root status --porcelain
+    if ($LASTEXITCODE -ne 0 -or $dirty) {
+        throw "$Label is not clean."
+    }
+}
+
+function Assert-FileHash {
+    param([string]$Path, [string]$Expected, [string]$Label)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "$Label is unavailable."
+    }
+    $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    if ($actual -ne $Expected.ToUpperInvariant()) {
+        throw "$Label does not match its frozen SHA-256."
+    }
+}
+
+$AlpacaRoot = "C:\Users\steve\AppData\Local\MomentumHunter\worktrees\ARGUS-OVERNIGHT-001-readonly-market-data-probe"
+$SchwabOvernightRoot = "C:\Users\steve\AppData\Local\MomentumHunter\worktrees\ARGUS-SCHWAB-OVERNIGHT-001-readonly-fidelity-probe"
+$OvernightShimRoot = "C:\Users\steve\AppData\Local\MomentumHunter\worktrees\ARGUS-OVERNIGHT-002-midweek-fidelity-replication"
+Assert-CleanCommit -Root $ProjectRoot -Expected $ExpectedGitCommit -Label "Session-fidelity worktree"
+Assert-FileHash -Path (Join-Path $ProjectRoot "momentum_hunter\session_fidelity.py") -Expected $ExpectedModuleSha256 -Label "Session-fidelity module"
+Assert-FileHash -Path (Join-Path $ProjectRoot "tools\run_session_fidelity_checkpoint.py") -Expected $ExpectedRunnerSha256 -Label "Session-fidelity runner"
+Assert-CleanCommit -Root $AlpacaRoot -Expected $ExpectedAlpacaCommit -Label "Frozen Alpaca probe"
+Assert-FileHash -Path (Join-Path $AlpacaRoot "momentum_hunter\alpaca_overnight_probe.py") -Expected $ExpectedAlpacaModuleSha256 -Label "Frozen Alpaca module"
+Assert-CleanCommit -Root $SchwabOvernightRoot -Expected $ExpectedSchwabOvernightCommit -Label "Frozen Schwab overnight probe"
+Assert-FileHash -Path (Join-Path $SchwabOvernightRoot "momentum_hunter\schwab_overnight_probe.py") -Expected $ExpectedSchwabOvernightModuleSha256 -Label "Frozen Schwab overnight module"
+Assert-CleanCommit -Root $OvernightShimRoot -Expected $ExpectedOvernightShimCommit -Label "Frozen overnight shim"
+Assert-FileHash -Path (Join-Path $OvernightShimRoot "tools\run_midweek_overnight_probe.py") -Expected $ExpectedOvernightShimSha256 -Label "Frozen overnight shim"
+
 if (-not (Test-Path -LiteralPath $OutputDirectory -PathType Container)) {
     New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 }
