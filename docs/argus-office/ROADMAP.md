@@ -1,6 +1,6 @@
 # Momentum Hunter Roadmap
 
-Last reconciled: 2026-08-09
+Last reconciled: 2026-08-10
 
 ## 1. Authority And Operating Rules
 
@@ -49,12 +49,13 @@ Operating rules:
 | Broker safety | Schwab remains read-only market/account evidence. Alpaca work is Paper-only. Real-order transmission is `UNAVAILABLE`; no live Alpaca endpoint or order is authorized. |
 | Provider authority | Schwab owns strategy market-data truth; Alpaca Paper owns only Paper order/fill/position/buying-power truth. Execution quotes may be preserved separately as execution evidence, but provider count cannot boost confidence or rewrite a TradePlan. |
 | Overnight context | OVERNIGHT-001 `897f18a` proved Alpaca Sunday-night context with limitations: derived overnight quotes were fresh, bars/trades were delayed, and bounded BOATS history supplied sparse OHLCV. SCHWAB-OVERNIGHT-001 `295ab24` then proved the existing Trader API stack insufficient in the same role: quote and Streamer seed evidence was approximately 52 hours old, no Sunday-night update arrived in five minutes, and explicit-window `/pricehistory` returned zero bars. Role adjudication is `ALPACA_DERIVED_FILLS_REAL_SCHWAB_GAP`; Alpaca remains research/context only, with no execution, ranking, breakout-trigger, or TradePlan authority. |
+| Schwab after-hours proof | `ARGUS-SCHWAB-AFTER-HOURS-001` is implemented at feature commit `02b46d2` and scheduled for Tuesday 2026-08-11. Independent read-only 15-minute observations run at 15:05 Central / 16:05 Eastern and 18:35 Central / 19:35 Eastern for SPY, QQQ, and NVDA. Both tasks are Ready, wake-enabled, retry-bounded, and pinned to exact clean Git/module identities. Codex is not required; the Windows session must remain logged in for current-user DPAPI. |
 | Alpaca Paper | Secure onboarding `39576d9` and fractional proof `256d442` are validated. A003 head `1abb4dd` includes harness `7ccbad5` and adjudication `94c7c77`; direct regular-hours lifecycle acceptance is waiting on market hours. |
 | Allocation | Provider-neutral allocation and multi-position research contracts are validated at `046b127`. A separate older activation worktree has seven uncommitted code/test files and is preserved untouched pending reconciliation and A003 evidence. |
 | Continuous intraday | Schwab candles, backfill, dense WPF charts, DATA-002 through DATA-005A, and opening automation are canonical. MONITOR `d2b77c2`, CATALYST `97ab34d`, REGIME `f4deb18`, EVENT `b6e861a`, and BREAKOUT `7492683` are validated, pushed, dormant, and unmerged. |
 | Active implementation | One of three implementation slots remains occupied by visual-gated UI-STREAMLINE-001 at clean local `989cb7c`; it is deliberately unpushed and unmerged. WORKTREE-HYGIENE-001 is complete as a no-delete audit at pushed closeout `7af33a6` (inventory `5c71b06`); no retirement is authorized. BREAKOUT-001 remains proven/backed up at `7492683`, and ROADMAP-002 remains reconciled at `e706b68`; validated work waits for serialized integration. |
 | Highest Ready work | None. Every unfinished inventory item is represented below in the Waiting/Gated Queue or Integration Queue. The project is active: Monday's A003 market-hours proof and scheduled opening capture are external-time work, while UI and cleanup have narrow Steven gates. |
-| External-time gate | A003 direct Paper lifecycle acceptance waits for an eligible regular-market session. This blocks only A003 acceptance and dependent integration/activation. |
+| External-time gates | A003 direct Paper lifecycle acceptance waits for an eligible regular-market session. The independent Schwab after-hours capability proof waits for Tuesday's 4:00-8:00 PM Eastern session. Each blocks only its own provider claim and dependent integration/activation. |
 | Steven gates | UI-STREAMLINE-001 visual acceptance; optional WORKTREE-HYGIENE-001 Batch A worktree-only retirement; R034 destructive legacy cutover; any brokerage anomaly; any live order; any unattended-live decision. |
 
 Worktree truth: Git currently knows 74 worktrees, of which 52 are clean and 22
@@ -68,6 +69,7 @@ Current project classification:
 A003_LIVE_ACCEPTANCE: WAITING_EXTERNAL_TIME
 OVERNIGHT_CONTEXT: PROVEN_WITH_LIMITATIONS_PENDING_INTEGRATION
 SCHWAB_OVERNIGHT_DATA: INSUFFICIENT
+SCHWAB_AFTER_HOURS_PROOF: SCHEDULED_2026-08-11
 PROJECT_DEVELOPMENT: ACTIVE
 CANONICAL_INTEGRATION: WAITING_INTEGRATION_WINDOW
 ORDER_TRANSMISSION: UNAVAILABLE
@@ -190,14 +192,14 @@ fill them; recalculate after the A003, UI, integration, or CEO gate changes.
 
 | Lane | Purpose | Current state | Current or next work |
 | --- | --- | --- | --- |
-| A - Market Data And Monitoring | Schwab Streamer, candles, reconciliation, discovery, monitoring, catalysts. | VALIDATED_PENDING_INTEGRATION | Canonical candle stack complete; MONITOR and CATALYST-002A validated; CATALYST-002B waits for provider proof. |
+| A - Market Data And Monitoring | Schwab Streamer, candles, reconciliation, discovery, monitoring, catalysts. | VALIDATED_PENDING_INTEGRATION / WAITING_EXTERNAL_TIME | Canonical candle stack complete; Tuesday's early/late Schwab after-hours proof is scheduled from frozen feature commit `02b46d2`; MONITOR and CATALYST-002A are validated; CATALYST-002B waits for provider proof. |
 | B - Strategy And TradePlan | Setup identity, DATA-004 horizon, breakout/pullback/reclaim, immutable plans. | VALIDATED_PENDING_INTEGRATION / PARALLEL-READY | DATA-003/004 complete; BREAKOUT-001 validated at `7492683`; PLAN-002 waits on the integrated evidence chain. |
 | C - Risk / Allocation / Portfolio | Provider-neutral quantities, freshness, buying power, aggregate risk, concurrency. | VALIDATED_PENDING_INTEGRATION | DATA-005B provider-neutral head `046b127`; activation branch preserved dirty and gated. |
 | D - Broker / Execution Providers | Broker capabilities, Alpaca Paper lifecycle, future live canary. | WAITING_EXTERNAL_TIME | A003 direct Paper lifecycle proof at next eligible regular-market session. |
 | E - Shadow / Evidence / Statistics | Prospective samples, rank evidence, conservative/Paper comparison, terminal packets. | ACTIVE / PARALLEL-READY | SHADOW-024 canonical; research contracts validated; SHADOW-025 waiting on continuous authority chain. |
 | F - Operator UI | WPF charts, candidate/plan/position state, workspace simplification. | IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE | UI-STREAMLINE-001 `989cb7c` passes 3 focused and all 254 .NET tests, zero-warning Release build, and nonblank `1180x820` proof; branch remains local/unmerged/unpushed until Steven accepts the visible hierarchy. |
 | G - Operations / Reliability | Service, scheduler, wake/clock, health, capture program. | OPERATIONAL | Service healthy; 25 captures pending; integration/install pin currently active. |
-| H - Research | Breakouts, RVOL, regime, counterfactuals, event studies, and bounded overnight context. | VALIDATED_PENDING_INTEGRATION / PARALLEL-READY | OVERNIGHT-001 `897f18a` proved narrow Alpaca Sunday-night context with delayed-bar limitations; SCHWAB-OVERNIGHT-001 `295ab24` proved Schwab insufficient for that Sunday-night role and preserved Alpaca's narrow context role without provider blending; DATA-002 is canonical; REGIME and BREAKOUT-001 `7492683` are validated; BREAKOUT-002 waits for a sufficient prospective cohort. |
+| H - Research | Breakouts, RVOL, regime, counterfactuals, event studies, and bounded overnight/extended-hours context. | VALIDATED_PENDING_INTEGRATION / WAITING_EXTERNAL_TIME | OVERNIGHT-001 `897f18a` proved narrow Alpaca Sunday-night context with delayed-bar limitations; SCHWAB-OVERNIGHT-001 `295ab24` proved Schwab insufficient for that Sunday-night role; SCHWAB-AFTER-HOURS-001 `02b46d2` is scheduled to test ordinary Tuesday after-hours behavior early and late without provider blending; DATA-002 is canonical; REGIME and BREAKOUT-001 `7492683` are validated. |
 | I - Security / Governance | Credentials, provider isolation, destructive gates, Git/release evidence. | VALIDATED_PENDING_INTEGRATION / DECISION_GATED | ARGUS-ROADMAP-003 and ROADMAP-002 reconciliation are verified pending merge. WORKTREE-HYGIENE-001 `7af33a6` inventories all 74 worktrees with no deletion; optional Batch A waits for exact Steven approval. |
 
 ## 6. Waiting / Gated Queue
@@ -207,6 +209,7 @@ contract. The longer records that follow explain the highest-consequence gates.
 
 | Task | State | Gate | Scope | Blocks | Does NOT block | Resume condition | Parallel-safe / while waiting |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| SCHWAB-AFTER-HOURS-001 | SCHEDULED_EXTERNAL_TIME | Tuesday 4:00-8:00 PM Eastern | READ_ONLY_PROVIDER_PROOF | Schwab after-hours authority and any dependent activation | Morning capture, A003, isolated development, existing Schwab regular-session authority | Preserve and adjudicate both 2026-08-11 write-once proofs | No runtime/service/candle-store changes; leave feature worktree clean and Windows session logged in |
 | ALPACA-A003-LIVE-ACCEPTANCE | WAITING_EXTERNAL_TIME | Direct regular-hours Paper lifecycle | VERIFICATION + INTEGRATION | A003 acceptance | Independent development | Eligible session and clean zero-residual preflight | All nonprovider lanes; offline adjudication |
 | ALPACA-A003-INTEGRATION | WAITING_PROVIDER_EVIDENCE | Successful sanitized A003 terminal evidence | INTEGRATION | Alpaca stack merge | Feature development and provider-neutral tests | A003 live pass and current-base revalidation | CATALYST, BREAKOUT, UI, governance |
 | DATA-005B-INTEGRATION | WAITING_DEPENDENCY | A003 capability truth and current-base reconciliation | INTEGRATION | Canonical allocator/evidence contracts | Generic tests and other lanes | A003 pass, policy split, full reverify | Research, UI, monitoring, governance |
@@ -534,6 +537,7 @@ is one candidate at a time; no row authorizes a merge by itself.
 | Alpaca A003 lifecycle | `1abb4dd` includes `7ccbad5` + `94c7c77` | Synthetic/adjudication verified; pushed; direct proof pending | Successful direct regular-hours proof with terminal zero positions/orders | Yes | No | Direct evidence scan plus full branch verification |
 | OVERNIGHT-001 read-only market data | `897f18a` | SPY/QQQ/NVDA Sunday-night proof; 10 focused, 121 adjacent, and 1,401 full tests pass; clean/pushed | Reconcile after the cumulative Alpaca credential boundary is integrated; no production wiring is implied | Yes | No | Current-base tests, exact-host GET-only scan, secret scan, proof-hash verification |
 | SCHWAB-OVERNIGHT-001 read-only fidelity probe | `295ab24` | Five-minute SPY/QQQ/NVDA proof classified `SCHWAB_OVERNIGHT_DATA_INSUFFICIENT`; 8 focused, 169 adjacent, and 1,322 full tests pass; clean/pushed | Reconcile with OVERNIGHT-001 in a serialized docs/research integration window; no production wiring is implied | Yes | No | Current-base tests, GET/Streamer-only scan, secret scan, proof-fingerprint verification |
+| SCHWAB-AFTER-HOURS-001 read-only proof | `02b46d2` | 10 focused, 100 affected, and 1,332 full Python tests pass; two one-time Tuesday tasks installed and pinned; feature branch clean/pushed | Preserve and adjudicate both 2026-08-11 early/late proofs, then reconcile in a serialized integration window; no production wiring is implied | Yes | No | Exact task/Git/module identity, write-once proof fingerprints, quote/candle freshness, OHLC/history reconciliation, secret and GET/Streamer-only scans |
 | DATA-005B provider-neutral allocation | `046b127` | 33 focused, 199 adjacent, 1,424 full tests; pushed | A003 acceptance; policy split; current-master reconciliation | Yes | No | Full allocator/Paper/Shadow suite |
 | MONITOR-001 | `d2b77c2` | 38 focused, 195 adjacent, 1,352 full; clean/pushed | Serialized integration window | Yes | No | Current-master full tests before merge |
 | CATALYST-002A | `97ab34d` includes implementation `c53a24b` and MONITOR | 43 focused, 158 bounded, 1,395 full; clean/pushed/dormant | MONITOR first; reconcile the REGIME/EVENT sibling stack in one serialized integration window | Yes | No | Current-master full tests and provider/runtime boundary scan before merge |
@@ -552,6 +556,7 @@ because their worktree still exists.
 | Gate ID | Gate | Scope | Blocks | Does not block | Resume evidence |
 | --- | --- | --- | --- | --- | --- |
 | G-A003-TIME | Eligible regular-market A003 proof | VERIFICATION + INTEGRATION | A003 acceptance and Alpaca-dependent semantics | All independent development | Terminal sanitized lifecycle, zero residual positions/orders, exact Paper host |
+| G-SCHWAB-AH-TIME | Tuesday 4:00-8:00 PM Eastern after-hours proof | VERIFICATION + INTEGRATION | Schwab after-hours authority and dependent activation | Morning capture, A003, existing regular-session authority, isolated development | Two terminal write-once proofs from exact pinned source; fresh three-symbol OHLCV and price-history adjudication |
 | G-RUNTIME-PIN | 25 jobs pinned to `1d0ca95` | INTEGRATION + INSTALLATION | Canonical/runtime changes without repin | Feature work, tests, docs, research | Terminal scheduled evidence plus deliberate re-pin/reproof |
 | G-SHADOW-ACTIVATE | New sample constitution | ACTIVATION | SHADOW-025 start/counting | Implementation and evidence preparation | Full authority chain, proof bundle, prospective identities |
 | G-R034 | Exact legacy archive/delete plan | DESTRUCTIVE_OPERATION | Legacy deletion/rebuild | All non-destructive work | Steven approval of named targets and rollback |
