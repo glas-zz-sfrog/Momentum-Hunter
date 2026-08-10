@@ -75,3 +75,17 @@
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.
+# R-071 - After-Hours Proof Missed Or Misclassified
+
+- Area: provider evidence / operational reliability.
+- Severity: High.
+- Risk: an unattended after-hours task runs outside the intended session,
+  observes stale seeds, loses account-bound credentials after logout, or calls
+  transport success proof of usable current candles.
+- Mitigation: exact Tuesday/date and 4:00-8:00 PM Eastern gates, independent
+  early/late runs, clean-Git and module-hash pins, quote/candle age limits,
+  mandatory three-symbol OHLCV and price-history reconciliation, write-once
+  outputs, fail-safe sanitation, wake/retry bounds, and no production authority.
+- Residual: current-user DPAPI requires the Windows session to remain logged in;
+  provider outage, entitlement change, logout, or full power-off can still fail.
+- State: `MITIGATED_PENDING_2026-08-11_LIVE_PROOF`.

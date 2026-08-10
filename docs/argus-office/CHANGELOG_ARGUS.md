@@ -235,3 +235,9 @@
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.
+# 2026-08-10
+
+- Added a read-only Schwab after-hours candle proof, automatic evidence
+  adjudication, clean-Git/source-hash pinning, and two independent one-time
+  Tuesday observation tasks without changing production runtime or trading
+  capability.

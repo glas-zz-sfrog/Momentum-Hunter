@@ -220,3 +220,15 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - No manual software gate remains. Preserve a clean canonical checkout, leave
   the computer powered and plugged in, run the Sunday read-only preflight, and
   audit Monday's ordinary opening receipt without intervention or fabrication.
+# 2026-08-10 - ARGUS-SCHWAB-AFTER-HOURS-001 Read-Only Proof Preparation
+
+- Built a fixed-date, nonpersisting Schwab after-hours probe around the accepted
+  R031B observer for SPY, QQQ, and NVDA.
+- Added deterministic adjudication for fresh quotes, complete extended-hours
+  OHLCV, price-history availability, stream/history comparability, OHLC
+  agreement, and the read-only boundary.
+- Installed independent one-time early and late Tuesday tasks at 15:05 and
+  18:35 Central; each is wake-enabled, bounded, limited interactive, and has
+  two two-minute transport retries.
+- Kept Codex, service, Engine Host, WPF, Shadow, positions, orders, production
+  candle stores, and scheduled opening jobs outside the proof.
