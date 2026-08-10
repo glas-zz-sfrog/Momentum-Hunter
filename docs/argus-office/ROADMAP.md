@@ -48,7 +48,7 @@ Operating rules:
 | Shadow | Historical v1/v2/v3 definitions are preserved. Current prospective Shadow is not armed; no current cycle, handoff, order, position, trade, or outcome exists. Official count remains `0 / 30`. |
 | Broker safety | Schwab remains read-only market/account evidence. Alpaca work is Paper-only. Real-order transmission is `UNAVAILABLE`; no live Alpaca endpoint or order is authorized. |
 | Provider authority | Schwab owns strategy market-data truth; Alpaca Paper owns only Paper order/fill/position/buying-power truth. Execution quotes may be preserved separately as execution evidence, but provider count cannot boost confidence or rewrite a TradePlan. |
-| Overnight context | OVERNIGHT-001 `897f18a` proved Alpaca Sunday-night context with limitations: derived overnight quotes were fresh, bars/trades were delayed, and bounded BOATS history supplied sparse OHLCV. This is research/context only; execution authority is unverified and canonical strategy authority is not granted. |
+| Overnight context | OVERNIGHT-001 `897f18a` proved Alpaca Sunday-night context with limitations: derived overnight quotes were fresh, bars/trades were delayed, and bounded BOATS history supplied sparse OHLCV. SCHWAB-OVERNIGHT-001 `295ab24` then proved the existing Trader API stack insufficient in the same role: quote and Streamer seed evidence was approximately 52 hours old, no Sunday-night update arrived in five minutes, and explicit-window `/pricehistory` returned zero bars. Role adjudication is `ALPACA_DERIVED_FILLS_REAL_SCHWAB_GAP`; Alpaca remains research/context only, with no execution, ranking, breakout-trigger, or TradePlan authority. |
 | Alpaca Paper | Secure onboarding `39576d9` and fractional proof `256d442` are validated. A003 head `1abb4dd` includes harness `7ccbad5` and adjudication `94c7c77`; direct regular-hours lifecycle acceptance is waiting on market hours. |
 | Allocation | Provider-neutral allocation and multi-position research contracts are validated at `046b127`. A separate older activation worktree has seven uncommitted code/test files and is preserved untouched pending reconciliation and A003 evidence. |
 | Continuous intraday | Schwab candles, backfill, dense WPF charts, DATA-002 through DATA-005A, and opening automation are canonical. MONITOR `d2b77c2`, CATALYST `97ab34d`, REGIME `f4deb18`, EVENT `b6e861a`, and BREAKOUT `7492683` are validated, pushed, dormant, and unmerged. |
@@ -67,6 +67,7 @@ Current project classification:
 ```text
 A003_LIVE_ACCEPTANCE: WAITING_EXTERNAL_TIME
 OVERNIGHT_CONTEXT: PROVEN_WITH_LIMITATIONS_PENDING_INTEGRATION
+SCHWAB_OVERNIGHT_DATA: INSUFFICIENT
 PROJECT_DEVELOPMENT: ACTIVE
 CANONICAL_INTEGRATION: WAITING_INTEGRATION_WINDOW
 ORDER_TRANSMISSION: UNAVAILABLE
@@ -196,7 +197,7 @@ fill them; recalculate after the A003, UI, integration, or CEO gate changes.
 | E - Shadow / Evidence / Statistics | Prospective samples, rank evidence, conservative/Paper comparison, terminal packets. | ACTIVE / PARALLEL-READY | SHADOW-024 canonical; research contracts validated; SHADOW-025 waiting on continuous authority chain. |
 | F - Operator UI | WPF charts, candidate/plan/position state, workspace simplification. | IMPLEMENTED_PENDING_VISUAL_ACCEPTANCE | UI-STREAMLINE-001 `989cb7c` passes 3 focused and all 254 .NET tests, zero-warning Release build, and nonblank `1180x820` proof; branch remains local/unmerged/unpushed until Steven accepts the visible hierarchy. |
 | G - Operations / Reliability | Service, scheduler, wake/clock, health, capture program. | OPERATIONAL | Service healthy; 25 captures pending; integration/install pin currently active. |
-| H - Research | Breakouts, RVOL, regime, counterfactuals, event studies, and bounded overnight context. | VALIDATED_PENDING_INTEGRATION / PARALLEL-READY | OVERNIGHT-001 `897f18a` proved narrow Alpaca Sunday-night context with delayed-bar limitations; DATA-002 is canonical; REGIME and BREAKOUT-001 `7492683` are validated; BREAKOUT-002 waits for a sufficient prospective cohort. |
+| H - Research | Breakouts, RVOL, regime, counterfactuals, event studies, and bounded overnight context. | VALIDATED_PENDING_INTEGRATION / PARALLEL-READY | OVERNIGHT-001 `897f18a` proved narrow Alpaca Sunday-night context with delayed-bar limitations; SCHWAB-OVERNIGHT-001 `295ab24` proved Schwab insufficient for that Sunday-night role and preserved Alpaca's narrow context role without provider blending; DATA-002 is canonical; REGIME and BREAKOUT-001 `7492683` are validated; BREAKOUT-002 waits for a sufficient prospective cohort. |
 | I - Security / Governance | Credentials, provider isolation, destructive gates, Git/release evidence. | VALIDATED_PENDING_INTEGRATION / DECISION_GATED | ARGUS-ROADMAP-003 and ROADMAP-002 reconciliation are verified pending merge. WORKTREE-HYGIENE-001 `7af33a6` inventories all 74 worktrees with no deletion; optional Batch A waits for exact Steven approval. |
 
 ## 6. Waiting / Gated Queue
@@ -532,6 +533,7 @@ is one candidate at a time; no row authorizes a merge by itself.
 | Alpaca A002 fractional capability | `256d442` | Direct fractional limit/cancel proof; zero residual state; pushed | A003 live acceptance and cumulative chain reconciliation | Yes | No | Secret/endpoint/order safety and full tests |
 | Alpaca A003 lifecycle | `1abb4dd` includes `7ccbad5` + `94c7c77` | Synthetic/adjudication verified; pushed; direct proof pending | Successful direct regular-hours proof with terminal zero positions/orders | Yes | No | Direct evidence scan plus full branch verification |
 | OVERNIGHT-001 read-only market data | `897f18a` | SPY/QQQ/NVDA Sunday-night proof; 10 focused, 121 adjacent, and 1,401 full tests pass; clean/pushed | Reconcile after the cumulative Alpaca credential boundary is integrated; no production wiring is implied | Yes | No | Current-base tests, exact-host GET-only scan, secret scan, proof-hash verification |
+| SCHWAB-OVERNIGHT-001 read-only fidelity probe | `295ab24` | Five-minute SPY/QQQ/NVDA proof classified `SCHWAB_OVERNIGHT_DATA_INSUFFICIENT`; 8 focused, 169 adjacent, and 1,322 full tests pass; clean/pushed | Reconcile with OVERNIGHT-001 in a serialized docs/research integration window; no production wiring is implied | Yes | No | Current-base tests, GET/Streamer-only scan, secret scan, proof-fingerprint verification |
 | DATA-005B provider-neutral allocation | `046b127` | 33 focused, 199 adjacent, 1,424 full tests; pushed | A003 acceptance; policy split; current-master reconciliation | Yes | No | Full allocator/Paper/Shadow suite |
 | MONITOR-001 | `d2b77c2` | 38 focused, 195 adjacent, 1,352 full; clean/pushed | Serialized integration window | Yes | No | Current-master full tests before merge |
 | CATALYST-002A | `97ab34d` includes implementation `c53a24b` and MONITOR | 43 focused, 158 bounded, 1,395 full; clean/pushed/dormant | MONITOR first; reconcile the REGIME/EVENT sibling stack in one serialized integration window | Yes | No | Current-master full tests and provider/runtime boundary scan before merge |
@@ -606,9 +608,11 @@ Important nondependencies:
 - The provider-minimalism guardrail does not block A003, Schwab data work,
   provider-neutral adapters, Paper research, or continuous monitoring. It
   governs only future proposals to add or elevate a provider.
-- OVERNIGHT-001 does not block A003, DATA-005 provider-neutral work, Monday
-  capture, Shadow engineering, or any other lane. It grants only a narrow
-  research/context role and creates no production dependency.
+- OVERNIGHT-001 and SCHWAB-OVERNIGHT-001 do not block A003, DATA-005
+  provider-neutral work, Monday capture, Shadow engineering, or any other lane.
+  Together they establish that Alpaca's derived feed fills a real Schwab
+  Sunday-night coverage gap, but they grant only a narrow research/context role
+  and create no execution, ranking, TradePlan, or provider-blending authority.
 
 ## 10. Phase / Capability Inventory
 
@@ -623,6 +627,7 @@ Integration sections are scheduling projections of these records.
 | ALPACA-A003-LIVE-ACCEPTANCE | D | P0 | WAITING_EXTERNAL_TIME | A001/A002/A003 code | A003 acceptance |
 | ALPACA-A003-INTEGRATION | D | P1 | WAITING_PROVIDER_EVIDENCE | A003 live pass | Accepted Paper capability baseline |
 | OVERNIGHT-001 | H | P2 | IMPLEMENTED_PENDING_INTEGRATION | Active Sunday overnight session; validated `897f18a` | Optional bounded overnight-context snapshot research |
+| SCHWAB-OVERNIGHT-001 | H | P2 | IMPLEMENTED_PENDING_INTEGRATION | Active Sunday overnight session; validated `295ab24` | Provider-minimalism adjudication; Alpaca retains narrow context role |
 | DATA-005B-INTEGRATION | C | P1 | WAITING_DEPENDENCY | A003 pass + reconciliation | Provider-neutral account/portfolio allocation |
 | DATA-005B-SHADOW-ACTIVATION | C | P1 | WAITING_DEPENDENCY | DATA-005B integration + policy identities | Prospective allocated FakeBroker/Paper decisions |
 | MONITOR-001-INTEGRATION | A | P1 | WAITING_INTEGRATION_WINDOW | Validated `d2b77c2` | Runtime candidate lifecycle work |
@@ -665,8 +670,12 @@ for Paper execution truth, an explicitly approved future live broker for live
 execution truth, attributed sources for catalyst truth, and a separately
 approved source for overnight context only if a real coverage gap is proven.
 OVERNIGHT-001 proved that narrow gap can be partially filled by Alpaca derived
-overnight quotes plus delayed BOATS history, but it did not grant execution or
-canonical strategy authority.
+overnight quotes plus delayed BOATS history. SCHWAB-OVERNIGHT-001 then tested
+the existing authoritative provider directly and found only Friday-close
+quotes/Streamer seed rows plus zero Sunday-night price-history bars. The role
+adjudication is therefore `ALPACA_DERIVED_FILLS_REAL_SCHWAB_GAP`, but neither
+proof grants execution, ranking, breakout-trigger, TradePlan, or canonical
+strategy authority.
 Any future provider proposal must name the problem, current source limitation,
 proposed capability, cost, authority role, and exit condition. A formal
 cross-provider divergence system remains conditional on prospective evidence
