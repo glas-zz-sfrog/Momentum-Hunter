@@ -1,5 +1,22 @@
 # Argus Changelog
 
+- Built the first complete prospective Canary Alpaca Paper engineering path:
+  trusted Schwab evidence, same-session TradePlan, Paper Risk Governor,
+  provider-neutral fractional allocation, deterministic selection, Paper entry,
+  broker-resident stop, lifecycle reconciliation, and immutable terminal
+  decision/outcome evidence.
+- Added interruption-safe intent recovery that never submits a late entry,
+  protects recovered fills, refuses to call partial emergency exits flat, and
+  excludes concurrent lifecycle managers with a Windows-wide mutex.
+- Added an opening-dependent `paper_engineering` Automation Service job with an
+  exact Git pin, 15-minute admission window, seven-hour finite monitor,
+  restart recovery, and deterministic manifest installer. Opening-job repins
+  carry the dependent Paper job to the new canonical identity.
+- Froze the initial canary engineering policy as a versioned lab profile
+  (`$2/$95/$5/$2/$4/1/30s`), not permanent strategy semantics. Alpaca live,
+  Shadow, scoring, alerts, UI, schemas, and the final 30-trade sample remain
+  unchanged and inactive.
+
 ## Unreleased
 - Fast-forwarded the directly proven A001-A003 Paper stack into canonical
   `master` after compileall, 53 immediate tests, all 1,391 Python tests,

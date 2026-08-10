@@ -31,6 +31,9 @@ from momentum_hunter.engine_host_client import (
     ensure_engine_host,
     send_engine_host_command,
 )
+from momentum_hunter.alpaca_paper_engineering import (
+    PAPER_ENGINEERING_DECISION_CONFIRMATION,
+)
 from momentum_hunter.schwab_onboarding import (
     EncryptedSchwabAccountBindingStore,
     SchwabOAuthSecretRepository,
@@ -47,6 +50,7 @@ JOB_KINDS = frozenset(
         "nonmarket_canary",
         "opening_capture",
         "shadow_opening",
+        "paper_engineering",
         "codex_review",
     }
 )
@@ -215,10 +219,20 @@ def parse_manifest(path: Path) -> AutomationManifest:
             raise ManifestValidationError(
                 "Codex review jobs require a terminal runtime dependency."
             )
-        if job.kind != "codex_review" and job.depends_on_job_id:
+        if job.kind not in {"codex_review", "paper_engineering"} and job.depends_on_job_id:
             raise ManifestValidationError(
                 "Runtime jobs cannot depend on a Codex review or another job."
             )
+        if job.kind == "paper_engineering":
+            dependency = jobs_by_id.get(job.depends_on_job_id)
+            if (
+                dependency is None
+                or dependency.kind != "opening_capture"
+                or dependency.scheduled_at.date() != job.scheduled_at.date()
+            ):
+                raise ManifestValidationError(
+                    "Paper engineering must depend on the same-date opening capture."
+                )
         if (
             job.kind == "codex_review"
             and job.depends_on_job_id
@@ -285,16 +299,22 @@ def _parse_job(
         raise ManifestValidationError(
             f"Job {job_id!r} latestStartAt precedes scheduledAt."
         )
-    if kind in {"opening_capture", "shadow_opening"}:
+    if kind in {"opening_capture", "shadow_opening", "paper_engineering"}:
         maximum_window = 5 if kind == "shadow_opening" else 300
+        if kind == "paper_engineering":
+            maximum_window = 900
         if (latest_start_at - scheduled_at).total_seconds() > maximum_window:
             if kind == "shadow_opening":
                 message = (
                     "Shadow openings allow at most a five-second start window."
                 )
-            else:
+            elif kind == "opening_capture":
                 message = (
                     "Opening captures allow at most a five-minute start window."
+                )
+            else:
+                message = (
+                    "Paper engineering allows at most a fifteen-minute start window."
                 )
             raise ManifestValidationError(message)
         if scheduled_at.strftime("%H:%M:%S") != "08:35:00":
@@ -303,9 +323,10 @@ def _parse_job(
             )
 
     timeout_seconds = int(payload.get("timeoutSeconds", 1800))
-    if not 1 <= timeout_seconds <= 3600:
+    maximum_timeout = 28_800 if kind == "paper_engineering" else 3_600
+    if not 1 <= timeout_seconds <= maximum_timeout:
         raise ManifestValidationError(
-            f"Job {job_id!r} timeoutSeconds must be between 1 and 3600."
+            f"Job {job_id!r} timeoutSeconds must be between 1 and {maximum_timeout}."
         )
     expected_git_head = str(payload.get("expectedGitHead", "")).strip().lower()
     proof_bundle_path = _optional_path(payload.get("proofBundlePath"))
@@ -313,10 +334,10 @@ def _parse_job(
     prompt_path = _optional_path(payload.get("promptPath"))
     expected_output = str(payload.get("expectedOutput", "")).strip()
 
-    if kind in {"opening_capture", "shadow_opening"}:
+    if kind in {"opening_capture", "shadow_opening", "paper_engineering"}:
         if not GIT_SHA_PATTERN.fullmatch(expected_git_head):
             raise ManifestValidationError(
-                "Opening jobs require a full expectedGitHead."
+                "Market runtime jobs require a full expectedGitHead."
             )
     if kind == "shadow_opening":
         if proof_bundle_path is None or not proof_bundle_path.is_dir():
@@ -329,7 +350,7 @@ def _parse_job(
             )
         _require_within_repository(proof_bundle_path, repository_root)
         _require_within_repository(task_definition_path, repository_root)
-    elif kind == "opening_capture":
+    elif kind in {"opening_capture", "paper_engineering"}:
         if proof_bundle_path or task_definition_path:
             raise ManifestValidationError(
                 f"Job {job_id!r} cannot carry Shadow opening authority."
@@ -525,6 +546,10 @@ class AutomationSupervisor:
         )
         for job in opening_jobs:
             self._evaluate_job(job, now)
+        now = self.clock()
+        for job in self.manifest.jobs:
+            if job.kind == "paper_engineering":
+                self._evaluate_job(job, now)
         probe_started_at = self.clock()
         self._refresh_engine_host(probe_started_at)
         now = self.clock()
@@ -584,16 +609,26 @@ class AutomationSupervisor:
                 "Job is disabled in the immutable service manifest.",
             )
             return
+        recovering_paper_job = False
         if receipt is not None and receipt.status == "RUNNING":
-            receipt.status = "FAILED"
-            receipt.observed_at = now.isoformat()
-            receipt.completed_at = now.isoformat()
-            receipt.reason = (
-                "The service restarted while this job was in progress; the job "
-                "was not relaunched because doing so could duplicate an existing "
-                "capture process."
-            )
-            return
+            if job.kind == "paper_engineering":
+                recovering_paper_job = True
+                receipt.status = "PENDING"
+                receipt.observed_at = now.isoformat()
+                receipt.reason = (
+                    "The service restarted during Paper engineering; the durable "
+                    "intent will be recovered idempotently."
+                )
+            else:
+                receipt.status = "FAILED"
+                receipt.observed_at = now.isoformat()
+                receipt.completed_at = now.isoformat()
+                receipt.reason = (
+                    "The service restarted while this job was in progress; the job "
+                    "was not relaunched because doing so could duplicate an existing "
+                    "capture process."
+                )
+                return
         if now < job.scheduled_at:
             if receipt is None:
                 self.state.jobs[job.job_id] = self._receipt(
@@ -603,7 +638,7 @@ class AutomationSupervisor:
                     "Waiting for the prospective schedule.",
                 )
             return
-        if now > job.latest_start_at:
+        if now > job.latest_start_at and not recovering_paper_job:
             self.state.jobs[job.job_id] = self._receipt(
                 job,
                 now,
@@ -709,6 +744,15 @@ class AutomationSupervisor:
         if job.kind == "shadow_opening":
             self._validate_repository_identity(job.expected_git_head)
             command = self._shadow_opening_command(job)
+            return self._run_process(
+                command,
+                log_path=log_path,
+                timeout_seconds=job.timeout_seconds,
+                working_directory=self.manifest.repository_root,
+            )
+        if job.kind == "paper_engineering":
+            self._validate_repository_identity(job.expected_git_head)
+            command = self._paper_engineering_command(job)
             return self._run_process(
                 command,
                 log_path=log_path,
@@ -865,6 +909,30 @@ class AutomationSupervisor:
             "finviz",
             "-Scanner",
             "Institutional Momentum",
+        ]
+
+    def _paper_engineering_command(self, job: AutomationJob) -> list[str]:
+        report = (
+            self.manifest.repository_root
+            / "MomentumHunterData"
+            / "data"
+            / "reports"
+            / f"trade-plan-briefing-{job.scheduled_at.date().isoformat()}-opening.json"
+        )
+        return [
+            str(self.manifest.python_executable),
+            "-B",
+            "-m",
+            "momentum_hunter.alpaca_paper_engineering",
+            "run-session",
+            "--report",
+            str(report),
+            "--confirmation",
+            PAPER_ENGINEERING_DECISION_CONFIRMATION,
+            "--reconcile-interval",
+            "5",
+            "--maximum-runtime",
+            "25200",
         ]
 
     def _codex_review_command(

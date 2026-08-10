@@ -94,6 +94,17 @@ def plan_opening_capture_manifest(
         expected_git_head=expected_git_head,
         shadow_dates=shadow_dates,
     )
+    opening_by_id = {str(job["jobId"]): job for job in opening_jobs}
+    for job in retained_jobs:
+        if job.get("kind") != "paper_engineering":
+            continue
+        dependency_id = str(job.get("dependsOnJobId", ""))
+        dependency = opening_by_id.get(dependency_id)
+        if dependency is None:
+            raise ValueError(
+                "A retained Paper engineering job has no repinned opening capture."
+            )
+        job["expectedGitHead"] = dependency["expectedGitHead"]
     planned = dict(payload)
     planned["jobs"] = sorted(
         [*retained_jobs, *opening_jobs],

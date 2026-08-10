@@ -30,6 +30,8 @@ HTTP_TIMEOUT = (5.0, 15.0)
 MAX_RESPONSE_BYTES = 256 * 1024
 PAPER_PROBE_CLIENT_PREFIX = "mh-paper-capability-"
 PAPER_PROBE_CONFIRMATION = "AUTHORIZE BOUNDED ALPACA PAPER CAPABILITY PROBE"
+PAPER_ENGINEERING_CLIENT_PREFIX = "mh-paper-engineering-"
+PAPER_ENGINEERING_CONFIRMATION = "AUTHORIZE ALPACA PAPER ENGINEERING ORDER"
 _SYMBOL_PATTERN = re.compile(r"^[A-Z][A-Z0-9.\-]{0,14}$")
 _CLIENT_ORDER_PATTERN = re.compile(r"^[A-Za-z0-9_\-:.]{1,128}$")
 _ORDER_STATUSES = {
@@ -264,6 +266,8 @@ class PaperCapabilityAuthorization:
     allowed_sides: tuple[str, ...]
     maximum_quantity: Decimal | None = None
     client_order_prefix: str = PAPER_PROBE_CLIENT_PREFIX
+    allowed_symbols: tuple[str, ...] = ()
+    purpose: str = "CAPABILITY_PROBE"
 
     def validate(self, request: AlpacaPaperOrderRequest) -> None:
         if self.lane is not AlpacaPaperLane.CANARY_REALISTIC:
@@ -273,6 +277,10 @@ class PaperCapabilityAuthorization:
         if request.side not in self.allowed_sides:
             raise AlpacaPaperBrokerRequestError(
                 "Paper order side exceeds the capability authorization."
+            )
+        if self.allowed_symbols and request.symbol not in self.allowed_symbols:
+            raise AlpacaPaperBrokerRequestError(
+                "Paper order symbol exceeds the bounded authorization."
             )
         if not request.client_order_id.startswith(self.client_order_prefix):
             raise AlpacaPaperBrokerRequestError(
@@ -324,6 +332,52 @@ def authorize_paper_capability_probe(
         maximum_notional=maximum_notional,
         allowed_sides=allowed_sides,
         maximum_quantity=maximum_quantity,
+    )
+
+
+def authorize_paper_engineering_order(
+    *,
+    confirmation: str,
+    maximum_notional: Decimal,
+    allowed_sides: tuple[str, ...],
+    allowed_symbols: tuple[str, ...],
+    maximum_quantity: Decimal | None = None,
+    client_order_prefix: str,
+) -> PaperCapabilityAuthorization:
+    """Create one bounded Canary Paper authorization after sample-arm validation."""
+
+    if confirmation != PAPER_ENGINEERING_CONFIRMATION:
+        raise AlpacaPaperBrokerRequestError(
+            "The exact Alpaca Paper engineering confirmation was not provided."
+        )
+    _require_positive_decimal(maximum_notional, "maximum notional")
+    if maximum_quantity is not None:
+        _require_positive_decimal(maximum_quantity, "maximum quantity")
+    if not allowed_sides or any(side not in {"buy", "sell"} for side in allowed_sides):
+        raise AlpacaPaperBrokerRequestError("Paper engineering sides are invalid.")
+    normalized_symbols = tuple(
+        dict.fromkeys(_normalized_symbol(symbol) for symbol in allowed_symbols)
+    )
+    if not normalized_symbols:
+        raise AlpacaPaperBrokerRequestError(
+            "Paper engineering authorization requires an explicit symbol."
+        )
+    if (
+        not client_order_prefix.startswith(PAPER_ENGINEERING_CLIENT_PREFIX)
+        or len(client_order_prefix) > 96
+        or not _CLIENT_ORDER_PATTERN.fullmatch(client_order_prefix)
+    ):
+        raise AlpacaPaperBrokerRequestError(
+            "Paper engineering client-order namespace is invalid."
+        )
+    return PaperCapabilityAuthorization(
+        lane=AlpacaPaperLane.CANARY_REALISTIC,
+        maximum_notional=maximum_notional,
+        allowed_sides=allowed_sides,
+        maximum_quantity=maximum_quantity,
+        client_order_prefix=client_order_prefix,
+        allowed_symbols=normalized_symbols,
+        purpose="PAPER_ENGINEERING",
     )
 
 

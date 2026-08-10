@@ -3,6 +3,7 @@ from __future__ import annotations
 """Paper-only Alpaca credential onboarding and read-only account proof."""
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -110,6 +111,8 @@ class AlpacaPaperAccount:
     account_blocked: bool
     trading_blocked: bool
     trade_suspended_by_user: bool
+    equity: Decimal | None = None
+    last_equity: Decimal | None = None
 
     @property
     def usable(self) -> bool:
@@ -218,6 +221,20 @@ class AlpacaPaperCredentialRepository:
         )
         _validate_credentials(credentials)
         return credentials
+
+    def binding_fingerprint(self) -> str:
+        """Return a stable account-slot binding without exposing credential material."""
+
+        credentials = self.load()
+        payload = "|".join(
+            (
+                "alpaca-paper-binding-v1",
+                self.lane.value,
+                ALPACA_PAPER_BASE_URL,
+                credentials.key_id,
+            )
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest().upper()
 
     def status(self) -> dict[str, object]:
         return {
@@ -449,6 +466,8 @@ def parse_paper_account(payload: object) -> AlpacaPaperAccount:
             payload,
             "trade_suspended_by_user",
         ),
+        equity=_optional_decimal(payload, "equity"),
+        last_equity=_optional_decimal(payload, "last_equity"),
     )
 
 
@@ -469,6 +488,15 @@ def _required_decimal(payload: Mapping[object, object], field: str) -> Decimal:
             f"The Alpaca Paper account response contained non-finite {field}."
         )
     return normalized
+
+
+def _optional_decimal(
+    payload: Mapping[object, object],
+    field: str,
+) -> Decimal | None:
+    if field not in payload or payload.get(field) in {None, ""}:
+        return None
+    return _required_decimal(payload, field)
 
 
 def _required_bool(payload: Mapping[object, object], field: str) -> bool:

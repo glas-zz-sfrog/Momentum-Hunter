@@ -200,6 +200,92 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertEqual("FAILED", state.jobs["canary"].status)
         self.assertIn("could duplicate", state.jobs["canary"].reason)
 
+    def test_interrupted_paper_job_recovers_idempotently_after_start_window(self) -> None:
+        opening = self.job(
+            kind="opening_capture",
+            job_id="opening-capture-20260730",
+            scheduled_at=self.now - timedelta(minutes=30),
+            latest_start_at=self.now - timedelta(minutes=25),
+        )
+        paper = self.job(
+            kind="paper_engineering",
+            job_id="paper-engineering-20260730",
+            scheduled_at=self.now - timedelta(minutes=30),
+            latest_start_at=self.now - timedelta(minutes=15),
+            depends_on_job_id=opening.job_id,
+        )
+        state = SupervisorState(
+            service_started_at=(self.now - timedelta(minutes=30)).isoformat(),
+            jobs={
+                opening.job_id: JobReceipt(
+                    job_id=opening.job_id,
+                    kind=opening.kind,
+                    status="COMPLETED",
+                    scheduled_at=opening.scheduled_at.isoformat(),
+                    latest_start_at=opening.latest_start_at.isoformat(),
+                    observed_at=(self.now - timedelta(minutes=20)).isoformat(),
+                    completed_at=(self.now - timedelta(minutes=20)).isoformat(),
+                    exit_code=0,
+                ),
+                paper.job_id: JobReceipt(
+                    job_id=paper.job_id,
+                    kind=paper.kind,
+                    status="RUNNING",
+                    scheduled_at=paper.scheduled_at.isoformat(),
+                    latest_start_at=paper.latest_start_at.isoformat(),
+                    observed_at=(self.now - timedelta(minutes=20)).isoformat(),
+                    started_at=(self.now - timedelta(minutes=20)).isoformat(),
+                    depends_on_job_id=opening.job_id,
+                ),
+            },
+        )
+        SupervisorStateStore(
+            self.state_dir / "automation-service-state.json"
+        ).save(state)
+
+        recovered = self.supervisor(opening, paper).tick()
+
+        self.assertEqual([paper.job_id], self.executed)
+        self.assertEqual("COMPLETED", recovered.jobs[paper.job_id].status)
+
+    def test_slow_opening_capture_cannot_launch_paper_after_admission_window(self) -> None:
+        opening = self.job(
+            kind="opening_capture",
+            job_id="opening-capture-20260730",
+            scheduled_at=self.now,
+            latest_start_at=self.now + timedelta(minutes=5),
+        )
+        paper = self.job(
+            kind="paper_engineering",
+            job_id="paper-engineering-20260730",
+            scheduled_at=self.now,
+            latest_start_at=self.now + timedelta(minutes=15),
+            depends_on_job_id=opening.job_id,
+        )
+        current = self.now
+
+        def clock() -> datetime:
+            return current
+
+        def execute(job: AutomationJob, _log_path: Path) -> tuple[int, str]:
+            nonlocal current
+            self.executed.append(job.job_id)
+            if job.kind == "opening_capture":
+                current += timedelta(minutes=16)
+            return 0, "completed"
+
+        supervisor = AutomationSupervisor(
+            self.manifest(opening, paper),
+            clock=clock,
+            engine_host_probe=self.healthy_engine,
+            job_executor=execute,
+        )
+
+        state = supervisor.tick()
+
+        self.assertEqual([opening.job_id], self.executed)
+        self.assertEqual("MISSED", state.jobs[paper.job_id].status)
+
     def test_unhealthy_engine_host_fails_due_job_closed(self) -> None:
         job = self.job(kind="nonmarket_canary")
         supervisor = AutomationSupervisor(
@@ -433,6 +519,63 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertEqual("a" * 40, manifest.jobs[0].expected_git_head)
         self.assertIsNone(manifest.jobs[0].proof_bundle_path)
         self.assertIsNone(manifest.jobs[0].task_definition_path)
+
+    def test_manifest_accepts_bounded_paper_job_after_same_date_capture(self) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260730",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:40:00-05:00",
+                    "timeoutSeconds": 900,
+                    "expectedGitHead": "a" * 40,
+                },
+                {
+                    "jobId": "paper-engineering-20260730",
+                    "kind": "paper_engineering",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:50:00-05:00",
+                    "timeoutSeconds": 25200,
+                    "expectedGitHead": "a" * 40,
+                    "dependsOnJobId": "opening-capture-20260730",
+                },
+            ]
+        )
+
+        manifest = self.parse_payload(payload)
+
+        paper = manifest.jobs[1]
+        self.assertEqual("paper_engineering", paper.kind)
+        self.assertEqual("opening-capture-20260730", paper.depends_on_job_id)
+        self.assertEqual(25200, paper.timeout_seconds)
+
+    def test_manifest_rejects_paper_job_without_same_date_capture(self) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "canary",
+                    "kind": "nonmarket_canary",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:40:00-05:00",
+                },
+                {
+                    "jobId": "paper-engineering-20260730",
+                    "kind": "paper_engineering",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:50:00-05:00",
+                    "timeoutSeconds": 25200,
+                    "expectedGitHead": "a" * 40,
+                    "dependsOnJobId": "canary",
+                },
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            ManifestValidationError,
+            "same-date opening capture",
+        ):
+            self.parse_payload(payload)
 
     def test_manifest_rejects_opening_without_frozen_git_identity(self) -> None:
         payload = self.manifest_payload(
@@ -801,6 +944,24 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertNotIn("order", joined)
         self.assertNotIn("submit", joined)
         self.assertNotIn("cancel", joined)
+
+    def test_paper_command_is_exactly_paper_engineering_session(self) -> None:
+        job = self.job(
+            kind="paper_engineering",
+            job_id="paper-engineering-20260730",
+            depends_on_job_id="opening-capture-20260730",
+            expected_git_head="a" * 40,
+        )
+        supervisor = self.supervisor(job)
+
+        command = supervisor._paper_engineering_command(job)
+        joined = " ".join(command)
+
+        self.assertIn("momentum_hunter.alpaca_paper_engineering", joined)
+        self.assertIn("run-session", command)
+        self.assertIn("trade-plan-briefing-2026-07-30-opening.json", joined)
+        self.assertNotIn("api.alpaca.markets", joined)
+        self.assertNotIn("shadow", joined.lower())
 
     def test_opening_execution_validates_frozen_repository_identity(self) -> None:
         job = self.job(kind="opening_capture", expected_git_head="a" * 40)

@@ -33,6 +33,7 @@ from momentum_hunter.broker_capabilities import (
     CAPABILITY_CLIENT_ORDER_ID,
     CAPABILITY_FRACTIONAL_LIMIT,
     CAPABILITY_FRACTIONAL_MARKET,
+    CAPABILITY_FRACTIONAL_PRECISION,
     CAPABILITY_FRACTIONAL_QUANTITY,
     CAPABILITY_FRACTIONAL_REPLACE,
     CAPABILITY_FRACTIONAL_STOP,
@@ -1000,6 +1001,7 @@ def adjudicate_lifecycle_capabilities(
         CAPABILITY_FRACTIONAL_QUANTITY: (
             f"fractional quantity {position_quantity:f} entered and liquidated exactly"
         ),
+        CAPABILITY_FRACTIONAL_PRECISION: "0.00000001",
         CAPABILITY_FRACTIONAL_MARKET: (
             "fractional market entry and exact market liquidation filled"
         ),

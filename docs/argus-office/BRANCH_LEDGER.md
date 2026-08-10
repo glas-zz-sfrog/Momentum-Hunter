@@ -1,5 +1,17 @@
 # Branch Ledger
 
+## ARGUS-BROKER-ALPACA-004 Paper Engineering
+
+`codex/ARGUS-BROKER-ALPACA-004-paper-engineering` is `ACTIVE` from synchronized
+canonical base `e6d8af1`. It contains the Hard-Chew-proven Paper Risk,
+allocation, execution, recovery, lifecycle-monitor, and Automation Service
+wiring for the canary engineering sample. No provider mutation occurred during
+implementation. Next action is one clean fast-forward integration and
+non-force backup, followed by installed-service refresh, sample freeze, and a
+same-head opening-dependent prospective Paper job. Do not use this branch for
+Alpaca live trading or the final continuous-intraday strategy sample.
+
+
 Date reconciled: 2026-08-10
 
 ## ARGUS-BROKER-ALPACA-003 Paper Lifecycle Harness

@@ -113,6 +113,38 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
         self.assertIn("opening-capture-20260803", identifiers)
         self.assertIn("opening-capture-20260804", identifiers)
 
+    def test_replan_updates_retained_paper_job_to_new_opening_identity(self) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260803",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-08-03T08:35:00-05:00",
+                    "latestStartAt": "2026-08-03T08:40:00-05:00",
+                    "expectedGitHead": "b" * 40,
+                },
+                {
+                    "jobId": "paper-engineering-20260803",
+                    "kind": "paper_engineering",
+                    "scheduledAt": "2026-08-03T08:35:00-05:00",
+                    "latestStartAt": "2026-08-03T08:50:00-05:00",
+                    "timeoutSeconds": 25200,
+                    "expectedGitHead": "b" * 40,
+                    "dependsOnJobId": "opening-capture-20260803",
+                },
+            ]
+        )
+
+        planned = plan_opening_capture_manifest(
+            payload,
+            start_date=date(2026, 8, 3),
+            market_sessions=2,
+            expected_git_head=self.expected_git_head,
+        )
+
+        paper = next(job for job in planned["jobs"] if job["kind"] == "paper_engineering")
+        self.assertEqual(self.expected_git_head, paper["expectedGitHead"])
+
     def test_validated_plan_does_not_mutate_source_manifest(self) -> None:
         original = self.manifest_path.read_bytes()
         output = self.root / "planned.json"
