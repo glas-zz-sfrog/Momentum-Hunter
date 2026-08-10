@@ -29,9 +29,9 @@ configured with two bounded retries, and export their task XML to
 
 ## Verification Before Scheduling
 
-- New focused tests: 10 pass.
-- Affected Schwab quote/candle/overnight boundary: 100 pass.
-- Full Python discovery: 1,332 pass.
+- New focused tests: 11 pass.
+- Affected Schwab quote/candle/overnight boundary: 101 pass.
+- Full Python discovery: 1,333 pass.
 - PowerShell parser and plan-only runner/installer: pass.
 - Central time zone, NIST synchronization, Schwab HTTPS reachability, no AC
   sleep/hibernate, enabled wake timers, and Running/Automatic automation

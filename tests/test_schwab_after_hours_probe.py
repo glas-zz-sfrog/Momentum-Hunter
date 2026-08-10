@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 from momentum_hunter.schwab_after_hours_probe import (
     SYMBOLS,
+    SchwabAfterHoursProbe,
     SchwabAfterHoursProbeError,
     _fingerprint,
     adjudicate_after_hours_proof,
@@ -69,6 +70,74 @@ def _proof(*, difference_fields: tuple[str, ...] = (), stale: bool = False) -> d
 
 
 class SchwabAfterHoursProbeTests(unittest.TestCase):
+    def test_wrapper_authorizes_once_and_adjudicates_synthetic_observer(self) -> None:
+        observed_at = datetime(2026, 8, 11, 20, 5, tzinfo=UTC)
+        quote = SimpleNamespace(
+            provider_quote_timestamp=(observed_at - timedelta(seconds=2)).isoformat(),
+            provider_bid_timestamp=(observed_at - timedelta(seconds=3)).isoformat(),
+            provider_ask_timestamp=(observed_at - timedelta(seconds=1)).isoformat(),
+            source="synthetic",
+            bid=1.0,
+            ask=1.1,
+            last=1.05,
+            volume=100,
+            realtime=True,
+            security_status="Normal",
+        )
+        access = SimpleNamespace(
+            access_token="forbidden-synthetic-token",
+            account_ending="2573",
+        )
+
+        class Guard:
+            calls = 0
+
+            def authorize(self, ending: str) -> object:
+                self.calls += 1
+                self.assertion = ending
+                return access
+
+        class QuoteTransport:
+            def fetch_quotes_with_clock(self, token: str, symbols: tuple[str, ...]) -> object:
+                self.token = token
+                self.symbols = symbols
+                return SimpleNamespace(
+                    quotes={symbol: quote for symbol in SYMBOLS},
+                    clock_skew_proof={"responseReceivedAt": observed_at.isoformat()},
+                )
+
+        class Observer:
+            def __init__(self, *, access_guard: object, utc_clock: object) -> None:
+                self.access_guard = access_guard
+
+            def observe(self, options: object) -> dict[str, object]:
+                self.access_guard.authorize("2573")
+                proof = _proof()
+                proof["proofFingerprint"] = "BASE"
+                return proof
+
+        guard = Guard()
+        transport = QuoteTransport()
+        result = SchwabAfterHoursProbe(
+            access_guard=guard,
+            quote_transport=transport,
+            observer_factory=Observer,
+            utc_clock=lambda: observed_at,
+        ).observe(
+            expected_session_date=date(2026, 8, 11),
+            duration_seconds=300,
+            attempt_label="OPEN",
+        )
+        self.assertEqual(1, guard.calls)
+        self.assertEqual("2573", guard.assertion)
+        self.assertEqual("forbidden-synthetic-token", transport.token)
+        self.assertEqual(SYMBOLS, transport.symbols)
+        self.assertEqual(
+            "SCHWAB_AFTER_HOURS_PROVEN",
+            result["afterHoursAdjudication"]["classification"],
+        )
+        self.assertNotIn("forbidden-synthetic-token", str(result))
+
     def test_tuesday_after_hours_window_is_allowed(self) -> None:
         observed = datetime(2026, 8, 11, 20, 5, tzinfo=UTC)
         eastern = require_after_hours_window(observed, date(2026, 8, 11))

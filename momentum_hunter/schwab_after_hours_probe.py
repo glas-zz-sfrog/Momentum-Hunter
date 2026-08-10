@@ -17,11 +17,9 @@ from momentum_hunter.schwab_candle_observer import (
     GuardedStreamerAccess,
     SchwabCandleAccessGuard,
     SchwabCandleMarketHoursObserver,
-    SchwabCandleObserverError,
     write_proof_once,
 )
 from momentum_hunter.schwab_market_data import SchwabMarketDataTransport
-from momentum_hunter.schwab_market_data import SchwabMarketDataError
 
 
 PROBE_SCHEMA_VERSION = 1
@@ -456,16 +454,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
         return 0
-    except (
-        SchwabAfterHoursProbeError,
-        SchwabCandleObserverError,
-        SchwabMarketDataError,
-    ):
+    except Exception as exc:
         print(
             json.dumps(
                 {
                     "classification": "SCHWAB_AFTER_HOURS_PROBE_FAILED_SAFE",
                     "credentialMaterialIncluded": False,
+                    "errorType": type(exc).__name__,
                     "ordersRequested": False,
                     "positionsRequested": False,
                 },
