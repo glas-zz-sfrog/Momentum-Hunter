@@ -54,16 +54,16 @@ without blindly submitting a duplicate command.
 - [x] Failure evidence is write-once and cleanup is best-effort/fail-closed.
 - [x] Provider receipts omit account identity and credential-shaped values.
 - [x] No production runtime imports the adapter or lifecycle harness.
-- [ ] One direct regular-market Alpaca Paper lifecycle finishes and is
+- [x] One direct regular-market Alpaca Paper lifecycle finishes and is
   independently adjudicated.
 
 ## Evidence Depth
 
 - Python compileall: pass.
 - Adapter tests: 32/32 pass.
-- Lifecycle tests: 15/15 pass.
+- Lifecycle tests: 21/21 pass.
 - Adjacent onboarding/allocation/TradePlan/simulation tests: 151/151 pass.
-- Full Python discovery: 1,385/1,385 pass in 292.763 seconds.
+- Full Python discovery: 1,391/1,391 pass in 231.451 seconds after direct proof.
 - `git diff --check`: pass.
 - Credential-shaped-value scan: zero hits.
 - Runtime import and protected-path scans: zero hits.
@@ -72,6 +72,8 @@ without blindly submitting a duplicate command.
 
 ## Status
 
-`IMPLEMENTED_PENDING_MARKET_HOURS_PROOF` on
-`codex/ARGUS-BROKER-ALPACA-003-paper-lifecycle-proof`. No direct provider
-lifecycle was attempted on Sunday, and no new capability is yet `PROVEN`.
+`DIRECT_PROOF_COMPLETE_PENDING_INTEGRATION` on
+`codex/ARGUS-BROKER-ALPACA-003-paper-lifecycle-proof`. Direct proof
+`alpaca-paper-lifecycle-78aaade645ee4fd697a338d3` is
+`ALPACA_PAPER_LIFECYCLE_PROVEN`, ends flat with zero open orders, and contains
+no credential or account identity. Runtime integration remains out of scope.

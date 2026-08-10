@@ -6,8 +6,8 @@
   idempotent submit/replace recovery, partial-fill handling, distant
   stop/stop-limit/target checks, bounded exact liquidation, sanitized provider
   receipts, and write-once external evidence.
-- Proved the implementation synthetically with 32 adapter tests, 15 lifecycle
-  tests, 151 adjacent tests, and all 1,385 Python tests. Added a second-pass
+- Proved the implementation synthetically with 32 adapter tests, 21 lifecycle
+  tests, 151 adjacent tests, and all 1,391 Python tests. Added a second-pass
   offline adjudicator that rejects tampered, dirty, incomplete, or receipt-free
   reports and promotes only capabilities present in the exact direct lifecycle
   chain. A successful CLI run now emits the derived registry without modifying
@@ -15,9 +15,17 @@
   all 1,391 Python tests now pass. Canonical `master`, the
   installed service/manifest, all 25 opening jobs, and zero-Shadow-job state
   remain unchanged.
-- Kept every unobserved lifecycle capability unproven. The direct provider run
-  waits for a safe regular-market window; no live host, runtime integration,
-  Paper strategy sample, account identity, or credential value was introduced.
+- Completed direct proof `alpaca-paper-lifecycle-78aaade645ee4fd697a338d3`
+  against the exact Paper host: `$1.00` of SPY filled as `0.00128035` share,
+  fractional stop and stop-limit orders were hosted/canceled, a fractional
+  target was replaced/canceled, and the exact quantity was liquidated. Both the
+  persisted final state and an independent read found zero positions and zero
+  open orders. Evidence contains no credential value or account identity.
+- Kept every unobserved lifecycle capability unproven. Partial-fill and provider
+  restart recovery remain synthetic-only; bracket/OCO/OTO, streaming,
+  extended-hours execution, and broker-resident linked protection remain
+  unknown. No live host, runtime integration, or Paper strategy sample was
+  introduced.
 - Added a provider-neutral, fail-closed broker capability registry plus an isolated Canary-only Alpaca Paper adapter. The adapter accepts only the exact Paper host, rejects the live host and research lane structurally, blocks advanced and extended-hours orders, bounds mutations by owned client IDs and maximum notional, and is not wired into Engine Host, Shadow, service, scheduler, WPF, or production execution.
 - Proved the first direct Alpaca Paper lifecycle slice with `0.5` SPY shares at a deliberately nonmarketable `$2.00` limit: fractional quantity and limit acceptance, exact client-order lookup, cancellation, and a clean final state with zero positions and zero open orders. Implementation and provider evidence are fingerprinted in a secret-free write-once local proof; 21 focused, 151 adjacent, and all 1,359 Python tests pass.
 - Kept every unobserved capability fail-closed. Fractional market/fill behavior, stops, stop-limits, profit taking, replace semantics, partial fills, advanced order classes, streaming, broker-resident protection, position recovery, exact liquidation, and strategy/runtime integration remain separate work.

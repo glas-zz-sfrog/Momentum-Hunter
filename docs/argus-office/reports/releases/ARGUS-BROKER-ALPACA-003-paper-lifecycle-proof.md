@@ -2,7 +2,7 @@
 
 ## Classification
 
-`IMPLEMENTED_PENDING_MARKET_HOURS_PROOF`
+`DIRECT_PROOF_COMPLETE_PENDING_INTEGRATION`
 
 ## Implementation
 
@@ -67,6 +67,25 @@ Synthetic tests prove:
 - Runtime import scan: no existing runtime imports the lifecycle harness or
   Alpaca Paper adapter.
 
+## Direct Provider Evidence
+
+On 2026-08-10 at 12:32 Central, the exact Paper-only harness ran proof
+`alpaca-paper-lifecycle-78aaade645ee4fd697a338d3` against SPY:
+
+- `$1.00` market entry filled `0.00128035` share at `$773.226`.
+- A fractional stop and stop-limit were accepted and canceled.
+- A fractional limit target was accepted, replaced by price, and canceled.
+- Exact liquidation sold `0.00128035` share at `$773.206`.
+- Persisted final state and a separate post-run read both found zero positions
+  and zero open orders.
+- Final report classification: `ALPACA_PAPER_LIFECYCLE_PROVEN`.
+- Plan SHA-256:
+  `405FC8E32E2EBE2704DE326745C2E791B4EB7538ED249AC23613748B8F75EB4C`.
+- Final SHA-256:
+  `A1A4CDDFC60BF03DDC7D23B0F9AF548F64B107DF34E88287477E548B75A54414`.
+- Exact stored credential values were compared locally against the evidence;
+  neither credential nor account identity was present.
+
 ## Operational Nonmutation
 
 Canonical `master` and `origin/master` remain synchronized at `1d0ca95`. The
@@ -78,12 +97,12 @@ brokerage read/write occurred during synthetic implementation.
 
 ## Capability Truth
 
-No remaining provider capability is promoted by this branch yet. Market
-entry/fill, stop and stop-limit acceptance, price replacement, partial-fill
-behavior, restart reconciliation, and exact liquidation remain
-`DOCUMENTED_UNPROVEN` or `UNKNOWN` until one direct regular-market proof passes.
-Bracket/OCO/OTO, streaming, extended hours, and broker-resident linked
-protection remain outside this slice.
+Direct evidence promotes Paper environment, fractional quantity, market,
+limit, stop, stop-limit, price replacement, cancellation, client-order
+identity, and exact fractional liquidation. Partial-fill and provider restart
+recovery remain synthetic-only because neither condition occurred in the direct
+run. Bracket/OCO/OTO, streaming, extended-hours execution, and broker-resident
+linked protection remain outside this slice and fail closed.
 
 The offline adjudicator will promote only Paper environment, fractional
 quantity/market/limit/stop/stop-limit, price replacement, cancellation, and
@@ -94,8 +113,8 @@ streaming, overnight, or linked-protection support.
 
 ## Next Action
 
-Commit and back up this feature branch without merging or installing it. In
-the next safe regular-market window, run exactly one bounded Canary Paper
-lifecycle, inspect the final account for zero positions and zero open orders,
-scan the evidence, and adjudicate only the capabilities the provider actually
-demonstrates.
+Commit and back up the direct-proof closeout, then fast-forward the verified
+A001-A003 stack into canonical `master`, repin future ordinary opening jobs to
+the final synchronized head, and resume provider-neutral DATA-005B allocation
+work. Do not wire a Paper strategy sample until the allocation, Risk Governor,
+ledger, and policy gates are explicitly versioned and tested.

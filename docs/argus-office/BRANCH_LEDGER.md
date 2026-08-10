@@ -1,11 +1,11 @@
 # Branch Ledger
 
-Date reconciled: 2026-08-09
+Date reconciled: 2026-08-10
 
 ## ARGUS-BROKER-ALPACA-003 Paper Lifecycle Harness
 
 `codex/ARGUS-BROKER-ALPACA-003-paper-lifecycle-proof` is
-`IMPLEMENTED_PENDING_MARKET_HOURS_PROOF`. It is stacked on A002 `256d442` and
+`DIRECT_PROOF_COMPLETE_PENDING_INTEGRATION`. It is stacked on A002 `256d442` and
 adds only an isolated Paper adapter hardening layer, lifecycle harness,
 synthetic tests, and branch-local governance evidence. Compileall, 32 adapter
 tests, 21 lifecycle tests, 77 focused Alpaca-stack tests, and all 1,391 Python
@@ -13,12 +13,15 @@ tests pass. The offline capability adjudicator requires exact frozen command
 identity, ordered lifecycle events, allowlisted direct provider receipts, and a
 clean final-flat state; the CLI emits its registry only after success and leaves
 every unobserved capability unproven.
-No direct provider lifecycle was attempted on Sunday, so remaining fractional
-market/protective/replacement/liquidation capabilities are still unproven. No
-live host, Engine Host, Shadow, service, scheduler, WPF, or production order
-path is reachable. Next action: ordinary non-force feature backup, then one
-bounded direct Paper lifecycle during a safe regular-market window; do not
-merge or install before adjudication.
+Direct proof `alpaca-paper-lifecycle-78aaade645ee4fd697a338d3` passed on
+2026-08-10. A `$1.00` SPY market entry filled `0.00128035` share; fractional
+stop, stop-limit, target replacement, cancellation, and exact liquidation all
+completed. Persisted and independent checks found zero positions and zero open
+orders, with no credential or account identity in evidence. Final-evidence
+SHA-256 is `A1A4CDDFC60BF03DDC7D23B0F9AF548F64B107DF34E88287477E548B75A54414`.
+No live host, Engine Host, Shadow, service, scheduler, WPF, or production order
+path is reachable. Next action: clean fast-forward integration, backup, opening-
+job repin, then provider-neutral DATA-005B reconciliation.
 
 ## ARGUS-BROKER-ALPACA-002 Fractional Capability Foundation
 
