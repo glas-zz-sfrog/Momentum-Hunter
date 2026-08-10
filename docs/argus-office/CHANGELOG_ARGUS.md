@@ -6,6 +6,10 @@
   protected-path review, exact-credential scan, and independent zero-position/
   zero-order reconciliation passed. No runtime imports the Paper adapter and no
   live endpoint or strategy sample was enabled.
+- Preserved the successful August 10 ordinary opening receipt and repinned all
+  24 future opening jobs from August 11 through September 14 to the final
+  synchronized closeout head. Tuesday is `PENDING`, zero Shadow jobs are
+  enabled, and order transmission remains `UNAVAILABLE`.
 - Added the isolated A003 Alpaca Paper lifecycle harness with a write-once
   one-dollar SPY plan, frozen client-order identities, market-hours gate,
   idempotent submit/replace recovery, partial-fill handling, distant

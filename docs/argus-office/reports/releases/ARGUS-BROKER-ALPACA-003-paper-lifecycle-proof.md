@@ -86,14 +86,15 @@ On 2026-08-10 at 12:32 Central, the exact Paper-only harness ran proof
 - Exact stored credential values were compared locally against the evidence;
   neither credential nor account identity was present.
 
-## Operational Nonmutation
+## Operational State
 
-Canonical `master` and `origin/master` remain synchronized at `1d0ca95`. The
-installed automation service remains Running/Automatic. Its manifest remains
-SHA-256 `E99E65A302B97A5D866071C3C1B37C8519972F8D55966EAC08772A1F6F093B47`
-with 25 enabled opening jobs and zero enabled Shadow jobs. No service restart,
-manifest edit, scheduled-job edit, Engine Host call, production-data access, or
-brokerage read/write occurred during synthetic implementation.
+Canonical `master` and `origin/master` contain the directly proven A001-A003
+stack. The installed automation service remains Running/Automatic. The
+successful August 10 opening receipt is preserved, and 24 future opening jobs
+from August 11 through September 14 are pinned to the final synchronized
+closeout head. Tuesday is `PENDING`, zero Shadow jobs are enabled, and order
+transmission remains `UNAVAILABLE`. No service restart, Engine Host command,
+Shadow action, production-data mutation, or live brokerage action occurred.
 
 ## Capability Truth
 
@@ -113,8 +114,7 @@ streaming, overnight, or linked-protection support.
 
 ## Next Action
 
-The verified A001-A003 stack is integrated on canonical `master` and backed up.
-Repin future ordinary opening jobs to the final synchronized closeout head,
-then resume provider-neutral DATA-005B allocation work. Do not wire a Paper
-strategy sample until the allocation, Risk Governor, ledger, and policy gates
-are explicitly versioned and tested.
+The verified A001-A003 stack is integrated on canonical `master`, backed up,
+and operationally repinned. Resume provider-neutral DATA-005B allocation work.
+Do not wire a Paper strategy sample until the allocation, Risk Governor,
+ledger, and policy gates are explicitly versioned and tested.

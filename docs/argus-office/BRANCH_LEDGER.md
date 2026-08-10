@@ -21,9 +21,9 @@ completed. Persisted and independent checks found zero positions and zero open
 orders, with no credential or account identity in evidence. Final-evidence
 SHA-256 is `A1A4CDDFC60BF03DDC7D23B0F9AF548F64B107DF34E88287477E548B75A54414`.
 No live host, Engine Host, Shadow, service, scheduler, WPF, or production order
-path is reachable. The stack fast-forwarded cleanly into canonical `master`;
-next action is final-head opening-job repin, then provider-neutral DATA-005B
-reconciliation.
+path is reachable. The stack fast-forwarded cleanly into canonical `master` and
+the 24 future ordinary opening jobs are pinned to the final synchronized
+closeout head. Next action is provider-neutral DATA-005B reconciliation.
 
 ## ARGUS-BROKER-ALPACA-002 Fractional Capability Foundation
 
