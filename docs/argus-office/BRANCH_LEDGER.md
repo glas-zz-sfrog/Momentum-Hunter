@@ -68,7 +68,7 @@ observed the first job as `PENDING`; no service reinstall or restart occurred.
 ## ARGUS-DATA-005B Provider-Neutral Allocation
 
 `codex/ARGUS-DATA-005B-current-master-integration` is
-`IMPLEMENTED_PENDING_MERGE` from synchronized A003 closeout `e0f6e33`. It
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` from synchronized A003 closeout `e0f6e33`. It
 reconciles the pushed source branch onto the directly proven Paper foundation
 and adds only dormant provider-neutral allocation, multi-position
 Paper-research, and dual-result evidence contracts plus synthetic tests.
@@ -79,8 +79,9 @@ provider, and environment evidence; cross-lineage and cross-lane combinations
 fail closed. Compileall, 36 focused tests, 202 adjacent regressions, and all
 1,427 Python tests pass. No provider call, Paper mutation, Alpaca-specific
 capability promotion, selector arm, Shadow state, service, scheduler, UI,
-credential, or order path is connected. Numeric policy activation and runtime
-wiring remain separate tasks.
+credential, or order path is connected. It fast-forwarded cleanly into
+canonical `master`; numeric policy activation and runtime wiring remain
+separate tasks.
 
 `codex/ARGUS-DATA-005B-provider-neutral-allocation` is a
 `PUSHED_FEATURE_BRANCH / SUPERSEDED_BY_CURRENT_BASE_RECONCILIATION` at

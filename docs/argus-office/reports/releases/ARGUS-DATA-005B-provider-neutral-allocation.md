@@ -5,7 +5,7 @@
 - Branch: `codex/ARGUS-DATA-005B-current-master-integration`
 - Base: synchronized A003 operational closeout `e0f6e33`
 - Reconciled source: `codex/ARGUS-DATA-005B-provider-neutral-allocation` at `046b127`
-- Classification: `IMPLEMENTED_PENDING_MERGE`
+- Classification: `COMPLETE`
 - Project development: `PROJECT_DEVELOPMENT_ACTIVE`
 - Runtime integration: none
 
@@ -55,7 +55,6 @@ both earlier commits are included in `1abb4dd`; Monday must test `1abb4dd`.
 
 ## Remaining Gates
 
-- Fast-forward this verified dormant infrastructure into canonical `master`.
 - Freeze separate numeric Canary/research policies from observed capabilities.
 - Add an audited Risk Governor/allocation/Alpaca Paper/ledger wiring slice before
   any prospective Paper engineering sample.
