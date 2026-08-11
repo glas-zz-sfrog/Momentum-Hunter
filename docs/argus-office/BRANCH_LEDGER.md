@@ -1,5 +1,18 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025C Runtime Source Admission
+
+`codex/ARGUS-SHADOW-025C-runtime-source-admission` is
+`IMPLEMENTED_PENDING_MERGE` from verified ARGUS-SHADOW-025B head `6ba54bd`.
+It admits exactly one canonical runtime source per new continuous plan version:
+an exact setup-bound candidate lifecycle event or the exact immutable successor
+plan after other context changes. Unpersisted, contradictory, setup-free,
+nonmaterial, reused-identity, wrong-predecessor, or disallowed sources fail
+closed. The branch remains dormant and feature-only; canonical `master`, the
+installed service, Tuesday jobs, providers, accounts, orders, production
+stores, and Paper/Shadow state are unchanged. Do not merge or install before
+Tuesday's terminal operational evidence is preserved.
+
 ## ARGUS-SHADOW-025B Cross-Process Ledger Ownership
 
 `codex/ARGUS-SHADOW-025B-cross-process-ledger-ownership` is

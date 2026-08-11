@@ -41,6 +41,7 @@ from momentum_hunter.continuous_plan_version import (
 EVENT_DECISION_SCHEMA_VERSION = 1
 EVENT_DECISION_PROFILE = "event-driven-decision-cycle-v1"
 EVENT_DECISION_AUTHORITY = "SYNTHETIC_NONLIVE_PRECURSOR"
+CONTINUOUS_PLAN_SOURCE_IDENTITY = "CONTINUOUS_PLAN_VERSION"
 
 NEW_CANDIDATE_DISCOVERED = "NEW_CANDIDATE_DISCOVERED"
 CANDIDATE_STATE_CHANGED = "CANDIDATE_STATE_CHANGED"
@@ -754,6 +755,23 @@ def _validate_trigger_binding(
         raise EventDecisionCycleError(
             "Candidate trigger event does not match the versioned plan."
         )
+    if trigger.candidate_event_id and (
+        trigger.candidate_event_id != plan.candidate_event_id
+    ):
+        raise EventDecisionCycleError(
+            "Decision trigger candidate event does not match the versioned plan."
+        )
+    if (
+        trigger.trigger_type in {PLAN_MATERIAL_REVISION, PLAN_INVALIDATED}
+        and trigger.source_evidence_fingerprint == plan.fingerprint
+        and (
+            trigger.source_identity != CONTINUOUS_PLAN_SOURCE_IDENTITY
+            or trigger.source_evidence_id != plan.plan_version_id
+        )
+    ):
+        raise EventDecisionCycleError(
+            "Plan trigger source does not identify the supplied plan version."
+        )
     if _timestamp(trigger.receipt_timestamp, "Trigger receipt timestamp") > _timestamp(
         plan.created_at, "Plan creation timestamp"
     ):
@@ -768,7 +786,11 @@ def _trigger_source_fingerprints(
         return frozenset({plan.candidate_evidence_fingerprint})
     if trigger_type in {MEANINGFUL_LEVEL_BREAK, PLAN_MATERIAL_REVISION, PLAN_INVALIDATED}:
         return frozenset(
-            {plan.setup_revision_fingerprint, plan.intraday_plan_fingerprint}
+            {
+                plan.setup_revision_fingerprint,
+                plan.intraday_plan_fingerprint,
+                plan.fingerprint,
+            }
         )
     if trigger_type == TIME_NORMALIZED_VOLUME_ABNORMAL:
         return frozenset({plan.rvol_evidence_fingerprint})
@@ -780,8 +802,15 @@ def _trigger_source_fingerprints(
         )
     if trigger_type == EVENT_WINDOW_STABILIZED:
         return frozenset({plan.event_context_fingerprint})
-    if trigger_type in {SPREAD_BECAME_EXECUTABLE, DATA_BECAME_STALE}:
+    if trigger_type == SPREAD_BECAME_EXECUTABLE:
         return frozenset(item.evidence_fingerprint for item in plan.source_clocks)
+    if trigger_type == DATA_BECAME_STALE:
+        return frozenset(
+            {
+                plan.candidate_evidence_fingerprint,
+                *(item.evidence_fingerprint for item in plan.source_clocks),
+            }
+        )
     return frozenset()
 
 

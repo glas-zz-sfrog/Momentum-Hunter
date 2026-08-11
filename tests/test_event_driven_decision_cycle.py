@@ -1127,7 +1127,10 @@ class EventDrivenDecisionCycleTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         importers = []
         for path in (root / "momentum_hunter").rglob("*.py"):
-            if path.name == "event_driven_decision_cycle.py":
+            if path.name in {
+                "event_driven_decision_cycle.py",
+                "event_source_admission.py",
+            }:
                 continue
             text = path.read_text(encoding="utf-8")
             if "event_driven_decision_cycle" in text:
