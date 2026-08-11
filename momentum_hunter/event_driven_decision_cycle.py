@@ -706,6 +706,13 @@ def _validate_trigger_binding(
         raise EventDecisionCycleError(
             "Continuous decision does not bind the supplied plan version."
         )
+    if (
+        decision.plan_status != plan.status
+        or decision.plan_blockers != plan.blockers
+    ):
+        raise EventDecisionCycleError(
+            "Continuous decision plan authority does not match the supplied plan."
+        )
     expected_fingerprints = _trigger_source_fingerprints(trigger.trigger_type, plan)
     if trigger.source_evidence_fingerprint not in expected_fingerprints:
         raise EventDecisionCycleError(

@@ -1,5 +1,19 @@
 # Branch Ledger
 
+## ARGUS-CONTINUOUS-002 Offline Contract Reconciliation
+
+`codex/ARGUS-CONTINUOUS-002-offline-contract-reconciliation` is
+`IMPLEMENTED_PENDING_MERGE` from common continuous head `f6b776e`. It replays
+the hardened PLAN-002A, BREAKOUT-002A, and SHADOW-025A contracts in dependency
+order and closes two integration-only defects: stale synthetic PLAN schema use
+and an event-cycle plan-authority copy that was not compared to the supplied
+plan. Compileall, 94 focused, 264 combined continuous, 130 adjacent, and all
+1,713 Python tests pass. The branch has no runtime importer or external
+capability and is pushed only as a feature backup after closeout. Canonical
+`master`, the installed service, Tuesday jobs, providers, accounts, orders,
+production stores, and Paper/Shadow state remain unchanged. Do not merge or
+install before Tuesday's terminal operational evidence is preserved.
+
 ## ARGUS-BROKER-ALPACA-004 Paper Engineering
 
 `codex/ARGUS-BROKER-ALPACA-004-paper-engineering` is

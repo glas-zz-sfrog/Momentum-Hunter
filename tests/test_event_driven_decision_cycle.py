@@ -16,13 +16,19 @@ from momentum_hunter.candidate_lifecycle import (
     WATCHING,
 )
 from momentum_hunter.continuous_plan_version import (
+    ALLOCATION_AUTHORIZED,
+    ALLOCATION_BLOCKED,
     DECISION_AUTHORIZED,
     DECISION_NO_TRADE,
     EXECUTION_AUTHORITY,
     PLAN_BLOCKED,
+    PROSPECTIVE_EVIDENCE_ONLY,
     READY_FOR_RISK_REVIEW,
+    RISK_AUTHORIZED,
+    RISK_BLOCKED,
     RVOL_EXECUTION_ELIGIBLE,
     ContinuousPlanDecision,
+    ContinuousPlanError,
     ContinuousPlanVersion,
     SourceClockEvidence,
     decision_fingerprint_payload,
@@ -185,6 +191,7 @@ def synthetic_plan(
         policy_version="synthetic-plan-policy-v1",
         policy_fingerprint="2" * 64,
         configuration_fingerprint=CONFIGURATION,
+        authority_profile=PROSPECTIVE_EVIDENCE_ONLY,
         status=READY_FOR_RISK_REVIEW if not blockers else PLAN_BLOCKED,
         blockers=blockers,
         warnings=(),
@@ -210,7 +217,17 @@ def synthetic_decision(
     )
     risk_fingerprint = evidence_fingerprint({"risk": nonce})
     allocation_fingerprint = evidence_fingerprint({"allocation": nonce})
-    blockers = () if authorized else ("SYNTHETIC_RISK_BLOCK",)
+    blockers = (
+        ()
+        if authorized
+        else (
+            *plan.blockers,
+            "RISK_DECISION_BLOCKED",
+            "ALLOCATION_DECISION_BLOCKED",
+            "ALLOCATION_QUANTITY_NOT_POSITIVE",
+            "SYNTHETIC_RISK_BLOCK",
+        )
+    )
     provisional = ContinuousPlanDecision(
         decision_id="",
         decided_at=decided_at.isoformat(),
@@ -230,6 +247,12 @@ def synthetic_decision(
         account_snapshot_fingerprint="5" * 64,
         capability_registry_fingerprint="6" * 64,
         final_authorized_quantity="0.25" if authorized else "0",
+        plan_status=plan.status,
+        plan_blockers=plan.blockers,
+        risk_status=RISK_AUTHORIZED if authorized else RISK_BLOCKED,
+        allocation_status=(
+            ALLOCATION_AUTHORIZED if authorized else ALLOCATION_BLOCKED
+        ),
         blockers=blockers,
         fingerprint="",
     )
@@ -398,8 +421,31 @@ class EventDrivenDecisionCycleTests(unittest.TestCase):
         assert result.cycle is not None
         self.assertEqual(NO_SELECTION, result.cycle.selection_result)
         self.assertEqual(DECISION_NO_TRADE, result.cycle.decision_status)
-        self.assertEqual(("SYNTHETIC_RISK_BLOCK",), result.cycle.blockers)
+        self.assertEqual(decision.blockers, result.cycle.blockers)
         self.assertFalse(result.cycle.selected)
+
+    def test_historical_plan_cannot_enter_event_cycle(self) -> None:
+        plan = synthetic_plan()
+        provisional = replace(
+            plan,
+            plan_version_id="",
+            authority_profile="HISTORICAL_REPLAY",
+            fingerprint="",
+        )
+        fingerprint = evidence_fingerprint(plan_fingerprint_payload(provisional))
+        historical = replace(
+            provisional,
+            plan_version_id=f"continuous-plan-{fingerprint[:24]}",
+            fingerprint=fingerprint,
+        )
+
+        with self.assertRaisesRegex(ContinuousPlanError, "not prospective"):
+            self.process_cycle(
+                plan=historical,
+                decision=synthetic_decision(historical),
+                trigger=synthetic_trigger(historical),
+            )
+        self.assertFalse(self.path.exists())
 
     def test_exact_replay_is_idempotent(self) -> None:
         plan = synthetic_plan()
@@ -584,6 +630,41 @@ class EventDrivenDecisionCycleTests(unittest.TestCase):
         decision = synthetic_decision(other)
         with self.assertRaisesRegex(EventDecisionCycleError, "supplied plan"):
             self.process_cycle(plan=plan, decision=decision)
+
+    def test_decision_cannot_forge_blocked_plan_authority(self) -> None:
+        plan = synthetic_plan(
+            candidate_state=DATA_STALE,
+            candidate_event_id="8" * 64,
+            candidate_evidence="9" * 64,
+        )
+        decision = synthetic_decision(plan, authorized=False)
+        forged = replace(
+            decision,
+            status=DECISION_AUTHORIZED,
+            final_authorized_quantity="0.25",
+            plan_status=READY_FOR_RISK_REVIEW,
+            plan_blockers=(),
+            risk_status=RISK_AUTHORIZED,
+            allocation_status=ALLOCATION_AUTHORIZED,
+            blockers=(),
+            fingerprint="",
+        )
+        forged = replace(
+            forged,
+            fingerprint=evidence_fingerprint(decision_fingerprint_payload(forged)),
+        )
+
+        with self.assertRaisesRegex(EventDecisionCycleError, "plan authority"):
+            self.process_cycle(
+                plan=plan,
+                decision=forged,
+                trigger=synthetic_trigger(
+                    plan,
+                    trigger_type=CANDIDATE_STATE_CHANGED,
+                    next_state=DATA_STALE,
+                ),
+            )
+        self.assertFalse(self.path.exists())
 
     def test_cycle_start_cannot_precede_trigger_receipt(self) -> None:
         plan = synthetic_plan()
