@@ -1,5 +1,18 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025J Runtime Root Security
+
+`codex/ARGUS-SHADOW-025J-runtime-root-security` is
+`IMPLEMENTED_PENDING_MERGE` from verified 025I head `dce582c`. It freezes a
+dormant path/owner/reparse/DACL/effective-access eligibility contract for a
+future installed evidence root. Same-SID writer/WPF, unsafe ownership,
+inherited or broad mutation, ancestor replacement, missing rights/evidence,
+path escape, reparse traversal, and tampering fail closed; activation is always
+false. Compileall, 19 focused, 145 adjacent runtime, and all 1,849 Python tests
+pass. No root, ACL, principal, installed importer, provider, account, order,
+Paper/Shadow state, production store, or Tuesday job changed. Do not merge or
+install before terminal Tuesday evidence.
+
 ## ARGUS-SHADOW-025I Runtime Orchestration
 
 `codex/ARGUS-SHADOW-025I-runtime-orchestration` is
