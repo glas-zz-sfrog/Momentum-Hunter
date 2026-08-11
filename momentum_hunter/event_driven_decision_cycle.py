@@ -555,6 +555,10 @@ def _build_cycle(
 ) -> EventDrivenDecisionCycle:
     validate_plan_version(plan_version)
     validate_decision(decision)
+    if policy.configuration_fingerprint != plan_version.configuration_fingerprint:
+        raise EventDecisionCycleError(
+            "Event-cycle policy configuration does not match the versioned plan."
+        )
     _validate_trigger_binding(trigger, plan_version, decision)
     started = _aware(cycle_started_at, "Decision-cycle start timestamp")
     trigger_received = _timestamp(trigger.receipt_timestamp, "Trigger receipt timestamp")

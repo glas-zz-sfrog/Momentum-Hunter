@@ -46,9 +46,14 @@ lost updates. The output stops at `SELECTED_FOR_DOWNSTREAM_NONLIVE_EXECUTION`
 or truthful `NO_SELECTION`; it cannot submit, replace, cancel, fill, mark, or
 close an order.
 
-Compileall, 35 focused tests, 268 adjacent lifecycle/plan/Shadow/context tests,
-46 Paper/allocation-adjacent tests, 15 isolated legacy storage/story reruns, and
-all 1,673 Python tests pass. One initial full-discovery attempt was invalidated
+Hard Chew self-review found and closed one configuration-authority gap: the
+event-cycle policy configuration must now exactly match the versioned plan
+configuration before a cycle can be created. Compileall, 36 focused tests, 230
+re-run continuous-evidence tests, 62 Paper/allocation-adjacent tests, and
+all 1,674 Python tests pass. The earlier 268 adjacent lifecycle/plan/Shadow/
+context tests, 46 Paper/allocation-adjacent tests, and 15 isolated legacy
+storage/story reruns also remain preserved as initial implementation evidence.
+One initial full-discovery attempt was invalidated
 by an orphaned timed-out test child colliding on legacy fixed test directories;
 after that process exited, the affected tests and one uncontested full run both
 passed. No existing runtime imports the new module. Canonical `master` remains

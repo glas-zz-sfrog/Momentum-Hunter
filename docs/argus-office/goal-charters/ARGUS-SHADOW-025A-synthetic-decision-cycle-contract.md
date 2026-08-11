@@ -41,6 +41,7 @@ identity that produced it.
 - [x] Regime and candidate-safety changes bypass entry cooldown.
 - [x] Exact duplicate replay is idempotent; conflicting replay fails closed.
 - [x] Trigger, plan, decision, policy, source, chronology, and predecessor identities bind.
+- [x] Event-cycle policy and PLAN-002A configuration identities match exactly.
 - [x] Tampered/orphaned evidence and conflicting outputs fail before state replacement.
 - [x] Two coordinators sharing a path cannot lose an in-process append.
 - [x] Inputs remain unchanged and deterministic inputs produce byte-identical ledgers.
@@ -50,11 +51,12 @@ identity that produced it.
 ## Evidence Depth / Hard Chew
 
 - Python compileall: pass.
-- Focused SHADOW-025A tests: 35/35 pass.
+- Focused SHADOW-025A tests: 36/36 pass.
 - Adjacent lifecycle/plan/Shadow/context tests: 268/268 pass.
 - Adjacent Paper/allocation tests: 46/46 pass.
 - Legacy storage/story collision rerun: 15/15 pass.
-- Full Python discovery: 1,673/1,673 pass in 225.362 seconds after final self-review.
+- Self-review regressions: 230/230 continuous-evidence and 62/62 Paper/allocation pass.
+- Full Python discovery: 1,674/1,674 pass in 226.106 seconds after final self-review.
 - Static runtime-import, network/broker-method, secret, protected-path, and whitespace
   scans: required before commit.
 - Canonical checkout: clean and synchronized at `78db1bf`; no installed state changed.

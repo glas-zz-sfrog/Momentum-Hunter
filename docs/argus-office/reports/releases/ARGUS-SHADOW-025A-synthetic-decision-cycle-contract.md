@@ -17,6 +17,8 @@
 - Safety-trigger and safety-state cooldown bypass.
 - Immutable non-live cycles bound to the exact PLAN-002A plan, risk, allocation, account,
   capability, configuration, and predecessor evidence.
+- Fail-closed equality between the event-cycle policy configuration and the versioned
+  PLAN-002A configuration.
 - Atomic, explicit-path JSON persistence with deterministic bytes, idempotent replay,
   tamper validation, and shared in-process path locking.
 
@@ -26,11 +28,12 @@ Those labels are evidence for a later integration task, not an order instruction
 ## Verification
 
 - Compileall: pass.
-- Focused suite: 35/35 pass.
+- Focused suite: 36/36 pass.
 - Adjacent lifecycle/plan/Shadow/context suite: 268/268 pass.
 - Adjacent Paper/allocation suite: 46/46 pass.
 - Affected legacy storage/story tests after harness collision: 15/15 pass.
-- Clean final Python discovery: 1,673/1,673 pass in 225.362 seconds.
+- Self-review regressions: 230/230 continuous-evidence and 62/62 Paper/allocation pass.
+- Clean final Python discovery: 1,674/1,674 pass in 226.106 seconds.
 - Initial full-discovery rerun was invalid because an earlier timed-out child continued
   concurrently and collided on fixed legacy `_test_*` paths; no SHADOW-025A test failed.
 - No existing module imports the new contract.
