@@ -40,7 +40,11 @@ gap, missing, corrected, and session-unavailable states remain explicit and
 cannot fabricate partial metrics. Historical replay is isolated from
 prospective denominators, and an unset or incomplete cohort cannot authorize a
 conclusion. Compileall, 29 focused tests, 136 adjacent regressions, and all
-1,648 Python tests pass. No existing runtime imports the module. BREAKOUT-002
+1,648 Python tests pass. Hard-Chew self-review then proved and repaired two
+fail-open evidence defects: historical-replay bars could complete a prospective
+outcome, and revision chronology could move backward. The repaired branch now
+passes compileall, 32 focused tests, the same 136 adjacent regressions, and all
+1,651 Python tests. No existing runtime imports the module. BREAKOUT-002
 calibration and outcome conclusions remain `WAITING_DEPENDENCY` on a separately
 frozen sufficient prospective cohort. Canonical `master`, the installed
 service, Tuesday's opening/Paper jobs, provider/account state, production

@@ -39,12 +39,12 @@ prospective sample.
 ## Acceptance Evidence
 
 - Compileall passes.
-- All 29 focused outcome tests pass.
+- All 32 focused outcome tests pass.
 - All 136 adjacent evidence/candle/plan tests pass.
-- Full Python discovery passes 1,648 tests.
+- Full Python discovery passes 1,651 tests.
 - Exact-horizon, no-future-bar, correction, gap, session-boundary, source
-  nonmutation, tamper, idempotency, cohort-denominator, and authority-negative
-  tests pass.
+  nonmutation, observation-mode binding, monotonic revision chronology, tamper,
+  idempotency, cohort-denominator, and authority-negative tests pass.
 - Static scans prove no runtime importer, provider/broker capability, or
   credential-shaped value.
 - Canonical `master`, installed runtime, Tuesday jobs, and provider/order state

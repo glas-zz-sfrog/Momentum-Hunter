@@ -41,16 +41,23 @@
 5. A numeric event threshold alone could appear ready with unfinished horizons;
    every required prospective horizon must also be terminal before later
    adjudication readiness is reported.
+6. Historical-replay bars could complete a prospective event and contaminate
+   its denominator; every forward observation now must match the source event's
+   frozen observation mode.
+7. A terminal outcome could be revised with an earlier as-of time and regress
+   into a pre-terminal state; builders and persisted revision chains now reject
+   backward chronology while preserving later gap backfill.
 
 ## Verification
 
 - Python compileall: PASS.
-- Focused outcome suite: 29 / 29 PASS.
+- Focused outcome suite: 32 / 32 PASS.
 - Adjacent BREAKOUT-001, technical breakout, candidate lifecycle, DATA-004,
   regime, RVOL, and candle-cutover suite: 136 / 136 PASS.
-- Full Python discovery: 1,648 / 1,648 PASS in 224.759 seconds.
+- Full Python discovery: 1,651 / 1,651 PASS in 226.396 seconds.
 - Source nonmutation, future-bar noninterference, tamper, revision lineage,
-  idempotency, denominator, and authority-negative tests: PASS.
+  mode isolation, chronology, idempotency, denominator, and authority-negative
+  tests: PASS.
 - Protected-path, static capability, secret-shaped value, and whitespace scans:
   PASS.
 

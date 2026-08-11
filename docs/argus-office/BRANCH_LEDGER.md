@@ -81,9 +81,12 @@ merged; canonical `master` and Tuesday's opening/Paper jobs remain unchanged.
 `codex/ARGUS-BREAKOUT-002A-synthetic-outcome-contract` is
 `IMPLEMENTED_PENDING_MERGE` from verified continuous-integration head
 `f6b776e`. It adds one dormant pure-Python outcome/cohort module, two directly
-related test files, and branch-local governance. Compileall, 29 focused tests,
-136 adjacent regressions, all 1,648 Python tests, protected-path review, and
-static capability/secret scans pass. No existing runtime imports the module.
+related test files, and branch-local governance. Hard-Chew self-review now
+binds every forward bar to the source event's observation mode and rejects
+backward revision chronology in both construction and persisted-ledger
+validation. Compileall, 32 focused tests, 136 adjacent regressions, all 1,651
+Python tests, protected-path review, and static capability/secret scans pass.
+No existing runtime imports the module.
 The branch neither contains nor depends on sibling PLAN-002A `7be49fd`; both
 must be current-base reconciled after the common continuous branch is
 integrated. Canonical `master`, Tuesday's opening/Paper jobs, and provider/order
