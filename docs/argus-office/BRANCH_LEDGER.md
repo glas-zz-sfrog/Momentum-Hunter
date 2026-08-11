@@ -1,5 +1,17 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025F Runtime Writer Session
+
+`codex/ARGUS-SHADOW-025F-runtime-writer-session` is
+`IMPLEMENTED_PENDING_MERGE` from verified 025E head `0b60eef`. It composes the
+025D writer claim, a process-lifetime OS lease, topology authorization, and 025E
+source-admission append into one dormant single-use Engine Host session.
+Program/configuration-bound schema v2 and a whole-ledger fingerprint close
+cross-namespace and header-tamper paths. Compileall, 43 focused, 248 adjacent,
+and all 1,783 Python tests pass. No installed importer, root, runtime, provider,
+account, order, Paper/Shadow state, production store, or Tuesday job changed.
+Do not merge or install before terminal Tuesday evidence.
+
 ## ARGUS-SHADOW-025E Source Admission Ledger
 
 `codex/ARGUS-SHADOW-025E-source-admission-ledger` is

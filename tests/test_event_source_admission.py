@@ -58,10 +58,14 @@ from momentum_hunter.event_source_admission import (
 from momentum_hunter.intraday_trade_plan import CONTINUATION_BREAKOUT
 from tests.test_event_driven_decision_cycle import (
     BASE,
+    CONFIGURATION,
     synthetic_decision,
     synthetic_plan,
     synthetic_policy,
 )
+
+
+PROGRAM = "engineering-shadow-025"
 
 
 def _append_source_admission_worker(
@@ -73,7 +77,11 @@ def _append_source_admission_worker(
     try:
         if not start_event.wait(10):
             raise RuntimeError("Synthetic source-admission start gate timed out.")
-        stored = RuntimeSourceAdmissionStore(Path(path_text)).append(admission)
+        stored = RuntimeSourceAdmissionStore(
+            Path(path_text),
+            evidence_program_id=PROGRAM,
+            configuration_fingerprint=CONFIGURATION,
+        ).append(admission)
         output_queue.put(("OK", stored.admission_id))
     except Exception as exc:  # pragma: no cover - asserted by parent process
         output_queue.put(("ERROR", type(exc).__name__, str(exc)))
@@ -86,7 +94,11 @@ def _hold_source_admission_lease_worker(
     output_queue,
 ) -> None:
     try:
-        store = RuntimeSourceAdmissionStore(Path(path_text))
+        store = RuntimeSourceAdmissionStore(
+            Path(path_text),
+            evidence_program_id=PROGRAM,
+            configuration_fingerprint=CONFIGURATION,
+        )
         with store.transaction():
             ready_event.set()
             if not release_event.wait(10):
@@ -100,7 +112,11 @@ def _exit_while_holding_source_admission_lease_worker(
     path_text: str,
     ready_event,
 ) -> None:
-    store = RuntimeSourceAdmissionStore(Path(path_text))
+    store = RuntimeSourceAdmissionStore(
+        Path(path_text),
+        evidence_program_id=PROGRAM,
+        configuration_fingerprint=CONFIGURATION,
+    )
     with store.transaction():
         ready_event.set()
         os._exit(29)
@@ -136,6 +152,14 @@ class EventSourceAdmissionTests(unittest.TestCase):
                 )
             )
         )
+
+    def source_store(self, path: Path, **changes):
+        values = {
+            "evidence_program_id": PROGRAM,
+            "configuration_fingerprint": CONFIGURATION,
+        }
+        values.update(changes)
+        return RuntimeSourceAdmissionStore(path, **values)
 
     def admit_source(self, **arguments):
         plan = arguments["plan_version"]
@@ -660,8 +684,8 @@ class EventSourceAdmissionTests(unittest.TestCase):
         )
         first_path = self.root / "admissions-a.json"
         second_path = self.root / "admissions-b.json"
-        first_store = RuntimeSourceAdmissionStore(first_path)
-        second_store = RuntimeSourceAdmissionStore(second_path)
+        first_store = self.source_store(first_path)
+        second_store = self.source_store(second_path)
 
         self.assertEqual(admission, first_store.append(admission))
         first_bytes = first_path.read_bytes()
@@ -687,7 +711,7 @@ class EventSourceAdmissionTests(unittest.TestCase):
             previous_plan_version=initial,
             event_cycle_policy=self.event_policy,
         )
-        store = RuntimeSourceAdmissionStore(self.root / "admissions.json")
+        store = self.source_store(self.root / "admissions.json")
 
         with self.assertRaisesRegex(RuntimeSourceAdmissionError, "orphan|out-of-order"):
             store.append(successor_admission)
@@ -708,13 +732,52 @@ class EventSourceAdmissionTests(unittest.TestCase):
             candidate_event=event,
             event_cycle_policy=self.event_policy,
         )
-        store = RuntimeSourceAdmissionStore(self.root / "admissions.json")
+        store = self.source_store(self.root / "admissions.json")
         store.append(admission)
         payload = json.loads(store.path.read_text(encoding="utf-8"))
         payload["admissions"][0]["reason"] = "TAMPERED"
         store.path.write_text(json.dumps(payload), encoding="utf-8")
 
         with self.assertRaisesRegex(RuntimeSourceAdmissionError, "identity|fingerprint"):
+            store.load()
+
+    def test_store_rejects_cross_program_or_configuration_reuse(self) -> None:
+        event = self.setup_event()
+        plan = self.plan_for_event(event)
+        admission = self.admit_source(
+            plan_version=plan,
+            candidate_event=event,
+            event_cycle_policy=self.event_policy,
+        )
+        path = self.root / "admissions.json"
+        self.source_store(path).append(admission)
+
+        for store in (
+            self.source_store(path, evidence_program_id="official-shadow-025"),
+            self.source_store(path, configuration_fingerprint="d" * 64),
+        ):
+            with self.subTest(store=store):
+                with self.assertRaisesRegex(
+                    RuntimeSourceAdmissionError,
+                    "namespace",
+                ):
+                    store.load()
+
+    def test_ledger_namespace_header_tampering_is_detected(self) -> None:
+        event = self.setup_event()
+        plan = self.plan_for_event(event)
+        admission = self.admit_source(
+            plan_version=plan,
+            candidate_event=event,
+            event_cycle_policy=self.event_policy,
+        )
+        store = self.source_store(self.root / "admissions.json")
+        store.append(admission)
+        payload = json.loads(store.path.read_text(encoding="utf-8"))
+        payload["evidence_program_id"] = "official-shadow-025"
+        store.path.write_text(json.dumps(payload), encoding="utf-8")
+
+        with self.assertRaisesRegex(RuntimeSourceAdmissionError, "fingerprint"):
             store.load()
 
     def test_atomic_replace_failure_preserves_previous_ledger(self) -> None:
@@ -731,7 +794,7 @@ class EventSourceAdmissionTests(unittest.TestCase):
             previous_plan_version=initial,
             event_cycle_policy=self.event_policy,
         )
-        store = RuntimeSourceAdmissionStore(self.root / "admissions.json")
+        store = self.source_store(self.root / "admissions.json")
         store.append(initial_admission)
 
         with patch(
@@ -783,7 +846,7 @@ class EventSourceAdmissionTests(unittest.TestCase):
             {first.admission_id, second.admission_id},
             {
                 item.admission_id
-                for item in RuntimeSourceAdmissionStore(path).load().admissions
+                for item in self.source_store(path).load().admissions
             },
         )
 
@@ -800,7 +863,7 @@ class EventSourceAdmissionTests(unittest.TestCase):
         process.start()
         self.assertTrue(ready_event.wait(10))
         try:
-            contender = RuntimeSourceAdmissionStore(path, lease_timeout_seconds=0.1)
+            contender = self.source_store(path, lease_timeout_seconds=0.1)
             with self.assertRaisesRegex(RuntimeSourceAdmissionError, "lease timed out"):
                 with contender.transaction():
                     self.fail("Contender acquired an already-owned process lease.")
@@ -810,7 +873,7 @@ class EventSourceAdmissionTests(unittest.TestCase):
 
         self.assertEqual(("OK",), output_queue.get(timeout=5))
         self.assertEqual(0, process.exitcode)
-        with RuntimeSourceAdmissionStore(
+        with self.source_store(
             path,
             lease_timeout_seconds=1.0,
         ).transaction():
@@ -829,7 +892,7 @@ class EventSourceAdmissionTests(unittest.TestCase):
         process.join(timeout=15)
 
         self.assertEqual(29, process.exitcode)
-        with RuntimeSourceAdmissionStore(
+        with self.source_store(
             path,
             lease_timeout_seconds=1.0,
         ).transaction():
@@ -842,10 +905,14 @@ class EventSourceAdmissionTests(unittest.TestCase):
                     RuntimeSourceAdmissionError,
                     "positive and finite",
                 ):
-                    RuntimeSourceAdmissionStore(
+                    self.source_store(
                         self.root / "admissions.json",
                         lease_timeout_seconds=timeout,
                     )
+
+    def test_store_requires_explicit_program_and_configuration_identity(self) -> None:
+        with self.assertRaises(TypeError):
+            RuntimeSourceAdmissionStore(self.root / "admissions.json")
 
     def test_ledger_rejects_duplicate_plan_and_source_identity(self) -> None:
         event = self.setup_event()
@@ -857,7 +924,11 @@ class EventSourceAdmissionTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeSourceAdmissionError, "duplicate identity"):
             validate_runtime_source_admission_ledger(
-                RuntimeSourceAdmissionLedger(admissions=(admission, admission))
+                RuntimeSourceAdmissionLedger(
+                    evidence_program_id=PROGRAM,
+                    configuration_fingerprint=CONFIGURATION,
+                    admissions=(admission, admission),
+                )
             )
 
     def test_module_has_no_network_broker_or_runtime_capability(self) -> None:

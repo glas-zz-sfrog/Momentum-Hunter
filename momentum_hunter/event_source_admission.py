@@ -60,10 +60,10 @@ from momentum_hunter.path_transaction import (
 )
 
 
-RUNTIME_SOURCE_ADMISSION_SCHEMA_VERSION = 1
-RUNTIME_SOURCE_ADMISSION_PROFILE = "runtime-decision-source-admission-v1"
-RUNTIME_SOURCE_ADMISSION_LEDGER_SCHEMA_VERSION = 1
-RUNTIME_SOURCE_ADMISSION_LEDGER_PROFILE = "runtime-source-admission-ledger-v1"
+RUNTIME_SOURCE_ADMISSION_SCHEMA_VERSION = 2
+RUNTIME_SOURCE_ADMISSION_PROFILE = "runtime-decision-source-admission-v2"
+RUNTIME_SOURCE_ADMISSION_LEDGER_SCHEMA_VERSION = 2
+RUNTIME_SOURCE_ADMISSION_LEDGER_PROFILE = "runtime-source-admission-ledger-v2"
 
 CANDIDATE_LIFECYCLE_SOURCE = "CANDIDATE_LIFECYCLE"
 CONTINUOUS_PLAN_SOURCE = CONTINUOUS_PLAN_SOURCE_IDENTITY
@@ -77,6 +77,7 @@ CANDIDATE_REFRESH_THROUGH_PLAN = "CANDIDATE_REFRESH_THROUGH_PLAN_SUCCESSOR"
 PLAN_SUCCESSOR_BLOCKED = "PLAN_SUCCESSOR_BLOCKED"
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_PROGRAM_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 
 
 class RuntimeSourceAdmissionError(ValueError):
@@ -94,6 +95,7 @@ class RuntimeSourceAdmission:
     plan_version_fingerprint: str
     predecessor_plan_version_id: str
     predecessor_plan_version_fingerprint: str
+    configuration_fingerprint: str
     event_cycle_policy_fingerprint: str
     reason: str
     trigger: DecisionTriggerEvidence
@@ -104,16 +106,31 @@ class RuntimeSourceAdmission:
 
 @dataclass(frozen=True)
 class RuntimeSourceAdmissionLedger:
+    evidence_program_id: str
+    configuration_fingerprint: str
     admissions: tuple[RuntimeSourceAdmission, ...] = ()
     schema_version: int = RUNTIME_SOURCE_ADMISSION_LEDGER_SCHEMA_VERSION
     profile: str = RUNTIME_SOURCE_ADMISSION_LEDGER_PROFILE
+    fingerprint: str = ""
 
 
 class RuntimeSourceAdmissionStore:
     """Append-only explicit-path store for admitted runtime trigger sources."""
 
-    def __init__(self, path: Path, *, lease_timeout_seconds: float = 5.0) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        evidence_program_id: str,
+        configuration_fingerprint: str,
+        lease_timeout_seconds: float = 5.0,
+    ) -> None:
         self.path = Path(path)
+        self.evidence_program_id = _program_id(evidence_program_id)
+        self.configuration_fingerprint = _sha256(
+            configuration_fingerprint,
+            "Source-admission ledger configuration fingerprint",
+        )
         try:
             self._transaction_lease = PathTransactionLease(
                 self.path,
@@ -140,7 +157,10 @@ class RuntimeSourceAdmissionStore:
     def load(self) -> RuntimeSourceAdmissionLedger:
         with self._lock:
             if not self.path.exists():
-                return RuntimeSourceAdmissionLedger()
+                return build_runtime_source_admission_ledger(
+                    evidence_program_id=self.evidence_program_id,
+                    configuration_fingerprint=self.configuration_fingerprint,
+                )
             try:
                 payload = json.loads(self.path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
@@ -150,6 +170,14 @@ class RuntimeSourceAdmissionStore:
                 ) from exc
             ledger = source_admission_ledger_from_wire(payload)
             validate_runtime_source_admission_ledger(ledger)
+            if (
+                ledger.evidence_program_id != self.evidence_program_id
+                or ledger.configuration_fingerprint
+                != self.configuration_fingerprint
+            ):
+                raise RuntimeSourceAdmissionError(
+                    "Runtime source-admission ledger namespace does not match the store."
+                )
             return ledger
 
     def append(self, admission: RuntimeSourceAdmission) -> RuntimeSourceAdmission:
@@ -177,9 +205,14 @@ class RuntimeSourceAdmissionStore:
                     raise RuntimeSourceAdmissionError(
                         "A canonical source record already admitted a different plan version."
                     )
-            updated = replace(
+            provisional = replace(
                 ledger,
                 admissions=ledger.admissions + (admission,),
+                fingerprint="",
+            )
+            updated = replace(
+                provisional,
+                fingerprint=source_admission_ledger_fingerprint(provisional),
             )
             validate_runtime_source_admission_ledger(updated)
             _atomic_write(
@@ -364,6 +397,7 @@ def validate_runtime_source_admission(admission: RuntimeSourceAdmission) -> None
         (admission.source_record_fingerprint, "Source record fingerprint"),
         (admission.source_authority_fingerprint, "Source authority fingerprint"),
         (admission.plan_version_fingerprint, "Plan version fingerprint"),
+        (admission.configuration_fingerprint, "Configuration fingerprint"),
         (admission.event_cycle_policy_fingerprint, "Event-cycle policy fingerprint"),
     ):
         _sha256(value, name)
@@ -426,6 +460,19 @@ def validate_runtime_source_admission_ledger(
         raise RuntimeSourceAdmissionError(
             "Runtime source-admission ledger schema identity is unsupported."
         )
+    program = _program_id(ledger.evidence_program_id)
+    if program != ledger.evidence_program_id:
+        raise RuntimeSourceAdmissionError(
+            "Runtime source-admission evidence program is not canonical."
+        )
+    configuration = _sha256(
+        ledger.configuration_fingerprint,
+        "Source-admission ledger configuration fingerprint",
+    )
+    if configuration != ledger.configuration_fingerprint:
+        raise RuntimeSourceAdmissionError(
+            "Runtime source-admission ledger configuration is not canonical."
+        )
 
     by_admission_id: dict[str, RuntimeSourceAdmission] = {}
     by_plan_id: dict[str, RuntimeSourceAdmission] = {}
@@ -433,6 +480,10 @@ def validate_runtime_source_admission_ledger(
     opportunity_roots: set[str] = set()
     for admission in ledger.admissions:
         validate_runtime_source_admission(admission)
+        if admission.configuration_fingerprint != ledger.configuration_fingerprint:
+            raise RuntimeSourceAdmissionError(
+                "Runtime source admission belongs to a different configuration."
+            )
         if admission.admission_id in by_admission_id:
             raise RuntimeSourceAdmissionError(
                 "Runtime source-admission ledger contains a duplicate identity."
@@ -494,6 +545,38 @@ def validate_runtime_source_admission_ledger(
         by_admission_id[admission.admission_id] = admission
         by_plan_id[admission.plan_version_id] = admission
         by_source[source_key] = admission
+    if ledger.fingerprint != source_admission_ledger_fingerprint(ledger):
+        raise RuntimeSourceAdmissionError(
+            "Runtime source-admission ledger fingerprint is invalid."
+        )
+
+
+def build_runtime_source_admission_ledger(
+    *,
+    evidence_program_id: str,
+    configuration_fingerprint: str,
+    admissions: tuple[RuntimeSourceAdmission, ...] = (),
+) -> RuntimeSourceAdmissionLedger:
+    provisional = RuntimeSourceAdmissionLedger(
+        evidence_program_id=_program_id(evidence_program_id),
+        configuration_fingerprint=_sha256(
+            configuration_fingerprint,
+            "Source-admission ledger configuration fingerprint",
+        ),
+        admissions=tuple(admissions),
+    )
+    result = replace(
+        provisional,
+        fingerprint=source_admission_ledger_fingerprint(provisional),
+    )
+    validate_runtime_source_admission_ledger(result)
+    return result
+
+
+def source_admission_ledger_fingerprint(
+    ledger: RuntimeSourceAdmissionLedger,
+) -> str:
+    return fingerprint_payload(asdict(replace(ledger, fingerprint="")))
 
 
 def source_admission_ledger_to_wire(
@@ -502,7 +585,10 @@ def source_admission_ledger_to_wire(
     return {
         "schema_version": ledger.schema_version,
         "profile": ledger.profile,
+        "evidence_program_id": ledger.evidence_program_id,
+        "configuration_fingerprint": ledger.configuration_fingerprint,
         "admissions": [asdict(item) for item in ledger.admissions],
+        "fingerprint": ledger.fingerprint,
     }
 
 
@@ -530,9 +616,14 @@ def source_admission_ledger_from_wire(
             values["trigger"] = DecisionTriggerEvidence(**dict(trigger))
             parsed.append(RuntimeSourceAdmission(**values))
         ledger = RuntimeSourceAdmissionLedger(
+            evidence_program_id=str(payload.get("evidence_program_id", "")),
+            configuration_fingerprint=str(
+                payload.get("configuration_fingerprint", "")
+            ),
             schema_version=int(payload.get("schema_version", 0)),
             profile=str(payload.get("profile", "")),
             admissions=tuple(parsed),
+            fingerprint=str(payload.get("fingerprint", "")),
         )
     except (TypeError, ValueError) as exc:
         raise RuntimeSourceAdmissionError(
@@ -571,6 +662,7 @@ def _build_admission(
         predecessor_plan_version_fingerprint=(
             previous_plan_version.fingerprint if previous_plan_version else ""
         ),
+        configuration_fingerprint=plan_version.configuration_fingerprint,
         event_cycle_policy_fingerprint=event_cycle_policy.fingerprint,
         reason=reason,
         trigger=trigger,
@@ -812,6 +904,15 @@ def _sha256(value: object, name: str) -> str:
     normalized = str(value).strip().lower()
     if not _SHA256.fullmatch(normalized):
         raise RuntimeSourceAdmissionError(f"{name} must be SHA-256.")
+    return normalized
+
+
+def _program_id(value: object) -> str:
+    normalized = str(value).strip()
+    if not _PROGRAM_ID.fullmatch(normalized):
+        raise RuntimeSourceAdmissionError(
+            "Evidence program identity must use canonical lowercase form."
+        )
     return normalized
 
 

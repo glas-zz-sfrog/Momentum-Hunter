@@ -460,7 +460,10 @@ class EventRuntimeTopologyTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1] / "momentum_hunter"
         importers = []
         for path in root.rglob("*.py"):
-            if path.name == "event_runtime_topology.py":
+            if path.name in {
+                "event_runtime_topology.py",
+                "event_runtime_writer_session.py",
+            }:
                 continue
             if "event_runtime_topology" in path.read_text(encoding="utf-8"):
                 importers.append(path.name)

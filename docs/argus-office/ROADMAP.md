@@ -29,6 +29,27 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SHADOW-025F runtime writer-session composition is
+`IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-SHADOW-025F-runtime-writer-session`, stacked on verified 025E head
+`0b60eef`. One dormant, single-use Engine Host session now binds the exact
+current host, PID, runtime build, configuration, and topology claim to a
+process-lifetime OS lease before a source admission can be appended. Replacement
+processes time out finitely while the owner is active, process exit releases
+the lease, same-object concurrent activation fails closed, and every append
+rechecks current authority and the exact topology-derived store path.
+
+Source-admission schema v2 now binds each record to its configuration, and
+ledger schema v2 binds the whole ordered chain to evidence-program plus
+configuration identity under one header-and-content fingerprint. Cross-program
+or cross-configuration reuse, header relabeling, removal, reordering, record
+tampering, stale claims, and escaped paths fail closed. Compileall, 43 focused,
+248 adjacent, and all 1,783 Python tests pass. No existing runtime imports the
+session; canonical `master` remains clean and synchronized at frozen
+`78db1bf`. Merge/install waits for Tuesday's terminal evidence. Actual installed
+root selection, ACL/reparse proof, Engine Host orchestration, and constraining
+raw-store access to the writer session remain separate prospective work.
+
 ARGUS-SHADOW-025E source-admission persistence is
 `IMPLEMENTED_PENDING_MERGE` on
 `codex/ARGUS-SHADOW-025E-source-admission-ledger`, stacked on verified 025D
