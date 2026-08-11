@@ -1,5 +1,15 @@
 # Argus Changelog
 
+- Reconciled the proven candidate, regime, macro-event, catalyst, plan-version,
+  breakout-research/outcome, and event-cycle contracts onto current canonical
+  base `e98b5cc` without replaying stale shared-governance closeouts. All eight
+  modules remain dormant and provider-neutral: no existing runtime path imports
+  them and no production source, writer, provider, account, order, service,
+  scheduler, Engine Host, WPF, Shadow, or Paper behavior is activated. Current-
+  head compileall, 254 focused tests, 228 adjacent regressions, and all 1,715
+  Python tests pass; all 29 restored artifacts match their source and static
+  runtime/capability scans return zero hits.
+
 - Hardened next-day opening repins after the first terminal Paper cycle. The
   planner now requires a persisted terminal service receipt before dropping a
   historical Paper job from the active manifest; missing or nonterminal state

@@ -29,6 +29,23 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-CONTINUOUS-003 is `IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-CONTINUOUS-003-current-head-integration` from current canonical
+base `e98b5cc`. It reconciles the proven continuous-intraday contract stack
+against the Paper-engineering and scheduler-hardened head: candidate lifecycle,
+rolling regime, macro-event context, provider-neutral catalyst evidence,
+prospective plan versions, sequential breakout research/outcomes, and
+event-driven decision cycles. The eight Python modules remain dormant and no
+existing runtime module imports them. This creates no provider, account,
+broker/order, service, scheduler, Engine Host, WPF, production-store, scoring,
+readiness, Shadow, or Paper capability. Current-head compileall, 254 focused
+tests, 228 adjacent regressions, and all 1,715 Python tests pass. All 29 restored
+artifacts match source branch `657cb37`; existing-runtime import, dormant-
+capability, credential-shape, protected-path, and staged-whitespace reviews
+pass. The branch is merge-ready. After integration, the next continuous-
+intraday slice is the explicit serialized runtime source/writer boundary, not
+an implicit import or activation of these contracts.
+
 ARGUS-BROKER-ALPACA-004 Paper engineering wiring is integrated and backed up
 through implementation commit `93f944c`. The canary engineering sample
 `alpaca-paper-engineering-20260810-v1` is frozen. On Tuesday August 11, the
@@ -1498,17 +1515,19 @@ Status: `BLOCKED`; destructive-operation gate after R032C and R034A pass
 
 ### Phase 13 - Broker Execution Validation Gate
 
-Status: `A003_LIFECYCLE_PROVEN / DATA-005B_NEXT`
+Status: `PAPER_ENGINEERING_ACTIVE / CONTINUOUS_INTRADAY_FOUNDATION_NEXT`
 
-- ARGUS-BROKER-ALPACA-001 sequence: reconcile DATA-005B as provider-neutral
-  infrastructure; prove official Alpaca account/Paper/live separation and every
-  fractional order capability independently; create a secure PAPER_ONLY host and
-  credential boundary; implement a bounded BrokerAdapter; prove market/limit,
-  stop/stop-limit, profit-taking, partial fill, cancel/replace or cancel-resubmit,
-  exact liquidation, forced-flat, restart/reconnect, reconciliation, network
-  interruption, and idempotency; then freeze separate canary-realistic and
-  strategy-research policies and begin a fresh prospective Paper engineering
-  sample.
+- A001-A003, DATA-005B, and the bounded A004 Paper-engineering runtime are
+  integrated. The direct lifecycle proved fractional market/limit/stop/
+  stop-limit behavior, replacement, cancellation, and exact liquidation; the
+  first prospective opening-dependent A004 cycle terminated truthfully as
+  zero-candidate `NO_TRADE` without contacting Alpaca. Continue the same frozen
+  engineering sample until candidate-bearing evidence exercises account,
+  allocation, entry, protection, and exit gates.
+- Continuous intraday discovery is the parallel foundation needed to escape the
+  observed opening-scanner supply limit. Dormant provider-neutral contracts may
+  integrate after current-head proof, but runtime source/writer activation is a
+  separate prospective task and cannot be inferred from module presence.
 - Broker capabilities are explicit data, never inferred. The capability model
   must distinguish fractional quantity precision and support for market, limit,
   stop, stop-limit, take-profit, bracket, OCO, OTO/OTOCO, replacement,

@@ -1,5 +1,18 @@
 # Branch Ledger
 
+## ARGUS-CONTINUOUS-003 Current-Head Integration
+
+`codex/ARGUS-CONTINUOUS-003-current-head-integration` is `ACTIVE` from
+`e98b5cc`. It reconciles the exact dormant continuous-intraday contract stack
+from `657cb37` after the first prospective Paper decision and scheduler
+hardening. Full regression and static proof pass; commit and push normally,
+then fast-forward integrate while the ancestry and worktrees remain clean.
+
+The source branch `codex/ARGUS-CONTINUOUS-002-offline-contract-reconciliation`
+at `657cb37` is `SUPERSEDED` after this current-head reconciliation. It is
+pushed and unmerged; preserve it as source evidence and do not merge it
+separately.
+
 ## ARGUS-AUTOMATION-008 Terminal Paper Repin Hardening
 
 `codex/ARGUS-AUTOMATION-008-terminal-paper-repin` is
