@@ -38,9 +38,13 @@ exact candidate opportunity/setup revision, regime snapshot, macro-event
 context, optional catalyst revision, time-normalized RVOL authority, source
 clocks, policy/configuration identity, predecessor, and supersession reason.
 Material revisions and manual overrides require new plan, risk, and allocation
-identities; research-only setup evidence remains blocked. Compileall, 19
-focused tests, 210 adjacent evidence/plan/allocation tests, and all 1,638 Python
-tests pass. No existing runtime imports the module. PLAN-002 production setup
+identities; research-only setup evidence remains blocked. Hard-Chew self-review
+repaired three fail-open evidence classes: plan/risk/allocation blockers can no
+longer be stripped from a rehashed decision, successor and manual-override
+chronology cannot move backward, and only `PROSPECTIVE_EVIDENCE_ONLY` policy
+can reach risk review. Compileall, 24 focused tests, 191 adjacent evidence/plan/
+allocation tests, and all 1,643 Python tests pass. No existing runtime imports
+the module. PLAN-002 production setup
 generation, risk/allocation invocation, persistence path selection, and runtime
 wiring remain not started and gated on serialized prerequisite integration and
 prospectively frozen source/policy authority. Canonical `master`, the installed

@@ -72,6 +72,7 @@ from momentum_hunter.rolling_market_regime import (
 CONTINUOUS_PLAN_SCHEMA_VERSION = 1
 CONTINUOUS_PLAN_PROFILE = "continuous-intraday-plan-version-v1"
 CONTINUOUS_DECISION_PROFILE = "continuous-intraday-decision-binding-v1"
+PROSPECTIVE_EVIDENCE_ONLY = "PROSPECTIVE_EVIDENCE_ONLY"
 
 READY_FOR_RISK_REVIEW = "READY_FOR_RISK_REVIEW"
 PLAN_BLOCKED = "BLOCKED"
@@ -107,7 +108,7 @@ class ContinuousPlanError(ValueError):
 class ContinuousPlanPolicy:
     policy_version: str
     configuration_fingerprint: str
-    authority_profile: str = "PROSPECTIVE_EVIDENCE_ONLY"
+    authority_profile: str = PROSPECTIVE_EVIDENCE_ONLY
 
     @property
     def fingerprint(self) -> str:
@@ -212,6 +213,7 @@ class ContinuousPlanVersion:
     policy_version: str
     policy_fingerprint: str
     configuration_fingerprint: str
+    authority_profile: str
     status: str
     blockers: tuple[str, ...] = field(default_factory=tuple)
     warnings: tuple[str, ...] = field(default_factory=tuple)
@@ -267,6 +269,10 @@ class ContinuousPlanDecision:
     account_snapshot_fingerprint: str
     capability_registry_fingerprint: str
     final_authorized_quantity: str
+    plan_status: str
+    plan_blockers: tuple[str, ...]
+    risk_status: str
+    allocation_status: str
     blockers: tuple[str, ...] = field(default_factory=tuple)
     schema_version: int = CONTINUOUS_PLAN_SCHEMA_VERSION
     profile: str = CONTINUOUS_DECISION_PROFILE
@@ -421,6 +427,12 @@ def build_continuous_plan_version(
             raise ContinuousPlanError("Predecessor symbol did not match.")
         if predecessor.session_date != intraday_plan.session_date:
             raise ContinuousPlanError("Predecessor session did not match.")
+        if created_at < _timestamp(
+            predecessor.created_at, "Predecessor plan creation timestamp"
+        ):
+            raise ContinuousPlanError(
+                "Continuous plan successor chronology cannot move backward."
+            )
         if not normalized_reason:
             raise ContinuousPlanError("A supersession reason is required.")
         if predecessor.intraday_plan_fingerprint == intraday_plan.fingerprint:
@@ -516,6 +528,7 @@ def build_continuous_plan_version(
         "policy_version": policy.policy_version,
         "policy_fingerprint": policy.fingerprint,
         "configuration_fingerprint": policy.configuration_fingerprint,
+        "authority_profile": policy.authority_profile,
         "status": PLAN_BLOCKED if blockers else READY_FOR_RISK_REVIEW,
         "blockers": tuple(blockers),
         "warnings": tuple(warnings),
@@ -569,6 +582,12 @@ def build_continuous_plan_decision(
         validate_decision(predecessor_decision)
         if predecessor_decision.plan_version_id != plan_version.predecessor_plan_version_id:
             raise ContinuousPlanError("Manual override predecessor decision did not match.")
+        if decision_time < _timestamp(
+            predecessor_decision.decided_at, "Predecessor decision timestamp"
+        ):
+            raise ContinuousPlanError(
+                "Manual override decision chronology cannot move backward."
+            )
         if predecessor_decision.risk_decision_id == risk.risk_decision_id:
             raise ContinuousPlanError("Manual override must create a new risk decision.")
         if (
@@ -609,6 +628,10 @@ def build_continuous_plan_decision(
         "account_snapshot_fingerprint": allocation.account_snapshot_fingerprint,
         "capability_registry_fingerprint": allocation.capability_registry_fingerprint,
         "final_authorized_quantity": allocation.final_authorized_quantity,
+        "plan_status": plan_version.status,
+        "plan_blockers": plan_version.blockers,
+        "risk_status": risk.status,
+        "allocation_status": allocation.status,
         "blockers": tuple(blockers),
         "schema_version": CONTINUOUS_PLAN_SCHEMA_VERSION,
         "profile": CONTINUOUS_DECISION_PROFILE,
@@ -638,6 +661,10 @@ def validate_plan_version(plan: ContinuousPlanVersion) -> None:
         raise ContinuousPlanError("Continuous plan schema identity is unsupported.")
     if plan.status not in PLAN_STATES:
         raise ContinuousPlanError("Continuous plan status is unsupported.")
+    if plan.authority_profile != PROSPECTIVE_EVIDENCE_ONLY:
+        raise ContinuousPlanError(
+            "Continuous plan authority profile is not prospective."
+        )
     expected_blockers = _authority_blockers_from_record(plan)
     if not expected_blockers.issubset(set(plan.blockers)):
         raise ContinuousPlanError(
@@ -793,14 +820,52 @@ def validate_decision(decision: ContinuousPlanDecision) -> None:
         raise ContinuousPlanError("Continuous decision mode is not non-live.")
     if decision.status not in {DECISION_AUTHORIZED, DECISION_NO_TRADE}:
         raise ContinuousPlanError("Continuous decision status is unsupported.")
+    if decision.plan_status not in PLAN_STATES:
+        raise ContinuousPlanError("Continuous decision plan status is unsupported.")
+    if (decision.plan_status == READY_FOR_RISK_REVIEW) != (
+        not decision.plan_blockers
+    ):
+        raise ContinuousPlanError(
+            "Continuous decision plan authority contradicts its blockers."
+        )
+    if decision.risk_status not in {RISK_AUTHORIZED, RISK_BLOCKED}:
+        raise ContinuousPlanError("Continuous decision risk status is unsupported.")
+    if decision.allocation_status not in {
+        ALLOCATION_AUTHORIZED,
+        ALLOCATION_BLOCKED,
+    }:
+        raise ContinuousPlanError(
+            "Continuous decision allocation status is unsupported."
+        )
+    if len(set(decision.plan_blockers)) != len(decision.plan_blockers) or len(
+        set(decision.blockers)
+    ) != len(decision.blockers):
+        raise ContinuousPlanError("Continuous decision blockers are duplicated.")
+    required_blockers = set(decision.plan_blockers)
+    if decision.risk_status != RISK_AUTHORIZED:
+        required_blockers.add("RISK_DECISION_BLOCKED")
+    if decision.allocation_status != ALLOCATION_AUTHORIZED:
+        required_blockers.add("ALLOCATION_DECISION_BLOCKED")
     if (decision.status == DECISION_AUTHORIZED) != (not decision.blockers):
         raise ContinuousPlanError("Continuous decision authority contradicts blockers.")
     _timestamp(decision.decided_at, "Decision timestamp")
     quantity = _decimal(decision.final_authorized_quantity)
     if quantity is None:
         raise ContinuousPlanError("Continuous decision quantity is invalid.")
+    if quantity <= 0:
+        required_blockers.add("ALLOCATION_QUANTITY_NOT_POSITIVE")
     if decision.status == DECISION_AUTHORIZED and quantity <= 0:
         raise ContinuousPlanError("Authorized decision quantity must be positive.")
+    if not required_blockers.issubset(set(decision.blockers)):
+        raise ContinuousPlanError(
+            "Continuous decision omitted a required authority blocker."
+        )
+    for value, name in (
+        (decision.plan_version_id, "Plan version identity"),
+        (decision.risk_decision_id, "Risk decision identity"),
+        (decision.allocation_decision_cycle_id, "Allocation cycle identity"),
+    ):
+        _required_text(value, name)
     for value, name in (
         (decision.plan_version_fingerprint, "Plan version fingerprint"),
         (decision.opportunity_id, "Opportunity identity"),
@@ -889,7 +954,10 @@ def validate_allocation_reference(reference: AllocationDecisionReference) -> Non
 
 def validate_policy(policy: ContinuousPlanPolicy) -> None:
     _required_text(policy.policy_version, "Continuous plan policy version")
-    _required_text(policy.authority_profile, "Continuous plan authority profile")
+    if policy.authority_profile != PROSPECTIVE_EVIDENCE_ONLY:
+        raise ContinuousPlanError(
+            "Continuous plan policy authority profile is not prospective."
+        )
     _sha256(policy.configuration_fingerprint, "Configuration fingerprint")
 
 
@@ -913,6 +981,12 @@ def validate_ledger(ledger: ContinuousPlanLedger) -> None:
                 raise ContinuousPlanError("Continuous plan version sequence was invalid.")
             if plan.opportunity_id != predecessor.opportunity_id:
                 raise ContinuousPlanError("Continuous plan chain changed opportunity identity.")
+            if _timestamp(plan.created_at, "Plan creation timestamp") < _timestamp(
+                predecessor.created_at, "Predecessor plan creation timestamp"
+            ):
+                raise ContinuousPlanError(
+                    "Continuous plan ledger chronology moved backward."
+                )
         seen[plan.plan_version_id] = plan
 
 
