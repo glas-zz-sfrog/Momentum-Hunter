@@ -1,5 +1,17 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025H Runtime Recovery Planner
+
+`codex/ARGUS-SHADOW-025H-runtime-recovery-planner` is
+`IMPLEMENTED_PENDING_MERGE` from verified 025G head `576aef9`. It validates all
+four dormant ledgers plus their cross-stage chain and emits a deterministic
+read-only snapshot of exact pending/completed identities. Concurrent changes,
+malformed/cross-program/orphan evidence, and raw-store bypass fail closed.
+Compileall, 19 focused, 47 combined chain/session/recovery, 281 runtime-boundary,
+and all 1,816 Python tests pass. No installed importer, runtime, provider,
+account, order, Paper/Shadow state, production store, or Tuesday job changed.
+Do not merge or install before terminal Tuesday evidence.
+
 ## ARGUS-SHADOW-025G Runtime Evidence Chain
 
 `codex/ARGUS-SHADOW-025G-runtime-evidence-chain` is

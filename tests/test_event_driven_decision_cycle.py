@@ -1131,6 +1131,7 @@ class EventDrivenDecisionCycleTests(unittest.TestCase):
                 "event_driven_decision_cycle.py",
                 "event_source_admission.py",
                 "event_runtime_evidence_chain.py",
+                "event_runtime_recovery.py",
             }:
                 continue
             text = path.read_text(encoding="utf-8")

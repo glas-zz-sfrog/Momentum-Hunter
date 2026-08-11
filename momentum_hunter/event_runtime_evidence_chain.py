@@ -19,12 +19,14 @@ from momentum_hunter.candidate_lifecycle import (
     CandidateLifecycleLedger,
     CandidateLifecycleStore,
     RuntimeAvailabilityEvent,
+    validate_ledger as validate_candidate_ledger,
 )
 from momentum_hunter.continuous_plan_version import (
     ContinuousPlanDecision,
     ContinuousPlanLedger,
     ContinuousPlanStore,
     ContinuousPlanVersion,
+    validate_ledger as validate_plan_ledger,
     validate_plan_version,
 )
 from momentum_hunter.event_driven_decision_cycle import (
@@ -33,6 +35,7 @@ from momentum_hunter.event_driven_decision_cycle import (
     EventDecisionCyclePolicy,
     EventDecisionCycleResult,
     EventDecisionCycleStore,
+    validate_ledger as validate_cycle_ledger,
     validate_policy as validate_event_cycle_policy,
 )
 from momentum_hunter.event_runtime_topology import (
@@ -43,6 +46,7 @@ from momentum_hunter.event_runtime_topology import (
     EventRuntimeTopology,
     RuntimeWriterClaim,
     artifact_path,
+    validate_event_runtime_topology,
 )
 from momentum_hunter.event_runtime_writer_session import (
     RuntimeSourceAdmissionWriterSession,
@@ -50,7 +54,9 @@ from momentum_hunter.event_runtime_writer_session import (
 from momentum_hunter.event_source_admission import (
     CANDIDATE_LIFECYCLE_SOURCE,
     RuntimeSourceAdmission,
+    RuntimeSourceAdmissionLedger,
     validate_runtime_source_admission,
+    validate_runtime_source_admission_ledger,
 )
 
 
@@ -229,6 +235,75 @@ class RuntimeEvidenceChainWriterSession:
                         "Runtime evidence store escaped its topology path."
                     )
                 yield
+
+
+def validate_runtime_evidence_chain_prefix(
+    topology: EventRuntimeTopology,
+    *,
+    candidate_ledger: CandidateLifecycleLedger,
+    plan_ledger: ContinuousPlanLedger,
+    admission_ledger: RuntimeSourceAdmissionLedger,
+    cycle_ledger: EventDecisionCycleLedger,
+) -> None:
+    """Validate one persisted chain prefix without requiring its next stage."""
+
+    validate_event_runtime_topology(topology)
+    validate_candidate_ledger(candidate_ledger)
+    validate_plan_ledger(plan_ledger)
+    validate_runtime_source_admission_ledger(admission_ledger)
+    validate_cycle_ledger(cycle_ledger)
+    if (
+        admission_ledger.evidence_program_id != topology.evidence_program_id
+        or admission_ledger.configuration_fingerprint
+        != topology.configuration_fingerprint
+    ):
+        raise RuntimeEvidenceChainError(
+            "Runtime source-admission ledger belongs to a different topology."
+        )
+    _require_plan_ledger_configuration(
+        plan_ledger,
+        topology.configuration_fingerprint,
+    )
+    _require_cycle_ledger_configuration(
+        cycle_ledger,
+        topology.configuration_fingerprint,
+    )
+    for plan in plan_ledger.plans:
+        _require_candidate_binding(candidate_ledger, plan)
+
+    admissions_by_trigger: dict[str, RuntimeSourceAdmission] = {}
+    for admission in admission_ledger.admissions:
+        plan = _require_persisted_plan(plan_ledger, admission)
+        _require_candidate_binding(candidate_ledger, plan)
+        _require_admission_source_binding(
+            admission,
+            plan=plan,
+            candidate_ledger=candidate_ledger,
+        )
+        admissions_by_trigger[admission.trigger.trigger_id] = admission
+
+    for receipt in cycle_ledger.receipts:
+        admission = admissions_by_trigger.get(receipt.trigger.trigger_id)
+        if admission is None:
+            raise RuntimeEvidenceChainError(
+                "Decision-cycle receipt has no persisted runtime source admission."
+            )
+        if (
+            receipt.trigger != admission.trigger
+            or receipt.policy.fingerprint
+            != admission.event_cycle_policy_fingerprint
+        ):
+            raise RuntimeEvidenceChainError(
+                "Decision-cycle receipt contradicts its runtime source admission."
+            )
+        if receipt.cycle_id and (
+            receipt.plan_version_id != admission.plan_version_id
+            or receipt.plan_version_fingerprint
+            != admission.plan_version_fingerprint
+        ):
+            raise RuntimeEvidenceChainError(
+                "Created decision cycle contradicts its admitted plan version."
+            )
 
 
 def _require_candidate_binding(
