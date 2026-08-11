@@ -1,5 +1,19 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025B Cross-Process Ledger Ownership
+
+`codex/ARGUS-SHADOW-025B-cross-process-ledger-ownership` is
+`IMPLEMENTED_PENDING_MERGE` from the verified ARGUS-CONTINUOUS-002 head
+`657cb37`. It adds a finite reentrant OS file lease around the dormant
+event-cycle ledger's full transaction and direct-save paths. Windows-spawn
+tests prove simultaneous appends are preserved, contention times out, normal
+release recovers, and process exit releases ownership. Compileall, 42 focused,
+98 direct-contract, 268 combined-continuous, 130 adjacent, and all 1,717 Python
+tests pass. The branch is a feature-only backup; canonical `master`, the
+installed service, Tuesday jobs, providers, accounts, orders, production
+stores, and Paper/Shadow state remain unchanged. Do not merge or install before
+Tuesday's terminal operational evidence is preserved.
+
 ## ARGUS-CONTINUOUS-002 Offline Contract Reconciliation
 
 `codex/ARGUS-CONTINUOUS-002-offline-contract-reconciliation` is

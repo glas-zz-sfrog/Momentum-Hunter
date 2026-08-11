@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import threading
+import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
@@ -117,6 +119,7 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 _SYMBOL = re.compile(r"[A-Z][A-Z0-9.-]{0,14}")
 _PATH_LOCKS_GUARD = threading.Lock()
 _PATH_LOCKS: dict[Path, threading.RLock] = {}
+_PATH_LEASE_STATE = threading.local()
 
 
 class EventDecisionCycleError(ValueError):
@@ -344,16 +347,43 @@ def build_decision_trigger(
 class EventDecisionCycleStore:
     """Atomic explicit-path store for immutable trigger receipts and cycles."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, lease_timeout_seconds: float = 5.0) -> None:
         self.path = Path(path)
+        timeout = float(lease_timeout_seconds)
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise EventDecisionCycleError(
+                "Event decision-cycle lease timeout must be positive and finite."
+            )
+        self.lease_timeout_seconds = timeout
+        resolved = self.path.resolve()
+        self.lease_path = resolved.with_name(f".{resolved.name}.lock")
         self._lock = _path_lock(self.path)
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
-        """Serialize a full read/validate/append/write transaction per path."""
+        """Serialize a full read/validate/append/write transaction across processes."""
 
         with self._lock:
-            yield
+            resolved = self.path.resolve()
+            depths = _lease_depths()
+            current_depth = depths.get(resolved, 0)
+            if current_depth:
+                depths[resolved] = current_depth + 1
+                try:
+                    yield
+                finally:
+                    depths[resolved] -= 1
+                return
+
+            with _exclusive_path_lease(
+                self.lease_path,
+                timeout_seconds=self.lease_timeout_seconds,
+            ):
+                depths[resolved] = 1
+                try:
+                    yield
+                finally:
+                    depths.pop(resolved, None)
 
     def load(self) -> EventDecisionCycleLedger:
         with self._lock:
@@ -370,7 +400,7 @@ class EventDecisionCycleStore:
             return ledger
 
     def save(self, ledger: EventDecisionCycleLedger) -> None:
-        with self._lock:
+        with self.transaction():
             validate_ledger(ledger)
             _atomic_write(self.path, canonical_json_bytes(ledger_to_wire(ledger)))
 
@@ -1203,6 +1233,74 @@ def _path_lock(path: Path) -> threading.RLock:
             lock = threading.RLock()
             _PATH_LOCKS[resolved] = lock
         return lock
+
+
+def _lease_depths() -> dict[Path, int]:
+    depths = getattr(_PATH_LEASE_STATE, "depths", None)
+    if depths is None:
+        depths = {}
+        _PATH_LEASE_STATE.depths = depths
+    return depths
+
+
+@contextmanager
+def _exclusive_path_lease(
+    path: Path,
+    *,
+    timeout_seconds: float,
+) -> Iterator[None]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout_seconds
+    acquired = False
+    last_error: OSError | None = None
+    with path.open("a+b") as handle:
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"\0")
+            handle.flush()
+        while not acquired:
+            try:
+                _lock_file_handle(handle)
+                acquired = True
+            except OSError as exc:
+                last_error = exc
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise EventDecisionCycleError(
+                        "Event decision-cycle ledger lease timed out."
+                    ) from last_error
+                time.sleep(min(0.01, remaining))
+        try:
+            yield
+        finally:
+            if acquired:
+                _unlock_file_handle(handle)
+
+
+def _lock_file_handle(handle) -> None:
+    handle.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock_file_handle(handle) -> None:
+    handle.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _required_text(value: object, name: str) -> str:
