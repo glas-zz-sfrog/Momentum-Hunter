@@ -43,5 +43,7 @@ already monitor or trade the market.
 
 ## Status
 
-`IMPLEMENTED_PENDING_MERGE` until current-head verification and clean
-fast-forward integration are complete.
+`COMPLETE` after implementation `1452507` and this final closeout commit are
+fast-forward integrated, synchronized to `origin/master`, and the pending
+opening/Paper jobs are repinned to that final closeout identity. No runtime
+activation is part of completion.

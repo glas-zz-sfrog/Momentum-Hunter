@@ -29,9 +29,12 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-CONTINUOUS-003 is `IMPLEMENTED_PENDING_MERGE` on
-`codex/ARGUS-CONTINUOUS-003-current-head-integration` from current canonical
-base `e98b5cc`. It reconciles the proven continuous-intraday contract stack
+ARGUS-CONTINUOUS-003 implementation `1452507` is integrated locally, fully
+verified, and backed by `codex/ARGUS-CONTINUOUS-003-current-head-integration`.
+This release closeout is the intended final canonical identity; after its clean
+fast-forward, non-force synchronization, and exact-head opening/Paper job
+repin, status resolves to `COMPLETE` without another Git mutation. The task
+reconciles the proven continuous-intraday contract stack
 against the Paper-engineering and scheduler-hardened head: candidate lifecycle,
 rolling regime, macro-event context, provider-neutral catalyst evidence,
 prospective plan versions, sequential breakout research/outcomes, and
@@ -42,9 +45,8 @@ readiness, Shadow, or Paper capability. Current-head compileall, 254 focused
 tests, 228 adjacent regressions, and all 1,715 Python tests pass. All 29 restored
 artifacts match source branch `657cb37`; existing-runtime import, dormant-
 capability, credential-shape, protected-path, and staged-whitespace reviews
-pass. The branch is merge-ready. After integration, the next continuous-
-intraday slice is the explicit serialized runtime source/writer boundary, not
-an implicit import or activation of these contracts.
+pass. The next continuous-intraday slice is the explicit serialized runtime
+source/writer boundary, not an implicit import or activation of these contracts.
 
 ARGUS-BROKER-ALPACA-004 Paper engineering wiring is integrated and backed up
 through implementation commit `93f944c`. The canary engineering sample
