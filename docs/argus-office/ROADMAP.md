@@ -87,6 +87,18 @@ scanner-supply limitation, not a capture failure; continuous intraday discovery
 remains the architectural answer rather than loosening the frozen opening
 scanner retrospectively.
 
+ARGUS-AUTOMATION-008 closes the next-day repin defect exposed by that first
+terminal Paper cycle. Future opening replans now remove a historical Paper job
+from the active manifest only when the persisted Automation Service state proves
+that exact job is terminal; a missing or nonterminal receipt fails closed.
+Same-date and future Paper jobs remain bound to their opening dependency and are
+repinned to the new full Git identity. Removing a terminal job from the active
+manifest does not remove or rewrite its service receipt. The repaired planner
+was proven against a byte-preserved copy of the August 11 production manifest:
+it produced exactly 23 openings from August 12 through September 14, removed
+the completed August 11 Paper entry, preserved nonmarket jobs, and left the
+source manifest unchanged.
+
 ARGUS-BROKER-ALPACA-001 through A003 are stacked on
 canonical `master` through `c62eb93` and are `COMPLETE`. The proven feature
 stack is backed up at `codex/ARGUS-BROKER-ALPACA-003-paper-lifecycle-proof`.

@@ -73,15 +73,29 @@ def plan_opening_capture_manifest(
     start_date: date,
     market_sessions: int,
     expected_git_head: str,
+    terminal_job_ids: Iterable[str] = (),
 ) -> dict[str, object]:
     raw_jobs = payload.get("jobs", [])
     if not isinstance(raw_jobs, list):
         raise ValueError("Automation manifest jobs must be a list.")
-    retained_jobs = [
-        dict(job)
-        for job in raw_jobs
-        if isinstance(job, dict) and job.get("kind") != OPENING_CAPTURE_KIND
-    ]
+    terminal_ids = set(terminal_job_ids)
+    retained_jobs: list[dict[str, object]] = []
+    for raw_job in raw_jobs:
+        if not isinstance(raw_job, dict):
+            continue
+        job = dict(raw_job)
+        if job.get("kind") == OPENING_CAPTURE_KIND:
+            continue
+        if job.get("kind") == "paper_engineering":
+            scheduled_at = datetime.fromisoformat(str(job.get("scheduledAt", "")))
+            if scheduled_at.date() < start_date:
+                job_id = str(job.get("jobId", ""))
+                if job_id not in terminal_ids:
+                    raise ValueError(
+                        "A historical Paper job has no terminal service receipt."
+                    )
+                continue
+        retained_jobs.append(job)
     shadow_dates = {
         datetime.fromisoformat(str(job["scheduledAt"])).date()
         for job in retained_jobs
@@ -124,6 +138,7 @@ def write_validated_plan(
     start_date: date,
     market_sessions: int,
     expected_git_head: str,
+    terminal_job_ids: Iterable[str] = (),
 ) -> dict[str, object]:
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     planned = plan_opening_capture_manifest(
@@ -131,6 +146,7 @@ def write_validated_plan(
         start_date=start_date,
         market_sessions=market_sessions,
         expected_git_head=expected_git_head,
+        terminal_job_ids=terminal_job_ids,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_path.with_name(
@@ -178,6 +194,7 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_MARKET_SESSIONS,
     )
+    parser.add_argument("--terminal-job-id", action="append", default=[])
     return parser
 
 
@@ -189,6 +206,7 @@ def main() -> int:
         start_date=args.start_date,
         market_sessions=args.market_sessions,
         expected_git_head=args.expected_git_head,
+        terminal_job_ids=args.terminal_job_id,
     )
     print(json.dumps(summary, indent=2))
     return 0

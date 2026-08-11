@@ -145,6 +145,84 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
         paper = next(job for job in planned["jobs"] if job["kind"] == "paper_engineering")
         self.assertEqual(self.expected_git_head, paper["expectedGitHead"])
 
+    def test_replan_drops_historical_paper_job_after_terminal_session(self) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "existing-canary",
+                    "kind": "nonmarket_canary",
+                    "scheduledAt": "2026-08-01T10:00:00-05:00",
+                    "latestStartAt": "2026-08-01T10:05:00-05:00",
+                },
+                {
+                    "jobId": "opening-capture-20260811",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-08-11T08:35:00-05:00",
+                    "latestStartAt": "2026-08-11T08:40:00-05:00",
+                    "expectedGitHead": "b" * 40,
+                },
+                {
+                    "jobId": "paper-engineering-20260811",
+                    "kind": "paper_engineering",
+                    "scheduledAt": "2026-08-11T08:35:00-05:00",
+                    "latestStartAt": "2026-08-11T08:50:00-05:00",
+                    "timeoutSeconds": 25200,
+                    "expectedGitHead": "b" * 40,
+                    "dependsOnJobId": "opening-capture-20260811",
+                },
+            ]
+        )
+
+        planned = plan_opening_capture_manifest(
+            payload,
+            start_date=date(2026, 8, 12),
+            market_sessions=2,
+            expected_git_head=self.expected_git_head,
+            terminal_job_ids={"paper-engineering-20260811"},
+        )
+
+        identifiers = [str(job["jobId"]) for job in planned["jobs"]]
+        self.assertIn("existing-canary", identifiers)
+        self.assertNotIn("opening-capture-20260811", identifiers)
+        self.assertNotIn("paper-engineering-20260811", identifiers)
+        self.assertIn("opening-capture-20260812", identifiers)
+        self.assertIn("opening-capture-20260813", identifiers)
+
+    def test_replan_rejects_historical_paper_job_without_terminal_receipt(
+        self,
+    ) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260811",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-08-11T08:35:00-05:00",
+                    "latestStartAt": "2026-08-11T08:40:00-05:00",
+                    "expectedGitHead": "b" * 40,
+                },
+                {
+                    "jobId": "paper-engineering-20260811",
+                    "kind": "paper_engineering",
+                    "scheduledAt": "2026-08-11T08:35:00-05:00",
+                    "latestStartAt": "2026-08-11T08:50:00-05:00",
+                    "timeoutSeconds": 25200,
+                    "expectedGitHead": "b" * 40,
+                    "dependsOnJobId": "opening-capture-20260811",
+                },
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "historical Paper job has no terminal service receipt",
+        ):
+            plan_opening_capture_manifest(
+                payload,
+                start_date=date(2026, 8, 12),
+                market_sessions=2,
+                expected_git_head=self.expected_git_head,
+            )
+
     def test_validated_plan_does_not_mutate_source_manifest(self) -> None:
         original = self.manifest_path.read_bytes()
         output = self.root / "planned.json"
@@ -215,7 +293,10 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
 
         self.assertIn("-EnableOpeningCaptures", installer)
         self.assertIn('"opening_capture"', installer)
-        self.assertIn("--expected-git-head $gitHead", installer)
+        self.assertIn('"--expected-git-head"', installer)
+        self.assertIn("$gitHead", installer)
+        self.assertIn('"--terminal-job-id"', installer)
+        self.assertIn("$terminalPaperJobIds", installer)
         self.assertIn('"UNAVAILABLE"', installer)
         self.assertIn('"opening"', runner)
         self.assertIn("$OpeningRetryCount = 1", runner)

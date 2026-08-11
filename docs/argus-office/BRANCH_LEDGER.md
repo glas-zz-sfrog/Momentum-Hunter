@@ -1,5 +1,19 @@
 # Branch Ledger
 
+## ARGUS-AUTOMATION-008 Terminal Paper Repin Hardening
+
+`codex/ARGUS-AUTOMATION-008-terminal-paper-repin` is
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH`. It starts from material
+closeout `c6608ec` and fixes the opening planner's inability to roll forward
+after a terminal prior-day Paper job. Historical Paper jobs may leave the
+active manifest only when service state proves a final receipt; receipt history
+itself is preserved. The branch changes one planner module, its installer, one
+focused test module, and governance records. It does not change capture,
+selection, allocation, risk, broker, credential, order, position, UI, database,
+or evidence semantics.
+
+Date reconciled: 2026-08-11
+
 ## ARGUS-BROKER-ALPACA-004 First Prospective Result
 
 `codex/ARGUS-BROKER-ALPACA-004-first-prospective-result` is

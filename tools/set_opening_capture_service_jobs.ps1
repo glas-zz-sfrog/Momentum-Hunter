@@ -57,16 +57,48 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
     }
 }
 
+$terminalPaperJobIds = @()
+if ($state) {
+    $terminalStatuses = @(
+        "COMPLETED",
+        "FAILED",
+        "MISSED",
+        "BLOCKED_DEPENDENCY",
+        "DISABLED"
+    )
+    $terminalPaperJobIds = @(
+        $state.jobs.PSObject.Properties.Value |
+            Where-Object {
+                $_.kind -eq "paper_engineering" -and
+                $_.status -in $terminalStatuses
+            } |
+            ForEach-Object { $_.job_id }
+    )
+}
+
 $temporaryManifest = Join-Path $env:TEMP (
     "momentum-hunter-opening-captures-$([guid]::NewGuid().ToString('N')).json"
 )
 try {
-    $plannerOutput = & $pythonPath -B -m momentum_hunter.automation_opening_capture `
-        --manifest $manifestPath `
-        --output $temporaryManifest `
-        --start-date $StartDate.ToString("yyyy-MM-dd") `
-        --expected-git-head $gitHead `
-        --market-sessions $MarketSessions
+    $plannerArguments = @(
+        "-B",
+        "-m",
+        "momentum_hunter.automation_opening_capture",
+        "--manifest",
+        $manifestPath,
+        "--output",
+        $temporaryManifest,
+        "--start-date",
+        $StartDate.ToString("yyyy-MM-dd"),
+        "--expected-git-head",
+        $gitHead,
+        "--market-sessions",
+        $MarketSessions
+    )
+    foreach ($terminalJobId in $terminalPaperJobIds) {
+        $plannerArguments += @("--terminal-job-id", $terminalJobId)
+    }
+    $plannerOutput = & $pythonPath @plannerArguments
     if ($LASTEXITCODE -ne 0) {
         throw "Opening capture manifest planning failed."
     }

@@ -1,5 +1,13 @@
 # Argus Changelog
 
+- Hardened next-day opening repins after the first terminal Paper cycle. The
+  planner now requires a persisted terminal service receipt before dropping a
+  historical Paper job from the active manifest; missing or nonterminal state
+  fails closed, while future Paper dependencies remain same-date and same-head.
+- Proved the repair read-only against the production manifest: 23 openings from
+  August 12 through September 14 were planned, the completed August 11 Paper
+  entry was retired from the active plan, nonmarket jobs were preserved, and
+  the production manifest hash did not change during proof.
 - Preserved the first prospective Canary Paper engineering decision. The
   Automation Service started the August 11 opening capture exactly at 08:35:00
   Central, completed it at 08:35:03, and immediately admitted Paper. The
