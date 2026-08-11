@@ -29,6 +29,27 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SHADOW-025G runtime evidence-chain composition is
+`IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-SHADOW-025G-runtime-evidence-chain`, stacked on verified 025F head
+`628d555`. One dormant topology-bound writer session now owns candidate
+lifecycle, continuous plan, source-admission, and decision-cycle appends under
+the same current host/PID/build/configuration authority. Plans require their
+exact persisted candidate event, admissions require the exact plan and
+candidate chain, and cycles require the exact admission, plan, candidate, and
+policy before a later artifact can be written.
+
+Stage-order violations, mixed configurations, raw plan-store bypass, escaped
+paths, and contradictory identities fail closed. Exact restart replay continues
+a valid partial prefix without duplicate evidence, and session close waits for
+an in-flight authorized append. Compileall, 28 focused, 184 combined-chain, 262
+runtime-boundary, and all 1,797 Python tests pass. No existing runtime imports
+the module; canonical `master` remains clean and synchronized at frozen
+`78db1bf`. Merge/install waits for Tuesday's terminal evidence. The chain is
+staged rather than atomically spanning four files; installed root selection,
+ACL/reparse proof, raw-store confinement, and Engine Host orchestration remain
+separate prospective work.
+
 ARGUS-SHADOW-025F runtime writer-session composition is
 `IMPLEMENTED_PENDING_MERGE` on
 `codex/ARGUS-SHADOW-025F-runtime-writer-session`, stacked on verified 025E head

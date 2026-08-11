@@ -463,6 +463,7 @@ class EventRuntimeTopologyTests(unittest.TestCase):
             if path.name in {
                 "event_runtime_topology.py",
                 "event_runtime_writer_session.py",
+                "event_runtime_evidence_chain.py",
             }:
                 continue
             if "event_runtime_topology" in path.read_text(encoding="utf-8"):

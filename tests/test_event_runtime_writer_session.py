@@ -5,6 +5,7 @@ import multiprocessing
 import os
 import tempfile
 import threading
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -57,6 +58,14 @@ from tests.test_event_source_admission import refingerprint_plan, successor_plan
 
 RUNTIME_BUILD = "c" * 64
 PROGRAM = "engineering-shadow-025"
+
+
+def build_runtime_writer_test_fixture():
+    fixture = EventRuntimeWriterSessionTests(
+        "test_construction_is_nonmutating_and_binds_topology_path"
+    )
+    fixture.setUp()
+    return fixture
 
 
 def _build_claim(topology, *, host_instance_id: str):
@@ -129,7 +138,7 @@ class EventRuntimeWriterSessionTests(unittest.TestCase):
         values.update(changes)
         return RuntimeSourceAdmissionWriterSession(**values)
 
-    def build_initial_admission(self, *, symbol: str, clock_offset: int):
+    def build_chain_evidence(self, *, symbol: str, clock_offset: int):
         candidate_policy = CandidateLifecyclePolicy(
             policy_version="synthetic-candidate-v1",
             cooldown_seconds=30,
@@ -219,6 +228,13 @@ class EventRuntimeWriterSessionTests(unittest.TestCase):
             event_cycle_policy=policy,
             candidate_event=event,
             candidate_ledger=candidate_store.load(),
+        )
+        return candidate_store.load().events, admission, plan, policy
+
+    def build_initial_admission(self, *, symbol: str, clock_offset: int):
+        _, admission, plan, policy = self.build_chain_evidence(
+            symbol=symbol,
+            clock_offset=clock_offset,
         )
         return admission, plan, policy
 
@@ -359,6 +375,39 @@ class EventRuntimeWriterSessionTests(unittest.TestCase):
             self.assertEqual(SESSION_CLOSED, first.result(timeout=5))
             self.assertIn("single-use", second.result(timeout=5))
 
+        self.assertEqual(SESSION_CLOSED, session.state)
+
+    def test_session_close_waits_for_inflight_authorized_append(self) -> None:
+        admission, _, _ = self.build_initial_admission(
+            symbol="AAA",
+            clock_offset=0,
+        )
+        session = self.session()
+        started = threading.Event()
+        release = threading.Event()
+        original_append = session._source_store.append
+
+        def blocked_append(record):
+            started.set()
+            if not release.wait(5):
+                raise RuntimeError("Synthetic append release gate timed out.")
+            return original_append(record)
+
+        session._source_store.append = blocked_append
+        activation = session.activate()
+        activation.__enter__()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            append = pool.submit(session.append_source_admission, admission)
+            self.assertTrue(started.wait(5))
+            timer = threading.Timer(0.1, release.set)
+            timer.start()
+            close_started = time.monotonic()
+            activation.__exit__(None, None, None)
+            close_elapsed = time.monotonic() - close_started
+            timer.join(timeout=2)
+            self.assertEqual(admission, append.result(timeout=5))
+
+        self.assertGreaterEqual(close_elapsed, 0.08)
         self.assertEqual(SESSION_CLOSED, session.state)
 
     def test_failed_append_does_not_end_valid_session(self) -> None:
@@ -516,7 +565,10 @@ class EventRuntimeWriterSessionTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1] / "momentum_hunter"
         importers = []
         for path in root.rglob("*.py"):
-            if path.name == "event_runtime_writer_session.py":
+            if path.name in {
+                "event_runtime_writer_session.py",
+                "event_runtime_evidence_chain.py",
+            }:
                 continue
             if "event_runtime_writer_session" in path.read_text(encoding="utf-8"):
                 importers.append(path.name)

@@ -1,5 +1,18 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025G Runtime Evidence Chain
+
+`codex/ARGUS-SHADOW-025G-runtime-evidence-chain` is
+`IMPLEMENTED_PENDING_MERGE` from verified 025F head `628d555`. It routes all
+four dormant continuous evidence paths through one current writer session and
+enforces candidate -> plan -> source-admission -> cycle identity and ordering.
+Restart replay continues valid partial prefixes idempotently; cross-config,
+escaped-path, missing-stage, and contradictory chains fail closed. Compileall,
+28 focused, 184 combined-chain, 262 runtime-boundary, and all 1,797 Python tests
+pass. No installed importer, runtime, provider, account, order, Paper/Shadow
+state, production store, or Tuesday job changed. Do not merge or install before
+terminal Tuesday evidence.
+
 ## ARGUS-SHADOW-025F Runtime Writer Session
 
 `codex/ARGUS-SHADOW-025F-runtime-writer-session` is

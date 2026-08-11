@@ -153,16 +153,9 @@ class RuntimeSourceAdmissionWriterSession:
     ) -> RuntimeSourceAdmission:
         """Append under the same current claim and lifetime writer lease."""
 
-        with self._state_lock:
-            if self._state != SESSION_ACTIVE:
-                raise RuntimeWriterSessionError(
-                    "Runtime source admission requires an active writer session."
-                )
-            if self._owner_process_id != os.getpid():
-                raise RuntimeWriterSessionError(
-                    "Runtime writer session belongs to a different process."
-                )
-            self._validate_current_identity()
+        with self.authorized_artifact_append(
+            RUNTIME_SOURCE_ADMISSION_LEDGER
+        ) as expected_path:
             if (
                 admission.configuration_fingerprint
                 != self.topology.configuration_fingerprint
@@ -170,6 +163,58 @@ class RuntimeSourceAdmissionWriterSession:
                 raise RuntimeWriterSessionError(
                     "Runtime source admission belongs to a different configuration."
                 )
+            if self.source_admission_path.resolve() != expected_path.resolve():
+                raise RuntimeWriterSessionError(
+                    "Runtime source-admission store escaped the topology path."
+                )
+            return self._source_store.append(admission)
+
+    def require_source_admission(
+        self,
+        admission: RuntimeSourceAdmission,
+    ) -> RuntimeSourceAdmission:
+        """Return one exact persisted admission under current writer ownership."""
+
+        with self.authorized_artifact_append(
+            RUNTIME_SOURCE_ADMISSION_LEDGER
+        ) as expected_path:
+            if self.source_admission_path.resolve() != expected_path.resolve():
+                raise RuntimeWriterSessionError(
+                    "Runtime source-admission store escaped the topology path."
+                )
+            ledger = self._source_store.load()
+            existing = next(
+                (
+                    item
+                    for item in ledger.admissions
+                    if item.admission_id == admission.admission_id
+                ),
+                None,
+            )
+            if existing is None:
+                raise RuntimeWriterSessionError(
+                    "Runtime source admission is not persisted."
+                )
+            if existing != admission:
+                raise RuntimeWriterSessionError(
+                    "Persisted runtime source admission is contradictory."
+                )
+            return existing
+
+    @contextmanager
+    def authorized_artifact_append(self, artifact_name: str) -> Iterator[Path]:
+        """Hold current writer authority across one complete artifact operation."""
+
+        with self._state_lock:
+            if self._state != SESSION_ACTIVE:
+                raise RuntimeWriterSessionError(
+                    "Runtime artifact append requires an active writer session."
+                )
+            if self._owner_process_id != os.getpid():
+                raise RuntimeWriterSessionError(
+                    "Runtime writer session belongs to a different process."
+                )
+            self._validate_current_identity()
             registry_key = self._writer_lease.resolved_target_path
             with _ACTIVE_SESSIONS_GUARD:
                 if (
@@ -181,7 +226,7 @@ class RuntimeSourceAdmissionWriterSession:
                     )
             access = authorize_runtime_artifact_access(
                 self.topology,
-                artifact_name=RUNTIME_SOURCE_ADMISSION_LEDGER,
+                artifact_name=artifact_name,
                 operation=APPEND,
                 process_role=PYTHON_ENGINE_HOST,
                 writer_claim=self.writer_claim,
@@ -190,17 +235,13 @@ class RuntimeSourceAdmissionWriterSession:
             )
             if not access.allowed:
                 raise RuntimeWriterSessionError(
-                    f"Runtime source-admission append was denied: {access.reason}."
+                    f"Runtime artifact append was denied: {access.reason}."
                 )
             expected_path = artifact_path(
                 self.topology,
-                RUNTIME_SOURCE_ADMISSION_LEDGER,
+                artifact_name,
             )
-            if self.source_admission_path.resolve() != expected_path.resolve():
-                raise RuntimeWriterSessionError(
-                    "Runtime source-admission store escaped the topology path."
-                )
-            return self._source_store.append(admission)
+            yield expected_path
 
     def _validate_current_identity(self) -> None:
         try:
