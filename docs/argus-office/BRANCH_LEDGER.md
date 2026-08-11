@@ -1,5 +1,17 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025D Runtime Topology Contract
+
+`codex/ARGUS-SHADOW-025D-runtime-topology-contract` is
+`IMPLEMENTED_PENDING_MERGE` from verified 025C head `0d3fc9b`. It freezes one
+online writer/reader role, supervisor-only and frontend-denied file access,
+offline read-only audit access, program/configuration-isolated relative paths,
+and current-host writer claims. Compileall, 23 focused, 222 host/service/source,
+308 continuous, 259 adjacent, and all 1,757 Python tests pass. No actual root,
+runtime importer, provider, account, order, production store, service, WPF, or
+scheduled job changed. Do not merge or install before Tuesday's terminal
+operational evidence is preserved.
+
 ## ARGUS-SHADOW-025C Runtime Source Admission
 
 `codex/ARGUS-SHADOW-025C-runtime-source-admission` is

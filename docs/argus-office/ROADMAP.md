@@ -29,6 +29,24 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SHADOW-025D runtime topology is `IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-SHADOW-025D-runtime-topology-contract`, stacked on verified 025C
+head `0d3fc9b`. The dormant continuous stack now assigns the Python Engine Host
+as sole online reader/writer, keeps Automation Service supervisor-only, denies
+WPF direct file access in favor of versioned Engine Host snapshots, and permits
+offline review as read-only. Four append-only artifact paths are deterministically
+scoped by evidence-program plus configuration identity beneath an explicit
+caller-provided absolute root; engineering and official programs cannot share
+candidate, plan, source-admission, or cycle ledgers.
+
+Append authorization requires a canonical claim matching the current host
+instance, PID, runtime build, configuration, and topology. Code upgrades retain
+the evidence namespace but rotate writer authority. Compileall, 23 focused, 222
+host/service/source, 308 combined-continuous, 259 adjacent, and all 1,757 Python
+tests pass. The module has no runtime importer or persistence/external
+capability. No installed root was selected or touched. Canonical `master`
+remains frozen at `78db1bf`; merge/install waits for Tuesday terminal evidence.
+
 ARGUS-SHADOW-025C runtime source admission is
 `IMPLEMENTED_PENDING_MERGE` on
 `codex/ARGUS-SHADOW-025C-runtime-source-admission`, stacked on the verified
@@ -1120,12 +1138,12 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 | Item | Current truth |
 | --- | --- |
 | Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, DATA-004 same-session intraday TradePlan semantics, DATA-005 account-aware allocation enforcement, DATA-005A fresh account/portfolio evidence, and the directly proven A001-A003 Alpaca Paper foundation. All 24 future opening jobs are pinned to the final synchronized closeout head. |
-| Active implementation | Eight consecutive unattended captures through Monday August 10 passed. DATA-005A, the directly proven A001-A003 Paper foundation, DATA-005B provider-neutral allocation/Paper-research contracts, and ARGUS-BROKER-ALPACA-004 Paper engineering wiring are complete on canonical `master`. ARGUS-SHADOW-025C extends the reconciled dormant continuous/PLAN/BREAKOUT/event-cycle stack through cross-process ownership and exact runtime-source admission; none of that stack is installed. The running service has the Paper job pending; the first prospective decision is next. R034 remains a separate destructive approval gate. |
+| Active implementation | Eight consecutive unattended captures through Monday August 10 passed. DATA-005A, the directly proven A001-A003 Paper foundation, DATA-005B provider-neutral allocation/Paper-research contracts, and ARGUS-BROKER-ALPACA-004 Paper engineering wiring are complete on canonical `master`. ARGUS-SHADOW-025D extends the reconciled dormant continuous/PLAN/BREAKOUT/event-cycle stack through cross-process ownership, exact runtime-source admission, and explicit process/path topology; none of that stack is installed. The running service has the Paper job pending; the first prospective decision is next. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Use a separately versioned canary-realistic Alpaca Paper engineering sample to prove prospective selection, fractional allocation, provider execution, protection, recovery, and terminal evidence. Do not count it as the final continuous-intraday strategy sample. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | The first prospective Paper engineering decision is waiting only for the next fresh opening capture and market evidence; no code or policy blocker remains. ARGUS-SHADOW-025C implementation is not blocked, but canonical merge/install waits for Tuesday's terminal opening/Paper evidence so the pinned runtime is not changed overnight. PLAN-002 production authority remains gated on integrated prerequisites and frozen live catalyst/macro/setup policy identities; BREAKOUT-002 conclusions require a frozen sufficient prospective cohort; SHADOW-025 source admission and cross-process ownership are synthetically proven, while installed source paths, process ownership, and orchestration remain unfrozen. Partial-fill and provider-restart behavior remain synthetic-only; broker-resident linked protection and status streaming remain separate unknowns. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
+| Blocked by | The first prospective Paper engineering decision is waiting only for the next fresh opening capture and market evidence; no code or policy blocker remains. ARGUS-SHADOW-025D implementation is not blocked, but canonical merge/install waits for Tuesday's terminal opening/Paper evidence so the pinned runtime is not changed overnight. PLAN-002 production authority remains gated on integrated prerequisites and frozen live catalyst/macro/setup policy identities; BREAKOUT-002 conclusions require a frozen sufficient prospective cohort; SHADOW-025 source admission, cross-process ownership, and relative topology are synthetically proven, while actual root selection, startup claim/lease composition, source-admission persistence, and Engine Host orchestration remain unwired. Partial-fill and provider-restart behavior remain synthetic-only; broker-resident linked protection and status streaming remain separate unknowns. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
 | Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-10 08:35 ordinary captures finished successfully with required artifacts and no Shadow or brokerage action. The 24 remaining jobs run from 2026-08-11 through 2026-09-14 at the final synchronized head; Tuesday is `PENDING`, zero Shadow jobs are enabled, and transmission is `UNAVAILABLE`. |
-| Immediate operational work | Preserve Tuesday's opening receipt, then adjudicate and preserve the first prospective Paper engineering `PAPER_TRADE_CREATED` or `NO_TRADE` result. After that evidence is terminal, reconcile ARGUS-SHADOW-025C against the then-current canonical base and serialize the dormant contract stack into the next integration window. Runtime PLAN-002, BREAKOUT-002 cohort activation, and SHADOW-025 orchestration/source-path wiring remain separate prospective tasks. Present R034's exact deletion plan only when Steven is ready. |
+| Immediate operational work | Preserve Tuesday's opening receipt, then adjudicate and preserve the first prospective Paper engineering `PAPER_TRADE_CREATED` or `NO_TRADE` result. After that evidence is terminal, reconcile ARGUS-SHADOW-025D against the then-current canonical base and serialize the dormant contract stack into the next integration window. Runtime PLAN-002, BREAKOUT-002 cohort activation, and SHADOW-025 installed-root/orchestration wiring remain separate prospective tasks. Present R034's exact deletion plan only when Steven is ready. |
 | Broker state | Schwab OAuth and immutable `2573` `INDIVIDUAL_CASH` binding remain read-only market-data/account evidence. No transmitting Schwab method exists. The Canary Alpaca Paper credential is encrypted outside Git. The exact Paper host accepted and completed one bounded fractional lifecycle; the activation preflight found the account active with `$100` cash/buying power, zero positions, and zero open orders. The research credential slot is empty. The Paper-only runtime path is integrated and scheduled, no prospective provider decision has run, and the live Alpaca host cannot be enabled by a mode flip. |
 | Steven action | No routine nonvisual approval is pending. Interrupt Steven before funding, money movement, any live endpoint/order, unexpected brokerage scope, destructive R034 cutover, or visual acceptance. Do not ask Steven to re-enter the stored Canary credential. |
 | Data caveat | Schwab remains authoritative for proven quote/candle evidence while execution-provider capability remains separate. DATA-001 through DATA-004 retain their provenance, RVOL, setup, and same-session chronology gates. DATA-005 makes `$500` reference sizing nonexecutable; DATA-005A supplies fresh bound-account/portfolio evidence. Fractional support may alter provider-executable quantity prospectively but may never rewrite old allocation or Shadow evidence. Legacy RVOL remains research-only; insufficient candle history and unknown broker capability fail closed. |
@@ -1345,6 +1363,13 @@ activated-empty and unarmed at `0 / 30`, A017 is
   refreshes cannot create duplicate parallel cycles. Runtime orchestration and
   installed source paths remain separate prospective work after Tuesday
   evidence.
+- ARGUS-SHADOW-025D is implemented on the latest successor feature branch. It
+  assigns one online owner, keeps service supervision separate from evidence
+  writes, preserves WPF's Engine Host boundary, and derives program/configuration-
+  isolated candidate, plan, source-admission, and cycle paths from one explicit
+  root. Current host/PID/build claims fail closed after replacement, and code
+  upgrades rotate authority without discarding the program namespace. Actual
+  root installation and orchestration remain separate after Tuesday evidence.
 
 #### 11B - Schwab Read-Only And Canary Preparation
 
