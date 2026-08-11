@@ -81,8 +81,11 @@ merged; canonical `master` and Tuesday's opening/Paper jobs remain unchanged.
 `codex/ARGUS-PLAN-002A-continuous-plan-version-contract` is
 `IMPLEMENTED_PENDING_MERGE`, stacked on the pushed and verified continuous
 integration head `f6b776e`. It adds one dormant pure-Python contract module,
-synthetic tests, and branch-local governance. Compileall, 19 focused tests, 210
-adjacent evidence/plan/allocation tests, and all 1,638 Python tests pass. The
+synthetic tests, and branch-local governance. Self-review now preserves and
+revalidates plan/risk/allocation authority states in each decision, requires a
+prospective-only authority profile, and rejects backward plan-ledger or
+manual-override chronology. Compileall, 24 focused tests, 191 adjacent
+evidence/plan/allocation tests, and all 1,643 Python tests pass. The
 module has no network, account, broker/order, scoring, Shadow, service,
 scheduler, Engine Host, WPF, or default production-path capability. This branch
 must not be merged or installed before Tuesday's terminal opening/Paper evidence

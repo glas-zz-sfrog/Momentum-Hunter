@@ -37,6 +37,7 @@ from momentum_hunter.continuous_plan_version import (
     RVOL_EXECUTION_ELIGIBLE,
     AllocationDecisionReference,
     ContinuousPlanError,
+    ContinuousPlanLedger,
     ContinuousPlanPolicy,
     ContinuousPlanStore,
     RiskDecisionReference,
@@ -49,6 +50,7 @@ from momentum_hunter.continuous_plan_version import (
     evidence_fingerprint,
     plan_fingerprint_payload,
     validate_decision,
+    validate_ledger,
     validate_plan_version,
 )
 from momentum_hunter.evidence_integrity import (
@@ -98,6 +100,7 @@ class ContinuousPlanVersionTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
 
     def bundle(self, **changes):
+        created_at = changes.pop("created_at", CREATED)
         setup_fingerprint = changes.pop("setup_fingerprint", SETUP_FINGERPRINT)
         setup_authority = changes.pop("setup_authority", EXECUTION_AUTHORITY)
         candidate_state = changes.pop("candidate_state", EXECUTION_ELIGIBLE)
@@ -154,7 +157,7 @@ class ContinuousPlanVersionTests(unittest.TestCase):
         intraday_plan = build_intraday_plan_evidence(
             symbol=SYMBOL,
             setup_family=CONTINUATION_BREAKOUT,
-            created_at=CREATED,
+            created_at=created_at,
             planned_entry=100.0,
             stop_price=98.0,
             target_prices=(102.0, 104.0),
@@ -278,6 +281,16 @@ class ContinuousPlanVersionTests(unittest.TestCase):
         self.assertIn("SETUP_EVIDENCE_RESEARCH_ONLY", plan.blockers)
         self.assertFalse(plan.ready_for_risk_review)
 
+    def test_nonprospective_policy_profile_cannot_gain_authority(self) -> None:
+        bundle = self.bundle()
+        bundle["policy"] = replace(
+            bundle["policy"],
+            authority_profile="HISTORICAL_REPLAY",
+        )
+
+        with self.assertRaisesRegex(ContinuousPlanError, "not prospective"):
+            build_continuous_plan_version(**bundle)
+
     def test_candidate_regime_event_and_rvol_gates_fail_closed(self) -> None:
         cases = {
             "candidate": (
@@ -369,6 +382,21 @@ class ContinuousPlanVersionTests(unittest.TestCase):
                 supersession_reason="CONTEXT_REFRESH",
             )
 
+    def test_successor_plan_chronology_cannot_move_backward(self) -> None:
+        predecessor = build_continuous_plan_version(
+            **self.bundle(created_at=CREATED + timedelta(minutes=2))
+        )
+
+        with self.assertRaisesRegex(ContinuousPlanError, "chronology"):
+            build_continuous_plan_version(
+                **self.bundle(
+                    setup_fingerprint="e" * 64,
+                    revision_id="setup-revision-2",
+                ),
+                predecessor=predecessor,
+                supersession_reason="CONTEXT_REFRESH",
+            )
+
     def test_store_is_append_only_idempotent_and_detects_tampering(self) -> None:
         path = self.root / "plans.json"
         store = ContinuousPlanStore(path)
@@ -446,6 +474,35 @@ class ContinuousPlanVersionTests(unittest.TestCase):
         with self.assertRaisesRegex(ContinuousPlanError, "latest opportunity"):
             store.append(branch)
         self.assertEqual((first, second), store.load().plans)
+
+    def test_ledger_rejects_rehashed_backward_plan_chronology(self) -> None:
+        first = build_continuous_plan_version(
+            **self.bundle(created_at=CREATED + timedelta(minutes=2))
+        )
+        second = build_continuous_plan_version(
+            **self.bundle(
+                created_at=CREATED + timedelta(minutes=3),
+                setup_fingerprint="e" * 64,
+                revision_id="setup-revision-2",
+            ),
+            predecessor=first,
+            supersession_reason="CONTEXT_REFRESH",
+        )
+        forged = replace(
+            second,
+            created_at=(CREATED + timedelta(minutes=1)).isoformat(),
+            plan_version_id="",
+            fingerprint="",
+        )
+        fingerprint = evidence_fingerprint(plan_fingerprint_payload(forged))
+        forged = replace(
+            forged,
+            plan_version_id=f"continuous-plan-{fingerprint[:24]}",
+            fingerprint=fingerprint,
+        )
+
+        with self.assertRaisesRegex(ContinuousPlanError, "chronology"):
+            validate_ledger(ContinuousPlanLedger(plans=(first, forged)))
 
     def test_authorized_decision_binds_exact_plan_risk_allocation_and_clock(self) -> None:
         plan = self.build()
@@ -526,6 +583,53 @@ class ContinuousPlanVersionTests(unittest.TestCase):
         with self.assertRaisesRegex(ContinuousPlanError, "quantity must be positive"):
             validate_decision(forged)
 
+    def test_decision_validator_rejects_rehashed_removed_authority_blockers(self) -> None:
+        cases = {
+            "risk": {
+                "plan": self.build(),
+                "risk_status": RISK_BLOCKED,
+            },
+            "plan": {
+                "plan": self.build(setup_authority=RESEARCH_ONLY),
+                "risk_status": RISK_AUTHORIZED,
+            },
+        }
+        for name, case in cases.items():
+            with self.subTest(name=name):
+                plan = case["plan"]
+                risk = replace(self.risk(plan), status=case["risk_status"])
+                allocation = self.allocation(plan, risk)
+                plan_bundle = self.bundle(
+                    setup_authority=(
+                        RESEARCH_ONLY if name == "plan" else EXECUTION_AUTHORITY
+                    )
+                )
+                blocked = build_continuous_plan_decision(
+                    plan_version=plan,
+                    intraday_plan=plan_bundle["intraday_plan"],
+                    risk=risk,
+                    allocation=allocation,
+                    decided_at=CREATED + timedelta(minutes=1),
+                    mode="FAKEBROKER",
+                )
+                forged = replace(
+                    blocked,
+                    status=DECISION_AUTHORIZED,
+                    blockers=(),
+                    fingerprint="",
+                )
+                forged = replace(
+                    forged,
+                    fingerprint=evidence_fingerprint(
+                        decision_fingerprint_payload(forged)
+                    ),
+                )
+
+                with self.assertRaisesRegex(
+                    ContinuousPlanError, "required authority blocker"
+                ):
+                    validate_decision(forged)
+
     def test_manual_override_requires_new_plan_risk_and_allocation(self) -> None:
         first = self.build()
         first_risk = self.risk(first)
@@ -577,6 +681,43 @@ class ContinuousPlanVersionTests(unittest.TestCase):
             predecessor_decision=first_decision,
         )
         self.assertEqual(DECISION_AUTHORIZED, approved.status)
+
+    def test_manual_override_decision_chronology_cannot_move_backward(self) -> None:
+        first = self.build()
+        first_risk = self.risk(first)
+        first_allocation = self.allocation(first, first_risk)
+        predecessor_decision = build_continuous_plan_decision(
+            plan_version=first,
+            intraday_plan=self.bundle()["intraday_plan"],
+            risk=first_risk,
+            allocation=first_allocation,
+            decided_at=CREATED + timedelta(minutes=3),
+            mode="FAKEBROKER",
+        )
+        second_bundle = self.bundle(
+            setup_fingerprint="e" * 64,
+            revision_id="setup-revision-2",
+        )
+        second = build_continuous_plan_version(
+            **second_bundle,
+            predecessor=first,
+            supersession_reason=MANUAL_OVERRIDE,
+        )
+        second_risk = self.risk(second, identity="risk-decision-2", fingerprint="7" * 64)
+        second_allocation = self.allocation(
+            second, second_risk, cycle="cycle-2", fingerprint="8" * 64
+        )
+
+        with self.assertRaisesRegex(ContinuousPlanError, "chronology"):
+            build_continuous_plan_decision(
+                plan_version=second,
+                intraday_plan=second_bundle["intraday_plan"],
+                risk=second_risk,
+                allocation=second_allocation,
+                decided_at=CREATED + timedelta(minutes=2),
+                mode="FAKEBROKER",
+                predecessor_decision=predecessor_decision,
+            )
 
     def test_module_has_no_network_broker_order_scoring_or_runtime_capability(self) -> None:
         path = (

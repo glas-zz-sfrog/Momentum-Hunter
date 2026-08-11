@@ -27,16 +27,30 @@
 It consumes DATA-004 plan semantics rather than redefining entry, stop, target,
 expiry, missed-entry, reclaim, or forced-flat behavior.
 
+## Hard-Chew Repairs
+
+1. A rehashed decision could remove blockers from a risk-blocked or
+   research-only plan because source authority states were not retained in the
+   decision record. Plan, risk, and allocation statuses are now persisted and
+   every required blocker is independently re-derived.
+2. Plan successors and manual-override decisions could predate their
+   predecessors. Construction and persisted plan-ledger validation now enforce
+   monotonic chronology.
+3. An arbitrary policy authority profile such as `HISTORICAL_REPLAY` could
+   become ready for risk review. Only `PROSPECTIVE_EVIDENCE_ONLY` is accepted
+   and preserved in the immutable plan version.
+
 ## Verification
 
 - Python compileall: PASS.
-- Focused PLAN-002A suite: 19 / 19 PASS.
+- Focused PLAN-002A suite: 24 / 24 PASS.
 - Adjacent candidate, regime, event, catalyst, DATA-004, provider-neutral
-  allocation, and Paper research suites: 210 / 210 PASS.
-- Full Python discovery: 1,638 / 1,638 PASS in 227.802 seconds.
+  allocation, and Paper research suites: 191 / 191 PASS.
+- Full Python discovery: 1,643 / 1,643 PASS in 223.445 seconds.
 - Exact-repeat identity and byte-stable store proof: PASS.
-- Tamper, forged-authority, stale/blocking context, missing clock, chain-branch,
-  cross-identity, live-mode, and manual-override negative proof: PASS.
+- Tamper, forged-authority, prospective-profile, stale/blocking context,
+  missing clock, chain-branch, chronology, cross-identity, live-mode, and
+  manual-override negative proof: PASS.
 
 ## Protected Boundary
 

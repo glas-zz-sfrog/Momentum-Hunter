@@ -40,8 +40,13 @@ manual override to rewrite history.
   and inconsistent identities fail closed.
 - Material successors preserve predecessor identity and cannot branch history.
 - Manual override requires a new plan, risk decision, and allocation decision.
+- Decision validation re-derives every required plan, risk, allocation, and
+  quantity blocker from persisted authority facts.
+- Successor plans and manual-override decisions cannot move backward in time.
+- Only the prospective-evidence authority profile may reach risk review.
 - Live decision modes are rejected structurally.
-- Compileall, focused, adjacent, and full Python discovery pass.
+- Compileall, 24 focused tests, 191 adjacent tests, and all 1,643 Python tests
+  pass.
 - Protected-path, secret, import/capability, whitespace, and canonical
   nonmutation reviews pass.
 - Branch-local Roadmap says `IMPLEMENTED_PENDING_MERGE`.
