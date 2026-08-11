@@ -29,6 +29,31 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SHADOW-025L reconciles the exact dormant SHADOW-025B through 025K
+serialized runtime-boundary chain from source head `203003b` onto current
+canonical base `b4762c6`. The 39 restored artifacts cover cross-process event-
+ledger ownership, prospective source admission, one explicit runtime topology,
+write-once admission evidence, a composed writer session and evidence chain,
+read-only recovery planning, dormant orchestration, raw-root security, and
+installed-writer feasibility. No existing runtime path imports the stack and
+the restored modules contain no provider, account, broker/order, service,
+scheduler, Engine Host process, WPF, or production-store capability. Compileall,
+196 focused runtime-chain tests, 412 continuous-stack tests, 387 adjacent
+current-runtime regressions, and all 1,873 Python tests pass. The integration
+status is `IMPLEMENTED_PENDING_MERGE`; module presence does not authorize
+activation.
+
+The current Automation Service, Engine Host, and WPF share Steven's Windows
+SID, so ACLs cannot distinguish the future raw-evidence writer from the UI.
+The contracts preserve two feasible shapes but select neither: a distinct-
+principal Engine Host that requires separately approved credential
+reprovisioning/brokering, or a dedicated evidence-writer process behind a
+strongly authenticated nonpersistent channel. Same-user SID-only pipe identity
+is insufficient. Every result keeps `activation_authorized=false`. After clean
+integration and exact-head schedule repinning, the next consequential gate is
+the writer-principal and credential-access architecture decision; no credential,
+principal, ACL, installed runtime, or production path changes in 025L.
+
 ARGUS-CONTINUOUS-003 implementation `1452507` is integrated locally, fully
 verified, and backed by `codex/ARGUS-CONTINUOUS-003-current-head-integration`.
 This release closeout is the intended final canonical identity; after its clean
@@ -45,8 +70,8 @@ readiness, Shadow, or Paper capability. Current-head compileall, 254 focused
 tests, 228 adjacent regressions, and all 1,715 Python tests pass. All 29 restored
 artifacts match source branch `657cb37`; existing-runtime import, dormant-
 capability, credential-shape, protected-path, and staged-whitespace reviews
-pass. The next continuous-intraday slice is the explicit serialized runtime
-source/writer boundary, not an implicit import or activation of these contracts.
+pass. The explicit serialized runtime source/writer contract is supplied by
+ARGUS-SHADOW-025L; installed activation remains a separate consequential gate.
 
 ARGUS-BROKER-ALPACA-004 Paper engineering wiring is integrated and backed up
 through implementation commit `93f944c`. The canary engineering sample
@@ -1527,9 +1552,11 @@ Status: `PAPER_ENGINEERING_ACTIVE / CONTINUOUS_INTRADAY_FOUNDATION_NEXT`
   engineering sample until candidate-bearing evidence exercises account,
   allocation, entry, protection, and exit gates.
 - Continuous intraday discovery is the parallel foundation needed to escape the
-  observed opening-scanner supply limit. Dormant provider-neutral contracts may
-  integrate after current-head proof, but runtime source/writer activation is a
-  separate prospective task and cannot be inferred from module presence.
+  observed opening-scanner supply limit. The dormant provider-neutral contracts
+  and SHADOW-025B through 025K runtime-boundary chain may integrate after
+  current-head proof, but installed source/writer activation requires a separate
+  writer-principal and credential-access decision and cannot be inferred from
+  module presence.
 - Broker capabilities are explicit data, never inferred. The capability model
   must distinguish fractional quantity precision and support for market, limit,
   stop, stop-limit, take-profit, bracket, OCO, OTO/OTOCO, replacement,

@@ -1,5 +1,23 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025L Current-Head Runtime Boundary
+
+`codex/ARGUS-SHADOW-025L-current-head-runtime-boundary` is `ACTIVE` from
+synchronized canonical base `b4762c6`. It restores the exact 39-artifact
+SHADOW-025B through 025K dormant runtime-boundary chain from source head
+`203003b`. Current-head compileall, 196 focused tests, 412 continuous-stack
+tests, 387 adjacent regressions, and all 1,873 Python tests pass; existing
+runtime imports and forbidden capabilities are zero. It changes no installed
+process, Windows principal, ACL, credential, provider, account, order, service,
+Engine Host, WPF, production store, Shadow, or Paper state.
+
+Source branches `codex/ARGUS-SHADOW-025B-cross-process-ledger-ownership`
+through `codex/ARGUS-SHADOW-025K-writer-boundary-contract` are pushed,
+unmerged source evidence and become `SUPERSEDED` after 025L cleanly integrates.
+Preserve them; do not merge any source branch separately. The next action after
+integration and exact-head repin is an explicit architecture decision between
+a distinct-principal Engine Host and a dedicated authenticated evidence writer.
+
 ## ARGUS-CONTINUOUS-003 Current-Head Integration
 
 `codex/ARGUS-CONTINUOUS-003-current-head-integration` is

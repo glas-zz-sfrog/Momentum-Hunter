@@ -1,5 +1,20 @@
 # Argus Changelog
 
+- Reconciled the exact SHADOW-025B through 025K serialized runtime-boundary
+  chain from source head `203003b` onto current base `b4762c6`: cross-process
+  event-ledger ownership, source admission, topology, admission ledger, writer
+  session, evidence chain, recovery, dormant orchestration, root security, and
+  installed-writer feasibility.
+- Proved 39/39 restored artifact identities, compileall, 196 focused runtime-
+  chain tests, 412 continuous-stack tests, 387 adjacent regressions, and all
+  1,873 Python tests. Existing runtime imports and provider/network/broker/
+  order/service/process/fixed-production-path capabilities remain zero.
+- Preserved the consequential writer architecture gate instead of guessing:
+  current same-SID WPF/Engine Host/service topology cannot isolate the raw
+  evidence root; neither a distinct-principal Engine Host nor a dedicated
+  authenticated writer was selected, and all proposals retain
+  `activation_authorized=false`.
+
 - Reconciled the proven candidate, regime, macro-event, catalyst, plan-version,
   breakout-research/outcome, and event-cycle contracts onto current canonical
   base `e98b5cc` without replaying stale shared-governance closeouts. All eight

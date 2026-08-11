@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import ast
 import json
+import multiprocessing
+import os
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -353,6 +355,60 @@ def synthetic_trigger(
             else (candidate_event_id or "")
         ),
     )
+
+
+def _process_cycle_worker(
+    path_text: str,
+    policy: EventDecisionCyclePolicy,
+    plan: ContinuousPlanVersion,
+    decision: ContinuousPlanDecision,
+    trigger: DecisionTriggerEvidence,
+    start_event,
+    output_queue,
+) -> None:
+    try:
+        if not start_event.wait(10):
+            raise RuntimeError("Synthetic process start gate timed out.")
+        store = EventDecisionCycleStore(Path(path_text), lease_timeout_seconds=5.0)
+        coordinator = EventDecisionCycleCoordinator(store, policy=policy)
+        result = coordinator.process(
+            trigger,
+            recorded_at=BASE + timedelta(seconds=3),
+            cycle_started_at=datetime.fromisoformat(trigger.receipt_timestamp)
+            + timedelta(milliseconds=100),
+            plan_version=plan,
+            decision=decision,
+        )
+        output_queue.put(("OK", result.status, result.receipt.receipt_id))
+    except Exception as exc:  # pragma: no cover - asserted by parent process
+        output_queue.put(("ERROR", type(exc).__name__, str(exc)))
+
+
+def _hold_store_lease_worker(
+    path_text: str,
+    ready_event,
+    release_event,
+    output_queue,
+) -> None:
+    try:
+        store = EventDecisionCycleStore(Path(path_text), lease_timeout_seconds=5.0)
+        with store.transaction():
+            ready_event.set()
+            if not release_event.wait(10):
+                raise RuntimeError("Synthetic lease release gate timed out.")
+        output_queue.put(("OK",))
+    except Exception as exc:  # pragma: no cover - asserted by parent process
+        output_queue.put(("ERROR", type(exc).__name__, str(exc)))
+
+
+def _exit_while_holding_store_lease_worker(
+    path_text: str,
+    ready_event,
+) -> None:
+    store = EventDecisionCycleStore(Path(path_text), lease_timeout_seconds=5.0)
+    with store.transaction():
+        ready_event.set()
+        os._exit(23)
 
 
 class EventDrivenDecisionCycleTests(unittest.TestCase):
@@ -866,6 +922,113 @@ class EventDrivenDecisionCycleTests(unittest.TestCase):
         self.assertEqual(2, len(ledger.receipts))
         self.assertEqual(2, len(ledger.cycles))
 
+    def test_two_processes_do_not_lose_concurrent_appends(self) -> None:
+        context = multiprocessing.get_context("spawn")
+        start_event = context.Event()
+        output_queue = context.Queue()
+        other_plan = synthetic_plan(
+            opportunity_id="0" * 64,
+            setup_id="a" * 64,
+            intraday_plan_id="b" * 64,
+            candidate_event_id="c" * 64,
+            candidate_evidence="d" * 64,
+        )
+        plans = (synthetic_plan(), other_plan)
+        processes = []
+        for index, plan in enumerate(plans, start=1):
+            trigger = synthetic_trigger(
+                plan,
+                source_evidence_id=f"process-{index}",
+            )
+            process = context.Process(
+                target=_process_cycle_worker,
+                args=(
+                    str(self.path),
+                    self.policy,
+                    plan,
+                    synthetic_decision(plan, nonce=f"process-{index}"),
+                    trigger,
+                    start_event,
+                    output_queue,
+                ),
+            )
+            process.start()
+            processes.append(process)
+
+        start_event.set()
+        for process in processes:
+            process.join(15)
+            self.assertFalse(process.is_alive())
+            self.assertEqual(0, process.exitcode)
+        results = tuple(output_queue.get(timeout=2) for _ in processes)
+        self.assertTrue(all(item[0] == "OK" for item in results), results)
+
+        ledger = self.store.load()
+        self.assertEqual(2, len(ledger.receipts))
+        self.assertEqual(2, len(ledger.cycles))
+        self.assertEqual(2, len({item[2] for item in results}))
+        self.assertTrue(self.store.lease_path.exists())
+
+    def test_cross_process_lease_timeout_is_finite_and_recovers(self) -> None:
+        context = multiprocessing.get_context("spawn")
+        ready_event = context.Event()
+        release_event = context.Event()
+        output_queue = context.Queue()
+        process = context.Process(
+            target=_hold_store_lease_worker,
+            args=(str(self.path), ready_event, release_event, output_queue),
+        )
+        process.start()
+        try:
+            self.assertTrue(ready_event.wait(5))
+            contender = EventDecisionCycleStore(
+                self.path,
+                lease_timeout_seconds=0.1,
+            )
+            with self.assertRaisesRegex(EventDecisionCycleError, "lease timed out"):
+                with contender.transaction():
+                    self.fail("Contender acquired an already-owned process lease.")
+        finally:
+            release_event.set()
+            process.join(15)
+        self.assertFalse(process.is_alive())
+        self.assertEqual(0, process.exitcode)
+        self.assertEqual(("OK",), output_queue.get(timeout=2))
+
+        with EventDecisionCycleStore(
+            self.path,
+            lease_timeout_seconds=1.0,
+        ).transaction():
+            pass
+
+    def test_process_exit_releases_cross_process_lease(self) -> None:
+        context = multiprocessing.get_context("spawn")
+        ready_event = context.Event()
+        process = context.Process(
+            target=_exit_while_holding_store_lease_worker,
+            args=(str(self.path), ready_event),
+        )
+        process.start()
+        self.assertTrue(ready_event.wait(5))
+        process.join(15)
+        self.assertFalse(process.is_alive())
+        self.assertEqual(23, process.exitcode)
+
+        with EventDecisionCycleStore(
+            self.path,
+            lease_timeout_seconds=1.0,
+        ).transaction():
+            pass
+
+    def test_lease_timeout_must_be_positive_and_finite(self) -> None:
+        for timeout in (0, -1, float("inf"), float("nan")):
+            with self.subTest(timeout=timeout):
+                with self.assertRaisesRegex(EventDecisionCycleError, "positive"):
+                    EventDecisionCycleStore(
+                        self.path,
+                        lease_timeout_seconds=timeout,
+                    )
+
     def test_input_records_are_not_mutated(self) -> None:
         plan = synthetic_plan()
         decision = synthetic_decision(plan)
@@ -964,7 +1127,13 @@ class EventDrivenDecisionCycleTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         importers = []
         for path in (root / "momentum_hunter").rglob("*.py"):
-            if path.name == "event_driven_decision_cycle.py":
+            if path.name in {
+                "event_driven_decision_cycle.py",
+                "event_source_admission.py",
+                "event_runtime_evidence_chain.py",
+                "event_runtime_recovery.py",
+                "event_runtime_orchestration.py",
+            }:
                 continue
             text = path.read_text(encoding="utf-8")
             if "event_driven_decision_cycle" in text:

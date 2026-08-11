@@ -10,7 +10,6 @@ import hashlib
 import json
 import os
 import re
-import threading
 import uuid
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
@@ -34,11 +33,17 @@ from momentum_hunter.continuous_plan_version import (
     validate_decision,
     validate_plan_version,
 )
+from momentum_hunter.path_transaction import (
+    PathTransactionLease,
+    PathTransactionLeaseError,
+    PathTransactionLeaseTimeoutError,
+)
 
 
 EVENT_DECISION_SCHEMA_VERSION = 1
 EVENT_DECISION_PROFILE = "event-driven-decision-cycle-v1"
 EVENT_DECISION_AUTHORITY = "SYNTHETIC_NONLIVE_PRECURSOR"
+CONTINUOUS_PLAN_SOURCE_IDENTITY = "CONTINUOUS_PLAN_VERSION"
 
 NEW_CANDIDATE_DISCOVERED = "NEW_CANDIDATE_DISCOVERED"
 CANDIDATE_STATE_CHANGED = "CANDIDATE_STATE_CHANGED"
@@ -115,10 +120,6 @@ SAFETY_CANDIDATE_STATES = frozenset(
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _SYMBOL = re.compile(r"[A-Z][A-Z0-9.-]{0,14}")
-_PATH_LOCKS_GUARD = threading.Lock()
-_PATH_LOCKS: dict[Path, threading.RLock] = {}
-
-
 class EventDecisionCycleError(ValueError):
     """Raised when event-cycle evidence is invalid or contradictory."""
 
@@ -344,16 +345,32 @@ def build_decision_trigger(
 class EventDecisionCycleStore:
     """Atomic explicit-path store for immutable trigger receipts and cycles."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, lease_timeout_seconds: float = 5.0) -> None:
         self.path = Path(path)
-        self._lock = _path_lock(self.path)
+        try:
+            self._transaction_lease = PathTransactionLease(
+                self.path,
+                timeout_seconds=lease_timeout_seconds,
+            )
+        except PathTransactionLeaseError as exc:
+            raise EventDecisionCycleError(
+                "Event decision-cycle lease timeout must be positive and finite."
+            ) from exc
+        self.lease_timeout_seconds = self._transaction_lease.timeout_seconds
+        self.lease_path = self._transaction_lease.lease_path
+        self._lock = self._transaction_lease.thread_lock
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
-        """Serialize a full read/validate/append/write transaction per path."""
+        """Serialize a full read/validate/append/write transaction across processes."""
 
-        with self._lock:
-            yield
+        try:
+            with self._transaction_lease.transaction():
+                yield
+        except PathTransactionLeaseTimeoutError as exc:
+            raise EventDecisionCycleError(
+                "Event decision-cycle ledger lease timed out."
+            ) from exc
 
     def load(self) -> EventDecisionCycleLedger:
         with self._lock:
@@ -370,7 +387,7 @@ class EventDecisionCycleStore:
             return ledger
 
     def save(self, ledger: EventDecisionCycleLedger) -> None:
-        with self._lock:
+        with self.transaction():
             validate_ledger(ledger)
             _atomic_write(self.path, canonical_json_bytes(ledger_to_wire(ledger)))
 
@@ -724,6 +741,23 @@ def _validate_trigger_binding(
         raise EventDecisionCycleError(
             "Candidate trigger event does not match the versioned plan."
         )
+    if trigger.candidate_event_id and (
+        trigger.candidate_event_id != plan.candidate_event_id
+    ):
+        raise EventDecisionCycleError(
+            "Decision trigger candidate event does not match the versioned plan."
+        )
+    if (
+        trigger.trigger_type in {PLAN_MATERIAL_REVISION, PLAN_INVALIDATED}
+        and trigger.source_evidence_fingerprint == plan.fingerprint
+        and (
+            trigger.source_identity != CONTINUOUS_PLAN_SOURCE_IDENTITY
+            or trigger.source_evidence_id != plan.plan_version_id
+        )
+    ):
+        raise EventDecisionCycleError(
+            "Plan trigger source does not identify the supplied plan version."
+        )
     if _timestamp(trigger.receipt_timestamp, "Trigger receipt timestamp") > _timestamp(
         plan.created_at, "Plan creation timestamp"
     ):
@@ -738,7 +772,11 @@ def _trigger_source_fingerprints(
         return frozenset({plan.candidate_evidence_fingerprint})
     if trigger_type in {MEANINGFUL_LEVEL_BREAK, PLAN_MATERIAL_REVISION, PLAN_INVALIDATED}:
         return frozenset(
-            {plan.setup_revision_fingerprint, plan.intraday_plan_fingerprint}
+            {
+                plan.setup_revision_fingerprint,
+                plan.intraday_plan_fingerprint,
+                plan.fingerprint,
+            }
         )
     if trigger_type == TIME_NORMALIZED_VOLUME_ABNORMAL:
         return frozenset({plan.rvol_evidence_fingerprint})
@@ -750,8 +788,15 @@ def _trigger_source_fingerprints(
         )
     if trigger_type == EVENT_WINDOW_STABILIZED:
         return frozenset({plan.event_context_fingerprint})
-    if trigger_type in {SPREAD_BECAME_EXECUTABLE, DATA_BECAME_STALE}:
+    if trigger_type == SPREAD_BECAME_EXECUTABLE:
         return frozenset(item.evidence_fingerprint for item in plan.source_clocks)
+    if trigger_type == DATA_BECAME_STALE:
+        return frozenset(
+            {
+                plan.candidate_evidence_fingerprint,
+                *(item.evidence_fingerprint for item in plan.source_clocks),
+            }
+        )
     return frozenset()
 
 
@@ -1193,16 +1238,6 @@ def _atomic_write(path: Path, payload: bytes) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-def _path_lock(path: Path) -> threading.RLock:
-    resolved = path.resolve()
-    with _PATH_LOCKS_GUARD:
-        lock = _PATH_LOCKS.get(resolved)
-        if lock is None:
-            lock = threading.RLock()
-            _PATH_LOCKS[resolved] = lock
-        return lock
 
 
 def _required_text(value: object, name: str) -> str:
