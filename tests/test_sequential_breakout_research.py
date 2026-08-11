@@ -524,13 +524,16 @@ class SequentialBreakoutResearchTests(unittest.TestCase):
                 if isinstance(node, ast.ImportFrom) and node.module == (
                     "momentum_hunter.sequential_breakout_research"
                 ):
-                    importers.append(str(path.relative_to(root)))
+                    importers.append(path.relative_to(root).as_posix())
                 if isinstance(node, ast.Import) and any(
                     alias.name == "momentum_hunter.sequential_breakout_research"
                     for alias in node.names
                 ):
-                    importers.append(str(path.relative_to(root)))
-        self.assertEqual(importers, [])
+                    importers.append(path.relative_to(root).as_posix())
+        self.assertEqual(
+            importers,
+            ["momentum_hunter/sequential_breakout_outcomes.py"],
+        )
 
 
 if __name__ == "__main__":

@@ -76,6 +76,19 @@ governance appendices against current Roadmap truth. Implementation head is
 Python tests, and static boundary scans pass. The branch is not installed or
 merged; canonical `master` and Tuesday's opening/Paper jobs remain unchanged.
 
+## ARGUS-BREAKOUT-002A Synthetic Outcome Contract
+
+`codex/ARGUS-BREAKOUT-002A-synthetic-outcome-contract` is
+`IMPLEMENTED_PENDING_MERGE` from verified continuous-integration head
+`f6b776e`. It adds one dormant pure-Python outcome/cohort module, two directly
+related test files, and branch-local governance. Compileall, 29 focused tests,
+136 adjacent regressions, all 1,648 Python tests, protected-path review, and
+static capability/secret scans pass. No existing runtime imports the module.
+The branch neither contains nor depends on sibling PLAN-002A `7be49fd`; both
+must be current-base reconciled after the common continuous branch is
+integrated. Canonical `master`, Tuesday's opening/Paper jobs, and provider/order
+state remain unchanged.
+
 ## ARGUS-BREAKOUT-001 Sequential Breakout Research
 
 `codex/ARGUS-BREAKOUT-001-sequential-research` is
