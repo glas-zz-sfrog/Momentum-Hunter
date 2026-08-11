@@ -65,6 +65,17 @@ credential pair is not present in Git, evidence, or local active storage. The
 strategy-research slot remains empty and disabled; no order method exists on
 the onboarding surface.
 
+## ARGUS-CONTINUOUS-001 Current-Master Integration
+
+`codex/ARGUS-CONTINUOUS-001-current-master-integration` is
+`IMPLEMENTED_PENDING_MERGE` from synchronized canonical `78db1bf`. It reapplies
+the five proven implementation commits for MONITOR-001, REGIME-001, EVENT-001,
+CATALYST-002A, and BREAKOUT-001 in dependency order and resolves stale
+governance appendices against current Roadmap truth. Implementation head is
+`06e1ea7`. Compileall, 160 focused tests, 250 adjacent regressions, all 1,619
+Python tests, and static boundary scans pass. The branch is not installed or
+merged; canonical `master` and Tuesday's opening/Paper jobs remain unchanged.
+
 ## ARGUS-BREAKOUT-001 Sequential Breakout Research
 
 `codex/ARGUS-BREAKOUT-001-sequential-research` is
