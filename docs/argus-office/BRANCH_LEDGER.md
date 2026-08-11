@@ -88,6 +88,20 @@ scheduler, Engine Host, WPF, or default production-path capability. This branch
 must not be merged or installed before Tuesday's terminal opening/Paper evidence
 is preserved and the stacked prerequisite branch is serialized first.
 
+## ARGUS-SHADOW-025A Synthetic Event-Driven Decision Cycles
+
+`codex/ARGUS-SHADOW-025A-synthetic-decision-cycle-contract` is
+`IMPLEMENTED_PENDING_MERGE`, stacked directly on PLAN-002A `7be49fd`. It adds
+only a dormant decision-trigger/receipt/cycle ledger and synthetic tests. The
+ledger records suppressed quote-only, insufficient-delta, and cooldown events;
+creates cycles only for enabled material evidence; bypasses cooldown for safety
+reevaluation; binds every cycle to exact PLAN-002A decision evidence; and
+rejects tampering, contradictory replay, chronology/predecessor defects, and
+in-process concurrent lost updates. It has no provider, account, broker/order,
+Shadow activation, service, scheduler, Engine Host, WPF, score, readiness, or
+default production-path capability. Merge/install waits for Tuesday evidence
+and serialized integration of ARGUS-CONTINUOUS-001 and PLAN-002A.
+
 ## ARGUS-BREAKOUT-001 Sequential Breakout Research
 
 `codex/ARGUS-BREAKOUT-001-sequential-research` is

@@ -1,5 +1,7 @@
 # Argus Changelog
 
+- Added SHADOW-025A's dormant event-driven decision-cycle contract. Material evidence can produce one immutable non-live cycle bound to PLAN-002A; quote churn, insignificant changes, and cooldown events produce truthful suppression receipts; safety changes bypass cooldown. Append-only explicit-path storage rejects replay conflicts, tampering, chronology/predecessor defects, and in-process lost updates. All 1,673 Python tests pass; no installed or scheduled runtime path changed.
+
 - Integrated and backed up ARGUS-BROKER-ALPACA-004, froze the versioned Canary
   Paper engineering sample, repinned the opening schedule, and installed the
   first exact-head Paper job behind the August 11 opening capture. Read-only
