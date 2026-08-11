@@ -1,6 +1,8 @@
 # Argus Changelog
 
 ## Unreleased
+- Fixed the SESSION-FIDELITY Alpaca adapter's frozen-module boundary. It now loads and origin-checks the pinned Schwab setup, Alpaca onboarding, and Alpaca probe modules as one dependency set instead of mixing them with already imported host modules, then restores the host import state.
+- Preserved failed checkpoints A-C exactly as observed. Offline credential-slot and GET-only transport initialization, compileall, 8 focused tests, 43 adjacent observer tests, and all 1,322 Python tests pass; no provider request, account/position/order action, Shadow action, service/scheduler change, production persistence, or canonical integration occurred.
 - Reconciled the execution roadmap around ARGUS-BROKER-ALPACA-001. Alpaca Paper is the preferred fractional execution laboratory pending official documentation, secure Paper-only onboarding, and direct lifecycle proof; live Alpaca trading remains unauthorized.
 - Preserved Schwab as the proven market-data foundation and DATA-005B as provider-neutral engineering precursor work. Whole-share quantity, one-position concurrency, and the proposed `$2/$95/$5/$2/$4/1/30s` values remain provisional policies rather than permanent strategy laws.
 - Split future evidence into separately fingerprinted canary-realistic and strategy-research Paper lanes, with explicit broker capabilities, ideal/provider/final quantities, multi-position and rank-conditioned research, conservative execution evidence, and no retrospective trade manufacture.

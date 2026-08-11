@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 import importlib.util
+import json
+import sys
 import tempfile
 import unittest
 from datetime import timedelta
@@ -91,6 +92,16 @@ class _Observer:
 
 
 class SessionFidelityTests(unittest.TestCase):
+    @staticmethod
+    def _load_alpaca_adapter() -> object:
+        root = Path(__file__).resolve().parents[1]
+        adapter_path = root / "tools" / "run_session_fidelity_alpaca.py"
+        spec = importlib.util.spec_from_file_location("session_fidelity_alpaca_test", adapter_path)
+        assert spec is not None and spec.loader is not None
+        adapter = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(adapter)
+        return adapter
+
     def test_checkpoint_matrix_is_fixed_and_reuses_d_and_i(self) -> None:
         self.assertEqual(tuple(CHECKPOINTS), tuple("ABCDEFGHI"))
         self.assertEqual(SYMBOLS, ("SPY", "QQQ", "NVDA"))
@@ -209,12 +220,7 @@ class SessionFidelityTests(unittest.TestCase):
         self.assertIn('Assert-FileHash -Path (Join-Path $ProjectRoot "momentum_hunter\\session_fidelity.py")', installer)
 
     def test_alpaca_adapter_is_context_only_and_redacts_credentials(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        adapter_path = root / "tools" / "run_session_fidelity_alpaca.py"
-        spec = importlib.util.spec_from_file_location("session_fidelity_alpaca_test", adapter_path)
-        assert spec is not None and spec.loader is not None
-        adapter = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(adapter)
+        adapter = self._load_alpaca_adapter()
 
         secret = SimpleNamespace(key_id="synthetic-key", secret_key="synthetic-secret")
 
@@ -318,6 +324,59 @@ class SessionFidelityTests(unittest.TestCase):
         rendered = json.dumps(result)
         self.assertNotIn(secret.key_id, rendered)
         self.assertNotIn(secret.secret_key, rendered)
+
+    def test_frozen_probe_loader_does_not_mix_preloaded_host_dependencies(self) -> None:
+        adapter = self._load_alpaca_adapter()
+        missing = object()
+        saved_modules = {
+            name: sys.modules.get(name, missing)
+            for name in adapter.FROZEN_PROBE_MODULES
+        }
+        saved_attributes = {
+            name.rsplit(".", 1)[1]: getattr(
+                adapter.momentum_hunter,
+                name.rsplit(".", 1)[1],
+                missing,
+            )
+            for name in adapter.FROZEN_PROBE_MODULES
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            package = Path(temporary) / "momentum_hunter"
+            package.mkdir()
+            (package / "schwab_setup.py").write_text(
+                "class WindowsDpapiProtector:\n"
+                "    def __init__(self, *, entropy, description):\n"
+                "        self.marker = (entropy, description)\n",
+                encoding="utf-8",
+            )
+            (package / "alpaca_paper_onboarding.py").write_text(
+                "from momentum_hunter.schwab_setup import WindowsDpapiProtector\n"
+                "class AlpacaPaperCredentialRepository:\n"
+                "    def __init__(self):\n"
+                "        self.protector = WindowsDpapiProtector(entropy=b'frozen', description='frozen')\n",
+                encoding="utf-8",
+            )
+            (package / "alpaca_overnight_probe.py").write_text(
+                "from momentum_hunter.alpaca_paper_onboarding import AlpacaPaperCredentialRepository\n"
+                "def build_repository():\n"
+                "    return AlpacaPaperCredentialRepository()\n",
+                encoding="utf-8",
+            )
+
+            probe = adapter._load_frozen_probe(Path(temporary))
+            repository = probe.build_repository()
+
+        self.assertEqual(repository.protector.marker, (b"frozen", "frozen"))
+        for name, saved in saved_modules.items():
+            if saved is missing:
+                self.assertNotIn(name, sys.modules)
+            else:
+                self.assertIs(sys.modules[name], saved)
+        for attribute, saved in saved_attributes.items():
+            if saved is missing:
+                self.assertFalse(hasattr(adapter.momentum_hunter, attribute))
+            else:
+                self.assertIs(getattr(adapter.momentum_hunter, attribute), saved)
 
 
 if __name__ == "__main__":

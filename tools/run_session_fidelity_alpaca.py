@@ -29,6 +29,12 @@ SNAPSHOT_PATH = "/v2/stocks/snapshots"
 HISTORY_LOOKBACK_MINUTES = 15
 QUOTE_FRESH_SECONDS = 30.0
 BAR_FRESH_SECONDS = 120.0
+FROZEN_PROBE_MODULES = (
+    "momentum_hunter.schwab_setup",
+    "momentum_hunter.alpaca_paper_onboarding",
+    "momentum_hunter.alpaca_overnight_probe",
+)
+_MISSING = object()
 
 
 def _load_frozen_probe(source_root: Path) -> object:
@@ -37,10 +43,52 @@ def _load_frozen_probe(source_root: Path) -> object:
     module = package / "alpaca_overnight_probe.py"
     if not module.is_file():
         raise RuntimeError("The frozen Alpaca market-data probe is unavailable.")
+    expected_paths = {
+        name: package / f"{name.rsplit('.', 1)[1]}.py"
+        for name in FROZEN_PROBE_MODULES
+    }
+    if any(not path.is_file() for path in expected_paths.values()):
+        raise RuntimeError("A frozen Alpaca probe dependency is unavailable.")
+
+    # session_fidelity imports the host Schwab stack before this adapter runs. Load
+    # the frozen Alpaca dependency set as one unit so Python cannot combine that
+    # host stack with the pinned provider branch.
+    saved_modules = {name: sys.modules.get(name, _MISSING) for name in FROZEN_PROBE_MODULES}
+    saved_attributes = {
+        name.rsplit(".", 1)[1]: getattr(momentum_hunter, name.rsplit(".", 1)[1], _MISSING)
+        for name in FROZEN_PROBE_MODULES
+    }
+    saved_package_path = list(momentum_hunter.__path__)
     package_path = str(package)
-    if package_path not in momentum_hunter.__path__:
-        momentum_hunter.__path__.append(package_path)
-    return importlib.import_module("momentum_hunter.alpaca_overnight_probe")
+    loaded: dict[str, object] = {}
+    try:
+        for name in FROZEN_PROBE_MODULES:
+            sys.modules.pop(name, None)
+        momentum_hunter.__path__.insert(0, package_path)
+        importlib.invalidate_caches()
+        for name in FROZEN_PROBE_MODULES:
+            loaded[name] = importlib.import_module(name)
+        for name, loaded_module in loaded.items():
+            origin = Path(str(getattr(loaded_module, "__file__", ""))).resolve()
+            if origin != expected_paths[name].resolve():
+                raise RuntimeError("A frozen Alpaca probe dependency resolved outside its pinned root.")
+        return loaded["momentum_hunter.alpaca_overnight_probe"]
+    finally:
+        for name in FROZEN_PROBE_MODULES:
+            sys.modules.pop(name, None)
+        for name, saved in saved_modules.items():
+            if saved is not _MISSING:
+                sys.modules[name] = saved
+        for attribute, saved in saved_attributes.items():
+            if saved is _MISSING:
+                try:
+                    delattr(momentum_hunter, attribute)
+                except AttributeError:
+                    pass
+            else:
+                setattr(momentum_hunter, attribute, saved)
+        momentum_hunter.__path__[:] = saved_package_path
+        importlib.invalidate_caches()
 
 
 def _snapshot(probe: object, client: object, secret: object) -> tuple[dict[str, object], dict[str, object]]:

@@ -29,6 +29,24 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+Branch-local reconciliation notice: ARGUS-SESSION-FIDELITY-002 is
+`IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-SESSION-FIDELITY-002-frozen-probe-loader`, based on the exact
+SESSION-FIDELITY-001 source head `925fcdd`. Checkpoints A, B, and C remain
+truthfully failed historical observations: Schwab completed, while the Alpaca
+adapter mixed the host `schwab_setup` module with the frozen Alpaca onboarding
+module and raised `TypeError` before producing Alpaca evidence. The successor
+adapter now loads and origin-checks the frozen `schwab_setup`, Alpaca
+onboarding, and overnight-probe modules as one dependency unit, then restores
+the host process. The actual encrypted credential slot and GET-only transport
+initialize offline without exposing values or making a request. Compileall,
+eight focused tests, 43 adjacent observer tests, and all 1,322 Python tests
+pass. No checkpoint was rerun or rewritten; no provider, account, position,
+order, Shadow, service, scheduler, production store, or canonical runtime was
+contacted or changed. Canonical `master` remains separately frozen for the
+August 11 opening/Paper jobs; this branch must be reconciled against the then-
+current Roadmap before integration.
+
 ARGUS-BROKER-ALPACA-001 is the approved execution-research direction. Alpaca is
 the preferred execution-provider candidate for fractional Paper execution,
 pending official-documentation research, secure Paper-only onboarding, and

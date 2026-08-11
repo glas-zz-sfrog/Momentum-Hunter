@@ -2,6 +2,21 @@
 
 Date reconciled: 2026-08-08
 
+## ARGUS-SESSION-FIDELITY-002 Frozen Probe Loader
+
+`codex/ARGUS-SESSION-FIDELITY-002-frozen-probe-loader` is
+`ACTIVE / IMPLEMENTED_PENDING_MERGE` from the exact frozen
+SESSION-FIDELITY source head `925fcdd`. It corrects the dependency-origin bug
+that caused the Alpaca child of checkpoints A-C to fail safely with `TypeError`
+while Schwab completed. The repair loads the three frozen provider modules as
+one unit, verifies their exact source root, restores the host module registry,
+and adds a synthetic regression for the incompatible DPAPI constructor. The
+existing A-C artifacts remain unchanged and must not be rerun or relabeled.
+Compileall, 8 focused, 43 adjacent, and all 1,322 Python tests pass. The branch
+has no provider, account, position, order, Shadow, service, scheduler, store, or
+canonical-runtime change. Reconcile this old-base branch against current
+`master` only after the August 11 opening/Paper evidence is terminal.
+
 ## ARGUS-BROKER-ALPACA-001 Roadmap Reconciliation
 
 `codex/ARGUS-BROKER-ALPACA-001-roadmap-reconciliation` is
