@@ -369,6 +369,13 @@ def assess_outcome(
                 "Outcome observations crossed source event identity."
             )
         if any(
+            observation.observation_mode != event.observation_mode
+            for observation in normalized
+        ):
+            raise SequentialBreakoutOutcomeError(
+                "Outcome observations crossed source event observation mode."
+            )
+        if any(
             aware_datetime(observation.receipt_timestamp) > as_of_time
             for observation in normalized
         ):
@@ -438,6 +445,10 @@ def assess_outcome(
         if previous.outcome_key != key:
             raise SequentialBreakoutOutcomeError(
                 "Previous outcome belongs to another event or horizon."
+            )
+        if as_of_time < aware_datetime(previous.first_observed_at):
+            raise SequentialBreakoutOutcomeError(
+                "Outcome revision chronology cannot move backward."
             )
         if material_outcome_payload(previous) == material_outcome_payload(base):
             return previous
@@ -1005,6 +1016,12 @@ def validate_outcome_ledger(ledger: SequentialBreakoutOutcomeLedger) -> None:
             if record.previous_outcome_id != expected_previous:
                 raise SequentialBreakoutOutcomeError(
                     "Outcome predecessor chain is contradictory."
+                )
+            if index > 1 and aware_datetime(
+                record.first_observed_at
+            ) < aware_datetime(records[index - 2].first_observed_at):
+                raise SequentialBreakoutOutcomeError(
+                    "Outcome revision chronology moved backward."
                 )
 
 

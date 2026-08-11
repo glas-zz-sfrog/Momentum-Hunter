@@ -351,6 +351,22 @@ class SequentialBreakoutOutcomeTests(unittest.TestCase):
         with self.assertRaisesRegex(SequentialBreakoutOutcomeError, "cannot regress"):
             self.assess(ledger, bars[:-1], previous=(complete,))
 
+    def test_outcome_revision_chronology_cannot_move_backward(self) -> None:
+        ledger = self.source_ledger()
+        gap = self.assess(
+            ledger,
+            (),
+            as_of=BASE + timedelta(minutes=8),
+        )[0]
+
+        with self.assertRaisesRegex(SequentialBreakoutOutcomeError, "chronology"):
+            self.assess(
+                ledger,
+                (),
+                as_of=BASE + timedelta(minutes=4),
+                previous=(gap,),
+            )
+
     def test_horizon_beyond_same_session_is_unavailable(self) -> None:
         ledger = self.source_ledger()
         policy = replace(self.policy, session_end_time="09:36")
@@ -385,6 +401,15 @@ class SequentialBreakoutOutcomeTests(unittest.TestCase):
         self.assertEqual(snapshot.prospective_anchor_event_count, 0)
         self.assertEqual(snapshot.cohort_status, COHORT_INSUFFICIENT)
         self.assertFalse(snapshot.conclusions_authorized)
+
+    def test_historical_bars_cannot_complete_prospective_outcome(self) -> None:
+        ledger = self.source_ledger(mode=PROSPECTIVE)
+        bars = self.forward_bars(mode=HISTORICAL_REPLAY)
+
+        with self.assertRaisesRegex(
+            SequentialBreakoutOutcomeError, "observation mode"
+        ):
+            self.assess(ledger, bars)
 
     def test_unset_cohort_threshold_withholds_readiness(self) -> None:
         ledger = self.source_ledger(mode=PROSPECTIVE)
@@ -513,6 +538,28 @@ class SequentialBreakoutOutcomeTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(before, self.path.read_bytes())
         self.assertEqual([item.revision for item in second.outcomes], [1, 2])
+
+    def test_ledger_rejects_rehashed_backward_revision_chronology(self) -> None:
+        ledger = self.source_ledger()
+        pending = self.assess(
+            ledger,
+            self.forward_bars()[:2],
+            as_of=BASE + timedelta(minutes=6, seconds=2),
+        )[0]
+        complete = self.assess(ledger, previous=(pending,))[0]
+        forged = replace(
+            complete,
+            first_observed_at=(BASE + timedelta(minutes=5)).isoformat(),
+        )
+        forged = self.rehash(forged)
+
+        with self.assertRaisesRegex(SequentialBreakoutOutcomeError, "chronology"):
+            validate_outcome_ledger(
+                SequentialBreakoutOutcomeLedger(
+                    policy=self.policy,
+                    outcomes=(pending, forged),
+                )
+            )
 
     def test_atomic_replace_failure_preserves_prior_ledger(self) -> None:
         ledger = self.source_ledger()
