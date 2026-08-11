@@ -1,5 +1,19 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025K Runtime Writer Boundary Contract
+
+`codex/ARGUS-SHADOW-025K-writer-boundary-contract` is
+`IMPLEMENTED_PENDING_MERGE` from verified 025J head `1015bbd`. It rejects the
+current same-SID runtime and freezes two dormant prospective boundaries: a
+distinct-principal Engine Host/root writer or a distinct evidence-writer
+process behind an authenticated nonpersistent capability. It binds DPAPI and
+credential-broker consequences, denies WPF/supervisor root access, rejects
+same-SID pipes and leaked capabilities, and always leaves activation false.
+Compileall, 22 focused, 196 adjacent runtime, and all 1,871 Python tests pass.
+No identity, credential, root, ACL, process,
+service, provider, account, order, Paper/Shadow state, production store, or
+Tuesday job changed. Do not merge or install before terminal Tuesday evidence.
+
 ## ARGUS-SHADOW-025J Runtime Root Security
 
 `codex/ARGUS-SHADOW-025J-runtime-root-security` is
