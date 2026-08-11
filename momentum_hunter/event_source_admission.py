@@ -3,15 +3,22 @@
 Every new continuous plan version selects exactly one upstream source. Candidate
 lifecycle changes retain their exact event identity. All other evidence changes
 must be consolidated into the immutable successor plan before they can trigger
-another cycle. This module performs no discovery, provider work, persistence,
-risk, allocation, selection, or execution.
+another cycle. Persistence is limited to a caller-selected append-only evidence
+path. This module performs no discovery, provider work, risk, allocation,
+selection, or execution.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import uuid
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
+from pathlib import Path
+from typing import Iterator, Mapping
 
 from momentum_hunter.candidate_lifecycle import (
     DATA_RECOVERED_EVENT,
@@ -41,14 +48,22 @@ from momentum_hunter.event_driven_decision_cycle import (
     DecisionTriggerEvidence,
     EventDecisionCyclePolicy,
     build_decision_trigger,
+    canonical_json_bytes,
     fingerprint_payload,
     validate_policy,
     validate_trigger,
+)
+from momentum_hunter.path_transaction import (
+    PathTransactionLease,
+    PathTransactionLeaseError,
+    PathTransactionLeaseTimeoutError,
 )
 
 
 RUNTIME_SOURCE_ADMISSION_SCHEMA_VERSION = 1
 RUNTIME_SOURCE_ADMISSION_PROFILE = "runtime-decision-source-admission-v1"
+RUNTIME_SOURCE_ADMISSION_LEDGER_SCHEMA_VERSION = 1
+RUNTIME_SOURCE_ADMISSION_LEDGER_PROFILE = "runtime-source-admission-ledger-v1"
 
 CANDIDATE_LIFECYCLE_SOURCE = "CANDIDATE_LIFECYCLE"
 CONTINUOUS_PLAN_SOURCE = CONTINUOUS_PLAN_SOURCE_IDENTITY
@@ -85,6 +100,93 @@ class RuntimeSourceAdmission:
     schema_version: int = RUNTIME_SOURCE_ADMISSION_SCHEMA_VERSION
     profile: str = RUNTIME_SOURCE_ADMISSION_PROFILE
     fingerprint: str = ""
+
+
+@dataclass(frozen=True)
+class RuntimeSourceAdmissionLedger:
+    admissions: tuple[RuntimeSourceAdmission, ...] = ()
+    schema_version: int = RUNTIME_SOURCE_ADMISSION_LEDGER_SCHEMA_VERSION
+    profile: str = RUNTIME_SOURCE_ADMISSION_LEDGER_PROFILE
+
+
+class RuntimeSourceAdmissionStore:
+    """Append-only explicit-path store for admitted runtime trigger sources."""
+
+    def __init__(self, path: Path, *, lease_timeout_seconds: float = 5.0) -> None:
+        self.path = Path(path)
+        try:
+            self._transaction_lease = PathTransactionLease(
+                self.path,
+                timeout_seconds=lease_timeout_seconds,
+            )
+        except PathTransactionLeaseError as exc:
+            raise RuntimeSourceAdmissionError(
+                "Runtime source-admission lease timeout must be positive and finite."
+            ) from exc
+        self.lease_timeout_seconds = self._transaction_lease.timeout_seconds
+        self.lease_path = self._transaction_lease.lease_path
+        self._lock = self._transaction_lease.thread_lock
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        try:
+            with self._transaction_lease.transaction():
+                yield
+        except PathTransactionLeaseTimeoutError as exc:
+            raise RuntimeSourceAdmissionError(
+                "Runtime source-admission ledger lease timed out."
+            ) from exc
+
+    def load(self) -> RuntimeSourceAdmissionLedger:
+        with self._lock:
+            if not self.path.exists():
+                return RuntimeSourceAdmissionLedger()
+            try:
+                payload = json.loads(self.path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise RuntimeSourceAdmissionError(
+                    "Runtime source-admission ledger cannot be loaded: "
+                    f"{type(exc).__name__}"
+                ) from exc
+            ledger = source_admission_ledger_from_wire(payload)
+            validate_runtime_source_admission_ledger(ledger)
+            return ledger
+
+    def append(self, admission: RuntimeSourceAdmission) -> RuntimeSourceAdmission:
+        validate_runtime_source_admission(admission)
+        with self.transaction():
+            ledger = self.load()
+            for existing in ledger.admissions:
+                if existing.admission_id == admission.admission_id:
+                    if existing == admission:
+                        return existing
+                    raise RuntimeSourceAdmissionError(
+                        "Runtime source admission identity was reused with conflicting evidence."
+                    )
+                if existing.plan_version_id == admission.plan_version_id:
+                    raise RuntimeSourceAdmissionError(
+                        "A plan version already has a different runtime source admission."
+                    )
+                if (
+                    existing.source_kind,
+                    existing.source_record_id,
+                ) == (
+                    admission.source_kind,
+                    admission.source_record_id,
+                ):
+                    raise RuntimeSourceAdmissionError(
+                        "A canonical source record already admitted a different plan version."
+                    )
+            updated = replace(
+                ledger,
+                admissions=ledger.admissions + (admission,),
+            )
+            validate_runtime_source_admission_ledger(updated)
+            _atomic_write(
+                self.path,
+                canonical_json_bytes(source_admission_ledger_to_wire(updated)),
+            )
+            return admission
 
 
 def admit_runtime_trigger_source(
@@ -312,6 +414,131 @@ def validate_runtime_source_admission(admission: RuntimeSourceAdmission) -> None
 
 def admission_fingerprint(admission: RuntimeSourceAdmission) -> str:
     return fingerprint_payload(asdict(replace(admission, fingerprint="")))
+
+
+def validate_runtime_source_admission_ledger(
+    ledger: RuntimeSourceAdmissionLedger,
+) -> None:
+    if (
+        ledger.schema_version != RUNTIME_SOURCE_ADMISSION_LEDGER_SCHEMA_VERSION
+        or ledger.profile != RUNTIME_SOURCE_ADMISSION_LEDGER_PROFILE
+    ):
+        raise RuntimeSourceAdmissionError(
+            "Runtime source-admission ledger schema identity is unsupported."
+        )
+
+    by_admission_id: dict[str, RuntimeSourceAdmission] = {}
+    by_plan_id: dict[str, RuntimeSourceAdmission] = {}
+    by_source: dict[tuple[str, str], RuntimeSourceAdmission] = {}
+    opportunity_roots: set[str] = set()
+    for admission in ledger.admissions:
+        validate_runtime_source_admission(admission)
+        if admission.admission_id in by_admission_id:
+            raise RuntimeSourceAdmissionError(
+                "Runtime source-admission ledger contains a duplicate identity."
+            )
+        if admission.plan_version_id in by_plan_id:
+            raise RuntimeSourceAdmissionError(
+                "Runtime source-admission ledger contains multiple sources for one plan."
+            )
+        source_key = (admission.source_kind, admission.source_record_id)
+        if source_key in by_source:
+            raise RuntimeSourceAdmissionError(
+                "Runtime source-admission ledger reuses one canonical source record."
+            )
+
+        predecessor_id = admission.predecessor_plan_version_id
+        if predecessor_id:
+            predecessor = by_plan_id.get(predecessor_id)
+            if predecessor is None:
+                raise RuntimeSourceAdmissionError(
+                    "Runtime source-admission ledger has an orphan or out-of-order predecessor."
+                )
+            if (
+                predecessor.plan_version_fingerprint
+                != admission.predecessor_plan_version_fingerprint
+            ):
+                raise RuntimeSourceAdmissionError(
+                    "Runtime source-admission predecessor fingerprint is contradictory."
+                )
+            if (
+                predecessor.trigger.opportunity_id,
+                predecessor.trigger.symbol,
+                predecessor.trigger.session_date,
+            ) != (
+                admission.trigger.opportunity_id,
+                admission.trigger.symbol,
+                admission.trigger.session_date,
+            ):
+                raise RuntimeSourceAdmissionError(
+                    "Runtime source-admission predecessor changed opportunity identity."
+                )
+            if _timestamp(
+                admission.trigger.receipt_timestamp,
+                "Source-admission trigger receipt timestamp",
+            ) < _timestamp(
+                predecessor.trigger.receipt_timestamp,
+                "Predecessor trigger receipt timestamp",
+            ):
+                raise RuntimeSourceAdmissionError(
+                    "Runtime source-admission ledger regressed trigger chronology."
+                )
+        else:
+            opportunity_id = admission.trigger.opportunity_id
+            if opportunity_id in opportunity_roots:
+                raise RuntimeSourceAdmissionError(
+                    "An opportunity has multiple initial runtime source admissions."
+                )
+            opportunity_roots.add(opportunity_id)
+
+        by_admission_id[admission.admission_id] = admission
+        by_plan_id[admission.plan_version_id] = admission
+        by_source[source_key] = admission
+
+
+def source_admission_ledger_to_wire(
+    ledger: RuntimeSourceAdmissionLedger,
+) -> dict[str, object]:
+    return {
+        "schema_version": ledger.schema_version,
+        "profile": ledger.profile,
+        "admissions": [asdict(item) for item in ledger.admissions],
+    }
+
+
+def source_admission_ledger_from_wire(
+    payload: object,
+) -> RuntimeSourceAdmissionLedger:
+    if not isinstance(payload, Mapping):
+        raise RuntimeSourceAdmissionError(
+            "Runtime source-admission ledger has an invalid shape."
+        )
+    admissions = payload.get("admissions")
+    if not isinstance(admissions, list):
+        raise RuntimeSourceAdmissionError(
+            "Runtime source-admission ledger has an invalid schema."
+        )
+    try:
+        parsed = []
+        for item in admissions:
+            if not isinstance(item, Mapping):
+                raise TypeError("Malformed source admission")
+            values = dict(item)
+            trigger = values.get("trigger")
+            if not isinstance(trigger, Mapping):
+                raise TypeError("Malformed source-admission trigger")
+            values["trigger"] = DecisionTriggerEvidence(**dict(trigger))
+            parsed.append(RuntimeSourceAdmission(**values))
+        ledger = RuntimeSourceAdmissionLedger(
+            schema_version=int(payload.get("schema_version", 0)),
+            profile=str(payload.get("profile", "")),
+            admissions=tuple(parsed),
+        )
+    except (TypeError, ValueError) as exc:
+        raise RuntimeSourceAdmissionError(
+            "Runtime source-admission ledger contains an invalid record."
+        ) from exc
+    return ledger
 
 
 def _build_admission(
@@ -586,3 +813,16 @@ def _sha256(value: object, name: str) -> str:
     if not _SHA256.fullmatch(normalized):
         raise RuntimeSourceAdmissionError(f"{name} must be SHA-256.")
     return normalized
+
+
+def _atomic_write(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with temporary.open("wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)

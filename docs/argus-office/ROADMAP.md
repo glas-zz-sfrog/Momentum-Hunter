@@ -29,6 +29,25 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SHADOW-025E source-admission persistence is
+`IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-SHADOW-025E-source-admission-ledger`, stacked on verified 025D
+head `c273aaa`. The dormant 025C admission record now has an explicit-path-only,
+append-only JSON store. Every append revalidates the complete ordered plan
+lineage under the finite SHADOW-025B cross-process lease and uses atomic
+replacement. Exact replay is byte-stable; conflicting plan/source reuse,
+orphaned predecessors, chronology regressions, schema defects, and tampering
+fail closed.
+
+Compileall, 68 focused source/cycle tests, 221 candidate/plan/topology/host/
+service tests, and all 1,766 Python tests pass. No installed root, runtime
+importer, provider, account, broker/order, service, scheduler, WPF, Paper,
+Shadow, production store, credential, or generated evidence changed. Canonical
+`master` remains clean and synchronized at frozen `78db1bf`; merge/install
+waits for Tuesday's terminal evidence. Actual root selection, ACL/reparse proof,
+startup topology/writer-claim composition, store wiring, and Engine Host
+orchestration remain separate prospective work.
+
 ARGUS-SHADOW-025D runtime topology is `IMPLEMENTED_PENDING_MERGE` on
 `codex/ARGUS-SHADOW-025D-runtime-topology-contract`, stacked on verified 025C
 head `0d3fc9b`. The dormant continuous stack now assigns the Python Engine Host
@@ -1370,6 +1389,12 @@ activated-empty and unarmed at `0 / 30`, A017 is
   root. Current host/PID/build claims fail closed after replacement, and code
   upgrades rotate authority without discarding the program namespace. Actual
   root installation and orchestration remain separate after Tuesday evidence.
+- ARGUS-SHADOW-025E is implemented on the latest successor feature branch. It
+  extracts the proven finite cross-process path transaction, preserves old
+  event-cycle behavior, and adds explicit-path append-only source-admission
+  persistence with full-lineage validation, idempotent replay, tamper checks,
+  atomic replace, and Windows concurrent/crash recovery proof. Actual root
+  selection, startup claims, store wiring, and orchestration remain separate.
 
 #### 11B - Schwab Read-Only And Canary Preparation
 

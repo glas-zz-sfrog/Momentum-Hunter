@@ -1,5 +1,17 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025E Source Admission Ledger
+
+`codex/ARGUS-SHADOW-025E-source-admission-ledger` is
+`IMPLEMENTED_PENDING_MERGE` from verified 025D head `c273aaa`. It extracts the
+proven finite cross-process lease into a shared dormant utility and persists
+025C admissions through an explicit-path append-only store. Exact replay,
+ordered predecessor lineage, atomic replacement, tamper rejection, concurrent
+Windows writers, timeout recovery, and process-exit recovery are proved. All
+1,766 Python tests pass. Canonical `master`, installed runtime, providers,
+accounts, orders, Paper/Shadow state, production stores, and Tuesday jobs are
+unchanged. Do not merge or install before terminal Tuesday evidence.
+
 ## ARGUS-SHADOW-025D Runtime Topology Contract
 
 `codex/ARGUS-SHADOW-025D-runtime-topology-contract` is
