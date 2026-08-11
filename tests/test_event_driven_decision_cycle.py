@@ -540,6 +540,26 @@ class EventDrivenDecisionCycleTests(unittest.TestCase):
         with self.assertRaisesRegex(EventDecisionCycleError, "not enabled"):
             coordinator.process(trigger, recorded_at=BASE + timedelta(seconds=3))
 
+    def test_plan_configuration_mismatch_fails_closed(self) -> None:
+        plan = synthetic_plan()
+        decision = synthetic_decision(plan)
+        trigger = synthetic_trigger(plan)
+        coordinator = EventDecisionCycleCoordinator(
+            self.store,
+            policy=synthetic_policy(configuration_fingerprint="9" * 64),
+        )
+
+        with self.assertRaisesRegex(EventDecisionCycleError, "configuration"):
+            coordinator.process(
+                trigger,
+                cycle_started_at=datetime.fromisoformat(trigger.receipt_timestamp)
+                + timedelta(milliseconds=100),
+                recorded_at=BASE + timedelta(seconds=3),
+                plan_version=plan,
+                decision=decision,
+            )
+        self.assertFalse(self.path.exists())
+
     def test_trigger_source_must_be_frozen_by_plan(self) -> None:
         plan = synthetic_plan()
         trigger = synthetic_trigger(plan, source_fingerprint="0" * 64)

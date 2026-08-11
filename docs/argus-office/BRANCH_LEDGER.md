@@ -101,6 +101,10 @@ in-process concurrent lost updates. It has no provider, account, broker/order,
 Shadow activation, service, scheduler, Engine Host, WPF, score, readiness, or
 default production-path capability. Merge/install waits for Tuesday evidence
 and serialized integration of ARGUS-CONTINUOUS-001 and PLAN-002A.
+Hard Chew self-review additionally proved that a mismatched event-policy and
+plan configuration had previously been accepted; the branch now rejects that
+combination before writing a ledger, with 36 focused and 1,674 full-suite tests
+passing.
 
 ## ARGUS-BREAKOUT-001 Sequential Breakout Research
 
