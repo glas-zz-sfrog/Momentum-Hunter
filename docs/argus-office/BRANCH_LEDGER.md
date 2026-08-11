@@ -1,5 +1,32 @@
 # Branch Ledger
 
+## ARGUS-SESSION-FIDELITY-004 Current-Head Reconciliation
+
+`codex/ARGUS-SESSION-FIDELITY-004-current-head-reconciliation` is
+`ACTIVE / IMPLEMENTED_PENDING_INTEGRATION` from synchronized base `a46d31b`.
+It restores the exact 11-file dormant observer/test/tool chain from source head
+`799f07b`, preserves the SESSION-FIDELITY-003 charter/release evidence, and
+adds current-head closeout records. One separate current-head regression pins
+correct Central-to-Eastern retry targets. Compileall, 16 focused, 209 adjacent,
+and all 1,889 Python tests pass. Existing production-runtime imports are zero,
+and no account, position, preview, order, live-endpoint, Shadow, service,
+Engine Host, WPF, or production-store route is added.
+
+After a clean fast-forward, non-force backup, and exact-head opening/Paper job
+repin, this entry resolves to `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH`
+without another documentation mutation. The external retry evidence remains a
+separate pending observation.
+
+Source branches `codex/ARGUS-SESSION-FIDELITY-001-full-session-matrix`,
+`codex/ARGUS-SESSION-FIDELITY-002-frozen-probe-loader`, and
+`codex/ARGUS-SESSION-FIDELITY-003-premarket-retry` remain pushed source
+evidence. Preserve them; do not merge them separately after this reconciliation
+integrates. The 003 branch at `799f07b` remains operationally active only as
+the immutable source for the three August 12 one-time retry tasks and must not
+be amended before those tasks finish.
+
+Date reconciled: 2026-08-11
+
 ## ARGUS-SHADOW-025L Current-Head Runtime Boundary
 
 `codex/ARGUS-SHADOW-025L-current-head-runtime-boundary` is

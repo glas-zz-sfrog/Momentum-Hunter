@@ -29,6 +29,43 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SESSION-FIDELITY-004 reconciles the exact dormant read-only
+SESSION-FIDELITY-001 through 003 observer stack from source head `799f07b` onto
+current base `a46d31b`. All 11 source/test/tool artifacts are byte-identical to
+their source, with one current-head timezone regression added separately.
+Compileall, 16 focused tests, 209 adjacent market-data/broker-boundary tests,
+and all 1,889 Python tests pass. No production runtime imports
+the observer, and it adds no account, position, preview, order, live-endpoint,
+Shadow, service, Engine Host, WPF, or production-store route.
+
+The August 11 A/B/C session-fidelity jobs did run. Their Schwab children wrote
+valid immutable evidence: A at 03:05 Central was `USEFUL_WITH_LIMITATIONS` with
+fresh SPY/QQQ/NVDA quotes and volume; B at 05:55 was
+`USEFUL_WITH_LIMITATIONS` with fresh quotes; C at 06:05 was `HIGH_FIDELITY`
+with fresh quotes, candles, and volume. Each Alpaca child failed safely with
+`TypeError`, so the three combined checkpoints are incomplete and no combined
+manifest was fabricated. The defect was frozen-provider dependency mixing, not
+a missed Task Scheduler launch or a Schwab capture failure.
+
+The original A/B/C evidence also preserves an incorrect non-authoritative
+`targetEastern` field that repeats the Central target. Actual task, provider,
+and receipt clocks remain intact, and history is not rewritten. The frozen
+August 12 retry currently resolves the correct Eastern targets at 04:05, 06:55,
+and 07:05; a current-head regression test pins those conversions.
+
+The prospective replacement is `SESSION-FIDELITY-003`, an Alpaca-only,
+SPY/QQQ/NVDA, GET-only retry on Wednesday August 12 at 03:05, 05:55, and 06:05
+Central. All three one-time tasks remain Ready, never run, and pinned to clean
+immutable branch `codex/ARGUS-SESSION-FIDELITY-003-premarket-retry` at
+`799f07b` with exact module, runner, adapter, and provider hashes. They require
+Steven's Windows session to remain logged in for CurrentUser DPAPI; the desktop
+may be locked and Codex is not required. No account values, positions,
+previews, orders, strategy authority, execution authority, production
+persistence, or transmission is available. Do not launch, replace, reschedule,
+or amend the frozen retry. Audit its persisted result after each terminal run.
+The retry evidence gate does not block unrelated project development or the
+independent ordinary opening/Paper schedule.
+
 ARGUS-SHADOW-025L implementation `51579de` is fully verified and backed up on
 `codex/ARGUS-SHADOW-025L-current-head-runtime-boundary`. This release closeout
 is the intended final canonical identity; after its clean fast-forward,

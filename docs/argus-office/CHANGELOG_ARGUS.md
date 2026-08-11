@@ -1,5 +1,20 @@
 # Argus Changelog
 
+- Reconciled the exact SESSION-FIDELITY-001 through 003 read-only observer,
+  retry, runner, installer, and test stack from source head `799f07b` onto
+  current base `a46d31b`. Eleven restored source artifacts match byte-for-byte;
+  a separate current-head timezone regression pins correct Eastern targets;
+  compileall, 16 focused, 209 adjacent, and all 1,889 Python tests pass.
+- Recorded that August 11 checkpoints A/B/C launched and preserved valid Schwab
+  evidence, while each Alpaca child failed safely with `TypeError`; the three
+  combined checkpoints remain incomplete rather than being mislabeled as
+  missed captures. The original evidence, including its incorrect
+  non-authoritative `targetEastern` metadata, was not rewritten.
+- Preserved the August 12 Alpaca-only retries at 03:05, 05:55, and 06:05
+  Central on immutable head `799f07b`. No task, provider, account, position,
+  order, Shadow, service, Engine Host, WPF, production store, credential, or
+  generated evidence was changed by the reconciliation.
+
 - Reconciled the exact SHADOW-025B through 025K serialized runtime-boundary
   chain from source head `203003b` onto current base `b4762c6`: cross-process
   event-ledger ownership, source admission, topology, admission ledger, writer
