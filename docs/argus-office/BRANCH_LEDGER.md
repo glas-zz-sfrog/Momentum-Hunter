@@ -1,5 +1,19 @@
 # Branch Ledger
 
+## ARGUS-BROKER-ALPACA-004 First Prospective Result
+
+`codex/ARGUS-BROKER-ALPACA-004-first-prospective-result` is
+`MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` from synchronized canonical
+`78db1bf`. It records the August 11 opening and dependent Paper receipts,
+immutable hashes, terminal zero-candidate `NO_TRADE`, and the absence of every
+Alpaca provider/order/lifecycle mutation. It changes no runtime, policy,
+credential, account, scheduler, service, UI, scoring, or evidence file. The
+closeout was cleanly fast-forwarded and backed up; the 23 remaining opening jobs
+and next opening-dependent Paper engineering cycle were then repinned to the
+new canonical head before August 12.
+
+Date reconciled: 2026-08-11
+
 ## ARGUS-BROKER-ALPACA-004 Paper Engineering
 
 `codex/ARGUS-BROKER-ALPACA-004-paper-engineering` is
@@ -9,8 +23,9 @@ Hard-Chew-proven Paper Risk,
 allocation, execution, recovery, lifecycle-monitor, and Automation Service
 wiring for the canary engineering sample. No provider mutation occurred during
 implementation. Canonical `master` and the feature branch are backed up; the
-running service hot-loaded the new path, the sample is frozen, and the August 11
-same-head opening-dependent prospective Paper job is pending. Do not use this branch for
+running service hot-loaded the new path and the sample is frozen. Its August 11
+same-head opening-dependent job subsequently completed as the zero-candidate
+`NO_TRADE` recorded in the current entry above. Do not use this branch for
 Alpaca live trading or the final continuous-intraday strategy sample.
 
 

@@ -1,5 +1,18 @@
 # Argus Changelog
 
+- Preserved the first prospective Canary Paper engineering decision. The
+  Automation Service started the August 11 opening capture exactly at 08:35:00
+  Central, completed it at 08:35:03, and immediately admitted Paper. The
+  unchanged Finviz scanner returned zero candidates, so Paper closed at
+  08:35:05 as `NO_TRADE / PAPER_NO_CANDIDATES_IN_PROSPECTIVE_REPORT`.
+- Verified that the terminal decision made zero Alpaca provider calls, created
+  no intent, order, position, or outcome, and remained Paper-only and excluded
+  from the final strategy sample. Candidate-bearing account/allocation/order/
+  protection behavior remains prospectively unobserved.
+- Recorded three consecutive zero-candidate opening captures on August 7, 10,
+  and 11 as a candidate-supply limitation rather than a capture failure. The
+  next bounded Paper cycle stays prospective under the same frozen sample;
+  continuous intraday discovery remains the structural follow-up.
 - Integrated and backed up ARGUS-BROKER-ALPACA-004, froze the versioned Canary
   Paper engineering sample, repinned the opening schedule, and installed the
   first exact-head Paper job behind the August 11 opening capture. Read-only
