@@ -2,6 +2,20 @@
 
 Date reconciled: 2026-08-08
 
+## ARGUS-SESSION-FIDELITY-003 Premarket Retry
+
+`codex/ARGUS-SESSION-FIDELITY-003-premarket-retry` is
+`ACTIVE / IMPLEMENTED_PENDING_FROZEN_INSTALL`, stacked on proven loader repair
+`6964f21`. It preserves the failed SESSION-FIDELITY-001 A-C evidence and owns
+three fresh Alpaca-only observations for August 12 at 03:05, 05:55, and 06:05
+Central. The tasks are one-time, exact-head/hash pinned, write-once, bounded to
+SPY/QQQ/NVDA, and require Steven's Windows user to remain logged in because the
+Paper credentials use CurrentUser DPAPI. Next action: commit and back up the
+branch, install from the exact clean commit, verify the external launcher
+receipt and task definitions, then leave the branch unchanged until all three
+observations are terminal. Do not merge before the August 11 operational lane
+is preserved and the observer stack is reconciled against canonical master.
+
 ## ARGUS-SESSION-FIDELITY-002 Frozen Probe Loader
 
 `codex/ARGUS-SESSION-FIDELITY-002-frozen-probe-loader` is

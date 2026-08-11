@@ -1,6 +1,9 @@
 # Argus Changelog
 
 ## Unreleased
+- Added SESSION-FIDELITY-003 as a prospective Alpaca-only replacement for the three failed premarket child observations. It preserves the original failures and fixes A/B/C at 03:05, 05:55, and 06:05 Central on August 12 with exact task, source, commit, hash, symbol, provider, and time-window identity.
+- Made the replacement write-once and scheduler-retry-safe: valid existing evidence is fingerprinted, sanitized, identity-checked, and returned as `DUPLICATE_VERIFIED` without loading the provider. Installation verifies all Python, PowerShell, adapter, and frozen-provider hashes before creating any task.
+- Proved the replacement with compileall, 15 focused tests, 67 adjacent market-data tests, and all 1,329 Python tests. It has no account, position, preview, order, live endpoint, strategy-authority, execution-authority, service, Shadow, or production-persistence route.
 - Fixed the SESSION-FIDELITY Alpaca adapter's frozen-module boundary. It now loads and origin-checks the pinned Schwab setup, Alpaca onboarding, and Alpaca probe modules as one dependency set instead of mixing them with already imported host modules, then restores the host import state.
 - Preserved failed checkpoints A-C exactly as observed. Offline credential-slot and GET-only transport initialization, compileall, 8 focused tests, 43 adjacent observer tests, and all 1,322 Python tests pass; no provider request, account/position/order action, Shadow action, service/scheduler change, production persistence, or canonical integration occurred.
 - Reconciled the execution roadmap around ARGUS-BROKER-ALPACA-001. Alpaca Paper is the preferred fractional execution laboratory pending official documentation, secure Paper-only onboarding, and direct lifecycle proof; live Alpaca trading remains unauthorized.

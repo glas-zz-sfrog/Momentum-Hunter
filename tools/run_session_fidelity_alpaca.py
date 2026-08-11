@@ -29,6 +29,7 @@ SNAPSHOT_PATH = "/v2/stocks/snapshots"
 HISTORY_LOOKBACK_MINUTES = 15
 QUOTE_FRESH_SECONDS = 30.0
 BAR_FRESH_SECONDS = 120.0
+ALLOWED_TASK_IDS = frozenset({TASK_ID, "SESSION-FIDELITY-003"})
 FROZEN_PROBE_MODULES = (
     "momentum_hunter.schwab_setup",
     "momentum_hunter.alpaca_paper_onboarding",
@@ -224,15 +225,16 @@ def _age(value: object) -> float:
     return parsed if parsed >= 0 else float("inf")
 
 
-def run(
-    checkpoint_code: str,
+def _run_checkpoint_observation(
+    checkpoint: object,
     *,
+    task_id: str,
     source_root: Path,
-    now: datetime | None = None,
     sleeper: object = time.sleep,
+    program_context: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    observed = now or datetime.now(timezone.utc)
-    checkpoint = require_checkpoint_start(checkpoint_code, observed)
+    if task_id not in ALLOWED_TASK_IDS:
+        raise RuntimeError("The Alpaca session observer received an unsupported task identity.")
     if checkpoint.code not in {"A", "B", "C"} or not checkpoint.alpaca:
         raise RuntimeError("This adapter is limited to the three premarket comparisons.")
     probe = _load_frozen_probe(source_root)
@@ -256,7 +258,7 @@ def run(
     )
     result = {
         "schemaVersion": 1,
-        "taskId": TASK_ID,
+        "taskId": task_id,
         "mode": "READ_ONLY_NONPERSISTING_SESSION_FIDELITY",
         "checkpoint": checkpoint.evidence(),
         "provider": "ALPACA",
@@ -274,6 +276,7 @@ def run(
         "historicalBars": history,
         "adjudication": _adjudicate(final),
         "productionPersistence": False,
+        "accountValuesIncluded": False,
         "accountRequested": False,
         "positionsRequested": False,
         "ordersRequested": False,
@@ -291,6 +294,8 @@ def run(
             ).hexdigest().upper(),
         },
     }
+    if program_context is not None:
+        result["programContext"] = dict(program_context)
     result["evidenceFingerprint"] = fingerprint(result)
     require_sanitized(
         result,
@@ -298,6 +303,23 @@ def run(
     )
     probe._assert_sanitized(result, secret)
     return result
+
+
+def run(
+    checkpoint_code: str,
+    *,
+    source_root: Path,
+    now: datetime | None = None,
+    sleeper: object = time.sleep,
+) -> dict[str, object]:
+    observed = now or datetime.now(timezone.utc)
+    checkpoint = require_checkpoint_start(checkpoint_code, observed)
+    return _run_checkpoint_observation(
+        checkpoint,
+        task_id=TASK_ID,
+        source_root=source_root,
+        sleeper=sleeper,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
