@@ -29,9 +29,13 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-ARGUS-SHADOW-025L reconciles the exact dormant SHADOW-025B through 025K
-serialized runtime-boundary chain from source head `203003b` onto current
-canonical base `b4762c6`. The 39 restored artifacts cover cross-process event-
+ARGUS-SHADOW-025L implementation `51579de` is fully verified and backed up on
+`codex/ARGUS-SHADOW-025L-current-head-runtime-boundary`. This release closeout
+is the intended final canonical identity; after its clean fast-forward,
+non-force synchronization, and exact-head opening/Paper job repin, status
+resolves to `COMPLETE` without another Git mutation. It reconciles the exact
+dormant SHADOW-025B through 025K serialized runtime-boundary chain from source
+head `203003b` onto canonical base `b4762c6`. The 39 restored artifacts cover cross-process event-
 ledger ownership, prospective source admission, one explicit runtime topology,
 write-once admission evidence, a composed writer session and evidence chain,
 read-only recovery planning, dormant orchestration, raw-root security, and
@@ -39,9 +43,8 @@ installed-writer feasibility. No existing runtime path imports the stack and
 the restored modules contain no provider, account, broker/order, service,
 scheduler, Engine Host process, WPF, or production-store capability. Compileall,
 196 focused runtime-chain tests, 412 continuous-stack tests, 387 adjacent
-current-runtime regressions, and all 1,873 Python tests pass. The integration
-status is `IMPLEMENTED_PENDING_MERGE`; module presence does not authorize
-activation.
+current-runtime regressions, and all 1,873 Python tests pass. Module presence
+does not authorize activation.
 
 The current Automation Service, Engine Host, and WPF share Steven's Windows
 SID, so ACLs cannot distinguish the future raw-evidence writer from the UI.
@@ -49,10 +52,10 @@ The contracts preserve two feasible shapes but select neither: a distinct-
 principal Engine Host that requires separately approved credential
 reprovisioning/brokering, or a dedicated evidence-writer process behind a
 strongly authenticated nonpersistent channel. Same-user SID-only pipe identity
-is insufficient. Every result keeps `activation_authorized=false`. After clean
-integration and exact-head schedule repinning, the next consequential gate is
-the writer-principal and credential-access architecture decision; no credential,
-principal, ACL, installed runtime, or production path changes in 025L.
+is insufficient. Every result keeps `activation_authorized=false`. The next
+consequential gate is the writer-principal and credential-access architecture
+decision; no credential, principal, ACL, installed runtime, or production path
+changes in 025L.
 
 ARGUS-CONTINUOUS-003 implementation `1452507` is integrated locally, fully
 verified, and backed by `codex/ARGUS-CONTINUOUS-003-current-head-integration`.

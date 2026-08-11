@@ -79,12 +79,11 @@ None. This is nonvisual dormant infrastructure.
 
 ## Recommendation
 
-Integrate and back up the dormant contracts after final diff and secret proof,
-then repin the existing opening-dependent Paper schedule to the final canonical
-head. Do not activate the source/writer chain or move credentials. Present the
-writer-principal choice as the next explicit architecture gate while continuing
-other bounded roadmap work that does not depend on installation.
+Preserve the clean integration and exact-head opening-dependent Paper schedule.
+Do not activate the source/writer chain or move credentials. Present the writer-
+principal choice as the next explicit architecture gate while continuing other
+bounded roadmap work that does not depend on installation.
 
 ## Classification
 
-`IMPLEMENTED_PENDING_MERGE`
+`COMPLETE_AFTER_FINAL_SYNC_AND_REPIN`
