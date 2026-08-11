@@ -76,6 +76,18 @@ governance appendices against current Roadmap truth. Implementation head is
 Python tests, and static boundary scans pass. The branch is not installed or
 merged; canonical `master` and Tuesday's opening/Paper jobs remain unchanged.
 
+## ARGUS-PLAN-002A Continuous Plan-Version Contract
+
+`codex/ARGUS-PLAN-002A-continuous-plan-version-contract` is
+`IMPLEMENTED_PENDING_MERGE`, stacked on the pushed and verified continuous
+integration head `f6b776e`. It adds one dormant pure-Python contract module,
+synthetic tests, and branch-local governance. Compileall, 19 focused tests, 210
+adjacent evidence/plan/allocation tests, and all 1,638 Python tests pass. The
+module has no network, account, broker/order, scoring, Shadow, service,
+scheduler, Engine Host, WPF, or default production-path capability. This branch
+must not be merged or installed before Tuesday's terminal opening/Paper evidence
+is preserved and the stacked prerequisite branch is serialized first.
+
 ## ARGUS-BREAKOUT-001 Sequential Breakout Research
 
 `codex/ARGUS-BREAKOUT-001-sequential-research` is
