@@ -29,6 +29,35 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SHADOW-025A synthetic event-driven decision-cycle contract is
+`IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-SHADOW-025A-synthetic-decision-cycle-contract`, stacked directly
+on the verified PLAN-002A head `7be49fd`. It adds a dormant, provider-neutral
+contract that turns only material candidate, setup, volume, catalyst, regime,
+event-window, spread, plan-revision, invalidation, or stale-data evidence into
+one immutable non-live decision cycle bound to the exact PLAN-002A plan, risk,
+allocation, account, capability, policy, and predecessor identities. Ordinary
+quote updates, insignificant deltas, and entry-seeking events inside cooldown
+produce explicit suppression receipts rather than fabricated cycles; safety
+and invalidation events bypass cooldown. Append-only explicit-path persistence
+rejects conflicting replay, tampering, chronology regression, orphan cycles,
+contradictory policy/source/predecessor bindings, and concurrent in-process
+lost updates. The output stops at `SELECTED_FOR_DOWNSTREAM_NONLIVE_EXECUTION`
+or truthful `NO_SELECTION`; it cannot submit, replace, cancel, fill, mark, or
+close an order.
+
+Compileall, 35 focused tests, 268 adjacent lifecycle/plan/Shadow/context tests,
+46 Paper/allocation-adjacent tests, 15 isolated legacy storage/story reruns, and
+all 1,673 Python tests pass. One initial full-discovery attempt was invalidated
+by an orphaned timed-out test child colliding on legacy fixed test directories;
+after that process exited, the affected tests and one uncontested full run both
+passed. No existing runtime imports the new module. Canonical `master` remains
+clean and synchronized at `78db1bf`; the installed service, Tuesday opening and
+Paper jobs, providers, accounts, orders, Shadow state, production stores, and
+WPF remain unchanged. Integration must wait for Tuesday's terminal operational
+evidence, then serialize the common continuous base, PLAN-002A, and SHADOW-025A
+in dependency order.
+
 ARGUS-PLAN-002A synthetic continuous plan-version contract is
 `IMPLEMENTED_PENDING_MERGE` on
 `codex/ARGUS-PLAN-002A-continuous-plan-version-contract`, stacked only on the
