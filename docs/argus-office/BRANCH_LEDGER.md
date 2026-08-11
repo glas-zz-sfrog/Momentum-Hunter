@@ -1,5 +1,19 @@
 # Branch Ledger
 
+## ARGUS-SHADOW-025I Runtime Orchestration
+
+`codex/ARGUS-SHADOW-025I-runtime-orchestration` is
+`IMPLEMENTED_PENDING_MERGE` from verified 025H head `4e61865`. It prevalidates
+one explicit candidate/plan/admission/decision request against the current
+prefix, then replays all four stages under one current topology-bound writer
+lease. Mid-candidate and later crash-prefix recovery, exact byte-stable replay,
+invalid request and
+writer rejection, target-specific completion, and result tamper detection are
+proved. Compileall, 14 focused, 126 adjacent runtime, 266 broader boundary, and
+all 1,830 Python tests pass. No installed importer, runtime, provider, account,
+order, Paper/Shadow state, production store, or Tuesday job changed. Do not
+merge or install before terminal Tuesday evidence.
+
 ## ARGUS-SHADOW-025H Runtime Recovery Planner
 
 `codex/ARGUS-SHADOW-025H-runtime-recovery-planner` is

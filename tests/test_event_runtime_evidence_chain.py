@@ -476,6 +476,8 @@ class EventRuntimeEvidenceChainTests(unittest.TestCase):
                 continue
             if path.name == "event_runtime_recovery.py":
                 continue
+            if path.name == "event_runtime_orchestration.py":
+                continue
             if "event_runtime_evidence_chain" in path.read_text(encoding="utf-8"):
                 importers.append(path.name)
         self.assertEqual([], importers)

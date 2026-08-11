@@ -434,6 +434,8 @@ class EventRuntimeRecoveryTests(unittest.TestCase):
         for path in root.rglob("*.py"):
             if path.name == "event_runtime_recovery.py":
                 continue
+            if path.name == "event_runtime_orchestration.py":
+                continue
             if "event_runtime_recovery" in path.read_text(encoding="utf-8"):
                 importers.append(path.name)
         self.assertEqual([], importers)
