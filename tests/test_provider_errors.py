@@ -4,7 +4,7 @@ import unittest
 
 import requests
 
-from momentum_hunter.models import BASE_MOMENTUM
+from momentum_hunter.models import BASE_MOMENTUM, INSTITUTIONAL_MOMENTUM
 from momentum_hunter.providers import (
     FINVIZ_CUSTOM_COLUMN_IDS,
     FinvizProvider,
@@ -79,6 +79,69 @@ class ProviderErrorTests(unittest.TestCase):
             "c=" + ",".join(str(item) for item in FINVIZ_CUSTOM_COLUMN_IDS),
             requests_seen[0],
         )
+
+    def test_finviz_scan_accepts_current_change_and_float_headers(self) -> None:
+        provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
+        screener = """
+            <table class="screener_table">
+                <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Market Cap</td><td>Float</td><td>ATR</td><td>Rel Volume</td><td>Volume</td><td>Price</td><td>Change %</td></tr>
+                <tr><td>1</td><td data-boxover-ticker="SMCI">SMCI SMCI</td><td>Super Micro Computer</td><td>Technology</td><td>Computer Hardware</td><td>23.37B</td><td>563.39M</td><td>2.46</td><td>7.02</td><td>57,422,617</td><td>36.13</td><td>14.34%</td></tr>
+            </table>
+        """
+
+        class FakeResponse:
+            text = screener
+
+            def raise_for_status(self) -> None:
+                return None
+
+        provider.session.get = lambda _url, **_kwargs: FakeResponse()
+
+        candidates = provider.scan(INSTITUTIONAL_MOMENTUM)
+
+        self.assertEqual(1, len(candidates))
+        self.assertEqual("SMCI", candidates[0].ticker)
+        self.assertEqual(14.34, candidates[0].percent_change)
+        self.assertEqual(563_390_000, candidates[0].float_shares)
+
+    def test_finviz_scan_rejects_missing_required_change_column(self) -> None:
+        provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
+
+        class FakeResponse:
+            text = """
+                <table class="screener_table">
+                    <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Market Cap</td><td>Volume</td><td>Price</td></tr>
+                    <tr><td>1</td><td>SMCI</td><td>Super Micro Computer</td><td>23.37B</td><td>57,422,617</td><td>36.13</td></tr>
+                </table>
+            """
+
+            def raise_for_status(self) -> None:
+                return None
+
+        provider.session.get = lambda _url, **_kwargs: FakeResponse()
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Finviz screener required columns were not found: Change",
+        ):
+            provider.scan(INSTITUTIONAL_MOMENTUM)
+
+    def test_finviz_scan_allows_legitimate_empty_current_schema(self) -> None:
+        provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
+
+        class FakeResponse:
+            text = """
+                <table class="screener_table">
+                    <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Market Cap</td><td>Float</td><td>ATR</td><td>Rel Volume</td><td>Volume</td><td>Price</td><td>Change %</td></tr>
+                </table>
+            """
+
+            def raise_for_status(self) -> None:
+                return None
+
+        provider.session.get = lambda _url, **_kwargs: FakeResponse()
+
+        self.assertEqual([], provider.scan(INSTITUTIONAL_MOMENTUM))
 
     def test_finviz_scan_keeps_candidate_when_optional_custom_fields_are_absent(self) -> None:
         provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())

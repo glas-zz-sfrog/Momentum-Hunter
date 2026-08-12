@@ -16,6 +16,13 @@ from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 FINVIZ_BACKOFF_SECONDS = (10, 30, 60)
 FINVIZ_QUOTE_BACKOFF_SECONDS: tuple[int, ...] = ()
 FINVIZ_CUSTOM_COLUMN_IDS = (0, 1, 2, 3, 4, 6, 25, 49, 64, 67, 65, 66)
+FINVIZ_REQUIRED_SCREENER_COLUMNS = {
+    "Ticker": ("Ticker",),
+    "Market Cap": ("Market Cap",),
+    "Volume": ("Volume",),
+    "Price": ("Price",),
+    "Change": ("Change", "Change %"),
+}
 
 
 class ProviderUnavailableError(RuntimeError):
@@ -174,6 +181,7 @@ class FinvizProvider(MarketDataProvider):
         if not rows:
             return []
         headers = finviz_screener_headers(rows[0])
+        validate_finviz_screener_headers(headers)
         candidates: list[Candidate] = []
         for row in rows[1:]:
             values = finviz_screener_row(row, headers)
@@ -187,10 +195,17 @@ class FinvizProvider(MarketDataProvider):
                     industry=values.get("Industry", ""),
                     market_cap=parse_market_cap(values.get("Market Cap", "")),
                     price=parse_float(values.get("Price", "")),
-                    percent_change=parse_percent(values.get("Change", "")),
+                    percent_change=parse_percent(
+                        finviz_screener_value(values, "Change", "Change %")
+                    ),
                     volume=parse_int(values.get("Volume", "")),
                     relative_volume=parse_float(values.get("Rel Volume", "")),
-                    float_shares=parse_market_cap(values.get("Shs Float", "")) or None,
+                    float_shares=(
+                        parse_market_cap(
+                            finviz_screener_value(values, "Shs Float", "Float")
+                        )
+                        or None
+                    ),
                     atr=parse_float(values.get("ATR", "")) or None,
                 )
             )
@@ -301,6 +316,27 @@ def finviz_screener_row(row: object, headers: list[str]) -> dict[str, str]:
             value = str(ticker_attribute or (value.split()[0] if value else ""))
         values[header] = value
     return values
+
+
+def finviz_screener_value(values: dict[str, str], *names: str) -> str:
+    for name in names:
+        if name in values:
+            return values[name]
+    return ""
+
+
+def validate_finviz_screener_headers(headers: list[str]) -> None:
+    observed = set(headers)
+    missing = [
+        label
+        for label, aliases in FINVIZ_REQUIRED_SCREENER_COLUMNS.items()
+        if not any(alias in observed for alias in aliases)
+    ]
+    if missing:
+        raise RuntimeError(
+            "Finviz screener required columns were not found: "
+            f"{', '.join(missing)}. Observed columns: {', '.join(headers)}."
+        )
 
 
 def provider_from_name(name: str) -> MarketDataProvider:

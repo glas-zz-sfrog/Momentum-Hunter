@@ -29,6 +29,29 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-DATA-006 closes the Finviz screener schema-drift defect exposed by the
+August 12 opening. The 08:35 scheduler, clock proof, artifact writes, and
+dependent Paper handoff completed, but the capture was not a trustworthy market
+observation: Finviz returned a valid screener table whose current percentage
+header is `Change %`, while the parser read only the former `Change` label. Every
+row therefore became `0.0%` and was silently removed by the 3% scanner gate.
+The August 7, 10, 11, and 12 zero-candidate captures and their dependent
+zero-candidate Paper `NO_TRADE` results are preserved but quarantined as
+data-integrity evidence; they are not strategy no-trades and do not count toward
+any performance sample.
+
+The prospective parser accepts both percentage-header identities and both
+`Shs Float`/`Float`, validates required screener columns before parsing, and
+fails loudly on unknown required-column drift while still allowing a legitimate
+header-only empty result. A nonpersisting live Finviz proof against the current
+schema returned 16 qualifying Institutional Momentum candidates where the old
+parser returned zero. Compileall, 65 focused provider/capture/Alpaca Paper
+tests, and all 1,892 Python tests pass.
+No historical capture was rewritten, no retrospective trade was created, and no
+account, position, order, Shadow, scoring, readiness, UI, schema, or secret path
+changed. Future opening and dependent Paper jobs must be repinned to the final
+integrated repair head before the next capture.
+
 ARGUS-SESSION-FIDELITY-004 reconciles the exact dormant read-only
 SESSION-FIDELITY-001 through 003 observer stack from source head `799f07b` onto
 current base `a46d31b`. All 11 source/test/tool artifacts are byte-identical to
@@ -115,17 +138,16 @@ ARGUS-SHADOW-025L; installed activation remains a separate consequential gate.
 
 ARGUS-BROKER-ALPACA-004 Paper engineering wiring is integrated and backed up
 through implementation commit `93f944c`. The canary engineering sample
-`alpaca-paper-engineering-20260810-v1` is frozen. On Tuesday August 11, the
-independent Automation Service started the ordinary opening capture at
-08:35:00 Central, completed it successfully at 08:35:03, and admitted the
-dependent Paper cycle immediately. The capture returned zero candidates from
-the unchanged Finviz Institutional Momentum scanner. The prospective Paper
-cycle therefore closed at 08:35:05 as `NO_TRADE` with reason
-`PAPER_NO_CANDIDATES_IN_PROSPECTIVE_REPORT`; it evaluated zero candidates,
-made zero Alpaca provider calls, created no intent/order/position/outcome, and
-left no lifecycle state to reconcile. This proves schedule, dependency,
-fresh-report identity, and fail-closed empty-candidate behavior. It does not yet
-prove the prospective account, allocation, entry, protection, or exit path.
+`alpaca-paper-engineering-20260810-v1` is frozen. On August 11 and 12, the
+independent Automation Service completed the ordinary opening capture and
+admitted the dependent Paper cycle immediately. Both Paper cycles closed as
+`NO_TRADE` with reason `PAPER_NO_CANDIDATES_IN_PROSPECTIVE_REPORT`; they made
+zero Alpaca provider calls and created no intent/order/position/outcome. The
+later DATA-006 diagnosis proves those empty reports were caused by Finviz
+percentage-header schema drift, so these results prove schedule, dependency,
+fresh-report identity, and fail-closed empty-report behavior only. They do not
+prove a legitimate market no-trade or the prospective account, allocation,
+entry, protection, or exit path.
 
 The intended candidate-bearing path remains Schwab trusted evidence ->
 DATA-004 TradePlan -> Paper Risk Governor -> DATA-005B provider-neutral
@@ -163,13 +185,12 @@ positions, and zero open orders; it made zero mutations. No Paper order has been
 made by this prospective sample. No live Alpaca host, Schwab order, Shadow
 activation, score/rank/alert change, database/schema change, UI change, or
 final-sample claim exists. The next operational action is continue the same
-engineering sample on a fresh opening-dependent cycle until candidate-bearing
-evidence exercises the downstream gates, while treating each legitimate
-`NO_TRADE` as terminal evidence rather than manufacturing a trade. Three
-consecutive zero-candidate openings on August 7, 10, and 11 are an observed
-scanner-supply limitation, not a capture failure; continuous intraday discovery
-remains the architectural answer rather than loosening the frozen opening
-scanner retrospectively.
+engineering sample after DATA-006 is integrated and future jobs are repinned,
+until candidate-bearing evidence exercises the downstream gates. Legitimate
+future `NO_TRADE` results remain terminal evidence, but the August 7/10/11/12
+empty results are quarantined parser-defect evidence. Continuous intraday
+discovery remains the architectural answer to opening-only supply; it does not
+replace correct parsing of the opening scanner.
 
 ARGUS-AUTOMATION-008 closes the next-day repin defect exposed by that first
 terminal Paper cycle. Future opening replans now remove a historical Paper job
@@ -1098,16 +1119,16 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, DATA-004 same-session intraday TradePlan semantics, DATA-005 account-aware allocation enforcement, DATA-005A fresh account/portfolio evidence, and the directly proven A001-A003 Alpaca Paper foundation. Tuesday completed successfully; 23 future opening jobs remain after August 11. |
-| Active implementation | Nine consecutive unattended captures through Tuesday August 11 passed. DATA-005A, the directly proven A001-A003 Paper foundation, DATA-005B provider-neutral allocation/Paper-research contracts, and ARGUS-BROKER-ALPACA-004 Paper engineering wiring are complete on canonical `master`. The first prospective Paper decision completed as a truthful zero-candidate `NO_TRADE` before any Alpaca provider call. Candidate-bearing provider execution remains unobserved. R034 remains a separate destructive approval gate. |
+| Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, DATA-004 same-session intraday TradePlan semantics, DATA-005 account-aware allocation enforcement, DATA-005A fresh account/portfolio evidence, and the directly proven A001-A003 Alpaca Paper foundation. The August 12 scheduler and artifact path completed, but its empty candidate evidence is quarantined pending the DATA-006 parser repair. |
+| Active implementation | DATA-006 repairs current Finviz `Change %`/`Float` headers and adds fail-loud required-column validation. DATA-005A, the directly proven A001-A003 Paper foundation, DATA-005B provider-neutral allocation/Paper-research contracts, and ARGUS-BROKER-ALPACA-004 Paper engineering wiring remain complete. Candidate-bearing provider execution remains unobserved. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Use a separately versioned canary-realistic Alpaca Paper engineering sample to prove prospective selection, fractional allocation, provider execution, protection, recovery, and terminal evidence. Do not count it as the final continuous-intraday strategy sample. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
-| Blocked by | The first Paper orchestration decision is complete, but its report had zero candidates and therefore did not exercise account, Risk, allocation, entry, protection, or exit. Partial-fill and provider-restart behavior remain synthetic-only; broker-resident linked protection and status streaming remain separate unknowns. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
-| Scheduled operational proof | `COMPLETE`: the 2026-08-03 through 2026-08-11 08:35 ordinary captures finished successfully with required artifacts and no Shadow or live-brokerage action. Tuesday's Paper job also completed successfully as a prospective zero-candidate `NO_TRADE` with no Alpaca provider call or mutation. Twenty-three future opening jobs run from 2026-08-12 through 2026-09-14; zero Shadow jobs are enabled. |
-| Immediate operational work | Preserve and hash Tuesday's first prospective Paper result; schedule the next bounded opening-dependent Paper engineering cycle on the same frozen sample; adjudicate the first candidate-bearing `PAPER_TRADE_CREATED` or gate-specific `NO_TRADE`. Continue continuous-intraday implementation so the system is not structurally limited to one 08:35 candidate supply. Present R034's exact deletion plan only when Steven is ready. |
+| Blocked by | Candidate-bearing Paper execution remains unobserved because the August 7/10/11/12 Finviz schema defect emptied the source reports before account, Risk, allocation, entry, protection, or exit. Partial-fill and provider-restart behavior remain synthetic-only; broker-resident linked protection and status streaming remain separate unknowns. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
+| Scheduled operational proof | The 2026-08-03 through 2026-08-12 08:35 jobs launched and wrote their required artifacts with no Shadow or live-brokerage action. August 7/10/11/12 zero-candidate contents are quarantined because of DATA-006 provider-schema drift and are not strategy evidence. Twenty-two future openings remain from August 13 through September 14; zero Shadow jobs are enabled. |
+| Immediate operational work | Integrate DATA-006, repin the 22 remaining opening jobs and the next dependent Paper job to the final repair head, then adjudicate the first candidate-bearing `PAPER_TRADE_CREATED` or gate-specific legitimate `NO_TRADE`. Continue continuous-intraday implementation so the system is not structurally limited to one 08:35 candidate supply. Present R034's exact deletion plan only when Steven is ready. |
 | Broker state | Schwab OAuth and immutable `2573` `INDIVIDUAL_CASH` binding remain read-only market-data/account evidence. No transmitting Schwab method exists. The Canary Alpaca Paper credential is encrypted outside Git. The exact Paper host accepted and completed one bounded fractional lifecycle; the activation preflight found the account active with `$100` cash/buying power, zero positions, and zero open orders. The research credential slot is empty. The integrated Paper-only runtime completed its first prospective decision without contacting Alpaca because the source report was empty. The live Alpaca host cannot be enabled by a mode flip. |
 | Steven action | No routine nonvisual approval is pending. Interrupt Steven before funding, money movement, any live endpoint/order, unexpected brokerage scope, destructive R034 cutover, or visual acceptance. Do not ask Steven to re-enter the stored Canary credential. |
-| Data caveat | Schwab remains authoritative for proven quote/candle evidence while execution-provider capability remains separate. DATA-001 through DATA-004 retain their provenance, RVOL, setup, and same-session chronology gates. DATA-005 makes `$500` reference sizing nonexecutable; DATA-005A supplies fresh bound-account/portfolio evidence. Fractional support may alter provider-executable quantity prospectively but may never rewrite old allocation or Shadow evidence. Legacy RVOL remains research-only; insufficient candle history and unknown broker capability fail closed. |
+| Data caveat | Schwab remains authoritative for proven quote/candle evidence while execution-provider capability remains separate. Finviz screener schema is validated prospectively; August 7/10/11/12 empty candidate sets are quarantined and may not be interpreted as market no-trades. DATA-001 through DATA-004 retain their provenance, RVOL, setup, and same-session chronology gates. DATA-005 makes `$500` reference sizing nonexecutable; DATA-005A supplies fresh bound-account/portfolio evidence. Fractional support may alter provider-executable quantity prospectively but may never rewrite old allocation or Shadow evidence. Legacy RVOL remains research-only; insufficient candle history and unknown broker capability fail closed. |
 
 ### Status Legend
 
