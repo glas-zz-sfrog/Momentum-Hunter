@@ -1,5 +1,23 @@
 # Branch Ledger
 
+## ARGUS-AFTER-CLOSE-002 Real Regular-Session Replay Trace
+
+`codex/ARGUS-AFTER-CLOSE-002-real-regular-replay-trace` is
+`ACTIVE / IMPLEMENTED_PENDING_MERGE_AFTER_AUG13_OPENING` from AFTER-CLOSE-001
+commit `e593131`. It adds an offline explicit-input replay that hash-binds a
+preserved July 29 SPY Schwab quote, five canonical opening bars, prior-session
+baseline bars, and the prior completed Daily candle. The real-evidence chain
+reached DATA-004 and stopped correctly at `PAPER_ENTRY_TRIGGER_NOT_REACHED`;
+no allocation, order intent, protection request, network call, or historical
+trade was fabricated. Synthetic tests prove the downstream zero-call contracts
+separately and are explicitly not historical evidence.
+
+Compileall, 69 focused/adjacent tests, and all 1,921 Python tests pass. The
+feature branch may be pushed normally for backup. Do not merge before the
+August 13 opening and dependent Paper evidence are terminal and preserved.
+
+Date reconciled: 2026-08-12
+
 ## ARGUS-AFTER-CLOSE-001 Contract And Transaction Trace
 
 `codex/ARGUS-AFTER-CLOSE-001-contract-transaction-trace` is
