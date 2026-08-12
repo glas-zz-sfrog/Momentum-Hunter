@@ -27,14 +27,31 @@ def _central(hour: int, minute: int) -> datetime:
     return datetime(2026, 8, 12, hour, minute, tzinfo=CENTRAL)
 
 
+def _central_on(day: int, hour: int, minute: int) -> datetime:
+    return datetime(2026, 8, day, hour, minute, tzinfo=CENTRAL)
+
+
 CHECKPOINTS: dict[str, Checkpoint] = {
     "A": Checkpoint("A", "EARLY_PREMARKET_RETRY", _central(3, 5), 300, False, True),
     "B": Checkpoint("B", "PRE_SCHWAB_BOUNDARY_RETRY", _central(5, 55), 300, False, True),
     "C": Checkpoint("C", "SCHWAB_PREMARKET_RETRY", _central(6, 5), 300, False, True),
     "B2": Checkpoint("B2", "PREMARKET_RECOVERY_0725_ET", _central(6, 25), 300, False, True),
+    "T2": Checkpoint("T2", "SCHEDULER_PROVIDER_CANARY", _central(7, 10), 300, False, True),
+    "A13": Checkpoint("A13", "EARLY_PREMARKET_REPEAT", _central_on(13, 3, 5), 300, False, True),
+    "B13": Checkpoint("B13", "PRE_SCHWAB_BOUNDARY_REPEAT", _central_on(13, 5, 55), 300, False, True),
+    "C13": Checkpoint("C13", "SCHWAB_PREMARKET_REPEAT", _central_on(13, 6, 5), 300, False, True),
 }
 
-SOURCE_CHECKPOINTS = {"A": "A", "B": "B", "C": "C", "B2": "B"}
+SOURCE_CHECKPOINTS = {
+    "A": "A",
+    "B": "B",
+    "C": "C",
+    "B2": "B",
+    "T2": "CANARY",
+    "A13": "A",
+    "B13": "B",
+    "C13": "C",
+}
 
 
 class PremarketRetryError(RuntimeError):
@@ -68,7 +85,11 @@ def program_context(code: str) -> Mapping[str, object]:
         "retryTaskId": TASK_ID,
         "sourceTaskId": SOURCE_TASK_ID,
         "sourceCheckpoint": SOURCE_CHECKPOINTS[checkpoint.code],
-        "sourceAttemptClassification": "FAILED_SAFE_PROVIDER_ADAPTER",
+        "sourceAttemptClassification": (
+            "SCHEDULED_HARNESS_CANARY"
+            if checkpoint.code == "T2"
+            else "FAILED_SAFE_PROVIDER_ADAPTER"
+        ),
         "sourceEvidenceMutationAuthorized": False,
         "providerScope": "ALPACA_ONLY",
         "historicalSchwabEvidenceReused": False,

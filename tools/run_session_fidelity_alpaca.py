@@ -22,6 +22,9 @@ from momentum_hunter.session_fidelity import (
     require_sanitized,
     write_json_once,
 )
+from momentum_hunter.session_fidelity_premarket_retry import (
+    CHECKPOINTS as PREMARKET_RETRY_CHECKPOINTS,
+)
 
 
 FEED = "iex"
@@ -235,7 +238,7 @@ def _run_checkpoint_observation(
 ) -> dict[str, object]:
     if task_id not in ALLOWED_TASK_IDS:
         raise RuntimeError("The Alpaca session observer received an unsupported task identity.")
-    if checkpoint.code not in {"A", "B", "C", "B2"} or not checkpoint.alpaca:
+    if checkpoint.code not in PREMARKET_RETRY_CHECKPOINTS or not checkpoint.alpaca:
         raise RuntimeError("This adapter is limited to the bounded premarket comparisons.")
     probe = _load_frozen_probe(source_root)
     repository = probe.AlpacaPaperCredentialRepository(

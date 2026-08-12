@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("A", "B", "C", "B2")]
+    [ValidateSet("A", "B", "C", "B2", "T2", "A13", "B13", "C13")]
     [string]$Checkpoint,
     [string]$ProjectRoot = "",
     [string]$PythonRoot = "C:\Users\steve\OneDrive\Documents\Investing",

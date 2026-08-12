@@ -38,7 +38,10 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
 
     def test_retry_matrix_is_fixed_alpaca_only_and_prospective(self) -> None:
         self.assertEqual(TASK_ID, "SESSION-FIDELITY-003")
-        self.assertEqual(tuple(CHECKPOINTS), ("A", "B", "C", "B2"))
+        self.assertEqual(
+            tuple(CHECKPOINTS),
+            ("A", "B", "C", "B2", "T2", "A13", "B13", "C13"),
+        )
         self.assertEqual(
             tuple(row.target_central.isoformat() for row in CHECKPOINTS.values()),
             (
@@ -46,6 +49,10 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
                 "2026-08-12T05:55:00-05:00",
                 "2026-08-12T06:05:00-05:00",
                 "2026-08-12T06:25:00-05:00",
+                "2026-08-12T07:10:00-05:00",
+                "2026-08-13T03:05:00-05:00",
+                "2026-08-13T05:55:00-05:00",
+                "2026-08-13T06:05:00-05:00",
             ),
         )
         for checkpoint in CHECKPOINTS.values():
@@ -78,7 +85,12 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
         adapter = (
             Path(__file__).resolve().parents[1] / "tools" / "run_session_fidelity_alpaca.py"
         ).read_text(encoding="utf-8")
-        self.assertIn('{"A", "B", "C", "B2"}', adapter)
+        self.assertIn("checkpoint.code not in PREMARKET_RETRY_CHECKPOINTS", adapter)
+        self.assertEqual(program_context("T2")["sourceCheckpoint"], "CANARY")
+        self.assertEqual(
+            program_context("T2")["sourceAttemptClassification"],
+            "SCHEDULED_HARNESS_CANARY",
+        )
 
     def test_existing_exact_retry_is_verified_without_provider_replay(self) -> None:
         checkpoint = CHECKPOINTS["A"]
