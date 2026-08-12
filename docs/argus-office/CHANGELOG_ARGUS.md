@@ -22,6 +22,19 @@
   evidence acquisition. The remaining 21 opening jobs and dependent August 14
   Paper job are bound to the final closeout identity with `PENDING` readback,
   zero enabled Shadow jobs, and order transmission `UNAVAILABLE`.
+- Added an isolated after-close provider-contract and TEST_ONLY transaction
+  tracer. The final live packet observed the exact current Finviz schema,
+  20 raw/parsed rows and nine qualifiers; mapped Schwab quotes and intraday/
+  daily OHLCV for SPCX/SPY/QQQ/IWM; labeled stale after-hours quotes; and read
+  one sanitized active Canary Alpaca Paper account through exact-host GET only.
+- Proved the diagnostic SPCX path through DATA-004 TradePlan, Paper Risk
+  Governor, provider-neutral fractional allocation, exact Alpaca Paper entry/
+  stop/emergency request serialization, idempotent client IDs, and restart/
+  flatten identity. The boundary stopped at
+  `DRY_RUN_READY_FOR_PROVIDER_SUBMISSION`; instrumentation recorded 11 GETs and
+  zero submit/cancel/replace calls. Canonical Git, service/runtime state, and
+  tomorrow's manifest remained unchanged. Integration waits for August 13
+  opening/Paper evidence.
 
 - Corrected DATA-007's overstated causal label without rewriting its original
   write-once evidence. The superseding schema-v2 record separates invalid

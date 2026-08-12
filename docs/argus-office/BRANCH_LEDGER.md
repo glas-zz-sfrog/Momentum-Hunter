@@ -1,5 +1,23 @@
 # Branch Ledger
 
+## ARGUS-AFTER-CLOSE-001 Contract And Transaction Trace
+
+`codex/ARGUS-AFTER-CLOSE-001-contract-transaction-trace` is
+`ACTIVE / IMPLEMENTED_PENDING_MERGE_AFTER_AUG13_OPENING` from synchronized
+canonical base `9d735dd`. It adds an isolated GET-only provider-contract tracer
+and a TEST_ONLY submission-boundary rehearsal. The final packet fingerprint is
+`D5DF05A91BFB3630C16F377C7CE1E56CCFCAE3B9CD285DD8031EB69FB2BDAE2E`;
+11 GETs and zero submit/cancel/replace calls were observed. Compileall, 159
+focused/adjacent tests, and all 1,916 Python tests pass.
+
+The branch may be pushed normally for backup. Do not merge or repin canonical
+jobs before the August 13 opening and dependent Paper evidence are terminal and
+preserved. After that evidence, reconcile against current master, fast-forward
+only if clean, and regenerate exact-head jobs only if integration changes the
+canonical head.
+
+Date reconciled: 2026-08-12
+
 ## ARGUS-DATA-007A Causal-Certainty Correction
 
 `codex/ARGUS-DATA-007A-causal-certainty-correction` is a bounded correction
