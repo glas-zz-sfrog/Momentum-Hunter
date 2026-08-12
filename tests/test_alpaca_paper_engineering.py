@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -27,13 +28,17 @@ from momentum_hunter.alpaca_paper_broker import (
 from momentum_hunter.alpaca_paper_engineering import (
     NO_TRADE,
     PAPER_ENGINEERING_DECISION_CONFIRMATION,
+    PAPER_ENGINEERING_ROLLOVER_CONFIRMATION,
     PAPER_ENGINEERING_SAMPLE_CONFIRMATION,
     PAPER_TRADE_CREATED,
     AlpacaPaperEngineeringEngine,
     PaperEngineeringAnomaly,
+    PaperEngineeringError,
     PaperEngineeringPolicy,
     _exclusive_paper_session,
     freeze_paper_engineering_sample,
+    load_paper_engineering_policy,
+    rollover_invalidated_paper_engineering_sample,
 )
 from momentum_hunter.alpaca_paper_onboarding import AlpacaPaperAccount
 from momentum_hunter.broker_capabilities import (
@@ -50,6 +55,7 @@ from momentum_hunter.paper_risk_governor import (
 )
 from momentum_hunter.provider_neutral_allocation import (
     ProviderNeutralAllocationPolicy,
+    evidence_fingerprint,
 )
 from momentum_hunter.schwab_market_data import (
     SCHWAB_QUOTE_SOURCE,
@@ -478,6 +484,288 @@ class AlpacaPaperEngineeringTests(unittest.TestCase):
         self.assertIn("PAPER_NO_CANDIDATES_IN_PROSPECTIVE_REPORT", result["reasons"])
         self.assertEqual([], adapter.calls)
         self.assertFalse(result["paperOrderCreated"])
+
+    def test_invalidated_no_order_sample_rolls_to_v2_without_policy_change(self) -> None:
+        adapter = SyntheticAdapter()
+        original = load_paper_engineering_policy(self.root / "paper")
+        decision = self.run_case(eligible_report(rows=False), adapter)
+        decision_path = (
+            self.root / "paper" / "decisions" / f"{decision['decisionCycleId']}.json"
+        )
+        decision_bytes = decision_path.read_bytes()
+        adjudication = {
+            "schemaVersion": 1,
+            "classification": "SYSTEM_DATA_CONTRACT_FAILURE",
+            "decisionState": "DECISION_NOT_REACHED",
+            "cases": [
+                {
+                    "paperDecisions": [
+                        {
+                            "decisionCycleId": decision["decisionCycleId"],
+                            "sampleId": original.sample_id,
+                            "originalFingerprint": decision["fingerprint"],
+                        }
+                    ]
+                }
+            ],
+        }
+        adjudication["fingerprint"] = evidence_fingerprint(adjudication)
+        adjudication_path = self.root / "adjudication.json"
+        adjudication_path.write_text(json.dumps(adjudication), encoding="utf-8")
+
+        with patch(
+            "momentum_hunter.alpaca_paper_engineering.adjudicate_lifecycle_capabilities",
+            return_value=registry(),
+        ):
+            result = rollover_invalidated_paper_engineering_sample(
+                expected_sample_id=original.sample_id,
+                new_sample_id="alpaca-paper-engineering-20260813-v2",
+                new_identity_date="20260813",
+                adjudication_path=adjudication_path,
+                confirmation=PAPER_ENGINEERING_ROLLOVER_CONFIRMATION,
+                output_directory=self.root / "paper",
+                archive_root=self.root / "archive",
+                closed_at=DECISION_AT,
+            )
+
+        archived = self.root / "archive" / original.sample_id
+        replacement = load_paper_engineering_policy(self.root / "paper")
+        self.assertEqual("PAPER_ENGINEERING_SAMPLE_ROLLED_OVER", result["classification"])
+        self.assertEqual(
+            decision_bytes,
+            (archived / "decisions" / decision_path.name).read_bytes(),
+        )
+        closure = json.loads((archived / "sample-closure.json").read_text())
+        self.assertEqual(
+            "CLOSED_INVALIDATED_PROVIDER_CONTRACT_DRIFT",
+            closure["classification"],
+        )
+        self.assertIn("policy.json", {item["path"] for item in closure["sourceFiles"]})
+        self.assertIn(
+            f"decisions/{decision_path.name}",
+            {item["path"] for item in closure["sourceFiles"]},
+        )
+        self.assertEqual("alpaca-paper-engineering-20260813-v2", replacement.sample_id)
+        self.assertEqual(
+            original.allocation.fixed_unit_risk_dollars,
+            replacement.allocation.fixed_unit_risk_dollars,
+        )
+        self.assertEqual(
+            original.risk.maximum_spread_percent,
+            replacement.risk.maximum_spread_percent,
+        )
+        self.assertFalse(result["policyValuesChanged"])
+        self.assertEqual([], adapter.calls)
+
+    def test_rollover_rejects_any_entry_intent(self) -> None:
+        original = load_paper_engineering_policy(self.root / "paper")
+        decision = self.run_case(eligible_report(rows=False))
+        intent = self.root / "paper" / "intents" / "unsafe.json"
+        intent.parent.mkdir(parents=True)
+        intent.write_text("{}", encoding="utf-8")
+        adjudication = {
+            "classification": "SYSTEM_DATA_CONTRACT_FAILURE",
+            "decisionState": "DECISION_NOT_REACHED",
+            "cases": [
+                {
+                    "paperDecisions": [
+                        {
+                            "decisionCycleId": decision["decisionCycleId"],
+                            "sampleId": original.sample_id,
+                            "originalFingerprint": decision["fingerprint"],
+                        }
+                    ]
+                }
+            ],
+        }
+        adjudication["fingerprint"] = evidence_fingerprint(adjudication)
+        adjudication_path = self.root / "adjudication.json"
+        adjudication_path.write_text(json.dumps(adjudication), encoding="utf-8")
+
+        with (
+            patch(
+                "momentum_hunter.alpaca_paper_engineering.adjudicate_lifecycle_capabilities",
+                return_value=registry(),
+            ),
+            self.assertRaisesRegex(PaperEngineeringAnomaly, "entry intent"),
+        ):
+            rollover_invalidated_paper_engineering_sample(
+                expected_sample_id=original.sample_id,
+                new_sample_id="alpaca-paper-engineering-20260813-v2",
+                new_identity_date="20260813",
+                adjudication_path=adjudication_path,
+                confirmation=PAPER_ENGINEERING_ROLLOVER_CONFIRMATION,
+                output_directory=self.root / "paper",
+                archive_root=self.root / "archive",
+                closed_at=DECISION_AT,
+            )
+
+    def test_rollover_archive_conflict_does_not_modify_active_sample(self) -> None:
+        original = load_paper_engineering_policy(self.root / "paper")
+        decision = self.run_case(eligible_report(rows=False))
+        before = {
+            path.relative_to(self.root / "paper"): path.read_bytes()
+            for path in (self.root / "paper").rglob("*")
+            if path.is_file()
+        }
+        adjudication = {
+            "classification": "SYSTEM_DATA_CONTRACT_FAILURE",
+            "decisionState": "DECISION_NOT_REACHED",
+            "cases": [
+                {
+                    "paperDecisions": [
+                        {
+                            "decisionCycleId": decision["decisionCycleId"],
+                            "sampleId": original.sample_id,
+                            "originalFingerprint": decision["fingerprint"],
+                        }
+                    ]
+                }
+            ],
+        }
+        adjudication["fingerprint"] = evidence_fingerprint(adjudication)
+        adjudication_path = self.root / "adjudication.json"
+        adjudication_path.write_text(json.dumps(adjudication), encoding="utf-8")
+        archive = self.root / "archive" / original.sample_id
+        archive.mkdir(parents=True)
+
+        with (
+            patch(
+                "momentum_hunter.alpaca_paper_engineering.adjudicate_lifecycle_capabilities",
+                return_value=registry(),
+            ),
+            self.assertRaisesRegex(PaperEngineeringAnomaly, "archive already exists"),
+        ):
+            rollover_invalidated_paper_engineering_sample(
+                expected_sample_id=original.sample_id,
+                new_sample_id="alpaca-paper-engineering-20260813-v2",
+                new_identity_date="20260813",
+                adjudication_path=adjudication_path,
+                confirmation=PAPER_ENGINEERING_ROLLOVER_CONFIRMATION,
+                output_directory=self.root / "paper",
+                archive_root=self.root / "archive",
+                closed_at=DECISION_AT,
+            )
+
+        after = {
+            path.relative_to(self.root / "paper"): path.read_bytes()
+            for path in (self.root / "paper").rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(before, after)
+        self.assertFalse((self.root / "paper" / "sample-closure.json").exists())
+
+    def test_rollover_rejects_adjudication_for_another_decision(self) -> None:
+        original = load_paper_engineering_policy(self.root / "paper")
+        self.run_case(eligible_report(rows=False))
+        adjudication = {
+            "classification": "SYSTEM_DATA_CONTRACT_FAILURE",
+            "decisionState": "DECISION_NOT_REACHED",
+            "cases": [
+                {
+                    "paperDecisions": [
+                        {
+                            "decisionCycleId": "paper-cycle-unrelated",
+                            "sampleId": original.sample_id,
+                            "originalFingerprint": "A" * 64,
+                        }
+                    ]
+                }
+            ],
+        }
+        adjudication["fingerprint"] = evidence_fingerprint(adjudication)
+        adjudication_path = self.root / "adjudication.json"
+        adjudication_path.write_text(json.dumps(adjudication), encoding="utf-8")
+
+        with (
+            patch(
+                "momentum_hunter.alpaca_paper_engineering.adjudicate_lifecycle_capabilities",
+                return_value=registry(),
+            ),
+            self.assertRaisesRegex(PaperEngineeringError, "exact active Paper decisions"),
+        ):
+            rollover_invalidated_paper_engineering_sample(
+                expected_sample_id=original.sample_id,
+                new_sample_id="alpaca-paper-engineering-20260813-v2",
+                new_identity_date="20260813",
+                adjudication_path=adjudication_path,
+                confirmation=PAPER_ENGINEERING_ROLLOVER_CONFIRMATION,
+                output_directory=self.root / "paper",
+                archive_root=self.root / "archive",
+                closed_at=DECISION_AT,
+            )
+
+        self.assertEqual(original, load_paper_engineering_policy(self.root / "paper"))
+        self.assertFalse((self.root / "paper" / "sample-closure.json").exists())
+
+    def test_rollover_restores_original_sample_when_activation_move_fails(self) -> None:
+        original = load_paper_engineering_policy(self.root / "paper")
+        decision = self.run_case(eligible_report(rows=False))
+        before = {
+            path.relative_to(self.root / "paper"): path.read_bytes()
+            for path in (self.root / "paper").rglob("*")
+            if path.is_file()
+        }
+        adjudication = {
+            "classification": "SYSTEM_DATA_CONTRACT_FAILURE",
+            "decisionState": "DECISION_NOT_REACHED",
+            "cases": [
+                {
+                    "paperDecisions": [
+                        {
+                            "decisionCycleId": decision["decisionCycleId"],
+                            "sampleId": original.sample_id,
+                            "originalFingerprint": decision["fingerprint"],
+                        }
+                    ]
+                }
+            ],
+        }
+        adjudication["fingerprint"] = evidence_fingerprint(adjudication)
+        adjudication_path = self.root / "adjudication.json"
+        adjudication_path.write_text(json.dumps(adjudication), encoding="utf-8")
+        real_replace = os.replace
+        calls = 0
+
+        def fail_activation(source, destination):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("synthetic activation failure")
+            return real_replace(source, destination)
+
+        with (
+            patch(
+                "momentum_hunter.alpaca_paper_engineering.adjudicate_lifecycle_capabilities",
+                return_value=registry(),
+            ),
+            patch(
+                "momentum_hunter.alpaca_paper_engineering.os.replace",
+                side_effect=fail_activation,
+            ),
+            self.assertRaisesRegex(PaperEngineeringError, "original sample was restored"),
+        ):
+            rollover_invalidated_paper_engineering_sample(
+                expected_sample_id=original.sample_id,
+                new_sample_id="alpaca-paper-engineering-20260813-v2",
+                new_identity_date="20260813",
+                adjudication_path=adjudication_path,
+                confirmation=PAPER_ENGINEERING_ROLLOVER_CONFIRMATION,
+                output_directory=self.root / "paper",
+                archive_root=self.root / "archive",
+                closed_at=DECISION_AT,
+            )
+
+        after = {
+            path.relative_to(self.root / "paper"): path.read_bytes()
+            for path in (self.root / "paper").rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(before, after)
+        self.assertFalse((self.root / "archive" / original.sample_id).exists())
+        self.assertFalse(
+            (self.root / "paper-alpaca-paper-engineering-20260813-v2-staging").exists()
+        )
 
     def test_authorized_candidate_creates_fractional_entry_and_stop(self) -> None:
         adapter = SyntheticAdapter()

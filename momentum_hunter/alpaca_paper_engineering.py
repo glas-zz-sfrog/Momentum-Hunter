@@ -8,9 +8,10 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import time
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_FLOOR
 from pathlib import Path
@@ -70,6 +71,9 @@ from momentum_hunter.time_utils import now_central
 PAPER_ENGINEERING_SCHEMA_VERSION = 1
 PAPER_ENGINEERING_PROFILE = "alpaca-paper-engineering-v1"
 PAPER_ENGINEERING_SAMPLE_CONFIRMATION = "FREEZE ALPACA PAPER ENGINEERING SAMPLE"
+PAPER_ENGINEERING_ROLLOVER_CONFIRMATION = (
+    "CLOSE INVALIDATED PAPER SAMPLE AND START VERSION 2"
+)
 PAPER_ENGINEERING_DECISION_CONFIRMATION = "RUN PROSPECTIVE ALPACA PAPER DECISION"
 PAPER_TRADE_CREATED = "PAPER_TRADE_CREATED"
 NO_TRADE = "NO_TRADE"
@@ -249,6 +253,8 @@ def freeze_paper_engineering_sample(
 def load_paper_engineering_policy(
     output_directory: Path = DEFAULT_PAPER_ENGINEERING_DIRECTORY,
 ) -> PaperEngineeringPolicy:
+    if (output_directory / "sample-closure.json").exists():
+        raise PaperEngineeringError("The Paper engineering sample is closed.")
     payload = _load_json_object(output_directory / "policy.json", "Paper policy")
     allocation = payload.get("allocation")
     risk = payload.get("risk")
@@ -286,6 +292,209 @@ def load_paper_engineering_policy(
     if payload.get("fingerprint") != policy.fingerprint:
         raise PaperEngineeringError("Paper policy fingerprint is invalid.")
     return policy
+
+
+def rollover_invalidated_paper_engineering_sample(
+    *,
+    expected_sample_id: str,
+    new_sample_id: str,
+    new_identity_date: str,
+    adjudication_path: Path,
+    confirmation: str,
+    output_directory: Path = DEFAULT_PAPER_ENGINEERING_DIRECTORY,
+    archive_root: Path | None = None,
+    closed_at: datetime | None = None,
+) -> dict[str, object]:
+    if confirmation != PAPER_ENGINEERING_ROLLOVER_CONFIRMATION:
+        raise PaperEngineeringError(
+            "The exact Paper engineering rollover confirmation was not provided."
+        )
+    if not re.fullmatch(r"\d{8}", new_identity_date):
+        raise PaperEngineeringError("The new Paper identity date is invalid.")
+    if not new_sample_id.endswith("-v2"):
+        raise PaperEngineeringError("The replacement Paper sample must be version 2.")
+    if new_sample_id == expected_sample_id:
+        raise PaperEngineeringError("The replacement Paper sample identity must be new.")
+    policy = load_paper_engineering_policy(output_directory)
+    arm, _ = load_paper_engineering_arm(
+        policy=policy,
+        output_directory=output_directory,
+    )
+    if policy.sample_id != expected_sample_id or arm.sample_id != expected_sample_id:
+        raise PaperEngineeringError("The active Paper sample identity is unexpected.")
+    if any((output_directory / "active").glob("*.json")):
+        raise PaperEngineeringAnomaly("The Paper sample has an active lifecycle.")
+    if any((output_directory / "intents").glob("*.json")):
+        raise PaperEngineeringAnomaly(
+            "The Paper sample contains an entry intent and requires provider adjudication."
+        )
+
+    decisions = []
+    for path in sorted((output_directory / "decisions").glob("*.json")):
+        decision = _load_verified_record(path, "Paper decision")
+        if (
+            decision.get("sampleId") != expected_sample_id
+            or decision.get("classification") != NO_TRADE
+            or decision.get("paperOrderCreated") is not False
+            or decision.get("providerCalls") != []
+        ):
+            raise PaperEngineeringAnomaly(
+                "The invalidated sample is not a no-order, no-provider-call sample."
+            )
+        decisions.append(
+            {
+                "decisionCycleId": decision.get("decisionCycleId"),
+                "fileSha256": _file_sha256(path),
+                "fingerprint": decision.get("fingerprint"),
+            }
+        )
+    if not decisions:
+        raise PaperEngineeringError("The invalidated Paper sample has no decisions.")
+
+    adjudication = _load_json_object(adjudication_path, "opening adjudication")
+    adjudication_fingerprint = str(adjudication.get("fingerprint", ""))
+    candidate = {
+        key: value for key, value in adjudication.items() if key != "fingerprint"
+    }
+    if (
+        adjudication.get("classification") != "SYSTEM_DATA_CONTRACT_FAILURE"
+        or adjudication.get("decisionState") != "DECISION_NOT_REACHED"
+        or adjudication_fingerprint != evidence_fingerprint(candidate)
+    ):
+        raise PaperEngineeringError("The opening adjudication is invalid.")
+    adjudicated_decisions = {
+        (
+            str(paper.get("decisionCycleId", "")),
+            str(paper.get("originalFingerprint", "")),
+            str(paper.get("sampleId", "")),
+        )
+        for case in adjudication.get("cases", [])
+        if isinstance(case, dict)
+        for paper in case.get("paperDecisions", [])
+        if isinstance(paper, dict)
+    }
+    sample_decisions = {
+        (
+            str(decision["decisionCycleId"]),
+            str(decision["fingerprint"]),
+            expected_sample_id,
+        )
+        for decision in decisions
+    }
+    if adjudicated_decisions != sample_decisions:
+        raise PaperEngineeringError(
+            "The opening adjudication does not bind the exact active Paper decisions."
+        )
+
+    closure_time = closed_at or now_central()
+    _require_aware(closure_time, "Paper sample closure")
+    source_files = [
+        {
+            "path": str(path.relative_to(output_directory)).replace("\\", "/"),
+            "sha256": _file_sha256(path),
+            "bytes": path.stat().st_size,
+        }
+        for path in sorted(item for item in output_directory.rglob("*") if item.is_file())
+    ]
+    closure = {
+        "schemaVersion": PAPER_ENGINEERING_SCHEMA_VERSION,
+        "classification": "CLOSED_INVALIDATED_PROVIDER_CONTRACT_DRIFT",
+        "sampleId": expected_sample_id,
+        "closedAt": closure_time.isoformat(),
+        "decisionState": "DECISION_NOT_REACHED",
+        "countsTowardAnySample": False,
+        "paperOrdersCreated": 0,
+        "providerCalls": 0,
+        "adjudicationPath": str(adjudication_path.resolve()),
+        "adjudicationFileSha256": _file_sha256(adjudication_path),
+        "adjudicationFingerprint": adjudication_fingerprint,
+        "decisions": decisions,
+        "sourceFiles": source_files,
+        "successorSampleId": new_sample_id,
+    }
+    closure["fingerprint"] = evidence_fingerprint(closure)
+    _assert_sanitized(closure)
+    archive = (archive_root or output_directory.parent / "paper-engineering-archive") / expected_sample_id
+    if archive.exists():
+        raise PaperEngineeringAnomaly("The write-once Paper sample archive already exists.")
+    proof_binding = _load_json_object(
+        output_directory / "capability-proof.json",
+        "Paper capability binding",
+    )
+    lifecycle_proof_path = Path(str(proof_binding.get("proofPath", "")))
+    new_policy = replace(
+        policy,
+        policy_id=f"alpaca-paper-canary-engineering-policy-{new_identity_date}-v2",
+        sample_id=new_sample_id,
+        allocation=replace(
+            policy.allocation,
+            policy_id=f"alpaca-paper-canary-allocation-{new_identity_date}-v2",
+        ),
+        risk=replace(
+            policy.risk,
+            policy_id=f"alpaca-paper-canary-risk-{new_identity_date}-v2",
+        ),
+    )
+    _validate_policy(new_policy)
+    staging = output_directory.with_name(
+        f"{output_directory.name}-{new_sample_id}-staging"
+    )
+    if staging.exists():
+        raise PaperEngineeringAnomaly("The Paper replacement staging path already exists.")
+    new_arm = freeze_paper_engineering_sample(
+        policy=new_policy,
+        lifecycle_proof_path=lifecycle_proof_path,
+        output_directory=staging,
+        confirmation=PAPER_ENGINEERING_SAMPLE_CONFIRMATION,
+        activated_at=closure_time,
+    )
+    lineage = {
+        "schemaVersion": PAPER_ENGINEERING_SCHEMA_VERSION,
+        "recordType": "PAPER_ENGINEERING_SAMPLE_LINEAGE",
+        "sampleId": new_sample_id,
+        "predecessorSampleId": expected_sample_id,
+        "predecessorClosureFingerprint": closure["fingerprint"],
+        "policyValuesChanged": False,
+        "archivePath": str(archive.resolve()),
+        "activatedAt": new_arm.activated_at,
+    }
+    lineage["fingerprint"] = evidence_fingerprint(lineage)
+    _write_same_or_fail(staging / "lineage.json", lineage)
+
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(output_directory, archive)
+    try:
+        _write_same_or_fail(archive / "sample-closure.json", closure)
+        os.replace(staging, output_directory)
+    except Exception as exc:
+        closure_path = archive / "sample-closure.json"
+        if closure_path.exists():
+            closure_path.unlink()
+        try:
+            os.replace(archive, output_directory)
+        except OSError as rollback_exc:
+            raise PaperEngineeringAnomaly(
+                "The Paper sample rollover failed and automatic rollback was unsuccessful."
+            ) from rollback_exc
+        if staging.exists():
+            shutil.rmtree(staging)
+        raise PaperEngineeringError(
+            "The Paper sample rollover failed; the original sample was restored."
+        ) from exc
+    return {
+        "classification": "PAPER_ENGINEERING_SAMPLE_ROLLED_OVER",
+        "closedSampleId": expected_sample_id,
+        "closedSampleClassification": closure["classification"],
+        "newSampleId": new_sample_id,
+        "newArmFingerprint": new_arm.fingerprint,
+        "policyValuesChanged": False,
+        "archivePath": str(archive.resolve()),
+        "activeDirectory": str(output_directory.resolve()),
+        "paperOrdersCreated": 0,
+        "providerCalls": 0,
+        "endpoint": ALPACA_PAPER_BASE_URL,
+        "liveEndpointReachable": False,
+    }
 
 
 def load_paper_engineering_arm(
@@ -1816,6 +2025,12 @@ def main(argv: list[str] | None = None) -> int:
     freeze.add_argument("--minimum-entry-notional", default="1")
     freeze.add_argument("--confirmation", required=True)
     freeze.add_argument("--lifecycle-proof", type=Path)
+    rollover = subparsers.add_parser("rollover-invalidated-sample")
+    rollover.add_argument("--expected-sample-id", required=True)
+    rollover.add_argument("--new-sample-id", required=True)
+    rollover.add_argument("--new-identity-date", required=True)
+    rollover.add_argument("--adjudication", type=Path, required=True)
+    rollover.add_argument("--confirmation", required=True)
     decide = subparsers.add_parser("decide")
     decide.add_argument("--report", type=Path, required=True)
     decide.add_argument("--confirmation", required=True)
@@ -1865,6 +2080,14 @@ def main(argv: list[str] | None = None) -> int:
                 "endpoint": arm.endpoint,
                 "liveEndpointReachable": False,
             }
+        elif args.command == "rollover-invalidated-sample":
+            result = rollover_invalidated_paper_engineering_sample(
+                expected_sample_id=args.expected_sample_id,
+                new_sample_id=args.new_sample_id,
+                new_identity_date=args.new_identity_date,
+                adjudication_path=args.adjudication,
+                confirmation=args.confirmation,
+            )
         else:
             engine = AlpacaPaperEngineeringEngine(
                 adapter=AlpacaPaperBrokerAdapter(lane=AlpacaPaperLane.CANARY_REALISTIC),
