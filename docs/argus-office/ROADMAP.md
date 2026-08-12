@@ -66,6 +66,29 @@ or amend the frozen retry. Audit its persisted result after each terminal run.
 The retry evidence gate does not block unrelated project development or the
 independent ordinary opening/Paper schedule.
 
+ARGUS-ROADMAP-004 establishes `CAPTURE_SAFE_DEVELOPMENT_ACTIVE` for the
+August 12 evidence window. Canonical `master`, the installed Automation
+Service, and all ordinary opening/Paper jobs remain frozen at exact head
+`5e06e33668f46e824e0eff092a426447e5a469cb`. The separate premarket retries
+remain frozen at `799f07bf08dec8a9f0d7d1d970934237be2dd544`. Unrelated work
+may continue only in a distinct AppData Git worktree using synthetic fixtures
+and temporary output. It may be committed and backed up on its feature branch,
+but it must not modify canonical files, the shared `.venv`, installed packages,
+production data, DPAPI credentials, provider/account state, service or Engine
+Host configuration, the automation manifest, Windows tasks, or any scheduled
+evidence path.
+
+The protected windows are 03:05, 05:55, and 06:05 Central for the read-only
+Alpaca session-fidelity retries, followed by the 08:35 ordinary opening capture
+and Paper engineering cycle. Canonical integration, Roadmap commits on
+`master`, runtime installation, repinning, and service restart remain deferred
+until all five jobs are terminal and any Momentum Hunter-owned Paper order or
+position is terminal and reconciled. The Paper job has a seven-hour timeout,
+so elapsed clock time alone is not proof that this gate has closed. Steven's
+Windows session must remain logged in for the CurrentUser-DPAPI retry tasks;
+the desktop may be locked, and Codex is not required. This Roadmap update is
+branch-local and remains `IMPLEMENTED_PENDING_MERGE_AFTER_AUGUST_12_EVIDENCE`.
+
 ARGUS-SHADOW-025L implementation `51579de` is fully verified and backed up on
 `codex/ARGUS-SHADOW-025L-current-head-runtime-boundary`. This release closeout
 is the intended final canonical identity; after its clean fast-forward,
@@ -112,6 +135,20 @@ artifacts match source branch `657cb37`; existing-runtime import, dormant-
 capability, credential-shape, protected-path, and staged-whitespace reviews
 pass. The explicit serialized runtime source/writer contract is supplied by
 ARGUS-SHADOW-025L; installed activation remains a separate consequential gate.
+
+The approved long-term direction is specialist intelligence and prospective
+strategy diversification, not a monolithic replacement for Momentum Hunter's
+Momentum engine. The current Momentum/Paper path remains the immutable
+baseline/control. Future research flows from opportunity detection to
+independently testable specialist opinions, then prospective comparison against
+the baseline, and only later to combination or arbiter logic that has earned
+authority through evidence. Phase 13R records that program without implementing
+or activating it. It must reuse CONTINUOUS-003, Technical Breakout Research
+Engine v1, SHADOW-025, DATA-004, DATA-005B, and existing prospective-sample,
+counterfactual, rank-conditioned, and no-backfill governance. Near-term priority
+remains the frozen A004 Paper engineering sample and the separate continuous
+writer-principal/credential-access decision; specialist planning must not delay
+either lane.
 
 ARGUS-BROKER-ALPACA-004 Paper engineering wiring is integrated and backed up
 through implementation commit `93f944c`. The canary engineering sample
@@ -1635,6 +1672,217 @@ Status: `PAPER_ENGINEERING_ACTIVE / CONTINUOUS_INTRADAY_FOUNDATION_NEXT`
   recovery remain synthetic-only; bracket/OCO/OTO, status streaming,
   extended-hours execution, and broker-resident linked protection remain
   unproven and fail closed.
+
+### Phase 13R - Specialist Intelligence Research And Strategy Diversification
+
+Status: `NOT_STARTED`
+
+Roadmap inclusion authorizes planning and bounded research preparation only.
+It does not activate runtime imports, begin or modify a Paper sample, grant
+order authority, or grant live authority. Every specialist begins as a
+read-only or silent observer unless a later bounded task separately proves and
+authorizes promotion. Momentum remains one opportunity specialist and the
+current Momentum/Paper path remains the control against which incremental value
+is measured.
+
+The frozen Alpaca Paper engineering sample is unchanged. Specialist planning
+must not alter its candidate rules, scoring, rank, candidate source, setup and
+entry semantics, stop/target behavior, allocation or risk policy, execution
+assumptions, lifecycle, or sample identity. These properties remain available
+as the prospective control rather than being rewritten after specialist
+outcomes are known.
+
+Intended specialist architecture:
+
+- Momentum: opportunity specialist and current prospective baseline.
+- Regime: environment, exhaustion, volatility, and stress specialist.
+- Technical Structure: deterministic chart-structure specialist.
+- Event Shock: catalyst, relationship, and expected-versus-actual reaction
+  specialist.
+- Statistical Outcome: historical expectancy and uncertainty specialist.
+- Execution Quality: liquidity, fill, and tradability specialist.
+- Exit Intelligence: trade-management research specialist.
+- Bearish Equity: later stock-shorting strategy family; no options work.
+- Meta-Arbiter: later combination layer earned only through prospective
+  evidence.
+
+#### ARGUS-DATA-CORPACTION-001 - Analysis Price-Basis And Security-Identity Integrity
+
+- Preserve raw provider candles unchanged and maintain a separately identified,
+  analysis-consistent price/volume basis with complete lineage.
+- Initial scope is forward splits, reverse splits, effective timestamps,
+  adjustment factors, and symbol/security identity continuity where research
+  requires it. Additional corporate actions require a named analysis gap.
+- Every technical or statistical feature must identify its price basis and
+  lineage so corporate actions cannot corrupt returns, ATR, moving averages,
+  levels, patterns, gaps, MFE/MAE, or historical analogs.
+- This is data-integrity work, not a split strategy. It grants no split score,
+  candidate bonus, entry trigger, or strategy authority.
+
+#### ARGUS-SPECIALIST-CONTRACT-001 - Common Specialist Opinion Contract
+
+- Define one provider-neutral, read-only opinion packet containing specialist
+  and version, opportunity/setup identity, as-of time, expiration, evidence
+  hashes, opinion, confidence/calibration metadata, authority level, evidence
+  families, and abstention reason.
+- Support explicit `NO_OPINION`, `INSUFFICIENT_EVIDENCE`, and `OUT_OF_DOMAIN`
+  abstentions.
+- A specialist cannot place an order or silently mutate another specialist's
+  evidence.
+
+#### ARGUS-REGIME-002 - Exhaustion And Market-Stress Research
+
+- Extend CONTINUOUS-003 rolling regime rather than creating a competing regime
+  engine.
+- Research trend-up, trend-down, rotation, chop, late-trend, exhaustion,
+  volatility-shock, market-stress, and data-unsafe states from evidence such as
+  SPY, QQQ, IWM, breadth, sector participation, realized volatility,
+  correlation, VWAP/range extension, and prospective breakout-failure rate.
+- Initial role is `SILENT_OBSERVER`. Measure whether a proposed veto or risk
+  reduction would have improved the actual Momentum baseline; classifier
+  existence grants no trade authority.
+
+#### ARGUS-TECH-STRUCTURE-002 - Technical Structure Research v2
+
+- Evolve Technical Breakout Research Engine v1 rather than creating a second
+  technical framework.
+- Define volatility-aware, deterministic geometry for compression-expansion,
+  breakout-retest, failed breakout, VWAP reclaim/loss, higher-low continuation,
+  lower-high breakdown, double top/bottom, support/resistance, and head-and-
+  shoulders/inverse head-and-shoulders structures.
+- Consume corporate-action-safe analysis history and initially emit
+  `SUPPORTS`, `NEUTRAL`, `CONTRADICTS`, `EXHAUSTED`, or an abstention for
+  existing Momentum Hunter opportunities.
+- Independent technical candidate nomination is later work requiring its own
+  prospective evidence and sample gate.
+
+#### ARGUS-RESEARCH-DATA-001 - Research-Scale Historical Data And Universe Integrity
+
+- Inventory actual Schwab minute and Daily history, prospectively accumulated
+  evidence, research-only Daily history, security identity coverage, and enough
+  renamed/delisted handling to avoid obvious survivorship bias.
+- Determine required depth for technical patterns, intraday analogs,
+  regime-conditioned setups, event reactions, time-of-day effects, and
+  rank/setup-conditioned outcomes.
+- Provider minimalism remains mandatory: prefer existing authoritative data and
+  prospectively accumulated canonical data. Before proposing another provider,
+  document the exact capability gap, required fields/depth, proposed and denied
+  authority, cost, and exit condition.
+
+#### ARGUS-STAT-DATA-001 - Prospective Opportunity Denominator
+
+- Preserve outcomes for sufficiently defined Momentum candidates, rank
+  alternatives, rejected and regime-vetoed candidates, later specialist-only
+  candidates, and explicitly labeled counterfactuals.
+- Maintain stable identity through outcome measurement and, where evidence
+  permits, classify `TARGET_FIRST`, `STOP_FIRST`, `TIMEOUT`, `UNFILLED`,
+  `INVALIDATED`, or `DATA_FAILURE`, with MFE, MAE, and timing/duration.
+- A counterfactual is never a retrospective trade. Never manufacture a trade
+  after observing its outcome.
+
+#### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
+
+- Promote spread, spread expansion, quote age/stability, executable size where
+  available, volume versus price progress, fill probability, delay, slippage,
+  halt/unavailable state, and provider capability into a separately testable
+  specialist.
+- Future bearish work must separately evaluate shortability, borrow/locate,
+  margin/buying-power eligibility, and broker restrictions.
+- Strategy logic remains provider-neutral; a provider name cannot become
+  strategy law.
+
+#### ARGUS-STAT-OUTCOME-001 - Historical Analog / Outcome Probability Engine
+
+- Begin only after sufficient STAT-DATA, research-history depth, and clean
+  corporate-action/price-basis semantics.
+- Candidate outputs may include target-before-stop probability, expected R,
+  MFE/MAE distributions, time to target/stop, fill probability, uncertainty,
+  sample size, and calibration quality.
+- Progress from matched historical analogs to interpretable logistic models,
+  then survival/competing-risk models; consider tree/boosting methods only when
+  they prove incremental value. Require walk-forward/out-of-sample evidence;
+  in-sample performance grants no authority.
+
+#### ARGUS-EXIT-RESEARCH-001 - Trade-Management And Exit Intelligence
+
+- Preserve each actual Paper trade under its frozen TradePlan/lifecycle while
+  silently comparing structural stop, trailing stop, time stop, break-even,
+  partial exit, momentum-failure exit, and regime-deterioration exit methods.
+- Keep actual and counterfactual results separate. A counterfactual exit may
+  never rewrite an actual trade.
+- Research whether management produces more incremental edge than another
+  entry filter; do not change current TradePlans under this task.
+
+#### ARGUS-EVENT-SHOCK-001 - Unscheduled Event And Reaction Intelligence
+
+- Extend CONTINUOUS-003 macro-event and catalyst architecture rather than
+  creating competing infrastructure.
+- Research supply disruptions, industrial incidents, geopolitical escalation,
+  cyber incidents, unexpected regulation, material corporate events, and other
+  credible breaking shocks.
+- Preserve direct-issuer, competitor, proven supplier/customer, sector,
+  commodity, macro, and unresolved relationship semantics; require market
+  confirmation.
+- Make expected reaction versus actual reaction first-class research, including
+  news/price disagreement, volume without progress, relative lag, and immediate
+  breakout failure. Headline sentiment never directly creates an order.
+
+#### ARGUS-BEAR-001 - Bearish Equity / Short-Selling Research
+
+- This is stock-shorting research only; no options work is authorized.
+- Begin only after regime, technical structure, execution quality,
+  account/broker capability, and short-side risk semantics are sufficiently
+  proven.
+- Research downside breakout, failed support/reclaim, lower-high breakdown,
+  relative weakness, and event-driven downside repricing in Paper/research
+  first.
+- Do not assume long-side sizing, borrow, margin, fractional, stop, fill, or
+  protection semantics apply to shorts. No live short authority is granted.
+
+#### ARGUS-RESEARCH-GOV-001 - Experiment Registry And Model-Health Discipline
+
+- Before broad parameter/model searches, preserve hypothesis, feature
+  definitions, every attempted variant, training/validation/test periods,
+  benchmark, success criteria, and untouched holdout. Failed variants remain
+  visible.
+- Later preserve `HEALTHY`, `DEGRADING`, `UNRELIABLE`, and
+  `INSUFFICIENT_RECENT_EVIDENCE` health states. A model or pattern can lose
+  authority; one favorable historical test never makes a strategy rule
+  permanent.
+
+#### ARGUS-ARBITER-001 - Meta-Decision / Strategy Arbiter
+
+- Status is `DEFERRED`. Begin only after multiple specialists have prospective
+  evidence of incremental value versus the Momentum baseline.
+- Do not naively average scores or count correlated indicators as independent
+  confirmation. Future combination must use explicit authority, veto,
+  abstention, evidence family, regime, portfolio risk, and broker capability.
+- Any material arbiter rule starts under a new prospective strategy and
+  configuration fingerprint and sample identity. No live authority is implied.
+
+#### Phase 13R Dependencies And Promotion Gates
+
+- DATA-CORPACTION-001 precedes serious TECH-STRUCTURE-002 and
+  STAT-OUTCOME-001 historical claims.
+- SPECIALIST-CONTRACT-001 precedes any combination of specialist opinions.
+- STAT-DATA-001 precedes STAT-OUTCOME-001, and RESEARCH-DATA-001 must prove
+  sufficient depth before broad historical/statistical claims.
+- REGIME-002 and TECH-STRUCTURE-002 may initially operate silently and
+  independently after their prerequisites exist. EVENT-SHOCK-001 and
+  EXIT-RESEARCH-001 remain independent research lanes and need not wait for the
+  final arbiter.
+- BEAR-001 depends on sufficient bearish setup, execution-quality, broker-
+  capability, and risk evidence. ARBITER-001 is last and must be earned through
+  prospective A/B evidence.
+
+Roadmap presence does not activate a strategy. Silent research does not count
+as an executed trade, and a counterfactual does not become a historical trade.
+Existing Paper evidence remains immutable. Any specialist influence on
+candidate admission, direction, entry, sizing, risk, stop, target, exit, or
+strategy combination is a material strategy change and must begin under a new
+prospective policy/configuration fingerprint and sample identity. No
+retrospective backfill, winner-only selection, or rewriting of the Momentum
+baseline after specialist outcomes is permitted.
 
 ### Phase 14 - Unattended Live Execution
 

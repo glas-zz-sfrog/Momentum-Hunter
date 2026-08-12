@@ -1,5 +1,25 @@
 # Branch Ledger
 
+## ARGUS-ROADMAP-004 Capture-Safe Development And Specialist Strategy
+
+`codex/ARGUS-ROADMAP-004-capture-safe-development` is
+`IMPLEMENTED_PENDING_MERGE_AFTER_AUGUST_12_EVIDENCE` from synchronized
+canonical base `5e06e33`. It records the August 12 capture-safe development
+boundary and the planned Phase 13R specialist-intelligence research program.
+The current Momentum/Paper path remains the immutable control; every new
+specialist is unimplemented and begins as a read-only or silent observer only
+after a separate future task.
+
+The branch changes governance files only. It does not alter the frozen
+SESSION-FIDELITY-003 tasks at `799f07b`, canonical `master`, the installed
+Automation Service, the shared environment, production evidence, credentials,
+provider/account/Paper state, opening/Paper job definitions, Shadow state, or
+order authority. Feature-branch backup is allowed, but integration is deferred
+until all August 12 retries and opening/Paper work are terminal and any owned
+Paper lifecycle is reconciled.
+
+Date reconciled: 2026-08-11
+
 ## ARGUS-SESSION-FIDELITY-004 Current-Head Reconciliation
 
 `codex/ARGUS-SESSION-FIDELITY-004-current-head-reconciliation` is
