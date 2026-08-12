@@ -61,6 +61,21 @@
 - Passed compileall, 216 affected regressions, and complete 1,910-test Python
   coverage split into bounded runs after monolithic discovery exceeded its
   five- and fifteen-minute wrappers without reporting a test failure.
+- Established the August 12 capture-safe development boundary: canonical
+  `master`, the installed Automation Service, and ordinary opening/Paper jobs
+  remain frozen at `5e06e33`; the three Alpaca-only premarket retries remain
+  frozen at `799f07b`; unrelated work may proceed only in isolated AppData
+  worktrees without shared-environment or production-state mutation.
+- Added planned Phase 13R specialist-intelligence research with Momentum as the
+  immutable prospective baseline. Recorded corporate-action-safe analysis,
+  common opinion contracts, regime, technical structure, research data,
+  opportunity denominator, execution quality, historical outcome, exit,
+  event-shock, bearish-equity, experiment-governance, and deferred arbiter
+  tasks with explicit dependencies and prospective promotion gates.
+- Preserved the frozen A004 Paper engineering sample and continuous writer-
+  principal decision as the near-term priorities. No specialist, strategy,
+  runtime import, Paper sample, provider, account, scheduler, service, Shadow,
+  or order authority was implemented or activated.
 
 - Reconciled the exact SESSION-FIDELITY-001 through 003 read-only observer,
   retry, runner, installer, and test stack from source head `799f07b` onto
