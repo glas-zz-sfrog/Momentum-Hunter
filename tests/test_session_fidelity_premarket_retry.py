@@ -75,6 +75,10 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
         recovery = program_context("B2")
         self.assertEqual(recovery["sourceCheckpoint"], "B")
         self.assertEqual(CHECKPOINTS["B2"].label, "PREMARKET_RECOVERY_0725_ET")
+        adapter = (
+            Path(__file__).resolve().parents[1] / "tools" / "run_session_fidelity_alpaca.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('{"A", "B", "C", "B2"}', adapter)
 
     def test_existing_exact_retry_is_verified_without_provider_replay(self) -> None:
         checkpoint = CHECKPOINTS["A"]

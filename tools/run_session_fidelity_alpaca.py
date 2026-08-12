@@ -235,8 +235,8 @@ def _run_checkpoint_observation(
 ) -> dict[str, object]:
     if task_id not in ALLOWED_TASK_IDS:
         raise RuntimeError("The Alpaca session observer received an unsupported task identity.")
-    if checkpoint.code not in {"A", "B", "C"} or not checkpoint.alpaca:
-        raise RuntimeError("This adapter is limited to the three premarket comparisons.")
+    if checkpoint.code not in {"A", "B", "C", "B2"} or not checkpoint.alpaca:
+        raise RuntimeError("This adapter is limited to the bounded premarket comparisons.")
     probe = _load_frozen_probe(source_root)
     repository = probe.AlpacaPaperCredentialRepository(
         lane=probe.AlpacaPaperLane.CANARY_REALISTIC
