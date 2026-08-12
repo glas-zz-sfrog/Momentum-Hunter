@@ -214,13 +214,15 @@ try {
     finally {
         $ErrorActionPreference = $savedErrorActionPreference
     }
-    [System.IO.File]::AppendAllLines(
+    $logLines = [string[]]@(
+        "[$startedAt] taskId=SESSION-FIDELITY-003 checkpoint=$Checkpoint commit=$($ExpectedGitCommit.ToLowerInvariant())",
+        [string](($output | Out-String).TrimEnd()),
+        "[$([datetime]::UtcNow.ToString('o'))] exitCode=$exitCode"
+    )
+    $logText = [string]::Join([System.Environment]::NewLine, $logLines) + [System.Environment]::NewLine
+    [System.IO.File]::AppendAllText(
         $logPath,
-        @(
-            "[$startedAt] taskId=SESSION-FIDELITY-003 checkpoint=$Checkpoint commit=$($ExpectedGitCommit.ToLowerInvariant())",
-            ($output | Out-String).TrimEnd(),
-            "[$([datetime]::UtcNow.ToString('o'))] exitCode=$exitCode"
-        ),
+        $logText,
         [System.Text.UTF8Encoding]::new($false)
     )
     $output | Write-Output

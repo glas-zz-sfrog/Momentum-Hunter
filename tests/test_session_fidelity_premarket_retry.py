@@ -196,6 +196,12 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+        wrapper = (root / "tools" / "run_session_fidelity_premarket_retry.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("$logLines = [string[]]@(", wrapper)
+        self.assertIn("[System.IO.File]::AppendAllText(", wrapper)
+
     def test_retry_runner_bootstraps_pinned_root_outside_worktree(self) -> None:
         root = Path(__file__).resolve().parents[1]
         runner = root / "tools" / "run_session_fidelity_premarket_retry.py"
