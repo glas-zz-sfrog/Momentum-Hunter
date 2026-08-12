@@ -2,6 +2,7 @@
 
 | ID | Risk | Area | Severity | Mitigation | Status |
 | --- | --- | --- | --- | --- | --- |
+| R-080 | A diagnostic rehearsal silently treats after-hours quotes as regular-session authority, leaks credentials, or crosses from request serialization into a Paper mutation. | Broker safety / evidence integrity | Critical | Keep live observations GET-only; label quote age/session explicitly; use deterministic TEST_ONLY regular-session evidence for the transaction path; scan against exact stored credential values and credential-shaped tokens; construct no broker transport at the submission boundary; instrument all HTTP methods; and require unchanged canonical Git and automation-manifest hashes. | Mitigated in ARGUS-AFTER-CLOSE-001 packet `D5DF05A...BDAE2E`: stale SPY/QQQ quotes were explicit, secret scan passed, 11 GETs and zero submit/cancel/replace calls occurred; integration remains deferred until after August 13 evidence. |
 | R-001 | Multiagent work creates fragmented recommendations. | Operations | Medium | Codex Orchestrator produces one consolidated CEO report. | Open |
 | R-002 | Analysis agents accidentally modify code. | Governance | High | Recommendation-only agents are read-only by default; Builder is the only normal code-writing agent. | Open |
 | R-003 | Protected trading or replay semantics change outside the authorized scope. | Product trust | High | Protected areas require exact task scope, Hard Chew proof, and interruption before semantic expansion. | Open |

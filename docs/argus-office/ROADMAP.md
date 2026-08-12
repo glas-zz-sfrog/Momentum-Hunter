@@ -29,6 +29,33 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-AFTER-CLOSE-001 is `IMPLEMENTED_PENDING_MERGE_AFTER_AUG13_OPENING` on
+isolated branch `codex/ARGUS-AFTER-CLOSE-001-contract-transaction-trace` from
+canonical head `9d735dd`. The final write-once diagnostic packet fingerprint is
+`D5DF05A91BFB3630C16F377C7CE1E56CCFCAE3B9CD285DD8031EB69FB2BDAE2E`.
+One bounded live trace observed the exact Finviz headers `No., Ticker, Company,
+Sector, Industry, Market Cap, Float, ATR, Rel Volume, Volume, Price, Change %`,
+parsed all 20 rows, and produced nine local qualifiers. GET-only Schwab quote
+and price-history evidence mapped the current quote/OHLCV contracts for
+diagnostic candidate `SPCX` plus SPY/QQQ/IWM; all candle invariants passed.
+SPY/QQQ after-hours quotes older than the 30-second diagnostic threshold were
+reported as stale and were never promoted to regular-session authority.
+
+The stored Schwab refresh grant first returned HTTP 400. Interactive OAuth was
+renewed, then read-only validation proved exactly one authorized `2573` `CASH`
+account with no positions requested and transmission unavailable. One exact
+Alpaca Paper `/v2/account` GET returned an active, usable, unblocked Paper
+account. A deterministic TEST_ONLY regular-session replay then traversed
+candidate, DATA-004 TradePlan, Paper Risk Governor, fresh account/allocation,
+fractional entry, protective stop, restart identity, and emergency-flatten
+serialization to `DRY_RUN_READY_FOR_PROVIDER_SUBMISSION`. Instrumentation
+recorded 11 GETs and zero submit/cancel/replace calls. The canonical checkout,
+installed service, active Paper/Shadow evidence, and automation manifest hash
+`98851F1ADB8FCDFCF4EF6F11D447913AC729F25F8D0C32F81DBC3D5FC9035F61`
+remained unchanged. Compileall, 159 focused/adjacent tests, and all 1,916 Python
+tests pass. Do not merge before the August 13 pinned opening and dependent
+Paper evidence are terminal and preserved.
+
 ARGUS-DATA-007A corrects the causal certainty of the DATA-007 zero-candidate
 adjudication without changing its operational conclusion. The August 7, 10,
 11, and 12 decisions remain `INVALID / SYSTEM_DATA_CONTRACT_FAILURE /
