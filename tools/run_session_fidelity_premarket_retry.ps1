@@ -203,8 +203,17 @@ try {
     )
     $startedAt = [datetime]::UtcNow.ToString("o")
     Write-Diagnostic "provider.start"
-    $output = & $python @arguments 2>&1
-    $exitCode = $LASTEXITCODE
+    $savedErrorActionPreference = $ErrorActionPreference
+    try {
+        # Native stderr is evidence, not a PowerShell terminating error. Capture
+        # it so the runner's sanitized failure classification reaches the log.
+        $ErrorActionPreference = "Continue"
+        $output = & $python @arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $savedErrorActionPreference
+    }
     [System.IO.File]::AppendAllLines(
         $logPath,
         @(

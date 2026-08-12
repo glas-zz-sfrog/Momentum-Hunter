@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -194,6 +195,20 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_retry_runner_bootstraps_pinned_root_outside_worktree(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        runner = root / "tools" / "run_session_fidelity_premarket_retry.py"
+        with tempfile.TemporaryDirectory() as temporary:
+            result = subprocess.run(
+                [sys.executable, "-B", str(runner), "--help"],
+                cwd=temporary,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Run an Alpaca premarket fidelity retry", result.stdout)
 
     def test_powershell_wrapper_logs_preflight_failure_before_python(self) -> None:
         root = Path(__file__).resolve().parents[1]

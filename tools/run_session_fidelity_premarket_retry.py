@@ -11,6 +11,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
+# Task Scheduler does not guarantee a repository working directory. Pin imports
+# to the feature worktree that owns this runner instead of an installed checkout.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from momentum_hunter.session_fidelity import write_json_once
 from momentum_hunter.session_fidelity_premarket_retry import (
     TASK_ID,
