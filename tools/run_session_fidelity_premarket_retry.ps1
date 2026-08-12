@@ -7,6 +7,7 @@ param(
     [string]$PythonRoot = "C:\Users\steve\OneDrive\Documents\Investing",
     [string]$OutputDirectory = "C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\SESSION-FIDELITY-003-20260812",
     [string]$AlpacaRoot = "C:\Users\steve\AppData\Local\MomentumHunter\worktrees\ARGUS-OVERNIGHT-001-readonly-market-data-probe",
+    [string]$DiagnosticDirectory = "",
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9a-fA-F]{40}$')]
     [string]$ExpectedGitCommit,
@@ -29,19 +30,62 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
-    $ProjectRoot = Split-Path -Parent $PSScriptRoot
+
+if ([string]::IsNullOrWhiteSpace($DiagnosticDirectory)) {
+    $DiagnosticDirectory = [System.IO.Path]::Combine(
+        $env:LOCALAPPDATA,
+        "MomentumHunter",
+        "diagnostics",
+        "SESSION-FIDELITY-003-20260812"
+    )
 }
-$ProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot).Path
-$PythonRoot = (Resolve-Path -LiteralPath $PythonRoot).Path
-$AlpacaRoot = (Resolve-Path -LiteralPath $AlpacaRoot).Path
-$python = Join-Path $PythonRoot ".venv\Scripts\python.exe"
-$retryModule = Join-Path $ProjectRoot "momentum_hunter\session_fidelity_premarket_retry.py"
-$retryRunner = Join-Path $ProjectRoot "tools\run_session_fidelity_premarket_retry.py"
-$adapter = Join-Path $ProjectRoot "tools\run_session_fidelity_alpaca.py"
+$DiagnosticDirectory = [System.IO.Path]::GetFullPath($DiagnosticDirectory)
+[System.IO.Directory]::CreateDirectory($DiagnosticDirectory) | Out-Null
+$diagnosticPath = [System.IO.Path]::Combine(
+    $DiagnosticDirectory,
+    "checkpoint-$($Checkpoint.ToLowerInvariant())-wrapper.log"
+)
+
+function Write-Diagnostic {
+    param([string]$Message)
+    $line = "[$([datetime]::UtcNow.ToString('o'))] $Message$([Environment]::NewLine)"
+    try {
+        [System.IO.File]::AppendAllText($diagnosticPath, $line, [System.Text.UTF8Encoding]::new($false))
+    }
+    catch {
+        # The process exit still communicates failure if even the local fallback is unavailable.
+    }
+}
+
+function Resolve-RequiredDirectory {
+    param([string]$Path, [string]$Label)
+    $resolved = [System.IO.Path]::GetFullPath($Path)
+    if (-not [System.IO.Directory]::Exists($resolved)) {
+        throw "$Label is unavailable."
+    }
+    return $resolved
+}
+
+function Get-Sha256 {
+    param([string]$Path)
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString($sha256.ComputeHash($stream))).Replace("-", "")
+        }
+        finally {
+            $sha256.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
 
 function Assert-CleanCommit {
     param([string]$Root, [string]$Expected, [string]$Label)
+    Write-Diagnostic "preflight.start label=$Label"
     $actual = (& git -C $Root rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0 -or $actual -ne $Expected.ToLowerInvariant()) {
         throw "$Label does not match its frozen Git commit."
@@ -50,74 +94,102 @@ function Assert-CleanCommit {
     if ($LASTEXITCODE -ne 0 -or $dirty) {
         throw "$Label is not clean."
     }
+    Write-Diagnostic "preflight.pass label=$Label"
 }
 
 function Assert-FileHash {
     param([string]$Path, [string]$Expected, [string]$Label)
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    Write-Diagnostic "preflight.start label=$Label"
+    if (-not [System.IO.File]::Exists($Path)) {
         throw "$Label is unavailable."
     }
-    $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    $actual = Get-Sha256 -Path $Path
     if ($actual -ne $Expected.ToUpperInvariant()) {
         throw "$Label does not match its frozen SHA-256."
     }
+    Write-Diagnostic "preflight.pass label=$Label"
 }
 
-Assert-CleanCommit -Root $ProjectRoot -Expected $ExpectedGitCommit -Label "Premarket retry worktree"
-Assert-FileHash -Path $retryModule -Expected $ExpectedRetryModuleSha256 -Label "Premarket retry module"
-Assert-FileHash -Path $retryRunner -Expected $ExpectedRetryRunnerSha256 -Label "Premarket retry runner"
-Assert-FileHash -Path $adapter -Expected $ExpectedAdapterSha256 -Label "Repaired Alpaca adapter"
-Assert-CleanCommit -Root $AlpacaRoot -Expected $ExpectedAlpacaCommit -Label "Frozen Alpaca probe"
-Assert-FileHash -Path (Join-Path $AlpacaRoot "momentum_hunter\alpaca_overnight_probe.py") -Expected $ExpectedAlpacaModuleSha256 -Label "Frozen Alpaca module"
+Write-Diagnostic "wrapper.start taskId=SESSION-FIDELITY-003 checkpoint=$Checkpoint"
+try {
+    if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+        $ProjectRoot = [System.IO.Path]::GetDirectoryName($PSScriptRoot)
+    }
+    $ProjectRoot = Resolve-RequiredDirectory -Path $ProjectRoot -Label "Premarket retry worktree"
+    $PythonRoot = Resolve-RequiredDirectory -Path $PythonRoot -Label "Python root"
+    $AlpacaRoot = Resolve-RequiredDirectory -Path $AlpacaRoot -Label "Frozen Alpaca probe"
+    $python = [System.IO.Path]::Combine($PythonRoot, ".venv", "Scripts", "python.exe")
+    $retryModule = [System.IO.Path]::Combine($ProjectRoot, "momentum_hunter", "session_fidelity_premarket_retry.py")
+    $retryRunner = [System.IO.Path]::Combine($ProjectRoot, "tools", "run_session_fidelity_premarket_retry.py")
+    $adapter = [System.IO.Path]::Combine($ProjectRoot, "tools", "run_session_fidelity_alpaca.py")
 
-if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-    throw "The pinned Python executable is unavailable."
-}
-if (-not (Test-Path -LiteralPath $OutputDirectory -PathType Container)) {
-    New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
-}
-$OutputDirectory = (Resolve-Path -LiteralPath $OutputDirectory).Path
-if ($OutputDirectory.StartsWith($ProjectRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "Premarket retry evidence must remain outside the repository."
-}
+    Assert-CleanCommit -Root $ProjectRoot -Expected $ExpectedGitCommit -Label "Premarket retry worktree"
+    Assert-FileHash -Path $retryModule -Expected $ExpectedRetryModuleSha256 -Label "Premarket retry module"
+    Assert-FileHash -Path $retryRunner -Expected $ExpectedRetryRunnerSha256 -Label "Premarket retry runner"
+    Assert-FileHash -Path $adapter -Expected $ExpectedAdapterSha256 -Label "Repaired Alpaca adapter"
+    Assert-CleanCommit -Root $AlpacaRoot -Expected $ExpectedAlpacaCommit -Label "Frozen Alpaca probe"
+    Assert-FileHash -Path ([System.IO.Path]::Combine($AlpacaRoot, "momentum_hunter", "alpaca_overnight_probe.py")) -Expected $ExpectedAlpacaModuleSha256 -Label "Frozen Alpaca module"
 
-if (-not $Execute) {
-    [ordered]@{
-        mode = "PLAN_ONLY"
-        taskId = "SESSION-FIDELITY-003"
-        checkpoint = $Checkpoint
-        expectedGitCommit = $ExpectedGitCommit.ToLowerInvariant()
-        outputDirectory = $OutputDirectory
-        providerScope = "ALPACA_ONLY"
-        serviceChanged = $false
-        schedulerChanged = $false
-        productionPersistence = $false
-        accountRequested = $false
-        positionsRequested = $false
-        ordersRequested = $false
-        orderTransmission = "UNAVAILABLE"
-    } | ConvertTo-Json
-    exit 0
-}
+    if (-not [System.IO.File]::Exists($python)) {
+        throw "The pinned Python executable is unavailable."
+    }
+    [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetFullPath($OutputDirectory)) | Out-Null
+    $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
+    if ($OutputDirectory.StartsWith($ProjectRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Premarket retry evidence must remain outside the repository."
+    }
 
-$outputPath = Join-Path $OutputDirectory "checkpoint-$($Checkpoint.ToLowerInvariant())-alpaca.json"
-$logPath = Join-Path $OutputDirectory "checkpoint-$($Checkpoint.ToLowerInvariant())-retry.log"
-$arguments = @(
-    "-B", $retryRunner,
-    "--checkpoint", $Checkpoint,
-    "--project-root", $ProjectRoot,
-    "--source-root", $AlpacaRoot,
-    "--output", $outputPath
-)
-$startedAt = [datetime]::UtcNow.ToString("o")
-$output = & $python @arguments 2>&1
-$exitCode = $LASTEXITCODE
-Add-Content -LiteralPath $logPath -Encoding utf8 -Value @(
-    "[$startedAt] taskId=SESSION-FIDELITY-003 checkpoint=$Checkpoint commit=$($ExpectedGitCommit.ToLowerInvariant())",
-    ($output | Out-String).TrimEnd(),
-    "[$([datetime]::UtcNow.ToString('o'))] exitCode=$exitCode"
-)
-$output | Write-Output
-if ($exitCode -ne 0) {
-    throw "The read-only premarket retry failed safely with exit code $exitCode."
+    if (-not $Execute) {
+        Write-Diagnostic "wrapper.complete mode=PLAN_ONLY"
+        [ordered]@{
+            mode = "PLAN_ONLY"
+            taskId = "SESSION-FIDELITY-003"
+            checkpoint = $Checkpoint
+            expectedGitCommit = $ExpectedGitCommit.ToLowerInvariant()
+            outputDirectory = $OutputDirectory
+            providerScope = "ALPACA_ONLY"
+            serviceChanged = $false
+            schedulerChanged = $false
+            productionPersistence = $false
+            accountRequested = $false
+            positionsRequested = $false
+            ordersRequested = $false
+            orderTransmission = "UNAVAILABLE"
+        } | ConvertTo-Json
+        exit 0
+    }
+
+    $outputPath = [System.IO.Path]::Combine($OutputDirectory, "checkpoint-$($Checkpoint.ToLowerInvariant())-alpaca.json")
+    $logPath = [System.IO.Path]::Combine($OutputDirectory, "checkpoint-$($Checkpoint.ToLowerInvariant())-retry.log")
+    $arguments = @(
+        "-B", $retryRunner,
+        "--checkpoint", $Checkpoint,
+        "--project-root", $ProjectRoot,
+        "--source-root", $AlpacaRoot,
+        "--output", $outputPath
+    )
+    $startedAt = [datetime]::UtcNow.ToString("o")
+    Write-Diagnostic "provider.start"
+    $output = & $python @arguments 2>&1
+    $exitCode = $LASTEXITCODE
+    [System.IO.File]::AppendAllLines(
+        $logPath,
+        @(
+            "[$startedAt] taskId=SESSION-FIDELITY-003 checkpoint=$Checkpoint commit=$($ExpectedGitCommit.ToLowerInvariant())",
+            ($output | Out-String).TrimEnd(),
+            "[$([datetime]::UtcNow.ToString('o'))] exitCode=$exitCode"
+        ),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    $output | Write-Output
+    if ($exitCode -ne 0) {
+        throw "The read-only premarket retry failed safely with exit code $exitCode."
+    }
+    Write-Diagnostic "wrapper.complete mode=EXECUTE exitCode=0"
+}
+catch {
+    $safeMessage = $_.Exception.Message -replace '[\r\n]+', ' '
+    Write-Diagnostic "wrapper.failed errorType=$($_.Exception.GetType().Name) message=$safeMessage"
+    Write-Error "Premarket retry failed safely. See local diagnostic log: $diagnosticPath"
+    exit 1
 }

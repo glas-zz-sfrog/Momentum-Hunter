@@ -8,6 +8,7 @@ import unittest
 from contextlib import redirect_stdout
 from datetime import timedelta
 from pathlib import Path
+import subprocess
 
 from momentum_hunter.session_fidelity import fingerprint
 from momentum_hunter.session_fidelity_premarket_retry import (
@@ -186,8 +187,6 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
                 "$ErrorActionPreference='Stop'; "
                 f"[void][scriptblock]::Create((Get-Content -LiteralPath '{path}' -Raw));"
             )
-            import subprocess
-
             result = subprocess.run(
                 ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
                 capture_output=True,
@@ -195,6 +194,57 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_powershell_wrapper_logs_preflight_failure_before_python(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        script = root / "tools" / "run_session_fidelity_premarket_retry.ps1"
+        with tempfile.TemporaryDirectory() as temporary:
+            diagnostic = Path(temporary) / "diagnostics"
+            missing = Path(temporary) / "missing-project"
+            result = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(script),
+                    "-Checkpoint",
+                    "B",
+                    "-ProjectRoot",
+                    str(missing),
+                    "-PythonRoot",
+                    str(root),
+                    "-AlpacaRoot",
+                    str(root),
+                    "-DiagnosticDirectory",
+                    str(diagnostic),
+                    "-ExpectedGitCommit",
+                    "0" * 40,
+                    "-ExpectedRetryModuleSha256",
+                    "0" * 64,
+                    "-ExpectedRetryRunnerSha256",
+                    "0" * 64,
+                    "-ExpectedAdapterSha256",
+                    "0" * 64,
+                    "-ExpectedAlpacaCommit",
+                    "0" * 40,
+                    "-ExpectedAlpacaModuleSha256",
+                    "0" * 64,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            log = diagnostic / "checkpoint-b-wrapper.log"
+            self.assertTrue(log.is_file())
+            content = log.read_text(encoding="utf-8")
+            self.assertIn("wrapper.start", content)
+            self.assertIn("wrapper.failed", content)
+            self.assertIn("Premarket retry worktree is unavailable", content)
+            self.assertNotIn("provider.start", content)
 
 
 if __name__ == "__main__":
