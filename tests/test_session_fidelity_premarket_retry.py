@@ -38,13 +38,14 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
 
     def test_retry_matrix_is_fixed_alpaca_only_and_prospective(self) -> None:
         self.assertEqual(TASK_ID, "SESSION-FIDELITY-003")
-        self.assertEqual(tuple(CHECKPOINTS), ("A", "B", "C"))
+        self.assertEqual(tuple(CHECKPOINTS), ("A", "B", "C", "B2"))
         self.assertEqual(
             tuple(row.target_central.isoformat() for row in CHECKPOINTS.values()),
             (
                 "2026-08-12T03:05:00-05:00",
                 "2026-08-12T05:55:00-05:00",
                 "2026-08-12T06:05:00-05:00",
+                "2026-08-12T06:25:00-05:00",
             ),
         )
         for checkpoint in CHECKPOINTS.values():
@@ -71,6 +72,9 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
         self.assertFalse(context["historicalSchwabEvidenceReused"])
         self.assertFalse(context["strategyAuthorityGranted"])
         self.assertFalse(context["executionAuthorityGranted"])
+        recovery = program_context("B2")
+        self.assertEqual(recovery["sourceCheckpoint"], "B")
+        self.assertEqual(CHECKPOINTS["B2"].label, "PREMARKET_RECOVERY_0725_ET")
 
     def test_existing_exact_retry_is_verified_without_provider_replay(self) -> None:
         checkpoint = CHECKPOINTS["A"]

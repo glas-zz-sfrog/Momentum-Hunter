@@ -19,6 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from momentum_hunter.session_fidelity import write_json_once
 from momentum_hunter.session_fidelity_premarket_retry import (
+    CHECKPOINTS,
     TASK_ID,
     load_existing_retry,
     program_context,
@@ -61,7 +62,7 @@ def run_retry(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run an Alpaca premarket fidelity retry.")
-    parser.add_argument("--checkpoint", choices=("A", "B", "C"), required=True)
+    parser.add_argument("--checkpoint", choices=tuple(CHECKPOINTS), required=True)
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)

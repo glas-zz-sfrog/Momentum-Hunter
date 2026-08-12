@@ -31,7 +31,10 @@ CHECKPOINTS: dict[str, Checkpoint] = {
     "A": Checkpoint("A", "EARLY_PREMARKET_RETRY", _central(3, 5), 300, False, True),
     "B": Checkpoint("B", "PRE_SCHWAB_BOUNDARY_RETRY", _central(5, 55), 300, False, True),
     "C": Checkpoint("C", "SCHWAB_PREMARKET_RETRY", _central(6, 5), 300, False, True),
+    "B2": Checkpoint("B2", "PREMARKET_RECOVERY_0725_ET", _central(6, 25), 300, False, True),
 }
+
+SOURCE_CHECKPOINTS = {"A": "A", "B": "B", "C": "C", "B2": "B"}
 
 
 class PremarketRetryError(RuntimeError):
@@ -64,7 +67,7 @@ def program_context(code: str) -> Mapping[str, object]:
         "schemaVersion": SCHEMA_VERSION,
         "retryTaskId": TASK_ID,
         "sourceTaskId": SOURCE_TASK_ID,
-        "sourceCheckpoint": checkpoint.code,
+        "sourceCheckpoint": SOURCE_CHECKPOINTS[checkpoint.code],
         "sourceAttemptClassification": "FAILED_SAFE_PROVIDER_ADAPTER",
         "sourceEvidenceMutationAuthorized": False,
         "providerScope": "ALPACA_ONLY",
