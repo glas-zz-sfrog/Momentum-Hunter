@@ -278,6 +278,15 @@ def run_capture_with_result(
     provider = provider_from_name(args.provider or config.provider)
     market_regime = detect_market_regime()
     candidates = provider.scan(criteria)
+    scan_diagnostics = getattr(provider, "last_scan_diagnostics", None)
+    if scan_diagnostics is not None:
+        print(
+            "Provider contract: "
+            f"schema={scan_diagnostics.schema_fingerprint} | "
+            f"rows={scan_diagnostics.data_row_count} | "
+            f"parsed={scan_diagnostics.parsed_row_count} | "
+            f"qualifying={scan_diagnostics.qualifying_candidate_count}"
+        )
     for candidate in candidates:
         if not candidate.news:
             candidate.news = provider.fetch_news(candidate.ticker, as_of=capture_time)
@@ -709,7 +718,7 @@ def shadow_error_is_retryable(
             ProviderUnavailableError,
             SchwabMarketDataNetworkError,
         ),
-    )
+    ) and getattr(exc, "reason", "") != "contract_drift"
 
 
 def opening_error_is_retryable(
@@ -727,7 +736,7 @@ def opening_error_is_retryable(
             TimeoutError,
             URLError,
         ),
-    )
+    ) and getattr(exc, "reason", "") != "contract_drift"
 
 
 def parse_args() -> argparse.Namespace:

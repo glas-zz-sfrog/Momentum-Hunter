@@ -6,9 +6,13 @@ import requests
 
 from momentum_hunter.models import BASE_MOMENTUM, INSTITUTIONAL_MOMENTUM
 from momentum_hunter.providers import (
+    FINVIZ_CANONICAL_SCREENER_COLUMNS,
     FINVIZ_CUSTOM_COLUMN_IDS,
     FinvizProvider,
+    ProviderContractError,
     ProviderUnavailableError,
+    canonicalize_finviz_screener_headers,
+    finviz_screener_schema_fingerprint,
     is_dns_failure,
     parse_finviz_snapshot_values,
 )
@@ -103,6 +107,16 @@ class ProviderErrorTests(unittest.TestCase):
         self.assertEqual("SMCI", candidates[0].ticker)
         self.assertEqual(14.34, candidates[0].percent_change)
         self.assertEqual(563_390_000, candidates[0].float_shares)
+        self.assertIsNotNone(provider.last_scan_diagnostics)
+        diagnostics = provider.last_scan_diagnostics
+        assert diagnostics is not None
+        self.assertEqual(1, diagnostics.data_row_count)
+        self.assertEqual(1, diagnostics.parsed_row_count)
+        self.assertEqual(1, diagnostics.qualifying_candidate_count)
+        self.assertEqual(
+            FINVIZ_CANONICAL_SCREENER_COLUMNS,
+            diagnostics.canonical_headers,
+        )
 
     def test_finviz_scan_rejects_missing_required_change_column(self) -> None:
         provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
@@ -121,8 +135,8 @@ class ProviderErrorTests(unittest.TestCase):
         provider.session.get = lambda _url, **_kwargs: FakeResponse()
 
         with self.assertRaisesRegex(
-            RuntimeError,
-            "Finviz screener required columns were not found: Change",
+            ProviderContractError,
+            "Finviz screener schema drift detected: missing=.*Change %",
         ):
             provider.scan(INSTITUTIONAL_MOMENTUM)
 
@@ -142,8 +156,13 @@ class ProviderErrorTests(unittest.TestCase):
         provider.session.get = lambda _url, **_kwargs: FakeResponse()
 
         self.assertEqual([], provider.scan(INSTITUTIONAL_MOMENTUM))
+        diagnostics = provider.last_scan_diagnostics
+        assert diagnostics is not None
+        self.assertEqual(0, diagnostics.data_row_count)
+        self.assertEqual(0, diagnostics.parsed_row_count)
+        self.assertEqual(0, diagnostics.qualifying_candidate_count)
 
-    def test_finviz_scan_keeps_candidate_when_optional_custom_fields_are_absent(self) -> None:
+    def test_finviz_scan_rejects_missing_requested_custom_fields(self) -> None:
         provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
 
         class FakeResponse:
@@ -164,13 +183,105 @@ class ProviderErrorTests(unittest.TestCase):
 
         provider.session.get = fake_get
 
-        candidates = provider.scan(BASE_MOMENTUM)
+        with self.assertRaisesRegex(
+            ProviderContractError,
+            "missing=Float,ATR,Rel Volume",
+        ):
+            provider.scan(BASE_MOMENTUM)
 
-        self.assertEqual(1, len(candidates))
-        self.assertEqual("CRWV", candidates[0].ticker)
-        self.assertEqual(0.0, candidates[0].relative_volume)
-        self.assertIsNone(candidates[0].float_shares)
-        self.assertIsNone(candidates[0].atr)
+    def test_finviz_schema_fingerprint_normalizes_known_aliases(self) -> None:
+        legacy = [
+            "No.", "Ticker", "Company", "Sector", "Industry", "Market Cap",
+            "Shs Float", "ATR", "Rel Volume", "Volume", "Price", "Change",
+        ]
+        current = [
+            "No.", "Ticker", "Company", "Sector", "Industry", "Market Cap",
+            "Float", "ATR", "Rel Volume", "Volume", "Price", "Change %",
+        ]
+
+        self.assertEqual(
+            FINVIZ_CANONICAL_SCREENER_COLUMNS,
+            canonicalize_finviz_screener_headers(legacy),
+        )
+        self.assertEqual(
+            finviz_screener_schema_fingerprint(legacy),
+            finviz_screener_schema_fingerprint(current),
+        )
+
+    def test_finviz_scan_rejects_reordered_schema(self) -> None:
+        provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
+
+        class FakeResponse:
+            text = """
+                <table class="screener_table">
+                    <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Market Cap</td><td>Float</td><td>ATR</td><td>Rel Volume</td><td>Price</td><td>Volume</td><td>Change %</td></tr>
+                </table>
+            """
+
+            def raise_for_status(self) -> None:
+                return None
+
+        provider.session.get = lambda _url, **_kwargs: FakeResponse()
+
+        with self.assertRaisesRegex(ProviderContractError, "column-order-changed"):
+            provider.scan(INSTITUTIONAL_MOMENTUM)
+
+    def test_finviz_scan_rejects_row_width_drift(self) -> None:
+        provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
+
+        class FakeResponse:
+            text = """
+                <table class="screener_table">
+                    <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Market Cap</td><td>Float</td><td>ATR</td><td>Rel Volume</td><td>Volume</td><td>Price</td><td>Change %</td></tr>
+                    <tr><td>1</td><td>NVDA</td><td>NVIDIA</td></tr>
+                </table>
+            """
+
+            def raise_for_status(self) -> None:
+                return None
+
+        provider.session.get = lambda _url, **_kwargs: FakeResponse()
+
+        with self.assertRaisesRegex(ProviderContractError, "row shape changed"):
+            provider.scan(INSTITUTIONAL_MOMENTUM)
+
+    def test_finviz_scan_rejects_malformed_required_numeric_value(self) -> None:
+        provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
+
+        class FakeResponse:
+            text = """
+                <table class="screener_table">
+                    <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Market Cap</td><td>Float</td><td>ATR</td><td>Rel Volume</td><td>Volume</td><td>Price</td><td>Change %</td></tr>
+                    <tr><td>1</td><td>NVDA</td><td>NVIDIA</td><td>Technology</td><td>Semiconductors</td><td>4.4T</td><td>24.1B</td><td>5.2</td><td>2.1</td><td>not-a-number</td><td>182.00</td><td>4.2%</td></tr>
+                </table>
+            """
+
+            def raise_for_status(self) -> None:
+                return None
+
+        provider.session.get = lambda _url, **_kwargs: FakeResponse()
+
+        with self.assertRaisesRegex(ProviderContractError, "invalid Volume"):
+            provider.scan(INSTITUTIONAL_MOMENTUM)
+
+    def test_finviz_scan_rejects_malformed_rvol_instead_of_defaulting_to_zero(self) -> None:
+        provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
+
+        class FakeResponse:
+            text = """
+                <table class="screener_table">
+                    <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Market Cap</td><td>Float</td><td>ATR</td><td>Rel Volume</td><td>Volume</td><td>Price</td><td>Change %</td></tr>
+                    <tr><td>1</td><td>NVDA</td><td>NVIDIA</td><td>Technology</td><td>Semiconductors</td><td>4.4T</td><td>24.1B</td><td>5.2</td><td>renamed-value</td><td>42,000,000</td><td>182.00</td><td>4.2%</td></tr>
+                </table>
+            """
+
+            def raise_for_status(self) -> None:
+                return None
+
+        provider.session.get = lambda _url, **_kwargs: FakeResponse()
+
+        with self.assertRaisesRegex(ProviderContractError, "invalid Rel Volume"):
+            provider.scan(INSTITUTIONAL_MOMENTUM)
 
     def test_finviz_quote_page_failure_does_not_repeat_screener_backoff(self) -> None:
         sleeps: list[int] = []

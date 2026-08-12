@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MomentumHunter.Application;
 using MomentumHunter.Contracts;
 
@@ -97,6 +98,7 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
     {
         PropertyNameCaseInsensitive = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
 
     private readonly PythonEngineHostOptions _options;
@@ -431,8 +433,18 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         }
 
         await using var stream = File.OpenRead(endpointPath);
-        var endpoint = await JsonSerializer.DeserializeAsync<PythonEngineHostEndpoint>(stream, SerializerOptions, cancellationToken);
-        if (endpoint is null || endpoint.ProtocolVersion != PythonEngineHostProtocol.Version || endpoint.Address != "127.0.0.1")
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        PythonEngineHostWireContract.ValidateEndpoint(document.RootElement);
+        var endpoint = document.RootElement.Deserialize<PythonEngineHostEndpoint>(SerializerOptions);
+        if (endpoint is null
+            || endpoint.SchemaVersion != 1
+            || endpoint.ProtocolVersion != PythonEngineHostProtocol.Version
+            || string.IsNullOrWhiteSpace(endpoint.HostInstanceId)
+            || endpoint.ProcessId <= 0
+            || endpoint.StartedAtUtc == default
+            || string.IsNullOrWhiteSpace(endpoint.RuntimeBuildHash)
+            || endpoint.SelectorArmSchemaVersion <= 0
+            || endpoint.Address != "127.0.0.1")
         {
             throw new InvalidOperationException("The Python Engine Host endpoint descriptor is invalid or is not loopback-only.");
         }
@@ -474,9 +486,24 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
             throw new IOException("The Python Engine Host returned no response.");
         }
 
-        var response = JsonSerializer.Deserialize<PythonEngineHostResponse>(responseLine, SerializerOptions)
+        using var responseDocument = JsonDocument.Parse(responseLine);
+        PythonEngineHostWireContract.ValidateResponse(responseDocument.RootElement);
+        var response = responseDocument.RootElement.Deserialize<PythonEngineHostResponse>(SerializerOptions)
             ?? throw new JsonException("The Python Engine Host response was empty.");
-        if (response.ProtocolVersion != PythonEngineHostProtocol.Version || response.RequestId != requestId || response.Result?.Snapshot is null)
+        if (response.ProtocolVersion != PythonEngineHostProtocol.Version
+            || response.RequestId != requestId
+            || response.Result?.Snapshot is null
+            || string.IsNullOrWhiteSpace(response.Result.Code)
+            || string.IsNullOrWhiteSpace(response.Result.Summary)
+            || response.Result.Snapshot.SchemaVersion != 1
+            || response.Result.Snapshot.Identity is null
+            || response.Result.Snapshot.Health is null
+            || response.Result.Snapshot.Collection is null
+            || response.Result.Snapshot.Capabilities is null
+            || response.Result.Snapshot.ActivePositionMarking is null
+            || string.IsNullOrWhiteSpace(
+                response.Result.Snapshot.Identity.RuntimeBuildHash)
+            || response.Result.Snapshot.Identity.SelectorArmSchemaVersion <= 0)
         {
             throw new JsonException("The Python Engine Host response did not satisfy the versioned contract.");
         }
@@ -497,7 +524,9 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         DateTimeOffset StartedAtUtc,
         string Address,
         int Port,
-        string AccessToken);
+        string AccessToken,
+        string RuntimeBuildHash,
+        int SelectorArmSchemaVersion);
 
     private sealed record PythonEngineHostRequest(
         string ProtocolVersion,
@@ -511,6 +540,7 @@ public sealed class PythonEngineHostConnection : IPythonEngineHostConnection
         string ProtocolVersion,
         string RequestId,
         bool Accepted,
+        JsonElement? Error,
         PythonEngineHostResult? Result);
 
     private sealed record PythonEngineHostResult(

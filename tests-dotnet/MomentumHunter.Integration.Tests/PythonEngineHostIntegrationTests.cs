@@ -164,7 +164,9 @@ public sealed class PythonEngineHostIntegrationTests
             var shutdown = await firstConnection.SendCommandAsync(PythonEngineHostProtocol.ShutdownHost, "shutdown-once");
             Assert.True(shutdown.Accepted);
             Assert.Equal("SHUTDOWN_REQUESTED", shutdown.Code);
-            await WaitUntilAsync(() => !File.Exists(Path.Combine(stateDirectory, "python-engine-endpoint.json")));
+            await WaitUntilAsync(() =>
+                !File.Exists(Path.Combine(stateDirectory, "python-engine-endpoint.json"))
+                && !File.Exists(Path.Combine(stateDirectory, "python-engine-host.lock")));
             Assert.False(File.Exists(Path.Combine(stateDirectory, "python-engine-host.lock")));
         }
         finally

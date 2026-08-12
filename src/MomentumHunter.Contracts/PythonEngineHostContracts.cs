@@ -27,7 +27,9 @@ public sealed record PythonEngineHostIdentity(
     string HostInstanceId,
     int ProcessId,
     DateTimeOffset StartedAtUtc,
-    string Transport);
+    string Transport,
+    string RuntimeBuildHash = "",
+    int SelectorArmSchemaVersion = 0);
 
 public sealed record PythonEngineHostHealthSnapshot(
     string State,
@@ -44,12 +46,23 @@ public sealed record PythonEngineCollectionSnapshot(
     DateTimeOffset? NextScheduledCycleAtUtc,
     string Detail);
 
+public sealed record PythonEngineActivePositionMarkingSnapshot(
+    string State,
+    decimal CadenceSeconds,
+    int CycleCount,
+    int ProviderRequestCount,
+    DateTimeOffset? LastCompletedAtUtc,
+    string Detail,
+    string Transport,
+    string OrderTransmission);
+
 public sealed record PythonEngineHostSnapshot(
     int SchemaVersion,
     PythonEngineHostIdentity Identity,
     PythonEngineHostHealthSnapshot Health,
     PythonEngineCollectionSnapshot Collection,
-    IReadOnlyList<string> Capabilities);
+    IReadOnlyList<string> Capabilities,
+    PythonEngineActivePositionMarkingSnapshot? ActivePositionMarking = null);
 
 public sealed record PythonEngineHostCommandResult(
     bool Accepted,

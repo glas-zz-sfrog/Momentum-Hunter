@@ -14,12 +14,30 @@ from unittest.mock import Mock, patch
 from momentum_hunter.config import AppConfig
 from momentum_hunter.market import MarketRegimeSnapshot
 from momentum_hunter.models import CaptureSession, MarketRegime, TradingMode
+from momentum_hunter.providers import ProviderContractError
 from momentum_hunter.scheduling import SkipReason
 from momentum_hunter.storage import file_sha256
 from tools import capture_job
 
 
 class CaptureJobTradePlanHandoffTests(unittest.TestCase):
+    def test_provider_contract_drift_is_not_retried_as_infrastructure(self) -> None:
+        error = ProviderContractError("Finviz screener schema drift detected.")
+
+        self.assertFalse(
+            capture_job.opening_error_is_retryable(
+                error,
+                session=CaptureSession.OPENING,
+            )
+        )
+        self.assertFalse(
+            capture_job.shadow_error_is_retryable(
+                error,
+                session=CaptureSession.SHADOW,
+                trigger_shadow_selector=True,
+            )
+        )
+
     def test_opening_https_clock_preflight_accepts_bounded_exact_host_time(
         self,
     ) -> None:
@@ -1078,6 +1096,23 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
                 capture_job,
                 "save_capture_failure",
                 return_value=self.root / "policy-failure.json",
+            ),
+        ):
+            self.assertEqual(1, capture_job.main())
+
+        with (
+            patch.object(capture_job, "parse_args", return_value=args),
+            patch.object(
+                capture_job,
+                "run_capture_with_result",
+                side_effect=ProviderContractError(
+                    "Finviz screener schema drift detected."
+                ),
+            ),
+            patch.object(
+                capture_job,
+                "save_capture_failure",
+                return_value=self.root / "contract-drift-failure.json",
             ),
         ):
             self.assertEqual(1, capture_job.main())

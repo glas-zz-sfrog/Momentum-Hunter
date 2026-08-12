@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 import re
 import socket
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Iterable
 
@@ -16,12 +20,25 @@ from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 FINVIZ_BACKOFF_SECONDS = (10, 30, 60)
 FINVIZ_QUOTE_BACKOFF_SECONDS: tuple[int, ...] = ()
 FINVIZ_CUSTOM_COLUMN_IDS = (0, 1, 2, 3, 4, 6, 25, 49, 64, 67, 65, 66)
-FINVIZ_REQUIRED_SCREENER_COLUMNS = {
-    "Ticker": ("Ticker",),
-    "Market Cap": ("Market Cap",),
-    "Volume": ("Volume",),
-    "Price": ("Price",),
-    "Change": ("Change", "Change %"),
+FINVIZ_CANONICAL_SCREENER_COLUMNS = (
+    "No.",
+    "Ticker",
+    "Company",
+    "Sector",
+    "Industry",
+    "Market Cap",
+    "Float",
+    "ATR",
+    "Rel Volume",
+    "Volume",
+    "Price",
+    "Change %",
+)
+FINVIZ_SCREENER_COLUMN_ALIASES = {
+    "Change": "Change %",
+    "Change %": "Change %",
+    "Shs Float": "Float",
+    "Float": "Float",
 }
 
 
@@ -31,6 +48,26 @@ class ProviderUnavailableError(RuntimeError):
         self.provider = provider
         self.reason = reason
         self.user_message = message
+
+
+class ProviderContractError(ProviderUnavailableError):
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            provider="finviz",
+            message=message,
+            reason="contract_drift",
+        )
+
+
+@dataclass(frozen=True)
+class ProviderScanDiagnostics:
+    provider: str
+    schema_fingerprint: str
+    observed_headers: tuple[str, ...]
+    canonical_headers: tuple[str, ...]
+    data_row_count: int
+    parsed_row_count: int
+    qualifying_candidate_count: int
 
 
 class MarketDataProvider(ABC):
@@ -157,6 +194,7 @@ class FinvizProvider(MarketDataProvider):
         self.backoff_seconds = backoff_seconds
         self.quote_backoff_seconds = quote_backoff_seconds
         self._quote_html_cache: dict[str, str] = {}
+        self.last_scan_diagnostics: ProviderScanDiagnostics | None = None
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -170,6 +208,7 @@ class FinvizProvider(MarketDataProvider):
     def scan(self, criteria: ScannerCriteria) -> list[Candidate]:
         from bs4 import BeautifulSoup
 
+        self.last_scan_diagnostics = None
         url = self._screener_url(criteria)
         response = self._get_with_retries(url, action="scan")
         soup = BeautifulSoup(response.text, "lxml")
@@ -179,38 +218,88 @@ class FinvizProvider(MarketDataProvider):
 
         rows = table.find_all("tr")
         if not rows:
-            return []
+            raise ProviderContractError(
+                "Finviz screener schema drift detected: the table has no header row."
+            )
         headers = finviz_screener_headers(rows[0])
-        validate_finviz_screener_headers(headers)
+        canonical_headers = validate_finviz_screener_headers(headers)
+        schema_fingerprint = finviz_screener_schema_fingerprint(canonical_headers)
+        data_rows = [row for row in rows[1:] if row.find_all(["th", "td"])]
         candidates: list[Candidate] = []
-        for row in rows[1:]:
-            values = finviz_screener_row(row, headers)
-            if not values.get("Ticker"):
-                continue
+        for row_number, row in enumerate(data_rows, start=1):
+            values = finviz_screener_row(row, headers, row_number=row_number)
+            ticker = required_finviz_text(values, "Ticker", row_number=row_number)
             candidates.append(
                 Candidate(
-                    ticker=values.get("Ticker", ""),
-                    company=values.get("Company", ""),
-                    sector=values.get("Sector", ""),
-                    industry=values.get("Industry", ""),
-                    market_cap=parse_market_cap(values.get("Market Cap", "")),
-                    price=parse_float(values.get("Price", "")),
-                    percent_change=parse_percent(
-                        finviz_screener_value(values, "Change", "Change %")
+                    ticker=ticker,
+                    company=required_finviz_text(
+                        values,
+                        "Company",
+                        row_number=row_number,
                     ),
-                    volume=parse_int(values.get("Volume", "")),
-                    relative_volume=parse_float(values.get("Rel Volume", "")),
+                    sector=required_finviz_text(
+                        values,
+                        "Sector",
+                        row_number=row_number,
+                    ),
+                    industry=required_finviz_text(
+                        values,
+                        "Industry",
+                        row_number=row_number,
+                    ),
+                    market_cap=parse_required_market_cap(
+                        values.get("Market Cap", ""),
+                        field="Market Cap",
+                        row_number=row_number,
+                    ),
+                    price=parse_required_finviz_float(
+                        values.get("Price", ""),
+                        field="Price",
+                        row_number=row_number,
+                        positive=True,
+                    ),
+                    percent_change=parse_required_finviz_float(
+                        finviz_screener_value(values, "Change", "Change %").replace("%", ""),
+                        field="Change %",
+                        row_number=row_number,
+                    ),
+                    volume=parse_required_finviz_int(
+                        values.get("Volume", ""),
+                        field="Volume",
+                        row_number=row_number,
+                        positive=True,
+                    ),
+                    relative_volume=parse_optional_finviz_float(
+                        values.get("Rel Volume", ""),
+                        field="Rel Volume",
+                        row_number=row_number,
+                    ) or 0.0,
                     float_shares=(
-                        parse_market_cap(
-                            finviz_screener_value(values, "Shs Float", "Float")
+                        parse_optional_finviz_market_cap(
+                            finviz_screener_value(values, "Shs Float", "Float"),
+                            field="Float",
+                            row_number=row_number,
                         )
-                        or None
                     ),
-                    atr=parse_float(values.get("ATR", "")) or None,
+                    atr=parse_optional_finviz_float(
+                        values.get("ATR", ""),
+                        field="ATR",
+                        row_number=row_number,
+                    ),
                 )
             )
 
-        return filter_candidates(candidates, criteria)
+        qualifying = filter_candidates(candidates, criteria)
+        self.last_scan_diagnostics = ProviderScanDiagnostics(
+            provider=self.name,
+            schema_fingerprint=schema_fingerprint,
+            observed_headers=tuple(headers),
+            canonical_headers=canonical_headers,
+            data_row_count=len(data_rows),
+            parsed_row_count=len(candidates),
+            qualifying_candidate_count=len(qualifying),
+        )
+        return qualifying
 
     def fetch_news(self, ticker: str, as_of: datetime | None = None) -> list[NewsItem]:
         from bs4 import BeautifulSoup
@@ -304,10 +393,19 @@ def finviz_screener_headers(row: object) -> list[str]:
     return [cell.get_text(" ", strip=True) for cell in cells]
 
 
-def finviz_screener_row(row: object, headers: list[str]) -> dict[str, str]:
+def finviz_screener_row(
+    row: object,
+    headers: list[str],
+    *,
+    row_number: int = 0,
+) -> dict[str, str]:
     cells = row.find_all("td")
     if len(cells) != len(headers):
-        return {}
+        raise ProviderContractError(
+            "Finviz screener row shape changed: "
+            f"row {row_number or 'unknown'} has {len(cells)} cells; "
+            f"the schema has {len(headers)} columns."
+        )
     values: dict[str, str] = {}
     for header, cell in zip(headers, cells):
         value = cell.get_text(" ", strip=True)
@@ -325,18 +423,165 @@ def finviz_screener_value(values: dict[str, str], *names: str) -> str:
     return ""
 
 
-def validate_finviz_screener_headers(headers: list[str]) -> None:
-    observed = set(headers)
-    missing = [
-        label
-        for label, aliases in FINVIZ_REQUIRED_SCREENER_COLUMNS.items()
-        if not any(alias in observed for alias in aliases)
-    ]
-    if missing:
-        raise RuntimeError(
-            "Finviz screener required columns were not found: "
-            f"{', '.join(missing)}. Observed columns: {', '.join(headers)}."
+def canonicalize_finviz_screener_headers(headers: Iterable[str]) -> tuple[str, ...]:
+    return tuple(
+        FINVIZ_SCREENER_COLUMN_ALIASES.get(header.strip(), header.strip())
+        for header in headers
+    )
+
+
+def finviz_screener_schema_fingerprint(headers: Iterable[str]) -> str:
+    canonical = canonicalize_finviz_screener_headers(headers)
+    serialized = json.dumps(canonical, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def validate_finviz_screener_headers(headers: list[str]) -> tuple[str, ...]:
+    canonical = canonicalize_finviz_screener_headers(headers)
+    if canonical != FINVIZ_CANONICAL_SCREENER_COLUMNS:
+        missing = [
+            name for name in FINVIZ_CANONICAL_SCREENER_COLUMNS if name not in canonical
+        ]
+        unexpected = [
+            name for name in canonical if name not in FINVIZ_CANONICAL_SCREENER_COLUMNS
+        ]
+        detail = []
+        if missing:
+            detail.append(f"missing={','.join(missing)}")
+        if unexpected:
+            detail.append(f"unexpected={','.join(unexpected)}")
+        if not missing and not unexpected:
+            detail.append("column-order-changed")
+        raise ProviderContractError(
+            "Finviz screener schema drift detected: "
+            f"{'; '.join(detail)}. Observed columns: {', '.join(headers)}."
         )
+    if len(set(canonical)) != len(canonical):
+        raise ProviderContractError(
+            "Finviz screener schema drift detected: duplicate canonical columns."
+        )
+    return canonical
+
+
+def required_finviz_text(
+    values: dict[str, str],
+    field: str,
+    *,
+    row_number: int,
+) -> str:
+    value = values.get(field, "").strip()
+    if not value:
+        raise ProviderContractError(
+            f"Finviz screener row {row_number} is missing required field {field}."
+        )
+    return value
+
+
+def parse_required_finviz_float(
+    value: str,
+    *,
+    field: str,
+    row_number: int,
+    positive: bool = False,
+) -> float:
+    normalized = value.strip().replace(",", "")
+    try:
+        parsed = float(normalized)
+    except ValueError as exc:
+        raise ProviderContractError(
+            f"Finviz screener row {row_number} has invalid {field}."
+        ) from exc
+    if not math.isfinite(parsed) or (positive and parsed <= 0):
+        raise ProviderContractError(
+            f"Finviz screener row {row_number} has invalid {field}."
+        )
+    return parsed
+
+
+def parse_required_finviz_int(
+    value: str,
+    *,
+    field: str,
+    row_number: int,
+    positive: bool = False,
+) -> int:
+    parsed = parse_required_finviz_float(
+        value,
+        field=field,
+        row_number=row_number,
+        positive=positive,
+    )
+    if not parsed.is_integer():
+        raise ProviderContractError(
+            f"Finviz screener row {row_number} has invalid {field}."
+        )
+    return int(parsed)
+
+
+def parse_required_market_cap(
+    value: str,
+    *,
+    field: str,
+    row_number: int,
+) -> int:
+    parsed = parse_optional_finviz_market_cap(
+        value,
+        field=field,
+        row_number=row_number,
+    )
+    if parsed is None or parsed <= 0:
+        raise ProviderContractError(
+            f"Finviz screener row {row_number} has invalid {field}."
+        )
+    return parsed
+
+
+def parse_optional_finviz_float(
+    value: str,
+    *,
+    field: str,
+    row_number: int,
+) -> float | None:
+    normalized = value.strip()
+    if normalized in {"", "-", "N/A"}:
+        return None
+    parsed = parse_required_finviz_float(
+        normalized,
+        field=field,
+        row_number=row_number,
+    )
+    if parsed < 0:
+        raise ProviderContractError(
+            f"Finviz screener row {row_number} has invalid {field}."
+        )
+    return parsed
+
+
+def parse_optional_finviz_market_cap(
+    value: str,
+    *,
+    field: str,
+    row_number: int,
+) -> int | None:
+    normalized = value.strip().replace(",", "").upper()
+    if normalized in {"", "-", "N/A"}:
+        return None
+    match = re.fullmatch(r"([\d.]+)([MBT])", normalized)
+    if not match:
+        raise ProviderContractError(
+            f"Finviz screener row {row_number} has invalid {field}."
+        )
+    number = float(match.group(1))
+    if not math.isfinite(number) or number <= 0:
+        raise ProviderContractError(
+            f"Finviz screener row {row_number} has invalid {field}."
+        )
+    multiplier = {
+        "M": 1_000_000,
+        "B": 1_000_000_000,
+        "T": 1_000_000_000_000,
+    }[match.group(2)]
+    return int(number * multiplier)
 
 
 def provider_from_name(name: str) -> MarketDataProvider:
