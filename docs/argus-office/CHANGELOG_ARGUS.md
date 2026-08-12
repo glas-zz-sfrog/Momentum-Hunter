@@ -1,5 +1,18 @@
 # Argus Changelog
 
+- Corrected DATA-007's overstated causal label without rewriting its original
+  write-once evidence. The superseding schema-v2 record separates invalid
+  decision state, system data-contract failure, and provider-schema-drift root
+  cause; Aug. 7/10/11 are inferred and Aug. 12 strongly corroborated, with no
+  exact-run cause reported as confirmed.
+- Preserved Paper v1's closed/excluded status, Paper v2's active prospective
+  state, every historical source hash, and the absence of retrospective trades.
+  The prospective rollover utility now describes future closures by the
+  observed system data-contract failure rather than an unproven provider cause.
+- Passed compileall, 216 affected regressions, and complete 1,910-test Python
+  coverage split into bounded runs after monolithic discovery exceeded its
+  five- and fifteen-minute wrappers without reporting a test failure.
+
 - Reconciled the exact SESSION-FIDELITY-001 through 003 read-only observer,
   retry, runner, installer, and test stack from source head `799f07b` onto
   current base `a46d31b`. Eleven restored source artifacts match byte-for-byte;

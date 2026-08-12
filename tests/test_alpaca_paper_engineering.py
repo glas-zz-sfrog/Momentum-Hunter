@@ -537,7 +537,7 @@ class AlpacaPaperEngineeringTests(unittest.TestCase):
         )
         closure = json.loads((archived / "sample-closure.json").read_text())
         self.assertEqual(
-            "CLOSED_INVALIDATED_PROVIDER_CONTRACT_DRIFT",
+            "CLOSED_INVALIDATED_SYSTEM_DATA_CONTRACT_FAILURE",
             closure["classification"],
         )
         self.assertIn("policy.json", {item["path"] for item in closure["sourceFiles"]})

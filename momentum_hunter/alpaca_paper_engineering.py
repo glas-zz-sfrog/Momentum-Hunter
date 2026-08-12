@@ -398,7 +398,7 @@ def rollover_invalidated_paper_engineering_sample(
     ]
     closure = {
         "schemaVersion": PAPER_ENGINEERING_SCHEMA_VERSION,
-        "classification": "CLOSED_INVALIDATED_PROVIDER_CONTRACT_DRIFT",
+        "classification": "CLOSED_INVALIDATED_SYSTEM_DATA_CONTRACT_FAILURE",
         "sampleId": expected_sample_id,
         "closedAt": closure_time.isoformat(),
         "decisionState": "DECISION_NOT_REACHED",

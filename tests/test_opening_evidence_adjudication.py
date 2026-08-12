@@ -8,8 +8,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from momentum_hunter.opening_evidence_adjudication import (
+    DECISION_INVALID,
     DECISION_NOT_REACHED,
     RAW_COUNTS_NOT_PRESERVED,
+    ROOT_CAUSE_INFERRED,
+    ROOT_CAUSE_STRONGLY_CORROBORATED,
     SYSTEM_DATA_CONTRACT_FAILURE,
     OpeningEvidenceAdjudicationError,
     OpeningEvidenceCase,
@@ -79,12 +82,17 @@ class OpeningEvidenceAdjudicationTests(unittest.TestCase):
         )
 
         self.assertEqual(SYSTEM_DATA_CONTRACT_FAILURE, result["classification"])
+        self.assertEqual(DECISION_INVALID, result["decisionValidity"])
+        self.assertEqual(SYSTEM_DATA_CONTRACT_FAILURE, result["failureClass"])
         self.assertEqual(DECISION_NOT_REACHED, result["decisionState"])
+        self.assertNotIn("failure", result)
         self.assertEqual(RAW_COUNTS_NOT_PRESERVED, result["rawCountStatus"])
         case = result["cases"][0]
         self.assertIsNone(case["rawProviderRows"])
         self.assertIsNone(case["parsedRows"])
         self.assertFalse(case["qualifiedRowsAuthoritative"])
+        self.assertEqual(ROOT_CAUSE_INFERRED, case["rootCauseStatus"])
+        self.assertFalse(case["rootCauseConfirmed"])
         self.assertFalse(case["paperDecisions"][0]["countsTowardAnySample"])
         self.assertFalse(result["historicalArtifactsMutated"])
 
@@ -131,6 +139,97 @@ class OpeningEvidenceAdjudicationTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(OpeningEvidenceAdjudicationError, "not zero-candidate"):
             adjudicate_opening_evidence([self.case()], repository_root=self.root)
+
+    @patch(
+        "momentum_hunter.opening_evidence_adjudication._git_file",
+        return_value='percent_change=parse_percent(values.get("Change", ""))',
+    )
+    def test_strong_corroboration_is_not_reported_as_confirmed(self, _git_file) -> None:
+        case = OpeningEvidenceCase(
+            **{
+                **self.case().__dict__,
+                "root_cause_status": ROOT_CAUSE_STRONGLY_CORROBORATED,
+            }
+        )
+        result = adjudicate_opening_evidence([case], repository_root=self.root)
+
+        observed = result["cases"][0]
+        self.assertEqual(ROOT_CAUSE_STRONGLY_CORROBORATED, observed["rootCauseStatus"])
+        self.assertFalse(observed["rootCauseConfirmed"])
+        self.assertIn("SAME_DAY_NONPERSISTING_AB_PROOF", observed["rootCauseEvidence"])
+
+    @patch(
+        "momentum_hunter.opening_evidence_adjudication._git_file",
+        return_value='percent_change=parse_percent(values.get("Change", ""))',
+    )
+    def test_superseding_adjudication_must_bind_identical_sources(self, _git_file) -> None:
+        original = adjudicate_opening_evidence([self.case()], repository_root=self.root)
+        original["schemaVersion"] = 1
+        original["failure"] = "PROVIDER_SCHEMA_DRIFT"
+        for key in (
+            "decisionValidity",
+            "failureClass",
+            "rootCauseCandidate",
+            "rootCauseConfirmed",
+        ):
+            original.pop(key)
+        for case in original["cases"]:
+            case["failure"] = "PROVIDER_SCHEMA_DRIFT"
+            for key in (
+                "decisionValidity",
+                "failureClass",
+                "rootCauseCandidate",
+                "rootCauseStatus",
+                "rootCauseConfirmed",
+                "rootCauseEvidence",
+            ):
+                case.pop(key)
+        original["fingerprint"] = evidence_fingerprint(
+            {key: value for key, value in original.items() if key != "fingerprint"}
+        )
+        original_path = self.root / "original.json"
+        original_path.write_text(json.dumps(original), encoding="utf-8")
+
+        corrected = adjudicate_opening_evidence(
+            [self.case()],
+            repository_root=self.root,
+            superseded_adjudication_path=original_path,
+        )
+        self.assertEqual(
+            original["fingerprint"],
+            corrected["supersedes"]["fingerprint"],
+        )
+        self.assertEqual(
+            "ROOT_CAUSE_CERTAINTY_OVERSTATED",
+            corrected["supersedes"]["reason"],
+        )
+
+        tampered = json.loads(original_path.read_text())
+        tampered["cases"][0]["capture"]["sha256"] = "A" * 64
+        tampered["fingerprint"] = evidence_fingerprint(
+            {key: value for key, value in tampered.items() if key != "fingerprint"}
+        )
+        original_path.write_text(json.dumps(tampered), encoding="utf-8")
+        with self.assertRaisesRegex(OpeningEvidenceAdjudicationError, "same source"):
+            adjudicate_opening_evidence(
+                [self.case()],
+                repository_root=self.root,
+                superseded_adjudication_path=original_path,
+            )
+
+    @patch(
+        "momentum_hunter.opening_evidence_adjudication._git_file",
+        return_value='percent_change=parse_percent(values.get("Change", ""))',
+    )
+    def test_unknown_root_cause_status_fails_closed(self, _git_file) -> None:
+        case = OpeningEvidenceCase(
+            **{
+                **self.case().__dict__,
+                "root_cause_status": "PROVIDER_SCHEMA_DRIFT_CONFIRMED",
+            }
+        )
+        with self.assertRaisesRegex(OpeningEvidenceAdjudicationError, "not supported"):
+            adjudicate_opening_evidence([case], repository_root=self.root)
 
 
 if __name__ == "__main__":

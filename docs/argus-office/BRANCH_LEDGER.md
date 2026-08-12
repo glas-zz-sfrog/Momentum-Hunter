@@ -1,5 +1,23 @@
 # Branch Ledger
 
+## ARGUS-DATA-007A Causal-Certainty Correction
+
+`codex/ARGUS-DATA-007A-causal-certainty-correction` is a bounded correction
+from synchronized base `2493b85`. It preserves original DATA-007 fingerprint
+`EDE1872069F4509383DD747A2006D9CB209876A53669371D465ED518BE72FBCE`
+and adds a write-once superseding record with fingerprint
+`FCA70F321855FD3AC538779EB8E4AB85B49A64B179232B96753B99A1C35D9450`.
+The operational classification and Paper-sample disposition are unchanged;
+only unsupported root-cause certainty is corrected. Compileall and all 1,910
+Python tests pass. No provider, account, order, service, scheduler, Shadow,
+installed runtime, production data, or UI state changed.
+
+After clean fast-forward integration and non-force backup this branch resolves
+to `MERGED_TO_LOCAL_MASTER / PUSHED_FEATURE_BRANCH` without another governance
+mutation.
+
+Date reconciled: 2026-08-12
+
 ## ARGUS-SESSION-FIDELITY-004 Current-Head Reconciliation
 
 `codex/ARGUS-SESSION-FIDELITY-004-current-head-reconciliation` is
