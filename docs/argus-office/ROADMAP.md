@@ -185,6 +185,33 @@ Any mismatch cancels the owned stop where possible and flattens only the current
 confirmed Paper position. This branch must not merge, activate, repin jobs, or
 replace the installed service until the August 14 opening/Paper evidence is
 terminal and preserved.
+ARGUS-AFTER-CLOSE-002 is `IMPLEMENTED_PENDING_MERGE_AFTER_AUG13_OPENING` on
+isolated branch `codex/ARGUS-AFTER-CLOSE-002-real-regular-replay-trace`, based
+on AFTER-CLOSE-001 commit `e593131`. A new offline replay consumed a preserved
+July 29 SPY Schwab quote, five canonical 09:30-09:34 ET price-history bars, the
+matching July 28 baseline bars, and the July 28 completed Daily candle. It
+preserved `ORIGINAL_MARKET_TIME` separately from `REPLAY_EVALUATION_TIME`,
+verified all four inputs stayed byte-identical, and made zero provider calls.
+
+The requested real-evidence path is honestly `PARTIAL`: DATA-004 produced a
+plan from the canonical Daily high/low and opening bars, but the preserved ask
+was `$740.05` versus the normalized `$742.79` breakout entry. Paper Risk
+Governor therefore returned only `PAPER_ENTRY_TRIGGER_NOT_REACHED`; DATA-005B
+allocation and order serialization were not reached. Synthetic crossing tests
+separately prove those downstream contracts, including fill-dependent
+protective quantity and the zero-call broker boundary. They are not historical
+evidence. The older identity `test-only:canonical-regular-session-replay`
+remains unchanged but is adjudicated as meaning
+`TEST_ONLY_CONSTRUCTED_REGULAR_SESSION_FIXTURE`; the real replay identity is
+`TEST_ONLY_REAL_PRESERVED_SCHWAB_REGULAR_SESSION_REPLAY`.
+
+Final replay fingerprint is
+`3557A3FCF32BC613345C28941F814CB0007022F35A97C76929114B4FEFC35E79`.
+Compileall, 69 focused/adjacent tests, and all 1,921 Python tests pass. No
+canonical runtime, scheduler, service, Paper/Shadow state, opening evidence, or
+production store changed. Do not merge before the August 13 pinned opening and
+dependent Paper evidence are terminal and preserved.
+
 ARGUS-AFTER-CLOSE-001 is `IMPLEMENTED_PENDING_MERGE_AFTER_AUG13_OPENING` on
 isolated branch `codex/ARGUS-AFTER-CLOSE-001-contract-transaction-trace` from
 canonical head `9d735dd`. The final write-once diagnostic packet fingerprint is

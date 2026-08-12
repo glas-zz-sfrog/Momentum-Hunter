@@ -22,6 +22,19 @@
   evidence acquisition. The remaining 21 opening jobs and dependent August 14
   Paper job are bound to the final closeout identity with `PENDING` readback,
   zero enabled Shadow jobs, and order transmission `UNAVAILABLE`.
+- Added an offline, explicit-input replay for preserved Schwab quote,
+  canonical minute-candle, baseline-volume, and completed Daily evidence.
+- Separated original market time from replay evaluation time and preserved all
+  input hashes and evidence IDs without source mutation.
+- Proved that July 29 SPY reached DATA-004 and stopped correctly because the
+  `$740.05` ask had not reached the `$742.79` breakout entry. No allocation,
+  historical order intent, protection request, or provider call was fabricated.
+- Added synthetic crossing coverage for DATA-005B allocation, notional intent,
+  fill-dependent protection, partial-fill reconciliation, and the zero-call
+  submission boundary.
+- Adjudicated the older `test-only:canonical-regular-session-replay` label as a
+  constructed fixture identity without changing the historical artifact.
+
 - Added an isolated after-close provider-contract and TEST_ONLY transaction
   tracer. The final live packet observed the exact current Finviz schema,
   20 raw/parsed rows and nine qualifiers; mapped Schwab quotes and intraday/
