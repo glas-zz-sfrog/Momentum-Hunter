@@ -8,6 +8,8 @@ param(
     [string]$OutputDirectory = "C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\SESSION-FIDELITY-003-20260812",
     [string]$AlpacaRoot = "C:\Users\steve\AppData\Local\MomentumHunter\worktrees\ARGUS-OVERNIGHT-001-readonly-market-data-probe",
     [string]$DiagnosticDirectory = "",
+    [ValidateRange(0, 10)]
+    [int]$PreflightRetryDelaySeconds = 2,
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9a-fA-F]{40}$')]
     [string]$ExpectedGitCommit,
@@ -59,11 +61,22 @@ function Write-Diagnostic {
 
 function Resolve-RequiredDirectory {
     param([string]$Path, [string]$Label)
-    $resolved = [System.IO.Path]::GetFullPath($Path)
-    if (-not [System.IO.Directory]::Exists($resolved)) {
-        throw "$Label is unavailable."
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        Write-Diagnostic "preflight.start label=$Label attempt=$attempt"
+        try {
+            $resolved = [System.IO.Path]::GetFullPath($Path)
+            if (-not [System.IO.Directory]::Exists($resolved)) {
+                throw "$Label is unavailable."
+            }
+            Write-Diagnostic "preflight.pass label=$Label attempt=$attempt"
+            return $resolved
+        }
+        catch {
+            Write-Diagnostic "preflight.retry label=$Label attempt=$attempt errorType=$($_.Exception.GetType().Name)"
+            if ($attempt -eq 3) { throw }
+            Start-Sleep -Seconds $PreflightRetryDelaySeconds
+        }
     }
-    return $resolved
 }
 
 function Get-Sha256 {
@@ -85,29 +98,49 @@ function Get-Sha256 {
 
 function Assert-CleanCommit {
     param([string]$Root, [string]$Expected, [string]$Label)
-    Write-Diagnostic "preflight.start label=$Label"
-    $actual = (& git -C $Root rev-parse HEAD).Trim()
-    if ($LASTEXITCODE -ne 0 -or $actual -ne $Expected.ToLowerInvariant()) {
-        throw "$Label does not match its frozen Git commit."
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        Write-Diagnostic "preflight.start label=$Label attempt=$attempt"
+        try {
+            $actual = (& git -C $Root rev-parse HEAD).Trim()
+            if ($LASTEXITCODE -ne 0 -or $actual -ne $Expected.ToLowerInvariant()) {
+                throw "$Label does not match its frozen Git commit."
+            }
+            $dirty = & git -C $Root status --porcelain
+            if ($LASTEXITCODE -ne 0 -or $dirty) {
+                throw "$Label is not clean."
+            }
+            Write-Diagnostic "preflight.pass label=$Label attempt=$attempt"
+            return
+        }
+        catch {
+            Write-Diagnostic "preflight.retry label=$Label attempt=$attempt errorType=$($_.Exception.GetType().Name)"
+            if ($attempt -eq 3) { throw }
+            Start-Sleep -Seconds $PreflightRetryDelaySeconds
+        }
     }
-    $dirty = & git -C $Root status --porcelain
-    if ($LASTEXITCODE -ne 0 -or $dirty) {
-        throw "$Label is not clean."
-    }
-    Write-Diagnostic "preflight.pass label=$Label"
 }
 
 function Assert-FileHash {
     param([string]$Path, [string]$Expected, [string]$Label)
-    Write-Diagnostic "preflight.start label=$Label"
-    if (-not [System.IO.File]::Exists($Path)) {
-        throw "$Label is unavailable."
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        Write-Diagnostic "preflight.start label=$Label attempt=$attempt"
+        try {
+            if (-not [System.IO.File]::Exists($Path)) {
+                throw "$Label is unavailable."
+            }
+            $actual = Get-Sha256 -Path $Path
+            if ($actual -ne $Expected.ToUpperInvariant()) {
+                throw "$Label does not match its frozen SHA-256."
+            }
+            Write-Diagnostic "preflight.pass label=$Label attempt=$attempt"
+            return
+        }
+        catch {
+            Write-Diagnostic "preflight.retry label=$Label attempt=$attempt errorType=$($_.Exception.GetType().Name)"
+            if ($attempt -eq 3) { throw }
+            Start-Sleep -Seconds $PreflightRetryDelaySeconds
+        }
     }
-    $actual = Get-Sha256 -Path $Path
-    if ($actual -ne $Expected.ToUpperInvariant()) {
-        throw "$Label does not match its frozen SHA-256."
-    }
-    Write-Diagnostic "preflight.pass label=$Label"
 }
 
 Write-Diagnostic "wrapper.start taskId=SESSION-FIDELITY-003 checkpoint=$Checkpoint"

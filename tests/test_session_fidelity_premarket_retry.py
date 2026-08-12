@@ -220,6 +220,8 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
                     str(root),
                     "-DiagnosticDirectory",
                     str(diagnostic),
+                    "-PreflightRetryDelaySeconds",
+                    "0",
                     "-ExpectedGitCommit",
                     "0" * 40,
                     "-ExpectedRetryModuleSha256",
@@ -244,6 +246,7 @@ class SessionFidelityPremarketRetryTests(unittest.TestCase):
             self.assertIn("wrapper.start", content)
             self.assertIn("wrapper.failed", content)
             self.assertIn("Premarket retry worktree is unavailable", content)
+            self.assertIn("attempt=3", content)
             self.assertNotIn("provider.start", content)
 
 
