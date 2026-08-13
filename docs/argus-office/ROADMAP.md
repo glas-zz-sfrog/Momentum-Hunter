@@ -29,6 +29,32 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SESSION-FIDELITY-008 corrects the premarket provider-role mismatch found
+on August 13. The `03:05`, `05:55`, and `06:05` Central repeat tasks executed
+successfully and safely, but all three were explicitly Alpaca `iex`-only probes;
+the `06:05` task therefore could not prove Schwab premarket authority despite
+its historical `SCHWAB_PREMARKET_REPEAT` label. Their preserved `STALE` results
+remain truthful Alpaca-IEX context observations and are not strategy evidence.
+
+The replacement path is provider-correct and fail-closed. It records only
+Schwab as the provider, binds Central and Eastern checkpoint identities, limits
+scope to SPY/QQQ/NVDA, writes sanitized evidence outside the repository, and
+has no account-value, position, preview, order, production-persistence, or
+transmission capability. A nonpersisting live repair proof on August 13
+classified Schwab premarket quote, candle, and volume authority
+`HIGH_FIDELITY` for all three symbols. The write-once proof SHA-256 is
+`6A2C5479D91A68E31D24722167ADEE9940E64D85C69490752CB6191F6A1C5776`.
+
+Tomorrow's one-time Schwab boundary and active-premarket tasks are installed at
+`2026-08-14 05:55 Central / 06:55 Eastern` and `06:05 Central / 07:05 Eastern`.
+Both are `Ready`, wake-enabled, `StartWhenAvailable=false`, and pinned to frozen
+implementation commit `c7b720c47afd8cd1f831e454185cfade72c759b9` plus exact
+module and runner hashes. The schedule receipt SHA-256 is
+`45518CBFCA572E699417412FD6796377375C80F24575F7E0BC6AE7797D139A15`.
+Hard Chew passed compileall, 39 focused/neighboring tests, and all 1,916 Python
+tests. Status is `IMPLEMENTED_PENDING_MERGE_AFTER_2026-08-13_OPENING`; today's
+08:35 opening runtime and canonical `master` were not changed.
+
 ARGUS-DATA-007A corrects the causal certainty of the DATA-007 zero-candidate
 adjudication without changing its operational conclusion. The August 7, 10,
 11, and 12 decisions remain `INVALID / SYSTEM_DATA_CONTRACT_FAILURE /
