@@ -403,3 +403,16 @@
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.
+
+## 2026-08-13 - Opening Candle Readiness And Paper Clock
+
+- Integrated the existing canonical Schwab candle backfill/read path into opening
+  TradePlan production for the bounded top-five candidate universe.
+- Required five completed canonical opening bars and five comparable baseline
+  sessions before time-normalized RVOL can grant execution authority.
+- Added explicit readiness timeout/failure evidence and prevented Paper evidence
+  collection when opening candle readiness is not `READY`.
+- Separated Paper cycle start from final decision time and revalidated report
+  freshness after quote/account acquisition.
+- Preserved strategy thresholds, scoring, raw captures, UI, Shadow state, and
+  live-order unavailability.

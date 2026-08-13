@@ -177,6 +177,7 @@ class SyntheticQuoteSource:
 
     def quotes_with_clock(self, symbols, *, decision_at=None):
         self.calls.append(tuple(symbols))
+        clock_at = decision_at or DECISION_AT
         return SchwabQuoteEvidenceBatch(
             quotes={
                 symbol: {
@@ -198,12 +199,23 @@ class SyntheticQuoteSource:
                 for symbol in symbols
             },
             clock_skew_proof=build_https_clock_skew_proof(
-                request_started_at=DECISION_AT,
-                response_received_at=DECISION_AT,
-                remote_date_header=format_datetime(DECISION_AT),
+                request_started_at=clock_at,
+                response_received_at=clock_at,
+                remote_date_header=format_datetime(clock_at),
                 source_identity="synthetic-paper-clock",
             ),
         )
+
+
+class SequenceClock:
+    def __init__(self, *values: datetime) -> None:
+        self.values = list(values)
+        self.last = values[-1]
+
+    def __call__(self) -> datetime:
+        if self.values:
+            self.last = self.values.pop(0)
+        return self.last
 
 
 class SequenceQuoteSource(SyntheticQuoteSource):
@@ -484,6 +496,102 @@ class AlpacaPaperEngineeringTests(unittest.TestCase):
         self.assertIn("PAPER_NO_CANDIDATES_IN_PROSPECTIVE_REPORT", result["reasons"])
         self.assertEqual([], adapter.calls)
         self.assertFalse(result["paperOrderCreated"])
+
+    def test_decision_clock_freezes_after_fresh_quote_and_account_evidence(self) -> None:
+        quote_at = DECISION_AT + timedelta(seconds=1, milliseconds=500)
+        quote = quote_result(
+            bid=9.98,
+            ask=9.99,
+            last=9.99,
+            timestamp=quote_at.isoformat(),
+            providerQuoteTimestamp=quote_at.isoformat(),
+            providerBidTimestamp=quote_at.isoformat(),
+            providerAskTimestamp=quote_at.isoformat(),
+            quoteAgeSeconds=0.5,
+        )
+        clock = SequenceClock(
+            DECISION_AT,
+            DECISION_AT + timedelta(seconds=1),
+            DECISION_AT + timedelta(seconds=2),
+            DECISION_AT + timedelta(seconds=3),
+        )
+        engine = AlpacaPaperEngineeringEngine(
+            adapter=SyntheticAdapter(),
+            quote_source=SyntheticQuoteSource({"TEST": quote}),
+            output_directory=self.root / "paper",
+            clock=clock,
+            sleep=lambda _seconds: None,
+        )
+
+        with patch(
+            "momentum_hunter.alpaca_paper_engineering.adjudicate_lifecycle_capabilities",
+            return_value=registry(),
+        ):
+            result = engine.run_decision(
+                self.write_report(eligible_report()),
+                confirmation=PAPER_ENGINEERING_DECISION_CONFIRMATION,
+            )
+
+        self.assertEqual(NO_TRADE, result["classification"])
+        self.assertEqual(DECISION_AT.isoformat(), result["decisionStartedAt"])
+        self.assertEqual(
+            (DECISION_AT + timedelta(seconds=3)).isoformat(),
+            result["decisionAt"],
+        )
+        self.assertEqual(
+            (DECISION_AT + timedelta(seconds=1)).isoformat(),
+            result["quoteProof"]["requestedAt"],
+        )
+        blockers = result["candidateEvaluations"][0]["blockers"]
+        self.assertNotIn("PAPER_QUOTE_TIMESTAMP_INVALID", blockers)
+        self.assertIn("PAPER_ENTRY_TRIGGER_NOT_REACHED", blockers)
+
+    def test_opening_candle_timeout_stops_before_quote_or_account(self) -> None:
+        payload = eligible_report()
+        payload["metadata"]["opening_candle_readiness"] = {
+            "status": "CANONICAL_CANDLE_READINESS_TIMEOUT"
+        }
+        adapter = SyntheticAdapter()
+
+        result = self.run_case(payload, adapter)
+
+        self.assertEqual(NO_TRADE, result["classification"])
+        self.assertIn("CANONICAL_CANDLE_READINESS_TIMEOUT", result["reasons"])
+        self.assertEqual([], adapter.calls)
+        self.assertFalse(result["paperOrderCreated"])
+
+    def test_report_that_ages_out_during_evidence_collection_cannot_trade(self) -> None:
+        adapter = SyntheticAdapter()
+        clock = SequenceClock(
+            DECISION_AT,
+            DECISION_AT + timedelta(seconds=1),
+            DECISION_AT + timedelta(seconds=2),
+            DECISION_AT + timedelta(seconds=62),
+        )
+        engine = AlpacaPaperEngineeringEngine(
+            adapter=adapter,
+            quote_source=SyntheticQuoteSource({"TEST": quote_result()}),
+            output_directory=self.root / "paper",
+            clock=clock,
+            sleep=lambda _seconds: None,
+        )
+
+        with patch(
+            "momentum_hunter.alpaca_paper_engineering.adjudicate_lifecycle_capabilities",
+            return_value=registry(),
+        ):
+            result = engine.run_decision(
+                self.write_report(eligible_report()),
+                confirmation=PAPER_ENGINEERING_DECISION_CONFIRMATION,
+            )
+
+        self.assertEqual(NO_TRADE, result["classification"])
+        self.assertTrue(
+            any("report-to-selection" in reason.lower() for reason in result["reasons"]),
+            result["reasons"],
+        )
+        self.assertTrue(any(call == "GET /v2/account" for call in adapter.calls))
+        self.assertFalse(any(call.startswith("POST ") for call in adapter.calls))
 
     def test_invalidated_no_order_sample_rolls_to_v2_without_policy_change(self) -> None:
         adapter = SyntheticAdapter()

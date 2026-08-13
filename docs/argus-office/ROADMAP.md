@@ -29,6 +29,48 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-DATA-009 opening candle readiness is `IMPLEMENTED_PENDING_INTEGRATION` on
+`codex/ARGUS-DATA-009-opening-candle-readiness` from synchronized canonical base
+`9d735dd`. The August 13 opening capture itself completed successfully with 20
+raw Finviz rows, 20 parsed rows, five qualified candidates, and five persisted
+candidate rows. Its immutable capture SHA-256 is
+`86A13ABE8627DC9B00FA21365A1297C4DF334B14C799784BB2EF1890BD1AF5C9`; the
+derived TradePlan report SHA-256 is
+`A9903C5725E16755B6FEDB772CB449A38AB1F72199C8715AB183E37C91CB0870`.
+The dependent Paper result is classified `NO_TRADE - EXECUTION EVIDENCE
+UNAVAILABLE`, not a complete strategy rejection: the opening planner had no
+authoritative current-window or baseline candle evidence. Independent review
+found no basis to claim a missed valid trade: CRWV had not reached its trigger,
+while NBIS, IREN, HPE, and SMCI were extended and/or below execution reward/risk
+policy, with unresolved catalyst authority present on some rows.
+
+DATA-009 composes the existing R032B/R032C Schwab history path, DATA-002
+time-normalized RVOL, DATA-004 same-session TradePlan, and A004 Paper lane. For
+the deduplicated top-five opening universe it inspects the canonical store,
+performs at most three candidate-only guarded history passes, waits 10 then 25
+seconds across the observed R031B two-to-28-second post-close arrival window,
+and requires all 09:30 through 09:34 ET price-history-backed bars plus at least
+five comparable baseline sessions. Only terminal canonical states are accepted.
+Timeout, provider/backfill failure, insufficient baseline, partial current
+window, wrong symbol/session, stale evidence, or tampered storage remain
+explicitly execution-ineligible. The report persists the readiness record, and
+Paper stops before quote/account/order work with
+`CANONICAL_CANDLE_READINESS_TIMEOUT` or the exact failure status. No provisional
+bar, legacy RVOL, source mutation, Shadow action, or order fabrication is
+allowed.
+
+The Paper chronology repair now separates `decisionStartedAt`, quote request and
+receipt evidence, account/portfolio acquisition, `evidenceAcquiredAt`, and the
+final frozen `decisionAt`. Report freshness is checked both at cycle start and
+again after all evidence is acquired, so a quote created after cycle start is
+not falsely future-dated and a report that ages out during collection cannot
+submit an order. Compileall and 76 focused tests pass; 131 adjacent candle,
+TradePlan, allocation, Shadow, and automation tests pass; and all 50 safe
+bounded backend/evidence/storage modules pass without failure or timeout. Full
+unittest discovery exceeded its explicit ten-minute bound without a result and
+is not claimed as a pass. No live provider, account, position, or order call was
+made by this repair verification.
+
 ARGUS-DATA-007A corrects the causal certainty of the DATA-007 zero-candidate
 adjudication without changing its operational conclusion. The August 7, 10,
 11, and 12 decisions remain `INVALID / SYSTEM_DATA_CONTRACT_FAILURE /
@@ -1192,13 +1234,13 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Canonical `master` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, DATA-004 same-session intraday TradePlan semantics, DATA-005 account-aware allocation enforcement, DATA-005A fresh account/portfolio evidence, the directly proven A001-A003 Alpaca Paper foundation, DATA-006 Finviz schema-drift repair, QUALITY-003 provider/UI/wire contract hardening, and DATA-007 write-once zero-candidate adjudication plus Paper-sample rollover. |
-| Active implementation | DATA-007A is complete: four invalid zero-candidate openings and two dependent Paper decisions remain formally `DECISION_NOT_REACHED`, while provider schema drift is separated as an inferred or strongly corroborated root-cause candidate and never claimed confirmed. Paper v1 remains archived invalid and v2 remains active prospectively. QUALITY-003 structural contracts remain enforced. Candidate-bearing provider execution remains unobserved. ARGUS-DATA-008 semantic plausibility is the next data-integrity hardening slice. R034 remains a separate destructive approval gate. |
+| Canonical baseline | Canonical `master` at `9d735dd` contains R032C automatic candle backfill, R034A legacy-consumer migration, DATA-002 time-normalized RVOL authority, DATA-003 breakout/reclaim setup identity, DATA-004 same-session intraday TradePlan semantics, DATA-005 account-aware allocation enforcement, DATA-005A fresh account/portfolio evidence, the directly proven A001-A003 Alpaca Paper foundation, DATA-006 Finviz schema-drift repair, QUALITY-003 provider/UI/wire contract hardening, and DATA-007/007A adjudication and causal-certainty correction. DATA-009 is branch-complete pending integration and operational repinning. |
+| Active implementation | DATA-009 integrates bounded canonical opening-candle readiness before TradePlan production and corrects Paper decision chronology. The August 13 candidate-bearing cycle is preserved as `NO_TRADE - EXECUTION EVIDENCE UNAVAILABLE`; it is not strategy evidence. Candidate-bearing provider execution remains unobserved until a prospective cycle has complete canonical candles and all authority gates. DATA-008 semantic plausibility remains queued after this concrete orchestration repair. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Use a separately versioned canary-realistic Alpaca Paper engineering sample to prove prospective selection, fractional allocation, provider execution, protection, recovery, and terminal evidence. Do not count it as the final continuous-intraday strategy sample. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | Candidate-bearing Paper execution remains unobserved because the August 7/10/11/12 candidate-admission evidence is invalid and did not reach a strategy decision. Provider schema drift is the leading inferred cause and is strongly corroborated only for August 12; exact-run payloads are unavailable. V2 starts cleanly, but partial-fill and provider-restart behavior remain synthetic-only; broker-resident linked protection and status streaming remain separate unknowns. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
-| Scheduled operational proof | The 2026-08-03 through 2026-08-12 08:35 jobs launched and wrote their required artifacts with no Shadow or live-brokerage action. August 7/10/11/12 are formally adjudicated data-contract failures, not strategy evidence. Twenty-two future openings remain from August 13 through September 14; zero Shadow jobs are enabled. |
-| Immediate operational work | The 22 remaining opening jobs and the next dependent Paper job are repinned to the final DATA-007A correction head without changing their dates, policy, or provider behavior. Adjudicate the first v2 candidate-bearing `PAPER_TRADE_CREATED` or gate-specific legitimate `NO_TRADE`. Implement ARGUS-DATA-008 semantic plausibility checks for structurally valid but economically nonsensical provider values, failing closed without provider voting or silent fallback. Continue continuous-intraday implementation so the system is not structurally limited to one 08:35 candidate supply. Present R034's exact deletion plan only when Steven is ready. |
+| Scheduled operational proof | The 2026-08-03 through 2026-08-13 08:35 jobs launched and wrote their required artifacts with no Shadow or live-brokerage action. August 7/10/11/12 are adjudicated data-contract failures; August 13 admitted five candidates but lacked canonical candle execution evidence. Twenty-one future openings remain from August 14 through September 14; zero Shadow jobs are enabled. |
+| Immediate operational work | Integrate DATA-009 after final protected-path proof, back it up, and repin the 21 future opening jobs plus the next dependent Paper job to the final canonical head without changing dates or policy. Adjudicate the first v2 candidate-bearing `PAPER_TRADE_CREATED` or gate-specific legitimate `NO_TRADE` produced with complete canonical candle readiness. Then resume ARGUS-DATA-008 semantic plausibility and continuous-intraday work. Present R034's exact deletion plan only when Steven is ready. |
 | Broker state | Schwab OAuth and immutable `2573` `INDIVIDUAL_CASH` binding remain read-only market-data/account evidence. No transmitting Schwab method exists. The Canary Alpaca Paper credential is encrypted outside Git. The exact Paper host accepted and completed one bounded fractional lifecycle; the activation preflight found the account active with `$100` cash/buying power, zero positions, and zero open orders. The research credential slot is empty. Invalidated Paper v1 is archived; v2 is active with unchanged policy and no carried decisions, intents, positions, or orders. The live Alpaca host cannot be enabled by a mode flip. |
 | Steven action | No routine nonvisual approval is pending. Interrupt Steven before funding, money movement, any live endpoint/order, unexpected brokerage scope, destructive R034 cutover, or visual acceptance. Do not ask Steven to re-enter the stored Canary credential. |
 | Data caveat | Schwab remains authoritative for proven quote/candle evidence while execution-provider capability remains separate. Finviz structural schema/row/value drift is validated prospectively; structurally valid but economically implausible provider values remain the explicit ARGUS-DATA-008 risk. Historical raw payloads and raw/parsed row counts for August 7/10/11/12 were never persisted and remain unknown; their empty candidate sets are adjudicated contract failures and may not be interpreted as market no-trades. Schema drift is `ROOT_CAUSE_INFERRED` for August 7/10/11 and `ROOT_CAUSE_STRONGLY_CORROBORATED` for August 12, never confirmed for the exact opening runs. DATA-001 through DATA-004 retain their provenance, RVOL, setup, and same-session chronology gates. DATA-005 makes `$500` reference sizing nonexecutable; DATA-005A supplies fresh bound-account/portfolio evidence. Fractional support may alter provider-executable quantity prospectively but may never rewrite old allocation or Shadow evidence. Legacy RVOL remains research-only; insufficient candle history and unknown broker capability fail closed. |

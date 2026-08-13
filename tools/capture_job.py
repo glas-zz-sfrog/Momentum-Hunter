@@ -7,7 +7,7 @@ import os
 import sys
 import traceback
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -20,6 +20,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from momentum_hunter.config import DATA_DIR, load_config
 from momentum_hunter.market import detect_market_regime
 from momentum_hunter.models import CaptureSession, SCANNER_PRESETS
+from momentum_hunter.opening_candle_readiness import (
+    MAX_OPENING_SYMBOLS,
+    failed_opening_candle_readiness,
+    prepare_opening_candle_readiness,
+)
 from momentum_hunter.providers import ProviderUnavailableError, provider_from_name
 from momentum_hunter.scheduling import SkipReason, evaluate_automatic_capture
 from momentum_hunter.scoring import score_candidates
@@ -233,22 +238,25 @@ def run_capture_with_result(
                 reports_dir=REPORTS_DIR,
             )
             reports_preexisting = all(path.exists() for path in expected.values())
-            report_paths = ensure_trade_planning_report(
-                capture_path,
-                expected_provider=args.provider or config.provider,
-                expected_scanner=(
-                    args.scanner or "Institutional Momentum"
-                ),
-                request_timeout_seconds=(
+            report_options = {
+                "expected_provider": args.provider or config.provider,
+                "expected_scanner": args.scanner or "Institutional Momentum",
+                "request_timeout_seconds": (
                     OPENING_REPORT_REQUEST_TIMEOUT_SECONDS
                     if session == CaptureSession.OPENING
                     else 20.0
                 ),
-                network_candidate_limit=(
+                "network_candidate_limit": (
                     OPENING_REPORT_NETWORK_CANDIDATE_LIMIT
                     if session == CaptureSession.OPENING
                     else None
                 ),
+            }
+            if session == CaptureSession.OPENING:
+                report_options["prepare_opening_candles"] = True
+            report_paths = ensure_trade_planning_report(
+                capture_path,
+                **report_options,
             )
             print_report_paths(report_paths, prefix="Existing capture report")
             return CaptureRunResult(
@@ -314,20 +322,25 @@ def run_capture_with_result(
         print("Score breakdowns updated")
     except Exception as exc:
         print(f"Score breakdown update failed: {exc}", file=sys.stderr)
-    report_paths = ensure_trade_planning_report(
-        json_path,
-        expected_provider=provider.name,
-        expected_scanner=criteria.name,
-        request_timeout_seconds=(
+    report_options = {
+        "expected_provider": provider.name,
+        "expected_scanner": criteria.name,
+        "request_timeout_seconds": (
             OPENING_REPORT_REQUEST_TIMEOUT_SECONDS
             if session == CaptureSession.OPENING
             else 20.0
         ),
-        network_candidate_limit=(
+        "network_candidate_limit": (
             OPENING_REPORT_NETWORK_CANDIDATE_LIMIT
             if session == CaptureSession.OPENING
             else None
         ),
+    }
+    if session == CaptureSession.OPENING:
+        report_options["prepare_opening_candles"] = True
+    report_paths = ensure_trade_planning_report(
+        json_path,
+        **report_options,
     )
     print_report_paths(report_paths, prefix="Trade planning")
     return CaptureRunResult(
@@ -380,6 +393,7 @@ def ensure_trade_planning_report(
     expected_scanner: str | None = None,
     request_timeout_seconds: float = 20.0,
     network_candidate_limit: int | None = None,
+    prepare_opening_candles: bool = False,
 ) -> dict[str, Path]:
     if not capture_path.exists():
         raise FileNotFoundError(f"Raw capture JSON is missing: {capture_path}")
@@ -404,18 +418,81 @@ def ensure_trade_planning_report(
 
     capture_payload = json.loads(capture_path.read_text(encoding="utf-8"))
     capture_timestamp = parse_datetime(str(capture_payload.get("capture_time", "")))
+    readiness = None
+    readiness_evidence: dict[str, object] | None = None
+    readiness_warning: str | None = None
+    if prepare_opening_candles:
+        raw_symbols = tuple(
+            str(item.get("ticker", "")).strip().upper()
+            for item in capture_payload.get("candidates", [])
+            if isinstance(item, dict) and str(item.get("ticker", "")).strip()
+        )
+        symbols = tuple(dict.fromkeys(raw_symbols))[:MAX_OPENING_SYMBOLS]
+        if symbols and capture_timestamp is not None:
+            try:
+                readiness = prepare_opening_candle_readiness(
+                    symbols,
+                    evidence_as_of=capture_timestamp,
+                )
+                readiness_evidence = readiness.to_evidence()
+                print(
+                    "Opening candle readiness: "
+                    f"{readiness.status} | attempts={len(readiness.attempts)} | "
+                    + " | ".join(
+                        f"{symbol}="
+                        f"{item.get('openingBarCount', 0)}/"
+                        f"{item.get('requiredOpeningBarCount', 5)} bars,"
+                        f"{item.get('baselineSessionCount', 0)}/"
+                        f"{item.get('minimumBaselineSessions', 5)} baseline"
+                        for symbol, item in sorted(readiness.symbol_evidence.items())
+                    )
+                )
+                if not readiness.ready:
+                    readiness_warning = (
+                        "Opening candle readiness failed closed: "
+                        f"{readiness.status}."
+                    )
+            except Exception as exc:
+                failure_finding = (
+                    f"OPENING_CANDLE_READINESS_FAILED:{type(exc).__name__}"
+                )
+                readiness = failed_opening_candle_readiness(
+                    symbols,
+                    evidence_as_of=capture_timestamp,
+                    finding=failure_finding,
+                )
+                readiness_evidence = readiness.to_evidence()
+                readiness_warning = (
+                    "Opening candle readiness failed closed: "
+                    f"{type(exc).__name__}."
+                )
+                print(readiness_warning, file=sys.stderr)
+
     generated_at = now_central()
     if capture_timestamp is None or generated_at < capture_timestamp:
         raise ValueError("TradePlan report time cannot precede the source capture.")
     capture_hash = file_sha256(capture_path)
-    report = build_trade_planning_report(
-        capture_path,
-        fetch_bars=True,
-        fetch_market_data=True,
-        as_of=generated_at,
-        request_timeout_seconds=request_timeout_seconds,
-        network_candidate_limit=network_candidate_limit,
-    )
+    build_options = {
+        "fetch_bars": True,
+        "fetch_market_data": True,
+        "as_of": generated_at,
+        "request_timeout_seconds": request_timeout_seconds,
+        "network_candidate_limit": network_candidate_limit,
+    }
+    if readiness is not None:
+        build_options["rvol_evidence_by_ticker"] = readiness.rvol_by_symbol
+        build_options["intraday_bars_by_ticker"] = readiness.bars_by_symbol
+    report = build_trade_planning_report(capture_path, **build_options)
+    if readiness_evidence is not None or readiness_warning is not None:
+        report = replace(
+            report,
+            opening_candle_readiness=readiness_evidence,
+            warnings=(
+                [*getattr(report, "warnings", []), readiness_warning]
+                if readiness_warning is not None
+                else getattr(report, "warnings", [])
+            ),
+        )
     actual = export_trade_planning_report(report, reports_dir)
     if actual != expected:
         raise RuntimeError("TradePlan report export returned unexpected output paths.")

@@ -362,6 +362,7 @@ class TradePlanningReport:
     state_transition_log: list[dict[str, str]] = field(default_factory=list)
     fed_news_summary: list[dict[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    opening_candle_readiness: dict[str, object] | None = None
 
 
 def build_trade_planning_report(
@@ -2631,6 +2632,7 @@ def write_json(report: TradePlanningReport, path: Path) -> None:
             "event_mode": report.event_mode,
             "polling_interval_seconds": report.polling_interval_seconds,
             "evidence_integrity_schema_version": EVIDENCE_INTEGRITY_SCHEMA_VERSION,
+            "opening_candle_readiness": report.opening_candle_readiness,
             "warnings": report.warnings,
         },
         "top_5_for_capital": [row_to_json(row) for row in report.rows[:5]],
@@ -2656,6 +2658,12 @@ def write_markdown(report: TradePlanningReport, path: Path) -> None:
         f"- Capital assumption: ${report.capital_assumption:,.2f}",
         f"- Event mode: {'ON' if report.event_mode else 'OFF'}",
         f"- Polling interval: {report.polling_interval_seconds} seconds",
+        (
+            "- Opening candle readiness: "
+            f"{report.opening_candle_readiness.get('status', 'UNAVAILABLE')}"
+            if report.opening_candle_readiness is not None
+            else "- Opening candle readiness: NOT_APPLICABLE"
+        ),
         "",
         "## Data Warnings",
         "",

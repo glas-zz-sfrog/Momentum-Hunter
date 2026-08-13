@@ -573,8 +573,8 @@ class AlpacaPaperEngineeringEngine:
             policy=policy,
             output_directory=self.output_directory,
         )
-        decision_at = self.clock()
-        _require_aware(decision_at, "Paper decision")
+        decision_started_at = self.clock()
+        _require_aware(decision_started_at, "Paper decision start")
         report_bytes = report_path.read_bytes()
         report_sha = hashlib.sha256(report_bytes).hexdigest().upper()
         cycle_id = _stable_id("paper-cycle", arm.fingerprint, report_sha)
@@ -599,7 +599,16 @@ class AlpacaPaperEngineeringEngine:
         metadata = report.get("metadata")
         metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
         report_blockers = list(report_evidence_authority_findings(metadata))
-        report_blockers.extend(validate_report_clocks(metadata, decision_at=decision_at))
+        opening_readiness = metadata.get("opening_candle_readiness")
+        if isinstance(opening_readiness, Mapping):
+            readiness_status = str(opening_readiness.get("status", "")).strip()
+            if readiness_status != "READY":
+                report_blockers.append(
+                    readiness_status or "CANONICAL_CANDLE_READINESS_INVALID"
+                )
+        report_blockers.extend(
+            validate_report_clocks(metadata, decision_at=decision_started_at)
+        )
         raw_rows = report.get("candidates") or report.get("top_5_for_capital") or []
         if not isinstance(raw_rows, list):
             report_blockers.append("PAPER_REPORT_CANDIDATES_INVALID")
@@ -617,7 +626,8 @@ class AlpacaPaperEngineeringEngine:
             "sampleArmFingerprint": arm.fingerprint,
             "policyFingerprint": policy.fingerprint,
             "decisionCycleId": cycle_id,
-            "decisionAt": decision_at.isoformat(),
+            "decisionStartedAt": decision_started_at.isoformat(),
+            "decisionAt": decision_started_at.isoformat(),
             "sourceReportPath": str(report_path.resolve()),
             "sourceReportSha256": report_sha,
             "sourceCapturePath": str(metadata.get("source_capture_path", "")),
@@ -674,12 +684,21 @@ class AlpacaPaperEngineeringEngine:
             for item in quote_proof.get("quotes", [])
             if isinstance(item, Mapping)
         }
+        base["quoteProof"] = quote_proof
 
         receipts: list[AlpacaPaperProviderReceipt] = []
         self.adapter.evidence_sink = receipts.append
         try:
             account = self._account_snapshot(cycle_id, policy, receipts)
         except (AlpacaPaperBrokerError, PaperEngineeringError) as exc:
+            failed_at = self.clock()
+            _require_aware(failed_at, "Paper failed decision")
+            if failed_at < decision_started_at:
+                raise PaperEngineeringError(
+                    "Paper failed-decision clock preceded cycle start."
+                )
+            base["decisionAt"] = failed_at.isoformat()
+            base["evidenceAcquiredAt"] = failed_at.isoformat()
             return self._write_final(
                 final_path,
                 {
@@ -689,6 +708,32 @@ class AlpacaPaperEngineeringEngine:
                     "reasons": [f"PAPER_ACCOUNT_PREFLIGHT_FAILED:{type(exc).__name__}"],
                     "candidatesEvaluated": 0,
                     "candidateEvaluations": [],
+                    "providerCalls": [_receipt_dict(item) for item in receipts],
+                    "paperOrderCreated": False,
+                },
+            )
+
+        decision_at = self.clock()
+        _require_aware(decision_at, "Paper decision")
+        if decision_at < decision_started_at:
+            raise PaperEngineeringError("Paper decision clock preceded cycle start.")
+        base["decisionAt"] = decision_at.isoformat()
+        base["evidenceAcquiredAt"] = decision_at.isoformat()
+        final_clock_findings = validate_report_clocks(
+            metadata,
+            decision_at=decision_at,
+        )
+        if final_clock_findings:
+            return self._write_final(
+                final_path,
+                {
+                    **base,
+                    "classification": NO_TRADE,
+                    "terminal": True,
+                    "reasons": list(final_clock_findings),
+                    "candidatesEvaluated": 0,
+                    "candidateEvaluations": [],
+                    "accountSnapshot": _account_dict(account),
                     "providerCalls": [_receipt_dict(item) for item in receipts],
                     "paperOrderCreated": False,
                 },

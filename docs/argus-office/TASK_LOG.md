@@ -251,3 +251,24 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - No manual software gate remains. Preserve a clean canonical checkout, leave
   the computer powered and plugged in, run the Sunday read-only preflight, and
   audit Monday's ordinary opening receipt without intervention or fabrication.
+
+## 2026-08-13 - ARGUS-DATA-009 Opening Candle Readiness
+
+- Preserved the successful candidate-bearing August 13 opening capture and its
+  dependent Paper `NO_TRADE`; no historical artifact was rewritten.
+- Classified the Paper result as execution evidence unavailable because all five
+  candidates lacked authoritative current-window/baseline candle evidence.
+- Added bounded candidate-only Schwab candle readiness before opening TradePlan
+  production: canonical 09:30-09:34 bars, five comparable baseline sessions,
+  and authoritative DATA-002 RVOL are required for every candidate.
+- Added explicit timeout/backfill-failure evidence and a Paper report-level gate
+  that stops before quote/account/order work when opening readiness is not
+  `READY`.
+- Corrected Paper chronology so `decisionAt` freezes only after quote and account
+  evidence are acquired, with a second report-freshness check before evaluation.
+- Verification: compileall passes; 76 focused tests pass; 131 adjacent tests
+  pass; all 50 safe bounded test modules pass. Full discovery hit its ten-minute
+  ceiling without a terminal result and is not claimed as passing.
+- No live provider/account/order call, source-capture mutation, Shadow action,
+  scoring change, strategy-threshold change, UI change, or real-order capability
+  was introduced.

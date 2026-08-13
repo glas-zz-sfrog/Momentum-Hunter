@@ -17,6 +17,7 @@ from momentum_hunter.models import CaptureSession, MarketRegime, TradingMode
 from momentum_hunter.providers import ProviderContractError
 from momentum_hunter.scheduling import SkipReason
 from momentum_hunter.storage import file_sha256
+from momentum_hunter.trade_planning import TradePlanningReport
 from tools import capture_job
 
 
@@ -604,6 +605,7 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             expected_scanner="Institutional Momentum",
             request_timeout_seconds=5.0,
             network_candidate_limit=5,
+            prepare_opening_candles=True,
         )
         provider_factory.assert_not_called()
 
@@ -1055,6 +1057,134 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             as_of=datetime.fromisoformat("2026-07-24T07:05:00-05:00"),
             request_timeout_seconds=20.0,
             network_candidate_limit=None,
+        )
+
+    def test_opening_readiness_failure_is_passed_to_trade_plan_and_report(self) -> None:
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        payload["session"] = "opening"
+        payload["candidates"] = [{"ticker": "AAA"}]
+        self.capture_path.write_text(json.dumps(payload), encoding="utf-8")
+        expected = capture_job.trade_planning_report_paths(
+            self.capture_path,
+            reports_dir=self.reports_dir,
+        )
+        report = TradePlanningReport(
+            generated_at="2026-07-24T07:05:00-05:00",
+            source_capture_path=str(self.capture_path),
+            source_capture_time="2026-07-24T07:00:00-05:00",
+            source_session="opening",
+            source_provider="finviz",
+            source_scanner="Institutional Momentum",
+            composite_profile="test",
+            capital_assumption=500.0,
+            event_mode=False,
+            polling_interval_seconds=900,
+            rows=[],
+        )
+
+        with (
+            patch.object(
+                capture_job,
+                "now_central",
+                return_value=datetime.fromisoformat("2026-07-24T07:05:00-05:00"),
+            ),
+            patch.object(
+                capture_job,
+                "prepare_opening_candle_readiness",
+                side_effect=RuntimeError("synthetic setup failure"),
+            ),
+            patch.object(
+                capture_job,
+                "build_trade_planning_report",
+                return_value=report,
+            ) as build,
+            patch.object(
+                capture_job,
+                "export_trade_planning_report",
+                return_value=expected,
+            ) as export,
+            patch.object(capture_job, "validate_trade_planning_report"),
+        ):
+            actual = capture_job.ensure_trade_planning_report(
+                self.capture_path,
+                reports_dir=self.reports_dir,
+                prepare_opening_candles=True,
+            )
+
+        self.assertEqual(expected, actual)
+        build_kwargs = build.call_args.kwargs
+        self.assertEqual({"AAA"}, set(build_kwargs["rvol_evidence_by_ticker"]))
+        self.assertFalse(
+            build_kwargs["rvol_evidence_by_ticker"]["AAA"].execution_eligible
+        )
+        self.assertEqual({"AAA": ()}, build_kwargs["intraday_bars_by_ticker"])
+        exported_report = export.call_args.args[0]
+        self.assertEqual(
+            "CANONICAL_CANDLE_BACKFILL_FAILED",
+            exported_report.opening_candle_readiness["status"],
+        )
+        self.assertIn(
+            "Opening candle readiness failed closed: RuntimeError.",
+            exported_report.warnings,
+        )
+
+    def test_opening_readiness_deduplicates_and_caps_candidate_universe(self) -> None:
+        payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
+        payload["candidates"] = [
+            {"ticker": symbol}
+            for symbol in ("AAA", "AAA", "BBB", "CCC", "DDD", "EEE", "FFF")
+        ]
+        self.capture_path.write_text(json.dumps(payload), encoding="utf-8")
+        expected = capture_job.trade_planning_report_paths(
+            self.capture_path,
+            reports_dir=self.reports_dir,
+        )
+        report = TradePlanningReport(
+            generated_at="2026-07-24T07:05:00-05:00",
+            source_capture_path=str(self.capture_path),
+            source_capture_time="2026-07-24T07:00:00-05:00",
+            source_session="opening",
+            source_provider="finviz",
+            source_scanner="Institutional Momentum",
+            composite_profile="test",
+            capital_assumption=500.0,
+            event_mode=False,
+            polling_interval_seconds=900,
+            rows=[],
+        )
+
+        with (
+            patch.object(
+                capture_job,
+                "now_central",
+                return_value=datetime.fromisoformat("2026-07-24T07:05:00-05:00"),
+            ),
+            patch.object(
+                capture_job,
+                "prepare_opening_candle_readiness",
+                side_effect=RuntimeError("synthetic stop"),
+            ) as prepare,
+            patch.object(
+                capture_job,
+                "build_trade_planning_report",
+                return_value=report,
+            ),
+            patch.object(
+                capture_job,
+                "export_trade_planning_report",
+                return_value=expected,
+            ),
+            patch.object(capture_job, "validate_trade_planning_report"),
+        ):
+            capture_job.ensure_trade_planning_report(
+                self.capture_path,
+                reports_dir=self.reports_dir,
+                prepare_opening_candles=True,
+            )
+
+        self.assertEqual(
+            ("AAA", "BBB", "CCC", "DDD", "EEE"),
+            prepare.call_args.args[0],
         )
 
     def test_opening_infrastructure_failure_is_retryable_but_policy_failure_is_not(
