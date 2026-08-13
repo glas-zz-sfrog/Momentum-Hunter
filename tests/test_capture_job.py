@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 from momentum_hunter.config import AppConfig
 from momentum_hunter.market import MarketRegimeSnapshot
 from momentum_hunter.models import CaptureSession, MarketRegime, TradingMode
-from momentum_hunter.providers import ProviderContractError
+from momentum_hunter.providers import ProviderContractError, ProviderUnavailableError
 from momentum_hunter.scheduling import SkipReason
 from momentum_hunter.storage import file_sha256
 from momentum_hunter.trade_planning import TradePlanningReport
@@ -24,6 +24,27 @@ from tools import capture_job
 class CaptureJobTradePlanHandoffTests(unittest.TestCase):
     def test_provider_contract_drift_is_not_retried_as_infrastructure(self) -> None:
         error = ProviderContractError("Finviz screener schema drift detected.")
+
+        self.assertFalse(
+            capture_job.opening_error_is_retryable(
+                error,
+                session=CaptureSession.OPENING,
+            )
+        )
+        self.assertFalse(
+            capture_job.shadow_error_is_retryable(
+                error,
+                session=CaptureSession.SHADOW,
+                trigger_shadow_selector=True,
+            )
+        )
+
+    def test_provider_semantic_failure_is_not_retried_as_infrastructure(self) -> None:
+        error = ProviderUnavailableError(
+            "finviz",
+            "Provider semantic plausibility failed closed.",
+            reason="semantic_implausibility",
+        )
 
         self.assertFalse(
             capture_job.opening_error_is_retryable(

@@ -10,6 +10,7 @@ from momentum_hunter.providers import (
     FINVIZ_CUSTOM_COLUMN_IDS,
     FinvizProvider,
     ProviderContractError,
+    ProviderSemanticPlausibilityError,
     ProviderUnavailableError,
     canonicalize_finviz_screener_headers,
     finviz_screener_schema_fingerprint,
@@ -117,6 +118,35 @@ class ProviderErrorTests(unittest.TestCase):
             FINVIZ_CANONICAL_SCREENER_COLUMNS,
             diagnostics.canonical_headers,
         )
+        self.assertEqual("PASS", diagnostics.semantic_status)
+        self.assertEqual(64, len(diagnostics.semantic_fingerprint))
+        self.assertEqual((), diagnostics.semantic_issue_codes)
+
+    def test_finviz_scan_fails_closed_before_filtering_implausible_economics(self) -> None:
+        provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())
+
+        class FakeResponse:
+            text = """
+                <table class="screener_table">
+                    <tr><td>No.</td><td>Ticker</td><td>Company</td><td>Sector</td><td>Industry</td><td>Market Cap</td><td>Float</td><td>ATR</td><td>Rel Volume</td><td>Volume</td><td>Price</td><td>Change %</td></tr>
+                    <tr><td>1</td><td>NVDA</td><td>NVIDIA</td><td>Technology</td><td>Semiconductors</td><td>4.4T</td><td>24.1B</td><td>5.2</td><td>2.1</td><td>42,000,000</td><td>182.00</td><td>1434%</td></tr>
+                </table>
+            """
+
+            def raise_for_status(self) -> None:
+                return None
+
+        provider.session.get = lambda _url, **_kwargs: FakeResponse()
+
+        with self.assertRaises(ProviderSemanticPlausibilityError) as context:
+            provider.scan(INSTITUTIONAL_MOMENTUM)
+
+        self.assertEqual("semantic_implausibility", context.exception.reason)
+        self.assertIn("ECONOMIC_VALUE_OUT_OF_BOUNDS", str(context.exception))
+        self.assertIn('"evaluatedCandidates"', str(context.exception))
+        self.assertIn('"percentChange":1434.0', str(context.exception))
+        self.assertIsNotNone(provider.last_semantic_diagnostics)
+        self.assertIsNone(provider.last_scan_diagnostics)
 
     def test_finviz_scan_rejects_missing_required_change_column(self) -> None:
         provider = FinvizProvider(sleeper=lambda _seconds: None, backoff_seconds=())

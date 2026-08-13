@@ -781,6 +781,14 @@ Do not start new implementation from:
 
 Use a fresh task branch from local `master` instead.
 
+## 2026-08-13 Night Shift Branches
+
+| Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-DATA-008-semantic-plausibility` | Based on synchronized `a9821ed`; verified feature commit is the branch HEAD | Feature backup required after commit | No | `ACTIVE` | Fail-closed semantic validation after Finviz structural parsing and before candidate filtering/scoring, plus explicit-context Schwab/candle and distribution checks. | Preserve through August 14; reconcile and integrate only after operational evidence. |
+| `codex/ARGUS-PAPER-005-protection-post-fill-hardening` | `b43f93a`, based on synchronized `a9821ed` | Yes | No | `ACTIVE` | Reconcile actual fill risk, current broker position, protective-stop quantity/response, recovery, and emergency flattening. | Preserve through August 14; repeat Hard Chew against current master before integration. |
+| `codex/ARGUS-DATA-009A-opening-readiness-hardening` | No-change audit at synchronized `a9821ed` | No | No | `NEEDS_REVIEW` | Independent audit proved DATA-009 opening candle/RVOL readiness is already integrated and 76 focused tests pass. | No code to integrate; preserve only if audit history remains useful. |
+
 ## 2026-08-06 Candle Backfill Reconciliation
 
 | Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
