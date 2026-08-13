@@ -32,8 +32,9 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 ARGUS-SETUP-001 premarket structure and fresh-setup research is
 `IMPLEMENTED_PENDING_MERGE` on
 `codex/ARGUS-SETUP-001-premarket-structure`, isolated from canonical runtime at
-base `a9821ed`. A deterministic two-pass tool reconstructed the actual August
-13 CRWV/NBIS/IREN/HPE/SMCI decision using only evidence at or before the
+base `a9821ed`. Feature commit `6919b03` is backed up by ordinary non-force
+feature-branch push. A deterministic two-pass tool reconstructed the actual
+August 13 CRWV/NBIS/IREN/HPE/SMCI decision using only evidence at or before the
 09:35:38 ET quote cutoff, froze decision fingerprint
 `9C2F2AB10FA2BF97BB4854286DFA692142BD993DD80EF7E2526329A5C778FF5E`,
 then separately measured later outcomes. Schwab history used for structure was

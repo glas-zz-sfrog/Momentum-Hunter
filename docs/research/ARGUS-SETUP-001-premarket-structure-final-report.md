@@ -19,8 +19,9 @@ behavior changed.
 - Branch: `codex/ARGUS-SETUP-001-premarket-structure`
 - Worktree: `C:\Users\steve\AppData\Local\MomentumHunter\worktrees\ARGUS-SETUP-001-premarket-structure`
 - Shared base: `a9821ed08d5be91a10cbeb0151bb3d6bd3f028b5`
-- Feature commit: recorded after the Hard Chew closeout; this report is part of
-  that feature commit
+- Feature commit: `6919b03` (`Add premarket structure research case study`)
+- Backup: ordinary non-force push of the feature branch; canonical `master` was
+  not pushed or merged
 - Canonical checkout: unchanged at the shared base throughout research
 - Pass 1 decision time: `2026-08-13T09:35:38.562310-04:00`
 - Completed-bar cutoff: `2026-08-13T09:35:00-04:00`

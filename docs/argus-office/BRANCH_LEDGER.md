@@ -751,7 +751,7 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 
 | Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `codex/ARGUS-SETUP-001-premarket-structure` | Based on canonical `a9821ed`; final feature commit recorded at closeout | No | No | `ACTIVE` | Offline two-pass Aug. 13 premarket/opening structure case study with no production strategy authority. | Complete Hard Chew verification, commit, back up the feature branch, and integrate only after canonical operational evidence is safe. |
+| `codex/ARGUS-SETUP-001-premarket-structure` | `6919b03` on canonical base `a9821ed` plus branch-local governance closeout | Yes | No | `PUSHED_FEATURE_BRANCH / IMPLEMENTED_PENDING_MERGE` | Offline two-pass Aug. 13 premarket/opening structure case study with no production strategy authority. | Preserve the branch; integrate only after canonical operational evidence is safe, then start a separate prospective multi-session research collector before any strategy-semantic proposal. |
 
 ## A004/A005 Supersession Finding
 
