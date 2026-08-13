@@ -14,6 +14,10 @@ from typing import Iterable
 import requests
 
 from momentum_hunter.models import Candidate, NewsItem, ScannerCriteria
+from momentum_hunter.provider_semantic_plausibility import (
+    ProviderSemanticDiagnostics,
+    evaluate_provider_semantics,
+)
 from momentum_hunter.time_utils import CENTRAL_TZ, now_central
 
 
@@ -59,6 +63,23 @@ class ProviderContractError(ProviderUnavailableError):
         )
 
 
+class ProviderSemanticPlausibilityError(ProviderUnavailableError):
+    def __init__(self, diagnostics: ProviderSemanticDiagnostics) -> None:
+        self.diagnostics = diagnostics
+        super().__init__(
+            provider=diagnostics.provider,
+            message=(
+                "Provider semantic plausibility failed closed: diagnostics="
+                + json.dumps(
+                    diagnostics.to_dict(),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            ),
+            reason="semantic_implausibility",
+        )
+
+
 @dataclass(frozen=True)
 class ProviderScanDiagnostics:
     provider: str
@@ -68,6 +89,10 @@ class ProviderScanDiagnostics:
     data_row_count: int
     parsed_row_count: int
     qualifying_candidate_count: int
+    semantic_status: str = "UNAVAILABLE"
+    semantic_fingerprint: str = ""
+    semantic_issue_codes: tuple[str, ...] = ()
+    semantic_rejection_reason_counts: tuple[tuple[str, int], ...] = ()
 
 
 class MarketDataProvider(ABC):
@@ -195,6 +220,7 @@ class FinvizProvider(MarketDataProvider):
         self.quote_backoff_seconds = quote_backoff_seconds
         self._quote_html_cache: dict[str, str] = {}
         self.last_scan_diagnostics: ProviderScanDiagnostics | None = None
+        self.last_semantic_diagnostics: ProviderSemanticDiagnostics | None = None
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -209,6 +235,7 @@ class FinvizProvider(MarketDataProvider):
         from bs4 import BeautifulSoup
 
         self.last_scan_diagnostics = None
+        self.last_semantic_diagnostics = None
         url = self._screener_url(criteria)
         response = self._get_with_retries(url, action="scan")
         soup = BeautifulSoup(response.text, "lxml")
@@ -289,7 +316,29 @@ class FinvizProvider(MarketDataProvider):
                 )
             )
 
+        semantic_diagnostics = evaluate_provider_semantics(
+            candidates,
+            criteria,
+            provider=self.name,
+            input_row_count=len(data_rows),
+        )
+        self.last_semantic_diagnostics = semantic_diagnostics
+        if semantic_diagnostics.status != "PASS":
+            raise ProviderSemanticPlausibilityError(semantic_diagnostics)
+
         qualifying = filter_candidates(candidates, criteria)
+        if len(qualifying) != semantic_diagnostics.qualifying_candidate_count:
+            raise ProviderUnavailableError(
+                provider=self.name,
+                reason="semantic_implausibility",
+                message=(
+                    "Provider semantic plausibility failed closed: qualification "
+                    "accounting disagrees with candidate filtering; "
+                    f"fingerprint={semantic_diagnostics.fingerprint}; "
+                    f"semanticQualifying={semantic_diagnostics.qualifying_candidate_count}; "
+                    f"filterQualifying={len(qualifying)}."
+                ),
+            )
         self.last_scan_diagnostics = ProviderScanDiagnostics(
             provider=self.name,
             schema_fingerprint=schema_fingerprint,
@@ -298,6 +347,12 @@ class FinvizProvider(MarketDataProvider):
             data_row_count=len(data_rows),
             parsed_row_count=len(candidates),
             qualifying_candidate_count=len(qualifying),
+            semantic_status=semantic_diagnostics.status,
+            semantic_fingerprint=semantic_diagnostics.fingerprint,
+            semantic_issue_codes=semantic_diagnostics.issue_codes,
+            semantic_rejection_reason_counts=(
+                semantic_diagnostics.rejection_reason_counts
+            ),
         )
         return qualifying
 

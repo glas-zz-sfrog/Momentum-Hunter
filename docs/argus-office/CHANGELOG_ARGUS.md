@@ -423,3 +423,16 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   freshness after quote/account acquisition.
 - Preserved strategy thresholds, scoring, raw captures, UI, Shadow state, and
   live-order unavailability.
+
+## 2026-08-13 - DATA-008 Semantic Plausibility (Branch Only)
+
+- Added a deterministic, nonmutating provider semantic evaluator and wired
+  intrinsic Finviz checks before candidate filtering/scoring on the isolated
+  DATA-008 branch.
+- Distinguished a criteria-explained zero-candidate scan from unexplained row
+  loss and other semantic failures.
+- Added explicit-authority Schwab price/candle, timestamp/session, comparable
+  volume, repeated-value, and distribution-shift checks without provider voting
+  or fallback substitution.
+- Preserved structured failure diagnostics and made semantic failures
+  nonretryable. Canonical runtime remains unchanged pending August 14 evidence.

@@ -280,3 +280,20 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - No live provider/account/order call, source-capture mutation, Shadow action,
   scoring change, strategy-threshold change, UI change, or real-order capability
   was introduced.
+
+## 2026-08-13 - Night Shift DATA-008 Semantic Plausibility
+
+- Created isolated branch/worktree from synchronized canonical `a9821ed`; no
+  canonical, installed-service, manifest, scheduler, or production-data mutation.
+- Added deterministic economic plausibility evaluation before Finviz candidate
+  filtering/scoring, with row/rejection accounting and hash-addressed diagnostics.
+- Added explicit-context Schwab price/candle, session/timestamp, comparable
+  cumulative-volume, and historical-distribution checks without provider calls,
+  substitution, averaging, or candidate mutation.
+- Made semantic failure deterministic and nonretryable so retries cannot convert
+  a bad contract into a later apparently valid observation.
+- Verification: compileall pass; 71 focused tests pass; 105 bounded regressions
+  pass; corrected full discovery passes 1,944/1,944 after an ignored worktree
+  `.venv` junction resolved two environment-only PowerShell test failures.
+- Status: `IMPLEMENTED_PENDING_INTEGRATION_AFTER_AUGUST_14_EVIDENCE`; nothing
+  merged or activated.

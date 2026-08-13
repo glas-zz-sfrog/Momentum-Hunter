@@ -295,6 +295,20 @@ def run_capture_with_result(
             f"parsed={scan_diagnostics.parsed_row_count} | "
             f"qualifying={scan_diagnostics.qualifying_candidate_count}"
         )
+        print(
+            "Provider semantics: "
+            f"status={scan_diagnostics.semantic_status} | "
+            f"fingerprint={scan_diagnostics.semantic_fingerprint} | "
+            f"issues={','.join(scan_diagnostics.semantic_issue_codes) or 'none'} | "
+            "rejections="
+            + (
+                ",".join(
+                    f"{reason}:{count}"
+                    for reason, count in scan_diagnostics.semantic_rejection_reason_counts
+                )
+                or "none"
+            )
+        )
     for candidate in candidates:
         if not candidate.news:
             candidate.news = provider.fetch_news(candidate.ticker, as_of=capture_time)
@@ -795,7 +809,10 @@ def shadow_error_is_retryable(
             ProviderUnavailableError,
             SchwabMarketDataNetworkError,
         ),
-    ) and getattr(exc, "reason", "") != "contract_drift"
+    ) and getattr(exc, "reason", "") not in {
+        "contract_drift",
+        "semantic_implausibility",
+    }
 
 
 def opening_error_is_retryable(
@@ -813,7 +830,10 @@ def opening_error_is_retryable(
             TimeoutError,
             URLError,
         ),
-    ) and getattr(exc, "reason", "") != "contract_drift"
+    ) and getattr(exc, "reason", "") not in {
+        "contract_drift",
+        "semantic_implausibility",
+    }
 
 
 def parse_args() -> argparse.Namespace:
