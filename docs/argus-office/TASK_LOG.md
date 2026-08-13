@@ -309,3 +309,28 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Classification: `RESEARCH_COMPLETE_IMPLEMENTATION_NOT_AUTHORIZED` and
   `IMPLEMENTED_PENDING_MERGE` for feature commit `6919b03`, backed up by
   ordinary non-force feature-branch push.
+
+## 2026-08-13 - ARGUS-SETUP-002 Prospective Successor-Setup Observer
+
+- Reconciled clean synchronized canonical `master`/`origin/master` at
+  `a9821ed`, the unmerged SETUP-001 stack at `1bfb4d2`, installed service
+  identity, and the pinned August 14 Schwab/opening/Paper program before work.
+- Created isolated stacked worktree/branch
+  `codex/ARGUS-SETUP-002-prospective-successor-observer`; no canonical,
+  installed-runtime, scheduler, credential, or production-store state changed.
+- Added an offline prospective sample charter, outcome-blind write-once Pass 1,
+  terminal write-once Pass 2, deterministic sample summary, and a dormant
+  `NOT_INSTALLED` activation plan.
+- Frozen sample `successor-setup-research-20260813-v1` starts at 0 sessions and
+  0 candidates, excludes SETUP-001, preserves the entire opening denominator,
+  and uses policy fingerprint
+  `C2A214A12E6BE8A42BC868AD3A4F90998721F5DE652FB748012546170C95B943`.
+- Preserved production behavior as the control and made every SETUP-002 opinion
+  `RESEARCH_ONLY / EXECUTION_AUTHORITY = NONE`; no provider, account, broker,
+  Paper, Shadow, risk, allocation, service, scheduler, or UI capability exists.
+- Verification passed compileall, 25 focused tests, 37 combined SETUP-001/002
+  tests, 134 affected regressions, and all 1,961 Python tests. Integration and
+  unattended activation remain gated on terminal August 14 evidence and a
+  separately proven activation plan.
+- Implementation commit `a676cd6` was backed up by ordinary non-force push on
+  the feature branch. Nothing was merged, installed, or scheduled.

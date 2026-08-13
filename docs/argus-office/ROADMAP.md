@@ -29,6 +29,51 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SETUP-002 prospective successor-setup research is
+`IMPLEMENTED_PENDING_MERGE_AND_ACTIVATION_GATE` on
+`codex/ARGUS-SETUP-002-prospective-successor-observer`, stacked on the complete
+unmerged SETUP-001 branch and isolated from canonical runtime at `a9821ed`.
+Implementation commit `a676cd6` is backed up by ordinary non-force feature-
+branch push; nothing is merged or installed.
+The prospective sample identity is `successor-setup-research-20260813-v1` with
+policy fingerprint `C2A214A12E6BE8A42BC868AD3A4F90998721F5DE652FB748012546170C95B943`.
+It starts at zero sessions and zero candidates; all five SETUP-001 candidates
+remain case-study evidence and are excluded from the denominator.
+
+The offline observer preserves the complete opening-candidate denominator and
+the production Momentum/Paper result as the control, evaluates at most five
+candidates by canonical rank, and records every unevaluated row as
+`NOT_EVALUATED_PROVIDER_BOUND`. Its immutable Pass 1 contains only completed
+canonical Schwab bars before 09:35 ET, the completed 09:15-09:29 structure, the
+09:30-09:34 opening range, Model A/B/C comparisons, raw verticality covariates,
+broad-market context, original lifecycle, and a separately identified
+continuation, pullback, reclaim, or no-structure opinion. The existing 0.25%
+extension and 1.5 execution-R/R rules are frozen; no research opinion has
+execution authority.
+
+A separate Pass 2 validates the frozen decision and cutoff evidence before
+classifying `UNTRIGGERED`, `TARGET_FIRST`, `STOP_FIRST`, `TIMEOUT`,
+`INVALIDATED`, `AMBIGUOUS_SAME_BAR`, or `DATA_FAILURE`. MFE/MAE terminate with
+the hypothetical lifecycle. Rejected candidates receive visibly separate
+post-decision counterfactual observations that cannot rewrite Pass 1. Exact
+duplicate writes are idempotent; conflicting writes, tampered packets, changed
+cutoff candles, wrong symbols, and wrong session dates fail closed.
+
+SETUP-002 is not installed or scheduled. Its dormant activation plan is
+explicitly `NOT_INSTALLED`, has zero retries and finite future timeouts, and
+states that research failure cannot change opening or Paper status. The August
+14 05:55 and 06:05 Schwab checkpoints, 08:35 opening capture, dependent Paper
+job, installed service, credentials, and production stores remain pinned to
+canonical `a9821ed` and untouched. Integration and any activation remain gated
+until those operational artifacts are terminal and preserved; activation then
+requires a separate exact scheduler/service plan and proof.
+
+Hard Chew proof passes compileall, 25 focused SETUP-002 tests, 37 combined
+SETUP-001/002 tests, 134 affected setup/TradePlan/candle/continuous-plan
+regressions, and all 1,961 Python tests. The remaining evidence limitation is
+unchanged: the current trusted Schwab history normally begins near 07:00 ET,
+so the true 04:00-07:00 path is recorded as `UNOBSERVED` rather than inferred.
+
 ARGUS-SETUP-001 premarket structure and fresh-setup research is
 `IMPLEMENTED_PENDING_MERGE` on
 `codex/ARGUS-SETUP-001-premarket-structure`, isolated from canonical runtime at
@@ -67,13 +112,11 @@ market observation because no valid setup was frozen at the cutoff.
 No production setup, TradePlan, scoring, ranking, Risk Governor, Paper, broker,
 scheduler, service, candle-store, or UI behavior changed. Tomorrow's canonical
 opening and dependent Paper jobs remain outside this worktree and must continue
-on their existing exact identity. After operational evidence is preserved, the
-recommended next strategy-research slice is a prospective research-only
-successor-setup evidence collector across multiple sessions. It should reuse
-DATA-003/DATA-004/CONTINUOUS-003 identities and collect premarket, completed
-15-minute, opening-range, and successor chronology without granting Paper or
-production authority. Production thresholds remain blocked on a larger
-outcome-blind sample.
+on their existing exact identity. The recommended successor collector is now
+implemented by SETUP-002 on a separate stacked branch, but remains unmerged,
+uninstalled, unscheduled, and empty until the August 14 operational evidence
+and separate activation gate are preserved. Production thresholds remain
+blocked on a larger outcome-blind sample.
 
 Hard Chew proof passes compileall, 12 focused research tests, 143 adjacent
 setup/TradePlan/candle regressions, and all 1,936 Python tests. The research

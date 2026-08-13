@@ -1,5 +1,21 @@
 # Argus Changelog
 
+- Implemented ARGUS-SETUP-002 on an isolated stacked feature branch. The new
+  offline observer freezes an empty prospective sample, preserves every opening
+  candidate and production decision as the control, writes outcome-blind
+  Pass 1 and separately adjudicated Pass 2 packets, and aggregates checkpoints
+  without tuning or edge claims.
+- Added explicit continuation/pullback/reclaim successor identity, 0.25%
+  do-not-chase and 1.5 execution-R/R enforcement, Model A/B/C comparison,
+  07:00 coverage/04:00-07:00 limitation, market-regime and verticality
+  covariates, write-once conflict handling, cutoff-evidence tamper detection,
+  lifecycle-bounded MFE/MAE, and counterfactual separation.
+- Passed compileall, 25 focused tests, 134 affected regressions, and all 1,961
+  Python tests. No scheduler was installed, no production runtime changed, and
+  August 14 remains pinned to canonical `a9821ed`.
+- Backed up implementation commit `a676cd6` by ordinary non-force feature-branch
+  push; nothing was merged or installed.
+
 - Integrated DATA-009 implementation commit `ded2929` into canonical `master`.
   Opening TradePlan production now performs finite, candidate-only canonical
   candle readiness and Paper freezes its decision timestamp only after required
