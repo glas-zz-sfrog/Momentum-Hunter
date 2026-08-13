@@ -254,6 +254,10 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 
 ## 2026-08-13 - ARGUS-DATA-009 Opening Candle Readiness
 
+- Integrated implementation commit `ded2929` into canonical `master` by clean
+  fast-forward after synchronized-base, diff, protected-path, and secret-scan
+  gates passed. The closeout identity containing this record is the required
+  exact Git pin for remaining opening and dependent Paper jobs.
 - Preserved the successful candidate-bearing August 13 opening capture and its
   dependent Paper `NO_TRADE`; no historical artifact was rewritten.
 - Classified the Paper result as execution evidence unavailable because all five

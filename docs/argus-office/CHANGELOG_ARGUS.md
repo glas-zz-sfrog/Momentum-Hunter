@@ -1,5 +1,11 @@
 # Argus Changelog
 
+- Integrated DATA-009 implementation commit `ded2929` into canonical `master`.
+  Opening TradePlan production now performs finite, candidate-only canonical
+  candle readiness and Paper freezes its decision timestamp only after required
+  evidence acquisition; the final closeout identity is the required scheduler
+  pin for the remaining opening and dependent Paper jobs.
+
 - Corrected DATA-007's overstated causal label without rewriting its original
   write-once evidence. The superseding schema-v2 record separates invalid
   decision state, system data-contract failure, and provider-schema-drift root
