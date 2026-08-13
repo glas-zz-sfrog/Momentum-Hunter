@@ -6,7 +6,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_FLOOR
 from email.utils import format_datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -243,7 +243,9 @@ class SyntheticAdapter:
         self.fail_asset_once = False
         self.interrupt_before_stop_once = False
         self.entry_fills = True
+        self.entry_fill_price = Decimal("10")
         self.stop_fails = False
+        self.stop_response_quantity: Decimal | None = None
         self.market_exit_fraction = Decimal("1")
         self.account_override: AlpacaPaperAccount | None = None
         self.account_receipt_payload: object = {"status": "ACTIVE"}
@@ -330,10 +332,12 @@ class SyntheticAdapter:
             raise AlpacaPaperBrokerError("synthetic stop rejection")
         self._receipt("POST", "/v2/orders")
         if request.side == "buy":
-            quantity = (request.notional or Decimal("0")) / Decimal("10")
+            quantity = (
+                (request.notional or Decimal("0")) / self.entry_fill_price
+            ).quantize(Decimal("0.000000001"), rounding=ROUND_FLOOR)
             status = "filled" if self.entry_fills else "new"
             filled = quantity if self.entry_fills else Decimal("0")
-            average = Decimal("10") if self.entry_fills else None
+            average = self.entry_fill_price if self.entry_fills else None
             if self.entry_fills:
                 self.positions = [
                     AlpacaPaperPosition(
@@ -347,11 +351,17 @@ class SyntheticAdapter:
                 ]
         elif request.order_type == "market":
             quantity = request.quantity or Decimal("0")
-            filled_quantity = quantity * self.market_exit_fraction
+            filled_quantity = (quantity * self.market_exit_fraction).quantize(
+                Decimal("0.000000001"),
+                rounding=ROUND_FLOOR,
+            )
             status = "filled"
             filled = filled_quantity
             average = Decimal("10")
-            remaining = quantity - filled_quantity
+            remaining = (quantity - filled_quantity).quantize(
+                Decimal("0.000000001"),
+                rounding=ROUND_FLOOR,
+            )
             if remaining > 0:
                 self.positions = [
                     AlpacaPaperPosition(
@@ -366,7 +376,12 @@ class SyntheticAdapter:
             else:
                 self.positions = []
         else:
-            quantity = request.quantity or Decimal("0")
+            quantity = (
+                self.stop_response_quantity
+                if request.order_type == "stop"
+                and self.stop_response_quantity is not None
+                else request.quantity or Decimal("0")
+            )
             status = "new"
             filled = Decimal("0")
             average = None
@@ -886,6 +901,23 @@ class AlpacaPaperEngineeringTests(unittest.TestCase):
         self.assertFalse(result["positionFlat"])
         self.assertEqual("filled", result["entryOrder"]["status"])
         self.assertEqual("new", result["protectiveStopOrder"]["status"])
+        self.assertEqual("PASS", result["postFillRisk"]["status"])
+        self.assertLessEqual(
+            Decimal(result["postFillRisk"]["actualDollarRisk"]),
+            Decimal(result["postFillRisk"]["maximumUnitRisk"]),
+        )
+        self.assertGreaterEqual(
+            Decimal(result["postFillRisk"]["actualRewardRisk"]),
+            Decimal(result["postFillRisk"]["minimumRewardRisk"]),
+        )
+        self.assertLessEqual(
+            Decimal(result["postFillRisk"]["entryExtensionPercent"]),
+            Decimal(result["postFillRisk"]["maximumEntryExtensionPercent"]),
+        )
+        self.assertEqual(
+            result["postFillRisk"]["confirmedPositionQuantity"],
+            result["protectiveStopOrder"]["quantity"],
+        )
         self.assertNotIn("https://api.alpaca.markets", json.dumps(result))
         self.assertFalse(any("https://api.alpaca.markets" in value for value in adapter.calls))
 
@@ -1060,6 +1092,92 @@ class AlpacaPaperEngineeringTests(unittest.TestCase):
         self.assertFalse(result["positionProtected"])
         self.assertEqual([], adapter.positions)
 
+    def test_adverse_actual_fill_rechecks_risk_and_flattens_before_stop(self) -> None:
+        adapter = SyntheticAdapter()
+        adapter.entry_fill_price = Decimal("10.04")
+
+        result = self.run_case(eligible_report(), adapter)
+
+        self.assertEqual(PAPER_TRADE_CREATED, result["classification"])
+        self.assertEqual(
+            ["PAPER_POST_FILL_RISK_FAILED_EMERGENCY_EXIT"],
+            result["reasons"],
+        )
+        self.assertEqual("BLOCKED", result["postFillRisk"]["status"])
+        self.assertIn(
+            "PAPER_POST_FILL_UNIT_RISK_EXCEEDED",
+            result["postFillRisk"]["blockers"],
+        )
+        self.assertIn(
+            "PAPER_POST_FILL_ENTRY_EXTENSION_TOO_LARGE",
+            result["postFillRisk"]["blockers"],
+        )
+        self.assertFalse(result["positionProtected"])
+        self.assertTrue(result["positionFlat"])
+        self.assertFalse(any(order.order_type == "stop" for order in adapter.orders.values()))
+
+    def test_fresh_stop_quantity_mismatch_is_canceled_and_position_flattened(self) -> None:
+        adapter = SyntheticAdapter()
+        adapter.stop_response_quantity = Decimal("99")
+
+        result = self.run_case(eligible_report(), adapter)
+
+        self.assertEqual(
+            ["PAPER_PROTECTION_MISMATCH_EMERGENCY_EXIT"],
+            result["reasons"],
+        )
+        self.assertEqual("canceled", result["protectiveStopOrder"]["status"])
+        self.assertEqual("99", result["protectiveStopOrder"]["quantity"])
+        self.assertFalse(result["positionProtected"])
+        self.assertTrue(result["positionFlat"])
+        self.assertEqual([], adapter.positions)
+
+    def test_recovery_stop_quantity_mismatch_is_not_reused(self) -> None:
+        adapter = SyntheticAdapter()
+        payload = eligible_report()
+        engine = self.engine(adapter)
+        original_write = engine._write_final
+
+        def interrupt_final(path, record):
+            if record.get("classification") == PAPER_TRADE_CREATED:
+                raise RuntimeError("synthetic interruption after active evidence")
+            return original_write(path, record)
+
+        engine._write_final = interrupt_final
+        with patch(
+            "momentum_hunter.alpaca_paper_engineering.adjudicate_lifecycle_capabilities",
+            return_value=registry(),
+        ), self.assertRaisesRegex(RuntimeError, "after active evidence"):
+            engine.run_decision(
+                self.write_report(payload),
+                confirmation=PAPER_ENGINEERING_DECISION_CONFIRMATION,
+            )
+
+        stop_id = next(
+            order_id
+            for order_id, order in adapter.orders.items()
+            if order.order_type == "stop"
+        )
+        original_stop = adapter.orders[stop_id]
+        adapter.orders[stop_id] = AlpacaPaperOrder(
+            **{
+                **original_stop.__dict__,
+                "quantity": original_stop.quantity + Decimal("0.01"),
+            }
+        )
+
+        result = self.run_case(payload, adapter)
+
+        self.assertEqual(
+            ["PAPER_RECOVERY_PROTECTION_MISMATCH_EMERGENCY_EXIT"],
+            result["reasons"],
+        )
+        self.assertTrue(result["recoveredAfterInterruption"])
+        self.assertFalse(result["positionProtected"])
+        self.assertTrue(result["positionFlat"])
+        self.assertEqual("canceled", result["protectiveStopOrder"]["status"])
+        self.assertEqual([], adapter.positions)
+
     def test_partial_emergency_exit_never_claims_flat_and_recovery_protects_remainder(self) -> None:
         adapter = SyntheticAdapter()
         adapter.stop_fails = True
@@ -1156,6 +1274,43 @@ class AlpacaPaperEngineeringTests(unittest.TestCase):
         self.assertTrue(outcomes[0]["positionFlat"])
         self.assertEqual([], adapter.positions)
         self.assertEqual(PAPER_TRADE_CREATED, created["classification"])
+
+    def test_active_reconciliation_never_claims_protected_after_position_drift(self) -> None:
+        adapter = SyntheticAdapter()
+        result = self.run_case(eligible_report(), adapter)
+        self.assertTrue(result["positionProtected"])
+        original = adapter.positions[0]
+        reduced = (original.quantity - Decimal("0.01")).quantize(
+            Decimal("0.000000001")
+        )
+        adapter.positions = [
+            AlpacaPaperPosition(
+                symbol=original.symbol,
+                quantity=reduced,
+                side=original.side,
+                average_entry_price=original.average_entry_price,
+                market_value=reduced * original.current_price,
+                current_price=original.current_price,
+            )
+        ]
+
+        with patch(
+            "momentum_hunter.alpaca_paper_engineering.adjudicate_lifecycle_capabilities",
+            return_value=registry(),
+        ):
+            outcomes = self.engine(adapter).reconcile_active()
+
+        self.assertEqual(1, len(outcomes))
+        self.assertEqual("POSITION_CLOSED", outcomes[0]["classification"])
+        self.assertEqual(
+            "PROTECTION_QUANTITY_MISMATCH",
+            outcomes[0]["exitReason"],
+        )
+        self.assertFalse(outcomes[0]["positionProtected"])
+        self.assertTrue(outcomes[0]["positionFlat"])
+        self.assertEqual("canceled", outcomes[0]["stopOrder"]["status"])
+        self.assertEqual(str(reduced), outcomes[0]["exitOrder"]["filledQuantity"])
+        self.assertEqual([], adapter.positions)
 
     def test_run_session_supervises_trade_to_terminal_outcome(self) -> None:
         adapter = SyntheticAdapter()

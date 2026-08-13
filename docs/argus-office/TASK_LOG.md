@@ -280,3 +280,22 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - No live provider/account/order call, source-capture mutation, Shadow action,
   scoring change, strategy-threshold change, UI change, or real-order capability
   was introduced.
+
+## 2026-08-13 - ARGUS-PAPER-005 Protection And Post-Fill Hardening
+
+- Implemented only in the isolated
+  `codex/ARGUS-PAPER-005-protection-post-fill-hardening` worktree from canonical
+  base `a9821ed`; no integration or activation occurred.
+- Added post-fill risk reconciliation using the confirmed Paper fill average,
+  filled quantity, current broker position, frozen stop/target, allocation
+  ceilings, and risk policy before a position may be protected.
+- Added exact protective-stop response and recovery validation. A stop quantity
+  or price mismatch is never reported as protected; the owned stop is canceled
+  where possible and the current confirmed Paper position is flattened.
+- Added active-supervisor quantity reconciliation so persisted active evidence
+  cannot override changed broker position truth.
+- Synthetic tests cover adverse fills, fresh stop mismatch, restart with stale
+  stop quantity, active-position drift, partial emergency exit, and the normal
+  exact-match lifecycle. Compileall and 103 focused Paper/broker/lifecycle/
+  allocation tests pass. No provider, account, service, scheduler, production
+  store, Shadow state, or installed runtime was contacted or changed.

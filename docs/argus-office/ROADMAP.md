@@ -77,6 +77,19 @@ unittest discovery exceeded its explicit ten-minute bound without a result and
 is not claimed as a pass. No live provider, account, position, or order call was
 made by this repair verification.
 
+ARGUS-PAPER-005 is `IMPLEMENTED_PENDING_INTEGRATION_AFTER_AUGUST_14_EVIDENCE`
+on branch `codex/ARGUS-PAPER-005-protection-post-fill-hardening`. The isolated
+implementation does not alter the installed August 14 runtime. It recalculates
+actual dollar risk, reward/risk, and entry extension from Alpaca Paper's
+confirmed fill and broker position before protection; a failed post-fill check
+forces the current Paper position flat. New and recovered protective stops must
+match the exact current broker position quantity and frozen stop price, and the
+active supervisor rechecks that invariant before reporting `POSITION_WORKING`.
+Any mismatch cancels the owned stop where possible and flattens only the current
+confirmed Paper position. This branch must not merge, activate, repin jobs, or
+replace the installed service until the August 14 opening/Paper evidence is
+terminal and preserved.
+
 ARGUS-DATA-007A corrects the causal certainty of the DATA-007 zero-candidate
 adjudication without changing its operational conclusion. The August 7, 10,
 11, and 12 decisions remain `INVALID / SYSTEM_DATA_CONTRACT_FAILURE /

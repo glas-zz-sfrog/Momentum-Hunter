@@ -995,6 +995,7 @@ class AlpacaPaperEngineeringEngine:
             "accountSnapshot": _account_dict(account),
             "submittedNotional": _decimal_text(submitted_notional),
             "plannedQuantity": _decimal_text(allocation.final_authorized_quantity),
+            "planEntryPrice": _decimal_text(Decimal(str(plan.bullish_entry))),
             "stopPrice": _decimal_text(Decimal(str(plan.bullish_stop))),
             "targetPrice": _decimal_text(Decimal(str(plan.bullish_target_1))),
             "forcedFlatAt": plan.intraday_evidence.forced_flat_at,
@@ -1076,6 +1077,18 @@ class AlpacaPaperEngineeringEngine:
             raise PaperEngineeringAnomaly(
                 "Paper entry fill and position identity do not reconcile."
             )
+        post_fill_risk = _post_fill_risk_evidence(
+            candidate_id=selected.candidate_id,
+            symbol=selected.symbol,
+            plan_entry_price=Decimal(str(plan.bullish_entry)),
+            stop_price=Decimal(str(plan.bullish_stop)),
+            target_price=Decimal(str(plan.bullish_target_1)),
+            authorized_quantity=allocation.final_authorized_quantity,
+            pre_entry_open_risk=account.committed_open_risk,
+            entry=entry,
+            position=position,
+            policy=policy,
+        )
         exit_authorization = authorize_paper_engineering_order(
             confirmation=PAPER_ENGINEERING_CONFIRMATION,
             maximum_notional=max(submitted_notional, abs(position.market_value)),
@@ -1084,6 +1097,37 @@ class AlpacaPaperEngineeringEngine:
             allowed_symbols=(selected.symbol,),
             client_order_prefix=prefix,
         )
+        if post_fill_risk["status"] != "PASS":
+            emergency = self._emergency_exit(
+                selected.symbol,
+                position,
+                exit_client_id,
+                exit_authorization,
+                policy,
+            )
+            return self._write_final(
+                final_path,
+                {
+                    **base,
+                    "classification": PAPER_TRADE_CREATED,
+                    "terminal": True,
+                    "reasons": ["PAPER_POST_FILL_RISK_FAILED_EMERGENCY_EXIT"],
+                    "candidatesEvaluated": len(evaluations),
+                    "candidateEvaluations": [item.to_dict() for item in evaluations],
+                    "selectedCandidateId": selected.candidate_id,
+                    "selectedSymbol": selected.symbol,
+                    "selectedRank": selected.canonical_rank,
+                    "accountSnapshot": _account_dict(account),
+                    "providerCalls": [_receipt_dict(item) for item in receipts],
+                    "paperOrderCreated": True,
+                    "entryOrder": _order_dict(entry),
+                    "postFillRisk": post_fill_risk,
+                    "emergencyExitOrder": _order_dict(emergency),
+                    "positionProtected": False,
+                    "positionFlat": not self.adapter.list_positions(),
+                    "intentFingerprint": intent["fingerprint"],
+                },
+            )
         stop_request = AlpacaPaperOrderRequest(
             symbol=selected.symbol,
             side="sell",
@@ -1093,12 +1137,62 @@ class AlpacaPaperEngineeringEngine:
             quantity=position.quantity,
             stop_price=Decimal(str(plan.bullish_stop)),
         )
+        stop_order: AlpacaPaperOrder | None = None
         try:
             stop_resolution = self.adapter.submit_order_idempotently(
                 stop_request,
                 authorization=exit_authorization,
             )
             stop_order = stop_resolution.order
+            _validate_protective_stop(
+                stop_order,
+                symbol=selected.symbol,
+                client_order_id=stop_client_id,
+                expected_quantity=position.quantity,
+                expected_stop_price=Decimal(str(plan.bullish_stop)),
+            )
+            protected_position = _find_position(
+                self.adapter.list_positions(),
+                selected.symbol,
+            )
+            if protected_position is None or protected_position.quantity != position.quantity:
+                raise PaperEngineeringAnomaly(
+                    "Paper position changed while protective stop was being installed."
+                )
+        except PaperEngineeringAnomaly:
+            canceled_stop, emergency, position_flat = self._close_after_protection_anomaly(
+                symbol=selected.symbol,
+                position=position,
+                stop_order=stop_order,
+                exit_client_id=exit_client_id,
+                client_order_prefix=prefix,
+                policy=policy,
+            )
+            return self._write_final(
+                final_path,
+                {
+                    **base,
+                    "classification": PAPER_TRADE_CREATED,
+                    "terminal": True,
+                    "reasons": ["PAPER_PROTECTION_MISMATCH_EMERGENCY_EXIT"],
+                    "candidatesEvaluated": len(evaluations),
+                    "candidateEvaluations": [item.to_dict() for item in evaluations],
+                    "accountSnapshot": _account_dict(account),
+                    "providerCalls": [_receipt_dict(item) for item in receipts],
+                    "paperOrderCreated": True,
+                    "entryOrder": _order_dict(entry),
+                    "postFillRisk": post_fill_risk,
+                    "protectiveStopOrder": (
+                        _order_dict(canceled_stop) if canceled_stop is not None else None
+                    ),
+                    "emergencyExitOrder": (
+                        _order_dict(emergency) if emergency is not None else None
+                    ),
+                    "positionProtected": False,
+                    "positionFlat": position_flat,
+                    "intentFingerprint": intent["fingerprint"],
+                },
+            )
         except AlpacaPaperBrokerError:
             emergency = self._emergency_exit(
                 selected.symbol,
@@ -1120,6 +1214,7 @@ class AlpacaPaperEngineeringEngine:
                     "providerCalls": [_receipt_dict(item) for item in receipts],
                     "paperOrderCreated": True,
                     "entryOrder": _order_dict(entry),
+                    "postFillRisk": post_fill_risk,
                     "emergencyExitOrder": _order_dict(emergency),
                     "positionProtected": False,
                     "positionFlat": not self.adapter.list_positions(),
@@ -1137,6 +1232,7 @@ class AlpacaPaperEngineeringEngine:
             "targetPrice": _decimal_text(Decimal(str(plan.bullish_target_1))),
             "forcedFlatAt": plan.intraday_evidence.forced_flat_at,
             "entryOrder": _order_dict(entry),
+            "postFillRisk": post_fill_risk,
             "protectiveStopOrder": _order_dict(stop_order),
             "exitClientOrderId": exit_client_id,
             "clientOrderPrefix": prefix,
@@ -1163,6 +1259,7 @@ class AlpacaPaperEngineeringEngine:
                 "providerCalls": [_receipt_dict(item) for item in receipts],
                 "paperOrderCreated": True,
                 "entryOrder": _order_dict(entry),
+                "postFillRisk": post_fill_risk,
                 "protectiveStopOrder": _order_dict(stop_order),
                 "positionProtected": stop_order.status not in {"canceled", "expired", "rejected"},
                 "positionFlat": False,
@@ -1213,6 +1310,7 @@ class AlpacaPaperEngineeringEngine:
         submitted_notional = _decimal(intent.get("submittedNotional"))
         stop_price = _decimal(intent.get("stopPrice"))
         target_price = _decimal(intent.get("targetPrice"))
+        plan_entry_price = _decimal(intent.get("planEntryPrice"))
         forced_flat_at = _aware_datetime(intent.get("forcedFlatAt"))
         if (
             not symbol
@@ -1222,6 +1320,7 @@ class AlpacaPaperEngineeringEngine:
             or exit_client_id != f"{prefix}exit"
             or submitted_notional is None
             or submitted_notional <= 0
+            or plan_entry_price is None
             or stop_price is None
             or target_price is None
             or forced_flat_at is None
@@ -1364,6 +1463,27 @@ class AlpacaPaperEngineeringEngine:
                 "Paper recovery position exceeds the owned entry fill."
             )
 
+        allocation_payload = selected.get("allocation")
+        allocation_payload = (
+            dict(allocation_payload) if isinstance(allocation_payload, Mapping) else {}
+        )
+        authorized_quantity = _decimal(
+            allocation_payload.get("finalAuthorizedQuantity")
+        )
+        pre_entry_open_risk = _decimal(account_snapshot.get("committedOpenRisk"))
+        post_fill_risk = _post_fill_risk_evidence(
+            candidate_id=str(selected.get("candidateId", "")),
+            symbol=symbol,
+            plan_entry_price=plan_entry_price,
+            stop_price=stop_price,
+            target_price=target_price,
+            authorized_quantity=authorized_quantity,
+            pre_entry_open_risk=pre_entry_open_risk,
+            entry=entry,
+            position=position,
+            policy=policy,
+        )
+
         exit_authorization = authorize_paper_engineering_order(
             confirmation=PAPER_ENGINEERING_CONFIRMATION,
             maximum_notional=max(submitted_notional, abs(position.market_value)),
@@ -1372,6 +1492,38 @@ class AlpacaPaperEngineeringEngine:
             allowed_symbols=(symbol,),
             client_order_prefix=prefix,
         )
+        if post_fill_risk["status"] != "PASS":
+            emergency = self._emergency_exit(
+                symbol,
+                position,
+                exit_client_id,
+                exit_authorization,
+                policy,
+            )
+            return self._write_final(
+                final_path,
+                {
+                    **base,
+                    "classification": PAPER_TRADE_CREATED,
+                    "terminal": True,
+                    "reasons": ["PAPER_RECOVERY_POST_FILL_RISK_FAILED_EMERGENCY_EXIT"],
+                    "candidatesEvaluated": len(evaluations),
+                    "candidateEvaluations": evaluations,
+                    "selectedCandidateId": selected.get("candidateId"),
+                    "selectedSymbol": symbol,
+                    "selectedRank": selected.get("canonicalRank"),
+                    "accountSnapshot": account_snapshot,
+                    "providerCalls": [_receipt_dict(item) for item in receipts],
+                    "paperOrderCreated": True,
+                    "entryOrder": _order_dict(entry),
+                    "postFillRisk": post_fill_risk,
+                    "emergencyExitOrder": _order_dict(emergency),
+                    "positionProtected": False,
+                    "positionFlat": not self.adapter.list_positions(),
+                    "recoveredAfterInterruption": True,
+                    "intentFingerprint": fingerprint,
+                },
+            )
         stop_order = self.adapter.try_get_order_by_client_id(stop_client_id)
         if stop_order is not None:
             _validate_recovered_order(
@@ -1381,6 +1533,56 @@ class AlpacaPaperEngineeringEngine:
                 client_order_id=stop_client_id,
                 order_type="stop",
             )
+            try:
+                _validate_protective_stop(
+                    stop_order,
+                    symbol=symbol,
+                    client_order_id=stop_client_id,
+                    expected_quantity=position.quantity,
+                    expected_stop_price=stop_price,
+                )
+            except PaperEngineeringAnomaly:
+                canceled_stop, emergency, position_flat = (
+                    self._close_after_protection_anomaly(
+                        symbol=symbol,
+                        position=position,
+                        stop_order=stop_order,
+                        exit_client_id=exit_client_id,
+                        client_order_prefix=prefix,
+                        policy=policy,
+                    )
+                )
+                return self._write_final(
+                    final_path,
+                    {
+                        **base,
+                        "classification": PAPER_TRADE_CREATED,
+                        "terminal": True,
+                        "reasons": ["PAPER_RECOVERY_PROTECTION_MISMATCH_EMERGENCY_EXIT"],
+                        "candidatesEvaluated": len(evaluations),
+                        "candidateEvaluations": evaluations,
+                        "selectedCandidateId": selected.get("candidateId"),
+                        "selectedSymbol": symbol,
+                        "selectedRank": selected.get("canonicalRank"),
+                        "accountSnapshot": account_snapshot,
+                        "providerCalls": [_receipt_dict(item) for item in receipts],
+                        "paperOrderCreated": True,
+                        "entryOrder": _order_dict(entry),
+                        "postFillRisk": post_fill_risk,
+                        "protectiveStopOrder": (
+                            _order_dict(canceled_stop)
+                            if canceled_stop is not None
+                            else None
+                        ),
+                        "emergencyExitOrder": (
+                            _order_dict(emergency) if emergency is not None else None
+                        ),
+                        "positionProtected": False,
+                        "positionFlat": position_flat,
+                        "recoveredAfterInterruption": True,
+                        "intentFingerprint": fingerprint,
+                    },
+                )
         if stop_order is None:
             stop_request = AlpacaPaperOrderRequest(
                 symbol=symbol,
@@ -1396,6 +1598,55 @@ class AlpacaPaperEngineeringEngine:
                     stop_request,
                     authorization=exit_authorization,
                 ).order
+                _validate_protective_stop(
+                    stop_order,
+                    symbol=symbol,
+                    client_order_id=stop_client_id,
+                    expected_quantity=position.quantity,
+                    expected_stop_price=stop_price,
+                )
+            except PaperEngineeringAnomaly:
+                canceled_stop, emergency, position_flat = (
+                    self._close_after_protection_anomaly(
+                        symbol=symbol,
+                        position=position,
+                        stop_order=stop_order,
+                        exit_client_id=exit_client_id,
+                        client_order_prefix=prefix,
+                        policy=policy,
+                    )
+                )
+                return self._write_final(
+                    final_path,
+                    {
+                        **base,
+                        "classification": PAPER_TRADE_CREATED,
+                        "terminal": True,
+                        "reasons": ["PAPER_RECOVERY_PROTECTION_MISMATCH_EMERGENCY_EXIT"],
+                        "candidatesEvaluated": len(evaluations),
+                        "candidateEvaluations": evaluations,
+                        "selectedCandidateId": selected.get("candidateId"),
+                        "selectedSymbol": symbol,
+                        "selectedRank": selected.get("canonicalRank"),
+                        "accountSnapshot": account_snapshot,
+                        "providerCalls": [_receipt_dict(item) for item in receipts],
+                        "paperOrderCreated": True,
+                        "entryOrder": _order_dict(entry),
+                        "postFillRisk": post_fill_risk,
+                        "protectiveStopOrder": (
+                            _order_dict(canceled_stop)
+                            if canceled_stop is not None
+                            else None
+                        ),
+                        "emergencyExitOrder": (
+                            _order_dict(emergency) if emergency is not None else None
+                        ),
+                        "positionProtected": False,
+                        "positionFlat": position_flat,
+                        "recoveredAfterInterruption": True,
+                        "intentFingerprint": fingerprint,
+                    },
+                )
             except AlpacaPaperBrokerError:
                 emergency = self._emergency_exit(
                     symbol,
@@ -1420,6 +1671,7 @@ class AlpacaPaperEngineeringEngine:
                         "providerCalls": [_receipt_dict(item) for item in receipts],
                         "paperOrderCreated": True,
                         "entryOrder": _order_dict(entry),
+                        "postFillRisk": post_fill_risk,
                         "emergencyExitOrder": _order_dict(emergency),
                         "positionProtected": False,
                         "positionFlat": not self.adapter.list_positions(),
@@ -1460,6 +1712,51 @@ class AlpacaPaperEngineeringEngine:
                 },
             )
 
+        protected_position = _find_position(self.adapter.list_positions(), symbol)
+        if (
+            protected_position is None
+            or protected_position.quantity != position.quantity
+        ):
+            canceled_stop, emergency, position_flat = (
+                self._close_after_protection_anomaly(
+                    symbol=symbol,
+                    position=position,
+                    stop_order=stop_order,
+                    exit_client_id=exit_client_id,
+                    client_order_prefix=prefix,
+                    policy=policy,
+                )
+            )
+            return self._write_final(
+                final_path,
+                {
+                    **base,
+                    "classification": PAPER_TRADE_CREATED,
+                    "terminal": True,
+                    "reasons": ["PAPER_RECOVERY_POSITION_CHANGED_EMERGENCY_EXIT"],
+                    "candidatesEvaluated": len(evaluations),
+                    "candidateEvaluations": evaluations,
+                    "selectedCandidateId": selected.get("candidateId"),
+                    "selectedSymbol": symbol,
+                    "selectedRank": selected.get("canonicalRank"),
+                    "accountSnapshot": account_snapshot,
+                    "providerCalls": [_receipt_dict(item) for item in receipts],
+                    "paperOrderCreated": True,
+                    "entryOrder": _order_dict(entry),
+                    "postFillRisk": post_fill_risk,
+                    "protectiveStopOrder": (
+                        _order_dict(canceled_stop) if canceled_stop is not None else None
+                    ),
+                    "emergencyExitOrder": (
+                        _order_dict(emergency) if emergency is not None else None
+                    ),
+                    "positionProtected": False,
+                    "positionFlat": position_flat,
+                    "recoveredAfterInterruption": True,
+                    "intentFingerprint": fingerprint,
+                },
+            )
+
         active = {
             **base,
             "recordType": "ACTIVE_ALPACA_PAPER_ENGINEERING_POSITION",
@@ -1470,6 +1767,7 @@ class AlpacaPaperEngineeringEngine:
             "targetPrice": _decimal_text(target_price),
             "forcedFlatAt": forced_flat_at.isoformat(),
             "entryOrder": _order_dict(entry),
+            "postFillRisk": post_fill_risk,
             "protectiveStopOrder": _order_dict(stop_order),
             "exitClientOrderId": exit_client_id,
             "clientOrderPrefix": prefix,
@@ -1502,6 +1800,7 @@ class AlpacaPaperEngineeringEngine:
                 "providerCalls": [_receipt_dict(item) for item in receipts],
                 "paperOrderCreated": True,
                 "entryOrder": _order_dict(entry),
+                "postFillRisk": post_fill_risk,
                 "protectiveStopOrder": _order_dict(stop_order),
                 "positionProtected": True,
                 "positionFlat": False,
@@ -1575,6 +1874,50 @@ class AlpacaPaperEngineeringEngine:
                     "exitReason": "PROTECTIVE_STOP" if stop_order.filled_quantity > 0 else "PROVIDER_POSITION_CLOSED",
                     "stopOrder": _order_dict(stop_order),
                     "positionFlat": True,
+                    "recordedAt": self.clock().isoformat(),
+                },
+            )
+        try:
+            _validate_protective_stop(
+                stop_order,
+                symbol=symbol,
+                client_order_id=str(stop_payload.get("clientOrderId", "")),
+                expected_quantity=position.quantity,
+                expected_stop_price=Decimal(str(active.get("stopPrice"))),
+            )
+            if position.quantity != quantity:
+                raise PaperEngineeringAnomaly(
+                    "Paper broker position no longer matches active evidence."
+                )
+        except PaperEngineeringAnomaly:
+            canceled_stop, emergency, position_flat = (
+                self._close_after_protection_anomaly(
+                    symbol=symbol,
+                    position=position,
+                    stop_order=stop_order,
+                    exit_client_id=exit_client_id,
+                    client_order_prefix=prefix,
+                    policy=policy,
+                )
+            )
+            return self._write_final(
+                outcome_path,
+                {
+                    "schemaVersion": PAPER_ENGINEERING_SCHEMA_VERSION,
+                    "profile": PAPER_ENGINEERING_PROFILE,
+                    "recordType": "ALPACA_PAPER_ENGINEERING_OUTCOME",
+                    "decisionCycleId": active.get("decisionCycleId"),
+                    "symbol": symbol,
+                    "classification": "POSITION_CLOSED",
+                    "exitReason": "PROTECTION_QUANTITY_MISMATCH",
+                    "stopOrder": (
+                        _order_dict(canceled_stop) if canceled_stop is not None else None
+                    ),
+                    "exitOrder": (
+                        _order_dict(emergency) if emergency is not None else None
+                    ),
+                    "positionProtected": False,
+                    "positionFlat": position_flat,
                     "recordedAt": self.clock().isoformat(),
                 },
             )
@@ -1683,6 +2026,61 @@ class AlpacaPaperEngineeringEngine:
                 "Paper emergency exit did not reconcile the owned position to flat."
             )
         return order
+
+    def _close_after_protection_anomaly(
+        self,
+        *,
+        symbol: str,
+        position: AlpacaPaperPosition,
+        stop_order: AlpacaPaperOrder | None,
+        exit_client_id: str,
+        client_order_prefix: str,
+        policy: PaperEngineeringPolicy,
+    ) -> tuple[AlpacaPaperOrder | None, AlpacaPaperOrder | None, bool]:
+        canceled_stop = stop_order
+        if stop_order is not None and not stop_order.terminal:
+            stop_quantity = stop_order.quantity or position.quantity
+            cancellation_authorization = authorize_paper_engineering_order(
+                confirmation=PAPER_ENGINEERING_CONFIRMATION,
+                maximum_notional=max(
+                    Decimal("1"),
+                    abs(position.market_value),
+                    stop_quantity * max(position.current_price, Decimal("1")),
+                ),
+                maximum_quantity=max(stop_quantity, position.quantity),
+                allowed_sides=("sell",),
+                allowed_symbols=(symbol,),
+                client_order_prefix=client_order_prefix,
+            )
+            canceled_stop = self.adapter.cancel_order(
+                stop_order.order_id,
+                authorization=cancellation_authorization,
+            )
+            canceled_stop = self._poll(canceled_stop, policy)
+            if canceled_stop.status != "canceled":
+                raise PaperEngineeringAnomaly(
+                    "Mismatched Paper protective stop could not be canceled."
+                )
+
+        current_position = _find_position(self.adapter.list_positions(), symbol)
+        if current_position is None:
+            return canceled_stop, None, True
+        exit_authorization = authorize_paper_engineering_order(
+            confirmation=PAPER_ENGINEERING_CONFIRMATION,
+            maximum_notional=max(Decimal("1"), abs(current_position.market_value)),
+            maximum_quantity=current_position.quantity,
+            allowed_sides=("sell",),
+            allowed_symbols=(symbol,),
+            client_order_prefix=client_order_prefix,
+        )
+        emergency = self._emergency_exit(
+            symbol,
+            current_position,
+            exit_client_id,
+            exit_authorization,
+            policy,
+        )
+        return canceled_stop, emergency, not self.adapter.list_positions()
 
     def _poll(
         self,
@@ -1884,6 +2282,155 @@ def _load_verified_record(path: Path, label: str) -> dict[str, object]:
         raise PaperEngineeringAnomaly(f"{label.capitalize()} fingerprint is invalid.")
     _assert_sanitized(payload)
     return payload
+
+
+def _post_fill_risk_evidence(
+    *,
+    candidate_id: str,
+    symbol: str,
+    plan_entry_price: Decimal | None,
+    stop_price: Decimal | None,
+    target_price: Decimal | None,
+    authorized_quantity: Decimal | None,
+    pre_entry_open_risk: Decimal | None,
+    entry: AlpacaPaperOrder,
+    position: AlpacaPaperPosition,
+    policy: PaperEngineeringPolicy,
+) -> dict[str, object]:
+    blockers: list[str] = []
+    fill_quantity = entry.filled_quantity
+    fill_price = entry.filled_average_price
+    position_quantity = position.quantity
+    position_price = position.average_entry_price
+    values = (
+        (plan_entry_price, "PAPER_POST_FILL_PLAN_ENTRY_MISSING"),
+        (stop_price, "PAPER_POST_FILL_STOP_MISSING"),
+        (target_price, "PAPER_POST_FILL_TARGET_MISSING"),
+        (authorized_quantity, "PAPER_POST_FILL_AUTHORIZED_QUANTITY_MISSING"),
+        (pre_entry_open_risk, "PAPER_POST_FILL_OPEN_RISK_MISSING"),
+        (fill_price, "PAPER_POST_FILL_AVERAGE_PRICE_MISSING"),
+    )
+    for value, blocker in values:
+        if value is None or not value.is_finite():
+            blockers.append(blocker)
+
+    if fill_quantity <= 0 or not fill_quantity.is_finite():
+        blockers.append("PAPER_POST_FILL_QUANTITY_INVALID")
+    if position_quantity <= 0 or not position_quantity.is_finite():
+        blockers.append("PAPER_POST_FILL_POSITION_QUANTITY_INVALID")
+    if authorized_quantity is not None and fill_quantity > authorized_quantity:
+        blockers.append("PAPER_POST_FILL_AUTHORIZATION_EXCEEDED")
+    if position_quantity > fill_quantity:
+        blockers.append("PAPER_POST_FILL_POSITION_EXCEEDS_FILL")
+    if fill_price is not None and position_price != fill_price:
+        blockers.append("PAPER_POST_FILL_AVERAGE_PRICE_MISMATCH")
+
+    actual_risk_per_share: Decimal | None = None
+    actual_dollar_risk: Decimal | None = None
+    actual_reward_risk: Decimal | None = None
+    entry_extension_percent: Decimal | None = None
+    if (
+        fill_price is not None
+        and plan_entry_price is not None
+        and stop_price is not None
+        and target_price is not None
+        and all(
+            value.is_finite()
+            for value in (fill_price, plan_entry_price, stop_price, target_price)
+        )
+        and plan_entry_price > 0
+    ):
+        actual_risk_per_share = fill_price - stop_price
+        reward_per_share = target_price - fill_price
+        entry_extension_percent = (
+            (fill_price - plan_entry_price) / plan_entry_price * Decimal("100")
+        )
+        if actual_risk_per_share <= 0 or reward_per_share <= 0:
+            blockers.append("PAPER_POST_FILL_LEVELS_INVALID")
+        else:
+            actual_dollar_risk = actual_risk_per_share * position_quantity
+            actual_reward_risk = reward_per_share / actual_risk_per_share
+            if actual_dollar_risk > policy.allocation.fixed_unit_risk_dollars:
+                blockers.append("PAPER_POST_FILL_UNIT_RISK_EXCEEDED")
+            if (
+                pre_entry_open_risk is not None
+                and pre_entry_open_risk.is_finite()
+                and pre_entry_open_risk + actual_dollar_risk
+                > policy.allocation.max_total_open_risk_dollars
+            ):
+                blockers.append("PAPER_POST_FILL_TOTAL_OPEN_RISK_EXCEEDED")
+            if actual_reward_risk < policy.risk.minimum_reward_risk:
+                blockers.append("PAPER_POST_FILL_REWARD_RISK_TOO_LOW")
+        if entry_extension_percent > policy.risk.maximum_entry_extension_percent:
+            blockers.append("PAPER_POST_FILL_ENTRY_EXTENSION_TOO_LARGE")
+
+    blockers = list(dict.fromkeys(blockers))
+    payload: dict[str, object] = {
+        "status": "BLOCKED" if blockers else "PASS",
+        "candidateId": candidate_id,
+        "symbol": symbol,
+        "planEntryPrice": _decimal_text(plan_entry_price),
+        "stopPrice": _decimal_text(stop_price),
+        "targetPrice": _decimal_text(target_price),
+        "authorizedQuantity": _decimal_text(authorized_quantity),
+        "entryFilledQuantity": _decimal_text(fill_quantity),
+        "confirmedPositionQuantity": _decimal_text(position_quantity),
+        "entryFilledAveragePrice": _decimal_text(fill_price),
+        "confirmedPositionAveragePrice": _decimal_text(position_price),
+        "actualRiskPerShare": _decimal_text(actual_risk_per_share),
+        "actualDollarRisk": _decimal_text(actual_dollar_risk),
+        "actualRewardRisk": _decimal_text(actual_reward_risk),
+        "entryExtensionPercent": _decimal_text(entry_extension_percent),
+        "preEntryOpenRisk": _decimal_text(pre_entry_open_risk),
+        "maximumUnitRisk": _decimal_text(
+            policy.allocation.fixed_unit_risk_dollars
+        ),
+        "maximumTotalOpenRisk": _decimal_text(
+            policy.allocation.max_total_open_risk_dollars
+        ),
+        "minimumRewardRisk": _decimal_text(policy.risk.minimum_reward_risk),
+        "maximumEntryExtensionPercent": _decimal_text(
+            policy.risk.maximum_entry_extension_percent
+        ),
+        "blockers": blockers,
+        "source": "ALPACA_PAPER_CONFIRMED_FILL_AND_POSITION",
+    }
+    payload["fingerprint"] = evidence_fingerprint(payload)
+    return payload
+
+
+def _validate_protective_stop(
+    order: AlpacaPaperOrder,
+    *,
+    symbol: str,
+    client_order_id: str,
+    expected_quantity: Decimal,
+    expected_stop_price: Decimal,
+) -> None:
+    _validate_recovered_order(
+        order,
+        symbol=symbol,
+        side="sell",
+        client_order_id=client_order_id,
+        order_type="stop",
+    )
+    if order.quantity != expected_quantity:
+        raise PaperEngineeringAnomaly(
+            "Paper protective stop quantity does not match broker position."
+        )
+    if order.stop_price != expected_stop_price:
+        raise PaperEngineeringAnomaly(
+            "Paper protective stop price does not match the frozen plan."
+        )
+    if order.filled_quantity != 0 or order.status in {
+        "canceled",
+        "expired",
+        "filled",
+        "rejected",
+    }:
+        raise PaperEngineeringAnomaly(
+            "Paper protective stop response is not an active unfilled order."
+        )
 
 
 def _validate_recovered_order(
