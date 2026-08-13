@@ -29,6 +29,56 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+ARGUS-SETUP-001 premarket structure and fresh-setup research is
+`IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-SETUP-001-premarket-structure`, isolated from canonical runtime at
+base `a9821ed`. A deterministic two-pass tool reconstructed the actual August
+13 CRWV/NBIS/IREN/HPE/SMCI decision using only evidence at or before the
+09:35:38 ET quote cutoff, froze decision fingerprint
+`9C2F2AB10FA2BF97BB4854286DFA692142BD993DD80EF7E2526329A5C778FF5E`,
+then separately measured later outcomes. Schwab history used for structure was
+received after the session and is explicitly
+`RETROSPECTIVE_CANONICAL_HISTORY_RESEARCH_ONLY`; the actual morning runtime had
+no August 13 canonical candles and the returned premarket path begins at 07:00
+ET.
+
+Hard-chew self-review preserved that original outcome-blind packet and added a
+separate conservative adjudication at fingerprint
+`618345BBF1B731EEF7FAF49435F123AA0BDBFD21CAF2EC65F9AABF4894A7CDAA`.
+CRWV's completed 09:34 bar crossed the original trigger before the decision, so
+its original setup is immutable missed despite the later ask sitting one cent
+below the trigger. The correction added no allowed setup and did not alter
+IREN's frozen decision or Pass 2 outcome. This adjudication is explicitly
+post-outcome self-review; only fingerprint `9C2F2AB...` is the original
+outcome-blind Pass 1.
+
+The case study does not justify loosening the existing 0.25% extension rule.
+NBIS, HPE, and SMCI had missed original setups without a defensible successor;
+CRWV remained indeterminate because the real runtime lacked the required
+candles. Only IREN produced a potential distinct `CONTINUATION_BREAKOUT` under
+the frozen exploratory full-structure model: trigger `$47.01`, stop `$45.38`,
+target `$50.27`, ask extension `0.0638%`, and execution-adjusted reward/risk
+`1.9458`. In outcome-blind Pass 1 that was a research allow; Pass 2 showed a
+`+4.5599%` MFE followed by a stop at 12:07 ET, so it is not evidence of a
+profitable missed trade. SMCI's later rally is preserved only as a post-decision
+market observation because no valid setup was frozen at the cutoff.
+
+No production setup, TradePlan, scoring, ranking, Risk Governor, Paper, broker,
+scheduler, service, candle-store, or UI behavior changed. Tomorrow's canonical
+opening and dependent Paper jobs remain outside this worktree and must continue
+on their existing exact identity. After operational evidence is preserved, the
+recommended next strategy-research slice is a prospective research-only
+successor-setup evidence collector across multiple sessions. It should reuse
+DATA-003/DATA-004/CONTINUOUS-003 identities and collect premarket, completed
+15-minute, opening-range, and successor chronology without granting Paper or
+production authority. Production thresholds remain blocked on a larger
+outcome-blind sample.
+
+Hard Chew proof passes compileall, 12 focused research tests, 143 adjacent
+setup/TradePlan/candle regressions, and all 1,936 Python tests. The research
+loader fails closed on legacy mixing and source, session, timestamp,
+minute-identity, or final-history contradictions.
+
 ARGUS-DATA-009 opening candle readiness is `COMPLETE` in canonical `master`.
 Implementation commit `ded2929` was fast-forwarded from
 `codex/ARGUS-DATA-009-opening-candle-readiness` on synchronized base `9d735dd`;
@@ -46,9 +96,11 @@ derived TradePlan report SHA-256 is
 The dependent Paper result is classified `NO_TRADE - EXECUTION EVIDENCE
 UNAVAILABLE`, not a complete strategy rejection: the opening planner had no
 authoritative current-window or baseline candle evidence. Independent review
-found no basis to claim a missed valid trade: CRWV had not reached its trigger,
-while NBIS, IREN, HPE, and SMCI were extended and/or below execution reward/risk
-policy, with unresolved catalyst authority present on some rows.
+found no basis to claim a missed valid trade. The preserved quote-only report
+treated CRWV as below its trigger; retrospective research later showed the
+09:34 candle had crossed before decision, but the actual runtime did not possess
+that bar. NBIS, IREN, HPE, and SMCI were extended and/or below execution
+reward/risk policy, with unresolved catalyst authority present on some rows.
 
 DATA-009 composes the existing R032B/R032C Schwab history path, DATA-002
 time-normalized RVOL, DATA-004 same-session TradePlan, and A004 Paper lane. For

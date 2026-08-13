@@ -747,6 +747,12 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 | `codex/ARGUS-0002-daily-checklist-visibility` | `ed94997` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Daily Checklist visibility and quick-action guards. | Historical branch only. |
 | `codex/ARGUS-0000-office-scaffold` | `319244b` | No | Yes | `MERGED_TO_LOCAL_MASTER` | Argus Office scaffold and discovery report. | Historical branch only. |
 
+## 2026-08-13 Premarket Structure Research
+
+| Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-SETUP-001-premarket-structure` | Based on canonical `a9821ed`; final feature commit recorded at closeout | No | No | `ACTIVE` | Offline two-pass Aug. 13 premarket/opening structure case study with no production strategy authority. | Complete Hard Chew verification, commit, back up the feature branch, and integrate only after canonical operational evidence is safe. |
+
 ## A004/A005 Supersession Finding
 
 `codex/ARGUS-A004-A005-tradeplan-risk-governor` is superseded.

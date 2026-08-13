@@ -423,3 +423,22 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   freshness after quote/account acquisition.
 - Preserved strategy thresholds, scoring, raw captures, UI, Shadow state, and
   live-order unavailability.
+
+## 2026-08-13 - Premarket Structure Research
+
+- Added an offline two-pass research engine that freezes a 09:35 structure
+  decision before reading later-session outcomes.
+- Added explicit prospective-versus-backfilled source labels, source hashes,
+  predecessor/new Setup IDs, Daily/15-minute/full-structure model comparisons,
+  verticality features, and lifecycle-bounded MFE/MAE.
+- Reconstructed CRWV, NBIS, IREN, HPE, and SMCI from the August 13 opening.
+  Only IREN produced a potential distinct continuation setup, and its frozen
+  hypothetical outcome later stopped out.
+- Preserved the original outcome-blind packet and added a separate conservative
+  adjudication after self-review proved CRWV crossed its trigger during the
+  completed 09:34 bar; no successor setup or trade was added.
+- Preserved the 0.25% extension and 1.5R rules and changed no production
+  strategy, runtime, scheduler, Paper, broker, scoring, ranking, or UI behavior.
+- Added strict source/session/timestamp/minute-identity/final-history validation;
+  compileall, 12 focused tests, 143 adjacent regressions, and all 1,936 Python
+  tests pass.

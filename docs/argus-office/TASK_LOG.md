@@ -280,3 +280,31 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - No live provider/account/order call, source-capture mutation, Shadow action,
   scoring change, strategy-threshold change, UI change, or real-order capability
   was introduced.
+
+## 2026-08-13 - ARGUS-SETUP-001 Premarket Structure Research
+
+- Created isolated branch/worktree `codex/ARGUS-SETUP-001-premarket-structure`
+  from canonical `a9821ed`; the installed runtime and future jobs were not
+  changed.
+- Preserved the real August 13 capture, TradePlan, quote cutoff, and source
+  hashes; confirmed the actual runtime had no August 13 canonical candles.
+- Performed one bounded read-only Schwab history pull for CRWV, NBIS, IREN, HPE,
+  SMCI, SPY, QQQ, and IWM into LocalAppData research storage. No provider order,
+  account mutation, production store write, or Shadow/Paper action occurred.
+- Froze Pass 1 at decision fingerprint
+  `9C2F2AB10FA2BF97BB4854286DFA692142BD993DD80EF7E2526329A5C778FF5E`
+  before inspecting post-09:35 bars, then validated the hash and source files
+  before Pass 2.
+- Found one exploratory successor setup in IREN; its later outcome hit the
+  frozen stop rather than the target. No other candidate was converted into a
+  retrospective trade.
+- Second-pass diff review preserved the original Pass 1 and created a separate
+  conservative adjudication for CRWV's 09:34 trigger crossing. It corrected the
+  original setup to immutable missed, created no successor, and added no trade.
+- Added offline research code and twelve focused synthetic tests for evidence
+  source validation, successor identity, vertical blocking, anti-hindsight
+  cutoff, write-once/tamper behavior, and lifecycle-bounded outcomes.
+- Final verification passed compileall, all 12 focused tests, 143 adjacent
+  setup/TradePlan/candle regressions, and all 1,936 Python tests.
+- Classification: `RESEARCH_COMPLETE_IMPLEMENTATION_NOT_AUTHORIZED` and
+  `IMPLEMENTED_PENDING_MERGE` for the branch artifact.
