@@ -29,6 +29,61 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+The August 14 operational gate is terminal and preserved. The 05:55 Central
+Schwab boundary checkpoint was `USEFUL_WITH_LIMITATIONS`: quotes and volume
+were fresh, while completed premarket candles were not yet available. The
+06:05 checkpoint was `HIGH_FIDELITY` for SPY, QQQ, and NVDA quotes, candles,
+and volume. The 07:00 capture received and parsed all 20 Finviz rows and
+truthfully qualified zero. The 08:35 opening capture received and parsed all
+20 rows, qualified SNDK and NU, and completed canonical candle readiness for
+both symbols with all five opening bars and seven baseline sessions.
+
+The dependent Canary Alpaca Paper cycle reached candidate-level strategy
+logic and terminated `NO_TRADE`. It used the expected Paper-only account,
+observed no existing positions or orders, created no order, and made no Shadow
+or live-broker action. SNDK was below its `$1,696.37` entry trigger; NU was a
+missed/reclaim setup with insufficient execution reward/risk. These are
+strategy/evidence outcomes rather than a provider-contract or candle-readiness
+failure.
+
+The additional SNDK stop finding was a stale cross-contract validator, not a
+bad price. The immutable completed-Daily setup invalidation was `$1,331.58`;
+the same-session opening-range TradePlan stop was the intentionally tighter
+`$1,565.00`. Selection previously required those distinct concepts to be
+equal. ARGUS-POST-20260814 now accepts a tighter intraday stop while still
+failing closed when a TradePlan stop permits loss below the Daily setup
+invalidation. This defect did not change August 14's terminal result because
+SNDK never reached its entry trigger.
+
+The single reconciliation branch
+`codex/ARGUS-POST-20260814-integration-reconciliation` contains the approved
+SETUP-001 research case study, dormant SETUP-002 prospective observer,
+PAPER-005 post-fill/protection hardening, DATA-008 semantic plausibility gate,
+SESSION-FIDELITY-008 provider-scope correction, AFTER-CLOSE-001/002 offline
+trace tools, the SNDK validator repair, and the approved Phase 13R specialist-
+intelligence roadmap. Status is `IMPLEMENTED_PENDING_FINAL_HARD_CHEW` until
+the combined full-suite, protected-path, secret, and capability reviews pass.
+
+SETUP-002 remains dormant: it is not installed, scheduled, or activated, and
+its prospective denominator remains empty. Activation is a separate bounded
+operational task after integration and service verification. R034 legacy-
+candle deletion remains separately approval-gated. Live order transmission
+remains unavailable.
+
+After final proof, Git Steward may fast-forward local `master`, make an
+ordinary non-force backup push, install the final exact canonical identity,
+repin the remaining 20 opening/Paper jobs once, and verify service health,
+future-job identity, zero enabled Shadow jobs, and Paper-only transmission
+boundaries. Routine successful captures continue in append-only operational
+evidence and do not cause daily Roadmap commits or repins.
+
+The approved long-term direction is the Phase 13R specialist-intelligence
+program with the current Momentum/Paper path preserved as the prospective
+baseline. Its presence in the Roadmap authorizes bounded research planning,
+not specialist runtime authority or strategy activation.
+
+## Integrated Work History
+
 ARGUS-SETUP-002 prospective successor-setup research is
 `IMPLEMENTED_PENDING_MERGE_AND_ACTIVATION_GATE` on
 `codex/ARGUS-SETUP-002-prospective-successor-observer`, stacked on the complete
@@ -1923,7 +1978,7 @@ Status: `BLOCKED`; destructive-operation gate after R032C and R034A pass
 
 ### Phase 13 - Broker Execution Validation Gate
 
-Status: `PAPER_ENGINEERING_V2_ACTIVE / DATA_PLAUSIBILITY_NEXT / CONTINUOUS_INTRADAY_FOUNDATION_NEXT`
+Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_INTRADAY_FOUNDATION_NEXT`
 
 - A001-A003, DATA-005B, and the bounded A004 Paper-engineering runtime are
   integrated. The direct lifecycle proved fractional market/limit/stop/
@@ -1933,8 +1988,8 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / DATA_PLAUSIBILITY_NEXT / CONTINUOUS_INTRA
   invalid and v2 starts prospectively with unchanged policy. Continue v2 until
   candidate-bearing evidence exercises account, allocation, entry, protection,
   and exit gates.
-- ARGUS-DATA-008 must add a semantic plausibility gate between the structural
-  provider contract and strategy evidence. It should detect structurally valid
+- ARGUS-DATA-008 adds a semantic plausibility gate between the structural
+  provider contract and strategy evidence. It detects structurally valid
   but economically implausible values, including unexplained raw-to-qualified
   count collapse, impossible price/change relationships, severe disagreement
   with authoritative Schwab evidence where comparison is justified, candle or
@@ -1942,12 +1997,10 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / DATA_PLAUSIBILITY_NEXT / CONTINUOUS_INTRA
   cross-symbol values, and extreme distribution shifts. A plausibility failure
   must fail closed with preserved diagnostics; it may not silently substitute a
   fallback provider, average providers, alter scoring, or manufacture candidates.
-  Isolated implementation is complete on
-  `codex/ARGUS-DATA-008-semantic-plausibility`: intrinsic Finviz checks are wired
-  before filtering/scoring; deterministic contextual Schwab/candle and baseline
-  checks require explicit authoritative/time-aligned inputs and remain unwired
-  in canonical production. Status is
-  `IMPLEMENTED_PENDING_INTEGRATION_AFTER_AUGUST_14_EVIDENCE`.
+  Intrinsic Finviz checks are wired before filtering/scoring; deterministic
+  contextual Schwab/candle and baseline checks require explicit authoritative,
+  time-aligned inputs and remain unwired. The August 14 gate is preserved and
+  the implementation is included in the post-August-14 reconciliation.
 - Continuous intraday discovery is the parallel foundation needed to escape the
   observed opening-scanner supply limit. The dormant provider-neutral contracts
   and SHADOW-025B through 025K runtime-boundary chain may integrate after

@@ -1,5 +1,26 @@
 # Branch Ledger
 
+## ARGUS-POST-20260814 Integration Reconciliation
+
+`codex/ARGUS-POST-20260814-integration-reconciliation` is
+`READY_FOR_FAST_FORWARD` from canonical base `a9821ed`. It reconciles the
+approved SETUP-001/002 research work, PAPER-005 safety hardening, DATA-008
+semantic plausibility, SESSION-FIDELITY-008 provider-scope correction,
+AFTER-CLOSE-001/002 offline trace tools, and the Phase 13R specialist roadmap.
+It also repairs the SNDK false stop contradiction by treating completed-Daily
+setup invalidation and tighter DATA-004 intraday stop as distinct authorities.
+
+Compileall, 181 high-risk combined tests, 222 corrected adjacent tests, the
+previous 152-test discovery subset, and all 2,004 Python tests pass. No WPF or
+.NET file changed. SETUP-002 remains dormant and uninstalled; no provider,
+account, order, Shadow, credential, service, scheduler, or production evidence
+was contacted or mutated by verification. Next action is a clean fast-forward,
+ordinary non-force backup push, one exact-head install/repin of the remaining
+20 opening/Paper jobs, and installed-service verification. Activation of
+SETUP-002 remains a separate task.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-AFTER-CLOSE-002 Real Regular-Session Replay Trace
 
 `codex/ARGUS-AFTER-CLOSE-002-real-regular-replay-trace` is

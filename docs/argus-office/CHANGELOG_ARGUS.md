@@ -1,5 +1,18 @@
 # Argus Changelog
 
+- Reconciled the post-August-14 approved feature inventory on one isolated
+  branch: SETUP-001/002, PAPER-005, DATA-008, SESSION-FIDELITY-008,
+  AFTER-CLOSE-001/002, and the Phase 13R specialist-intelligence roadmap.
+- Repaired the SNDK selector false positive. Completed-Daily invalidation and
+  the same-session DATA-004 stop remain separately validated; a tighter long
+  stop is accepted, while a stop below Daily invalidation still fails closed.
+- Preserved SETUP-002 as dormant and empty. No research scheduler, provider,
+  account, broker/order, Shadow, service, WPF, or production-store capability
+  was added by the integration.
+- Passed compileall, 181 combined high-risk tests, 222 corrected adjacent
+  tests, and all 2,004 Python tests. The release remains subject to final
+  static gates, clean fast-forward integration, and one exact-head repin.
+
 - Implemented ARGUS-SETUP-002 on an isolated stacked feature branch. The new
   offline observer freezes an empty prospective sample, preserves every opening
   candidate and production decision as the control, writes outcome-blind
