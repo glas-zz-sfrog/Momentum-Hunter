@@ -79,6 +79,14 @@ The approved long-term direction remains Phase 13R specialist intelligence,
 with the current Momentum/Paper path preserved as the prospective baseline.
 Specialist runtime authority and strategy activation remain future gates.
 
+On branch `codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract`, the
+first Phase 13R implementation slice is `IMPLEMENTED_PENDING_INTEGRATION` from
+canonical base `ea05615`. It adds only the immutable provider-neutral common
+opinion contract and tests. It is not imported by the runtime, has no arbiter,
+provider, broker, storage, scheduler, service, Engine Host, WPF, Paper, Shadow,
+or order capability, and does not alter the August 17 lane. Canonical `master`
+and the installed runtime remain unchanged until a later clean integration.
+
 ## Integrated Work History
 
 ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
@@ -2041,7 +2049,7 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_IN
 
 ### Phase 13R - Specialist Intelligence Research And Strategy Diversification
 
-Status: `NOT_STARTED`
+Status: `STARTED - SPECIALIST-CONTRACT-001 IMPLEMENTED_PENDING_INTEGRATION`
 
 Roadmap inclusion authorizes planning and bounded research preparation only.
 It does not activate runtime imports, begin or modify a Paper sample, grant
@@ -2087,6 +2095,8 @@ Intended specialist architecture:
 
 #### ARGUS-SPECIALIST-CONTRACT-001 - Common Specialist Opinion Contract
 
+- Branch-local status: `IMPLEMENTED_PENDING_INTEGRATION` from `ea05615`; no
+  runtime consumer, persistence path, arbiter, activation, or authority exists.
 - Define one provider-neutral, read-only opinion packet containing specialist
   and version, opportunity/setup identity, as-of time, expiration, evidence
   hashes, opinion, confidence/calibration metadata, authority level, evidence

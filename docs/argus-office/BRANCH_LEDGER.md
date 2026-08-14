@@ -1,5 +1,22 @@
 # Branch Ledger
 
+## ARGUS-SPECIALIST-CONTRACT-001 Common Opinion Contract
+
+`codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract` is an isolated
+feature branch from synchronized canonical `ea05615`. It implements the first
+Phase 13R code slice: one immutable, deterministic, provider/broker/strategy-
+neutral specialist opinion contract plus adversarial tests and concise
+architecture records. The branch is `IMPLEMENTED_PENDING_INTEGRATION` and may
+be backed up by ordinary non-force push after final Hard Chew.
+
+No runtime imports the contract. No specialist algorithm, combination layer,
+provider, account, broker, order, storage, service, scheduler, Engine Host,
+WPF, Paper, Shadow, SETUP-002, or August 17 operational path changed. Next
+action after branch proof is later clean integration without installation or
+activation; all specialist authority remains a separate prospective gate.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-SETUP-002A Silent Activation
 
 `codex/ARGUS-SETUP-002A-silent-activation` is a focused successor to
