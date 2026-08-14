@@ -66,6 +66,21 @@ transmission remains unavailable. SETUP-002 is silent research only and does
 not alter candidate admission, scoring, TradePlan, Risk Governor, allocation,
 Paper selection, or the official Paper sample.
 
+In a separate AppData worktree, ARGUS-CONTINUOUS-ACTIVATION-001 implements an
+offline authenticated-writer IPC prototype on branch
+`codex/ARGUS-CONTINUOUS-ACTIVATION-001-authenticated-writer-ipc`. A direct
+child accepts HMAC-authenticated, ordered, configuration/source-bound records
+through an inherited handle and writes only to a temporary proof root. Parent
+and child both fail closed on forgery, replay, reordering, identity drift,
+tampering, sensitive payloads, conflicts, and unexpected output. The result is
+explicitly `PROTOCOL_PROVEN_ACTIVATION_BLOCKED`: same-SID process-handle
+isolation, installed-root ACLs, WPF handle isolation, and restart/crash
+recovery remain unproven. No runtime imports the module; SETUP-002, Paper,
+Shadow, service, scheduler, Engine Host, WPF, provider, credential, account,
+order, and production evidence remain unchanged. This branch is not eligible
+for runtime activation or canonical integration before the August 17 evidence
+is preserved and the physical Windows isolation gate is separately passed.
+
 Next operational evidence is the August 17 opening/Paper result plus the two
 SETUP-002 research receipts. A valid Pass 1 may still abstain for insufficient
 history, and a valid Pass 2 may classify no successor setup; neither is a

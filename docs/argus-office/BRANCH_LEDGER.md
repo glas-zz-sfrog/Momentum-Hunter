@@ -1,5 +1,24 @@
 # Branch Ledger
 
+## ARGUS-CONTINUOUS-ACTIVATION-001 Authenticated Writer IPC
+
+`codex/ARGUS-CONTINUOUS-ACTIVATION-001-authenticated-writer-ipc` is
+`IMPLEMENTED_PENDING_WINDOWS_ISOLATION_PROOF` from synchronized canonical base
+`ea056155182351be70bb03d23841aca55c6118ae`. It adds a dormant offline direct-
+child writer protocol using a nonpersistent inherited capability,
+HMAC-authenticated ordered envelopes, write-once temporary records, and
+independent parent validation of the complete child output chain.
+
+The branch does not change or import into the installed runtime. It cannot
+contact providers or accounts, access credentials, submit orders, schedule
+work, mutate production evidence, or activate continuous collection. It must
+not merge while the August 17 SETUP-002 evidence is pending. Later integration
+also requires separate physical proof for same-SID process-handle isolation,
+installed ACLs, WPF handle isolation, and restart/crash recovery. Compileall,
+15 focused tests, 231 adjacent runtime tests, and all 2,028 Python tests pass.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-SETUP-002A Silent Activation
 
 `codex/ARGUS-SETUP-002A-silent-activation` is a focused successor to

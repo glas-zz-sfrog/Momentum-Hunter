@@ -1,5 +1,16 @@
 # Argus Changelog
 
+- Added a dormant offline child-process writer protocol using a one-session
+  inherited capability and HMAC-authenticated, ordered, chained envelopes.
+- Added independent parent validation of every child frame, receipt, hash,
+  predecessor, output name, status, and activation blocker; tampering,
+  forgery, replay, reordering, identity drift, sensitive payloads, and
+  conflicts fail closed.
+- Kept activation explicitly blocked on same-SID process-handle isolation,
+  installed-root ACLs, WPF handle isolation, and restart/crash recovery.
+- Added no runtime import, provider/account/broker/order capability, service or
+  scheduler change, production write, SETUP-002 mutation, or visual behavior.
+
 - Activated the empty SETUP-002 successor-setup research sample prospectively
   for August 17 with a separate immutable activation timestamp and fingerprint.
 - Added two exact-head, zero-retry service jobs: outcome-blind Pass 1 after the
