@@ -378,3 +378,33 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   `.venv` junction resolved two environment-only PowerShell test failures.
 - Status: `IMPLEMENTED_PENDING_INTEGRATION_AFTER_AUGUST_14_EVIDENCE`; nothing
   merged or activated.
+
+## 2026-08-14 - ARGUS-REGIME-002 Exhaustion And Market Stress
+
+- Reconciled clean synchronized canonical `master`/`origin/master` at
+  `ea05615`, the exact Specialist Contract parent at `e65cb70`, the integrated
+  CONTINUOUS-003 regime/macro contracts, the installed manifest, and all four
+  August 17 opening/Paper/SETUP-002 pins before implementation.
+- Created isolated stacked branch/worktree
+  `codex/ARGUS-REGIME-002-exhaustion-market-stress`; canonical and installed
+  runtime state remained untouched.
+- Added one provider-free evaluator for explicit canonical SPY/QQQ/IWM bars,
+  immutable raw benchmark features, separate direction/extension/stress/
+  session/data-quality states, and a specialist-owned packet bound to the
+  common Specialist Opinion Contract.
+- Frozen policy `regime-exhaustion-research-policy-v1` has fingerprint
+  `55d5e05f91553381ba162c70b09c5f9987262edfbe2a9ec687214cc29f9d1057`;
+  thresholds are `RESEARCH_HEURISTIC`, explicit frozen session profiles are
+  premarket `1.25x`, opening `1.00x`, midday `0.75x`, and late session `1.00x`, and confidence is
+  `HEURISTIC / UNCALIBRATED`.
+- Focused proof passed 43/43 tests. Combined Specialist/rolling-regime/macro
+  proof passed 152/152; candle/readiness/evidence proof passed 102/102; SETUP-002
+  nonmutation proof passed 29/29; final full Python discovery passed 2,106/2,106
+  after the v1 after-hours fail-closed guard.
+  Final static and branch identity evidence is recorded in the release report
+  at closeout.
+- No retrospective Aug. 13/14 example was used or tuned. No runtime importer,
+  persistence, schedule, provider, UI, scoring, risk, Paper, Shadow, broker,
+  or order capability was added.
+- Classification: `IMPLEMENTED_PENDING_PARENT_INTEGRATION`; no merge,
+  installation, activation, or repin is authorized.

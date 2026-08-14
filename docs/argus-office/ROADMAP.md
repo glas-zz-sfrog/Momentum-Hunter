@@ -2139,6 +2139,9 @@ Intended specialist architecture:
 
 #### ARGUS-REGIME-002 - Exhaustion And Market-Stress Research
 
+- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` on Specialist
+  Contract parent `e65cb70`; policy fingerprint
+  `55d5e05f91553381ba162c70b09c5f9987262edfbe2a9ec687214cc29f9d1057`.
 - Extend CONTINUOUS-003 rolling regime rather than creating a competing regime
   engine.
 - Research trend-up, trend-down, rotation, chop, late-trend, exhaustion,
@@ -2148,6 +2151,13 @@ Intended specialist architecture:
 - Initial role is `SILENT_OBSERVER`. Measure whether a proposed veto or risk
   reduction would have improved the actual Momentum baseline; classifier
   existence grants no trade authority.
+- V1 requires SPY/QQQ/IWM for evaluation; missing/stale evidence abstains,
+  contradictory/tampered evidence fails, and after-hours is identified but
+  unsupported. Frozen provisional session profiles are premarket `1.25x`,
+  opening `1.00x`, midday `0.75x`, and late session `1.00x`; they are policy-
+  fingerprinted `RESEARCH_HEURISTIC` hypotheses rather than calibrated
+  probabilities. Proposed five-minute regular-session cadence remains
+  dormant pending a separate integration and activation task.
 
 #### ARGUS-TECH-STRUCTURE-002 - Technical Structure Research v2
 
