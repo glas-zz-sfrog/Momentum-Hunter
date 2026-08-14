@@ -572,3 +572,19 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   or fallback substitution.
 - Preserved structured failure diagnostics and made semantic failures
   nonretryable. Canonical runtime remains unchanged pending August 14 evidence.
+
+## 2026-08-14 - REGIME-002 Research Specialist (Branch Only)
+
+- Added a deterministic offline SPY/QQQ/IWM environment specialist that reuses
+  CONTINUOUS-003 rolling-regime and macro-event contracts.
+- Preserved raw returns, structure, `BAR_DERIVED_VWAP`, ATR, volatility,
+  range, speed, persistence, participation, and divergence features while
+  keeping direction, extension, stress, session, and data quality separate.
+- Froze distinct premarket, opening, midday, and late-session heuristic
+  profiles in policy identity so one threshold set cannot silently span every
+  time of day.
+- Made missing/stale evidence abstain and contradictory/tampered evidence fail;
+  `DATA_UNSAFE` cannot masquerade as mixed or neutral market conditions.
+- Emitted only the common `RESEARCH_ONLY / EXECUTION_AUTHORITY_NONE`
+  Specialist Opinion plus a fingerprint-bound REGIME body. No production or
+  execution behavior changed.
