@@ -1,5 +1,24 @@
 # Branch Ledger
 
+## ARGUS-RESEARCH-DATA-001 Research Data Inventory
+
+`codex/ARGUS-RESEARCH-DATA-001-data-inventory` is an isolated read-only
+research branch from synchronized canonical `ea056155`. It adds one inventory
+module, synthetic tests, a hash-addressed actual inventory report, and
+governance closeout. It does not change collection, scoring, readiness,
+selection, TradePlan, Risk Governor, Paper/Shadow, account, broker/order,
+service, scheduler, Engine Host, WPF, or installed-runtime behavior.
+
+Status: `IMPLEMENTED_PENDING_MERGE`. The branch proves current evidence is not
+yet a survivor-safe research universe, preserves the broad Daily cache as
+research-only, and selects no provider. Canonical `master`, the installed
+service, and August 17 jobs remain unchanged. Compileall, 13 focused, 188
+adjacent, and all 2,026 Python tests pass, along with protected-path,
+capability, secret, and diff checks. Next action is one focused commit and
+ordinary feature-branch backup; integration remains a later deliberate pass.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-SETUP-002A Silent Activation
 
 `codex/ARGUS-SETUP-002A-silent-activation` is a focused successor to

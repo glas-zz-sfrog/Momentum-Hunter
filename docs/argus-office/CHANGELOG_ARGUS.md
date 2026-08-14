@@ -1,5 +1,19 @@
 # Argus Changelog
 
+- Added ARGUS-RESEARCH-DATA-001's deterministic read-only inventory of
+  canonical Schwab minute/Daily history, the 263-symbol research-only Daily
+  cache, candidate/outcome/opening history, and the empty SETUP-002 sample.
+- Quantified 38,286 canonical minute bars across 7 symbols/17 session dates,
+  1,764 canonical Daily bars across 7 symbols, 79,298 adjusted research Daily
+  rows across 263 symbols, and 1,256 historical candidate rows across 290
+  symbols.
+- Classified Daily-pattern and rank/setup-outcome research as `PARTIAL` and
+  all other evaluated historical-statistical uses as `INSUFFICIENT`; recorded
+  missing security continuity, delisting, point-in-time-universe, and
+  corporate-action lineage as explicit blockers.
+- Selected no new provider and preserved all runtime, operational, scoring,
+  Paper/Shadow, broker/order, service, scheduler, Engine Host, and UI behavior.
+
 - Activated the empty SETUP-002 successor-setup research sample prospectively
   for August 17 with a separate immutable activation timestamp and fingerprint.
 - Added two exact-head, zero-retry service jobs: outcome-blind Pass 1 after the
