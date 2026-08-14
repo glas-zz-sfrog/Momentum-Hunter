@@ -1522,6 +1522,7 @@ def bind_setup_identity(
     symbol: str | None = None,
     created_at: datetime | None = None,
     early_close: bool = False,
+    setup_invalidation_level: float | None = None,
 ) -> dict:
     """Keep a synthetic report row's setup chain internally consistent."""
 
@@ -1531,23 +1532,28 @@ def bind_setup_identity(
     symbol = str(row["symbol"])
     market_data = row["market_data"]
     trade_plan = row["trade_plan"]
+    setup_invalidation = (
+        float(setup_invalidation_level)
+        if setup_invalidation_level is not None
+        else float(trade_plan["bullish_stop"])
+    )
     setup = asdict(
         build_trade_setup_evidence(
             symbol=symbol,
             observed_price=float(market_data["last_price"]),
             breakout_level=float(trade_plan["bullish_entry"]),
-            invalidation_level=float(trade_plan["bullish_stop"]),
+            invalidation_level=setup_invalidation,
             source="daily_bars",
         )
     )
     row["technical_levels"] = {
         "previous_day_high": float(trade_plan["bullish_entry"]),
-        "previous_day_low": float(trade_plan["bullish_stop"]),
+        "previous_day_low": setup_invalidation,
         "previous_day_close": float(market_data["last_price"]),
         "five_day_high": float(trade_plan["bullish_entry"]),
         "twenty_day_high": float(trade_plan["bullish_entry"]),
         "atr": round(float(trade_plan["bullish_entry"]) - float(trade_plan["bullish_stop"]), 2),
-        "support_level": float(trade_plan["bullish_stop"]),
+        "support_level": setup_invalidation,
         "resistance_level": float(trade_plan["bullish_entry"]),
         "source": "daily_bars",
         "warnings": [],

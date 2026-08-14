@@ -1219,8 +1219,12 @@ def trade_setup_authority_findings(
     plan_stop = finite_number(trade_plan.get("bullish_stop"))
     if breakout is None or plan_entry is None or abs(breakout - plan_entry) > 0.0001:
         findings.append("Candidate TradePlan entry contradicts the setup breakout level.")
-    if invalidation is None or plan_stop is None or abs(invalidation - plan_stop) > 0.0001:
-        findings.append("Candidate TradePlan stop contradicts the setup invalidation level.")
+    if plan_stop is None:
+        findings.append("Candidate TradePlan stop is missing.")
+    elif invalidation is not None and plan_stop < invalidation - 0.0001:
+        findings.append(
+            "Candidate TradePlan stop permits loss beyond the setup invalidation level."
+        )
 
     technicals = row.get("technical_levels")
     technicals = technicals if isinstance(technicals, Mapping) else {}

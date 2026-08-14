@@ -40,6 +40,7 @@ from momentum_hunter.shadow_selection import (
     SELECTION_NO_ELIGIBLE_CANDIDATE,
     SELECTION_STARTED,
     AutomaticShadowSelector,
+    trade_setup_authority_findings,
 )
 from momentum_hunter.shadow_opening import build_https_clock_skew_proof
 from momentum_hunter.shadow_trading import (
@@ -800,6 +801,34 @@ class ShadowMarketValiditySelectionTests(unittest.TestCase):
         self.assertIn(
             "setup identity is missing",
             " ".join(cycle["candidate_assessments"][0]["rejection_reasons"]),
+        )
+
+    def test_tighter_intraday_stop_does_not_contradict_daily_invalidation(self) -> None:
+        payload = report_payload()
+        row = payload["candidates"][0]
+        bind_setup_identity(row, setup_invalidation_level=9.25)
+
+        findings = trade_setup_authority_findings(
+            row,
+            row["evidence_integrity"],
+        )
+
+        self.assertEqual((), findings)
+
+    def test_stop_below_daily_invalidation_is_rejected(self) -> None:
+        payload = report_payload()
+        row = payload["candidates"][0]
+        row["trade_plan"]["bullish_stop"] = 9.2
+        bind_setup_identity(row, setup_invalidation_level=9.25)
+
+        findings = trade_setup_authority_findings(
+            row,
+            row["evidence_integrity"],
+        )
+
+        self.assertIn(
+            "Candidate TradePlan stop permits loss beyond the setup invalidation level.",
+            findings,
         )
 
     def test_tampered_setup_identity_fingerprint_is_rejected(self) -> None:
