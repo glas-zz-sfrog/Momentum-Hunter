@@ -87,6 +87,17 @@ provider, broker, storage, scheduler, service, Engine Host, WPF, Paper, Shadow,
 or order capability, and does not alter the August 17 lane. Canonical `master`
 and the installed runtime remain unchanged until a later clean integration.
 
+On stacked branch `codex/ARGUS-REGIME-002-exhaustion-market-stress`, the first
+dedicated Regime specialist is `IMPLEMENTED_PENDING_PARENT_INTEGRATION` on
+Specialist Contract parent `e65cb70`. It consumes caller-supplied canonical
+SPY/QQQ/IWM bars, reuses CONTINUOUS-003 rolling-regime and optional macro-event
+context, and preserves separate direction, extension, stress, session, data-
+quality, and raw-feature evidence. Its policy is provisional
+`RESEARCH_HEURISTIC`; its common opinion remains
+`RESEARCH_ONLY / EXECUTION_AUTHORITY_NONE`. It has no runtime importer,
+provider, persistence writer, schedule, UI, risk, Paper, Shadow, broker, or
+order capability. It is not merged, activated, or part of the August 17 lane.
+
 ## Integrated Work History
 
 ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
@@ -2049,7 +2060,7 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_IN
 
 ### Phase 13R - Specialist Intelligence Research And Strategy Diversification
 
-Status: `STARTED - SPECIALIST-CONTRACT-001 IMPLEMENTED_PENDING_INTEGRATION`
+Status: `STARTED - REGIME-002 IMPLEMENTED_PENDING_PARENT_INTEGRATION`
 
 Roadmap inclusion authorizes planning and bounded research preparation only.
 It does not activate runtime imports, begin or modify a Paper sample, grant
@@ -2108,6 +2119,9 @@ Intended specialist architecture:
 
 #### ARGUS-REGIME-002 - Exhaustion And Market-Stress Research
 
+- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` on Specialist
+  Contract parent `e65cb70`; policy fingerprint
+  `55d5e05f91553381ba162c70b09c5f9987262edfbe2a9ec687214cc29f9d1057`.
 - Extend CONTINUOUS-003 rolling regime rather than creating a competing regime
   engine.
 - Research trend-up, trend-down, rotation, chop, late-trend, exhaustion,
@@ -2117,6 +2131,13 @@ Intended specialist architecture:
 - Initial role is `SILENT_OBSERVER`. Measure whether a proposed veto or risk
   reduction would have improved the actual Momentum baseline; classifier
   existence grants no trade authority.
+- V1 requires SPY/QQQ/IWM for evaluation; missing/stale evidence abstains,
+  contradictory/tampered evidence fails, and after-hours is identified but
+  unsupported. Frozen provisional session profiles are premarket `1.25x`,
+  opening `1.00x`, midday `0.75x`, and late session `1.00x`; they are policy-
+  fingerprinted `RESEARCH_HEURISTIC` hypotheses rather than calibrated
+  probabilities. Proposed five-minute regular-session cadence remains
+  dormant pending a separate integration and activation task.
 
 #### ARGUS-TECH-STRUCTURE-002 - Technical Structure Research v2
 

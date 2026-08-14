@@ -1,5 +1,21 @@
 # Branch Ledger
 
+## ARGUS-REGIME-002 Exhaustion And Market Stress
+
+`codex/ARGUS-REGIME-002-exhaustion-market-stress` is a clean stacked successor
+of Specialist Contract head `e65cb70`, which itself is two commits ahead of
+synchronized canonical `ea05615`. The branch adds one dormant offline Regime
+specialist, focused tests, architecture/goal/release evidence, and branch-local
+governance only.
+
+Classification: `IMPLEMENTED_PENDING_PARENT_INTEGRATION`. It may be backed up
+by ordinary non-force feature push after Hard Chew. It must not merge before
+the parent contract is integrated or both branches are deliberately reconciled
+together. It must not be installed, scheduled, activated, connected to Paper,
+or used to repin the August 17 jobs.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-SPECIALIST-CONTRACT-001 Common Opinion Contract
 
 `codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract` is an isolated
