@@ -4,6 +4,7 @@
 
 - Branch: `codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract`
 - Base: synchronized canonical `ea05615`
+- Implementation commit: `802f2d1`
 - Classification: `IMPLEMENTED_PENDING_INTEGRATION`
 - Runtime/install/activation: none
 
@@ -24,12 +25,14 @@
 ## Verification
 
 - Python compileall: pass.
-- Focused specialist contract tests: 48/48 pass.
+- Focused specialist contract tests: 50/50 pass.
 - Candidate lifecycle, DATA-004, evidence-integrity, and SETUP-002 bounded
-  regression: 140/140 pass.
-- Full Python discovery: 2,061/2,061 pass in 265.180 seconds.
+  regression: 142/142 pass.
+- Full Python discovery: 2,063/2,063 pass in 267.771 seconds.
 - Diff check, credential-pattern scan, forbidden-capability import scan, and
   existing-runtime import scan: pass.
+- Closeout adds explicit policy-fingerprint drift/tamper proof and confirms
+  that future specialist IDs do not require a schema redesign.
 - Canonical checkout, installed service, manifest, and August 17 job identity
   were read-only and unchanged during implementation.
 

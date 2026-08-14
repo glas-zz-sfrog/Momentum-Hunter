@@ -208,6 +208,27 @@ class SpecialistOpinionTests(unittest.TestCase):
         self.assertNotEqual(original.opinion_id, new_version.opinion_id)
         self.assertNotEqual(original.opinion_id, new_code.opinion_id)
 
+    def test_policy_drift_changes_identity_and_breaks_old_record(self) -> None:
+        original = evaluated_opinion()
+        changed = evaluated_opinion(policy_fingerprint="5" * 64)
+
+        self.assertNotEqual(original.opinion_id, changed.opinion_id)
+        self.assertNotEqual(original.fingerprint, changed.fingerprint)
+        payload = opinion_to_wire(original)
+        payload["policyFingerprint"] = "5" * 64
+        with self.assertRaisesRegex(SpecialistOpinionError, "identity is invalid"):
+            opinion_from_wire(payload)
+
+    def test_specialist_identity_vocabulary_is_extension_friendly(self) -> None:
+        opinion = evaluated_opinion(
+            specialist_id="FUTURE_SPECIALIST",
+            specialist_version="future-specialist-v1",
+            opinion_code="DOMAIN_FINDING",
+        )
+
+        self.assertEqual("FUTURE_SPECIALIST", opinion.specialist_id)
+        self.assertEqual("DOMAIN_FINDING", opinion.opinion_code)
+
     def test_authority_is_identity_bound_but_v1_escalation_is_rejected(self) -> None:
         original = evaluated_opinion()
         elevated = replace(
