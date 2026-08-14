@@ -1,5 +1,25 @@
 # Branch Ledger
 
+## ARGUS-RESEARCH-DATA-002 Security Identity And Corporate-Action Basis
+
+`codex/ARGUS-RESEARCH-DATA-002-security-action-basis` is an isolated research
+branch stacked on DATA-001 `d03301c`, whose canonical baseline is synchronized
+`ea056155`. It adds provider-neutral identity, action, price-basis,
+transformation-lineage, survivorship, and admission contracts; synthetic tests;
+an actual DATA-001 compatibility matrix; and governance closeout.
+
+Status: `IMPLEMENTED_PENDING_MERGE`. The branch grants no execution authority,
+selects no provider, and changes no production runtime. Current evidence remains
+identity-unresolved, basis-unknown, and survivorship-uncontrolled. Canonical
+`master`, the installed service, automation manifest, SETUP-002, and August 17
+opening/Paper/research jobs remain unchanged. Compileall, 24 focused tests, 155
+focused/adjacent regressions, and all 2,050 Python tests pass with clean source-
+mutation, protected-path, capability, secret, and diff checks. Next action is
+one focused commit and ordinary feature-branch backup; integration remains a
+later deliberate reconciliation.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-RESEARCH-DATA-001 Research Data Inventory
 
 `codex/ARGUS-RESEARCH-DATA-001-data-inventory` is an isolated read-only

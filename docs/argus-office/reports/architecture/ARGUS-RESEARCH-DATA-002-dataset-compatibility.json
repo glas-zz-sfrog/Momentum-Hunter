@@ -1,0 +1,194 @@
+{
+  "asOf": "2026-08-14T21:21:07.800178+00:00",
+  "authority": "RESEARCH_DATA_ADMISSION_ONLY",
+  "classification": "IDENTITY_AND_PRICE_BASIS_FOUNDATION_DEFINED_GAPS_REMAIN",
+  "datasets": [
+    {
+      "admissionStatus": "SECURITY_IDENTITY_UNRESOLVED",
+      "authority": "CANONICAL",
+      "corporateActionMetadata": false,
+      "datasetId": "canonicalSchwabMinute",
+      "dateRange": {
+        "first": "2026-07-28T00:53:00+00:00",
+        "last": "2026-08-14T13:35:00+00:00"
+      },
+      "delistedSecurityCoverage": false,
+      "historicalAliases": false,
+      "pointInTimeMembership": false,
+      "priceBasis": "UNKNOWN",
+      "priceBasisVerified": false,
+      "recordCount": 38286,
+      "safeFor": [
+        "SOURCE_EVIDENCE_INSPECTION_ONLY"
+      ],
+      "stableSecurityIdentity": false,
+      "survivorshipBiasStatus": "UNCONTROLLED",
+      "symbolCount": 7,
+      "unsafeFor": [
+        "CORPORATE_ACTION_SENSITIVE_RETURNS",
+        "CROSS_ACTION_TECHNICAL_LEVELS",
+        "SURVIVORSHIP_SAFE_STATISTICS",
+        "HISTORICAL_ANALOG_MODELING"
+      ]
+    },
+    {
+      "admissionStatus": "SECURITY_IDENTITY_UNRESOLVED",
+      "authority": "CANONICAL",
+      "corporateActionMetadata": false,
+      "datasetId": "canonicalSchwabDaily",
+      "dateRange": {
+        "first": "2025-08-06",
+        "last": "2026-08-14"
+      },
+      "delistedSecurityCoverage": false,
+      "historicalAliases": false,
+      "pointInTimeMembership": false,
+      "priceBasis": "UNKNOWN",
+      "priceBasisVerified": false,
+      "recordCount": 1764,
+      "safeFor": [
+        "SOURCE_EVIDENCE_INSPECTION_ONLY"
+      ],
+      "stableSecurityIdentity": false,
+      "survivorshipBiasStatus": "UNCONTROLLED",
+      "symbolCount": 7,
+      "unsafeFor": [
+        "CORPORATE_ACTION_SENSITIVE_RETURNS",
+        "CROSS_ACTION_TECHNICAL_LEVELS",
+        "SURVIVORSHIP_SAFE_STATISTICS",
+        "HISTORICAL_ANALOG_MODELING"
+      ]
+    },
+    {
+      "admissionStatus": "SECURITY_IDENTITY_UNRESOLVED",
+      "authority": "RESEARCH_ONLY",
+      "corporateActionMetadata": false,
+      "datasetId": "researchDaily263",
+      "dateRange": {
+        "first": "2025-04-01",
+        "last": "2026-07-02"
+      },
+      "delistedSecurityCoverage": false,
+      "historicalAliases": false,
+      "pointInTimeMembership": false,
+      "priceBasis": "UNKNOWN",
+      "priceBasisVerified": false,
+      "recordCount": 79298,
+      "safeFor": [
+        "SOURCE_EVIDENCE_INSPECTION_ONLY"
+      ],
+      "stableSecurityIdentity": false,
+      "survivorshipBiasStatus": "UNCONTROLLED",
+      "symbolCount": 263,
+      "unsafeFor": [
+        "CORPORATE_ACTION_SENSITIVE_RETURNS",
+        "CROSS_ACTION_TECHNICAL_LEVELS",
+        "SURVIVORSHIP_SAFE_STATISTICS",
+        "HISTORICAL_ANALOG_MODELING"
+      ]
+    },
+    {
+      "admissionStatus": "SECURITY_IDENTITY_UNRESOLVED",
+      "authority": "RESEARCH_ONLY",
+      "corporateActionMetadata": false,
+      "datasetId": "candidateOutcomeHistory",
+      "dateRange": {
+        "first": "2026-06-02T14:27:27.491123-05:00",
+        "last": "2026-08-14T08:35:02.665991-05:00"
+      },
+      "delistedSecurityCoverage": false,
+      "historicalAliases": false,
+      "pointInTimeMembership": false,
+      "priceBasis": "UNKNOWN",
+      "priceBasisVerified": false,
+      "recordCount": 1256,
+      "safeFor": [
+        "POINT_IN_TIME_CANDIDATE_EVIDENCE_INSPECTION_ONLY"
+      ],
+      "stableSecurityIdentity": false,
+      "survivorshipBiasStatus": "UNCONTROLLED",
+      "symbolCount": 290,
+      "unsafeFor": [
+        "CORPORATE_ACTION_SENSITIVE_RETURNS",
+        "CROSS_ACTION_TECHNICAL_LEVELS",
+        "SURVIVORSHIP_SAFE_STATISTICS",
+        "HISTORICAL_ANALOG_MODELING"
+      ]
+    },
+    {
+      "admissionStatus": "SECURITY_IDENTITY_UNRESOLVED",
+      "authority": "PROSPECTIVE_RESEARCH",
+      "corporateActionMetadata": false,
+      "datasetId": "successorSetupProspective",
+      "dateRange": {
+        "first": null,
+        "last": null
+      },
+      "delistedSecurityCoverage": false,
+      "historicalAliases": false,
+      "pointInTimeMembership": false,
+      "priceBasis": "UNKNOWN",
+      "priceBasisVerified": false,
+      "recordCount": 0,
+      "safeFor": [
+        "PROSPECTIVE_SETUP_EVIDENCE_ONLY"
+      ],
+      "stableSecurityIdentity": false,
+      "survivorshipBiasStatus": "UNCONTROLLED",
+      "symbolCount": 0,
+      "unsafeFor": [
+        "CORPORATE_ACTION_SENSITIVE_RETURNS",
+        "CROSS_ACTION_TECHNICAL_LEVELS",
+        "SURVIVORSHIP_SAFE_STATISTICS",
+        "HISTORICAL_ANALOG_MODELING"
+      ]
+    }
+  ],
+  "engineVersion": "research-data-basis-v1",
+  "executionAuthority": "NONE",
+  "gaps": [
+    {
+      "existingSourceCapability": "No inspected dataset contains durable identity or alias history.",
+      "gapId": "DURABLE_SECURITY_IDENTITY",
+      "missingCapability": "Stable issuer/security ID with point-in-time aliases and inactive states.",
+      "prospectiveCollectionCanClose": false,
+      "providerMightEventuallyBeRequired": true,
+      "requirement": "Stable issuer/security ID with point-in-time aliases and inactive states.",
+      "researchConsequence": "Historical records cannot prove economic-security continuity."
+    },
+    {
+      "existingSourceCapability": "No inspected dataset contains event-level action lineage.",
+      "gapId": "CORPORATE_ACTION_EVENT_CHAIN",
+      "missingCapability": "Verified split/symbol-change events with effective time, ratio, and source fingerprint.",
+      "prospectiveCollectionCanClose": true,
+      "providerMightEventuallyBeRequired": true,
+      "requirement": "Verified split/symbol-change events with effective time, ratio, and source fingerprint.",
+      "researchConsequence": "Returns, ATR, gaps, levels, patterns, excursions, and analogs can be corrupted."
+    },
+    {
+      "existingSourceCapability": "Schwab basis is unspecified and broad Daily adjustment method lacks event lineage.",
+      "gapId": "PRICE_BASIS_VERIFICATION",
+      "missingCapability": "Explicit raw/split-adjusted/total-return basis and transformation lineage.",
+      "prospectiveCollectionCanClose": true,
+      "providerMightEventuallyBeRequired": false,
+      "requirement": "Explicit raw/split-adjusted/total-return basis and transformation lineage.",
+      "researchConsequence": "Corporate-action-sensitive analysis must abstain."
+    },
+    {
+      "existingSourceCapability": "Current evidence is ticker-keyed and evidence-derived.",
+      "gapId": "POINT_IN_TIME_UNIVERSE",
+      "missingCapability": "Historical membership including renamed, inactive, acquired, and delisted securities.",
+      "prospectiveCollectionCanClose": false,
+      "providerMightEventuallyBeRequired": true,
+      "requirement": "Historical membership including renamed, inactive, acquired, and delisted securities.",
+      "researchConsequence": "Historical statistics remain exposed to survivorship bias."
+    }
+  ],
+  "pointInTimeUniverseCapability": "INSUFFICIENT",
+  "providerSelection": "NOT_PERFORMED",
+  "reportFingerprint": "3C763CFF90D9CFEF1C5B75B55E2ABBB5D0E759883519317DE1ACBD199EFAD8BC",
+  "schemaVersion": 1,
+  "sourceInventoryFingerprint": "5D414FDC41BA78DBC07328653EA491847377D0C5690904F96E4067C6CB2BA735",
+  "survivorshipBiasStatus": "UNCONTROLLED",
+  "task": "ARGUS-RESEARCH-DATA-002"
+}

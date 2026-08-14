@@ -1,5 +1,19 @@
 # Argus Changelog
 
+- Added ARGUS-RESEARCH-DATA-002's provider-neutral durable security identity,
+  point-in-time symbol alias, inactive/delisted state, and ambiguous ticker-
+  reuse contracts.
+- Added verified forward/reverse split and symbol-change actions, explicit raw,
+  split-adjusted, total-return-adjusted, and unknown price bases, and immutable
+  raw-to-derived OHLCV transformation lineage.
+- Added fail-closed survivorship and research-data admission contracts plus
+  synthetic proof that unnormalized actions corrupt returns, ATR, moving
+  averages, gaps, levels, patterns, MFE/MAE, and historical analogs.
+- Applied the contract to DATA-001: all five datasets remain identity-
+  unresolved, basis-unknown, and survivorship-uncontrolled. No provider,
+  strategy, runtime, scheduler, UI, Paper/Shadow, broker, or execution behavior
+  changed.
+
 - Added ARGUS-RESEARCH-DATA-001's deterministic read-only inventory of
   canonical Schwab minute/Daily history, the 263-symbol research-only Daily
   cache, candidate/outcome/opening history, and the empty SETUP-002 sample.
