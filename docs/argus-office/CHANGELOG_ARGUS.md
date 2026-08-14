@@ -184,6 +184,12 @@
   unchanged and inactive.
 
 ## Unreleased
+- Added the branch-local Phase 13R common specialist opinion contract. Frozen
+  records now bind specialist/version, exact opportunity/setup/TradePlan
+  target, policy, timestamps, evidence hashes, evaluation state, feature
+  families, confidence semantics, reason codes, and research-only authority to
+  deterministic JSON identities. The module performs no I/O, has no arbiter or
+  runtime consumer, and cannot influence Paper, Shadow, SETUP-002, or orders.
 - Fast-forwarded the directly proven A001-A003 Paper stack into canonical
   `master` after compileall, 53 immediate tests, all 1,391 Python tests,
   protected-path review, exact-credential scan, and independent zero-position/
