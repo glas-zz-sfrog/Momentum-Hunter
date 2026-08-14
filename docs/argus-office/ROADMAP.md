@@ -87,6 +87,25 @@ provider, broker, storage, scheduler, service, Engine Host, WPF, Paper, Shadow,
 or order capability, and does not alter the August 17 lane. Canonical `master`
 and the installed runtime remain unchanged until a later clean integration.
 
+ARGUS-RESEARCH-DATA-001 is implemented on
+`codex/ARGUS-RESEARCH-DATA-001-data-inventory` and remains
+`IMPLEMENTED_PENDING_MERGE`. Its read-only inventory found 38,286 canonical
+Schwab minute bars across 7 symbols and 17 session dates, 1,764 canonical
+Schwab Daily bars across the same 7 symbols, and 79,298 research-only adjusted
+Daily rows across 263 symbols. The broader Daily cache is useful for bounded
+research but is not canonical or survivor-safe: all inspected histories are
+ticker-keyed and lack stable security identity, symbol-change/delisting
+history, point-in-time membership, and corporate-action transformation
+lineage. Daily technical-pattern and rank/setup-outcome uses are `PARTIAL`;
+the other evaluated historical-statistical uses are `INSUFFICIENT`.
+
+No new data provider is selected or recommended. The next research-data work
+should close durable security identity and corporate-action price-basis
+lineage, then build the prospective opportunity denominator. Existing Schwab
+backfill and prospective collection remain preferred until a named gap fails
+its explicit exit condition. The August 17 installed runtime and operational
+jobs remain pinned to canonical `master` and are unchanged by this branch.
+
 ## Integrated Work History
 
 ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
@@ -2134,6 +2153,23 @@ Intended specialist architecture:
 
 #### ARGUS-RESEARCH-DATA-001 - Research-Scale Historical Data And Universe Integrity
 
+- Status: `IMPLEMENTED_PENDING_MERGE` on
+  `codex/ARGUS-RESEARCH-DATA-001-data-inventory`.
+- Frozen inventory fingerprint:
+  `5D414FDC41BA78DBC07328653EA491847377D0C5690904F96E4067C6CB2BA735`.
+- Measured evidence: 38,286 canonical Schwab minute bars / 7 symbols / 17
+  session dates; 1,764 canonical Schwab Daily bars / 7 symbols; 79,298
+  research-only adjusted Daily rows / 263 symbols; 1,256 candidate rows / 290
+  symbols; and an empty prospective SETUP-002 sample.
+- Research capability: Daily technical patterns and rank/setup-conditioned
+  outcomes are `PARTIAL`; intraday analogs, complete premarket structure,
+  failed breakouts, successor-setup statistics, regimes, events, time-of-day,
+  and historical analog modeling are `INSUFFICIENT`.
+- Universe integrity is `INSUFFICIENT`: durable security identity, symbol
+  continuity, delisted coverage, point-in-time membership, and complete
+  corporate-action lineage are absent.
+- No provider is selected or recommended. The inventory records exact gaps,
+  allowed/denied authority, and exit conditions before procurement.
 - Inventory actual Schwab minute and Daily history, prospectively accumulated
   evidence, research-only Daily history, security identity coverage, and enough
   renamed/delisted handling to avoid obvious survivorship bias.
