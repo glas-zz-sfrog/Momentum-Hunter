@@ -100,11 +100,23 @@ lineage. Daily technical-pattern and rank/setup-outcome uses are `PARTIAL`;
 the other evaluated historical-statistical uses are `INSUFFICIENT`.
 
 No new data provider is selected or recommended. The next research-data work
-should close durable security identity and corporate-action price-basis
-lineage, then build the prospective opportunity denominator. Existing Schwab
-backfill and prospective collection remain preferred until a named gap fails
-its explicit exit condition. The August 17 installed runtime and operational
-jobs remain pinned to canonical `master` and are unchanged by this branch.
+closes durable security identity and corporate-action price-basis lineage on
+`codex/ARGUS-RESEARCH-DATA-002-security-action-basis`. The implementation is
+`IMPLEMENTED_PENDING_MERGE`: point-in-time aliases, inactive/delisted states,
+forward/reverse split and symbol-change actions, explicit price bases,
+immutable transformation lineage, survivorship assessment, and fail-closed
+research admission are implemented and focused tests pass. The actual DATA-001
+compatibility matrix remains conservative: all five sources are ticker-keyed,
+price basis is `UNKNOWN`, point-in-time universe capability is `INSUFFICIENT`,
+and survivorship status is `UNCONTROLLED`.
+
+No provider is procured or selected. Durable identity/action and historical
+membership are demonstrated gaps that may eventually require another source,
+but existing Schwab evidence and prospective collection remain preferred until
+the recorded exit conditions fail. After merge reconciliation, the next
+research-data task is `ARGUS-STAT-DATA-001`, the prospective opportunity
+denominator. The August 17 installed runtime and operational jobs remain pinned
+to canonical `master` and are unchanged by this stacked research branch.
 
 ## Integrated Work History
 
@@ -2180,6 +2192,29 @@ Intended specialist architecture:
   prospectively accumulated canonical data. Before proposing another provider,
   document the exact capability gap, required fields/depth, proposed and denied
   authority, cost, and exit condition.
+
+#### ARGUS-RESEARCH-DATA-002 - Security Identity And Corporate-Action Basis
+
+- Status: `IMPLEMENTED_PENDING_MERGE` on
+  `codex/ARGUS-RESEARCH-DATA-002-security-action-basis`, stacked on DATA-001
+  `d03301c` from canonical baseline `ea056155`.
+- Define durable research security IDs, point-in-time aliases, inactive and
+  delisted states, and fail-closed ambiguous/reused-symbol resolution.
+- Define verified forward split, reverse split, and symbol-change actions;
+  preserve merger/spinoff/distribution extension types without inventing
+  unsupported transformation semantics.
+- Require every research bar to declare `RAW_PROVIDER`, `SPLIT_ADJUSTED`,
+  `TOTAL_RETURN_ADJUSTED`, or `UNKNOWN`; provider name never proves basis.
+- Preserve raw OHLCV and bind every derived bar to identity, action IDs,
+  cumulative price/volume factors, transformation version, and fingerprints.
+- Current dataset result: all five DATA-001 sources have unresolved identity,
+  unknown price basis, uncontrolled survivorship, and insufficient point-in-
+  time universe evidence. They remain useful only for explicitly bounded
+  source/prospective evidence inspection, not survivor-safe or corporate-
+  action-sensitive statistical claims.
+- No provider selected. The compatibility report records durable identity,
+  event-chain, basis-verification, and point-in-time-universe gaps plus whether
+  prospective collection can close each one.
 
 #### ARGUS-STAT-DATA-001 - Prospective Opportunity Denominator
 
