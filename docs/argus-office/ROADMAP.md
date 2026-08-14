@@ -30,66 +30,62 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 ## Now
 
 The August 14 operational gate is terminal and preserved. The 05:55 Central
-Schwab boundary checkpoint was `USEFUL_WITH_LIMITATIONS`: quotes and volume
-were fresh, while completed premarket candles were not yet available. The
-06:05 checkpoint was `HIGH_FIDELITY` for SPY, QQQ, and NVDA quotes, candles,
-and volume. The 07:00 capture received and parsed all 20 Finviz rows and
-truthfully qualified zero. The 08:35 opening capture received and parsed all
-20 rows, qualified SNDK and NU, and completed canonical candle readiness for
-both symbols with all five opening bars and seven baseline sessions.
+Schwab boundary checkpoint was `USEFUL_WITH_LIMITATIONS`; the 06:05 checkpoint
+was `HIGH_FIDELITY` for SPY, QQQ, and NVDA. The 07:00 capture received and
+parsed all 20 Finviz rows and truthfully qualified zero. The 08:35 opening
+capture received and parsed all 20 rows, qualified SNDK and NU, and completed
+canonical candle readiness with five opening bars and seven baseline sessions
+for both symbols. The dependent Canary Alpaca Paper cycle reached actual
+candidate-level strategy logic and terminated `NO_TRADE` without creating an
+order. SNDK was below its entry trigger; NU was a missed/reclaim setup with
+insufficient execution reward/risk.
 
-The dependent Canary Alpaca Paper cycle reached candidate-level strategy
-logic and terminated `NO_TRADE`. It used the expected Paper-only account,
-observed no existing positions or orders, created no order, and made no Shadow
-or live-broker action. SNDK was below its `$1,696.37` entry trigger; NU was a
-missed/reclaim setup with insufficient execution reward/risk. These are
-strategy/evidence outcomes rather than a provider-contract or candle-readiness
-failure.
+The post-August-14 reconciliation is complete on synchronized local and remote
+`master`. It integrates SETUP-001/002, PAPER-005, DATA-008,
+SESSION-FIDELITY-008, AFTER-CLOSE-001/002, Phase 13R, and the SNDK stop-
+authority repair. The SNDK issue was a stale cross-contract equality check:
+the completed-Daily invalidation was `$1,331.58` and the valid tighter
+same-session TradePlan stop was `$1,565.00`. Current code accepts a tighter
+long stop and still fails closed if a plan allows loss below Daily
+invalidation. All 2,004 reconciliation tests passed before integration.
 
-The additional SNDK stop finding was a stale cross-contract validator, not a
-bad price. The immutable completed-Daily setup invalidation was `$1,331.58`;
-the same-session opening-range TradePlan stop was the intentionally tighter
-`$1,565.00`. Selection previously required those distinct concepts to be
-equal. ARGUS-POST-20260814 now accepts a tighter intraday stop while still
-failing closed when a TradePlan stop permits loss below the Daily setup
-invalidation. This defect did not change August 14's terminal result because
-SNDK never reached its entry trigger.
+ARGUS-SETUP-002A adds the separate unattended activation boundary for the
+already-integrated offline successor-setup observer. Its immutable activation
+record starts an empty prospective denominator on the first eligible session,
+Monday August 17, 2026. Pass 1 depends on the same-date opening capture and is
+evaluated before Paper at the fixed 09:35 ET cutoff. Pass 2 depends on the
+exact Pass 1 packet and runs after the regular-session outcome horizon. Both
+jobs are write-once, exact-head pinned, finite, zero-retry, and isolated: a
+research failure cannot change the opening or Paper receipt and cannot invoke
+a provider, account, position, broker, order, Shadow, Engine Host, or UI path.
 
-The single reconciliation branch
-`codex/ARGUS-POST-20260814-integration-reconciliation` contains the approved
-SETUP-001 research case study, dormant SETUP-002 prospective observer,
-PAPER-005 post-fill/protection hardening, DATA-008 semantic plausibility gate,
-SESSION-FIDELITY-008 provider-scope correction, AFTER-CLOSE-001/002 offline
-trace tools, the SNDK validator repair, and the approved Phase 13R specialist-
-intelligence roadmap. Status is `IMPLEMENTED_PENDING_FINAL_HARD_CHEW` until
-the combined full-suite, protected-path, secret, and capability reviews pass.
+The remaining 20 opening captures and the August 17 Canary Paper engineering
+job remain pending under the exact canonical identity. The automation service
+is Automatic and healthy, zero Shadow jobs are enabled, and real/live order
+transmission remains unavailable. SETUP-002 is silent research only and does
+not alter candidate admission, scoring, TradePlan, Risk Governor, allocation,
+Paper selection, or the official Paper sample.
 
-SETUP-002 remains dormant: it is not installed, scheduled, or activated, and
-its prospective denominator remains empty. Activation is a separate bounded
-operational task after integration and service verification. R034 legacy-
-candle deletion remains separately approval-gated. Live order transmission
-remains unavailable.
+Next operational evidence is the August 17 opening/Paper result plus the two
+SETUP-002 research receipts. A valid Pass 1 may still abstain for insufficient
+history, and a valid Pass 2 may classify no successor setup; neither is a
+production failure. After the first terminal pair, verify denominator count,
+provider-bound exclusions, cutoff hashes, outcome separation, and production
+nonmutation before extending unattended collection. R034 legacy-candle
+deletion remains separately approval-gated. Routine successful captures stay
+in append-only operational evidence and do not trigger daily Roadmap commits.
 
-After final proof, Git Steward may fast-forward local `master`, make an
-ordinary non-force backup push, install the final exact canonical identity,
-repin the remaining 20 opening/Paper jobs once, and verify service health,
-future-job identity, zero enabled Shadow jobs, and Paper-only transmission
-boundaries. Routine successful captures continue in append-only operational
-evidence and do not cause daily Roadmap commits or repins.
-
-The approved long-term direction is the Phase 13R specialist-intelligence
-program with the current Momentum/Paper path preserved as the prospective
-baseline. Its presence in the Roadmap authorizes bounded research planning,
-not specialist runtime authority or strategy activation.
+The approved long-term direction remains Phase 13R specialist intelligence,
+with the current Momentum/Paper path preserved as the prospective baseline.
+Specialist runtime authority and strategy activation remain future gates.
 
 ## Integrated Work History
 
-ARGUS-SETUP-002 prospective successor-setup research is
-`IMPLEMENTED_PENDING_MERGE_AND_ACTIVATION_GATE` on
-`codex/ARGUS-SETUP-002-prospective-successor-observer`, stacked on the complete
-unmerged SETUP-001 branch and isolated from canonical runtime at `a9821ed`.
-Implementation commit `a676cd6` is backed up by ordinary non-force feature-
-branch push; nothing is merged or installed.
+ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
+`master` through the post-August-14 reconciliation. Its original implementation
+commit `a676cd6` remains preserved on
+`codex/ARGUS-SETUP-002-prospective-successor-observer`; SETUP-002A supplies the
+separate prospective activation record and unattended research-only schedule.
 The prospective sample identity is `successor-setup-research-20260813-v1` with
 policy fingerprint `C2A214A12E6BE8A42BC868AD3A4F90998721F5DE652FB748012546170C95B943`.
 It starts at zero sessions and zero candidates; all five SETUP-001 candidates
@@ -114,14 +110,11 @@ post-decision counterfactual observations that cannot rewrite Pass 1. Exact
 duplicate writes are idempotent; conflicting writes, tampered packets, changed
 cutoff candles, wrong symbols, and wrong session dates fail closed.
 
-SETUP-002 is not installed or scheduled. Its dormant activation plan is
-explicitly `NOT_INSTALLED`, has zero retries and finite future timeouts, and
-states that research failure cannot change opening or Paper status. The August
-14 05:55 and 06:05 Schwab checkpoints, 08:35 opening capture, dependent Paper
-job, installed service, credentials, and production stores remain pinned to
-canonical `a9821ed` and untouched. Integration and any activation remain gated
-until those operational artifacts are terminal and preserved; activation then
-requires a separate exact scheduler/service plan and proof.
+SETUP-002A activates SETUP-002 prospectively from an empty denominator on
+August 17. Its two research jobs have zero retries and finite timeouts, and a
+research failure cannot change opening or Paper status. The immutable Aug. 14
+checkpoint/opening/Paper evidence remains preserved under its original Git
+identity; activation creates no retrospective candidate or outcome.
 
 Hard Chew proof passes compileall, 25 focused SETUP-002 tests, 37 combined
 SETUP-001/002 tests, 134 affected setup/TradePlan/candle/continuous-plan
@@ -129,11 +122,11 @@ regressions, and all 1,961 Python tests. The remaining evidence limitation is
 unchanged: the current trusted Schwab history normally begins near 07:00 ET,
 so the true 04:00-07:00 path is recorded as `UNOBSERVED` rather than inferred.
 
-ARGUS-SETUP-001 premarket structure and fresh-setup research is
-`IMPLEMENTED_PENDING_MERGE` on
-`codex/ARGUS-SETUP-001-premarket-structure`, isolated from canonical runtime at
-base `a9821ed`. Feature commit `6919b03` is backed up by ordinary non-force
-feature-branch push. A deterministic two-pass tool reconstructed the actual
+ARGUS-SETUP-001 premarket structure and fresh-setup research is integrated on
+canonical `master` through the post-August-14 reconciliation. Original feature
+commit `6919b03` remains preserved on
+`codex/ARGUS-SETUP-001-premarket-structure`. A deterministic two-pass tool
+reconstructed the actual
 August 13 CRWV/NBIS/IREN/HPE/SMCI decision using only evidence at or before the
 09:35:38 ET quote cutoff, froze decision fingerprint
 `9C2F2AB10FA2BF97BB4854286DFA692142BD993DD80EF7E2526329A5C778FF5E`,
@@ -228,21 +221,20 @@ unittest discovery exceeded its explicit ten-minute bound without a result and
 is not claimed as a pass. No live provider, account, position, or order call was
 made by this repair verification.
 
-ARGUS-PAPER-005 is `IMPLEMENTED_PENDING_INTEGRATION_AFTER_AUGUST_14_EVIDENCE`
-on branch `codex/ARGUS-PAPER-005-protection-post-fill-hardening`. The isolated
-implementation does not alter the installed August 14 runtime. It recalculates
+ARGUS-PAPER-005 is integrated on canonical `master` through the
+post-August-14 reconciliation; its original branch is
+`codex/ARGUS-PAPER-005-protection-post-fill-hardening`. It recalculates
 actual dollar risk, reward/risk, and entry extension from Alpaca Paper's
 confirmed fill and broker position before protection; a failed post-fill check
 forces the current Paper position flat. New and recovered protective stops must
 match the exact current broker position quantity and frozen stop price, and the
 active supervisor rechecks that invariant before reporting `POSITION_WORKING`.
 Any mismatch cancels the owned stop where possible and flattens only the current
-confirmed Paper position. This branch must not merge, activate, repin jobs, or
-replace the installed service until the August 14 opening/Paper evidence is
-terminal and preserved.
-ARGUS-AFTER-CLOSE-002 is `IMPLEMENTED_PENDING_MERGE_AFTER_AUG13_OPENING` on
-isolated branch `codex/ARGUS-AFTER-CLOSE-002-real-regular-replay-trace`, based
-on AFTER-CLOSE-001 commit `e593131`. A new offline replay consumed a preserved
+confirmed Paper position.
+ARGUS-AFTER-CLOSE-002 is integrated on canonical `master` through the
+post-August-14 reconciliation; its original isolated branch is
+`codex/ARGUS-AFTER-CLOSE-002-real-regular-replay-trace`, based on
+AFTER-CLOSE-001 commit `e593131`. A new offline replay consumed a preserved
 July 29 SPY Schwab quote, five canonical 09:30-09:34 ET price-history bars, the
 matching July 28 baseline bars, and the July 28 completed Daily candle. It
 preserved `ORIGINAL_MARKET_TIME` separately from `REPLAY_EVALUATION_TIME`,
@@ -267,8 +259,9 @@ canonical runtime, scheduler, service, Paper/Shadow state, opening evidence, or
 production store changed. Do not merge before the August 13 pinned opening and
 dependent Paper evidence are terminal and preserved.
 
-ARGUS-AFTER-CLOSE-001 is `IMPLEMENTED_PENDING_MERGE_AFTER_AUG13_OPENING` on
-isolated branch `codex/ARGUS-AFTER-CLOSE-001-contract-transaction-trace` from
+ARGUS-AFTER-CLOSE-001 is integrated on canonical `master` through the
+post-August-14 reconciliation; its original isolated branch is
+`codex/ARGUS-AFTER-CLOSE-001-contract-transaction-trace` from historical
 canonical head `9d735dd`. The final write-once diagnostic packet fingerprint is
 `D5DF05A91BFB3630C16F377C7CE1E56CCFCAE3B9CD285DD8031EB69FB2BDAE2E`.
 One bounded live trace observed the exact Finviz headers `No., Ticker, Company,
@@ -1494,13 +1487,13 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 
 | Item | Current truth |
 | --- | --- |
-| Canonical baseline | Canonical `master` includes DATA-009 implementation commit `ded2929` on top of synchronized base `9d735dd`. It now contains bounded opening-candle readiness, authoritative DATA-002 opening RVOL input, and corrected Paper evidence chronology in addition to the previously integrated R032B/R032C, R034A, DATA-003 through DATA-007A, A001-A003, and QUALITY-003 foundations. The final canonical identity is the closeout commit containing this statement. |
-| Active implementation | DATA-008 semantic plausibility is implemented and fully tested on isolated branch `codex/ARGUS-DATA-008-semantic-plausibility`, pending integration only after August 14 evidence. Its intrinsic Finviz gate runs after structural parsing and before filtering/scoring; contextual Schwab/candle and distribution checks require explicit authoritative input and are not yet wired by canonical production. Paper fill/protection hardening is separately implemented on `codex/ARGUS-PAPER-005-protection-post-fill-hardening`. Canonical `master`, service, manifest, and August 14 jobs remain frozen at `a9821ed`. R034 remains a separate destructive approval gate. |
+| Canonical baseline | Canonical `master` contains the post-August-14 reconciliation: SETUP-001/002, PAPER-005, DATA-008, SESSION-FIDELITY-008, AFTER-CLOSE-001/002, Phase 13R, and the SNDK stop-authority repair. SETUP-002A adds only the separate silent research activation boundary. |
+| Active implementation | SETUP-002A begins the empty prospective successor-setup denominator on August 17 with two exact-head, write-once, research-only receipts. DATA-008 intrinsic Finviz plausibility runs after structural parsing and before filtering/scoring; contextual Schwab/candle and distribution checks still require explicit authoritative input. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
 | Active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Use a separately versioned canary-realistic Alpaca Paper engineering sample to prove prospective selection, fractional allocation, provider execution, protection, recovery, and terminal evidence. Do not count it as the final continuous-intraday strategy sample. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | Candidate-bearing Paper execution remains unobserved because the August 7/10/11/12 candidate-admission evidence is invalid and did not reach a strategy decision. Provider schema drift is the leading inferred cause and is strongly corroborated only for August 12; exact-run payloads are unavailable. V2 starts cleanly, but partial-fill and provider-restart behavior remain synthetic-only; broker-resident linked protection and status streaming remain separate unknowns. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
-| Scheduled operational proof | The 2026-08-03 through 2026-08-13 08:35 jobs launched and wrote their required artifacts with no Shadow or live-brokerage action. August 7/10/11/12 are adjudicated data-contract failures; August 13 admitted five candidates but lacked canonical candle execution evidence. Twenty-one future openings remain from August 14 through September 14 and are bound to the final canonical closeout identity. The dependent August 14 Paper job has the same identity and opening dependency. Both next jobs are `PENDING`; zero Shadow jobs are enabled. |
-| Immediate operational work | Preserve and adjudicate the August 14 Schwab fidelity, opening, and dependent Paper evidence from frozen canonical `a9821ed`. After that evidence is terminal, reconcile the DATA-008 and Paper-safety feature branches against current master, repeat Hard Chew, and integrate only by clean fast-forward-compatible paths. Present R034's exact deletion plan only when Steven is ready. |
+| Scheduled operational proof | The Aug. 14 fidelity, opening, and Paper evidence is terminal and preserved. Twenty future openings remain, the Aug. 17 Paper job is pending, and SETUP-002A adds Aug. 17 Pass 1/Pass 2 research receipts without enabling Shadow. All are bound to the final canonical activation identity. |
+| Immediate operational work | Preserve and adjudicate the Aug. 17 opening, Paper, and successor-setup research receipts. Verify the first research denominator, provider-bound exclusions, cutoff hashes, outcome separation, and production nonmutation. Present R034's exact deletion plan only when Steven is ready. |
 | Broker state | Schwab OAuth and immutable `2573` `INDIVIDUAL_CASH` binding remain read-only market-data/account evidence. No transmitting Schwab method exists. The Canary Alpaca Paper credential is encrypted outside Git. The exact Paper host accepted and completed one bounded fractional lifecycle; the activation preflight found the account active with `$100` cash/buying power, zero positions, and zero open orders. The research credential slot is empty. Invalidated Paper v1 is archived; v2 is active with unchanged policy and no carried decisions, intents, positions, or orders. The live Alpaca host cannot be enabled by a mode flip. |
 | Steven action | No routine nonvisual approval is pending. Interrupt Steven before funding, money movement, any live endpoint/order, unexpected brokerage scope, destructive R034 cutover, or visual acceptance. Do not ask Steven to re-enter the stored Canary credential. |
 | Data caveat | Schwab remains authoritative for proven quote/candle evidence while execution-provider capability remains separate. Finviz structural schema/row/value drift is validated prospectively; structurally valid but economically implausible provider values remain the explicit ARGUS-DATA-008 risk. Historical raw payloads and raw/parsed row counts for August 7/10/11/12 were never persisted and remain unknown; their empty candidate sets are adjudicated contract failures and may not be interpreted as market no-trades. Schema drift is `ROOT_CAUSE_INFERRED` for August 7/10/11 and `ROOT_CAUSE_STRONGLY_CORROBORATED` for August 12, never confirmed for the exact opening runs. DATA-001 through DATA-004 retain their provenance, RVOL, setup, and same-session chronology gates. DATA-005 makes `$500` reference sizing nonexecutable; DATA-005A supplies fresh bound-account/portfolio evidence. Fractional support may alter provider-executable quantity prospectively but may never rewrite old allocation or Shadow evidence. Legacy RVOL remains research-only; insufficient candle history and unknown broker capability fail closed. |

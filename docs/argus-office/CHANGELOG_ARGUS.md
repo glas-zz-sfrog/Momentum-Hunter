@@ -1,5 +1,15 @@
 # Argus Changelog
 
+- Activated the empty SETUP-002 successor-setup research sample prospectively
+  for August 17 with a separate immutable activation timestamp and fingerprint.
+- Added two exact-head, zero-retry service jobs: outcome-blind Pass 1 after the
+  opening capture and before Paper, then terminal Pass 2 after the session.
+- Isolated research failure from opening/Paper status and added guarded manifest
+  installation, rollback, Central-offset validation, and future exact-head
+  repinning for both passes.
+- Preserved zero provider/account/order/Shadow/Engine Host/UI authority and left
+  all production strategy semantics unchanged.
+
 - Reconciled the post-August-14 approved feature inventory on one isolated
   branch: SETUP-001/002, PAPER-005, DATA-008, SESSION-FIDELITY-008,
   AFTER-CLOSE-001/002, and the Phase 13R specialist-intelligence roadmap.

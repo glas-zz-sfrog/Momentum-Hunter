@@ -110,13 +110,24 @@ def plan_opening_capture_manifest(
     )
     opening_by_id = {str(job["jobId"]): job for job in opening_jobs}
     for job in retained_jobs:
-        if job.get("kind") != "paper_engineering":
+        if job.get("kind") not in {"paper_engineering", "successor_setup_pass1"}:
             continue
         dependency_id = str(job.get("dependsOnJobId", ""))
         dependency = opening_by_id.get(dependency_id)
         if dependency is None:
             raise ValueError(
-                "A retained Paper engineering job has no repinned opening capture."
+                "A retained dependent opening job has no repinned opening capture."
+            )
+        job["expectedGitHead"] = dependency["expectedGitHead"]
+    retained_by_id = {str(job.get("jobId", "")): job for job in retained_jobs}
+    for job in retained_jobs:
+        if job.get("kind") != "successor_setup_pass2":
+            continue
+        dependency_id = str(job.get("dependsOnJobId", ""))
+        dependency = retained_by_id.get(dependency_id)
+        if dependency is None or dependency.get("kind") != "successor_setup_pass1":
+            raise ValueError(
+                "A retained Successor Pass 2 job has no repinned Pass 1 dependency."
             )
         job["expectedGitHead"] = dependency["expectedGitHead"]
     planned = dict(payload)

@@ -550,6 +550,71 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertEqual("opening-capture-20260730", paper.depends_on_job_id)
         self.assertEqual(25200, paper.timeout_seconds)
 
+    def test_manifest_accepts_bounded_successor_pass_pair(self) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260817",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-08-17T08:35:00-05:00",
+                    "latestStartAt": "2026-08-17T08:40:00-05:00",
+                    "expectedGitHead": "a" * 40,
+                },
+                {
+                    "jobId": "successor-setup-pass1-20260817",
+                    "kind": "successor_setup_pass1",
+                    "scheduledAt": "2026-08-17T08:35:00-05:00",
+                    "latestStartAt": "2026-08-17T08:50:00-05:00",
+                    "timeoutSeconds": 600,
+                    "expectedGitHead": "a" * 40,
+                    "dependsOnJobId": "opening-capture-20260817",
+                },
+                {
+                    "jobId": "successor-setup-pass2-20260817",
+                    "kind": "successor_setup_pass2",
+                    "scheduledAt": "2026-08-17T15:05:00-05:00",
+                    "latestStartAt": "2026-08-17T16:00:00-05:00",
+                    "timeoutSeconds": 900,
+                    "expectedGitHead": "a" * 40,
+                    "dependsOnJobId": "successor-setup-pass1-20260817",
+                },
+            ]
+        )
+
+        manifest = self.parse_payload(payload)
+
+        self.assertEqual(
+            ("opening_capture", "successor_setup_pass1", "successor_setup_pass2"),
+            tuple(job.kind for job in manifest.jobs),
+        )
+
+    def test_manifest_rejects_successor_pass_without_exact_dependency(self) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "canary",
+                    "kind": "nonmarket_canary",
+                    "scheduledAt": "2026-08-17T08:35:00-05:00",
+                    "latestStartAt": "2026-08-17T08:35:10-05:00",
+                },
+                {
+                    "jobId": "successor-setup-pass1-20260817",
+                    "kind": "successor_setup_pass1",
+                    "scheduledAt": "2026-08-17T08:35:00-05:00",
+                    "latestStartAt": "2026-08-17T08:50:00-05:00",
+                    "timeoutSeconds": 600,
+                    "expectedGitHead": "a" * 40,
+                    "dependsOnJobId": "canary",
+                },
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            ManifestValidationError,
+            "same-date opening capture",
+        ):
+            self.parse_payload(payload)
+
     def test_manifest_rejects_paper_job_without_same_date_capture(self) -> None:
         payload = self.manifest_payload(
             jobs=[
@@ -962,6 +1027,78 @@ class AutomationSupervisorTests(unittest.TestCase):
         self.assertIn("trade-plan-briefing-2026-07-30-opening.json", joined)
         self.assertNotIn("api.alpaca.markets", joined)
         self.assertNotIn("shadow", joined.lower())
+
+    def test_successor_pass_one_runs_before_paper_and_failure_is_isolated(self) -> None:
+        opening = self.job(
+            kind="opening_capture",
+            job_id="opening-capture-20260730",
+            expected_git_head="a" * 40,
+        )
+        successor = self.job(
+            kind="successor_setup_pass1",
+            job_id="successor-setup-pass1-20260730",
+            depends_on_job_id=opening.job_id,
+            expected_git_head="a" * 40,
+        )
+        paper = self.job(
+            kind="paper_engineering",
+            job_id="paper-engineering-20260730",
+            depends_on_job_id=opening.job_id,
+            expected_git_head="a" * 40,
+        )
+        executions: list[str] = []
+
+        def execute(job: AutomationJob, _log: Path) -> tuple[int, str]:
+            executions.append(job.job_id)
+            if job.kind == "successor_setup_pass1":
+                return 1, "research failed closed"
+            return 0, "completed"
+
+        state = AutomationSupervisor(
+            self.manifest(opening, paper, successor),
+            clock=lambda: self.now,
+            engine_host_probe=self.healthy_engine,
+            job_executor=execute,
+        ).tick()
+
+        self.assertEqual(
+            [opening.job_id, successor.job_id, paper.job_id],
+            executions,
+        )
+        self.assertEqual("FAILED", state.jobs[successor.job_id].status)
+        self.assertEqual("COMPLETED", state.jobs[paper.job_id].status)
+
+    def test_successor_commands_are_offline_write_once_research_only(self) -> None:
+        pass1 = self.job(
+            kind="successor_setup_pass1",
+            job_id="successor-setup-pass1-20260730",
+            depends_on_job_id="opening-capture-20260730",
+            expected_git_head="a" * 40,
+        )
+        pass2 = self.job(
+            kind="successor_setup_pass2",
+            job_id="successor-setup-pass2-20260730",
+            scheduled_at=self.now.replace(hour=20, minute=5),
+            latest_start_at=self.now.replace(hour=21, minute=0),
+            depends_on_job_id=pass1.job_id,
+            expected_git_head="a" * 40,
+        )
+        supervisor = self.supervisor(pass1, pass2)
+
+        first = supervisor._successor_setup_pass1_command(pass1)
+        second = supervisor._successor_setup_pass2_command(pass2)
+        joined = " ".join((*first, *second)).lower()
+
+        self.assertIn("momentum_hunter.successor_setup_observer", joined)
+        self.assertIn("sample-charter.json", joined)
+        self.assertIn("activation.json", joined)
+        self.assertIn("pass1-2026-07-30.json", joined)
+        self.assertIn("pass2-2026-07-30.json", joined)
+        self.assertNotIn("alpaca", joined)
+        self.assertNotIn("schwab_onboarding", joined)
+        self.assertNotIn("order", joined)
+        self.assertNotIn("submit", joined)
+        self.assertNotIn("shadow", joined)
 
     def test_opening_execution_validates_frozen_repository_identity(self) -> None:
         job = self.job(kind="opening_capture", expected_git_head="a" * 40)

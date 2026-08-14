@@ -14,6 +14,7 @@ from datetime import datetime, time
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from momentum_hunter.config import DATA_DIR
 from momentum_hunter.intraday_trade_plan import (
     CONTINUATION_BREAKOUT,
     OPENING_BREAKOUT,
@@ -38,12 +39,16 @@ SAMPLE_ID = "successor-setup-research-20260813-v1"
 PASS1_ENGINE_VERSION = "prospective-successor-setup-pass1-v1"
 PASS2_ENGINE_VERSION = "prospective-successor-setup-pass2-v1"
 SUMMARY_ENGINE_VERSION = "prospective-successor-setup-summary-v1"
+ACTIVATION_ENGINE_VERSION = "prospective-successor-setup-activation-v1"
 RESEARCH_ONLY = "RESEARCH_ONLY"
 EXECUTION_AUTHORITY = "NONE"
 MAX_EVALUATED_CANDIDATES = 5
 DECISION_CUTOFF = time(9, 35)
 FORCED_FLAT = time(15, 55)
 BENCHMARKS = ("SPY", "QQQ", "IWM")
+RESEARCH_OUTPUT_ROOT = DATA_DIR / "research" / SAMPLE_ID
+CHARTER_PATH = RESEARCH_OUTPUT_ROOT / "sample-charter.json"
+ACTIVATION_PATH = RESEARCH_OUTPUT_ROOT / "activation.json"
 
 ORIGINAL_UNTOUCHED = "ORIGINAL_UNTOUCHED"
 ORIGINAL_TRIGGERED = "ORIGINAL_TRIGGERED"
@@ -107,6 +112,8 @@ def packet_fingerprint(payload: Mapping[str, Any]) -> str:
         copy.pop("outcomeFingerprint", None)
     elif payload.get("engineVersion") == SUMMARY_ENGINE_VERSION:
         copy.pop("summaryFingerprint", None)
+    elif payload.get("engineVersion") == ACTIVATION_ENGINE_VERSION:
+        copy.pop("activationFingerprint", None)
     elif "activationAuthorized" in payload:
         copy.pop("activationPlanFingerprint", None)
     elif payload.get("pass") == "PASS_1_OUTCOME_BLIND_DECISION":
@@ -145,9 +152,79 @@ def create_sample_charter(*, created_at: str, output_path: Path) -> dict[str, An
     return payload
 
 
+def create_activation_record(
+    *,
+    charter_path: Path,
+    activated_at: str,
+    first_eligible_session_date: str,
+    expected_git_head: str,
+    output_path: Path,
+) -> dict[str, Any]:
+    """Activate the empty sample prospectively without changing production state."""
+
+    charter = _validated_charter(charter_path)
+    activated = _parse_datetime(activated_at)
+    try:
+        first_eligible = datetime.strptime(
+            first_eligible_session_date,
+            "%Y-%m-%d",
+        ).date()
+    except ValueError as exc:
+        raise SuccessorSetupResearchError(
+            "First eligible session date must use YYYY-MM-DD."
+        ) from exc
+    if first_eligible < activated.astimezone(EASTERN).date():
+        raise SuccessorSetupResearchError(
+            "First eligible session cannot precede activation."
+        )
+    normalized_head = expected_git_head.strip().lower()
+    if len(normalized_head) != 40 or any(
+        character not in "0123456789abcdef" for character in normalized_head
+    ):
+        raise SuccessorSetupResearchError("Activation requires a full Git commit identity.")
+    payload: dict[str, Any] = {
+        "schemaVersion": SCHEMA_VERSION,
+        "engineVersion": ACTIVATION_ENGINE_VERSION,
+        "task": "ARGUS-SETUP-002A",
+        "recordType": "PROSPECTIVE_SAMPLE_ACTIVATION",
+        "sampleId": SAMPLE_ID,
+        "charterFingerprint": charter["charterFingerprint"],
+        "policyFingerprint": POLICY_FINGERPRINT,
+        "activatedAt": activated.isoformat(),
+        "firstEligibleSessionDate": first_eligible.isoformat(),
+        "expectedGitHead": normalized_head,
+        "status": "ACTIVE_PROSPECTIVE_EMPTY",
+        "denominatorStartRule": "FIRST_ELIGIBLE_SESSION_ON_OR_AFTER_ACTIVATION",
+        "initialCounts": _empty_counts(),
+        "authority": RESEARCH_ONLY,
+        "executionAuthority": EXECUTION_AUTHORITY,
+        "productionMutation": False,
+    }
+    payload["activationFingerprint"] = packet_fingerprint(payload)
+    _write_once_json(output_path, payload)
+    return payload
+
+
+def validate_activation_record(
+    *,
+    charter_path: Path,
+    activation_path: Path,
+    expected_git_head: str,
+    first_eligible_session_date: str,
+) -> dict[str, Any]:
+    charter = _validated_charter(charter_path)
+    activation = _validated_activation(activation_path, charter=charter)
+    if activation["expectedGitHead"] != expected_git_head.strip().lower():
+        raise SuccessorSetupResearchError("Activation Git identity differs from expected head.")
+    if activation["firstEligibleSessionDate"] != first_eligible_session_date:
+        raise SuccessorSetupResearchError("Activation first eligible session differs.")
+    return activation
+
+
 def build_pass_one(
     *,
     charter_path: Path,
+    activation_path: Path,
     trade_plan_path: Path,
     capture_path: Path,
     minute_store_root: Path,
@@ -159,10 +236,15 @@ def build_pass_one(
     """Freeze an outcome-blind 09:35 ET research opinion for every candidate."""
 
     charter = _validated_charter(charter_path)
+    activation = _validated_activation(activation_path, charter=charter)
     if maximum_evaluated_candidates != MAX_EVALUATED_CANDIDATES:
         raise SuccessorSetupResearchError("The frozen provider bound cannot be changed.")
     observed = _parse_datetime(observed_at).astimezone(EASTERN)
     session_date = _report_session_date(_read_json(trade_plan_path))
+    if session_date < activation["firstEligibleSessionDate"]:
+        raise SuccessorSetupResearchError("Session predates prospective sample activation.")
+    if observed < _parse_datetime(activation["activatedAt"]):
+        raise SuccessorSetupResearchError("Observation predates prospective sample activation.")
     if observed.date().isoformat() != session_date or observed.time() < DECISION_CUTOFF:
         raise SuccessorSetupResearchError("Pass 1 observation time is outside its session/cutoff.")
     cutoff = datetime.combine(observed.date(), DECISION_CUTOFF, tzinfo=EASTERN)
@@ -175,6 +257,7 @@ def build_pass_one(
 
     source_hashes = {
         "charter": _sha256_file(charter_path),
+        "activation": _sha256_file(activation_path),
         "tradePlanReport": _sha256_file(trade_plan_path),
         "capture": _sha256_file(capture_path),
     }
@@ -251,6 +334,7 @@ def build_pass_one(
         "pass": "PASS_1_OUTCOME_BLIND_DECISION",
         "sampleId": SAMPLE_ID,
         "charterFingerprint": charter["charterFingerprint"],
+        "activationFingerprint": activation["activationFingerprint"],
         "policyFingerprint": POLICY_FINGERPRINT,
         "sessionDate": session_date,
         "observedAt": observed.isoformat(),
@@ -280,12 +364,18 @@ def build_pass_one(
 
 
 def build_pass_two(
-    *, decision_path: Path, minute_store_root: Path, finalized_at: str, output_path: Path
+    *,
+    activation_path: Path,
+    decision_path: Path,
+    minute_store_root: Path,
+    finalized_at: str,
+    output_path: Path,
 ) -> dict[str, Any]:
     """Adjudicate later outcomes without altering the frozen Pass 1 opinion."""
 
+    activation = _validated_activation(activation_path)
     decision = _read_json(decision_path)
-    _validate_decision(decision)
+    _validate_decision(decision, activation=activation)
     cutoff = _parse_datetime(str(decision["evidenceCutoff"])).astimezone(EASTERN)
     session_date = str(decision["sessionDate"])
     finalized = _parse_datetime(finalized_at).astimezone(EASTERN)
@@ -338,6 +428,7 @@ def build_pass_two(
         "task": "ARGUS-SETUP-002",
         "pass": "PASS_2_TERMINAL_OUTCOME",
         "sampleId": SAMPLE_ID,
+        "activationFingerprint": activation["activationFingerprint"],
         "policyFingerprint": POLICY_FINGERPRINT,
         "sessionDate": session_date,
         "finalizedAt": finalized.isoformat(),
@@ -345,7 +436,10 @@ def build_pass_two(
         "decisionPacketSha256": _sha256_file(decision_path),
         "outcomeEvidenceInspected": True,
         "candidates": outcomes,
-        "sourceHashes": dict(sorted(source_hashes.items())),
+        "sourceHashes": {
+            "activation": _sha256_file(activation_path),
+            **dict(sorted(source_hashes.items())),
+        },
         "authority": RESEARCH_ONLY,
         "executionAuthority": EXECUTION_AUTHORITY,
         "interpretationRule": (
@@ -358,17 +452,27 @@ def build_pass_two(
 
 
 def build_sample_summary(
-    *, charter_path: Path, pass_one_paths: Sequence[Path], pass_two_paths: Sequence[Path], output_path: Path
+    *,
+    charter_path: Path,
+    activation_path: Path,
+    pass_one_paths: Sequence[Path],
+    pass_two_paths: Sequence[Path],
+    output_path: Path,
 ) -> dict[str, Any]:
     """Build a deterministic aggregate from explicit immutable packet paths."""
 
     charter = _validated_charter(charter_path)
+    activation = _validated_activation(activation_path, charter=charter)
     decisions = [_read_json(path) for path in pass_one_paths]
     outcomes = [_read_json(path) for path in pass_two_paths]
     for decision in decisions:
-        _validate_decision(decision)
+        _validate_decision(decision, activation=activation)
     for outcome in outcomes:
-        if outcome.get("sampleId") != SAMPLE_ID or outcome.get("outcomeFingerprint") != packet_fingerprint(outcome):
+        if (
+            outcome.get("sampleId") != SAMPLE_ID
+            or outcome.get("activationFingerprint") != activation["activationFingerprint"]
+            or outcome.get("outcomeFingerprint") != packet_fingerprint(outcome)
+        ):
             raise SuccessorSetupResearchError("Invalid Pass 2 packet in sample summary.")
     if len({item["sessionDate"] for item in decisions}) != len(decisions):
         raise SuccessorSetupResearchError("Duplicate Pass 1 session in sample summary.")
@@ -431,6 +535,7 @@ def build_sample_summary(
         "engineVersion": SUMMARY_ENGINE_VERSION,
         "sampleId": SAMPLE_ID,
         "charterFingerprint": charter["charterFingerprint"],
+        "activationFingerprint": activation["activationFingerprint"],
         "policyFingerprint": POLICY_FINGERPRINT,
         "counts": counts,
         "setupFamilyDistribution": dict(sorted(families.items())),
@@ -443,6 +548,7 @@ def build_sample_summary(
         "interpretation": "NO_EDGE_CLAIM_NO_PARAMETER_TUNING",
         "inputHashes": {
             "charter": _sha256_file(charter_path),
+            "activation": _sha256_file(activation_path),
             **{f"pass1:{path.name}": _sha256_file(path) for path in pass_one_paths},
             **{f"pass2:{path.name}": _sha256_file(path) for path in pass_two_paths},
         },
@@ -1338,9 +1444,46 @@ def _validated_charter(path: Path) -> dict[str, Any]:
     return charter
 
 
-def _validate_decision(decision: Mapping[str, Any]) -> None:
+def _validated_activation(
+    path: Path,
+    *,
+    charter: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    activation = _read_json(path)
+    if activation.get("engineVersion") != ACTIVATION_ENGINE_VERSION:
+        raise SuccessorSetupResearchError("Wrong SETUP-002 activation record.")
+    if activation.get("sampleId") != SAMPLE_ID:
+        raise SuccessorSetupResearchError("Activation sample identity is invalid.")
+    if activation.get("policyFingerprint") != POLICY_FINGERPRINT:
+        raise SuccessorSetupResearchError("Activation policy identity is invalid.")
+    if charter is not None and activation.get("charterFingerprint") != charter.get(
+        "charterFingerprint"
+    ):
+        raise SuccessorSetupResearchError("Activation does not bind the sample charter.")
+    if activation.get("status") != "ACTIVE_PROSPECTIVE_EMPTY":
+        raise SuccessorSetupResearchError("SETUP-002 sample is not actively prospective.")
+    _parse_datetime(str(activation.get("activatedAt", "")))
+    try:
+        datetime.strptime(
+            str(activation.get("firstEligibleSessionDate", "")),
+            "%Y-%m-%d",
+        )
+    except ValueError as exc:
+        raise SuccessorSetupResearchError("Activation session identity is invalid.") from exc
+    if activation.get("activationFingerprint") != packet_fingerprint(activation):
+        raise SuccessorSetupResearchError("Activation fingerprint is invalid.")
+    return activation
+
+
+def _validate_decision(
+    decision: Mapping[str, Any],
+    *,
+    activation: Mapping[str, Any],
+) -> None:
     if decision.get("sampleId") != SAMPLE_ID or decision.get("policyFingerprint") != POLICY_FINGERPRINT:
         raise SuccessorSetupResearchError("Pass 1 sample/policy identity is invalid.")
+    if decision.get("activationFingerprint") != activation.get("activationFingerprint"):
+        raise SuccessorSetupResearchError("Pass 1 activation identity is invalid.")
     if decision.get("outcomeEvidenceInspected") is not False:
         raise SuccessorSetupResearchError("Pass 1 is not outcome-blind.")
     if decision.get("decisionFingerprint") != packet_fingerprint(decision):
@@ -1472,8 +1615,20 @@ def _main() -> int:
     charter = commands.add_parser("charter")
     charter.add_argument("--created-at", required=True)
     charter.add_argument("--output", type=Path, required=True)
+    activate = commands.add_parser("activate")
+    activate.add_argument("--charter", type=Path, required=True)
+    activate.add_argument("--activated-at", required=True)
+    activate.add_argument("--first-eligible-session-date", required=True)
+    activate.add_argument("--expected-git-head", required=True)
+    activate.add_argument("--output", type=Path, required=True)
+    validate_activation = commands.add_parser("validate-activation")
+    validate_activation.add_argument("--charter", type=Path, required=True)
+    validate_activation.add_argument("--activation", type=Path, required=True)
+    validate_activation.add_argument("--expected-git-head", required=True)
+    validate_activation.add_argument("--first-eligible-session-date", required=True)
     pass1 = commands.add_parser("pass1")
     pass1.add_argument("--charter", type=Path, required=True)
+    pass1.add_argument("--activation", type=Path, required=True)
     pass1.add_argument("--trade-plan", type=Path, required=True)
     pass1.add_argument("--capture", type=Path, required=True)
     pass1.add_argument("--minute-store", type=Path, required=True)
@@ -1481,6 +1636,7 @@ def _main() -> int:
     pass1.add_argument("--paper-result", type=Path)
     pass1.add_argument("--output", type=Path, required=True)
     pass2 = commands.add_parser("pass2")
+    pass2.add_argument("--activation", type=Path, required=True)
     pass2.add_argument("--decision", type=Path, required=True)
     pass2.add_argument("--minute-store", type=Path, required=True)
     pass2.add_argument("--finalized-at", required=True)
@@ -1492,9 +1648,33 @@ def _main() -> int:
     if args.command == "charter":
         result = create_sample_charter(created_at=args.created_at, output_path=args.output)
         summary = {"status": result["status"], "fingerprint": result["charterFingerprint"]}
+    elif args.command == "activate":
+        result = create_activation_record(
+            charter_path=args.charter,
+            activated_at=args.activated_at,
+            first_eligible_session_date=args.first_eligible_session_date,
+            expected_git_head=args.expected_git_head,
+            output_path=args.output,
+        )
+        summary = {
+            "status": result["status"],
+            "fingerprint": result["activationFingerprint"],
+        }
+    elif args.command == "validate-activation":
+        result = validate_activation_record(
+            charter_path=args.charter,
+            activation_path=args.activation,
+            expected_git_head=args.expected_git_head,
+            first_eligible_session_date=args.first_eligible_session_date,
+        )
+        summary = {
+            "status": result["status"],
+            "fingerprint": result["activationFingerprint"],
+        }
     elif args.command == "pass1":
         result = build_pass_one(
             charter_path=args.charter,
+            activation_path=args.activation,
             trade_plan_path=args.trade_plan,
             capture_path=args.capture,
             minute_store_root=args.minute_store,
@@ -1505,6 +1685,7 @@ def _main() -> int:
         summary = {"status": "FROZEN", "fingerprint": result["decisionFingerprint"]}
     elif args.command == "pass2":
         result = build_pass_two(
+            activation_path=args.activation,
             decision_path=args.decision,
             minute_store_root=args.minute_store,
             finalized_at=args.finalized_at,

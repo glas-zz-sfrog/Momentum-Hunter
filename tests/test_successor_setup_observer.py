@@ -20,8 +20,10 @@ from momentum_hunter.successor_setup_observer import (
     build_pass_one,
     build_pass_two,
     build_sample_summary,
+    create_activation_record,
     create_sample_charter,
     packet_fingerprint,
+    validate_activation_record,
 )
 
 
@@ -33,7 +35,15 @@ class SuccessorSetupObserverTests(unittest.TestCase):
         self.root.mkdir(parents=True)
         self.charter = self.root / "charter.json"
         create_sample_charter(
-            created_at="2026-08-13T18:00:00-04:00", output_path=self.charter
+            created_at="2026-08-12T18:00:00-04:00", output_path=self.charter
+        )
+        self.activation = self.root / "activation.json"
+        create_activation_record(
+            charter_path=self.charter,
+            activated_at="2026-08-13T06:55:00-04:00",
+            first_eligible_session_date="2026-08-13",
+            expected_git_head="a" * 40,
+            output_path=self.activation,
         )
 
     def tearDown(self) -> None:
@@ -50,6 +60,65 @@ class SuccessorSetupObserverTests(unittest.TestCase):
         )
         self.assertTrue(all(value == 0 for value in payload["initialCounts"].values()))
         self.assertEqual(payload["charterFingerprint"], packet_fingerprint(payload))
+
+    def test_activation_starts_denominator_and_binds_exact_git_identity(self) -> None:
+        payload = json.loads(self.activation.read_text(encoding="utf-8"))
+
+        self.assertEqual("ACTIVE_PROSPECTIVE_EMPTY", payload["status"])
+        self.assertEqual("2026-08-13", payload["firstEligibleSessionDate"])
+        self.assertEqual("a" * 40, payload["expectedGitHead"])
+        self.assertEqual(payload["activationFingerprint"], packet_fingerprint(payload))
+        self.assertTrue(all(value == 0 for value in payload["initialCounts"].values()))
+
+    def test_pass_one_rejects_session_before_activation(self) -> None:
+        activation = self.root / "future-activation.json"
+        create_activation_record(
+            charter_path=self.charter,
+            activated_at="2026-08-14T06:55:00-04:00",
+            first_eligible_session_date="2026-08-14",
+            expected_git_head="b" * 40,
+            output_path=activation,
+        )
+        paths = self._evidence(symbols=("AAA",))
+
+        with self.assertRaisesRegex(
+            SuccessorSetupResearchError,
+            "predates prospective sample activation",
+        ):
+            build_pass_one(
+                charter_path=self.charter,
+                activation_path=activation,
+                trade_plan_path=paths["report"],
+                capture_path=paths["capture"],
+                minute_store_root=paths["minute"],
+                observed_at="2026-08-13T09:36:00-04:00",
+                output_path=self.root / "too-early.json",
+            )
+
+    def test_activation_validation_rejects_tampering_and_wrong_runtime(self) -> None:
+        with self.assertRaisesRegex(
+            SuccessorSetupResearchError,
+            "Git identity differs",
+        ):
+            validate_activation_record(
+                charter_path=self.charter,
+                activation_path=self.activation,
+                expected_git_head="b" * 40,
+                first_eligible_session_date="2026-08-13",
+            )
+        payload = json.loads(self.activation.read_text(encoding="utf-8"))
+        payload["firstEligibleSessionDate"] = "2026-08-14"
+        write_json(self.activation, payload)
+        with self.assertRaisesRegex(
+            SuccessorSetupResearchError,
+            "fingerprint is invalid",
+        ):
+            validate_activation_record(
+                charter_path=self.charter,
+                activation_path=self.activation,
+                expected_git_head="a" * 40,
+                first_eligible_session_date="2026-08-13",
+            )
 
     def test_pass_one_preserves_denominator_and_provider_bound(self) -> None:
         paths = self._evidence(symbols=("AAA", "BBB", "CCC", "DDD", "EEE", "FFF"))
@@ -169,6 +238,7 @@ class SuccessorSetupObserverTests(unittest.TestCase):
         )
 
         outcome = build_pass_two(
+            activation_path=self.activation,
             decision_path=self.root / "decision.json",
             minute_store_root=paths["minute"],
             finalized_at="2026-08-13T16:05:00-04:00",
@@ -198,6 +268,7 @@ class SuccessorSetupObserverTests(unittest.TestCase):
         )
 
         result = build_pass_two(
+            activation_path=self.activation,
             decision_path=self.root / "decision.json",
             minute_store_root=paths["minute"],
             finalized_at="2026-08-13T16:05:00-04:00",
@@ -280,6 +351,7 @@ class SuccessorSetupObserverTests(unittest.TestCase):
 
         with self.assertRaises(SuccessorSetupResearchError):
             build_pass_two(
+                activation_path=self.activation,
                 decision_path=self.root / "decision.json",
                 minute_store_root=paths["minute"],
                 finalized_at="2026-08-13T15:59:59-04:00",
@@ -330,6 +402,7 @@ class SuccessorSetupObserverTests(unittest.TestCase):
 
         result = build_pass_one(
             charter_path=self.charter,
+            activation_path=self.activation,
             trade_plan_path=paths["report"],
             capture_path=paths["capture"],
             minute_store_root=paths["minute"],
@@ -353,6 +426,7 @@ class SuccessorSetupObserverTests(unittest.TestCase):
 
         with self.assertRaises(SuccessorSetupResearchError):
             build_pass_two(
+                activation_path=self.activation,
                 decision_path=self.root / "decision.json",
                 minute_store_root=paths["minute"],
                 finalized_at="2026-08-13T16:05:00-04:00",
@@ -369,6 +443,7 @@ class SuccessorSetupObserverTests(unittest.TestCase):
         write_json(partition, payload)
 
         result = build_pass_two(
+            activation_path=self.activation,
             decision_path=self.root / "decision.json",
             minute_store_root=paths["minute"],
             finalized_at="2026-08-13T16:05:00-04:00",
@@ -401,11 +476,13 @@ class SuccessorSetupObserverTests(unittest.TestCase):
         )
         output = self.root / "outcome.json"
         first = build_pass_two(
+            activation_path=self.activation,
             decision_path=self.root / "decision.json", minute_store_root=paths["minute"],
             finalized_at="2026-08-13T16:05:00-04:00", output_path=output
         )
         output_hash = sha256(output)
         second = build_pass_two(
+            activation_path=self.activation,
             decision_path=self.root / "decision.json", minute_store_root=paths["minute"],
             finalized_at="2026-08-13T16:05:00-04:00", output_path=output
         )
@@ -416,6 +493,7 @@ class SuccessorSetupObserverTests(unittest.TestCase):
         write_json(output, payload)
         with self.assertRaises(SuccessorSetupResearchError):
             build_pass_two(
+                activation_path=self.activation,
                 decision_path=self.root / "decision.json", minute_store_root=paths["minute"],
                 finalized_at="2026-08-13T16:05:00-04:00", output_path=output
             )
@@ -428,6 +506,7 @@ class SuccessorSetupObserverTests(unittest.TestCase):
             [bar("AAA", "2026-08-13T09:35:00-04:00", 111, 116.1, 110.9, 116.0)],
         )
         build_pass_two(
+            activation_path=self.activation,
             decision_path=self.root / "decision.json",
             minute_store_root=paths["minute"],
             finalized_at="2026-08-13T16:05:00-04:00",
@@ -436,6 +515,7 @@ class SuccessorSetupObserverTests(unittest.TestCase):
 
         summary = build_sample_summary(
             charter_path=self.charter,
+            activation_path=self.activation,
             pass_one_paths=[self.root / "decision.json"],
             pass_two_paths=[self.root / "outcome.json"],
             output_path=self.root / "summary.json",
@@ -504,13 +584,14 @@ class SuccessorSetupObserverTests(unittest.TestCase):
             "report": report,
             "capture": capture,
             "minute": minute,
-            "source_paths": [report, capture, self.charter]
+            "source_paths": [report, capture, self.charter, self.activation]
             + sorted((minute / "2026-08-13").glob("*.json")),
         }
 
     def _pass_one(self, paths: dict, output: Path | None = None) -> dict:
         return build_pass_one(
             charter_path=self.charter,
+            activation_path=self.activation,
             trade_plan_path=paths["report"],
             capture_path=paths["capture"],
             minute_store_root=paths["minute"],
@@ -520,6 +601,7 @@ class SuccessorSetupObserverTests(unittest.TestCase):
 
     def _pass_two(self, paths: dict) -> dict:
         return build_pass_two(
+            activation_path=self.activation,
             decision_path=self.root / "decision.json",
             minute_store_root=paths["minute"],
             finalized_at="2026-08-13T16:05:00-04:00",

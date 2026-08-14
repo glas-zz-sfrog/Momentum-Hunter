@@ -1,5 +1,21 @@
 # Branch Ledger
 
+## ARGUS-SETUP-002A Silent Activation
+
+`codex/ARGUS-SETUP-002A-silent-activation` is a focused successor to
+synchronized canonical `e7eb5f1`. It adds only the immutable activation
+boundary, two offline service job kinds, guarded installation, exact-head
+repinning, and tests for the integrated SETUP-002 observer. After Hard Chew it
+is eligible for a clean fast-forward and ordinary non-force backup push.
+
+The first eligible session is August 17, 2026. Pass 1 depends on that date's
+opening capture and executes before Paper; Pass 2 depends on Pass 1 and runs
+after the regular-session horizon. Both are write-once, finite, zero-retry,
+research-only jobs. No provider, account, position, order, Shadow, Engine Host,
+UI, scoring, TradePlan, Risk Governor, allocation, or Paper authority is added.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-POST-20260814 Integration Reconciliation
 
 `codex/ARGUS-POST-20260814-integration-reconciliation` is

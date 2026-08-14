@@ -51,11 +51,22 @@ JOB_KINDS = frozenset(
         "opening_capture",
         "shadow_opening",
         "paper_engineering",
+        "successor_setup_pass1",
+        "successor_setup_pass2",
         "codex_review",
     }
 )
 ENGINE_HOST_REQUIRED_JOB_KINDS = frozenset(
     {"nonmarket_canary", "shadow_opening"}
+)
+REPOSITORY_PINNED_JOB_KINDS = frozenset(
+    {
+        "opening_capture",
+        "shadow_opening",
+        "paper_engineering",
+        "successor_setup_pass1",
+        "successor_setup_pass2",
+    }
 )
 FINAL_JOB_STATES = frozenset(
     {
@@ -219,7 +230,12 @@ def parse_manifest(path: Path) -> AutomationManifest:
             raise ManifestValidationError(
                 "Codex review jobs require a terminal runtime dependency."
             )
-        if job.kind not in {"codex_review", "paper_engineering"} and job.depends_on_job_id:
+        if job.kind not in {
+            "codex_review",
+            "paper_engineering",
+            "successor_setup_pass1",
+            "successor_setup_pass2",
+        } and job.depends_on_job_id:
             raise ManifestValidationError(
                 "Runtime jobs cannot depend on a Codex review or another job."
             )
@@ -232,6 +248,26 @@ def parse_manifest(path: Path) -> AutomationManifest:
             ):
                 raise ManifestValidationError(
                     "Paper engineering must depend on the same-date opening capture."
+                )
+        if job.kind == "successor_setup_pass1":
+            dependency = jobs_by_id.get(job.depends_on_job_id)
+            if (
+                dependency is None
+                or dependency.kind != "opening_capture"
+                or dependency.scheduled_at.date() != job.scheduled_at.date()
+            ):
+                raise ManifestValidationError(
+                    "Successor Pass 1 must depend on the same-date opening capture."
+                )
+        if job.kind == "successor_setup_pass2":
+            dependency = jobs_by_id.get(job.depends_on_job_id)
+            if (
+                dependency is None
+                or dependency.kind != "successor_setup_pass1"
+                or dependency.scheduled_at.date() != job.scheduled_at.date()
+            ):
+                raise ManifestValidationError(
+                    "Successor Pass 2 must depend on same-date Successor Pass 1."
                 )
         if (
             job.kind == "codex_review"
@@ -321,9 +357,29 @@ def _parse_job(
             raise ManifestValidationError(
                 "Opening jobs must be scheduled at exactly 08:35:00 local time."
             )
+    elif kind == "successor_setup_pass1":
+        if scheduled_at.strftime("%H:%M:%S") != "08:35:00":
+            raise ManifestValidationError(
+                "Successor Pass 1 must be scheduled at exactly 08:35:00 local time."
+            )
+        if (latest_start_at - scheduled_at).total_seconds() > 900:
+            raise ManifestValidationError(
+                "Successor Pass 1 allows at most a fifteen-minute start window."
+            )
+    elif kind == "successor_setup_pass2":
+        if scheduled_at.strftime("%H:%M:%S") != "15:05:00":
+            raise ManifestValidationError(
+                "Successor Pass 2 must be scheduled at exactly 15:05:00 local time."
+            )
+        if (latest_start_at - scheduled_at).total_seconds() > 3_300:
+            raise ManifestValidationError(
+                "Successor Pass 2 allows at most a fifty-five-minute start window."
+            )
 
     timeout_seconds = int(payload.get("timeoutSeconds", 1800))
     maximum_timeout = 28_800 if kind == "paper_engineering" else 3_600
+    if kind in {"successor_setup_pass1", "successor_setup_pass2"}:
+        maximum_timeout = 900
     if not 1 <= timeout_seconds <= maximum_timeout:
         raise ManifestValidationError(
             f"Job {job_id!r} timeoutSeconds must be between 1 and {maximum_timeout}."
@@ -334,7 +390,7 @@ def _parse_job(
     prompt_path = _optional_path(payload.get("promptPath"))
     expected_output = str(payload.get("expectedOutput", "")).strip()
 
-    if kind in {"opening_capture", "shadow_opening", "paper_engineering"}:
+    if kind in REPOSITORY_PINNED_JOB_KINDS:
         if not GIT_SHA_PATTERN.fullmatch(expected_git_head):
             raise ManifestValidationError(
                 "Market runtime jobs require a full expectedGitHead."
@@ -350,7 +406,12 @@ def _parse_job(
             )
         _require_within_repository(proof_bundle_path, repository_root)
         _require_within_repository(task_definition_path, repository_root)
-    elif kind in {"opening_capture", "paper_engineering"}:
+    elif kind in {
+        "opening_capture",
+        "paper_engineering",
+        "successor_setup_pass1",
+        "successor_setup_pass2",
+    }:
         if proof_bundle_path or task_definition_path:
             raise ManifestValidationError(
                 f"Job {job_id!r} cannot carry Shadow opening authority."
@@ -548,7 +609,15 @@ class AutomationSupervisor:
             self._evaluate_job(job, now)
         now = self.clock()
         for job in self.manifest.jobs:
+            if job.kind == "successor_setup_pass1":
+                self._evaluate_job(job, now)
+        now = self.clock()
+        for job in self.manifest.jobs:
             if job.kind == "paper_engineering":
+                self._evaluate_job(job, now)
+        now = self.clock()
+        for job in self.manifest.jobs:
+            if job.kind == "successor_setup_pass2":
                 self._evaluate_job(job, now)
         probe_started_at = self.clock()
         self._refresh_engine_host(probe_started_at)
@@ -759,6 +828,24 @@ class AutomationSupervisor:
                 timeout_seconds=job.timeout_seconds,
                 working_directory=self.manifest.repository_root,
             )
+        if job.kind == "successor_setup_pass1":
+            self._validate_repository_identity(job.expected_git_head)
+            command = self._successor_setup_pass1_command(job)
+            return self._run_process(
+                command,
+                log_path=log_path,
+                timeout_seconds=job.timeout_seconds,
+                working_directory=self.manifest.repository_root,
+            )
+        if job.kind == "successor_setup_pass2":
+            self._validate_repository_identity(job.expected_git_head)
+            command = self._successor_setup_pass2_command(job)
+            return self._run_process(
+                command,
+                log_path=log_path,
+                timeout_seconds=job.timeout_seconds,
+                working_directory=self.manifest.repository_root,
+            )
         if job.kind == "codex_review":
             command = self._codex_review_command(job, log_path)
             exit_code, detail = self._run_process(
@@ -933,6 +1020,60 @@ class AutomationSupervisor:
             "5",
             "--maximum-runtime",
             "25200",
+        ]
+
+    def _successor_setup_pass1_command(self, job: AutomationJob) -> list[str]:
+        session_date = job.scheduled_at.date().isoformat()
+        data_root = self.manifest.repository_root / "MomentumHunterData" / "data"
+        output_root = data_root / "research" / "successor-setup-research-20260813-v1"
+        return [
+            str(self.manifest.python_executable),
+            "-B",
+            "-m",
+            "momentum_hunter.successor_setup_observer",
+            "pass1",
+            "--charter",
+            str(output_root / "sample-charter.json"),
+            "--activation",
+            str(output_root / "activation.json"),
+            "--trade-plan",
+            str(data_root / "reports" / f"trade-plan-briefing-{session_date}-opening.json"),
+            "--capture",
+            str(data_root / "captures" / session_date / "opening.json"),
+            "--minute-store",
+            str(data_root / "schwab-candles-v1"),
+            "--observed-at",
+            job.scheduled_at.isoformat(),
+            "--output",
+            str(output_root / f"pass1-{session_date}.json"),
+        ]
+
+    def _successor_setup_pass2_command(self, job: AutomationJob) -> list[str]:
+        session_date = job.scheduled_at.date().isoformat()
+        output_root = (
+            self.manifest.repository_root
+            / "MomentumHunterData"
+            / "data"
+            / "research"
+            / "successor-setup-research-20260813-v1"
+        )
+        data_root = self.manifest.repository_root / "MomentumHunterData" / "data"
+        return [
+            str(self.manifest.python_executable),
+            "-B",
+            "-m",
+            "momentum_hunter.successor_setup_observer",
+            "pass2",
+            "--activation",
+            str(output_root / "activation.json"),
+            "--decision",
+            str(output_root / f"pass1-{session_date}.json"),
+            "--minute-store",
+            str(data_root / "schwab-candles-v1"),
+            "--finalized-at",
+            job.scheduled_at.isoformat(),
+            "--output",
+            str(output_root / f"pass2-{session_date}.json"),
         ]
 
     def _codex_review_command(

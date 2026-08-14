@@ -145,6 +145,52 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
         paper = next(job for job in planned["jobs"] if job["kind"] == "paper_engineering")
         self.assertEqual(self.expected_git_head, paper["expectedGitHead"])
 
+    def test_replan_updates_both_successor_passes_to_new_identity(self) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260817",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-08-17T08:35:00-05:00",
+                    "latestStartAt": "2026-08-17T08:40:00-05:00",
+                    "expectedGitHead": "b" * 40,
+                },
+                {
+                    "jobId": "successor-setup-pass1-20260817",
+                    "kind": "successor_setup_pass1",
+                    "scheduledAt": "2026-08-17T08:35:00-05:00",
+                    "latestStartAt": "2026-08-17T08:50:00-05:00",
+                    "timeoutSeconds": 600,
+                    "expectedGitHead": "b" * 40,
+                    "dependsOnJobId": "opening-capture-20260817",
+                },
+                {
+                    "jobId": "successor-setup-pass2-20260817",
+                    "kind": "successor_setup_pass2",
+                    "scheduledAt": "2026-08-17T15:05:00-05:00",
+                    "latestStartAt": "2026-08-17T16:00:00-05:00",
+                    "timeoutSeconds": 900,
+                    "expectedGitHead": "b" * 40,
+                    "dependsOnJobId": "successor-setup-pass1-20260817",
+                },
+            ]
+        )
+
+        planned = plan_opening_capture_manifest(
+            payload,
+            start_date=date(2026, 8, 17),
+            market_sessions=2,
+            expected_git_head=self.expected_git_head,
+        )
+
+        successor = [
+            job for job in planned["jobs"] if str(job["kind"]).startswith("successor_")
+        ]
+        self.assertEqual(2, len(successor))
+        self.assertTrue(
+            all(job["expectedGitHead"] == self.expected_git_head for job in successor)
+        )
+
     def test_replan_drops_historical_paper_job_after_terminal_session(self) -> None:
         payload = self.manifest_payload(
             jobs=[
