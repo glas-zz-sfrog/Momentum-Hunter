@@ -1,5 +1,25 @@
 # Argus Changelog
 
+- Implemented ARGUS-STAT-DATA-001 on a branch stacked directly on common
+  Specialist Contract `e65cb70`. Added distinct immutable cycle and opportunity
+  contracts with strict bounded-universe completeness and explicit
+  `DENOMINATOR_INCOMPLETE` failure semantics.
+- Added research-only origin, disposition, security-identity, counterfactual,
+  specialist-attachment, market-path, broker-execution, and data-quality
+  contracts. Market metrics stop at terminal evidence; broker fills require
+  actual submission/provider truth.
+- Added explicit-root atomic write-once persistence with exact-replay
+  idempotency, conflict/tamper/duplicate-key/restart failure handling, and pure
+  summaries that exclude retrospective/synthetic examples from prospective
+  counts and make no profitability claim.
+- Proved the current August 14 opening report in memory only: 20 received, 20
+  parsed, 2 represented (SNDK/NU), correctly
+  `RETROSPECTIVE_RESEARCH_EXAMPLE / DENOMINATOR_INCOMPLETE`, with no write.
+- Passed compileall, 32 focused tests, 215 adjacent regressions, and all 2,095
+  Python tests. The sample remains inactive at 0 sessions/0 opportunities; no
+  runtime consumer, provider, account, order, service, scheduler, UI, merge,
+  install, activation, or August 17 repin exists.
+
 - Activated the empty SETUP-002 successor-setup research sample prospectively
   for August 17 with a separate immutable activation timestamp and fingerprint.
 - Added two exact-head, zero-retry service jobs: outcome-blind Pass 1 after the

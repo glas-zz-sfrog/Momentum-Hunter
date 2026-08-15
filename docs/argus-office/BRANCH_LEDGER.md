@@ -1,5 +1,25 @@
 # Branch Ledger
 
+## ARGUS-STAT-DATA-001 Prospective Opportunity Denominator
+
+`codex/ARGUS-STAT-DATA-001-prospective-opportunity-denominator` is stacked
+directly on pushed Specialist Contract parent `e65cb70`. It implements the
+general research denominator as separate immutable cycle and opportunity
+records, strict complete-universe accounting, immutable common-contract
+specialist attachments, separate market-path/broker-execution/data-quality
+outcomes, caller-root-only write-once persistence, and a read-only opening
+report adapter.
+
+The branch is `IMPLEMENTED_PENDING_PARENT_INTEGRATION`. The prospective sample
+is inactive with zero sessions and opportunities. It imports neither REGIME-002
+nor EXEC-QUALITY-001 and is not imported by current runtime code. No provider,
+account, broker/order, service, scheduler, Engine Host, WPF, Paper, Shadow,
+production evidence, installed manifest, or August 17 pin changed. Next action
+is later parent-first integration after the common Specialist Contract enters
+canonical history; activation and producer wiring remain separate gates.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-SPECIALIST-CONTRACT-001 Common Opinion Contract
 
 `codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract` is an isolated
