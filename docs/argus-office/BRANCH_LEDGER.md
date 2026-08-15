@@ -1,5 +1,23 @@
 # Branch Ledger
 
+## ARGUS-EXIT-RESEARCH-001 Trade-Management Research
+
+`codex/ARGUS-EXIT-RESEARCH-001-trade-management-research` is an isolated
+feature branch stacked exactly on pushed Specialist Contract commit `e65cb70`.
+It implements the pure offline Exit Intelligence specialist, frozen policy,
+actual-control and counterfactual schemas, deterministic evaluator, adversarial
+tests, architecture record, and governance closeout. Classification is
+`IMPLEMENTED_PENDING_PARENT_INTEGRATION`.
+
+The branch has no persistence or existing-runtime consumer and cannot contact a
+provider, account, broker, order, Paper, Shadow, service, scheduler, Engine
+Host, WPF, or production data. The prospective sample is inactive with zero
+trades. Next action is later parent-first integration and a separate producer,
+persistence, prospective activation, and authority decision; this branch must
+not be installed or activated by itself.
+
+Date reconciled: 2026-08-15
+
 ## ARGUS-SPECIALIST-CONTRACT-001 Common Opinion Contract
 
 `codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract` is an isolated

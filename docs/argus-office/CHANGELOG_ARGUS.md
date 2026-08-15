@@ -1,5 +1,20 @@
 # Argus Changelog
 
+- Added the research-only Exit Intelligence specialist on an isolated branch
+  stacked on the exact common Specialist Contract parent.
+- Required actual broker-confirmed fill, quantity, time, original-stop, plan,
+  policy, and evidence identity before evaluating any management alternative.
+- Preserved the actual trade as an immutable control and implemented separate
+  structural-stop, ATR-trailing, time-stop, break-even, partial-exit,
+  momentum-failure, and regime-deterioration counterfactual paths.
+- Added fail-closed completed-bar chronology, next-bar trailing effectiveness,
+  same-bar and gap uncertainty, quantity conservation, stable original 1R,
+  exit-bounded MFE/MAE, post-exit separation, tamper rejection, and deterministic
+  output proof.
+- Kept the future sample inactive at zero trades and added no runtime,
+  persistence, provider, account, broker/order, Paper, Shadow, service,
+  scheduler, Engine Host, WPF, or August 17 capability.
+
 - Activated the empty SETUP-002 successor-setup research sample prospectively
   for August 17 with a separate immutable activation timestamp and fingerprint.
 - Added two exact-head, zero-retry service jobs: outcome-blind Pass 1 after the

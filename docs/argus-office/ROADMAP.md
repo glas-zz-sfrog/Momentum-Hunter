@@ -87,6 +87,20 @@ provider, broker, storage, scheduler, service, Engine Host, WPF, Paper, Shadow,
 or order capability, and does not alter the August 17 lane. Canonical `master`
 and the installed runtime remain unchanged until a later clean integration.
 
+On branch `codex/ARGUS-EXIT-RESEARCH-001-trade-management-research`, the Exit
+Intelligence specialist is `IMPLEMENTED_PENDING_PARENT_INTEGRATION`, stacked
+exactly on Specialist Contract commit `e65cb70`. Its frozen policy
+`exit-management-research-v1` has fingerprint
+`7dca6d7547cef6aed38e661bb89868a5f6ebe7f9058c1c45958555726e1e778a`.
+It accepts caller-supplied completed evidence only, requires an actual
+broker-confirmed fill, preserves the actual trade as an immutable control, and
+emits separately identified counterfactual management paths. The future sample
+is inactive at zero trades. No runtime import, persistence, provider, account,
+broker, order, Paper, Shadow, service, scheduler, Engine Host, WPF, or August 17
+operational path changed.
+Its static inactive sample fingerprint is
+`79592f644fb04b2c3853d9277554dd0a8e0e40c12eeb38d6e6bf2fe298d74a9f`.
+
 ## Integrated Work History
 
 ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
@@ -2049,7 +2063,7 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_IN
 
 ### Phase 13R - Specialist Intelligence Research And Strategy Diversification
 
-Status: `STARTED - SPECIALIST-CONTRACT-001 IMPLEMENTED_PENDING_INTEGRATION`
+Status: `STARTED - SPECIALIST FOUNDATION IMPLEMENTED ON ISOLATED BRANCHES; NO RUNTIME AUTHORITY`
 
 Roadmap inclusion authorizes planning and bounded research preparation only.
 It does not activate runtime imports, begin or modify a Paper sample, grant
@@ -2181,11 +2195,29 @@ Intended specialist architecture:
 
 #### ARGUS-EXIT-RESEARCH-001 - Trade-Management And Exit Intelligence
 
+- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` on
+  `codex/ARGUS-EXIT-RESEARCH-001-trade-management-research`, stacked exactly on
+  Specialist Contract commit `e65cb70`; no runtime consumer, persistence path,
+  activation, or authority exists.
+- Freeze `exit-management-research-v1` as a software-validation policy. Require
+  the actual broker-confirmed fill, quantity, time, original protective stop,
+  TradePlan, policy, and evidence identities before evaluating any alternative.
+- Implement eight separate methods: actual frozen control, structural stop,
+  next-bar-effective ATR trailing stop, 60-minute time stop, +1R break-even,
+  50% Target-1 partial exit with original-stop/Target-2 runner, momentum
+  failure, and regime deterioration. No optimized combined method exists.
 - Preserve each actual Paper trade under its frozen TradePlan/lifecycle while
   silently comparing structural stop, trailing stop, time stop, break-even,
   partial exit, momentum-failure exit, and regime-deterioration exit methods.
 - Keep actual and counterfactual results separate. A counterfactual exit may
   never rewrite an actual trade.
+- Use completed bars only and preserve ambiguous same-bar stop/target ordering,
+  gap execution uncertainty, stable original 1R, quantity conservation,
+  counterfactual MFE/MAE only through exit, and separately labeled post-exit
+  opportunity. Stale or mismatched specialist evidence abstains.
+- The prospective sample is defined but inactive with zero trades. Integration,
+  producer wiring, persistence, activation, parameter research, strategy
+  influence, and any execution authority require separately authorized gates.
 - Research whether management produces more incremental edge than another
   entry filter; do not change current TradePlans under this task.
 
