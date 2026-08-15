@@ -2288,6 +2288,8 @@ Intended specialist architecture:
 
 #### ARGUS-RESEARCH-GOV-001 - Experiment Registry And Model-Health Discipline
 
+- Status: `IMPLEMENTED_PENDING_MERGE` on the isolated task branch; no runtime
+  integration or activation exists.
 - Before broad parameter/model searches, preserve hypothesis, feature
   definitions, every attempted variant, training/validation/test periods,
   benchmark, success criteria, and untouched holdout. Failed variants remain
@@ -2296,6 +2298,11 @@ Intended specialist architecture:
   `INSUFFICIENT_RECENT_EVIDENCE` health states. A model or pattern can lose
   authority; one favorable historical test never makes a strategy rule
   permanent.
+- Contract v1 now also distinguishes authorized final holdout access from
+  permanent early-access contamination; separates results and invalidations
+  from preregistration; exposes planned and actual search counts; and rejects
+  deleted negative evidence, broken receipt chains, tampering, and execution
+  authority. Static examples remain unactivated and make no predictive claim.
 
 #### ARGUS-ARBITER-001 - Meta-Decision / Strategy Arbiter
 
