@@ -1,5 +1,41 @@
 # Branch Ledger
 
+## ARGUS-RESEARCH-INTEGRATION-001 Stack Preflight
+
+`codex/ARGUS-RESEARCH-INTEGRATION-001-stack-preflight` is an isolated
+composition branch from frozen canonical and remote base `ea056155`. It
+contains every requested implementation exactly once in this order:
+
+1. SPECIALIST-CONTRACT-001: source `802f2d1`, verification `e65cb70`.
+2. RESEARCH-DATA-001: `d03301c`.
+3. RESEARCH-DATA-002: `12e6a05`, whose parent is DATA-001.
+4. RESEARCH-GOV-001: `0f61e48`.
+5. STAT-DATA-001: `cd95490`, whose parent is SPECIALIST-CONTRACT-001.
+6. REGIME-002: `99a25f8`, whose parent is SPECIALIST-CONTRACT-001.
+7. EXEC-QUALITY-001: `1b105e7`, whose parent is SPECIALIST-CONTRACT-001.
+8. EVENT-SHOCK-001: `fe8ca09`, whose parent is SPECIALIST-CONTRACT-001.
+9. TECH-STRUCTURE-002: `1b47b4a`, whose parent is
+   SPECIALIST-CONTRACT-001.
+10. EXIT-RESEARCH-001: `c8fcc15`, whose parent is
+    SPECIALIST-CONTRACT-001.
+
+All ten source worktrees were clean and equal to their remote branches.
+Every implementation module in the composed tree is byte-identical to its
+authoritative source branch. Dry merges found no source, test, package,
+schema, config, scheduler, broker, or runtime conflict. Conflicts are confined
+to shared governance ledgers: BRANCH_LEDGER, CHANGELOG_ARGUS, RISK_REGISTER,
+ROADMAP, and TASK_LOG. Branch-local reuse of `R-083`, `R-086`, and `R-087` was
+reconciled to unique combined IDs `R-086` through `R-095`.
+
+Classification remains
+`INTEGRATION_PREFLIGHT_COMPLETE_PENDING_AUGUST_17_EVIDENCE` after final proof.
+The branch is not canonical, installed, scheduled, activated, or imported by
+the production runtime. Post-August-17 integration must use one deliberate
+reconciliation pass; STAT-DATA-002 producer wiring and every specialist
+activation remain later tasks.
+
+Date reconciled: 2026-08-15
+
 ## ARGUS-STAT-DATA-001 Prospective Opportunity Denominator
 
 `codex/ARGUS-STAT-DATA-001-prospective-opportunity-denominator` is stacked
