@@ -1,5 +1,24 @@
 # Branch Ledger
 
+## ARGUS-EXEC-QUALITY-001 Liquidity And Execution Quality
+
+`codex/ARGUS-EXEC-QUALITY-001-liquidity-execution-research` is an isolated
+feature branch stacked directly on Specialist Contract `e65cb70`, whose base
+is synchronized canonical `ea05615`. REGIME-002 is an independent sibling and
+is neither an ancestor nor an import dependency. The branch is
+`IMPLEMENTED_PENDING_PARENT_INTEGRATION` and may be backed up by ordinary
+non-force feature-branch push after final Hard Chew.
+
+The branch adds one pure specialist module, synthetic tests, and branch-local
+governance only. No production module imports it. No provider, account,
+broker/order, storage, service, scheduler, Engine Host, WPF, Paper, Shadow,
+SETUP-002, REGIME-002, installed manifest, August 17 job, or canonical master
+state changed. Next action is a later deliberate parent-plus-child integration
+without activation; prospective collection and any decision authority remain
+separate gates.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-SPECIALIST-CONTRACT-001 Common Opinion Contract
 
 `codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract` is an isolated

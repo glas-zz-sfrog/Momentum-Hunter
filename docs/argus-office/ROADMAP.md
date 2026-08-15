@@ -87,6 +87,17 @@ provider, broker, storage, scheduler, service, Engine Host, WPF, Paper, Shadow,
 or order capability, and does not alter the August 17 lane. Canonical `master`
 and the installed runtime remain unchanged until a later clean integration.
 
+On sibling feature branch
+`codex/ARGUS-EXEC-QUALITY-001-liquidity-execution-research`, stacked directly
+on Specialist Contract `e65cb70`, the first Execution Quality specialist is
+`IMPLEMENTED_PENDING_PARENT_INTEGRATION`. It preserves separate liquidity,
+spread, quote-stability, price-impact-risk, fill-risk, and data-quality states,
+raw quote/candle measurements, mathematical TradePlan sensitivity, and a
+separate actual-fill attachment. It has no runtime consumer or provider,
+account, broker, order, persistence, scheduler, service, Engine Host, WPF,
+Paper, Shadow, SETUP-002, or REGIME-002 authority. Canonical `master`, the
+installed manifest, and all August 17 jobs remain unchanged.
+
 ## Integrated Work History
 
 ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
@@ -2049,7 +2060,7 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_IN
 
 ### Phase 13R - Specialist Intelligence Research And Strategy Diversification
 
-Status: `STARTED - SPECIALIST-CONTRACT-001 IMPLEMENTED_PENDING_INTEGRATION`
+Status: `STARTED - SPECIALIST CONTRACT AND EXECUTION QUALITY IMPLEMENTED_PENDING_INTEGRATION`
 
 Roadmap inclusion authorizes planning and bounded research preparation only.
 It does not activate runtime imports, begin or modify a Paper sample, grant
@@ -2158,10 +2169,17 @@ Intended specialist architecture:
 
 #### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
 
-- Promote spread, spread expansion, quote age/stability, executable size where
-  available, volume versus price progress, fill probability, delay, slippage,
-  halt/unavailable state, and provider capability into a separately testable
-  specialist.
+- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` from Specialist
+  Contract `e65cb70`; no runtime consumer, persistence, activation, or
+  authority exists.
+- Preserve spread, spread expansion, quote age/stability, executable size only
+  where proven, volume versus price progress, heuristic fill-risk state,
+  halt/unavailable state, and provider capability as separate research
+  dimensions rather than one score.
+- Preserve later provider-confirmed fill state, delay, actual filled quantity,
+  slippage, and execution-adjusted risk/R:R in a separate immutable attachment;
+  never leak later execution into the original opinion and never report an
+  uncalibrated fill probability.
 - Future bearish work must separately evaluate shortability, borrow/locate,
   margin/buying-power eligibility, and broker restrictions.
 - Strategy logic remains provider-neutral; a provider name cannot become

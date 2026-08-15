@@ -1,5 +1,19 @@
 # Argus Changelog
 
+- Added the provider-neutral `execution-quality-research-v1` specialist on a
+  sibling branch stacked directly on the common Specialist Contract.
+- Preserved separate liquidity, spread, quote-stability, price-impact-risk,
+  fill-risk, and data-quality states plus raw quote/candle/TradePlan
+  sensitivity evidence; no universal execution score or fill probability was
+  introduced.
+- Added explicit regular-session evaluation, extended-hours abstention,
+  actual-fill-only partial/no-fill metrics, deterministic serialization,
+  tamper detection, and proof that later Paper evidence cannot alter the
+  original research opinion.
+- Kept provider, account, broker, order, persistence, service, scheduler,
+  Engine Host, WPF, Paper, Shadow, SETUP-002, REGIME-002, and August 17 runtime
+  paths unchanged.
+
 - Activated the empty SETUP-002 successor-setup research sample prospectively
   for August 17 with a separate immutable activation timestamp and fingerprint.
 - Added two exact-head, zero-retry service jobs: outcome-blind Pass 1 after the
