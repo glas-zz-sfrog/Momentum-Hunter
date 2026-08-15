@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from statistics import median
 from typing import Iterable
 
+from momentum_hunter.broad_discovery import candidate_rejection_reasons
 from momentum_hunter.models import Candidate, ScannerCriteria
 
 
@@ -220,7 +221,7 @@ def evaluate_provider_semantics(
                 candidate.relative_volume,
             )
         ].append(symbol)
-        reasons = _criteria_rejection_reasons(candidate, criteria)
+        reasons = candidate_rejection_reasons(candidate, criteria)
         if reasons:
             rejection_reasons.update(reasons)
         else:
@@ -598,24 +599,6 @@ def _check_distribution(
                     fields=(field, f"baseline.{field}"),
                 )
             )
-
-
-def _criteria_rejection_reasons(
-    candidate: Candidate,
-    criteria: ScannerCriteria,
-) -> tuple[str, ...]:
-    reasons: list[str] = []
-    if candidate.volume < criteria.min_volume:
-        reasons.append("BELOW_MIN_VOLUME")
-    if candidate.percent_change < criteria.min_percent_change:
-        reasons.append("BELOW_MIN_PERCENT_CHANGE")
-    if candidate.market_cap < criteria.min_market_cap:
-        reasons.append("BELOW_MIN_MARKET_CAP")
-    if candidate.price < criteria.min_price:
-        reasons.append("BELOW_MIN_PRICE")
-    if candidate.relative_volume != 0.0 and candidate.relative_volume < criteria.min_relative_volume:
-        reasons.append("BELOW_MIN_RELATIVE_VOLUME")
-    return tuple(reasons)
 
 
 def _field_issue(code: str, symbol: str, field: str, value: object) -> ProviderSemanticIssue:

@@ -13,6 +13,13 @@ from typing import Iterable
 
 import requests
 
+from momentum_hunter.broad_discovery import (
+    DiscoveryQueryIdentity,
+    DiscoverySnapshot,
+    DiscoverySourceRow,
+    build_discovery_snapshot,
+    filter_discovery_candidates,
+)
 from momentum_hunter.models import Candidate, NewsItem, ScannerCriteria
 from momentum_hunter.provider_semantic_plausibility import (
     ProviderSemanticDiagnostics,
@@ -44,6 +51,8 @@ FINVIZ_SCREENER_COLUMN_ALIASES = {
     "Shs Float": "Float",
     "Float": "Float",
 }
+FINVIZ_DISCOVERY_SOURCE_VERSION = "finviz-screener-v151-custom-columns-v1"
+FINVIZ_DISCOVERY_PARSER_CONTRACT_VERSION = 1
 
 
 class ProviderUnavailableError(RuntimeError):
@@ -221,6 +230,7 @@ class FinvizProvider(MarketDataProvider):
         self._quote_html_cache: dict[str, str] = {}
         self.last_scan_diagnostics: ProviderScanDiagnostics | None = None
         self.last_semantic_diagnostics: ProviderSemanticDiagnostics | None = None
+        self.last_discovery_snapshot: DiscoverySnapshot | None = None
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -232,12 +242,30 @@ class FinvizProvider(MarketDataProvider):
         )
 
     def scan(self, criteria: ScannerCriteria) -> list[Candidate]:
+        """Return the legacy opening-scan result from the bounded snapshot path."""
+
+        return list(self.discover(criteria).qualified_candidates())
+
+    def discover(
+        self,
+        criteria: ScannerCriteria,
+        *,
+        requested_at: datetime | None = None,
+        received_at: datetime | None = None,
+        evaluated_at: datetime | None = None,
+    ) -> DiscoverySnapshot:
+        """Acquire one Finviz response and return its complete bounded snapshot."""
+
         from bs4 import BeautifulSoup
 
         self.last_scan_diagnostics = None
         self.last_semantic_diagnostics = None
+        self.last_discovery_snapshot = None
+        observed_requested_at = requested_at or now_central()
         url = self._screener_url(criteria)
         response = self._get_with_retries(url, action="scan")
+        observed_received_at = received_at or now_central()
+        observed_evaluated_at = evaluated_at or now_central()
         soup = BeautifulSoup(response.text, "lxml")
         table = soup.find("table", class_="screener_table")
         if table is None:
@@ -253,66 +281,75 @@ class FinvizProvider(MarketDataProvider):
         schema_fingerprint = finviz_screener_schema_fingerprint(canonical_headers)
         data_rows = [row for row in rows[1:] if row.find_all(["th", "td"])]
         candidates: list[Candidate] = []
+        discovery_source_rows: list[DiscoverySourceRow] = []
         for row_number, row in enumerate(data_rows, start=1):
             values = finviz_screener_row(row, headers, row_number=row_number)
             ticker = required_finviz_text(values, "Ticker", row_number=row_number)
-            candidates.append(
-                Candidate(
-                    ticker=ticker,
-                    company=required_finviz_text(
-                        values,
-                        "Company",
+            candidate = Candidate(
+                ticker=ticker,
+                company=required_finviz_text(
+                    values,
+                    "Company",
+                    row_number=row_number,
+                ),
+                sector=required_finviz_text(
+                    values,
+                    "Sector",
+                    row_number=row_number,
+                ),
+                industry=required_finviz_text(
+                    values,
+                    "Industry",
+                    row_number=row_number,
+                ),
+                market_cap=parse_required_market_cap(
+                    values.get("Market Cap", ""),
+                    field="Market Cap",
+                    row_number=row_number,
+                ),
+                price=parse_required_finviz_float(
+                    values.get("Price", ""),
+                    field="Price",
+                    row_number=row_number,
+                    positive=True,
+                ),
+                percent_change=parse_required_finviz_float(
+                    finviz_screener_value(values, "Change", "Change %").replace("%", ""),
+                    field="Change %",
+                    row_number=row_number,
+                ),
+                volume=parse_required_finviz_int(
+                    values.get("Volume", ""),
+                    field="Volume",
+                    row_number=row_number,
+                    positive=True,
+                ),
+                relative_volume=parse_optional_finviz_float(
+                    values.get("Rel Volume", ""),
+                    field="Rel Volume",
+                    row_number=row_number,
+                ) or 0.0,
+                float_shares=(
+                    parse_optional_finviz_market_cap(
+                        finviz_screener_value(values, "Shs Float", "Float"),
+                        field="Float",
                         row_number=row_number,
-                    ),
-                    sector=required_finviz_text(
-                        values,
-                        "Sector",
-                        row_number=row_number,
-                    ),
-                    industry=required_finviz_text(
-                        values,
-                        "Industry",
-                        row_number=row_number,
-                    ),
-                    market_cap=parse_required_market_cap(
-                        values.get("Market Cap", ""),
-                        field="Market Cap",
-                        row_number=row_number,
-                    ),
-                    price=parse_required_finviz_float(
-                        values.get("Price", ""),
-                        field="Price",
-                        row_number=row_number,
-                        positive=True,
-                    ),
-                    percent_change=parse_required_finviz_float(
-                        finviz_screener_value(values, "Change", "Change %").replace("%", ""),
-                        field="Change %",
-                        row_number=row_number,
-                    ),
-                    volume=parse_required_finviz_int(
-                        values.get("Volume", ""),
-                        field="Volume",
-                        row_number=row_number,
-                        positive=True,
-                    ),
-                    relative_volume=parse_optional_finviz_float(
-                        values.get("Rel Volume", ""),
-                        field="Rel Volume",
-                        row_number=row_number,
-                    ) or 0.0,
-                    float_shares=(
-                        parse_optional_finviz_market_cap(
-                            finviz_screener_value(values, "Shs Float", "Float"),
-                            field="Float",
-                            row_number=row_number,
-                        )
-                    ),
-                    atr=parse_optional_finviz_float(
-                        values.get("ATR", ""),
-                        field="ATR",
-                        row_number=row_number,
-                    ),
+                    )
+                ),
+                atr=parse_optional_finviz_float(
+                    values.get("ATR", ""),
+                    field="ATR",
+                    row_number=row_number,
+                ),
+            )
+            candidates.append(candidate)
+            normalized_values = canonicalize_finviz_screener_values(values)
+            discovery_source_rows.append(
+                DiscoverySourceRow.from_mapping(
+                    source_row_ordinal=row_number,
+                    source_row_identity=normalized_values.get("No.", str(row_number)),
+                    source_values=normalized_values,
+                    candidate=candidate,
                 )
             )
 
@@ -326,7 +363,7 @@ class FinvizProvider(MarketDataProvider):
         if semantic_diagnostics.status != "PASS":
             raise ProviderSemanticPlausibilityError(semantic_diagnostics)
 
-        qualifying = filter_candidates(candidates, criteria)
+        qualifying = filter_discovery_candidates(candidates, criteria)
         if len(qualifying) != semantic_diagnostics.qualifying_candidate_count:
             raise ProviderUnavailableError(
                 provider=self.name,
@@ -337,6 +374,35 @@ class FinvizProvider(MarketDataProvider):
                     f"fingerprint={semantic_diagnostics.fingerprint}; "
                     f"semanticQualifying={semantic_diagnostics.qualifying_candidate_count}; "
                     f"filterQualifying={len(qualifying)}."
+                ),
+            )
+        query_identity = DiscoveryQueryIdentity.from_criteria(
+            criteria,
+            source_query=url,
+            sort_order="-volume",
+        )
+        snapshot = build_discovery_snapshot(
+            source=self.name,
+            source_version=FINVIZ_DISCOVERY_SOURCE_VERSION,
+            requested_at=observed_requested_at,
+            received_at=observed_received_at,
+            evaluated_at=observed_evaluated_at,
+            query_identity=query_identity,
+            source_contract_fingerprint=finviz_discovery_contract_fingerprint(
+                schema_fingerprint
+            ),
+            semantic_plausibility_fingerprint=semantic_diagnostics.fingerprint,
+            source_rows=discovery_source_rows,
+            raw_row_count=len(data_rows),
+        )
+        if list(snapshot.qualified_candidates()) != qualifying:
+            raise ProviderUnavailableError(
+                provider=self.name,
+                reason="semantic_implausibility",
+                message=(
+                    "Provider semantic plausibility failed closed: discovery snapshot "
+                    "qualification ordering disagrees with candidate filtering; "
+                    f"fingerprint={semantic_diagnostics.fingerprint}."
                 ),
             )
         self.last_scan_diagnostics = ProviderScanDiagnostics(
@@ -354,7 +420,8 @@ class FinvizProvider(MarketDataProvider):
                 semantic_diagnostics.rejection_reason_counts
             ),
         )
-        return qualifying
+        self.last_discovery_snapshot = snapshot
+        return snapshot
 
     def fetch_news(self, ticker: str, as_of: datetime | None = None) -> list[NewsItem]:
         from bs4 import BeautifulSoup
@@ -485,9 +552,36 @@ def canonicalize_finviz_screener_headers(headers: Iterable[str]) -> tuple[str, .
     )
 
 
+def canonicalize_finviz_screener_values(values: dict[str, str]) -> dict[str, str]:
+    """Normalize known Finviz header aliases before snapshot fingerprinting."""
+
+    normalized: dict[str, str] = {}
+    for header, value in values.items():
+        canonical_header = FINVIZ_SCREENER_COLUMN_ALIASES.get(
+            header.strip(),
+            header.strip(),
+        )
+        if canonical_header in normalized:
+            raise ProviderContractError(
+                "Finviz screener schema drift detected: duplicate canonical columns."
+            )
+        normalized[canonical_header] = value
+    return normalized
+
+
 def finviz_screener_schema_fingerprint(headers: Iterable[str]) -> str:
     canonical = canonicalize_finviz_screener_headers(headers)
     serialized = json.dumps(canonical, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def finviz_discovery_contract_fingerprint(schema_fingerprint: str) -> str:
+    payload = {
+        "sourceVersion": FINVIZ_DISCOVERY_SOURCE_VERSION,
+        "parserContractVersion": FINVIZ_DISCOVERY_PARSER_CONTRACT_VERSION,
+        "schemaFingerprint": schema_fingerprint,
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
@@ -696,16 +790,9 @@ def parse_finviz_news_time(value: str, now: datetime | None = None) -> datetime 
 
 
 def filter_candidates(candidates: Iterable[Candidate], criteria: ScannerCriteria) -> list[Candidate]:
-    filtered = [
-        candidate
-        for candidate in candidates
-        if candidate.volume >= criteria.min_volume
-        and candidate.percent_change >= criteria.min_percent_change
-        and candidate.market_cap >= criteria.min_market_cap
-        and candidate.price >= criteria.min_price
-        and (candidate.relative_volume == 0.0 or candidate.relative_volume >= criteria.min_relative_volume)
-    ]
-    return sorted(filtered, key=lambda item: (item.score, item.volume, item.percent_change), reverse=True)
+    """Backward-compatible public name for the shared discovery filter path."""
+
+    return filter_discovery_candidates(candidates, criteria)
 
 
 def summarize_catalyst(headline: str) -> str:
