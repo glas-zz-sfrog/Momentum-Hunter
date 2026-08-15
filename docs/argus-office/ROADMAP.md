@@ -2310,11 +2310,29 @@ Intended specialist architecture:
 
 #### ARGUS-EXIT-RESEARCH-001 - Trade-Management And Exit Intelligence
 
+- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` on
+  `codex/ARGUS-EXIT-RESEARCH-001-trade-management-research`, stacked exactly on
+  Specialist Contract commit `e65cb70`; no runtime consumer, persistence path,
+  activation, or authority exists.
+- Freeze `exit-management-research-v1` as a software-validation policy. Require
+  the actual broker-confirmed fill, quantity, time, original protective stop,
+  TradePlan, policy, and evidence identities before evaluating any alternative.
+- Implement eight separate methods: actual frozen control, structural stop,
+  next-bar-effective ATR trailing stop, 60-minute time stop, +1R break-even,
+  50% Target-1 partial exit with original-stop/Target-2 runner, momentum
+  failure, and regime deterioration. No optimized combined method exists.
 - Preserve each actual Paper trade under its frozen TradePlan/lifecycle while
   silently comparing structural stop, trailing stop, time stop, break-even,
   partial exit, momentum-failure exit, and regime-deterioration exit methods.
 - Keep actual and counterfactual results separate. A counterfactual exit may
   never rewrite an actual trade.
+- Use completed bars only and preserve ambiguous same-bar stop/target ordering,
+  gap execution uncertainty, stable original 1R, quantity conservation,
+  counterfactual MFE/MAE only through exit, and separately labeled post-exit
+  opportunity. Stale or mismatched specialist evidence abstains.
+- The prospective sample is defined but inactive with zero trades. Integration,
+  producer wiring, persistence, activation, parameter research, strategy
+  influence, and any execution authority require separately authorized gates.
 - Research whether management produces more incremental edge than another
   entry filter; do not change current TradePlans under this task.
 
