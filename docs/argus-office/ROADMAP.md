@@ -29,6 +29,226 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+### ARGUS-ROADMAP-005 - August 17 Integration Gate And Continuous Intraday Build Lanes
+
+Status: `ROADMAP_PLAN_READY_PENDING_AUGUST_17_GATE`
+
+This is governance only. It freezes integration, not development. No runtime,
+service, scheduler, manifest, credential, provider, Paper, SETUP-002, or
+continuous-runtime change is authorized by this Roadmap entry.
+
+#### Reconciled Baseline And Protected Operational State
+
+Reconciled on 2026-08-15:
+
+| Item | Current truth |
+| --- | --- |
+| Canonical Git | Local `master` and `origin/master` are synchronized at `ea056155182351be70bb03d23841aca55c6118ae`. The canonical worktree is clean. |
+| Installed runtime identity | The running `MomentumHunterAutomation` service uses canonical checkout `C:\Users\steve\OneDrive\Documents\Investing` with its canonical `.venv` Python. |
+| Automation Service | `Running`, `Automatic`; no service or scheduler mutation is authorized by this task. |
+| Automation manifest | `C:\ProgramData\MomentumHunter\Automation\automation-manifest.json`, SHA-256 `8C211729AE78DCDAEF6BC16497E9F4C797B7FDD87B34F2AB9583FCD45AD6A329`. |
+| Exact protected pin | All four August 17 jobs below require `ea056155182351be70bb03d23841aca55c6118ae`. |
+
+The protected August 17 jobs are exact-head, enabled, finite, and must remain
+untouched until their receipts are terminal and preserved:
+
+| Job | Schedule and dependency | Gate purpose |
+| --- | --- | --- |
+| `opening-capture-20260817` | 08:35 CT; latest start 08:40 CT | Canonical opening evidence. |
+| `paper-engineering-20260817` | 08:35 CT; latest start 08:50 CT; depends on opening capture | Canary Paper operational result. |
+| `successor-setup-pass1-20260817` | 08:35 CT; latest start 08:50 CT; depends on opening capture | Outcome-blind SETUP-002 prospective observation. |
+| `successor-setup-pass2-20260817` | 15:05 CT; latest start 16:00 CT; depends on exact Pass 1 | Separate outcome classification. |
+
+No canonical Git advance, repin, install, activation, or service change may
+disturb those jobs. Routine evidence remains operational evidence, not a reason
+to create canonical Git churn.
+
+#### August 17 Integration Gate
+
+Lane A has P0 priority. At the first relevant August 17 result, preserve and
+adjudicate the opening capture, Canary Paper result, SETUP-002 Pass 1, and
+SETUP-002 Pass 2. Verify exact receipts and Git identity, denominator and
+provider-bound treatment, cutoff hashes, Pass 1/Pass 2 chronology, Paper
+decision, production nonmutation, and every anomaly. Do not tune SETUP-002 from
+its first observation. A defect requires preserved evidence, failure
+classification, a repair, and bounded verification; no missed prospective
+observation may be fabricated or reconstructed.
+
+Only after all four results are terminal and adjudicated may canonical work
+proceed in this order:
+
+1. Reconcile current `master` and the research integration preflight against
+   that exact canonical head.
+2. Re-run the combined Hard Chew suite.
+3. Perform one deliberate research-stack integration, rather than ten unrelated
+   branch merges.
+4. Push/synchronize the resulting canonical state.
+5. Perform one controlled install/manifest repin only if the canonical batch
+   actually requires it, then verify the service and runtime once.
+
+Do not blindly fast-forward an older preflight branch after the operational
+gate. Do not merge, install, schedule, activate, or otherwise connect isolated
+continuous work to the protected runtime before this sequence.
+
+#### Continuous Architecture Status
+
+Engineering verdict:
+
+```text
+CONTINUOUS_DISCOVERY_PRODUCER_NOT_IMPLEMENTED
+FOUNDATIONS_REUSABLE
+COMPOSITION_LAYER_REQUIRED
+```
+
+CONTINUOUS-003 supplies dormant, reusable contracts for candidate lifecycle,
+prospective plan versions, event triggers, rolling regime, macro/catalyst
+context, sequential breakout research, decision cycles, recovery, and evidence
+integrity. It is not an operating continuous trader. Current runtime has no
+broad all-day discovery producer, persistent hot-universe owner, automatic
+midday admission/readiness, completed-bar or event-driven setup composition,
+whole-day denominator producer, or process that continuously orchestrates these
+pieces.
+
+`MODULE PRESENCE != RUNTIME ACTIVATION` and
+`CONTINUOUS CONTRACTS != CONTINUOUS DISCOVERY` are mandatory distinctions.
+
+The 08:35 opening capture remains important as a bootstrap and opening-specific
+evidence event. It must not remain the permanent structural parent of the
+day's opportunity universe. A symbol discovered at 10:30, 11:15, or 14:00 must
+be able to complete canonical Schwab readiness and become a first-class
+opportunity with a prospective setup and TradePlan/research evaluation.
+`MISSED_ENTRY` remains immutable: a later continuation breakout, pullback, or
+reclaim is a new prospective setup with its own identity and predecessor
+lineage, never a rewritten trigger.
+
+The target is a two-speed architecture:
+
+- **Broad discovery** finds unknown symbols on a slower, bounded,
+  provider-minimal cadence. It records complete bounded-source disposition and
+  never creates an order by itself. Exact cadence is not strategy law here.
+- **Hot-universe reevaluation** follows already interesting symbols by completed
+  canonical one-minute bars, lifecycle transitions, material events, regime
+  transitions, stale/recovery transitions, bounded heartbeat, and near-trigger
+  executable quote state. It does not require another broad scan.
+- **Active-position supervision** remains independently operational. Quotes,
+  broker truth, protection, recovery, and forced-flat logic must continue even
+  when discovery or a candidate fails.
+
+Initial continuous research reuses Finviz discovery plus Schwab canonical
+evidence. A Finviz result page is a bounded discovery universe, not the whole
+market. Each pulse must preserve request/page identity, raw and parsed counts,
+all represented rows, every disposition, admitted candidates, rejected rows,
+provider-bound rows, and failures. No new provider is authorized by this entry.
+
+#### Ownership, Writer, And Observability Gates
+
+The synchronous Automation Supervisor remains suitable for bounded scheduled
+jobs but is not the intended host for a long-lived discovery loop. The target
+boundary is an independent **Continuous Opportunity Runtime** owning broad
+discovery, hot-universe lifecycle, canonical-readiness coordination,
+event/bar processing, prospective setup production, continuous composition,
+denominator production, and health/backpressure evidence. It is not installed
+by this Roadmap.
+
+Evidence writer topology remains an explicit unresolved gate. Canonical runtime
+topology v1 assigns continuous evidence writes to `PYTHON_ENGINE_HOST`; the
+unmerged CONTINUOUS-ACTIVATION-001 prototype assigns them to a
+`DEDICATED_EVIDENCE_WRITER`. The preferred direction is a dedicated writer, but
+the conflict is reserved for `WRITER-TOPOLOGY-002`. CONTINUOUS-ACTIVATION-001
+must remain unmerged. Physical same-SID/Windows isolation proof remains later
+and may validly conclude `SAME_SID_FILESYSTEM_ISOLATION_INSUFFICIENT`.
+
+Future continuous health must use bounded counters, not a generic
+`COLLECTION_COMPLETED`: discovery pulses, provider requests, raw/parsed rows,
+new/retained/expired symbols, evicted/provider-bound symbols, accepted bars,
+setup transitions, decision cycles, data failures, and queue/backpressure. A
+healthy process with zero discovery cannot look equivalent to a healthy process
+actively searching the market.
+
+#### Execution Lanes
+
+| Lane | Priority and state | Allowed work | Explicit boundary |
+| --- | --- | --- | --- |
+| **A - August 17 operational evidence and canonical integration** | P0, frozen until evidence arrives | Preserve/adjudicate the four protected results; then one reconciled research-stack integration. | No action may disturb protected jobs or their pins. |
+| **B - Continuous intraday core engineering** | P1, active in isolated worktrees | Design, implement, Hard-Chew test, commit, and push isolated components. | No merge, install, schedule, activation, or repin before the gate. |
+| **C - Process/writer/Windows trust boundary** | P2 | Offline contracts, synthetic/crash-restart tests, topology and evidence-storage design. | No installed activation; physical isolation remains a distinct campaign. |
+| **D - Paper/live authority** | Blocked by evidence | Later design only after prospective, denominator-complete, restart-safe continuous observation. | Do not connect continuous opportunities to Paper; unattended live stays blocked pending Steven's future decision. |
+
+Lane B sequence is fixed until the gate:
+
+1. `CONT-DISCOVERY-001` - Broad Discovery Producer.
+2. `CONT-UNIVERSE-001` - Persistent Hot-Universe Owner.
+3. `CONT-COMPOSE-001` - Canonical readiness, lifecycle/successor setup, and
+   continuous plan composition.
+4. `STAT-DATA-002` - Complete continuous denominator producer wiring.
+5. `CONT-DAYPROOF-001` - Synthetic whole-trading-day composition proof.
+6. Later: `CONT-RUNTIME-001` and `CONT-STORAGE-001`.
+
+Use up to three nonconflicting isolated worktrees when useful. Canonical
+integration remains serialized. Do not start another intelligence specialist or
+`STAT-OUTCOME-001` ahead of this sequence.
+
+`CONT-DAYPROOF-001` is mandatory before installed research-only activation. Its
+synthetic day must prove: an immutable missed setup followed by a distinct AAA
+continuation; BBB admitted at 11:15 without an opening parent; CCC retained
+after a scanner disappearance; explicit handling for at least 30 symbols under
+a ten-symbol market-data limit; one backfill failure; one specialist
+failure/abstention; a midday restart; and independent supervision of an open
+Paper position. Denominators must reconcile; duplicate candidate/setup/decision
+records are forbidden; a specialist failure cannot become neutral approval; and
+all terminal evidence must be deterministic and auditable.
+
+#### Research Stack Position
+
+Phase 13R status is `IMPLEMENTED_STACK_PENDING_AUGUST_17_INTEGRATION`. The
+following verified, research-only branches remain unmerged from canonical
+`master`:
+
+| Foundation | Branch | Head |
+| --- | --- | --- |
+| Specialist Contract | `codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract` | `e65cb702dfd0c2515c8c37bae6fd377315c71f83` |
+| Research Data inventory | `codex/ARGUS-RESEARCH-DATA-001-data-inventory` | `d03301cec3d2f675ca03f32a2c8c8e5e4adc9726` |
+| Security/corporate-action basis | `codex/ARGUS-RESEARCH-DATA-002-security-action-basis` | `12e6a05d0f1f2e860edb522c7a9247c3a39fbdf6` |
+| Opportunity denominator | `codex/ARGUS-STAT-DATA-001-prospective-opportunity-denominator` | `cd95490661b54c73af162c8b9f651039006ad0c6` |
+| Research Governance | `codex/ARGUS-RESEARCH-GOV-001-experiment-registry` | `0f61e4898063f9a8b7949d227880bee03384542e` |
+| Regime | `codex/ARGUS-REGIME-002-exhaustion-market-stress` | `99a25f84219377e9988e8284aa15a944e3936784` |
+| Execution Quality | `codex/ARGUS-EXEC-QUALITY-001-liquidity-execution-research` | `1b105e71d99d45a8ed8099ae4001bd9c6ba2242f` |
+| Event Shock | `codex/ARGUS-EVENT-SHOCK-001-event-reaction-research` | `fe8ca09556fe8ea3dd81949e59ac26d8e3d86da4` |
+| Technical Structure | `codex/ARGUS-TECH-STRUCTURE-002-technical-structure-v2` | `1b47b4ad4cac7f5b944b0662e5c2269ffa8829a6` |
+| Exit Research | `codex/ARGUS-EXIT-RESEARCH-001-trade-management-research` | `c8fcc15395e5ac3b76c16fc6ac28b6a0c7da2899` |
+
+The proven combined preflight remains unmerged on
+`codex/ARGUS-RESEARCH-INTEGRATION-001-stack-preflight` at
+`c1eacecbcad8eb7ba0c925300a335b8150469a8d`; its recorded combined proof is
+367 focused tests, 45 environment regressions, and 2,380 full Python tests.
+`codex/ARGUS-CONTINUOUS-ACTIVATION-001-authenticated-writer-ipc` at
+`e85728c7995deb459ffbdb72f5c6b4b4f46da70b` remains separately preserved as
+`IMPLEMENTED_PENDING_WINDOWS_ISOLATION_PROOF` and unmerged.
+
+All specialists remain `RESEARCH_ONLY` with `EXECUTION_AUTHORITY_NONE`. There
+is no Arbiter and no current specialist may influence Momentum or Paper
+decisions. Continuous Paper requires a later `CONT-PAPER-001` with a new
+admission contract, policy fingerprint, and prospective sample identity. It may
+reuse the proven downstream TradePlan, Risk Governor, allocation, Alpaca Paper,
+and PAPER-005 supervision components; it must not rebuild them.
+
+#### August 17 Interrupt And Post-Gate Rule
+
+Until the gate, P0 is protection of prospective evidence and P1 is isolated
+continuous-core engineering. At the first relevant August 17 result, Lane A
+preempts all canonical integration. Isolated work remains preserved on its
+branch, but the integration queue stops until the complete gate is adjudicated.
+After deliberate research-stack integration and one runtime verification,
+reconcile every Lane B branch onto the new canonical head, preserve branch
+history without reset/rebase/force-push, rerun Hard Chew, and continue through
+Discovery, Hot Universe, Continuous Composition, Denominator Wiring,
+Whole-Day Proof, Runtime/Writer Topology, Physical Isolation, and finally
+research-only prospective activation.
+
+No continuous activation is authorized. The exact next implementation task is
+`CONT-DISCOVERY-001 - Broad Discovery Producer`, unless post-gate
+reconciliation exposes a concrete prerequisite that makes that order unsafe.
+
 The August 14 operational gate is terminal and preserved. The 05:55 Central
 Schwab boundary checkpoint was `USEFUL_WITH_LIMITATIONS`; the 06:05 checkpoint
 was `HIGH_FIDELITY` for SPY, QQQ, and NVDA. The 07:00 capture received and
@@ -66,18 +286,22 @@ transmission remains unavailable. SETUP-002 is silent research only and does
 not alter candidate admission, scoring, TradePlan, Risk Governor, allocation,
 Paper selection, or the official Paper sample.
 
-Next operational evidence is the August 17 opening/Paper result plus the two
-SETUP-002 research receipts. A valid Pass 1 may still abstain for insufficient
-history, and a valid Pass 2 may classify no successor setup; neither is a
-production failure. After the first terminal pair, verify denominator count,
-provider-bound exclusions, cutoff hashes, outcome separation, and production
-nonmutation before extending unattended collection. R034 legacy-candle
-deletion remains separately approval-gated. Routine successful captures stay
-in append-only operational evidence and do not trigger daily Roadmap commits.
+Next operational evidence is the complete August 17 four-result gate: opening,
+Canary Paper, SETUP-002 Pass 1, and SETUP-002 Pass 2. A valid Pass 1 may still
+abstain for insufficient history, and a valid Pass 2 may classify no successor
+setup; neither is a production failure. Preserve and adjudicate all four before
+any canonical integration, then verify denominator count, provider-bound
+exclusions, cutoff hashes, outcome separation, Paper decision, and production
+nonmutation. No continuous collection is extended or activated by the first
+result. R034 legacy-candle deletion remains separately approval-gated. Routine
+successful captures stay in append-only operational evidence and do not trigger
+daily Roadmap commits.
 
-The approved long-term direction remains Phase 13R specialist intelligence,
-with the current Momentum/Paper path preserved as the prospective baseline.
-Specialist runtime authority and strategy activation remain future gates.
+The approved long-term direction includes Phase 13R specialist intelligence,
+but no further specialist work outranks continuous discovery, hot-universe,
+composition, denominator, and whole-day-proof work. The current Momentum/Paper
+path remains the prospective baseline. Specialist runtime authority and strategy
+activation remain future gates.
 
 ## Integrated Work History
 
