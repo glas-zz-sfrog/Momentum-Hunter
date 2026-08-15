@@ -715,9 +715,10 @@ Momentum engine. The current Momentum/Paper path remains the immutable
 baseline/control. Future research flows from opportunity detection to
 independently testable specialist opinions, then prospective comparison against
 the baseline, and only later to combination or arbiter logic that has earned
-authority through evidence. Phase 13R records that program without implementing
-or activating it. It must reuse CONTINUOUS-003, Technical Breakout Research
-Engine v1, SHADOW-025, DATA-004, DATA-005B, and existing prospective-sample,
+authority through evidence. Phase 13R records that program. Its research
+foundation is implemented on verified, unmerged research branches, but it is
+not integrated or activated. It must reuse CONTINUOUS-003, Technical Breakout
+Research Engine v1, SHADOW-025, DATA-004, DATA-005B, and existing prospective-sample,
 counterfactual, rank-conditioned, and no-backfill governance. Near-term priority
 remains the frozen A004 Paper engineering sample and the separate continuous
 writer-principal/credential-access decision; specialist planning must not delay
@@ -1729,6 +1730,8 @@ SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote
 - `ACTIVE_ENGINEERING_PRECURSOR`: useful provider-neutral implementation is in progress, but consequential policy and activation remain intentionally unfrozen.
 - `ACTIVE_PROVIDER_RESEARCH`: official contract research or isolated provider proof is the current implementation lane; production authority has not been granted.
 - `IMPLEMENTED_PENDING_MERGE`: work is committed and verified on a branch but has not yet been integrated. Proven nonvisual work may integrate automatically; visual work waits for Steven's manual acceptance.
+- `ROADMAP_PLAN_READY_PENDING_AUGUST_17_GATE`: the Roadmap direction is approved, but the protected August 17 evidence gate must complete before integration or downstream activation decisions.
+- `IMPLEMENTED_STACK_PENDING_AUGUST_17_INTEGRATION`: verified research foundations exist on named unmerged branches, but they are not yet canonical, integrated, or activated.
 - `COMPLETE`: work is merged into local `master` and verified.
 - `BLOCKED`: a stated gate or CEO decision prevents work from starting.
 - `BLOCKED_VENDOR_CAPABILITY`: the required broker capability does not exist; implementation cannot proceed by configuration alone.
@@ -1955,7 +1958,7 @@ activated-empty and unarmed at `0 / 30`, A017 is
 
 - Standing-authorized nonvisual work includes bounded Shadow implementation/repair, evidence collection, Paper-only Alpaca documentation/adapter/lifecycle work after expected credential handoff, manual paperMoney reconciliation artifacts, authenticated read-only Schwab calls, OAuth refresh, exact canary binding when one `2573` CASH account revalidates, tests, reports, Roadmap updates, commits, clean fast-forward merges, and non-force pushes. Funding, live endpoints, live orders, and money movement remain explicit interruption gates.
 - Steven checkpoints apply to GUI/visual acceptance and the anomaly/consequence list in this Roadmap. Real broker transmission, destructive data/schema operations, credential or provider-app revocation, paid services, and protected semantic expansion remain interruption gates.
-- Keep one active implementation branch and at most one stacked successor. Begin new work from the integrated local baseline. The official Shadow sample may begin automatically after every frozen prerequisite passes; any failed or ambiguous prerequisite interrupts Steven.
+- The current three-worktree rule supersedes the former one-active-branch rule: up to three nonconflicting isolated implementation worktrees may proceed under the approved lane model, while canonical integration remains serialized and deliberate. Begin each new worktree from the integrated local baseline; do not begin a conflicting branch or integrate competing changes concurrently. The official Shadow sample may begin automatically after every frozen prerequisite passes; any failed or ambiguous prerequisite interrupts Steven.
 - R027 must preserve both validated parents: current Shadow `master` and R026. R026 and TEST-001 become source/audit branches after combined verification; do not rebase or rewrite either history merely for linearity.
 
 ### Phase 12 - Incremental Capability Migration And Qt Retirement
@@ -2265,13 +2268,17 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_IN
 
 ### Phase 13R - Specialist Intelligence Research And Strategy Diversification
 
-Status: `NOT_STARTED`
+Status: `IMPLEMENTED_STACK_PENDING_AUGUST_17_INTEGRATION`
 
-Roadmap inclusion authorizes planning and bounded research preparation only.
-It does not activate runtime imports, begin or modify a Paper sample, grant
-order authority, or grant live authority. Every specialist begins as a
-read-only or silent observer unless a later bounded task separately proves and
-authorizes promotion. Momentum remains one opportunity specialist and the
+The specialist research foundation is implemented on verified, unmerged
+research branches recorded in the `Research Stack Position` table in `Now`, but
+it is not canonical, integrated, or activated. The subsections in this phase
+are requirement definitions; the branch table in `Now` is the implementation
+truth. Implemented items must be adjudicated and integrated deliberately, not
+rebuilt. This phase does not activate runtime imports, begin or modify a Paper
+sample, grant order authority, or grant live authority. Every specialist begins
+as a read-only or silent observer unless a later bounded task separately proves
+and authorizes promotion. Momentum remains one opportunity specialist and the
 current Momentum/Paper path remains the control against which incremental value
 is measured.
 
@@ -2297,6 +2304,11 @@ Intended specialist architecture:
   evidence.
 
 #### ARGUS-DATA-CORPACTION-001 - Analysis Price-Basis And Security-Identity Integrity
+
+Current implementation disposition: substantially fulfilled or superseded by
+`RESEARCH-DATA-002`. Do not rebuild it. Any remaining work must identify a
+distinct analysis price-basis or security-identity scope not already covered by
+that verified branch before it becomes a new task.
 
 - Preserve raw provider candles unchanged and maintain a separately identified,
   analysis-consistent price/volume basis with complete lineage.
