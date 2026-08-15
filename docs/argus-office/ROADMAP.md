@@ -2161,6 +2161,9 @@ Intended specialist architecture:
 
 #### ARGUS-TECH-STRUCTURE-002 - Technical Structure Research v2
 
+- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` from exact
+  parent SPECIALIST-CONTRACT-001 `e65cb70`; frozen policy fingerprint
+  `6b40ecc89cbfe5d1b3fb0c4d5b1376a4b5e9fb8e3bc96282afccf4838cbb1aa0`.
 - Evolve Technical Breakout Research Engine v1 rather than creating a second
   technical framework.
 - Define volatility-aware, deterministic geometry for compression-expansion,
@@ -2170,8 +2173,20 @@ Intended specialist architecture:
 - Consume corporate-action-safe analysis history and initially emit
   `SUPPORTS`, `NEUTRAL`, `CONTRADICTS`, `EXHAUSTED`, or an abstention for
   existing Momentum Hunter opportunities.
+- Implemented v2 preserves completed-bar chronology, economic event time versus
+  `knownAt`, explicit same-bar ambiguity, ATR/range-normalized geometry,
+  sparse levels, conflicting structures, bar-derived VWAP identity, data-basis
+  admission, and immutable source/policy/target fingerprints. Unknown evidence
+  abstains rather than becoming neutral.
+- Hard Chew passes 50 focused tests, 245 adjacent tests, 202 untouched sibling
+  contract tests, compileall, `git diff --check`, and all 2,113 Python tests.
+  Existing runtime imports and provider/account/broker/order/persistence/
+  service/scheduler/UI capabilities remain absent.
 - Independent technical candidate nomination is later work requiring its own
   prospective evidence and sample gate.
+- Do not infer pattern edge from synthetic detector proof. Later integration
+  requires the parent contract, and later prospective attachment requires
+  RESEARCH-GOV/RESEARCH-DATA/STAT producer wiring plus a new activation gate.
 
 #### ARGUS-RESEARCH-DATA-001 - Research-Scale Historical Data And Universe Integrity
 
