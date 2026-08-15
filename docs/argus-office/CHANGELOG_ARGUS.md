@@ -1,5 +1,18 @@
 # Argus Changelog
 
+- Rehearsed the complete ten-branch Phase 13R research stack on isolated
+  `ARGUS-RESEARCH-INTEGRATION-001` from frozen canonical `ea056155`.
+- Proved the source dependency graph: DATA-002 stacks on DATA-001; six
+  specialist modules stack on the common opinion contract; research governance
+  remains independent. Every composed implementation file matches its source
+  branch byte-for-byte.
+- Found no source/test/runtime conflict. Reconciled the shared governance-only
+  collision surface and remapped branch-local duplicate risk IDs into unique
+  combined IDs without changing any research implementation.
+- Left canonical master, installed service/manifest, production evidence,
+  Paper/Shadow, broker/order paths, and all four August 17 jobs untouched.
+
+
 - Added ARGUS-RESEARCH-DATA-002's provider-neutral durable security identity,
   point-in-time symbol alias, inactive/delisted state, and ambiguous ticker-
   reuse contracts.

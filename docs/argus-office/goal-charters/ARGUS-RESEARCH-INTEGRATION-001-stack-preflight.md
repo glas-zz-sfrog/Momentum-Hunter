@@ -65,10 +65,4 @@ discovery exercise.
 
 ## Classification
 
-Until all evidence passes:
-
-`IN_PROGRESS_ISOLATED_PREFLIGHT`
-
-Successful closeout classification:
-
 `INTEGRATION_PREFLIGHT_COMPLETE_PENDING_AUGUST_17_EVIDENCE`

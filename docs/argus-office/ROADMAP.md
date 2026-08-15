@@ -79,6 +79,31 @@ The approved long-term direction remains Phase 13R specialist intelligence,
 with the current Momentum/Paper path preserved as the prospective baseline.
 Specialist runtime authority and strategy activation remain future gates.
 
+ARGUS-RESEARCH-INTEGRATION-001 is the active isolated preflight branch. It
+combines SPECIALIST-CONTRACT-001, RESEARCH-DATA-001/002, RESEARCH-GOV-001,
+STAT-DATA-001, REGIME-002, EXEC-QUALITY-001, EVENT-SHOCK-001,
+TECH-STRUCTURE-002, and EXIT-RESEARCH-001 from frozen canonical base
+`ea056155`. Every implementation module remains byte-identical to its source
+branch. No production module imports the stack, and no producer, persistence,
+activation, arbiter, provider, account, broker/order, service, scheduler,
+Engine Host, WPF, Paper, or Shadow authority has been added.
+
+The code and tests compose without source conflicts. The rehearsal identified
+one bounded integration-debt class: all sibling branches edited the same five
+governance ledgers and several independently reused risk IDs `R-083`, `R-086`,
+or `R-087`. This branch preserves the unique artifacts, consolidates the
+shared records once, and assigns unique combined risk IDs. The intended later
+integration order is common contract; DATA-001 then DATA-002; research
+governance; denominator; then the four market-intelligence specialists and
+exit specialist. No canonical integration occurs before the August 17 opening,
+Paper, and SETUP-002 receipts are terminal and preserved.
+
+After August 17, reconcile current canonical head against this preflight,
+re-run Hard Chew, and perform one deliberate integration and one operational
+repin if all gates pass. STAT-DATA-002 producer wiring remains the next
+activation-enabling data task; specialist producer wiring, prospective samples,
+combination, calibration, and strategy authority remain separately gated.
+
 On branch `codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract`, the
 first Phase 13R implementation slice is `IMPLEMENTED_PENDING_INTEGRATION` from
 canonical base `ea05615`. It adds only the immutable provider-neutral common
