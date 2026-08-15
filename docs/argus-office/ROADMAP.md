@@ -87,6 +87,22 @@ provider, broker, storage, scheduler, service, Engine Host, WPF, Paper, Shadow,
 or order capability, and does not alter the August 17 lane. Canonical `master`
 and the installed runtime remain unchanged until a later clean integration.
 
+On branch `codex/ARGUS-EVENT-SHOCK-001-event-reaction-research`, EVENT-SHOCK
+is `IMPLEMENTED_PENDING_MERGE` on top of the common specialist contract. It
+separates event relevance, prospectively frozen expected reaction, completed-
+bar market confirmation, and a later immutable actual-reaction attachment.
+Every Roadmap event and relationship class is explicit; unresolved or stale
+evidence abstains, and disagreement, volume without progress, relative lag,
+and immediate breakout failure remain research facts. The module has no
+producer, persistence, provider, runtime consumer, scheduler, UI, Paper,
+Shadow, broker, or order capability and is not activated.
+
+The near-term sequence remains: preserve the four Aug. 17 operational results,
+reconcile and integrate the specialist foundation deliberately, then perform
+`ARGUS-STAT-DATA-002` producer wiring and prospective activation. No
+STAT-DATA producer repair or EVENT-SHOCK activation may alter the frozen Aug.
+17 lane at canonical `ea05615`.
+
 ## Integrated Work History
 
 ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
@@ -2049,7 +2065,7 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_IN
 
 ### Phase 13R - Specialist Intelligence Research And Strategy Diversification
 
-Status: `STARTED - SPECIALIST-CONTRACT-001 IMPLEMENTED_PENDING_INTEGRATION`
+Status: `STARTED - EVENT-SHOCK-001 IMPLEMENTED_PENDING_MERGE`
 
 Roadmap inclusion authorizes planning and bounded research preparation only.
 It does not activate runtime imports, begin or modify a Paper sample, grant
@@ -2156,6 +2172,16 @@ Intended specialist architecture:
 - A counterfactual is never a retrospective trade. Never manufacture a trade
   after observing its outcome.
 
+#### ARGUS-STAT-DATA-002 - Prospective Producer Wiring And Activation
+
+- Begin only after the frozen Aug. 17 evidence is terminal and preserved.
+- Feed the denominator from the complete bounded source population, including
+  rows that do not survive scanner/report admission, rather than treating a
+  surviving briefing subset as the original population.
+- Wire and activate prospectively under a new immutable activation identity;
+  do not backfill history, rewrite STAT-DATA-001 records, or change the current
+  Momentum/Paper strategy path.
+
 #### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
 
 - Promote spread, spread expansion, quote age/stability, executable size where
@@ -2191,6 +2217,9 @@ Intended specialist architecture:
 
 #### ARGUS-EVENT-SHOCK-001 - Unscheduled Event And Reaction Intelligence
 
+- Branch-local status: `IMPLEMENTED_PENDING_MERGE` from specialist-contract
+  head `e65cb70`; no producer, persistence, runtime consumer, activation, or
+  execution authority exists.
 - Extend CONTINUOUS-003 macro-event and catalyst architecture rather than
   creating competing infrastructure.
 - Research supply disruptions, industrial incidents, geopolitical escalation,

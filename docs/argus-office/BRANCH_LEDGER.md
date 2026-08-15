@@ -1,5 +1,24 @@
 # Branch Ledger
 
+## ARGUS-EVENT-SHOCK-001 Event And Reaction Research
+
+`codex/ARGUS-EVENT-SHOCK-001-event-reaction-research` is an isolated feature
+branch from specialist-contract head `e65cb70`, whose canonical ancestor is
+`ea05615`. It implements a deterministic research-only EVENT-SHOCK specialist
+that separates event relevance, expected reaction, market confirmation, and a
+later immutable actual-reaction attachment. The branch is
+`IMPLEMENTED_PENDING_MERGE` and may be backed up by ordinary non-force push
+after final Hard Chew.
+
+No producer, provider, persistence, service, scheduler, Engine Host, WPF,
+Paper, Shadow, broker, order, scanner, scoring, ranking, TradePlan, Risk
+Governor, or allocation path changed. Canonical master and the four Aug. 17
+jobs remain frozen at `ea05615`. Next action is preserve Aug. 17 evidence,
+then reconcile the specialist foundation before STAT-DATA-002 producer wiring
+or any prospective activation.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-SPECIALIST-CONTRACT-001 Common Opinion Contract
 
 `codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract` is an isolated

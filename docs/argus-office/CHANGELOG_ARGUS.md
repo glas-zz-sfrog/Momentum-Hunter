@@ -1,5 +1,18 @@
 # Argus Changelog
 
+- Implemented ARGUS-EVENT-SHOCK-001 on an isolated specialist-contract branch.
+  The new research-only specialist separates event relevance, prospective
+  expected reaction, completed-bar market confirmation, and later immutable
+  actual reaction.
+- Added explicit supply-disruption, industrial-incident, geopolitical, cyber,
+  regulation, corporate-event, and approved-other categories; preserved all
+  required relationship semantics and fail-closed unresolved evidence.
+- Added deterministic detection for news/price disagreement, volume without
+  progress, relative lag, and immediate breakout failure without adding any
+  headline-to-order, provider, persistence, runtime, Paper, or Shadow path.
+- Passed 25 focused tests, 189 adjacent regressions, and all 2,088 Python tests.
+  Canonical master and the frozen Aug. 17 operational lane remain unchanged.
+
 - Activated the empty SETUP-002 successor-setup research sample prospectively
   for August 17 with a separate immutable activation timestamp and fingerprint.
 - Added two exact-head, zero-retry service jobs: outcome-blind Pass 1 after the
