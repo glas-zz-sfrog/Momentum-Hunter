@@ -2253,6 +2253,16 @@ Intended specialist architecture:
   remain `RETROSPECTIVE_RESEARCH_EXAMPLE` and cannot enter the prospective
   denominator.
 
+#### ARGUS-STAT-DATA-002 - Prospective Producer Wiring And Activation
+
+- Begin only after the frozen Aug. 17 evidence is terminal and preserved.
+- Feed the denominator from the complete bounded source population, including
+  rows that do not survive scanner/report admission, rather than treating a
+  surviving briefing subset as the original population.
+- Wire and activate prospectively under a new immutable activation identity;
+  do not backfill history, rewrite STAT-DATA-001 records, or change the current
+  Momentum/Paper strategy path.
+
 #### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
 
 - Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` from Specialist
@@ -2295,6 +2305,9 @@ Intended specialist architecture:
 
 #### ARGUS-EVENT-SHOCK-001 - Unscheduled Event And Reaction Intelligence
 
+- Branch-local status: `IMPLEMENTED_PENDING_MERGE` from specialist-contract
+  head `e65cb70`; no producer, persistence, runtime consumer, activation, or
+  execution authority exists.
 - Extend CONTINUOUS-003 macro-event and catalyst architecture rather than
   creating competing infrastructure.
 - Research supply disruptions, industrial incidents, geopolitical escalation,
