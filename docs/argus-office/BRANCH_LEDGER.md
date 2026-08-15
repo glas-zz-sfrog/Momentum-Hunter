@@ -1,5 +1,24 @@
 # Branch Ledger
 
+## ARGUS-TECH-STRUCTURE-002 Technical Structure Research v2
+
+`codex/ARGUS-TECH-STRUCTURE-002-technical-structure-v2` is an isolated stacked
+feature branch from SPECIALIST-CONTRACT-001 `e65cb70`, with canonical merge
+base `ea05615`. It implements a deterministic offline Technical Structure
+specialist, 50 focused tests, a Goal Charter, architecture record, and release
+evidence. Its frozen policy fingerprint is
+`6b40ecc89cbfe5d1b3fb0c4d5b1376a4b5e9fb8e3bc96282afccf4838cbb1aa0`.
+
+The branch is `IMPLEMENTED_PENDING_PARENT_INTEGRATION`. It is not merged,
+installed, activated, scheduled, or imported by an existing runtime. It adds
+no provider, persistence, account, broker/order, Paper, Shadow, service,
+scheduler, Engine Host, WPF, scoring, ranking, TradePlan, risk, or allocation
+authority. Next action is ordinary feature-branch backup, then deliberate
+parent-first integration after the August 17 evidence lane is terminal;
+prospective attachment and strategy authority remain later tasks.
+
+Date reconciled: 2026-08-15
+
 ## ARGUS-SPECIALIST-CONTRACT-001 Common Opinion Contract
 
 `codex/ARGUS-SPECIALIST-CONTRACT-001-common-opinion-contract` is an isolated

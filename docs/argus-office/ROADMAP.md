@@ -87,6 +87,20 @@ provider, broker, storage, scheduler, service, Engine Host, WPF, Paper, Shadow,
 or order capability, and does not alter the August 17 lane. Canonical `master`
 and the installed runtime remain unchanged until a later clean integration.
 
+On stacked branch `codex/ARGUS-TECH-STRUCTURE-002-technical-structure-v2`,
+TECH-STRUCTURE-002 is `IMPLEMENTED_PENDING_PARENT_INTEGRATION` from
+SPECIALIST-CONTRACT-001 `e65cb70`. It adds one pure offline specialist that
+reuses Technical Breakout v1 bar, ATR, and bar-derived VWAP primitives;
+preserves immutable pivots, levels, geometry, event time, `knownAt`, basis,
+session, source hashes, and conflicting structures; and emits only
+`RESEARCH_ONLY / EXECUTION_AUTHORITY_NONE` opinions. The frozen policy
+fingerprint is `6b40ecc89cbfe5d1b3fb0c4d5b1376a4b5e9fb8e3bc96282afccf4838cbb1aa0`.
+No existing runtime imports the module, and no provider, persistence, scanner,
+score, TradePlan, risk, Paper, Shadow, broker/order, service, scheduler, Engine
+Host, WPF, sample, or August 17 path changed. Predictive value, threshold
+quality, corporate-action-safe broad history, persistence, prospective
+attachment, integration, installation, and activation remain separate gates.
+
 ## Integrated Work History
 
 ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
@@ -2049,7 +2063,7 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_IN
 
 ### Phase 13R - Specialist Intelligence Research And Strategy Diversification
 
-Status: `STARTED - SPECIALIST-CONTRACT-001 IMPLEMENTED_PENDING_INTEGRATION`
+Status: `STARTED - TECH-STRUCTURE-002 IMPLEMENTED_PENDING_PARENT_INTEGRATION`
 
 Roadmap inclusion authorizes planning and bounded research preparation only.
 It does not activate runtime imports, begin or modify a Paper sample, grant
@@ -2120,6 +2134,9 @@ Intended specialist architecture:
 
 #### ARGUS-TECH-STRUCTURE-002 - Technical Structure Research v2
 
+- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` from exact
+  parent SPECIALIST-CONTRACT-001 `e65cb70`; frozen policy fingerprint
+  `6b40ecc89cbfe5d1b3fb0c4d5b1376a4b5e9fb8e3bc96282afccf4838cbb1aa0`.
 - Evolve Technical Breakout Research Engine v1 rather than creating a second
   technical framework.
 - Define volatility-aware, deterministic geometry for compression-expansion,
@@ -2129,8 +2146,20 @@ Intended specialist architecture:
 - Consume corporate-action-safe analysis history and initially emit
   `SUPPORTS`, `NEUTRAL`, `CONTRADICTS`, `EXHAUSTED`, or an abstention for
   existing Momentum Hunter opportunities.
+- Implemented v2 preserves completed-bar chronology, economic event time versus
+  `knownAt`, explicit same-bar ambiguity, ATR/range-normalized geometry,
+  sparse levels, conflicting structures, bar-derived VWAP identity, data-basis
+  admission, and immutable source/policy/target fingerprints. Unknown evidence
+  abstains rather than becoming neutral.
+- Hard Chew passes 50 focused tests, 245 adjacent tests, 202 untouched sibling
+  contract tests, compileall, `git diff --check`, and all 2,113 Python tests.
+  Existing runtime imports and provider/account/broker/order/persistence/
+  service/scheduler/UI capabilities remain absent.
 - Independent technical candidate nomination is later work requiring its own
   prospective evidence and sample gate.
+- Do not infer pattern edge from synthetic detector proof. Later integration
+  requires the parent contract, and later prospective attachment requires
+  RESEARCH-GOV/RESEARCH-DATA/STAT producer wiring plus a new activation gate.
 
 #### ARGUS-RESEARCH-DATA-001 - Research-Scale Historical Data And Universe Integrity
 

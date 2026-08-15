@@ -1,5 +1,23 @@
 # Argus Changelog
 
+- Added TECH-STRUCTURE-002 as one offline research specialist built on the
+  existing Technical Breakout v1 bar, ATR, and cumulative bar-derived VWAP
+  primitives rather than a competing technical engine.
+- Added deterministic compression/expansion, breakout/retest, failed breakout,
+  VWAP reclaim/loss, higher-low/lower-high continuation, double top/bottom,
+  sparse support/resistance, head-and-shoulders/inverse, and exhaustion
+  structures with immutable pivots, levels, geometry, source hashes, event
+  time, `knownAt`, confirmation, invalidation, and same-bar ambiguity.
+- Added explicit session, price-basis, corporate-action, stale/gap, target,
+  tamper, conflicting-structure, and first-class abstention boundaries. Output
+  uses SPECIALIST-CONTRACT-001 at `RESEARCH_ONLY /
+  EXECUTION_AUTHORITY_NONE`; no universal score or confidence probability was
+  invented.
+- Passed compileall, 50 focused tests, 245 adjacent tests, 202 sibling-contract
+  tests, all 2,113 Python tests, diff/secret/capability/import scans, and
+  canonical/manifest/Aug. 17 nonmutation proof. The feature remains unmerged,
+  uninstalled, unscheduled, and inactive pending parent-first integration.
+
 - Activated the empty SETUP-002 successor-setup research sample prospectively
   for August 17 with a separate immutable activation timestamp and fingerprint.
 - Added two exact-head, zero-retry service jobs: outcome-blind Pass 1 after the
