@@ -2255,10 +2255,17 @@ Intended specialist architecture:
 
 #### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
 
-- Promote spread, spread expansion, quote age/stability, executable size where
-  available, volume versus price progress, fill probability, delay, slippage,
-  halt/unavailable state, and provider capability into a separately testable
-  specialist.
+- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` from Specialist
+  Contract `e65cb70`; no runtime consumer, persistence, activation, or
+  authority exists.
+- Preserve spread, spread expansion, quote age/stability, executable size only
+  where proven, volume versus price progress, heuristic fill-risk state,
+  halt/unavailable state, and provider capability as separate research
+  dimensions rather than one score.
+- Preserve later provider-confirmed fill state, delay, actual filled quantity,
+  slippage, and execution-adjusted risk/R:R in a separate immutable attachment;
+  never leak later execution into the original opinion and never report an
+  uncalibrated fill probability.
 - Future bearish work must separately evaluate shortability, borrow/locate,
   margin/buying-power eligibility, and broker restrictions.
 - Strategy logic remains provider-neutral; a provider name cannot become
