@@ -2080,7 +2080,7 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_IN
 
 ### Phase 13R - Specialist Intelligence Research And Strategy Diversification
 
-Status: `STARTED - SPECIALIST-CONTRACT-001 IMPLEMENTED_PENDING_INTEGRATION`
+Status: `STARTED - SPECIALIST-CONTRACT-001 AND STAT-DATA-001 IMPLEMENTED_PENDING_INTEGRATION`
 
 Roadmap inclusion authorizes planning and bounded research preparation only.
 It does not activate runtime imports, begin or modify a Paper sample, grant
@@ -2218,14 +2218,30 @@ Intended specialist architecture:
 
 #### ARGUS-STAT-DATA-001 - Prospective Opportunity Denominator
 
-- Preserve outcomes for sufficiently defined Momentum candidates, rank
-  alternatives, rejected and regime-vetoed candidates, later specialist-only
-  candidates, and explicitly labeled counterfactuals.
-- Maintain stable identity through outcome measurement and, where evidence
-  permits, classify `TARGET_FIRST`, `STOP_FIRST`, `TIMEOUT`, `UNFILLED`,
-  `INVALIDATED`, or `DATA_FAILURE`, with MFE, MAE, and timing/duration.
-- A counterfactual is never a retrospective trade. Never manufacture a trade
-  after observing its outcome.
+- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` from common
+  Specialist Contract parent `e65cb70`; no runtime consumer or activation
+  exists.
+- Preserve a cycle-level proof of the complete bounded source universe and one
+  immutable row for every represented Momentum candidate, rank alternative,
+  reject, data/risk/provider block, provider-bound non-evaluation, future
+  specialist nomination, system failure, and explicit counterfactual.
+- Maintain stable opportunity identity across separately attached specialist,
+  market-path, broker-execution, and data-quality records. Same-symbol,
+  same-session opportunities remain distinct when setup, origin, cutoff, or
+  evidence identity differs; ticker is never treated as durable issuer identity
+  without proof.
+- Market-path outcomes support `TARGET_FIRST`, `STOP_FIRST`, `TIMEOUT`,
+  `UNTRIGGERED`, `INVALIDATED`, `AMBIGUOUS_SAME_BAR`, and `DATA_FAILURE`, with
+  terminal-bounded MFE/MAE and timing. Broker outcomes independently require
+  actual provider submission/fill evidence and never infer fill quantity from
+  candles or allocation authority.
+- Exact duplicate persistence is idempotent; conflicts, malformed/tampered
+  records, incomplete writes, sample/policy drift, future evidence, and any
+  attempted execution authority fail closed.
+- Sample `opportunity-denominator-research-v1` is inactive at 0 sessions and 0
+  opportunities. Historical fixtures and the August 14 opening-report proof
+  remain `RETROSPECTIVE_RESEARCH_EXAMPLE` and cannot enter the prospective
+  denominator.
 
 #### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
 
