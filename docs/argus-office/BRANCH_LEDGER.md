@@ -1,5 +1,26 @@
 # Branch Ledger
 
+## ARGUS-RESEARCH-GOV-001 Experiment Registry
+
+`codex/ARGUS-RESEARCH-GOV-001-experiment-registry` is
+`PUSHED_FEATURE_BRANCH / IMPLEMENTED_PENDING_MERGE` from synchronized canonical
+base `ea056155182351be70bb03d23841aca55c6118ae`. Its focused feature commit adds
+only the dormant research-governance module, focused tests, Goal Charter,
+architecture/release evidence, and branch-local governance closeout.
+
+Contract v1 preserves preregistration, every attempted variant, holdout-access
+chronology, negative results, invalidation, and research-only model health in a
+canonical caller-rooted write-once store. It contains no optimizer, best-model
+selector, provider/network/broker/order path, production import, service job,
+UI, or execution authority. Hard Chew passes 33 focused tests, 28 adjacent
+SETUP-002 tests, compileall, and all 2,046 Python tests.
+
+Next action: preserve the branch until a deliberate post-Aug. 17 integration
+review. Do not install, activate, schedule, evaluate outcomes, create a
+production registry, or repin the four Aug. 17 jobs.
+
+Date reconciled: 2026-08-14
+
 ## ARGUS-SETUP-002A Silent Activation
 
 `codex/ARGUS-SETUP-002A-silent-activation` is a focused successor to

@@ -79,6 +79,18 @@ The approved long-term direction remains Phase 13R specialist intelligence,
 with the current Momentum/Paper path preserved as the prospective baseline.
 Specialist runtime authority and strategy activation remain future gates.
 
+ARGUS-RESEARCH-GOV-001 is `IMPLEMENTED_PENDING_MERGE` on isolated branch
+`codex/ARGUS-RESEARCH-GOV-001-experiment-registry` from exact canonical
+`ea056155`. It adds dormant immutable experiment, amendment, attempted-variant,
+holdout-access, result, invalidation, and model-health contracts plus
+caller-rooted write-once persistence and static REGIME/EXEC-QUALITY/
+EVENT-SHOCK/STAT-DATA compatibility. Focused proof is 33/33, adjacent
+SETUP-002 proof is 28/28, and full Python discovery is 2,046/2,046. No
+experiment was evaluated, no model was classified healthy, and no production
+registry, import, schedule, UI, provider, account, broker/order, or authority
+path exists. Merge, activation, production persistence, and all Aug. 17 changes
+remain prohibited; the four operational jobs stay pinned to `ea056155`.
+
 ## Integrated Work History
 
 ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
@@ -2207,6 +2219,8 @@ Intended specialist architecture:
 
 #### ARGUS-RESEARCH-GOV-001 - Experiment Registry And Model-Health Discipline
 
+- Status: `IMPLEMENTED_PENDING_MERGE` on the isolated task branch; no runtime
+  integration or activation exists.
 - Before broad parameter/model searches, preserve hypothesis, feature
   definitions, every attempted variant, training/validation/test periods,
   benchmark, success criteria, and untouched holdout. Failed variants remain
@@ -2215,6 +2229,11 @@ Intended specialist architecture:
   `INSUFFICIENT_RECENT_EVIDENCE` health states. A model or pattern can lose
   authority; one favorable historical test never makes a strategy rule
   permanent.
+- Contract v1 now also distinguishes authorized final holdout access from
+  permanent early-access contamination; separates results and invalidations
+  from preregistration; exposes planned and actual search counts; and rejects
+  deleted negative evidence, broken receipt chains, tampering, and execution
+  authority. Static examples remain unactivated and make no predictive claim.
 
 #### ARGUS-ARBITER-001 - Meta-Decision / Strategy Arbiter
 

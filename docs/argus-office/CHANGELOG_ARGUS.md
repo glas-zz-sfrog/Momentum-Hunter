@@ -1,5 +1,20 @@
 # Argus Changelog
 
+- Added RESEARCH-GOV-001 contract v1 for immutable research preregistration,
+  amendments, attempted variants, exact feature/data/partition identity,
+  holdout-access chronology, separate results, invalidation, and model-health
+  evidence.
+- Added canonical caller-rooted write-once persistence. Exact duplicates are
+  idempotent; conflicting identities, tampering, duplicate JSON keys, partial
+  writes, deleted variants/results/holdout receipts, and understated search
+  counts fail closed.
+- Added pure summaries and exact static REGIME-002, EXEC-QUALITY-001,
+  EVENT-SHOCK-001, STAT-DATA-001, and RESEARCH-DATA-002 compatibility without
+  importing sibling runtime modules or making predictive claims.
+- Passed 33 focused tests, 28 adjacent SETUP-002 tests, compileall, and all
+  2,046 Python tests. No runtime, provider, account, order, service, scheduler,
+  UI, production data, or Aug. 17 job changed.
+
 - Activated the empty SETUP-002 successor-setup research sample prospectively
   for August 17 with a separate immutable activation timestamp and fingerprint.
 - Added two exact-head, zero-retry service jobs: outcome-blind Pass 1 after the
