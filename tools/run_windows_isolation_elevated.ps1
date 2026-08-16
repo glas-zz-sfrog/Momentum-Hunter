@@ -385,9 +385,18 @@ try {
     $actorMemory.Dispose()
     $writerRoot = Join-Path $testRoot "writer"
     $limitedRoot = Join-Path $testRoot "limited"
+    $wpfRoot = Join-Path $testRoot "wpf"
+    $engineHostRoot = Join-Path $testRoot "engine-host"
     $highestRoot = Join-Path $testRoot "highest"
     $handleRoot = Join-Path $testRoot "handle"
-    foreach ($path in @($writerRoot, $limitedRoot, $highestRoot, $handleRoot)) {
+    foreach ($path in @(
+        $writerRoot,
+        $limitedRoot,
+        $wpfRoot,
+        $engineHostRoot,
+        $highestRoot,
+        $handleRoot
+    )) {
         New-SeedRoot -Path $path
     }
 
@@ -438,6 +447,20 @@ try {
         -ActorRoot $limitedRoot `
         -ActorLabel "WPF_ENGINE_HOST_LIMITED_EQUIVALENT"
     $result.actors.limitedNonwriter = $limitedActor.proof
+
+    $wpfActor = Invoke-AccessTask `
+        -Suffix "Wpf" `
+        -IdentityMode Limited `
+        -ActorRoot $wpfRoot `
+        -ActorLabel "WPF_MEDIUM_NONWRITER"
+    $result.actors.wpfNonwriter = $wpfActor.proof
+
+    $engineHostActor = Invoke-AccessTask `
+        -Suffix "EngineHost" `
+        -IdentityMode Limited `
+        -ActorRoot $engineHostRoot `
+        -ActorLabel "ENGINE_HOST_MEDIUM_NONWRITER"
+    $result.actors.engineHostNonwriter = $engineHostActor.proof
 
     $handleTask = "$taskPrefix HandleTarget"
     $handleControl = Join-Path $controlRoot "handle-control.json"

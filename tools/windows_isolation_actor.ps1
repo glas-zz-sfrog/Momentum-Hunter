@@ -171,6 +171,52 @@ function Invoke-AccessMatrix {
         [IO.Directory]::CreateDirectory((Join-Path $resolvedRoot "created-dir")) |
             Out-Null
     }
+    $attempts.immutableCreate = Invoke-Attempt {
+        $path = Join-Path $resolvedRoot "immutable-record.json"
+        $bytes = [Text.Encoding]::ASCII.GetBytes('{"immutable":true}' + "`n")
+        $stream = [IO.FileStream]::new(
+            $path,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None
+        )
+        try {
+            $stream.Write($bytes, 0, $bytes.Length)
+            $stream.Flush($true)
+        } finally {
+            $stream.Dispose()
+        }
+    }
+    $attempts.tempWriteAtomicCommit = Invoke-Attempt {
+        $temporary = Join-Path $resolvedRoot ("writer-" + [guid]::NewGuid().ToString("N") + ".tmp")
+        $target = Join-Path $resolvedRoot "atomic-committed.json"
+        $bytes = [Text.Encoding]::ASCII.GetBytes('{"atomic":true}' + "`n")
+        $stream = [IO.FileStream]::new(
+            $temporary,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None
+        )
+        try {
+            $stream.Write($bytes, 0, $bytes.Length)
+            $stream.Flush($true)
+        } finally {
+            $stream.Dispose()
+        }
+        [IO.File]::Move($temporary, $target)
+        if ((Get-Sha256Hex -Bytes ([IO.File]::ReadAllBytes($target))) -ne
+            (Get-Sha256Hex -Bytes $bytes)) {
+            throw "Atomic target bytes differ from completed temporary bytes."
+        }
+    }
+    $attempts.tempCleanup = Invoke-Attempt {
+        $temporary = Join-Path $resolvedRoot ("cleanup-" + [guid]::NewGuid().ToString("N") + ".tmp")
+        [IO.File]::WriteAllText($temporary, "temporary", [Text.Encoding]::ASCII)
+        [IO.File]::Delete($temporary)
+        if (Test-Path -LiteralPath $temporary) {
+            throw "Writer temporary cleanup did not remove the disposable file."
+        }
+    }
     $attempts.committedOverwrite = Invoke-Attempt {
         [IO.File]::WriteAllText(
             (Join-Path $resolvedRoot "committed.json"),

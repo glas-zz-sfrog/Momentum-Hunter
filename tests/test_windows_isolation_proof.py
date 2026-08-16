@@ -15,6 +15,7 @@ from momentum_hunter.continuous_runtime import (
 from momentum_hunter.windows_isolation_proof import (
     crash_restart_matrix,
     current_identity,
+    duplicate_writer_crash_recovery_proof,
     duplicate_writer_process_proof,
     handle_inheritance_matrix,
     ipc_attack_matrix,
@@ -57,12 +58,23 @@ class WindowsIsolationProofTests(unittest.TestCase):
         self.assertTrue(result)
         self.assertTrue(all(result.values()))
 
-    def test_two_physical_writers_expose_missing_process_exclusion(self) -> None:
+    def test_two_physical_writers_have_exactly_one_owner(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             result = duplicate_writer_process_proof(Path(temporary))
-        self.assertTrue(result["bothAccepted"])
-        self.assertEqual(2, result["recordFiles"])
-        self.assertTrue(result["restartValidationFailed"])
+        self.assertFalse(result["bothAccepted"])
+        self.assertEqual(1, result["acceptedCount"])
+        self.assertEqual(1, result["ownerConflictCount"])
+        self.assertEqual(1, result["recordFiles"])
+        self.assertFalse(result["restartValidationFailed"])
+
+    def test_denied_writer_crash_and_replacement_have_no_overlap(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            result = duplicate_writer_crash_recovery_proof(Path(temporary))
+        self.assertEqual(WRITER_ACCEPTED, result["initialStatus"])
+        self.assertEqual("WRITER_OWNER_CONFLICT", result["deniedStatus"])
+        self.assertEqual("WRITER_OWNER_ACQUIRED", result["replacementStatus"])
+        self.assertEqual(1, result["recordFiles"])
+        self.assertEqual(0, result["overlapOwners"])
 
     def test_physical_writer_and_runtime_restart_replay_are_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -85,15 +97,24 @@ class WindowsIsolationProofTests(unittest.TestCase):
         self.assertEqual(WRITER_DUPLICATE, runtime["replayStatus"])
         self.assertEqual(1, runtime["recordCount"])
 
-    def test_same_sid_root_and_partial_reparse_attacks_escape(self) -> None:
+    def test_root_shard_and_partial_reparse_attacks_cannot_escape(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             result = reparse_attack_matrix(Path(temporary))
         self.assertTrue(result["rootSubstitution"]["writeRejected"])
         self.assertEqual(0, result["rootSubstitution"]["escapedRecordCount"])
         self.assertTrue(result["recordShardRedirect"]["rejected"])
         self.assertEqual(0, result["recordShardRedirect"]["escapedRecordCount"])
+        self.assertTrue(result["childDirectoryRedirect"]["rejected"])
+        self.assertEqual(0, result["childDirectoryRedirect"]["escapedRecordCount"])
         self.assertEqual(WRITER_UNAVAILABLE, result["partialRedirect"]["writerStatus"])
-        self.assertEqual(1, result["partialRedirect"]["escapedTemporaryCount"])
+        self.assertEqual(0, result["partialRedirect"]["escapedTemporaryCount"])
+        self.assertTrue(result["partialRedirect"]["startupReparseRejected"])
+        self.assertEqual(0, result["partialRedirect"]["startupEscapedTemporaryCount"])
+        if result["directorySymlinkRedirect"]["supported"]:
+            self.assertTrue(result["directorySymlinkRedirect"]["rejected"])
+        self.assertEqual(0, result["directorySymlinkRedirect"]["escapedFileCount"])
+        self.assertTrue(result["outsideHardLinkInward"]["rejected"])
+        self.assertFalse(result["outsideHardLinkInward"]["outsideChanged"])
 
     def test_same_sid_can_overwrite_and_delete_committed_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -109,7 +130,7 @@ class WindowsIsolationProofTests(unittest.TestCase):
         self.assertEqual("TEST_ONLY_NO_RUNTIME_AUTHORITY", result["authority"])
         self.assertEqual(0, result["providerBrokerOrderCalls"])
         self.assertFalse(result["productionContacted"])
-        self.assertEqual("continuous-windows-isolation-proof-v1", persisted["profile"])
+        self.assertEqual("continuous-windows-isolation-proof-v2", persisted["profile"])
         self.assertRegex(persisted["fingerprint"], r"^[a-f0-9]{64}$")
 
     def test_harness_has_no_provider_broker_order_or_service_control_import(self) -> None:

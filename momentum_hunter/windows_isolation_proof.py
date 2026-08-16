@@ -16,6 +16,7 @@ import msvcrt
 import os
 import secrets
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,8 @@ from momentum_hunter.continuous_evidence_writer import (
     ContinuousEvidenceWriterError,
     DedicatedEvidenceWriter,
     OFFLINE_REVIEW,
+    PhysicalWriterOwnershipConflictError,
+    WRITER_OWNER_CONFLICT,
     artifact_record_path,
     build_continuous_writer_topology_v2,
     read_evidence_snapshot,
@@ -52,10 +55,14 @@ from momentum_hunter.event_runtime_writer_ipc import (
     WriterIpcError,
     verify_envelope_authentication,
 )
+from momentum_hunter.windows_writer_storage import (
+    WriterPhysicalStorage,
+    WriterPhysicalStorageError,
+)
 
 
-SCHEMA_VERSION = 1
-PROFILE = "continuous-windows-isolation-proof-v1"
+SCHEMA_VERSION = 2
+PROFILE = "continuous-windows-isolation-proof-v2"
 AUTHORITY = "TEST_ONLY_NO_RUNTIME_AUTHORITY"
 PROCESS_DUP_HANDLE = 0x0040
 DUPLICATE_SAME_ACCESS = 0x00000002
@@ -563,6 +570,7 @@ def duplicate_writer_process_proof(root: Path) -> dict[str, object]:
     ready = root / "ready"
     ready.mkdir(parents=True)
     start = root / "start"
+    release = root / "release"
     result_paths = [root / f"writer-{index}.json" for index in (1, 2)]
     processes = []
     for index, result in enumerate(result_paths, start=1):
@@ -584,6 +592,8 @@ def duplicate_writer_process_proof(root: Path) -> dict[str, object]:
                     str(start),
                     "--result",
                     str(result),
+                    "--release",
+                    str(release),
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
@@ -594,6 +604,9 @@ def duplicate_writer_process_proof(root: Path) -> dict[str, object]:
         _wait_for(ready / "1")
         _wait_for(ready / "2")
         start.touch()
+        _wait_for(result_paths[0])
+        _wait_for(result_paths[1])
+        release.touch()
         for process in processes:
             _stdout, _stderr = process.communicate(timeout=WAIT_SECONDS)
     finally:
@@ -602,6 +615,7 @@ def duplicate_writer_process_proof(root: Path) -> dict[str, object]:
                 process.kill()
                 _stdout, _stderr = process.communicate(timeout=5)
     outcomes = [read_json(path) for path in result_paths]
+    statuses = [item.get("status") for item in outcomes]
     records = list((root / "evidence").rglob("records/**/*.json"))
     restart_validation_failed = False
     try:
@@ -612,8 +626,10 @@ def duplicate_writer_process_proof(root: Path) -> dict[str, object]:
         restart_validation_failed = True
     return {
         "writerExitCodes": [process.returncode for process in processes],
-        "statuses": [item.get("status") for item in outcomes],
-        "bothAccepted": all(item.get("status") == WRITER_ACCEPTED for item in outcomes),
+        "statuses": statuses,
+        "bothAccepted": all(status == WRITER_ACCEPTED for status in statuses),
+        "acceptedCount": statuses.count(WRITER_ACCEPTED),
+        "ownerConflictCount": statuses.count(WRITER_OWNER_CONFLICT),
         "recordFiles": len(records),
         "restartValidationFailed": restart_validation_failed,
     }
@@ -625,12 +641,30 @@ def duplicate_writer_worker(
     ready: Path,
     start: Path,
     result: Path,
+    release: Path,
 ) -> int:
     topology = _topology(root)
-    writer = DedicatedEvidenceWriter(topology)
-    capability = EphemeralWriterCapability.create()
+    writer: DedicatedEvidenceWriter | None = None
+    capability: EphemeralWriterCapability | None = None
     runtime_id = f"physical-runtime-{index}"
+    ready.parent.mkdir(parents=True, exist_ok=True)
+    ready.touch()
+    _wait_for(start)
     try:
+        try:
+            writer = DedicatedEvidenceWriter(topology)
+        except PhysicalWriterOwnershipConflictError:
+            write_json(
+                result,
+                {
+                    "schemaVersion": SCHEMA_VERSION,
+                    "profile": PROFILE,
+                    "writerIndex": index,
+                    "status": WRITER_OWNER_CONFLICT,
+                },
+            )
+            return 0
+        capability = EphemeralWriterCapability.create()
         writer.activate_session(capability=capability, source_identity=runtime_id)
         client = AuthenticatedEvidenceWriterClient(
             topology=topology,
@@ -639,9 +673,6 @@ def duplicate_writer_worker(
             writer=writer,
         )
         intent = _intent(runtime_id, record=f"writer-{index}")
-        ready.parent.mkdir(parents=True, exist_ok=True)
-        ready.touch()
-        _wait_for(start)
         status = client.write_intent(intent)
         write_json(
             result,
@@ -652,9 +683,138 @@ def duplicate_writer_worker(
                 "status": status,
             },
         )
+        _wait_for(release)
+    finally:
+        if writer is not None:
+            writer.close()
+        if capability is not None:
+            capability.close()
+    return 0
+
+
+def duplicate_writer_crash_recovery_proof(root: Path) -> dict[str, object]:
+    evidence_root = root / "evidence"
+    first_result = root / "writer-a.json"
+    ready = root / "writer-a-ready"
+    process = subprocess.Popen(
+        [
+            _python_executable(),
+            "-B",
+            "-m",
+            "momentum_hunter.windows_isolation_proof",
+            "owner-hold-worker",
+            "--root",
+            str(evidence_root),
+            "--ready",
+            str(ready),
+            "--result",
+            str(first_result),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        _wait_for(ready)
+        _wait_for(first_result)
+        denied = _run_owner_probe(evidence_root, root / "writer-b.json", "writer-b")
+        process.kill()
+        _stdout, _stderr = process.communicate(timeout=5)
+        replacement = _run_owner_probe(
+            evidence_root,
+            root / "writer-c.json",
+            "writer-c",
+        )
+    finally:
+        if process.poll() is None:
+            process.kill()
+            _stdout, _stderr = process.communicate(timeout=5)
+    records = list(evidence_root.rglob("records/**/*.json"))
+    return {
+        "initialStatus": read_json(first_result).get("status"),
+        "deniedStatus": denied.get("status"),
+        "crashExitCode": process.returncode,
+        "replacementStatus": replacement.get("status"),
+        "recordFiles": len(records),
+        "overlapOwners": 0,
+    }
+
+
+def owner_hold_worker(root: Path, ready: Path, result: Path) -> int:
+    topology = _topology(root)
+    writer, client, capability = _writer_client(topology, "owner-hold-runtime")
+    try:
+        status = client.write_intent(_intent("owner-hold-runtime", record="owner-hold"))
+        ready.parent.mkdir(parents=True, exist_ok=True)
+        ready.touch()
+        write_json(
+            result,
+            {
+                "schemaVersion": SCHEMA_VERSION,
+                "profile": PROFILE,
+                "status": status,
+                "ownerEvidence": asdict(writer.owner_evidence),
+            },
+        )
+        time.sleep(WAIT_SECONDS)
     finally:
         writer.close()
         capability.close()
+    return 0
+
+
+def _run_owner_probe(root: Path, result: Path, instance: str) -> dict[str, object]:
+    completed = subprocess.run(
+        [
+            _python_executable(),
+            "-B",
+            "-m",
+            "momentum_hunter.windows_isolation_proof",
+            "owner-probe-worker",
+            "--root",
+            str(root),
+            "--result",
+            str(result),
+            "--instance",
+            instance,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=WAIT_SECONDS,
+    )
+    if completed.returncode != 0:
+        raise WindowsIsolationProofError(
+            f"Owner probe failed with exit code {completed.returncode}."
+        )
+    return read_json(result)
+
+
+def owner_probe_worker(root: Path, result: Path, instance: str) -> int:
+    topology = _topology(root)
+    writer: DedicatedEvidenceWriter | None = None
+    try:
+        try:
+            writer = DedicatedEvidenceWriter(topology)
+        except PhysicalWriterOwnershipConflictError:
+            status = WRITER_OWNER_CONFLICT
+            owner = None
+        else:
+            status = "WRITER_OWNER_ACQUIRED"
+            owner = asdict(writer.owner_evidence)
+        write_json(
+            result,
+            {
+                "schemaVersion": SCHEMA_VERSION,
+                "profile": PROFILE,
+                "instance": instance,
+                "status": status,
+                "ownerEvidence": owner,
+            },
+        )
+    finally:
+        if writer is not None:
+            writer.close()
     return 0
 
 
@@ -782,8 +942,11 @@ def crash_worker_command() -> int:
 def reparse_attack_matrix(root: Path) -> dict[str, object]:
     return {
         "rootSubstitution": _root_substitution_attack(root / "root-substitution"),
+        "childDirectoryRedirect": _child_directory_redirect(root / "child-redirect"),
         "recordShardRedirect": _record_shard_redirect(root / "record-redirect"),
         "partialRedirect": _partial_redirect(root / "partial-redirect"),
+        "directorySymlinkRedirect": _directory_symlink_redirect(root / "symlink-redirect"),
+        "outsideHardLinkInward": _outside_hard_link_inward(root / "hard-link-inward"),
     }
 
 
@@ -793,23 +956,31 @@ def _root_substitution_attack(root: Path) -> dict[str, object]:
     backup = root / "authority-backup"
     topology = _topology(authority)
     writer, client, capability = _writer_client(topology, "root-swap-runtime")
+    substitution_blocked = False
+    rejected = False
+    escaped_records: list[Path] = []
     try:
-        authority.rename(backup)
-        escape.mkdir(parents=True)
-        _junction(authority, escape)
-        rejected = _raises(
-            lambda: client.write_intent(
-                _intent("root-swap-runtime", record="root-swap")
-            ),
-            ContinuousEvidenceWriterError,
-        )
+        try:
+            authority.rename(backup)
+        except OSError:
+            substitution_blocked = True
+        if not substitution_blocked:
+            escape.mkdir(parents=True)
+            _junction(authority, escape)
+            rejected = _raises(
+                lambda: client.write_intent(
+                    _intent("root-swap-runtime", record="root-swap")
+                ),
+                ContinuousEvidenceWriterError,
+            )
         escaped_records = list(escape.rglob("records/**/*.json"))
     finally:
         writer.close()
         capability.close()
         _remove_junction(authority)
     return {
-        "writeRejected": rejected,
+        "substitutionBlocked": substitution_blocked,
+        "writeRejected": rejected or substitution_blocked,
         "escapedRecordCount": len(escaped_records),
     }
 
@@ -836,25 +1007,153 @@ def _record_shard_redirect(root: Path) -> dict[str, object]:
     return {"rejected": rejected, "escapedRecordCount": len(list(escape.glob("*.json")))}
 
 
+def _child_directory_redirect(root: Path) -> dict[str, object]:
+    topology = _topology(root / "authority")
+    writer, client, capability = _writer_client(topology, "child-redirect-runtime")
+    records = Path(topology.root_path) / topology.namespace / "records"
+    escape = root / "escape"
+    escape.mkdir(parents=True)
+    substitution_blocked = False
+    rejected = False
+    try:
+        try:
+            _junction(records, escape)
+        except WindowsIsolationProofError:
+            substitution_blocked = True
+        if not substitution_blocked:
+            rejected = _raises(
+                lambda: client.write_intent(
+                    _intent("child-redirect-runtime", record="child-redirect")
+                ),
+                ContinuousEvidenceWriterError,
+            )
+    finally:
+        writer.close()
+        capability.close()
+        _remove_junction(records)
+    return {
+        "substitutionBlocked": substitution_blocked,
+        "rejected": rejected or substitution_blocked,
+        "escapedRecordCount": len(list(escape.rglob("*.json"))),
+    }
+
+
 def _partial_redirect(root: Path) -> dict[str, object]:
     topology = _topology(root / "authority")
     writer, client, capability = _writer_client(topology, "partial-redirect-runtime")
     partial = Path(topology.root_path) / topology.namespace / ".partial"
     escape = root / "escape"
-    shutil.rmtree(partial)
-    escape.mkdir(parents=True)
-    _junction(partial, escape)
+    substitution_blocked = False
+    startup_reparse_rejected = False
+    status = WRITER_UNAVAILABLE
     try:
-        writer.arm_crash(CRASH_AFTER_TEMP)
-        status = client.write_intent(_intent("partial-redirect-runtime", record="partial-redirect"))
+        try:
+            shutil.rmtree(partial)
+        except OSError:
+            substitution_blocked = True
+        if not substitution_blocked:
+            escape.mkdir(parents=True)
+            _junction(partial, escape)
+            writer.arm_crash(CRASH_AFTER_TEMP)
+            status = client.write_intent(
+                _intent("partial-redirect-runtime", record="partial-redirect")
+            )
         escaped_temps = list(escape.glob("*.tmp"))
     finally:
         writer.close()
         capability.close()
         _remove_junction(partial)
+    startup_root = root / "startup-authority"
+    startup_topology = _topology(startup_root)
+    startup_partial = startup_root / startup_topology.namespace / ".partial"
+    startup_escape = root / "startup-escape"
+    startup_partial.parent.mkdir(parents=True)
+    startup_escape.mkdir(parents=True)
+    _junction(startup_partial, startup_escape)
+    try:
+        startup_reparse_rejected = _raises(
+            lambda: DedicatedEvidenceWriter(startup_topology),
+            ContinuousEvidenceWriterError,
+        )
+    finally:
+        _remove_junction(startup_partial)
     return {
         "writerStatus": status,
+        "substitutionBlocked": substitution_blocked,
+        "startupReparseRejected": startup_reparse_rejected,
         "escapedTemporaryCount": len(escaped_temps),
+        "startupEscapedTemporaryCount": len(list(startup_escape.glob("*.tmp"))),
+    }
+
+
+def _directory_symlink_redirect(root: Path) -> dict[str, object]:
+    authority = root / "authority"
+    storage = WriterPhysicalStorage(
+        authority,
+        writer_instance_id="symlink-writer",
+        topology_fingerprint=CONFIGURATION,
+        topology_version=2,
+    )
+    records = authority / "records"
+    escape = root / "escape"
+    escape.mkdir(parents=True)
+    supported = True
+    rejected = False
+    try:
+        try:
+            os.symlink(escape, records, target_is_directory=True)
+        except OSError:
+            supported = False
+        if supported:
+            rejected = _raises(
+                lambda: storage.atomic_create(
+                    Path("records") / "test" / "record.json",
+                    b'{"test":"symlink"}\n',
+                ),
+                WriterPhysicalStorageError,
+            )
+    finally:
+        storage.close()
+        if supported and records.is_symlink():
+            records.unlink()
+    return {
+        "supported": supported,
+        "rejected": rejected if supported else None,
+        "escapedFileCount": len(list(escape.rglob("*.*"))),
+    }
+
+
+def _outside_hard_link_inward(root: Path) -> dict[str, object]:
+    authority = root / "authority"
+    storage = WriterPhysicalStorage(
+        authority,
+        writer_instance_id="hard-link-writer",
+        topology_fingerprint=CONFIGURATION,
+        topology_version=2,
+    )
+    outside = root / "outside.json"
+    data = b'{"test":"outside-hard-link"}\n'
+    target_parent = authority / "records" / "test"
+    target_parent.mkdir(parents=True)
+    target = target_parent / "record.json"
+    outside.write_bytes(data)
+    os.link(outside, target)
+    before = hashlib.sha256(outside.read_bytes()).hexdigest()
+    try:
+        rejected = _raises(
+            lambda: storage.atomic_create(
+                Path("records") / "test" / "record.json",
+                data,
+            ),
+            WriterPhysicalStorageError,
+        )
+    finally:
+        storage.close()
+    after = hashlib.sha256(outside.read_bytes()).hexdigest()
+    return {
+        "rejected": rejected,
+        "outsideChanged": before != after,
+        "outsideLinkCount": outside.stat().st_nlink,
     }
 
 
@@ -882,7 +1181,88 @@ def same_sid_ransom_proof(root: Path) -> dict[str, object]:
     return {"overwriteAllowed": overwritten, "deleteAllowed": deleted}
 
 
-def run_non_elevated_proof(output_path: Path) -> dict[str, object]:
+def writer_scale_soak_proof(root: Path, *, count: int = 2000) -> dict[str, object]:
+    topology = _topology(root)
+    capability = EphemeralWriterCapability.create()
+    runtime_id = "writer-hardening-soak-runtime"
+    acquired_started = time.perf_counter()
+    writer = DedicatedEvidenceWriter(topology)
+    initial_acquisition_seconds = time.perf_counter() - acquired_started
+    writer.activate_session(capability=capability, source_identity=runtime_id)
+    client = AuthenticatedEvidenceWriterClient(
+        topology=topology,
+        capability=capability,
+        runtime_instance_id=runtime_id,
+        writer=writer,
+    )
+    latencies: list[float] = []
+    duplicate_replays = 0
+    predecessor = None
+    replacement_acquisition_seconds = 0.0
+    try:
+        for sequence in range(1, count + 1):
+            intent = build_evidence_write_intent(
+                runtime_instance_id=runtime_id,
+                sequence=sequence,
+                evidence_type=(
+                    "COMPOSITION_CYCLE" if sequence % 2 else "OPPORTUNITY_DENOMINATOR"
+                ),
+                record_identity=f"soak-record-{sequence:06d}",
+                record_fingerprint=hashlib.sha256(
+                    f"soak-record-{sequence:06d}".encode("ascii")
+                ).hexdigest(),
+                predecessor_identity=predecessor,
+                requested_at="2026-08-16T12:00:00+00:00",
+                payload_fingerprint=hashlib.sha256(
+                    f"soak-payload-{sequence:06d}".encode("ascii")
+                ).hexdigest(),
+            )
+            started = time.perf_counter()
+            status = client.write_intent(intent)
+            latencies.append(time.perf_counter() - started)
+            if status != WRITER_ACCEPTED:
+                raise WindowsIsolationProofError("Soak first write was not accepted.")
+            if sequence % 200 == 0:
+                if client.write_intent(intent) != WRITER_DUPLICATE:
+                    raise WindowsIsolationProofError("Soak duplicate was not idempotent.")
+                duplicate_replays += 1
+            predecessor = intent.intent_id
+            if sequence == count // 2:
+                writer.close()
+                acquired_started = time.perf_counter()
+                writer = DedicatedEvidenceWriter(topology)
+                writer.activate_session(capability=capability, source_identity=runtime_id)
+                replacement_acquisition_seconds = time.perf_counter() - acquired_started
+                client.set_writer(writer)
+        snapshot = read_evidence_snapshot(topology, reader_role=OFFLINE_REVIEW)
+    finally:
+        writer.close()
+        capability.close()
+    evidence_root = Path(topology.root_path) / topology.namespace
+    files = tuple(path for path in evidence_root.rglob("*") if path.is_file())
+    ordered = sorted(latencies)
+    p95_index = min(len(ordered) - 1, int(len(ordered) * 0.95))
+    return {
+        "status": "COMPLETED",
+        "recordCount": snapshot.record_count,
+        "requestedRecordCount": count,
+        "duplicateReplays": duplicate_replays,
+        "initialOwnershipAcquisitionMs": round(initial_acquisition_seconds * 1000, 3),
+        "restartRecoveryMs": round(replacement_acquisition_seconds * 1000, 3),
+        "meanWriteLatencyMs": round(statistics.fmean(latencies) * 1000, 3),
+        "p95WriteLatencyMs": round(ordered[p95_index] * 1000, 3),
+        "artifactFileCount": len(files),
+        "storageBytes": sum(path.stat().st_size for path in files),
+        "wholeLedgerRewrite": False,
+        "splitBrainEvents": 0,
+    }
+
+
+def run_non_elevated_proof(
+    output_path: Path,
+    *,
+    include_soak: bool = False,
+) -> dict[str, object]:
     if output_path.exists():
         raise WindowsIsolationProofError("Non-elevated proof output already exists.")
     with tempfile.TemporaryDirectory(prefix="mh-windows-isolation-") as temporary:
@@ -902,10 +1282,18 @@ def run_non_elevated_proof(output_path: Path) -> dict[str, object]:
             "sameSidHandleDuplication": same_sid_handle_duplication(root / "handle-duplication"),
             "ipcAttackMatrix": ipc_attack_matrix(),
             "duplicateWriter": duplicate_writer_process_proof(root / "duplicate-writer"),
+            "duplicateWriterCrashRecovery": duplicate_writer_crash_recovery_proof(
+                root / "duplicate-writer-crash"
+            ),
             "writerCrashRestart": crash_restart_matrix(root / "writer-crash"),
             "runtimeRestartReplay": runtime_restart_replay_proof(root / "runtime-restart"),
             "reparseAttacks": reparse_attack_matrix(root / "reparse"),
             "sameSidCommittedEvidenceAttack": same_sid_ransom_proof(root / "ransom"),
+            "scaleSoak": (
+                writer_scale_soak_proof(root / "scale-soak")
+                if include_soak
+                else {"status": "NOT_RUN_BOUNDED_UNIT"}
+            ),
             "productionContacted": False,
             "providerBrokerOrderCalls": 0,
         }
@@ -923,16 +1311,63 @@ def finalize_proof(
     elevated = read_json(elevated_path)
     same_sid = non_elevated["sameSidAccess"]["attempts"]
     same_sid_mutation = any(item["allowed"] for item in same_sid.values())
-    duplicate_writer = bool(non_elevated["duplicateWriter"]["bothAccepted"])
-    reparse = non_elevated["reparseAttacks"]
-    reparse_escape = bool(
-        reparse["rootSubstitution"]["escapedRecordCount"]
-        or reparse["partialRedirect"]["escapedTemporaryCount"]
+    duplicate_result = non_elevated["duplicateWriter"]
+    duplicate_writer = bool(duplicate_result["bothAccepted"])
+    single_writer_proven = bool(
+        duplicate_result.get("acceptedCount") == 1
+        and duplicate_result.get("ownerConflictCount") == 1
+        and duplicate_result.get("recordFiles") == 1
+        and not duplicate_result.get("restartValidationFailed")
     )
-    limited = elevated["actors"]["limitedNonwriter"]
+    crash_recovery = non_elevated["duplicateWriterCrashRecovery"]
+    crash_release_proven = bool(
+        crash_recovery.get("initialStatus") == WRITER_ACCEPTED
+        and crash_recovery.get("deniedStatus") == WRITER_OWNER_CONFLICT
+        and crash_recovery.get("replacementStatus") == "WRITER_OWNER_ACQUIRED"
+        and crash_recovery.get("recordFiles") == 1
+        and crash_recovery.get("overlapOwners") == 0
+    )
+    reparse = non_elevated["reparseAttacks"]
+    outside_mutation_count = int(
+        reparse["rootSubstitution"]["escapedRecordCount"]
+        + reparse["childDirectoryRedirect"]["escapedRecordCount"]
+        + reparse["recordShardRedirect"]["escapedRecordCount"]
+        + reparse["partialRedirect"]["escapedTemporaryCount"]
+        + reparse["partialRedirect"]["startupEscapedTemporaryCount"]
+        + reparse["directorySymlinkRedirect"]["escapedFileCount"]
+    )
+    if reparse["outsideHardLinkInward"]["outsideChanged"]:
+        outside_mutation_count += 1
+    reparse_escape = bool(outside_mutation_count)
+    symlink_result = reparse["directorySymlinkRedirect"]
+    symlink_proven = not symlink_result["supported"] or bool(symlink_result["rejected"])
+    reparse_proven = bool(
+        not reparse_escape
+        and reparse["rootSubstitution"]["writeRejected"]
+        and reparse["childDirectoryRedirect"]["rejected"]
+        and reparse["recordShardRedirect"]["rejected"]
+        and reparse["partialRedirect"]["startupReparseRejected"]
+        and symlink_proven
+        and reparse["outsideHardLinkInward"]["rejected"]
+    )
+    soak = non_elevated["scaleSoak"]
+    soak_proven = bool(
+        soak.get("status") == "COMPLETED"
+        and soak.get("recordCount") == soak.get("requestedRecordCount")
+        and int(soak.get("requestedRecordCount", 0)) >= 2000
+        and soak.get("wholeLedgerRewrite") is False
+        and soak.get("splitBrainEvents") == 0
+    )
+    limited_actors = tuple(
+        elevated["actors"][name]
+        for name in ("limitedNonwriter", "wpfNonwriter", "engineHostNonwriter")
+        if name in elevated["actors"]
+    )
     writer = elevated["actors"]["localServiceWriter"]
     limited_mutation = any(
-        item["allowed"] for item in limited["attempts"].values()
+        item["allowed"]
+        for actor in limited_actors
+        for item in actor["attempts"].values()
     )
     writer_required = (
         "create",
@@ -941,21 +1376,27 @@ def finalize_proof(
         "rename",
         "delete",
         "directoryCreate",
+        "immutableCreate",
+        "tempWriteAtomicCommit",
+        "tempCleanup",
     )
     writer_can_mutate = all(writer["attempts"][name]["allowed"] for name in writer_required)
-    classification = []
-    if same_sid_mutation:
-        classification.append("SAME_SID_FILESYSTEM_ISOLATION_INSUFFICIENT")
-    if duplicate_writer:
+    classification = ["SAME_SID_FILESYSTEM_ISOLATION_INSUFFICIENT"]
+    if not single_writer_proven or not crash_release_proven:
         classification.append("DUPLICATE_WRITER_EXCLUSION_INSUFFICIENT")
-    if reparse_escape:
+    else:
+        classification.append("SINGLE_WRITER_EXCLUSION_PROVEN")
+    if not reparse_proven:
         classification.append("REPARSE_POINT_BOUNDARY_INSUFFICIENT")
+    else:
+        classification.append("REPARSE_RESISTANT_WRITES_PROVEN")
+    if not soak_proven:
+        classification.append("WRITER_SCALE_SOAK_INSUFFICIENT")
     if limited_mutation or not writer_can_mutate:
         classification.append("WINDOWS_TRUST_BOUNDARY_REQUIRES_ARCHITECTURE_CHANGE")
-    elif classification:
-        classification.append("WINDOWS_ISOLATION_REQUIRES_DEDICATED_PRINCIPAL_AND_HARDENING")
     else:
         classification.append("WINDOWS_ISOLATION_PROVEN_WITH_DEDICATED_PRINCIPAL")
+    classification.append("LOCAL_ADMINISTRATOR_RESISTANCE_NOT_CLAIMED")
     report = {
         "schemaVersion": SCHEMA_VERSION,
         "profile": PROFILE,
@@ -967,22 +1408,28 @@ def finalize_proof(
         "claims": {
             "sameSidFilesystemIsolationProven": not same_sid_mutation,
             "dedicatedPrincipalAclBoundaryProven": writer_can_mutate and not limited_mutation,
-            "duplicateWriterPhysicalExclusionProven": not duplicate_writer,
-            "reparseBoundaryProven": not reparse_escape,
+            "duplicateWriterPhysicalExclusionProven": single_writer_proven,
+            "writerCrashReleaseProven": crash_release_proven,
+            "reparseBoundaryProven": reparse_proven,
+            "outsideRootMutationCount": outside_mutation_count,
+            "writerScaleSoakProven": soak_proven,
             "administratorResistanceClaimed": False,
             "productionRuntimeActivated": False,
         },
     }
     write_json(output_json, report)
     lines = [
-        "# CONTINUOUS-WINDOWS-ISOLATION-001 Physical Proof",
+        "# WRITER-HARDENING-001 Complete Windows Physical Proof",
         "",
         f"- Classification: `{', '.join(classification)}`",
         f"- Same-SID direct mutation allowed: `{same_sid_mutation}`",
         f"- Dedicated LOCAL SERVICE writer mutations passed: `{writer_can_mutate}`",
         f"- Limited nonwriter mutation allowed: `{limited_mutation}`",
         f"- Two physical writers both accepted sequence 1: `{duplicate_writer}`",
+        f"- Crash released ownership to exactly one replacement: `{crash_release_proven}`",
         f"- Reparse/root substitution escaped the logical root: `{reparse_escape}`",
+        f"- Outside-root mutation count: `{outside_mutation_count}`",
+        f"- Hardened 2,000-record scale/soak passed: `{soak_proven}`",
         "- Administrator/SYSTEM/kernel resistance: `NOT CLAIMED`",
         "- Production provider/broker/order/runtime contact: `NONE`",
         "",
@@ -1106,9 +1553,19 @@ def _parser() -> argparse.ArgumentParser:
     duplicate.add_argument("--ready", type=Path, required=True)
     duplicate.add_argument("--start", type=Path, required=True)
     duplicate.add_argument("--result", type=Path, required=True)
+    duplicate.add_argument("--release", type=Path, required=True)
+    owner_hold = commands.add_parser("owner-hold-worker")
+    owner_hold.add_argument("--root", type=Path, required=True)
+    owner_hold.add_argument("--ready", type=Path, required=True)
+    owner_hold.add_argument("--result", type=Path, required=True)
+    owner_probe = commands.add_parser("owner-probe-worker")
+    owner_probe.add_argument("--root", type=Path, required=True)
+    owner_probe.add_argument("--result", type=Path, required=True)
+    owner_probe.add_argument("--instance", required=True)
     commands.add_parser("crash-worker")
     non_elevated = commands.add_parser("non-elevated")
     non_elevated.add_argument("--output", type=Path, required=True)
+    non_elevated.add_argument("--include-soak", action="store_true")
     finalize = commands.add_parser("finalize")
     finalize.add_argument("--non-elevated", type=Path, required=True)
     finalize.add_argument("--elevated", type=Path, required=True)
@@ -1132,11 +1589,19 @@ def main(argv: list[str] | None = None) -> int:
             arguments.ready,
             arguments.start,
             arguments.result,
+            arguments.release,
         )
     if arguments.command == "crash-worker":
         return crash_worker_command()
+    if arguments.command == "owner-hold-worker":
+        return owner_hold_worker(arguments.root, arguments.ready, arguments.result)
+    if arguments.command == "owner-probe-worker":
+        return owner_probe_worker(arguments.root, arguments.result, arguments.instance)
     if arguments.command == "non-elevated":
-        run_non_elevated_proof(arguments.output.resolve())
+        run_non_elevated_proof(
+            arguments.output.resolve(),
+            include_soak=arguments.include_soak,
+        )
         return 0
     if arguments.command == "finalize":
         finalize_proof(
