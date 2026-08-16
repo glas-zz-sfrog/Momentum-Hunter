@@ -5,16 +5,20 @@ import json
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
 from .continuous_composition import (
+    AMBIGUOUS_SAME_BAR,
+    BLOCKED_DATA,
     DATA_FAILURE,
     DATA_UNSAFE,
     GAPPED_EVIDENCE,
     MISSED_ENTRY_RECORDED,
     NO_LIFECYCLE_CHANGE,
     RESEARCH_PLAN_COMPOSED,
+    SETUP_PENDING,
     SUCCESSOR_SETUP_CREATED,
 )
 from .continuous_denominator import (
@@ -39,31 +43,47 @@ PROOF_STATUS = "PASS"
 PAPER_LANE = "SYNTHETIC_PAPER_SUPERVISION_INDEPENDENT"
 ORDER_CAPABILITY_UNAVAILABLE = "UNAVAILABLE"
 
-CHECK_OPENING_MISS_AND_SUCCESSOR = "OPENING_MISS_AND_DISTINCT_SUCCESSOR"
+CHECK_OPENING_MISS_IMMUTABLE = "OPENING_MISS_REMAINS_IMMUTABLE"
+CHECK_DISTINCT_SUCCESSOR = "DISTINCT_SUCCESSOR_WITH_PREDECESSOR_LINEAGE"
 CHECK_MIDDAY_DISCOVERY = "MIDDAY_FIRST_DISCOVERY"
 CHECK_RETAINED_MEMBER = "SOURCE_DISAPPEARANCE_RETAINS_MEMBER"
 CHECK_LATER_PAGE = "LATER_PAGE_CANDIDATE_ADMITTED"
 CHECK_CAPACITY = "THIRTY_FOR_TEN_PRESERVES_TWENTY_PROVIDER_BOUND"
-CHECK_DISCOVERY_FAILURE = "DISCOVERY_FAILURE_ISOLATED"
-CHECK_READINESS_FAILURE = "SCHWAB_READINESS_FAILURE_EXPLICIT"
-CHECK_CORRUPT_DATA = "CORRUPT_CANDIDATE_DATA_EXPLICIT"
+CHECK_DISCOVERY_FAILURE = "DISCOVERY_FAILURE_DOES_NOT_AGE_RETAINED_MEMBERS"
+CHECK_DISCOVERY_COMPOSITION = "DISCOVERY_FAILURE_PRESERVES_RETAINED_COMPOSITION"
+CHECK_READINESS_FAILURE = "PER_SYMBOL_READINESS_FAILURE_ISOLATED"
+CHECK_PROVISIONAL = "PROVISIONAL_BARS_HAVE_NO_SETUP_AUTHORITY"
 CHECK_RESTART = "NOON_RESTART_IDEMPOTENT"
-CHECK_IDENTITY = "NO_DUPLICATE_CREATED_IDENTITIES"
+CHECK_CONFLICTING_REPLAY = "CONFLICTING_REPLAY_FAILS_CLOSED"
+CHECK_SAME_BAR = "SAME_BAR_AMBIGUITY_PRESERVED"
+CHECK_CORRECTION = "CANONICAL_CORRECTION_PRESERVES_HISTORY"
 CHECK_DENOMINATOR = "ALL_DENOMINATOR_COUNTS_RECONCILE"
+CHECK_BORING = "BORING_AND_PROVIDER_BOUND_OBSERVATIONS_PRESERVED"
 CHECK_PAPER_LANE = "PAPER_SUPERVISION_INDEPENDENT_OF_DISCOVERY"
+CHECK_CAPABILITY = "NO_NETWORK_BROKER_ACCOUNT_OR_ORDER_CAPABILITY"
+CHECK_NONMUTATION = "NO_PRODUCTION_PATH_MUTATION"
+CHECK_NO_STRATEGY_AUTHORITY = "NO_NEW_STRATEGY_AUTHORITY"
 REQUIRED_CHECKS = (
-    CHECK_OPENING_MISS_AND_SUCCESSOR,
+    CHECK_OPENING_MISS_IMMUTABLE,
+    CHECK_DISTINCT_SUCCESSOR,
     CHECK_MIDDAY_DISCOVERY,
     CHECK_RETAINED_MEMBER,
     CHECK_LATER_PAGE,
     CHECK_CAPACITY,
     CHECK_DISCOVERY_FAILURE,
+    CHECK_DISCOVERY_COMPOSITION,
     CHECK_READINESS_FAILURE,
-    CHECK_CORRUPT_DATA,
+    CHECK_PROVISIONAL,
     CHECK_RESTART,
-    CHECK_IDENTITY,
+    CHECK_CONFLICTING_REPLAY,
+    CHECK_SAME_BAR,
+    CHECK_CORRECTION,
     CHECK_DENOMINATOR,
+    CHECK_BORING,
     CHECK_PAPER_LANE,
+    CHECK_CAPABILITY,
+    CHECK_NONMUTATION,
+    CHECK_NO_STRATEGY_AUTHORITY,
 )
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -108,6 +128,9 @@ class ContinuousDayScenario:
     later_page_symbol: str = "DDD"
     readiness_failure_symbol: str = "EEE"
     corrupt_data_symbol: str = "FFF"
+    provisional_symbol: str = "GGG"
+    insufficient_rvol_symbol: str = "HHH"
+    same_bar_symbol: str = "III"
     readiness_capacity: int = 10
     expected_provider_bound: int = 20
     midday_hour: int = 12
@@ -140,6 +163,67 @@ class SyntheticPaperSupervisionObservation:
     authority: str
     execution_authority: str
     order_capability: str
+    fingerprint: str
+
+
+@dataclass(frozen=True)
+class FailureInjectionReceipt:
+    injection: str
+    result: str
+    blast_radius: str
+    source_fingerprint: str
+    fingerprint: str
+
+
+@dataclass(frozen=True)
+class ContinuousDaySupplementalEvidence:
+    preopen_bootstrap_at: str
+    session_end_at: str
+    forced_flat_boundary: str
+    complete_pagination_pages: int
+    complete_pagination_rows: int
+    complete_pagination_state: str
+    bounded_prefix_state: str
+    partial_failure_state: str
+    failure_injections: tuple[FailureInjectionReceipt, ...]
+    capacity_protected: int
+    capacity_hot: int
+    capacity_warm: int
+    capacity_provider_bound: int
+    provisional_cycle_fingerprint: str
+    provisional_disposition: str
+    provisional_blockers: tuple[str, ...]
+    canonical_cycle_fingerprint: str
+    canonical_disposition: str
+    insufficient_rvol_cycle_fingerprint: str
+    insufficient_rvol_disposition: str
+    insufficient_rvol_blockers: tuple[str, ...]
+    midday_rvol_cutoff: str
+    midday_rvol_baseline_sessions: int
+    midday_rvol_value: float
+    duplicate_replay_byte_identical: bool
+    conflicting_replay_rejected: bool
+    conflict_source_fingerprint_before: str
+    conflict_source_fingerprint_after: str
+    correction_original_cycle_fingerprint: str
+    correction_later_cycle_fingerprint: str
+    correction_original_byte_identical: bool
+    same_bar_cycle_fingerprint: str
+    same_bar_disposition: str
+    same_bar_blockers: tuple[str, ...]
+    specialist_status: str
+    specialist_authority: str
+    specialist_changed_cycle: bool
+    boring_symbols: tuple[str, ...]
+    proof_root_scope: str
+    production_snapshot_before: str
+    production_snapshot_after: str
+    network_capability: str
+    provider_capability: str
+    broker_capability: str
+    account_capability: str
+    order_capability: str
+    strategy_authority: str
     fingerprint: str
 
 
@@ -177,6 +261,9 @@ class ContinuousDayMetrics:
     discovery_failures: int
     readiness_data_failures: int
     paper_supervision_observations: int
+    complete_pagination_pages: int
+    complete_pagination_rows: int
+    failure_injections: int
 
 
 @dataclass(frozen=True)
@@ -190,6 +277,7 @@ class ContinuousDayProof:
     cycle_references: tuple[ContinuousDayCycleReference, ...]
     restart_receipt: RestartReceipt
     paper_supervision_observations: tuple[SyntheticPaperSupervisionObservation, ...]
+    supplemental_evidence: ContinuousDaySupplementalEvidence
     scenario_checks: tuple[str, ...]
     metrics: ContinuousDayMetrics
     status: str
@@ -198,6 +286,51 @@ class ContinuousDayProof:
     execution_authority: str
     order_capability: str
     fingerprint: str
+
+
+def build_supplemental_evidence(**values: object) -> ContinuousDaySupplementalEvidence:
+    payload = dict(values)
+    payload.pop("fingerprint", None)
+    payload["failure_injections"] = tuple(
+        item
+        if isinstance(item, FailureInjectionReceipt)
+        else FailureInjectionReceipt(**item)
+        for item in payload.get("failure_injections", ())
+    )
+    fingerprint_payload = {
+        **payload,
+        "failure_injections": [
+            asdict(item) for item in payload["failure_injections"]
+        ],
+    }
+    return ContinuousDaySupplementalEvidence(
+        **payload,
+        fingerprint=_fingerprint(
+            "continuous-day-supplemental-evidence-v1", fingerprint_payload
+        ),
+    )
+
+
+def build_failure_injection_receipt(
+    *,
+    injection: str,
+    result: str,
+    blast_radius: str,
+    source_fingerprint: str,
+) -> FailureInjectionReceipt:
+    normalized = {
+        "injection": injection.strip().upper(),
+        "result": result.strip().upper(),
+        "blast_radius": blast_radius.strip().upper(),
+        "source_fingerprint": source_fingerprint,
+    }
+    _require_sha256(source_fingerprint, "Failure-injection source")
+    if not all(normalized.values()):
+        raise ContinuousDayProofError("Failure-injection receipt is incomplete.")
+    return FailureInjectionReceipt(
+        **normalized,
+        fingerprint=_fingerprint("continuous-day-failure-injection-v1", normalized),
+    )
 
 
 def build_restart_receipt(
@@ -277,6 +410,7 @@ def build_continuous_day_proof(
     results: Iterable[ContinuousDenominatorResult],
     restart_receipt: RestartReceipt,
     paper_supervision_observations: Iterable[SyntheticPaperSupervisionObservation],
+    supplemental_evidence: ContinuousDaySupplementalEvidence,
     scenario: ContinuousDayScenario | None = None,
 ) -> ContinuousDayProof:
     """Validate one synthetic day assembled from the real continuous contracts."""
@@ -356,7 +490,9 @@ def build_continuous_day_proof(
 
     checks: list[str] = []
     missed = _first_member(items, scenario.opening_symbol, MISSED_ENTRY_RECORDED)
-    successor = _first_member(items, scenario.opening_symbol, RESEARCH_PLAN_COMPOSED)
+    successor_cycle, successor = _first_member_with_cycle(
+        items, scenario.opening_symbol, RESEARCH_PLAN_COMPOSED
+    )
     if not missed.setup_id or not missed.trade_plan_id:
         raise ContinuousDayProofError("Opening miss omitted its immutable setup or plan.")
     if (
@@ -367,7 +503,12 @@ def build_continuous_day_proof(
         or successor.trade_plan_id == missed.trade_plan_id
     ):
         raise ContinuousDayProofError("Opening miss did not produce a distinct linked successor.")
-    checks.append(CHECK_OPENING_MISS_AND_SUCCESSOR)
+    if _parse_timestamp(
+        successor_cycle.cycle.observed_at, "Successor cycle timestamp"
+    ) <= _parse_timestamp(restart_receipt.restarted_at, "Restart timestamp"):
+        raise ContinuousDayProofError("Successor setup was not a post-restart late-session event.")
+    checks.append(CHECK_OPENING_MISS_IMMUTABLE)
+    checks.append(CHECK_DISTINCT_SUCCESSOR)
 
     midday_rows = _rows_for_symbol(items, scenario.midday_symbol)
     if not midday_rows:
@@ -436,6 +577,7 @@ def build_continuous_day_proof(
             "Discovery failure blocked every retained-member evaluation."
         )
     checks.append(CHECK_DISCOVERY_FAILURE)
+    checks.append(CHECK_DISCOVERY_COMPOSITION)
 
     readiness_failure = _member_any(items, scenario.readiness_failure_symbol)
     if not any(
@@ -444,8 +586,6 @@ def build_continuous_day_proof(
         for member in readiness_failure
     ):
         raise ContinuousDayProofError("Schwab/readiness failure was not explicit.")
-    checks.append(CHECK_READINESS_FAILURE)
-
     corrupt_failure = _member_any(items, scenario.corrupt_data_symbol)
     if not any(
         member.composition_disposition == DATA_FAILURE
@@ -453,19 +593,39 @@ def build_continuous_day_proof(
         for member in corrupt_failure
     ):
         raise ContinuousDayProofError("Corrupt candidate evidence was not explicit.")
-    checks.append(CHECK_CORRUPT_DATA)
+    _validate_supplemental_evidence(supplemental_evidence)
+    checks.append(CHECK_READINESS_FAILURE)
+    checks.append(CHECK_PROVISIONAL)
 
     _validate_restart(restart_receipt, items, scenario)
     checks.append(CHECK_RESTART)
-    checks.append(CHECK_IDENTITY)
+    checks.append(CHECK_CONFLICTING_REPLAY)
+    checks.append(CHECK_SAME_BAR)
+    checks.append(CHECK_CORRECTION)
 
     aggregate = summarize_continuous_denominators(items)
     if aggregate.cycles_produced != len(items) or sum(len(item.opportunities) for item in items) != len(opportunity_ids):
         raise ContinuousDayProofError("Day-level denominator totals did not reconcile.")
     checks.append(CHECK_DENOMINATOR)
 
+    provider_bound_symbols = {
+        opportunity.symbol
+        for item in items
+        for opportunity in item.opportunities
+        if opportunity.disposition == NOT_EVALUATED_PROVIDER_BOUND
+    }
+    if not provider_bound_symbols or not set(supplemental_evidence.boring_symbols).issubset(
+        {member.symbol for item in items for member in item.linkage.members}
+        | provider_bound_symbols
+    ):
+        raise ContinuousDayProofError("Boring denominator observations disappeared.")
+    checks.append(CHECK_BORING)
+
     _validate_paper_lane(papers, failure_cycles)
     checks.append(CHECK_PAPER_LANE)
+    checks.append(CHECK_CAPABILITY)
+    checks.append(CHECK_NONMUTATION)
+    checks.append(CHECK_NO_STRATEGY_AUTHORITY)
     if tuple(checks) != REQUIRED_CHECKS:
         raise ContinuousDayProofError("Whole-day proof checks are incomplete.")
 
@@ -502,6 +662,9 @@ def build_continuous_day_proof(
         discovery_failures=aggregate.discovery_failures,
         readiness_data_failures=aggregate.opportunities_blocked_data,
         paper_supervision_observations=len(papers),
+        complete_pagination_pages=supplemental_evidence.complete_pagination_pages,
+        complete_pagination_rows=supplemental_evidence.complete_pagination_rows,
+        failure_injections=len(supplemental_evidence.failure_injections),
     )
     payload = {
         "contract_version": CONTRACT_VERSION,
@@ -512,6 +675,7 @@ def build_continuous_day_proof(
         "cycle_references": cycle_references,
         "restart_receipt": restart_receipt,
         "paper_supervision_observations": papers,
+        "supplemental_evidence": supplemental_evidence,
         "scenario_checks": tuple(checks),
         "metrics": metrics,
         "status": PROOF_STATUS,
@@ -525,6 +689,7 @@ def build_continuous_day_proof(
         "cycle_references": [asdict(item) for item in cycle_references],
         "restart_receipt": asdict(restart_receipt),
         "paper_supervision_observations": [asdict(item) for item in papers],
+        "supplemental_evidence": asdict(supplemental_evidence),
         "metrics": asdict(metrics),
     }
     fingerprint = _fingerprint("continuous-day-proof-v1", identity_payload)
@@ -587,6 +752,22 @@ def _member_any(results: tuple[ContinuousDenominatorResult, ...], symbol: str):
 def _first_member(results: tuple[ContinuousDenominatorResult, ...], symbol: str, disposition: str):
     matches = [
         member
+        for item in results
+        for member in item.linkage.members
+        if member.symbol == symbol and member.composition_disposition == disposition
+    ]
+    if not matches:
+        raise ContinuousDayProofError(f"Expected {disposition} evidence for {symbol}.")
+    return matches[0]
+
+
+def _first_member_with_cycle(
+    results: tuple[ContinuousDenominatorResult, ...],
+    symbol: str,
+    disposition: str,
+):
+    matches = [
+        (item, member)
         for item in results
         for member in item.linkage.members
         if member.symbol == symbol and member.composition_disposition == disposition
@@ -682,6 +863,147 @@ def _validate_paper_lane(
         raise ContinuousDayProofError("Paper supervision did not survive discovery failure.")
 
 
+def _validate_supplemental_evidence(
+    evidence: ContinuousDaySupplementalEvidence,
+) -> None:
+    expected = build_supplemental_evidence(**asdict(evidence))
+    if evidence != expected:
+        raise ContinuousDayProofError("Supplemental proof evidence is invalid or tampered.")
+    required_failures = {
+        "FINVIZ_PAGE_FAILURE",
+        "FINVIZ_FULL_PULSE_FAILURE",
+        "SCHEMA_FAILURE",
+        "SEMANTIC_PLAUSIBILITY_FAILURE",
+        "LATER_PAGE_CANDIDATE",
+        "SCANNER_DISAPPEARANCE",
+        "CAPACITY_EXHAUSTION",
+        "READINESS_MISSING_BARS",
+        "READINESS_GAPPED_EVIDENCE",
+        "INSUFFICIENT_RVOL",
+        "PROVISIONAL_ONLY_BAR",
+        "CORRECTED_CANONICAL_BAR",
+        "SAME_BAR_AMBIGUITY",
+        "CONFLICTING_REPLAY",
+        "PERSISTENCE_RESTART",
+        "MISSING_DENOMINATOR_LINKAGE",
+        "ONE_SYMBOL_COMPOSITION_FAILURE",
+        "SYSTEM_LEVEL_SHARED_FAILURE",
+    }
+    injections = {item.injection for item in evidence.failure_injections}
+    if not required_failures.issubset(injections):
+        raise ContinuousDayProofError("Failure injection matrix is incomplete.")
+    for item in evidence.failure_injections:
+        expected_item = build_failure_injection_receipt(
+            injection=item.injection,
+            result=item.result,
+            blast_radius=item.blast_radius,
+            source_fingerprint=item.source_fingerprint,
+        )
+        if item != expected_item or item.result not in {"ISOLATED", "FAIL_CLOSED"}:
+            raise ContinuousDayProofError(
+                "Failure injection receipt is invalid or lacks blast-radius proof."
+            )
+    preopen = _parse_timestamp(evidence.preopen_bootstrap_at, "Pre-open bootstrap")
+    session_end = _parse_timestamp(evidence.session_end_at, "Session end")
+    if (
+        preopen.astimezone(_MARKET_TZ).time() >= datetime.strptime("09:30", "%H:%M").time()
+        or session_end.astimezone(_MARKET_TZ).time()
+        < datetime.strptime("15:55", "%H:%M").time()
+        or evidence.forced_flat_boundary
+        != "SYNTHETIC_BOUNDARY_OBSERVED_NO_ORDER_CAPABILITY"
+    ):
+        raise ContinuousDayProofError("Synthetic full-day clock is incomplete.")
+    if (
+        evidence.complete_pagination_pages < 5
+        or evidence.complete_pagination_rows < 100
+        or evidence.complete_pagination_state != "COMPLETE_FILTERED_RESULT_SET"
+        or evidence.bounded_prefix_state != "BOUNDED_PAGE_PREFIX"
+        or evidence.partial_failure_state != "PARTIAL_PROVIDER_FAILURE"
+    ):
+        raise ContinuousDayProofError("Pagination coverage proof is incomplete.")
+    if (
+        evidence.capacity_protected < 1
+        or evidence.capacity_hot < 3
+        or evidence.capacity_warm < 3
+        or evidence.capacity_provider_bound < 1
+    ):
+        raise ContinuousDayProofError("Capacity tier proof omitted a required tier.")
+    for value, label in (
+        (evidence.provisional_cycle_fingerprint, "Provisional cycle"),
+        (evidence.canonical_cycle_fingerprint, "Canonical cycle"),
+        (evidence.insufficient_rvol_cycle_fingerprint, "RVOL cycle"),
+        (evidence.conflict_source_fingerprint_before, "Conflict source before"),
+        (evidence.conflict_source_fingerprint_after, "Conflict source after"),
+        (evidence.correction_original_cycle_fingerprint, "Correction original cycle"),
+        (evidence.correction_later_cycle_fingerprint, "Correction later cycle"),
+        (evidence.same_bar_cycle_fingerprint, "Same-bar cycle"),
+        (evidence.production_snapshot_before, "Production snapshot before"),
+        (evidence.production_snapshot_after, "Production snapshot after"),
+    ):
+        _require_sha256(value, label)
+    if (
+        evidence.provisional_disposition != DATA_FAILURE
+        or "CANONICAL_RECONCILED_SCHWAB_BAR_REQUIRED"
+        not in evidence.provisional_blockers
+        or evidence.canonical_disposition != RESEARCH_PLAN_COMPOSED
+    ):
+        raise ContinuousDayProofError("Provisional evidence acquired setup authority.")
+    if (
+        evidence.insufficient_rvol_disposition != BLOCKED_DATA
+        or "TIME_NORMALIZED_RVOL_INSUFFICIENT_OR_UNSAFE"
+        not in evidence.insufficient_rvol_blockers
+        or evidence.midday_rvol_baseline_sessions < 5
+        or evidence.midday_rvol_value <= 0
+        or _parse_timestamp(evidence.midday_rvol_cutoff, "Midday RVOL cutoff")
+        .astimezone(_MARKET_TZ)
+        .hour
+        < 11
+    ):
+        raise ContinuousDayProofError("Time-normalized midday RVOL proof is invalid.")
+    if (
+        not evidence.duplicate_replay_byte_identical
+        or not evidence.conflicting_replay_rejected
+        or evidence.conflict_source_fingerprint_before
+        != evidence.conflict_source_fingerprint_after
+    ):
+        raise ContinuousDayProofError("Replay conflict did not fail closed.")
+    if (
+        evidence.correction_original_cycle_fingerprint
+        == evidence.correction_later_cycle_fingerprint
+        or not evidence.correction_original_byte_identical
+    ):
+        raise ContinuousDayProofError("Canonical correction rewrote prior evidence.")
+    if (
+        evidence.same_bar_disposition != SETUP_PENDING
+        or AMBIGUOUS_SAME_BAR not in evidence.same_bar_blockers
+    ):
+        raise ContinuousDayProofError("Same-bar ambiguity was promoted.")
+    if (
+        evidence.specialist_status != "ABSTAINED"
+        or evidence.specialist_authority != RESEARCH_ONLY
+        or evidence.specialist_changed_cycle
+    ):
+        raise ContinuousDayProofError("Specialist abstention changed cycle authority.")
+    if not evidence.boring_symbols:
+        raise ContinuousDayProofError("Boring denominator symbols were omitted.")
+    if (
+        evidence.proof_root_scope != "TEMPORARY_DIRECTORY_ONLY"
+        or evidence.production_snapshot_before != evidence.production_snapshot_after
+        or any(
+            value != "UNAVAILABLE"
+            for value in (
+                evidence.network_capability,
+                evidence.provider_capability,
+                evidence.broker_capability,
+                evidence.account_capability,
+                evidence.order_capability,
+            )
+        )
+        or evidence.strategy_authority != "NONE"
+    ):
+        raise ContinuousDayProofError("Proof capability or nonmutation boundary drifted.")
+
+
 def validate_continuous_day_proof(proof: ContinuousDayProof) -> None:
     if not isinstance(proof, ContinuousDayProof):
         raise ContinuousDayProofError("Continuous day proof is malformed.")
@@ -700,3 +1022,75 @@ def validate_continuous_day_proof(proof: ContinuousDayProof) -> None:
         or proof.order_capability != ORDER_CAPABILITY_UNAVAILABLE
     ):
         raise ContinuousDayProofError("Continuous day proof authority boundary drifted.")
+
+
+def render_continuous_day_proof_json(proof: ContinuousDayProof) -> bytes:
+    validate_continuous_day_proof(proof)
+    return _canonical_json(asdict(proof))
+
+
+def render_continuous_day_proof_markdown(proof: ContinuousDayProof) -> str:
+    validate_continuous_day_proof(proof)
+    lines = [
+        "# Synthetic Whole-Day Continuous Architecture Proof",
+        "",
+        f"- Status: `{proof.status}`",
+        f"- Proof ID: `{proof.proof_id}`",
+        f"- Fingerprint: `{proof.fingerprint}`",
+        f"- Session: `{proof.session_date}`",
+        f"- Mode: `{proof.observation_mode}`",
+        f"- Execution authority: `{proof.execution_authority}`",
+        f"- Cycles: `{proof.metrics.cycles}`",
+        f"- Opportunities: `{proof.metrics.opportunities}`",
+        f"- Complete pagination: `{proof.metrics.complete_pagination_pages}` pages / "
+        f"`{proof.metrics.complete_pagination_rows}` rows",
+        f"- Pre-open bootstrap: `{proof.supplemental_evidence.preopen_bootstrap_at}`",
+        f"- Session end: `{proof.supplemental_evidence.session_end_at}`",
+        "",
+        "## Timeline",
+        "",
+    ]
+    for item in proof.cycle_references:
+        lines.append(
+            f"- `{item.observed_at}` -> `{item.decision_cutoff}`: "
+            f"cycle `{item.cycle_id}`, opportunities `{item.opportunity_count}`, "
+            f"complete `{str(item.complete_denominator).lower()}`"
+        )
+    lines.extend(("", "## Acceptance Assertions", ""))
+    lines.extend(f"- PASS: `{item}`" for item in proof.scenario_checks)
+    lines.extend(
+        (
+            "",
+            "## Safety",
+            "",
+            "Synthetic/offline only. No provider, account, broker, order, service, "
+            "scheduler, or production evidence capability is present.",
+            "",
+        )
+    )
+    return "\n".join(lines)
+
+
+def write_continuous_day_proof_artifacts(
+    proof: ContinuousDayProof,
+    *,
+    output_dir: Path,
+) -> tuple[Path, Path]:
+    resolved = output_dir.resolve()
+    lowered = str(resolved).lower()
+    if "momentumhunterdata" in lowered or "programdata\\momentumhunter" in lowered:
+        raise ContinuousDayProofError("Proof output must remain outside production paths.")
+    resolved.mkdir(parents=True, exist_ok=True)
+    json_path = resolved / f"{proof.proof_id}.json"
+    markdown_path = resolved / f"{proof.proof_id}.md"
+    payloads = (
+        (json_path, render_continuous_day_proof_json(proof)),
+        (markdown_path, render_continuous_day_proof_markdown(proof).encode("ascii")),
+    )
+    for path, payload in payloads:
+        if path.exists():
+            if path.read_bytes() != payload:
+                raise ContinuousDayProofError("Conflicting proof artifact already exists.")
+            continue
+        path.write_bytes(payload)
+    return json_path, markdown_path
