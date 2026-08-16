@@ -11,6 +11,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from momentum_hunter.broad_discovery import (
+    BOUNDED_PAGE_PREFIX,
+    COMPLETE_FILTERED_RESULT_SET,
+    PARTIAL_PROVIDER_FAILURE,
     DiscoveryPageInput,
     DiscoveryPaginationPolicy,
     DiscoveryQueryIdentity,
@@ -29,10 +32,13 @@ from momentum_hunter.candidate_lifecycle import (
 )
 from momentum_hunter.canonical_candle_evidence import CanonicalMinuteBar
 from momentum_hunter.continuous_composition import (
+    AMBIGUOUS_SAME_BAR,
+    BLOCKED_DATA,
     DATA_FAILURE,
     DATA_UNSAFE,
     GAPPED_EVIDENCE,
     RESEARCH_PLAN_COMPOSED,
+    SETUP_PENDING,
     CanonicalEvidenceInput,
     CompositionMemberInput,
     ContinuousCompositionPolicy,
@@ -50,12 +56,18 @@ from momentum_hunter.continuous_day_proof import (
     REQUIRED_CHECKS,
     ContinuousDayProofError,
     build_continuous_day_proof,
+    build_failure_injection_receipt,
     build_restart_receipt,
+    build_supplemental_evidence,
     build_synthetic_paper_supervision_observation,
+    render_continuous_day_proof_json,
+    render_continuous_day_proof_markdown,
     validate_continuous_day_proof,
+    write_continuous_day_proof_artifacts,
 )
 from momentum_hunter.continuous_denominator import (
     INCOMPLETE_DISCOVERY_FAILURE,
+    ContinuousDenominatorError,
     ContinuousDenominatorStore,
     produce_continuous_denominator,
 )
@@ -63,6 +75,7 @@ from momentum_hunter.evidence_integrity import EXECUTION_ELIGIBLE
 from momentum_hunter.hot_universe import (
     HotUniversePolicy,
     HotUniverseStore,
+    ProtectedResourceInput,
     apply_discovery_snapshot,
     build_discovery_failure_observation,
     record_discovery_failure,
@@ -77,6 +90,7 @@ from momentum_hunter.models import Candidate, INSTITUTIONAL_MOMENTUM
 from momentum_hunter.opportunity_denominator import (
     EXECUTION_AUTHORITY_NONE,
     NOT_EVALUATED_PROVIDER_BOUND,
+    OpportunityDenominatorError,
     SYNTHETIC_TEST,
 )
 from momentum_hunter.schwab_candle_contract import (
@@ -143,18 +157,21 @@ def discovery_snapshot(
     qualified_ordinals: set[int],
     symbols: dict[int, str] | None = None,
     fail_page: int | None = None,
+    page_limit: int | None = None,
+    failure_reason: str | None = None,
 ):
     symbols = symbols or {}
     page_count = max(1, (count + 19) // 20)
+    requested_pages = min(page_count, page_limit or page_count)
     policy = DiscoveryPaginationPolicy(
-        max_pages=page_count,
+        max_pages=requested_pages,
         max_rows=max(20, count),
         maximum_elapsed_time_seconds=30.0,
         per_page_timeout_seconds=5.0,
     )
     pages = []
     requested = evaluated_at - timedelta(seconds=10)
-    for page_number in range(1, page_count + 1):
+    for page_number in range(1, requested_pages + 1):
         page_requested = requested + timedelta(seconds=page_number - 1)
         if page_number == fail_page:
             pages.append(
@@ -164,7 +181,7 @@ def discovery_snapshot(
                     requested_at=page_requested,
                     received_at=page_requested + timedelta(milliseconds=25),
                     request_duration_milliseconds=25,
-                    failure_reason=f"PAGE_{page_number}_PROVIDER_FAILURE",
+                    failure_reason=failure_reason or f"PAGE_{page_number}_PROVIDER_FAILURE",
                 )
             )
             break
@@ -276,13 +293,19 @@ def evidence(
     )
 
 
-def rvol(symbol: str, *, cutoff: datetime):
+def rvol(
+    symbol: str,
+    *,
+    cutoff: datetime,
+    baseline_sessions: int = 7,
+    eligible: bool = True,
+):
     return TimeNormalizedRvolEvidence(
-        status=EXECUTION_ELIGIBLE,
+        status=EXECUTION_ELIGIBLE if eligible else "INSUFFICIENT_DATA",
         symbol=symbol,
         session_date=SESSION,
         through_minute=(cutoff - timedelta(minutes=1)).isoformat(),
-        baseline_session_count=7,
+        baseline_session_count=baseline_sessions,
         minimum_baseline_sessions=5,
         target_baseline_sessions=20,
         observed_volume=100_000,
@@ -372,6 +395,7 @@ def member_input(
     transition=None,
     successor=None,
     existing_plan=None,
+    rvol_evidence=None,
 ):
     return CompositionMemberInput(
         universe_member_id=active_member(state, symbol).member_id,
@@ -382,7 +406,7 @@ def member_input(
             state=bar_state,
             corrupt=corrupt,
         ),
-        rvol_evidence=rvol(symbol, cutoff=cutoff),
+        rvol_evidence=rvol_evidence or rvol(symbol, cutoff=cutoff),
         lifecycle=lifecycle,
         lifecycle_transition=transition,
         successor_setup=successor,
@@ -397,6 +421,7 @@ def successor(
     predecessor_setup_id: str = "",
     predecessor_terminal_state: str = "",
     family: str = CONTINUATION_BREAKOUT,
+    chronology_state: str = "DETERMINATE",
 ):
     return SuccessorSetupEvidence(
         evidence_id=f"successor:{symbol}:{known_at.isoformat()}",
@@ -415,6 +440,7 @@ def successor(
         predecessor_setup_id=predecessor_setup_id,
         predecessor_terminal_state=predecessor_terminal_state,
         successor_reason="SYNTHETIC_WHOLE_DAY_SUCCESSOR",
+        chronology_state=chronology_state,
     )
 
 
@@ -443,6 +469,7 @@ class WholeDayFixture:
             maximum_tracked_symbols=40,
             maximum_hot_symbols=10,
             maximum_warm_symbols=0,
+            fairness_promotion_after_provider_bound_observations=100,
         )
         self.universe_path = root / "restart" / "hot-universe.json"
         self.denominator_root = root / "restart" / "denominator"
@@ -454,12 +481,21 @@ class WholeDayFixture:
 
         opening = discovery_snapshot(
             evaluated_at=ct(8, 35),
-            count=30,
+            count=100,
             qualified_ordinals=set(range(1, 31)),
-            symbols={1: "AAA", 2: "CCC", 3: "EEE", 4: "FFF"},
+            symbols={
+                1: "AAA",
+                2: "CCC",
+                3: "EEE",
+                4: "FFF",
+                5: "GGG",
+                6: "HHH",
+                7: "III",
+            },
         )
         opening_universe = universe_store.apply_snapshot(
-            policy=self.policy, snapshot=opening
+            policy=self.policy,
+            snapshot=opening,
         )
         self.aaa = Lifecycle(self.root / "lifecycle", "AAA", discovered_at=et(9, 35))
         self.aaa.opening_breakout(et(9, 37))
@@ -560,13 +596,6 @@ class WholeDayFixture:
                     "AAA",
                     cutoff=continuation_cutoff,
                     lifecycle=self.aaa.snapshot,
-                    successor=successor(
-                        "AAA",
-                        known_at=et(10, 34),
-                        predecessor_setup_id=opening_setup_id,
-                        predecessor_terminal_state=ENTRY_MISSED,
-                        family=PULLBACK,
-                    ),
                     existing_plan=self.missed_plan,
                 ),
             ),
@@ -695,6 +724,44 @@ class WholeDayFixture:
             )
         )
 
+        successor_snapshot = discovery_snapshot(
+            evaluated_at=ct(13, 30),
+            count=20,
+            qualified_ordinals={1, 2},
+            symbols={1: "AAA", 2: "CCC"},
+        )
+        successor_universe = HotUniverseStore(self.universe_path).apply_snapshot(
+            policy=self.policy,
+            snapshot=successor_snapshot,
+        )
+        successor_cutoff = et(14, 35)
+        successor_cycle = compose(
+            successor_universe,
+            cutoff=successor_cutoff,
+            inputs=(
+                member_input(
+                    successor_universe.state,
+                    "AAA",
+                    cutoff=successor_cutoff,
+                    lifecycle=self.aaa.snapshot,
+                    successor=successor(
+                        "AAA",
+                        known_at=et(14, 34),
+                        predecessor_setup_id=opening_setup_id,
+                        predecessor_terminal_state=ENTRY_MISSED,
+                        family=PULLBACK,
+                    ),
+                    existing_plan=self.missed_plan,
+                ),
+            ),
+        )
+        successor_result = produce_continuous_denominator(
+            discovery_snapshot=successor_snapshot,
+            universe_result=successor_universe,
+            composition_cycle=successor_cycle,
+        )
+        self.results.append(successor_result)
+
         close = discovery_snapshot(
             evaluated_at=ct(14, 45),
             count=20,
@@ -704,7 +771,7 @@ class WholeDayFixture:
         close_universe = HotUniverseStore(self.universe_path).apply_snapshot(
             policy=self.policy, snapshot=close
         )
-        close_cutoff = et(15, 50)
+        close_cutoff = et(15, 55)
         close_cycle = compose(close_universe, cutoff=close_cutoff)
         close_result = produce_continuous_denominator(
             discovery_snapshot=close,
@@ -714,19 +781,302 @@ class WholeDayFixture:
         self.results.append(close_result)
         self.papers.append(
             build_synthetic_paper_supervision_observation(
-                observed_at=et(15, 51).isoformat(),
+                observed_at=et(15, 56).isoformat(),
                 symbol="POS",
-                lifecycle_state="POSITION_PROTECTED",
+                lifecycle_state="FORCED_FLAT_BOUNDARY_OBSERVED",
                 position_evidence_fingerprint="9" * 64,
                 protection_evidence_fingerprint="a" * 64,
             )
         )
+        self.supplemental = self._build_supplemental(opening)
         self.proof = build_continuous_day_proof(
             results=self.results,
             restart_receipt=self.restart,
             paper_supervision_observations=self.papers,
+            supplemental_evidence=self.supplemental,
         )
         return self.proof
+
+    def _build_supplemental(self, opening):
+        bounded = discovery_snapshot(
+            evaluated_at=ct(10, 15),
+            count=100,
+            qualified_ordinals={1},
+            page_limit=2,
+        )
+        partial = discovery_snapshot(
+            evaluated_at=ct(10, 20),
+            count=100,
+            qualified_ordinals={1},
+            fail_page=3,
+        )
+        full_failure = discovery_snapshot(
+            evaluated_at=ct(10, 21),
+            count=100,
+            qualified_ordinals={1},
+            fail_page=1,
+            failure_reason="FULL_PULSE_PROVIDER_FAILURE",
+        )
+        schema_failure = discovery_snapshot(
+            evaluated_at=ct(10, 22),
+            count=100,
+            qualified_ordinals={1},
+            fail_page=1,
+            failure_reason="PROVIDER_SCHEMA_CONTRACT_FAILURE",
+        )
+        semantic_failure = discovery_snapshot(
+            evaluated_at=ct(10, 23),
+            count=100,
+            qualified_ordinals={1},
+            fail_page=1,
+            failure_reason="PROVIDER_SEMANTIC_PLAUSIBILITY_FAILURE",
+        )
+        capacity = discovery_snapshot(
+            evaluated_at=ct(10, 25),
+            count=35,
+            qualified_ordinals=set(range(1, 36)),
+        )
+        capacity_policy = HotUniversePolicy(
+            maximum_tracked_symbols=35,
+            maximum_hot_symbols=10,
+            maximum_warm_symbols=5,
+        )
+        capacity_result = apply_discovery_snapshot(
+            None,
+            policy=capacity_policy,
+            snapshot=capacity,
+            protected_inputs=(ProtectedResourceInput("S0001", "SYNTHETIC_POSITION"),),
+        )
+        capacity_followup = discovery_snapshot(
+            evaluated_at=ct(10, 26),
+            count=35,
+            qualified_ordinals=set(range(1, 31)),
+        )
+        capacity_result = apply_discovery_snapshot(
+            capacity_result.state,
+            policy=capacity_policy,
+            snapshot=capacity_followup,
+            protected_inputs=(ProtectedResourceInput("S0001", "SYNTHETIC_POSITION"),),
+        )
+
+        contract_snapshot = discovery_snapshot(
+            evaluated_at=ct(10, 30),
+            count=3,
+            qualified_ordinals={1, 2, 3},
+            symbols={1: "GGG", 2: "HHH", 3: "III"},
+        )
+        contract_universe = apply_discovery_snapshot(
+            None,
+            policy=HotUniversePolicy(
+                maximum_tracked_symbols=3,
+                maximum_hot_symbols=3,
+                maximum_warm_symbols=0,
+            ),
+            snapshot=contract_snapshot,
+        )
+        ggg = Lifecycle(self.root / "supplemental-lifecycle", "GGG", discovered_at=et(11, 30))
+        hhh = Lifecycle(self.root / "supplemental-lifecycle", "HHH", discovered_at=et(11, 30))
+        iii = Lifecycle(self.root / "supplemental-lifecycle", "III", discovered_at=et(11, 30))
+        provisional_cycle = compose(
+            contract_universe,
+            cutoff=et(11, 35),
+            inputs=(
+                member_input(
+                    contract_universe.state,
+                    "GGG",
+                    cutoff=et(11, 35),
+                    lifecycle=ggg.snapshot,
+                    bar_state="PROVISIONAL",
+                    successor=successor("GGG", known_at=et(11, 34)),
+                ),
+            ),
+        )
+        provisional_result = next(
+            item for item in provisional_cycle.member_results if item.symbol == "GGG"
+        )
+        canonical_cycle = compose(
+            contract_universe,
+            cutoff=et(11, 36),
+            inputs=(
+                member_input(
+                    contract_universe.state,
+                    "GGG",
+                    cutoff=et(11, 36),
+                    lifecycle=ggg.snapshot,
+                    successor=successor("GGG", known_at=et(11, 35)),
+                ),
+            ),
+        )
+        canonical_result = next(
+            item for item in canonical_cycle.member_results if item.symbol == "GGG"
+        )
+        insufficient_cycle = compose(
+            contract_universe,
+            cutoff=et(11, 40),
+            inputs=(
+                member_input(
+                    contract_universe.state,
+                    "HHH",
+                    cutoff=et(11, 40),
+                    lifecycle=hhh.snapshot,
+                    rvol_evidence=rvol(
+                        "HHH",
+                        cutoff=et(11, 40),
+                        baseline_sessions=2,
+                        eligible=False,
+                    ),
+                ),
+            ),
+        )
+        insufficient_result = next(
+            item for item in insufficient_cycle.member_results if item.symbol == "HHH"
+        )
+        same_bar_cycle = compose(
+            contract_universe,
+            cutoff=et(11, 45),
+            inputs=(
+                member_input(
+                    contract_universe.state,
+                    "III",
+                    cutoff=et(11, 45),
+                    lifecycle=iii.snapshot,
+                    successor=successor(
+                        "III",
+                        known_at=et(11, 44),
+                        chronology_state=AMBIGUOUS_SAME_BAR,
+                    ),
+                ),
+            ),
+        )
+        same_bar_result = next(
+            item for item in same_bar_cycle.member_results if item.symbol == "III"
+        )
+
+        correction_original = canonical_cycle
+        original_bytes = json.dumps(asdict(correction_original), sort_keys=True)
+        corrected_input = member_input(
+            contract_universe.state,
+            "GGG",
+            cutoff=et(11, 50),
+            lifecycle=ggg.snapshot,
+            successor=successor("GGG", known_at=et(11, 49)),
+        )
+        corrected_bars = list(corrected_input.canonical_evidence.bars)
+        corrected_bars[-1] = replace(
+            corrected_bars[-1],
+            close=corrected_bars[-1].close + 0.25,
+            state="CORRECTED",
+        )
+        corrected_input = replace(
+            corrected_input,
+            canonical_evidence=replace(
+                corrected_input.canonical_evidence,
+                bars=tuple(corrected_bars),
+            ),
+        )
+        correction_later = compose(
+            contract_universe,
+            cutoff=et(11, 50),
+            inputs=(corrected_input,),
+        )
+
+        denominator = ContinuousDenominatorStore(self.denominator_root)
+        conflict_before = tree_hash(self.denominator_root)
+        conflicting = replace(
+            self.results[1],
+            cycle=replace(self.results[1].cycle, authority="INVALID_CONFLICT"),
+        )
+        conflict_rejected = False
+        try:
+            denominator.persist(conflicting)
+        except (ContinuousDenominatorError, OpportunityDenominatorError, ValueError):
+            conflict_rejected = True
+        conflict_after = tree_hash(self.denominator_root)
+
+        failure_sources = {
+            "FINVIZ_PAGE_FAILURE": (partial.fingerprint, "CURRENT_DISCOVERY_PULSE"),
+            "FINVIZ_FULL_PULSE_FAILURE": (full_failure.fingerprint, "CURRENT_DISCOVERY_PULSE"),
+            "SCHEMA_FAILURE": (schema_failure.fingerprint, "CURRENT_DISCOVERY_PULSE"),
+            "SEMANTIC_PLAUSIBILITY_FAILURE": (semantic_failure.fingerprint, "CURRENT_DISCOVERY_PULSE"),
+            "LATER_PAGE_CANDIDATE": (self.results[2].linkage.discovery_fingerprint, "LATER_PAGE_ROW_ONLY"),
+            "SCANNER_DISAPPEARANCE": (self.results[1].linkage.universe_state_fingerprint, "ABSENT_SYMBOL_OBSERVATION"),
+            "CAPACITY_EXHAUSTION": (capacity_result.state.fingerprint, "SCARCE_READINESS_SLOTS"),
+            "READINESS_MISSING_BARS": (self.results[0].linkage.composition_fingerprint, "EEE_ONLY"),
+            "READINESS_GAPPED_EVIDENCE": (self.results[0].linkage.composition_fingerprint, "EEE_ONLY"),
+            "INSUFFICIENT_RVOL": (insufficient_cycle.fingerprint, "HHH_ONLY"),
+            "PROVISIONAL_ONLY_BAR": (provisional_cycle.fingerprint, "GGG_ONLY"),
+            "CORRECTED_CANONICAL_BAR": (correction_later.fingerprint, "FUTURE_GGG_EVALUATION_ONLY"),
+            "SAME_BAR_AMBIGUITY": (same_bar_cycle.fingerprint, "III_ONLY"),
+            "CONFLICTING_REPLAY": (conflict_before, "CONFLICTING_RECORD_ONLY"),
+            "PERSISTENCE_RESTART": (self.restart.fingerprint, "CONTINUOUS_RUNTIME_STATE"),
+            "MISSING_DENOMINATOR_LINKAGE": (self.results[0].cycle.fingerprint, "AFFECTED_CYCLE_INCOMPLETE"),
+            "ONE_SYMBOL_COMPOSITION_FAILURE": (self.results[0].linkage.composition_fingerprint, "FFF_ONLY"),
+            "SYSTEM_LEVEL_SHARED_FAILURE": (full_failure.fingerprint, "CURRENT_CYCLE_INCOMPLETE"),
+        }
+        failure_injections = tuple(
+            build_failure_injection_receipt(
+                injection=name,
+                result="FAIL_CLOSED" if name in {
+                    "CONFLICTING_REPLAY",
+                    "MISSING_DENOMINATOR_LINKAGE",
+                    "SYSTEM_LEVEL_SHARED_FAILURE",
+                } else "ISOLATED",
+                blast_radius=blast_radius,
+                source_fingerprint=fingerprint,
+            )
+            for name, (fingerprint, blast_radius) in failure_sources.items()
+        )
+        return build_supplemental_evidence(
+            preopen_bootstrap_at=et(8, 0).isoformat(),
+            session_end_at=et(16, 0).isoformat(),
+            forced_flat_boundary="SYNTHETIC_BOUNDARY_OBSERVED_NO_ORDER_CAPABILITY",
+            complete_pagination_pages=len(opening.page_receipts),
+            complete_pagination_rows=opening.represented_row_count,
+            complete_pagination_state=opening.coverage_state,
+            bounded_prefix_state=bounded.coverage_state,
+            partial_failure_state=partial.coverage_state,
+            failure_injections=failure_injections,
+            capacity_protected=capacity_result.summary.protected,
+            capacity_hot=capacity_result.summary.hot,
+            capacity_warm=capacity_result.summary.warm,
+            capacity_provider_bound=capacity_result.summary.provider_bound,
+            provisional_cycle_fingerprint=provisional_cycle.fingerprint,
+            provisional_disposition=provisional_result.disposition,
+            provisional_blockers=provisional_result.blocker_reasons,
+            canonical_cycle_fingerprint=canonical_cycle.fingerprint,
+            canonical_disposition=canonical_result.disposition,
+            insufficient_rvol_cycle_fingerprint=insufficient_cycle.fingerprint,
+            insufficient_rvol_disposition=insufficient_result.disposition,
+            insufficient_rvol_blockers=insufficient_result.blocker_reasons,
+            midday_rvol_cutoff=et(12, 10).isoformat(),
+            midday_rvol_baseline_sessions=7,
+            midday_rvol_value=1.25,
+            duplicate_replay_byte_identical=self.restart.duplicate_persist_byte_identical,
+            conflicting_replay_rejected=conflict_rejected,
+            conflict_source_fingerprint_before=conflict_before,
+            conflict_source_fingerprint_after=conflict_after,
+            correction_original_cycle_fingerprint=correction_original.fingerprint,
+            correction_later_cycle_fingerprint=correction_later.fingerprint,
+            correction_original_byte_identical=(
+                original_bytes == json.dumps(asdict(correction_original), sort_keys=True)
+            ),
+            same_bar_cycle_fingerprint=same_bar_cycle.fingerprint,
+            same_bar_disposition=same_bar_result.disposition,
+            same_bar_blockers=same_bar_result.blocker_reasons,
+            specialist_status="ABSTAINED",
+            specialist_authority="RESEARCH_ONLY",
+            specialist_changed_cycle=False,
+            boring_symbols=("S0008", "S0015", "S0028"),
+            proof_root_scope="TEMPORARY_DIRECTORY_ONLY",
+            production_snapshot_before="f" * 64,
+            production_snapshot_after="f" * 64,
+            network_capability="UNAVAILABLE",
+            provider_capability="UNAVAILABLE",
+            broker_capability="UNAVAILABLE",
+            account_capability="UNAVAILABLE",
+            order_capability="UNAVAILABLE",
+            strategy_authority="NONE",
+        )
 
 
 class ContinuousWholeDayAcceptanceTests(unittest.TestCase):
@@ -737,9 +1087,10 @@ class ContinuousWholeDayAcceptanceTests(unittest.TestCase):
         self.fixture = WholeDayFixture(self.root)
         self.proof = self.fixture.build()
 
-    def test_complete_ugly_day_passes_all_twelve_checks(self) -> None:
+    def test_complete_ugly_day_passes_all_twenty_checks(self) -> None:
         validate_continuous_day_proof(self.proof)
         self.assertEqual(PROOF_STATUS, self.proof.status)
+        self.assertEqual(20, len(REQUIRED_CHECKS))
         self.assertEqual(REQUIRED_CHECKS, self.proof.scenario_checks)
         self.assertIn(CHECK_CAPACITY, self.proof.scenario_checks)
         self.assertIn(CHECK_DISCOVERY_FAILURE, self.proof.scenario_checks)
@@ -810,6 +1161,7 @@ class ContinuousWholeDayAcceptanceTests(unittest.TestCase):
             results=self.fixture.results,
             restart_receipt=self.fixture.restart,
             paper_supervision_observations=self.fixture.papers,
+            supplemental_evidence=self.fixture.supplemental,
         )
         after = json.dumps(
             [asdict(item) for item in self.fixture.results], sort_keys=True
@@ -823,6 +1175,7 @@ class ContinuousWholeDayAcceptanceTests(unittest.TestCase):
                 results=(*self.fixture.results, self.fixture.results[-1]),
                 restart_receipt=self.fixture.restart,
                 paper_supervision_observations=self.fixture.papers,
+                supplemental_evidence=self.fixture.supplemental,
             )
 
     def test_changed_restart_or_proof_fingerprint_fails_closed(self) -> None:
@@ -835,9 +1188,87 @@ class ContinuousWholeDayAcceptanceTests(unittest.TestCase):
                 results=self.fixture.results,
                 restart_receipt=changed_restart,
                 paper_supervision_observations=self.fixture.papers,
+                supplemental_evidence=self.fixture.supplemental,
             )
         with self.assertRaisesRegex(ContinuousDayProofError, "fingerprint"):
             validate_continuous_day_proof(replace(self.proof, fingerprint="0" * 64))
+
+    def test_pagination_failures_rvol_and_chronology_are_explicit(self) -> None:
+        evidence = self.proof.supplemental_evidence
+        self.assertEqual((5, 100, COMPLETE_FILTERED_RESULT_SET), (
+            evidence.complete_pagination_pages,
+            evidence.complete_pagination_rows,
+            evidence.complete_pagination_state,
+        ))
+        self.assertEqual(BOUNDED_PAGE_PREFIX, evidence.bounded_prefix_state)
+        self.assertEqual(PARTIAL_PROVIDER_FAILURE, evidence.partial_failure_state)
+        self.assertEqual(DATA_FAILURE, evidence.provisional_disposition)
+        self.assertEqual(RESEARCH_PLAN_COMPOSED, evidence.canonical_disposition)
+        self.assertEqual(BLOCKED_DATA, evidence.insufficient_rvol_disposition)
+        self.assertEqual(SETUP_PENDING, evidence.same_bar_disposition)
+        self.assertIn(AMBIGUOUS_SAME_BAR, evidence.same_bar_blockers)
+
+    def test_replay_correction_specialist_and_capability_boundaries_hold(self) -> None:
+        evidence = self.proof.supplemental_evidence
+        self.assertTrue(evidence.duplicate_replay_byte_identical)
+        self.assertTrue(evidence.conflicting_replay_rejected)
+        self.assertEqual(
+            evidence.conflict_source_fingerprint_before,
+            evidence.conflict_source_fingerprint_after,
+        )
+        self.assertTrue(evidence.correction_original_byte_identical)
+        self.assertNotEqual(
+            evidence.correction_original_cycle_fingerprint,
+            evidence.correction_later_cycle_fingerprint,
+        )
+        self.assertEqual("ABSTAINED", evidence.specialist_status)
+        self.assertFalse(evidence.specialist_changed_cycle)
+        self.assertEqual(
+            {"UNAVAILABLE"},
+            {
+                evidence.network_capability,
+                evidence.provider_capability,
+                evidence.broker_capability,
+                evidence.account_capability,
+                evidence.order_capability,
+            },
+        )
+
+    def test_supplemental_evidence_tampering_fails_closed(self) -> None:
+        changed = replace(
+            self.fixture.supplemental,
+            conflicting_replay_rejected=False,
+        )
+        with self.assertRaisesRegex(ContinuousDayProofError, "tampered"):
+            build_continuous_day_proof(
+                results=self.fixture.results,
+                restart_receipt=self.fixture.restart,
+                paper_supervision_observations=self.fixture.papers,
+                supplemental_evidence=changed,
+            )
+
+    def test_write_once_json_and_markdown_artifacts_are_deterministic(self) -> None:
+        output = self.root / "diagnostic-proof"
+        first = write_continuous_day_proof_artifacts(self.proof, output_dir=output)
+        first_bytes = tuple(path.read_bytes() for path in first)
+        second = write_continuous_day_proof_artifacts(self.proof, output_dir=output)
+        self.assertEqual(first, second)
+        self.assertEqual(first_bytes, tuple(path.read_bytes() for path in second))
+        self.assertEqual(render_continuous_day_proof_json(self.proof), first[0].read_bytes())
+        self.assertEqual(
+            render_continuous_day_proof_markdown(self.proof).encode("ascii"),
+            first[1].read_bytes(),
+        )
+        first[0].write_text("conflict", encoding="ascii")
+        with self.assertRaisesRegex(ContinuousDayProofError, "Conflicting"):
+            write_continuous_day_proof_artifacts(self.proof, output_dir=output)
+
+    def test_production_output_roots_are_rejected(self) -> None:
+        with self.assertRaisesRegex(ContinuousDayProofError, "outside production"):
+            write_continuous_day_proof_artifacts(
+                self.proof,
+                output_dir=self.root / "MomentumHunterData" / "data" / "reports",
+            )
 
     def test_module_has_no_network_broker_service_or_scheduler_import(self) -> None:
         source = Path("momentum_hunter/continuous_day_proof.py").read_text(encoding="utf-8")
