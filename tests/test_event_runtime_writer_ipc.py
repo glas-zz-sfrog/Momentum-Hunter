@@ -370,7 +370,24 @@ class EventRuntimeWriterIpcTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             if "event_runtime_writer_ipc" in text:
                 importers.append(path.name)
-        self.assertEqual(["continuous_evidence_writer.py"], importers)
+        self.assertEqual(
+            ["continuous_evidence_writer.py", "windows_isolation_proof.py"],
+            sorted(importers),
+        )
+        proof_source = (package_root / "windows_isolation_proof.py").read_text(
+            encoding="utf-8"
+        ).lower()
+        self.assertIn("test_only_no_runtime_authority", proof_source)
+        for forbidden in (
+            "import requests",
+            "import httpx",
+            "import socket",
+            "submit_order(",
+            "cancel_order(",
+            "replace_order(",
+            "query_account(",
+        ):
+            self.assertNotIn(forbidden, proof_source)
 
 
 if __name__ == "__main__":
