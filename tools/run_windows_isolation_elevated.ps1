@@ -387,6 +387,9 @@ try {
     $limitedRoot = Join-Path $testRoot "limited"
     $highestRoot = Join-Path $testRoot "highest"
     $handleRoot = Join-Path $testRoot "handle"
+    foreach ($path in @($writerRoot, $limitedRoot, $highestRoot, $handleRoot)) {
+        New-SeedRoot -Path $path
+    }
 
     & icacls.exe $testBase /inheritance:r `
         /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-19:(OI)(CI)RX" `
@@ -402,17 +405,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Test control base ACL configuration failed." }
     & icacls.exe $testRoot /inheritance:r `
         /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-19:(OI)(CI)M" `
-        "*S-1-5-32-545:(OI)(CI)RX" /T /C | Out-Null
+        "*S-1-5-32-545:(OI)(CI)RX" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Test root ACL configuration failed." }
     & icacls.exe $testRoot /setowner "*S-1-5-18" /T /C | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Test root ownership configuration failed." }
     & icacls.exe $toolRoot /inheritance:r `
         /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-19:(OI)(CI)RX" `
-        "*S-1-5-32-545:(OI)(CI)RX" /T /C | Out-Null
+        "*S-1-5-32-545:(OI)(CI)RX" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Test tool ACL configuration failed." }
     & icacls.exe $controlRoot /inheritance:r `
         /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-19:(OI)(CI)M" `
-        "*S-1-5-32-545:(OI)(CI)M" /T /C | Out-Null
+        "*S-1-5-32-545:(OI)(CI)M" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Test control ACL configuration failed." }
     $result.acl = [ordered]@{
         testBase = (& icacls.exe $testBase) -join "`n"
@@ -422,10 +425,6 @@ try {
         toolRoot = (& icacls.exe $toolRoot) -join "`n"
         controlRoot = (& icacls.exe $controlRoot) -join "`n"
     }
-    foreach ($path in @($writerRoot, $limitedRoot, $highestRoot, $handleRoot)) {
-        New-SeedRoot -Path $path
-    }
-
     $writerActor = Invoke-AccessTask `
         -Suffix "Writer" `
         -IdentityMode LocalService `

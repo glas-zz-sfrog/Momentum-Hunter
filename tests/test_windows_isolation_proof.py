@@ -154,7 +154,7 @@ class WindowsIsolationProofTests(unittest.TestCase):
                 )
                 self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
 
-    def test_distinct_principal_seed_files_inherit_writer_acl(self) -> None:
+    def test_distinct_principal_seed_files_are_protected_before_actor_launch(self) -> None:
         source = (
             ROOT / "tools" / "run_windows_isolation_elevated.ps1"
         ).read_text(encoding="utf-8")
@@ -162,8 +162,22 @@ class WindowsIsolationProofTests(unittest.TestCase):
         acl_install = source.index("$result.acl = [ordered]@{", proof_body)
         seed_creation = source.index("New-SeedRoot -Path $path", proof_body)
         writer_launch = source.index("$writerActor = Invoke-AccessTask", proof_body)
-        self.assertLess(acl_install, seed_creation)
-        self.assertLess(seed_creation, writer_launch)
+        self.assertLess(seed_creation, acl_install)
+        self.assertLess(acl_install, writer_launch)
+
+    def test_distinct_principal_children_keep_root_acl_inheritance(self) -> None:
+        source = (
+            ROOT / "tools" / "run_windows_isolation_elevated.ps1"
+        ).read_text(encoding="utf-8")
+        for root, failure in (
+            ("$testRoot", "Test root ACL configuration failed."),
+            ("$toolRoot", "Test tool ACL configuration failed."),
+            ("$controlRoot", "Test control ACL configuration failed."),
+        ):
+            with self.subTest(root=root):
+                start = source.index(f"& icacls.exe {root} /inheritance:r")
+                end = source.index(failure, start)
+                self.assertNotIn("/T", source[start:end])
 
     def test_service_actor_uses_encoded_disposable_payload(self) -> None:
         source = (
