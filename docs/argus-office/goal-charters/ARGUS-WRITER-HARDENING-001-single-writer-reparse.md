@@ -55,4 +55,3 @@ The branch remains unmerged and uninstalled. Activation remains prohibited.
 - [x] Protected production and August 17 boundaries are explicit.
 - [x] Historical same-SID failure and administrator limitation are retained.
 - [x] Complete physical and logical regression evidence is required.
-
