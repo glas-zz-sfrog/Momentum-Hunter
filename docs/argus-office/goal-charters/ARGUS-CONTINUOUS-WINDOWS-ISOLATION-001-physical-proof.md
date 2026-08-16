@@ -44,14 +44,15 @@ failure modes before any continuous runtime is installed or activated.
 
 ## Status
 
-`IMPLEMENTED_PENDING_CORRECTED_DISTINCT_PRINCIPAL_RERUN`.
+`PHYSICAL_PROOF_COMPLETE_ARCHITECTURE_HARDENING_REQUIRED`.
 
-The same-SID and process/filesystem defects are physically proven. The
-completed LocalService run created new files and denied the limited nonwriter,
-but its preexisting seed files inherited ACLs before the writer ACL was
-installed. The fixture order is corrected and regression-pinned; the final
-elevated rerun remains required before accepting the dedicated-principal
-operation matrix.
+The corrected physical matrix accepts the dedicated-principal ACL boundary:
+LocalService can perform the required evidence mutations while the ordinary
+medium-integrity current-user process cannot mutate the protected root or
+duplicate the writer handle. Same-SID isolation, duplicate-writer exclusion,
+and reparse-resistant persistence remain physically disproven. No runtime may
+be installed or activated until the latter two defects are hardened and the
+full physical matrix passes again.
 
 ## Goal Steward Review
 
@@ -59,4 +60,5 @@ operation matrix.
 - [x] Scope, non-goals, and protected boundaries are explicit.
 - [x] Failing isolation results are accepted as evidence.
 - [x] Evidence depth covers physical Windows behavior and broad regressions.
-- [x] Remaining elevation gate is explicit and cannot be inferred away.
+- [x] Dedicated-principal result is physical rather than inferred.
+- [x] Remaining single-writer and reparse gates are explicit.

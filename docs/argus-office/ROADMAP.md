@@ -92,30 +92,33 @@ continuous runtime is activated.
 
 `CONTINUOUS-WINDOWS-ISOLATION-001` is implemented on the separate branch
 `codex/ARGUS-CONTINUOUS-WINDOWS-ISOLATION-001-physical-proof` from writer
-topology head `39bd45b`. A completed physical run against disposable roots
-proved that same-SID processes can mutate committed evidence, duplicate and
-read a capability handle, and interfere with the partial-file path. Two
-physical writer processes also both accepted sequence 1. Explicit handle
-allowlisting, IPC authentication/replay rejection, capability regeneration,
-and crash/restart idempotency passed. A limited current-user process could not
-open or mutate the distinct LocalService lane, while a high-integrity local
-administrator could change ACLs, duplicate the writer handle, and regain write
+topology head `39bd45b`. The corrected physical run against disposable roots
+proved that a dedicated `LOCAL SERVICE` writer can read, create, overwrite,
+append, rename, and delete evidence under its protected root while the
+medium-integrity current-user WPF/Engine-Host equivalent can read but cannot
+perform any tested mutation, ACL/ownership change, junction creation, or
+LocalService handle duplication. A high-integrity local administrator can
+change ACLs, create a junction, duplicate the writer handle, and regain write
 access; no administrator-resistance claim is made.
 
-The completed report is preserved outside Git at
-`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\CONTINUOUS-WINDOWS-ISOLATION-001\CONTINUOUS-WINDOWS-ISOLATION-001-20260816T121230Z-97dd66cce8ef4a65.json`
+The same campaign also proved that same-SID processes can mutate committed
+evidence, duplicate and read a capability handle, and interfere with the
+partial-file path. Two physical writer processes both accepted sequence 1.
+Explicit handle allowlisting, IPC authentication/replay rejection, capability
+regeneration, and crash/restart idempotency passed. The dedicated-principal ACL
+boundary is therefore accepted, but physical single-writer exclusion and
+reparse-resistant persistence remain failed activation gates.
+
+The final corrected report is preserved outside Git at
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\CONTINUOUS-WINDOWS-ISOLATION-001\CONTINUOUS-WINDOWS-ISOLATION-001-20260816T153118Z-aea37c6df81942ff.json`
 with SHA-256
-`E5D76D376B3377FAD7460B62FCDF21EBEE23FE2A3C60C4EB84FD0F7B1A129B0E`.
-Its dedicated-writer mutation matrix is conservatively not accepted because
-seed files were created before the writer ACL and inherited the wrong test
-permissions. The harness now installs ACLs before seeding, but the corrected
-elevated rerun remains pending because its final UAC launch was not approved.
+`B07DD7D76159EFADDF22B9EF80EF0ABD9CBCE6ED8231761E498ACDFADD12503E`.
 Current branch classification is
-`IMPLEMENTED_PENDING_CORRECTED_DISTINCT_PRINCIPAL_RERUN`; no merge,
+`PHYSICAL_PROOF_COMPLETE_ARCHITECTURE_HARDENING_REQUIRED`; no merge,
 installation, service change, scheduler change, or activation is eligible.
-After the corrected matrix, the next architecture gate must add physical
-single-writer exclusion and reparse-resistant temp handling under a dedicated
-non-admin writer principal before any continuous runtime activation.
+The next architecture slice must retain the dedicated non-admin writer
+principal and add OS-level single-writer exclusion plus reparse-resistant
+temp/final operations, followed by a complete physical attack-matrix rerun.
 
 ## Integrated Work History
 

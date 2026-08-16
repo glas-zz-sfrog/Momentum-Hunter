@@ -23,11 +23,11 @@
 
 ## Evidence Root And ACL Matrix
 
-Completed run ID `97dd66cce8ef4a65` used only:
+Final corrected run ID `aea37c6df81942ff` used only:
 
-- `C:\MomentumHunterIsolationProof\97dd66cce8ef4a65`
-- `C:\MomentumHunterIsolationProofTools\97dd66cce8ef4a65`
-- `C:\MomentumHunterIsolationProofControl\97dd66cce8ef4a65`
+- `C:\MomentumHunterIsolationProof\aea37c6df81942ff`
+- `C:\MomentumHunterIsolationProofTools\aea37c6df81942ff`
+- `C:\MomentumHunterIsolationProofControl\aea37c6df81942ff`
 
 All were removed after the run. The test ACL gave SYSTEM full control,
 LocalService modify on evidence/control and read/execute on tools, and ordinary
@@ -36,18 +36,19 @@ than displayed ACL text, determine the findings:
 
 - Same-SID medium process: create, overwrite, append, rename, delete, directory
   create, committed overwrite/delete, and partial rename all succeeded.
-- Limited current-user process against the distinct lane: every mutation,
-  ACL/ownership attempt, junction creation, and read attempt was denied.
-- LocalService writer: new file and directory creation succeeded. Existing
-  seed mutations were denied because the fixture created them before applying
-  the writer ACL; this matrix is not accepted as the final writer result.
+- Limited current-user process against the distinct lane: read succeeded by
+  design, while every tested mutation, ACL/ownership attempt, and junction
+  creation was denied.
+- LocalService writer: read, create, overwrite, append, rename, delete,
+  directory creation, committed-file overwrite/delete, and partial rename all
+  succeeded. ACL and ownership changes were denied.
 - High-integrity current-user process: initial data mutations were denied, but
   ACL modification and junction creation succeeded, followed by a successful
   grant and write. This is the documented administrator ceiling.
 
-The harness now applies the ACL before creating seed files. A focused test
-pins that order, but the corrected elevated matrix did not run because its UAC
-launch was not approved.
+The corrected harness creates seed fixtures, then protects only the disposable
+root so its children inherit the LocalService access-control entries. Focused
+tests pin both order and nonrecursive inheritance protection.
 
 ## Physical Results
 
@@ -91,8 +92,9 @@ opened, duplicated, stopped, or modified.
 
 ### WPF And Engine Host Equivalents
 
-- The medium-integrity current-user equivalent could not mutate or read the
-  distinct-principal lane and could not open the LocalService handle target.
+- The medium-integrity current-user equivalent could read but could not mutate
+  the distinct-principal lane and could not open the LocalService handle
+  target.
 - The high-integrity current-user equivalent changed ACLs, created a junction,
   regained write access, and duplicated the LocalService capability handle.
 - Actual WPF and Engine Host processes were not touched. The proof establishes
@@ -129,23 +131,26 @@ Physically proven:
   writer/runtime crash idempotency work in the test architecture.
 - Current duplicate-writer exclusion and partial-temp reparse handling are not
   adequate.
+- The dedicated LocalService principal can perform required evidence mutations
+  while the medium current-user WPF/Engine-Host equivalent cannot mutate that
+  protected root or duplicate the LocalService capability handle.
 
 Not proven:
 
-- Final LocalService writer operation matrix after corrected ACL/seed order.
 - Resistance to Administrator, SYSTEM, kernel control, credential theft, or
   arbitrary code execution inside the writer.
 - Actual installed WPF/Engine Host binary isolation.
+- Installed LocalService writer deployment, service recovery, or credential
+  boundary behavior.
 - Simultaneous boot ordering of an installed continuous runtime and writer.
 - Any provider, account, broker, order, Paper, Shadow, or strategy behavior.
 
 ## Verification
 
 - Compileall: pass.
-- Focused Windows proof tests: 13/13 pass.
-- Focused importer plus proof tests: 14/14 pass.
-- Adjacent writer/runtime/IPC/root-security/proof tests: 96/96 pass.
-- Full Python discovery: 2,294/2,294 pass in 599.304 seconds.
+- Focused Windows proof tests: 14/14 pass after the final harness repair.
+- Adjacent writer/runtime/IPC/root-security/proof tests: 134/134 pass.
+- Full Python discovery: 2,295/2,295 pass in 503.398 seconds.
 - PowerShell parse checks: pass for all three proof scripts.
 - Secret-value scan: pass. Four preexisting synthetic credential-shaped values
   in `test_event_runtime_writer_ipc.py` remain test rejection fixtures and are
@@ -167,13 +172,13 @@ Before and after the completed elevated run:
 - No production provider, broker, account, credential, order, evidence root,
   service, manifest, scheduler, WPF, or Engine Host state changed.
 
-Canonical JSON proof:
+Final canonical JSON proof:
 
-`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\CONTINUOUS-WINDOWS-ISOLATION-001\CONTINUOUS-WINDOWS-ISOLATION-001-20260816T121230Z-97dd66cce8ef4a65.json`
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\CONTINUOUS-WINDOWS-ISOLATION-001\CONTINUOUS-WINDOWS-ISOLATION-001-20260816T153118Z-aea37c6df81942ff.json`
 
 SHA-256:
 
-`E5D76D376B3377FAD7460B62FCDF21EBEE23FE2A3C60C4EB84FD0F7B1A129B0E`
+`B07DD7D76159EFADDF22B9EF80EF0ABD9CBCE6ED8231761E498ACDFADD12503E`
 
 ## Classification And Next Gate
 
@@ -182,13 +187,13 @@ Completed report classifications:
 - `SAME_SID_FILESYSTEM_ISOLATION_INSUFFICIENT`
 - `DUPLICATE_WRITER_EXCLUSION_INSUFFICIENT`
 - `REPARSE_POINT_BOUNDARY_INSUFFICIENT`
-- `WINDOWS_TRUST_BOUNDARY_REQUIRES_ARCHITECTURE_CHANGE`
+- `WINDOWS_ISOLATION_REQUIRES_DEDICATED_PRINCIPAL_AND_HARDENING`
 
 Branch closeout classification:
 
-`IMPLEMENTED_PENDING_CORRECTED_DISTINCT_PRINCIPAL_RERUN`
+`PHYSICAL_PROOF_COMPLETE_ARCHITECTURE_HARDENING_REQUIRED`
 
-Exact next gate: run the corrected disposable LocalService matrix under UAC,
-then design and prove a dedicated non-admin writer deployment with OS-level
-single-writer exclusion and reparse-resistant temp/final operations. Do not
-merge, install, or activate continuous runtime behavior before those gates.
+Exact next gate: preserve the proven dedicated non-admin writer boundary, add
+OS-level single-writer exclusion and reparse-resistant temp/final operations,
+then rerun this complete physical attack matrix. Do not merge, install, or
+activate continuous runtime behavior before those gates pass.
