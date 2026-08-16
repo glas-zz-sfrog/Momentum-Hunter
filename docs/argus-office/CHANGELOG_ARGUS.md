@@ -41,6 +41,19 @@
 - Selected no new provider and preserved all runtime, operational, scoring,
   Paper/Shadow, broker/order, service, scheduler, Engine Host, and UI behavior.
 
+- Hardened the dormant dedicated evidence writer with a root-scoped exclusive
+  Windows owner handle, explicit duplicate-owner failure, crash release, and
+  bounded owner diagnostics.
+- Added handle-pinned, reparse-rejecting temp/final persistence with strict path
+  components, physical final-path/identity checks, and hard-link alias defense.
+- Reran the complete elevated Windows matrix: LocalService writer passed,
+  medium nonwriters remained read-only, one duplicate was denied, replacement
+  ownership after crash passed, and outside-root mutation count was zero.
+- Preserved same-SID failure and the local-Administrator limitation. Passed 216
+  focused/adjacent tests, all 2,301 Python tests, PowerShell parsing, secret and
+  capability scans. Branch remains unmerged, uninstalled, and inactive pending
+  August 17 reconciliation.
+
 - Activated the empty SETUP-002 successor-setup research sample prospectively
   for August 17 with a separate immutable activation timestamp and fingerprint.
 - Added two exact-head, zero-retry service jobs: outcome-blind Pass 1 after the

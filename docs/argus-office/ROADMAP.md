@@ -170,19 +170,41 @@ evidence, duplicate and read a capability handle, and interfere with the
 partial-file path. Two physical writer processes both accepted sequence 1.
 Explicit handle allowlisting, IPC authentication/replay rejection, capability
 regeneration, and crash/restart idempotency passed. The dedicated-principal ACL
-boundary is therefore accepted, but physical single-writer exclusion and
-reparse-resistant persistence remain failed activation gates.
+boundary was therefore accepted, while physical single-writer exclusion and
+reparse-resistant persistence remained failed activation gates at
+physical-proof commit `b384680`.
 
 The final corrected report is preserved outside Git at
 `C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\CONTINUOUS-WINDOWS-ISOLATION-001\CONTINUOUS-WINDOWS-ISOLATION-001-20260816T153118Z-aea37c6df81942ff.json`
 with SHA-256
 `B07DD7D76159EFADDF22B9EF80EF0ABD9CBCE6ED8231761E498ACDFADD12503E`.
-Current branch classification is
-`PHYSICAL_PROOF_COMPLETE_ARCHITECTURE_HARDENING_REQUIRED`; no merge,
-installation, service change, scheduler change, or activation is eligible.
-The next architecture slice must retain the dedicated non-admin writer
-principal and add OS-level single-writer exclusion plus reparse-resistant
-temp/final operations, followed by a complete physical attack-matrix rerun.
+`WRITER-HARDENING-001` now closes those two defects on
+`codex/ARGUS-WRITER-HARDENING-001-single-writer-reparse` at implementation
+commit `df31bc0`. The writer holds a root-scoped, no-sharing Windows file handle
+for its process lifetime, so one independent process owns one physical evidence
+root, a duplicate fails immediately with `WRITER_OWNER_CONFLICT`, and the OS
+releases ownership after process death. Root identity includes normalized path,
+volume/file identity, and topology fingerprint; PID is diagnostic only.
+
+Canonical, partial, and temporary writes now use a handle-pinned Windows
+storage boundary that rejects reparse points, final-path mismatches, unsafe path
+components, and hard-link aliases. The complete corrected physical campaign
+proved one accepted writer, one denied duplicate, crash release to one
+replacement owner, and zero outside-root mutations. LocalService retained the
+required writer operations while medium Steven/WPF/Engine Host-equivalent
+processes remained read-only and unable to duplicate its handle. Same-SID
+isolation remains permanently insufficient, and local Administrator resistance
+is not claimed.
+
+The hardened report is preserved at
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\WRITER-HARDENING-001\WRITER-HARDENING-001-20260816T173600Z-5207f911ae104acf.json`
+with SHA-256
+`F8D6D4B4F84BD2A82700D9E8305B1345BA264358DF40878875F374708941E9AB`.
+Classification is
+`WRITER_PHYSICAL_INTEGRITY_HARDENED_PENDING_AUGUST_17_RECONCILIATION`.
+Nothing is merged, installed, scheduled, or activated. The next gate is the
+post-August-17 one-lineage reconciliation followed by separately authorized
+research-only deployment/activation planning.
 
 ## Integrated Work History
 

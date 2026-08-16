@@ -409,3 +409,25 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   or order capability was added.
 - Classification: `IMPLEMENTED_PENDING_PARENT_INTEGRATION`; no merge,
   installation, activation, or repin is authorized.
+
+## 2026-08-16 - ARGUS-WRITER-HARDENING-001 Physical Integrity
+
+- Reconciled the runtime/writer/physical-proof lineage through `fd04452`,
+  `39bd45b`, and `b384680`, then created the isolated hardening branch without
+  changing canonical `ea056155` or the August 17 program.
+- Added one process-lifetime exclusive Windows owner per physical evidence root;
+  duplicate start fails immediately, unrelated roots remain independent, and
+  ownership is released by the OS after process death.
+- Added Windows handle-pinned root/directory/temp/final validation that rejects
+  reparse points, unsafe components, final-path mismatch, and hard-link aliases.
+- Complete elevated proof passed with one writer owner, one denied duplicate,
+  one crash replacement, zero overlap, zero outside-root mutations, successful
+  LocalService writes, and denied medium nonwriter mutations/handle duplication.
+- Physical soak passed 2,000 records with 10 duplicate replays, one restart,
+  zero split brain, mean `39.059 ms`, p95 `42.265 ms`, and bounded storage.
+- Compileall passed; 216 focused/adjacent tests passed including the 4,300-record
+  ledger; corrected full discovery passed 2,301/2,301. PowerShell parsing,
+  whitespace, secret, capability, and protected-path checks passed.
+- Implementation commit: `df31bc0`. Classification:
+  `WRITER_PHYSICAL_INTEGRITY_HARDENED_PENDING_AUGUST_17_RECONCILIATION`.
+  Nothing was merged, installed, scheduled, or activated.
