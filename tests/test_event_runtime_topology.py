@@ -466,6 +466,7 @@ class EventRuntimeTopologyTests(unittest.TestCase):
                 "event_runtime_evidence_chain.py",
                 "event_runtime_recovery.py",
                 "event_runtime_orchestration.py",
+                "continuous_evidence_writer.py",
             }:
                 continue
             if "event_runtime_topology" in path.read_text(encoding="utf-8"):

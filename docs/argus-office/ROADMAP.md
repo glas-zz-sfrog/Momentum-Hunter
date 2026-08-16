@@ -143,6 +143,20 @@ research-data task is `ARGUS-STAT-DATA-001`, the prospective opportunity
 denominator. The August 17 installed runtime and operational jobs remain pinned
 to canonical `master` and are unchanged by this stacked research branch.
 
+Branch-local continuous development is active without changing that operational
+baseline. `CONT-RUNTIME-001` is preserved at `fd04452` with its narrow ordered
+`EvidenceWriteIntent` boundary. `WRITER-TOPOLOGY-002` is implemented on
+`codex/ARGUS-WRITER-TOPOLOGY-002-dedicated-evidence-writer` from that exact
+parent and reconciles the earlier topology conflict in favor of a dedicated,
+credential-free evidence writer. Topology v1 remains readable and unchanged;
+topology v2 makes Engine Host and WPF read-only, uses authenticated bounded IPC,
+and stores immutable sharded intent records rather than rewriting a full-day
+ledger. The branch is dormant and unmerged, no writer is installed, and no
+continuous runtime is activated. Current classification is
+`IMPLEMENTED_PENDING_WINDOWS_ISOLATION_PROOF`; the next gate must physically
+prove principal, handle, ACL, same-SID, and reparse-point isolation after the
+August 17 operational evidence is preserved.
+
 ## Integrated Work History
 
 ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
