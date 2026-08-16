@@ -88,10 +88,34 @@ credential-free evidence writer. Topology v1 remains readable and unchanged;
 topology v2 makes Engine Host and WPF read-only, uses authenticated bounded IPC,
 and stores immutable sharded intent records rather than rewriting a full-day
 ledger. The branch is dormant and unmerged, no writer is installed, and no
-continuous runtime is activated. Current classification is
-`IMPLEMENTED_PENDING_WINDOWS_ISOLATION_PROOF`; the next gate must physically
-prove principal, handle, ACL, same-SID, and reparse-point isolation after the
-August 17 operational evidence is preserved.
+continuous runtime is activated.
+
+`CONTINUOUS-WINDOWS-ISOLATION-001` is implemented on the separate branch
+`codex/ARGUS-CONTINUOUS-WINDOWS-ISOLATION-001-physical-proof` from writer
+topology head `39bd45b`. A completed physical run against disposable roots
+proved that same-SID processes can mutate committed evidence, duplicate and
+read a capability handle, and interfere with the partial-file path. Two
+physical writer processes also both accepted sequence 1. Explicit handle
+allowlisting, IPC authentication/replay rejection, capability regeneration,
+and crash/restart idempotency passed. A limited current-user process could not
+open or mutate the distinct LocalService lane, while a high-integrity local
+administrator could change ACLs, duplicate the writer handle, and regain write
+access; no administrator-resistance claim is made.
+
+The completed report is preserved outside Git at
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\CONTINUOUS-WINDOWS-ISOLATION-001\CONTINUOUS-WINDOWS-ISOLATION-001-20260816T121230Z-97dd66cce8ef4a65.json`
+with SHA-256
+`E5D76D376B3377FAD7460B62FCDF21EBEE23FE2A3C60C4EB84FD0F7B1A129B0E`.
+Its dedicated-writer mutation matrix is conservatively not accepted because
+seed files were created before the writer ACL and inherited the wrong test
+permissions. The harness now installs ACLs before seeding, but the corrected
+elevated rerun remains pending because its final UAC launch was not approved.
+Current branch classification is
+`IMPLEMENTED_PENDING_CORRECTED_DISTINCT_PRINCIPAL_RERUN`; no merge,
+installation, service change, scheduler change, or activation is eligible.
+After the corrected matrix, the next architecture gate must add physical
+single-writer exclusion and reparse-resistant temp handling under a dedicated
+non-admin writer principal before any continuous runtime activation.
 
 ## Integrated Work History
 
