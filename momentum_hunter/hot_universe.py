@@ -20,6 +20,7 @@ from typing import Iterable, Mapping
 
 from momentum_hunter.broad_discovery import (
     COVERAGE_SCOPE_BOUNDED_PROVIDER_RESPONSE,
+    COVERAGE_SCOPE_FILTERED_PROVIDER_QUERY,
     ROW_DISPOSITION_QUALIFIED,
     ROW_DISPOSITION_REJECTED_FILTER,
     SNAPSHOT_STATUS_COMPLETE,
@@ -889,8 +890,11 @@ def _validated_snapshot(snapshot: DiscoverySnapshot) -> DiscoverySnapshot:
         raise HotUniverseError("Discovery snapshot is malformed or tampered.") from exc
     if validated.status != SNAPSHOT_STATUS_COMPLETE:
         raise HotUniverseError("Only completed discovery snapshots may alter membership.")
-    if validated.coverage_scope != COVERAGE_SCOPE_BOUNDED_PROVIDER_RESPONSE:
-        raise HotUniverseError("Hot-universe input must remain a bounded provider response.")
+    if validated.coverage_scope not in {
+        COVERAGE_SCOPE_BOUNDED_PROVIDER_RESPONSE,
+        COVERAGE_SCOPE_FILTERED_PROVIDER_QUERY,
+    }:
+        raise HotUniverseError("Hot-universe input must name a bounded provider query.")
     if validated.session_date != validated.evaluated_at.astimezone(CENTRAL_TZ).date().isoformat():
         raise HotUniverseError("Discovery snapshot session date is inconsistent with its timestamp.")
     return validated

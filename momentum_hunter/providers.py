@@ -14,11 +14,18 @@ from typing import Iterable
 import requests
 
 from momentum_hunter.broad_discovery import (
+    DiscoveryPageInput,
+    DiscoveryPaginationPolicy,
     DiscoveryQueryIdentity,
     DiscoverySnapshot,
     DiscoverySourceRow,
+    TRUNCATION_MAX_ELAPSED_TIME,
+    TRUNCATION_MAX_PAGES,
+    TRUNCATION_MAX_ROWS,
     build_discovery_snapshot,
+    build_paginated_discovery_snapshot,
     filter_discovery_candidates,
+    pagination_page_bound,
 )
 from momentum_hunter.models import Candidate, NewsItem, ScannerCriteria
 from momentum_hunter.provider_semantic_plausibility import (
@@ -53,6 +60,7 @@ FINVIZ_SCREENER_COLUMN_ALIASES = {
 }
 FINVIZ_DISCOVERY_SOURCE_VERSION = "finviz-screener-v151-custom-columns-v1"
 FINVIZ_DISCOVERY_PARSER_CONTRACT_VERSION = 1
+FINVIZ_DISCOVERY_PAGE_SIZE = 20
 
 
 class ProviderUnavailableError(RuntimeError):
@@ -102,6 +110,18 @@ class ProviderScanDiagnostics:
     semantic_fingerprint: str = ""
     semantic_issue_codes: tuple[str, ...] = ()
     semantic_rejection_reason_counts: tuple[tuple[str, int], ...] = ()
+
+
+@dataclass(frozen=True)
+class _ParsedFinvizDiscoveryPage:
+    candidates: tuple[Candidate, ...]
+    source_rows: tuple[DiscoverySourceRow, ...]
+    observed_headers: tuple[str, ...]
+    canonical_headers: tuple[str, ...]
+    schema_fingerprint: str
+    semantic_diagnostics: ProviderSemanticDiagnostics
+    provider_total_results: int | None
+    page_size: int
 
 
 class MarketDataProvider(ABC):
@@ -423,6 +443,163 @@ class FinvizProvider(MarketDataProvider):
         self.last_discovery_snapshot = snapshot
         return snapshot
 
+    def discover_paginated(
+        self,
+        criteria: ScannerCriteria,
+        *,
+        pagination_policy: DiscoveryPaginationPolicy,
+        requested_at: datetime | None = None,
+        evaluated_at: datetime | None = None,
+    ) -> DiscoverySnapshot:
+        """Explicitly acquire one bounded multi-page Finviz discovery pulse.
+
+        This method is intentionally separate from ``discover`` and ``scan``.
+        Nothing in the opening runtime calls it: a future owner must opt in with
+        a versioned page policy and consume the resulting coverage truth.
+        """
+
+        self.last_scan_diagnostics = None
+        self.last_semantic_diagnostics = None
+        self.last_discovery_snapshot = None
+        if pagination_policy.max_rows < FINVIZ_DISCOVERY_PAGE_SIZE:
+            raise ValueError(
+                "Finviz paginated discovery max_rows must accommodate one complete page."
+            )
+        pulse_started = requested_at or now_central()
+        observed_evaluated_at = evaluated_at or now_central()
+        source_query = self._screener_url(criteria)
+        query_identity = DiscoveryQueryIdentity.from_criteria(
+            criteria,
+            source_query=source_query,
+            sort_order="-volume",
+            page_bound=pagination_page_bound(pagination_policy),
+        )
+        pages: list[DiscoveryPageInput] = []
+        collected_rows = 0
+        known_page_size = FINVIZ_DISCOVERY_PAGE_SIZE
+        termination_reason: str | None = None
+
+        for page_number in range(1, pagination_policy.max_pages + 1):
+            if pages and (now_central() - pulse_started).total_seconds() >= (
+                pagination_policy.maximum_elapsed_time_seconds
+            ):
+                termination_reason = TRUNCATION_MAX_ELAPSED_TIME
+                break
+            if pages and collected_rows + known_page_size > pagination_policy.max_rows:
+                termination_reason = TRUNCATION_MAX_ROWS
+                break
+            page_offset = 1 + ((page_number - 1) * known_page_size)
+            page_requested_at = now_central()
+            started_monotonic = time.monotonic()
+            try:
+                response = self._get_with_retries(
+                    self._screener_page_url(criteria, page_offset=page_offset),
+                    action=f"paginated scan page {page_number}",
+                    timeout_seconds=pagination_policy.per_page_timeout_seconds,
+                )
+                page_received_at = now_central()
+                parsed = self._parse_discovery_page(response.text, criteria)
+            except ProviderUnavailableError as exc:
+                page_received_at = now_central()
+                pages.append(
+                    DiscoveryPageInput(
+                        page_number=page_number,
+                        page_offset=page_offset,
+                        requested_at=page_requested_at,
+                        received_at=page_received_at,
+                        request_duration_milliseconds=int(
+                            (time.monotonic() - started_monotonic) * 1000
+                        ),
+                        failure_reason=f"{exc.reason}:{type(exc).__name__}",
+                    )
+                )
+                break
+            except Exception as exc:
+                page_received_at = now_central()
+                pages.append(
+                    DiscoveryPageInput(
+                        page_number=page_number,
+                        page_offset=page_offset,
+                        requested_at=page_requested_at,
+                        received_at=page_received_at,
+                        request_duration_milliseconds=int(
+                            (time.monotonic() - started_monotonic) * 1000
+                        ),
+                        failure_reason=f"unclassified:{type(exc).__name__}",
+                    )
+                )
+                break
+
+            known_page_size = parsed.page_size
+            last_row_ordinal = page_offset + len(parsed.source_rows) - 1
+            terminal_page = (
+                parsed.provider_total_results is not None
+                and last_row_ordinal >= parsed.provider_total_results
+            ) or len(parsed.source_rows) < parsed.page_size
+            pages.append(
+                DiscoveryPageInput(
+                    page_number=page_number,
+                    page_offset=page_offset,
+                    requested_at=page_requested_at,
+                    received_at=page_received_at,
+                    request_duration_milliseconds=int(
+                        (time.monotonic() - started_monotonic) * 1000
+                    ),
+                    source_rows=parsed.source_rows,
+                    raw_row_count=len(parsed.source_rows),
+                    source_contract_fingerprint=finviz_discovery_contract_fingerprint(
+                        parsed.schema_fingerprint
+                    ),
+                    semantic_plausibility_fingerprint=parsed.semantic_diagnostics.fingerprint,
+                    provider_total_results=parsed.provider_total_results,
+                    provider_page_size=parsed.page_size,
+                    terminal_page=terminal_page,
+                )
+            )
+            collected_rows += len(parsed.source_rows)
+            self.last_scan_diagnostics = ProviderScanDiagnostics(
+                provider=self.name,
+                schema_fingerprint=parsed.schema_fingerprint,
+                observed_headers=parsed.observed_headers,
+                canonical_headers=parsed.canonical_headers,
+                data_row_count=len(parsed.source_rows),
+                parsed_row_count=len(parsed.candidates),
+                qualifying_candidate_count=len(
+                    filter_discovery_candidates(parsed.candidates, criteria)
+                ),
+                semantic_status=parsed.semantic_diagnostics.status,
+                semantic_fingerprint=parsed.semantic_diagnostics.fingerprint,
+                semantic_issue_codes=parsed.semantic_diagnostics.issue_codes,
+                semantic_rejection_reason_counts=(
+                    parsed.semantic_diagnostics.rejection_reason_counts
+                ),
+            )
+            self.last_semantic_diagnostics = parsed.semantic_diagnostics
+            if terminal_page:
+                break
+            if collected_rows >= pagination_policy.max_rows:
+                termination_reason = TRUNCATION_MAX_ROWS
+                break
+            if page_number == pagination_policy.max_pages:
+                termination_reason = TRUNCATION_MAX_PAGES
+                break
+            if pagination_policy.inter_request_delay_seconds:
+                self.sleeper(pagination_policy.inter_request_delay_seconds)
+
+        if not pages:
+            raise RuntimeError("Paginated discovery did not issue a bounded page request.")
+        snapshot = build_paginated_discovery_snapshot(
+            source=self.name,
+            source_version=FINVIZ_DISCOVERY_SOURCE_VERSION,
+            evaluated_at=observed_evaluated_at,
+            query_identity=query_identity,
+            pagination_policy=pagination_policy,
+            page_inputs=pages,
+            termination_reason=termination_reason,
+        )
+        self.last_discovery_snapshot = snapshot
+        return snapshot
+
     def fetch_news(self, ticker: str, as_of: datetime | None = None) -> list[NewsItem]:
         from bs4 import BeautifulSoup
 
@@ -486,19 +663,150 @@ class FinvizProvider(MarketDataProvider):
         columns = ",".join(str(item) for item in FINVIZ_CUSTOM_COLUMN_IDS)
         return f"{self.base_url}/screener.ashx?v=151&f={filters}&o=-volume&c={columns}"
 
+    def _screener_page_url(
+        self,
+        criteria: ScannerCriteria,
+        *,
+        page_offset: int,
+    ) -> str:
+        if page_offset < 1:
+            raise ValueError("Finviz screener page offsets must be positive.")
+        base = self._screener_url(criteria)
+        return base if page_offset == 1 else f"{base}&r={page_offset}"
+
+    def _parse_discovery_page(
+        self,
+        html: str,
+        criteria: ScannerCriteria,
+    ) -> _ParsedFinvizDiscoveryPage:
+        """Parse and validate one already-fetched Finviz screener page."""
+
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(html, "lxml")
+        table = soup.find("table", class_="screener_table")
+        if table is None:
+            raise RuntimeError(
+                "Finviz screener table was not found. Try Sample provider or update parser."
+            )
+        rows = table.find_all("tr")
+        if not rows:
+            raise ProviderContractError(
+                "Finviz screener schema drift detected: the table has no header row."
+            )
+        headers = finviz_screener_headers(rows[0])
+        canonical_headers = validate_finviz_screener_headers(headers)
+        schema_fingerprint = finviz_screener_schema_fingerprint(canonical_headers)
+        data_rows = [row for row in rows[1:] if row.find_all(["th", "td"])]
+        if len(data_rows) > FINVIZ_DISCOVERY_PAGE_SIZE:
+            raise ProviderContractError(
+                "Finviz screener page exceeded the proven page-size contract."
+            )
+        candidates: list[Candidate] = []
+        discovery_source_rows: list[DiscoverySourceRow] = []
+        for row_number, row in enumerate(data_rows, start=1):
+            values = finviz_screener_row(row, headers, row_number=row_number)
+            ticker = required_finviz_text(values, "Ticker", row_number=row_number)
+            candidate = Candidate(
+                ticker=ticker,
+                company=required_finviz_text(values, "Company", row_number=row_number),
+                sector=required_finviz_text(values, "Sector", row_number=row_number),
+                industry=required_finviz_text(values, "Industry", row_number=row_number),
+                market_cap=parse_required_market_cap(
+                    values.get("Market Cap", ""),
+                    field="Market Cap",
+                    row_number=row_number,
+                ),
+                price=parse_required_finviz_float(
+                    values.get("Price", ""),
+                    field="Price",
+                    row_number=row_number,
+                    positive=True,
+                ),
+                percent_change=parse_required_finviz_float(
+                    finviz_screener_value(values, "Change", "Change %").replace("%", ""),
+                    field="Change %",
+                    row_number=row_number,
+                ),
+                volume=parse_required_finviz_int(
+                    values.get("Volume", ""),
+                    field="Volume",
+                    row_number=row_number,
+                    positive=True,
+                ),
+                relative_volume=parse_optional_finviz_float(
+                    values.get("Rel Volume", ""),
+                    field="Rel Volume",
+                    row_number=row_number,
+                )
+                or 0.0,
+                float_shares=parse_optional_finviz_market_cap(
+                    finviz_screener_value(values, "Shs Float", "Float"),
+                    field="Float",
+                    row_number=row_number,
+                ),
+                atr=parse_optional_finviz_float(
+                    values.get("ATR", ""),
+                    field="ATR",
+                    row_number=row_number,
+                ),
+            )
+            candidates.append(candidate)
+            normalized_values = canonicalize_finviz_screener_values(values)
+            discovery_source_rows.append(
+                DiscoverySourceRow.from_mapping(
+                    source_row_ordinal=row_number,
+                    source_row_identity=normalized_values.get("No.", str(row_number)),
+                    source_values=normalized_values,
+                    candidate=candidate,
+                )
+            )
+        semantic_diagnostics = evaluate_provider_semantics(
+            candidates,
+            criteria,
+            provider=self.name,
+            input_row_count=len(data_rows),
+        )
+        if semantic_diagnostics.status != "PASS":
+            raise ProviderSemanticPlausibilityError(semantic_diagnostics)
+        qualifying = filter_discovery_candidates(candidates, criteria)
+        if len(qualifying) != semantic_diagnostics.qualifying_candidate_count:
+            raise ProviderUnavailableError(
+                provider=self.name,
+                reason="semantic_implausibility",
+                message=(
+                    "Provider semantic plausibility failed closed: qualification "
+                    "accounting disagrees with candidate filtering; "
+                    f"fingerprint={semantic_diagnostics.fingerprint}; "
+                    f"semanticQualifying={semantic_diagnostics.qualifying_candidate_count}; "
+                    f"filterQualifying={len(qualifying)}."
+                ),
+            )
+        return _ParsedFinvizDiscoveryPage(
+            candidates=tuple(candidates),
+            source_rows=tuple(discovery_source_rows),
+            observed_headers=tuple(headers),
+            canonical_headers=canonical_headers,
+            schema_fingerprint=schema_fingerprint,
+            semantic_diagnostics=semantic_diagnostics,
+            provider_total_results=finviz_screener_total_results(soup),
+            page_size=FINVIZ_DISCOVERY_PAGE_SIZE,
+        )
+
     def _get_with_retries(
         self,
         url: str,
         *,
         action: str,
         backoff_seconds: tuple[int, ...] | None = None,
+        timeout_seconds: float = 20,
     ) -> requests.Response:
         last_error: Exception | None = None
         retry_delays = self.backoff_seconds if backoff_seconds is None else backoff_seconds
         attempts = len(retry_delays) + 1
         for attempt in range(attempts):
             try:
-                response = self.session.get(url, timeout=20)
+                response = self.session.get(url, timeout=timeout_seconds)
                 response.raise_for_status()
                 return response
             except requests.RequestException as exc:
@@ -513,6 +821,23 @@ class FinvizProvider(MarketDataProvider):
 def finviz_screener_headers(row: object) -> list[str]:
     cells = row.find_all(["th", "td"])
     return [cell.get_text(" ", strip=True) for cell in cells]
+
+
+def finviz_screener_total_results(soup: object) -> int | None:
+    """Return Finviz's visible filtered-result total when the page exposes one."""
+
+    text = soup.get_text(" ", strip=True)
+    matches = {
+        int(item.replace(",", ""))
+        for item in re.findall(r"\b([\d,]+)\s+Total\b", text, flags=re.IGNORECASE)
+    }
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise ProviderContractError(
+            "Finviz screener exposed contradictory filtered-result totals."
+        )
+    return next(iter(matches))
 
 
 def finviz_screener_row(
