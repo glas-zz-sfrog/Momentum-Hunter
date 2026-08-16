@@ -367,6 +367,14 @@ class EvidenceWriteIntent:
 
     def __post_init__(self) -> None:
         for label, value in (
+            ("Intent identity", self.intent_id),
+            ("Runtime instance identity", self.runtime_instance_id),
+            ("Evidence type", self.evidence_type),
+            ("Record identity", self.record_identity),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ContinuousRuntimeError(f"{label} is required.")
+        for label, value in (
             ("Record fingerprint", self.record_fingerprint),
             ("Payload fingerprint", self.payload_fingerprint),
             ("Intent fingerprint", self.fingerprint),
@@ -374,7 +382,29 @@ class EvidenceWriteIntent:
             _require_fingerprint(value, label)
         if self.sequence <= 0:
             raise ContinuousRuntimeError("Intent sequence must be positive.")
+        if self.predecessor_identity is not None and not self.predecessor_identity.strip():
+            raise ContinuousRuntimeError("Intent predecessor identity is malformed.")
         _parse_timestamp(self.requested_at, "Intent timestamp")
+
+
+def validate_evidence_write_intent(intent: EvidenceWriteIntent) -> None:
+    """Recompute the complete immutable identity of a write intent."""
+
+    payload = {
+        "runtime_instance_id": intent.runtime_instance_id,
+        "sequence": intent.sequence,
+        "evidence_type": intent.evidence_type,
+        "record_identity": intent.record_identity,
+        "record_fingerprint": intent.record_fingerprint,
+        "predecessor_identity": intent.predecessor_identity,
+        "requested_at": intent.requested_at,
+        "payload_fingerprint": intent.payload_fingerprint,
+    }
+    fingerprint = _fingerprint("continuous-evidence-write-intent-v1", payload)
+    if intent.fingerprint != fingerprint:
+        raise ContinuousRuntimeError("Evidence write intent fingerprint is invalid.")
+    if intent.intent_id != f"continuous-intent-{fingerprint[:24]}":
+        raise ContinuousRuntimeError("Evidence write intent identity is invalid.")
 
 
 def build_evidence_write_intent(
@@ -399,11 +429,13 @@ def build_evidence_write_intent(
         "payload_fingerprint": payload_fingerprint,
     }
     fingerprint = _fingerprint("continuous-evidence-write-intent-v1", payload)
-    return EvidenceWriteIntent(
+    result = EvidenceWriteIntent(
         intent_id=f"continuous-intent-{fingerprint[:24]}",
         fingerprint=fingerprint,
         **payload,
     )
+    validate_evidence_write_intent(result)
+    return result
 
 
 @dataclass(frozen=True)
@@ -1831,4 +1863,5 @@ __all__ = [
     "RuntimeTriggerEvent",
     "build_evidence_write_intent",
     "measure_runtime_operation",
+    "validate_evidence_write_intent",
 ]
