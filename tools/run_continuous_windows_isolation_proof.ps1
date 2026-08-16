@@ -4,8 +4,9 @@ param(
     [string]$CanonicalRoot = "C:\Users\steve\OneDrive\Documents\Investing",
     [string]$OutputDirectory = (
         "C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\" +
-        "CONTINUOUS-WINDOWS-ISOLATION-001"
-    )
+        "WRITER-HARDENING-001"
+    ),
+    [string]$PythonExecutable = ""
 )
 
 Set-StrictMode -Version Latest
@@ -13,7 +14,13 @@ $ErrorActionPreference = "Stop"
 
 $project = (Resolve-Path -LiteralPath $ProjectRoot).Path
 $canonical = (Resolve-Path -LiteralPath $CanonicalRoot).Path
-$python = Join-Path $project ".venv\Scripts\python.exe"
+$python = if ($PythonExecutable) {
+    (Resolve-Path -LiteralPath $PythonExecutable).Path
+} elseif (Test-Path -LiteralPath (Join-Path $project ".venv\Scripts\python.exe")) {
+    (Resolve-Path -LiteralPath (Join-Path $project ".venv\Scripts\python.exe")).Path
+} else {
+    (Resolve-Path -LiteralPath (Join-Path $canonical ".venv\Scripts\python.exe")).Path
+}
 $elevatedScript = Join-Path $project "tools\run_windows_isolation_elevated.ps1"
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
     throw "The project Python executable is unavailable."
@@ -32,19 +39,14 @@ $temporaryRoot = Join-Path $env:LOCALAPPDATA (
 $nonElevated = Join-Path $temporaryRoot "non-elevated.json"
 $elevated = Join-Path $temporaryRoot "elevated.json"
 $outputJson = Join-Path $OutputDirectory (
-    "CONTINUOUS-WINDOWS-ISOLATION-001-$stamp-$runId.json"
+    "WRITER-HARDENING-001-$stamp-$runId.json"
 )
 $outputMarkdown = Join-Path $OutputDirectory (
-    "CONTINUOUS-WINDOWS-ISOLATION-001-$stamp-$runId.md"
+    "WRITER-HARDENING-001-$stamp-$runId.md"
 )
 
+Push-Location $project
 try {
-    & $python -B -m momentum_hunter.windows_isolation_proof `
-        non-elevated --output $nonElevated
-    if ($LASTEXITCODE -ne 0) {
-        throw "The non-elevated physical proof failed."
-    }
-
     function Quote-PowerShellLiteral([string]$value) {
         return "'" + $value.Replace("'", "''") + "'"
     }
@@ -67,7 +69,7 @@ try {
     if ($process.ExitCode -ne 0) {
         if (Test-Path -LiteralPath $elevated -PathType Leaf) {
             $failurePath = Join-Path $OutputDirectory (
-                "CONTINUOUS-WINDOWS-ISOLATION-001-$stamp-$runId-elevated-failure.json"
+                "WRITER-HARDENING-001-$stamp-$runId-elevated-failure.json"
             )
             Copy-Item -LiteralPath $elevated -Destination $failurePath
         }
@@ -75,6 +77,12 @@ try {
     }
     if (-not (Test-Path -LiteralPath $elevated -PathType Leaf)) {
         throw "The elevated physical proof did not produce its result."
+    }
+
+    & $python -B -m momentum_hunter.windows_isolation_proof `
+        non-elevated --output $nonElevated --include-soak
+    if ($LASTEXITCODE -ne 0) {
+        throw "The non-elevated physical proof failed."
     }
 
     & $python -B -m momentum_hunter.windows_isolation_proof finalize `
@@ -95,6 +103,7 @@ try {
         classification = @($report.classification)
     } | ConvertTo-Json -Depth 5
 } finally {
+    Pop-Location
     if (Test-Path -LiteralPath $temporaryRoot) {
         Remove-Item -LiteralPath $temporaryRoot -Recurse -Force
     }

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import threading
 import time
@@ -41,7 +40,13 @@ from momentum_hunter.event_runtime_writer_ipc import (
     WriterEnvelopeSender,
     verify_envelope_authentication,
 )
-from momentum_hunter.path_transaction import PathTransactionLease
+from momentum_hunter.windows_writer_storage import (
+    WriterOwnerEvidence,
+    WriterOwnershipConflictError,
+    WriterPhysicalStorage,
+    WriterPhysicalStorageError,
+    WriterStorageCrashAfterTemp,
+)
 
 
 TOPOLOGY_VERSION = 2
@@ -54,6 +59,7 @@ ACK_PROFILE = "continuous-evidence-writer-ack-v1"
 EVIDENCE_ROOT_POLICY = "writer-derived-sharded-paths-v1"
 STORAGE_FORMAT = "immutable-sharded-record-per-file-v1"
 AUTHORITY = "DORMANT_CONTRACT_ONLY"
+WRITER_OWNER_CONFLICT = "WRITER_OWNER_CONFLICT"
 
 DEDICATED_EVIDENCE_WRITER = "DEDICATED_EVIDENCE_WRITER"
 CONTINUOUS_RUNTIME = "CONTINUOUS_RUNTIME"
@@ -126,6 +132,10 @@ class WriterUnavailableError(ContinuousEvidenceWriterError):
 
 class WriterCrashInjected(WriterUnavailableError):
     """Synthetic crash used only by temporary-root tests."""
+
+
+class PhysicalWriterOwnershipConflictError(ContinuousEvidenceWriterError):
+    """Raised when another process owns the exact physical evidence root."""
 
 
 @dataclass(frozen=True)
@@ -399,16 +409,32 @@ class DedicatedEvidenceWriter:
         self._next_intent_sequence = 1
         self._last_intent_id: str | None = None
         self._crash_phase: str | None = None
-        self._lease = PathTransactionLease(self._root / "writer-transaction")
+        self._storage: WriterPhysicalStorage | None = None
         _claim_root(self._root, self._owner_token)
         try:
-            self._root.mkdir(parents=True, exist_ok=True)
-            (self._root / ".partial").mkdir(parents=True, exist_ok=True)
-            (self._root / ".quarantine").mkdir(parents=True, exist_ok=True)
-            (self._root / "sessions").mkdir(parents=True, exist_ok=True)
+            self._storage = WriterPhysicalStorage(
+                self._root,
+                writer_instance_id=self._owner_token,
+                topology_fingerprint=self.topology.fingerprint,
+                topology_version=self.topology.topology_version,
+            )
             self._quarantine_partial_files()
             self._load_record_index()
+        except WriterOwnershipConflictError as exc:
+            _release_root(self._root, self._owner_token)
+            raise PhysicalWriterOwnershipConflictError(
+                "Another physical writer owns this evidence root."
+            ) from exc
+        except WriterPhysicalStorageError as exc:
+            if self._storage is not None:
+                self._storage.close()
+            _release_root(self._root, self._owner_token)
+            raise ContinuousEvidenceWriterError(
+                "Writer initialization violated the physical storage boundary."
+            ) from exc
         except Exception:
+            if self._storage is not None:
+                self._storage.close()
             _release_root(self._root, self._owner_token)
             raise
 
@@ -421,6 +447,13 @@ class DedicatedEvidenceWriter:
     @property
     def closed(self) -> bool:
         return self._closed
+
+    @property
+    def owner_evidence(self) -> WriterOwnerEvidence:
+        self._require_open()
+        if self._storage is None:
+            raise WriterUnavailableError("Writer physical storage is unavailable.")
+        return self._storage.owner_evidence
 
     def activate_session(
         self,
@@ -490,7 +523,9 @@ class DedicatedEvidenceWriter:
             raise ContinuousEvidenceWriterError("Intent evidence type maps to another artifact.")
         if self._consume_crash(CRASH_BEFORE_COMMIT):
             raise WriterCrashInjected("Writer crashed before record commit.")
-        with self._lease.transaction():
+        if self._storage is None:
+            raise WriterUnavailableError("Writer physical storage is unavailable.")
+        with self._storage.transaction():
             view, created = self._persist_record(envelope, intent)
             if self._consume_crash(CRASH_AFTER_COMMIT_BEFORE_ACK):
                 raise WriterCrashInjected("Writer crashed after record commit before acknowledgement.")
@@ -516,7 +551,12 @@ class DedicatedEvidenceWriter:
             return
         self._zero_key()
         self._closed = True
-        _release_root(self._root, self._owner_token)
+        try:
+            if self._storage is not None:
+                self._storage.close()
+                self._storage = None
+        finally:
+            _release_root(self._root, self._owner_token)
 
     def _persist_record(
         self,
@@ -545,18 +585,17 @@ class DedicatedEvidenceWriter:
         )
         document = _build_record_document(self.topology, envelope, intent)
         data = _canonical_bytes(document)
-        if path.exists():
+        created = self._atomic_create(
+            path,
+            data,
+            crash_after_temp=self._consume_crash(CRASH_AFTER_TEMP),
+        )
+        if not created:
             view = _validate_record_file(self.topology, path)
             if view.record_identity != intent.record_identity or view.intent_id != intent.intent_id:
                 raise ContinuousEvidenceWriterError("Record path contains conflicting evidence.")
             self._index_record(view)
             return view, False
-        _atomic_create(
-            path,
-            data,
-            partial_root=self._root / ".partial",
-            crash_after_temp=self._consume_crash(CRASH_AFTER_TEMP),
-        )
         view = EvidenceRecordView(
             artifact_name=envelope.artifact_name,
             record_identity=intent.record_identity,
@@ -616,24 +655,19 @@ class DedicatedEvidenceWriter:
             "acknowledgement": asdict(acknowledgement),
         }
         data = _canonical_bytes(document)
-        if path.exists():
+        created = self._atomic_create(path, data)
+        if not created:
             old_envelope, old_ack = _validate_ack_file(self.topology, path)
             if old_envelope != envelope or old_ack != acknowledgement:
                 raise ContinuousEvidenceWriterError("Acknowledgement identity conflicts.")
             return
-        _atomic_create(
-            path,
-            data,
-            partial_root=self._root / ".partial",
-        )
 
     def _load_record_index(self) -> None:
-        records_root = self._root / "records"
-        if not records_root.exists():
-            return
+        if self._storage is None:
+            raise WriterUnavailableError("Writer physical storage is unavailable.")
         views = tuple(
             _validate_record_file(self.topology, path)
-            for path in sorted(records_root.rglob("*.json"))
+            for path in self._storage.iter_files(PurePath("records"), suffix=".json")
         )
         for view in sorted(views, key=lambda item: item.intent_sequence):
             self._index_record(view)
@@ -690,10 +724,10 @@ class DedicatedEvidenceWriter:
         self._acks_by_sequence.clear()
         self._expected_sequence = 1
         self._prior_envelope_fingerprint = GENESIS_FINGERPRINT
-        session_root = self._root / "sessions" / str(self._session_id)
-        if not session_root.exists():
-            return
-        for path in sorted(session_root.glob("*.ack.json")):
+        if self._storage is None:
+            raise WriterUnavailableError("Writer physical storage is unavailable.")
+        session_root = PurePath("sessions") / str(self._session_id)
+        for path in self._storage.iter_files(session_root, suffix=".ack.json"):
             envelope, acknowledgement = _validate_ack_file(self.topology, path)
             verify_envelope_authentication(
                 envelope,
@@ -711,13 +745,44 @@ class DedicatedEvidenceWriter:
             self._prior_envelope_fingerprint = envelope.fingerprint
 
     def _quarantine_partial_files(self) -> None:
-        partial_root = self._root / ".partial"
-        quarantine_root = self._root / ".quarantine"
-        for path in sorted(partial_root.glob("*.tmp")):
-            target = quarantine_root / path.name
-            if target.exists():
-                target = quarantine_root / f"{path.stem}-{uuid.uuid4().hex}.tmp"
-            os.replace(path, target)
+        if self._storage is None:
+            raise WriterUnavailableError("Writer physical storage is unavailable.")
+        try:
+            self._storage.quarantine_partials()
+        except WriterPhysicalStorageError as exc:
+            raise ContinuousEvidenceWriterError(
+                "Writer partial recovery violated the physical storage boundary."
+            ) from exc
+
+    def _atomic_create(
+        self,
+        path: Path,
+        data: bytes,
+        *,
+        crash_after_temp: bool = False,
+    ) -> bool:
+        if self._storage is None:
+            raise WriterUnavailableError("Writer physical storage is unavailable.")
+        try:
+            relative = path.relative_to(self._root)
+        except ValueError as exc:
+            raise ContinuousEvidenceWriterError(
+                "Writer-derived path escaped its evidence root."
+            ) from exc
+        try:
+            return self._storage.atomic_create(
+                PurePath(relative),
+                data,
+                crash_after_temp=crash_after_temp,
+            )
+        except WriterStorageCrashAfterTemp as exc:
+            raise WriterCrashInjected(
+                "Writer crashed after temporary file completion."
+            ) from exc
+        except WriterPhysicalStorageError as exc:
+            raise ContinuousEvidenceWriterError(
+                "Writer commit violated the physical storage boundary."
+            ) from exc
 
     def _consume_crash(self, phase: str) -> bool:
         if self._crash_phase != phase:
@@ -988,38 +1053,6 @@ def _validate_ack_file(
     return envelope, acknowledgement
 
 
-def _atomic_create(
-    target: Path,
-    data: bytes,
-    *,
-    partial_root: Path,
-    crash_after_temp: bool = False,
-    durable: bool = True,
-) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    partial_root.mkdir(parents=True, exist_ok=True)
-    temp = partial_root / f"{uuid.uuid4().hex}.tmp"
-    try:
-        with temp.open("xb") as handle:
-            handle.write(data)
-            handle.flush()
-            if durable:
-                os.fsync(handle.fileno())
-        if crash_after_temp:
-            raise WriterCrashInjected("Writer crashed after temporary file completion.")
-        try:
-            os.link(temp, target)
-        except FileExistsError:
-            if target.read_bytes() != data:
-                raise ContinuousEvidenceWriterError("Write-once target already conflicts.")
-        temp.unlink(missing_ok=True)
-    except WriterCrashInjected:
-        raise
-    except Exception:
-        temp.unlink(missing_ok=True)
-        raise
-
-
 def _read_canonical_document(path: Path, label: str) -> tuple[dict[str, object], bytes]:
     try:
         data = path.read_bytes()
@@ -1150,12 +1183,14 @@ __all__ = [
     "EvidenceReadSnapshot",
     "EvidenceRecordView",
     "EvidenceWriterAcknowledgement",
+    "PhysicalWriterOwnershipConflictError",
     "READ",
     "STORAGE_FORMAT",
     "TOPOLOGY_VERSION",
     "TopologyCompatibility",
     "TopologyContradiction",
     "WriterCrashInjected",
+    "WRITER_OWNER_CONFLICT",
     "WriterRoleContract",
     "artifact_record_path",
     "authorize_topology_access",
