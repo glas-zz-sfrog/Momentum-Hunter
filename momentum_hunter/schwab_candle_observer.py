@@ -19,11 +19,19 @@ import requests
 from momentum_hunter import schwab_candle_contract as candle_contract_module
 from momentum_hunter.schwab_account_discovery import (
     SchwabAccountDiscoveryError,
+    SchwabAccountDiscoveryForbiddenError,
+    SchwabAccountDiscoveryNetworkError,
+    SchwabAccountDiscoveryResponseError,
+    SchwabAccountDiscoveryUnauthorizedError,
     SchwabAccountNumbersTransport,
 )
 from momentum_hunter.schwab_account_validation import (
     SchwabAccountDetailsTransport,
     SchwabAccountValidationError,
+    SchwabAccountValidationForbiddenError,
+    SchwabAccountValidationNetworkError,
+    SchwabAccountValidationResponseError,
+    SchwabAccountValidationUnauthorizedError,
     build_unpersisted_binding_candidate,
     parse_account_identity,
     require_single_expected_account,
@@ -47,7 +55,11 @@ from momentum_hunter.schwab_candle_contract import (
 from momentum_hunter.scheduling import is_market_open_day
 from momentum_hunter.schwab_market_data import (
     BoundSchwabAccessTokenProvider,
+    SchwabAuthRefreshFailed,
+    SchwabAuthSecureStoreError,
+    SchwabAuthStateMissingError,
     SchwabMarketDataAuthorizationError,
+    SchwabReauthorizationRequired,
 )
 from momentum_hunter.schwab_onboarding import (
     EncryptedSchwabAccountBindingStore,
@@ -82,21 +94,68 @@ class SchwabCandleObserverError(RuntimeError):
 
 
 class SchwabCandleObserverAuthorizationError(SchwabCandleObserverError):
-    pass
+    diagnostic_code = "SCHWAB_AUTHORIZATION_FAILED"
 
 
 class SchwabCandleObserverReauthorizationRequired(
     SchwabCandleObserverAuthorizationError
 ):
-    pass
+    diagnostic_code = "SCHWAB_REAUTH_REQUIRED"
+
+
+class SchwabCandleObserverAuthStateLoadError(
+    SchwabCandleObserverAuthorizationError
+):
+    diagnostic_code = "SCHWAB_AUTH_STATE_LOAD_FAILED"
+
+
+class SchwabCandleObserverAuthStateMissingError(
+    SchwabCandleObserverAuthStateLoadError
+):
+    diagnostic_code = "SCHWAB_AUTH_STATE_MISSING"
+
+
+class SchwabCandleObserverSecureStoreError(
+    SchwabCandleObserverAuthStateLoadError
+):
+    diagnostic_code = "SCHWAB_AUTH_SECURE_STORE_FAILED"
+
+
+class SchwabCandleObserverRefreshFailed(
+    SchwabCandleObserverAuthorizationError
+):
+    diagnostic_code = "SCHWAB_AUTH_REFRESH_FAILED"
+
+
+class SchwabCandleObserverHttpUnauthorizedError(
+    SchwabCandleObserverAuthorizationError
+):
+    diagnostic_code = "SCHWAB_HTTP_UNAUTHORIZED"
+    http_status = 401
+
+
+class SchwabCandleObserverHttpForbiddenError(
+    SchwabCandleObserverAuthorizationError
+):
+    diagnostic_code = "SCHWAB_HTTP_FORBIDDEN"
+    http_status = 403
 
 
 class SchwabCandleObserverNetworkError(SchwabCandleObserverError):
-    pass
+    diagnostic_code = "SCHWAB_CANDLE_NETWORK_FAILED"
 
 
 class SchwabCandleObserverResponseError(SchwabCandleObserverError):
-    pass
+    diagnostic_code = "SCHWAB_CANDLE_RESPONSE_INVALID"
+
+    def __init__(self, message: str, *, http_status: int | None = None) -> None:
+        super().__init__(message)
+        if http_status is not None:
+            self.http_status = http_status
+
+
+class SchwabCandleObserverRequestFailed(SchwabCandleObserverResponseError):
+    diagnostic_code = "SCHWAB_CANDLE_REQUEST_FAILED"
 
 
 @dataclass(frozen=True)
@@ -349,55 +408,92 @@ class SchwabCandleAccessGuard:
 
     def authorize(self, expected_account_ending: str) -> GuardedStreamerAccess:
         try:
-            binding = self.bindings.load()
-            if binding.account_number_last_four != expected_account_ending:
-                raise SchwabCandleObserverAuthorizationError(
-                    "Pinned Schwab account ending did not match the expected observer account."
-                )
-            if binding.account_type != EXPECTED_ACCOUNT_TYPE:
-                raise SchwabCandleObserverAuthorizationError(
-                    "Pinned Schwab account type was not the required individual cash account."
-                )
+            binding = self._load_expected_binding(expected_account_ending)
             access_token = self.token_provider.access_token()
-            accounts = self.discovery.discover(access_token)
-            if len(accounts) != 1:
-                raise SchwabCandleObserverAuthorizationError(
-                    "Schwab account revalidation expected one authorized account; "
-                    f"observed {len(accounts)}. Streamer remains locked."
+            try:
+                identity = self._revalidate(
+                    binding,
+                    expected_account_ending=expected_account_ending,
+                    access_token=access_token,
                 )
-            discovered = require_single_expected_account(
-                accounts,
-                expected_account_ending,
-            )
-            if discovered.account_hash != binding.account_hash:
-                raise SchwabCandleObserverAuthorizationError(
-                    "Authorized Schwab account identity changed; Streamer remains locked."
-                )
-            identity = parse_account_identity(
-                self.details.fetch(access_token, discovered.account_hash),
-                discovered,
-            )
-            if build_unpersisted_binding_candidate(identity) != binding:
-                raise SchwabCandleObserverAuthorizationError(
-                    "Authorized Schwab cash identity changed; Streamer remains locked."
-                )
+            except (
+                SchwabAccountDiscoveryUnauthorizedError,
+                SchwabAccountValidationUnauthorizedError,
+            ):
+                access_token = self._refresh_after_rejection()
+                try:
+                    identity = self._revalidate(
+                        binding,
+                        expected_account_ending=expected_account_ending,
+                        access_token=access_token,
+                    )
+                except (
+                    SchwabAccountDiscoveryUnauthorizedError,
+                    SchwabAccountValidationUnauthorizedError,
+                ) as exc:
+                    raise SchwabCandleObserverHttpUnauthorizedError(
+                        "Schwab rejected the refreshed authorization; candle access remains locked."
+                    ) from exc
         except SchwabCandleObserverAuthorizationError:
             raise
-        except SchwabMarketDataAuthorizationError as exc:
+        except SchwabReauthorizationRequired as exc:
+            raise SchwabCandleObserverReauthorizationRequired(
+                "Schwab OAuth refresh was rejected; interactive reauthorization is required."
+            ) from exc
+        except SchwabAuthStateMissingError as exc:
+            raise SchwabCandleObserverAuthStateMissingError(
+                "Schwab candle authorization state is missing."
+            ) from exc
+        except SchwabAuthSecureStoreError as exc:
+            raise SchwabCandleObserverSecureStoreError(
+                "Schwab candle access could not decrypt or load authorization state."
+            ) from exc
+        except SchwabAuthRefreshFailed as exc:
+            raise SchwabCandleObserverRefreshFailed(
+                "Schwab candle authorization refresh failed safely."
+            ) from exc
+        except (
+            SchwabAccountDiscoveryForbiddenError,
+            SchwabAccountValidationForbiddenError,
+        ) as exc:
+            raise SchwabCandleObserverHttpForbiddenError(
+                "Schwab denied the candle authorization endpoint with HTTP 403."
+            ) from exc
+        except (
+            SchwabAccountDiscoveryUnauthorizedError,
+            SchwabAccountValidationUnauthorizedError,
+        ) as exc:
+            raise SchwabCandleObserverHttpUnauthorizedError(
+                "Schwab rejected candle authorization with HTTP 401."
+            ) from exc
+        except (
+            SchwabAccountDiscoveryNetworkError,
+            SchwabAccountValidationNetworkError,
+        ) as exc:
+            raise SchwabCandleObserverNetworkError(
+                "Schwab candle account revalidation could not reach its endpoint."
+            ) from exc
+        except (
+            SchwabAccountDiscoveryResponseError,
+            SchwabAccountValidationResponseError,
+        ) as exc:
+            raise SchwabCandleObserverRequestFailed(
+                "Schwab candle account revalidation request failed safely.",
+                http_status=getattr(exc, "http_status", None),
+            ) from exc
+        except (SchwabMarketDataAuthorizationError, SchwabOAuthError) as exc:
             if _exception_chain_contains(exc, SchwabOAuthResponseError):
                 raise SchwabCandleObserverReauthorizationRequired(
                     "Schwab OAuth refresh was rejected; interactive reauthorization is required."
                 ) from exc
-            raise SchwabCandleObserverAuthorizationError(
-                "Schwab Streamer account revalidation failed safely."
+            raise SchwabCandleObserverRefreshFailed(
+                "Schwab candle authorization failed safely."
             ) from exc
-        except (
-            SchwabAccountDiscoveryError,
-            SchwabAccountValidationError,
-            SchwabOAuthError,
-            SchwabSetupError,
-            AccountIsolationError,
-        ) as exc:
+        except (SchwabAccountDiscoveryError, SchwabAccountValidationError) as exc:
+            raise SchwabCandleObserverResponseError(
+                "Schwab candle account revalidation failed safely."
+            ) from exc
+        except (SchwabSetupError, AccountIsolationError) as exc:
             raise SchwabCandleObserverAuthorizationError(
                 "Schwab Streamer account revalidation failed safely."
             ) from exc
@@ -407,6 +503,127 @@ class SchwabCandleAccessGuard:
             account_type=binding.account_type,
             balances_present=identity.balances_present,
         )
+
+    def refresh_after_rejection(
+        self,
+        expected_account_ending: str,
+    ) -> GuardedStreamerAccess:
+        """Refresh once after a candle endpoint 401 and revalidate the pinned account."""
+
+        try:
+            binding = self._load_expected_binding(expected_account_ending)
+            access_token = self._refresh_after_rejection()
+            identity = self._revalidate(
+                binding,
+                expected_account_ending=expected_account_ending,
+                access_token=access_token,
+            )
+        except (
+            SchwabAccountDiscoveryUnauthorizedError,
+            SchwabAccountValidationUnauthorizedError,
+        ) as exc:
+            raise SchwabCandleObserverHttpUnauthorizedError(
+                "Schwab rejected the refreshed authorization; candle access remains locked."
+            ) from exc
+        except (
+            SchwabAccountDiscoveryForbiddenError,
+            SchwabAccountValidationForbiddenError,
+        ) as exc:
+            raise SchwabCandleObserverHttpForbiddenError(
+                "Schwab denied the refreshed candle authorization with HTTP 403."
+            ) from exc
+        except (
+            SchwabAccountDiscoveryNetworkError,
+            SchwabAccountValidationNetworkError,
+        ) as exc:
+            raise SchwabCandleObserverNetworkError(
+                "Schwab refreshed candle authorization could not reach its endpoint."
+            ) from exc
+        except (
+            SchwabAccountDiscoveryResponseError,
+            SchwabAccountValidationResponseError,
+        ) as exc:
+            raise SchwabCandleObserverRequestFailed(
+                "Schwab refreshed candle authorization request failed safely.",
+                http_status=getattr(exc, "http_status", None),
+            ) from exc
+        except SchwabReauthorizationRequired as exc:
+            raise SchwabCandleObserverReauthorizationRequired(
+                "Schwab rejected the refresh credential; interactive reauthorization is required."
+            ) from exc
+        except SchwabAuthStateMissingError as exc:
+            raise SchwabCandleObserverAuthStateMissingError(
+                "Schwab candle authorization state is missing."
+            ) from exc
+        except SchwabAuthSecureStoreError as exc:
+            raise SchwabCandleObserverSecureStoreError(
+                "Schwab candle access could not decrypt or reload authorization state."
+            ) from exc
+        except SchwabAuthRefreshFailed as exc:
+            raise SchwabCandleObserverRefreshFailed(
+                "Schwab candle authorization refresh failed safely."
+            ) from exc
+        except (SchwabSetupError, AccountIsolationError) as exc:
+            raise SchwabCandleObserverAuthorizationError(
+                "Schwab refreshed account revalidation failed safely."
+            ) from exc
+        return GuardedStreamerAccess(
+            access_token=access_token,
+            account_ending=binding.account_number_last_four,
+            account_type=binding.account_type,
+            balances_present=identity.balances_present,
+        )
+
+    def _refresh_after_rejection(self) -> str:
+        refresh = getattr(self.token_provider, "refresh_after_rejection", None)
+        if not callable(refresh):
+            raise SchwabCandleObserverHttpUnauthorizedError(
+                "Schwab rejected authorization and no bounded refresh path is available."
+            )
+        return refresh()
+
+    def _load_expected_binding(self, expected_account_ending: str):
+        binding = self.bindings.load()
+        if binding.account_number_last_four != expected_account_ending:
+            raise SchwabCandleObserverAuthorizationError(
+                "Pinned Schwab account ending did not match the expected observer account."
+            )
+        if binding.account_type != EXPECTED_ACCOUNT_TYPE:
+            raise SchwabCandleObserverAuthorizationError(
+                "Pinned Schwab account type was not the required individual cash account."
+            )
+        return binding
+
+    def _revalidate(
+        self,
+        binding,
+        *,
+        expected_account_ending: str,
+        access_token: str,
+    ):
+        accounts = self.discovery.discover(access_token)
+        if len(accounts) != 1:
+            raise SchwabCandleObserverAuthorizationError(
+                "Schwab account revalidation expected one authorized account; "
+                f"observed {len(accounts)}. Streamer remains locked."
+            )
+        discovered = require_single_expected_account(
+            accounts,
+            expected_account_ending,
+        )
+        if discovered.account_hash != binding.account_hash:
+            raise SchwabCandleObserverAuthorizationError(
+                "Authorized Schwab account identity changed; Streamer remains locked."
+            )
+        identity = parse_account_identity(
+            self.details.fetch(access_token, discovered.account_hash),
+            discovered,
+        )
+        if build_unpersisted_binding_candidate(identity) != binding:
+            raise SchwabCandleObserverAuthorizationError(
+                "Authorized Schwab cash identity changed; Streamer remains locked."
+            )
+        return identity
 
 
 class SchwabCandleHttpTransport:
@@ -503,9 +720,18 @@ class SchwabCandleHttpTransport:
             raise SchwabCandleObserverResponseError(
                 "Schwab candle observation refused an HTTP redirect."
             )
+        if response.status_code == 401:
+            raise SchwabCandleObserverHttpUnauthorizedError(
+                "Schwab candle observation failed safely with HTTP 401."
+            )
+        if response.status_code == 403:
+            raise SchwabCandleObserverHttpForbiddenError(
+                "Schwab candle observation failed safely with HTTP 403."
+            )
         if response.status_code != 200:
-            raise SchwabCandleObserverResponseError(
-                f"Schwab candle observation failed safely with HTTP {response.status_code}."
+            raise SchwabCandleObserverRequestFailed(
+                f"Schwab candle observation failed safely with HTTP {response.status_code}.",
+                http_status=response.status_code,
             )
         if len(response.content) > MAX_HTTP_RESPONSE_BYTES:
             raise SchwabCandleObserverResponseError(
@@ -1224,6 +1450,30 @@ def _exception_chain_contains(
         visited.add(id(current))
         current = current.__cause__ or current.__context__
     return False
+
+
+def sanitized_candle_failure(error: BaseException) -> dict[str, object]:
+    """Return stable diagnostic fields without serializing exception messages."""
+
+    current: BaseException | None = error
+    visited: set[int] = set()
+    selected: BaseException = error
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if hasattr(current, "diagnostic_code"):
+            selected = current
+            if getattr(current, "diagnostic_code") != "SCHWAB_AUTHORIZATION_FAILED":
+                break
+        current = current.__cause__ or current.__context__
+    return {
+        "classification": str(
+            getattr(selected, "diagnostic_code", "UNKNOWN_AUTHORIZATION_FAILURE")
+        ),
+        "exceptionClass": type(selected).__name__,
+        "httpStatus": getattr(selected, "http_status", None),
+        "messageIncluded": False,
+        "credentialMaterialIncluded": False,
+    }
 
 
 def _is_stream_notification(payload: Mapping[str, object]) -> bool:

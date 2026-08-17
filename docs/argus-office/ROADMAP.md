@@ -29,6 +29,62 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+The August 17 opening is permanently classified
+`AUG17_SYSTEM_EVIDENCE_FAILURE / DECISION_NOT_REACHED`, not a strategy
+`NO_TRADE`. Scheduler, clock, and Finviz succeeded with 20 received and 20
+parsed rows; MU and SKHY qualified. The canonical Schwab candle guard failed
+before the price-history request on all three bounded attempts, leaving both
+candidates at zero opening bars and zero baseline sessions. Paper evaluated
+zero candidates and created no order or position. SETUP-002 Pass 1 completed
+and abstained as `INSUFFICIENT_PREMARKET_HISTORY`; its frozen Pass 2 remains
+scheduled for 15:05 Central on the original `ea056155` identity.
+
+`ARGUS-SCHWAB-AUTH-RECOVERY-001` is implemented on
+`codex/ARGUS-SCHWAB-AUTH-RECOVERY-001-service-context` and remains pending the
+August 17 Pass 2 plus controlled integration. The original provider status
+cannot be recovered: the installed code collapsed every account-discovery or
+account-validation response into `SchwabCandleObserverAuthorizationError`, and
+the opening readiness record preserved only that outer class. The honest
+incident cause is therefore `UNKNOWN_AUTHORIZATION_FAILURE` with
+`AUTHORIZATION_FAILURE_DETAIL_DESTROYED_BY_CODE`; no claim of token expiry,
+HTTP 401, HTTP 403, or rate limiting is justified. Direct incident chronology
+does prove that the Session-0 service found and decrypted the DPAPI store,
+refreshed and persisted authorization, revalidated the sole bound account, and
+completed a fresh Schwab quote read before the redundant candle-guard account
+revalidation failed.
+
+The repair preserves missing-store, DPAPI/secure-store, refresh,
+reauthorization, HTTP 401, HTTP 403, transport, request-status, and malformed
+response classifications; serializes expired-token refresh; allows one
+bounded refresh and retry after a 401; fails closed on a second 401; never
+refreshes a 403; and prevents authorization failure from becoming valid empty
+candle evidence. A standalone diagnostic uses the exact production guard,
+quote transport, price-history backfill, candle stores, and DATA-009 readiness
+consumer with disposable output roots only.
+
+Physical Windows proof passed under the installed Automation Service identity
+`beastcomputer\\steve`, SID
+`S-1-5-21-4040432023-2123217278-1285564647-1001`, Session 0, profile
+`C:\\Users\\steve`, and the canonical DPAPI credential path. The access token
+was expired at proof time; one refresh and secure persistence succeeded. The
+same child then passed the exact sole-account invariant (ending 2573,
+`INDIVIDUAL_CASH`), one live quote read, MU price-history parsing, a disposable
+canonical backfill of 7,912 minute and 251 daily rows, and DATA-009 readiness
+with five opening bars and five baseline sessions. The temporary task and
+scratch store were removed; order transmission remained `UNAVAILABLE` and no
+Paper, Shadow, position, order, opening, Pass 1, or production candle store was
+mutated.
+
+Hard Chew passes compileall, 132 focused authorization/candle/readiness tests,
+205 adjacent opening/Paper/successor/orchestration regressions, and all 2,030
+Python tests. `git diff --check`, source secret scanning, credential-leakage
+scanning, provider-capability scanning, protected-strategy-path review, and
+immutable incident-hash verification pass. Canonical `master`, the installed
+service, manifest, future jobs, and the 15:05 Pass 2 pin remain unchanged at
+`ea056155`. Next action is to preserve terminal Pass 2 evidence, then perform a
+controlled fast-forward integration, non-force backup push, future-job repin,
+and service-supervisor refresh before the next opening.
+
 The August 14 operational gate is terminal and preserved. The 05:55 Central
 Schwab boundary checkpoint was `USEFUL_WITH_LIMITATIONS`; the 06:05 checkpoint
 was `HIGH_FIDELITY` for SPY, QQQ, and NVDA. The 07:00 capture received and

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
@@ -23,12 +24,15 @@ from momentum_hunter.schwab_bound_account_refresh import (
     BOUND_REFRESH_CONFIRMATION,
     SchwabBoundAccountRefresh,
     SchwabBoundAccountRefreshError,
+    SchwabBoundAccountRefreshPersistenceError,
 )
 from momentum_hunter.schwab_onboarding import (
     SchwabOAuthError,
+    SchwabOAuthResponseError,
     SchwabOAuthSecretRepository,
 )
 from momentum_hunter.schwab_readonly import AccountIsolationError
+from momentum_hunter.schwab_setup import SchwabSetupError
 from momentum_hunter.shadow_market_validity import (
     EASTERN_TZ,
     ShadowMarketValidityPolicy,
@@ -57,7 +61,27 @@ class SchwabMarketDataError(RuntimeError):
 
 
 class SchwabMarketDataAuthorizationError(SchwabMarketDataError):
-    pass
+    diagnostic_code = "SCHWAB_AUTHORIZATION_FAILED"
+
+
+class SchwabAuthStateMissingError(SchwabMarketDataAuthorizationError):
+    diagnostic_code = "SCHWAB_AUTH_STATE_MISSING"
+
+
+class SchwabAuthSecureStoreError(SchwabMarketDataAuthorizationError):
+    diagnostic_code = "SCHWAB_AUTH_SECURE_STORE_FAILED"
+
+
+class SchwabAuthRefreshFailed(SchwabMarketDataAuthorizationError):
+    diagnostic_code = "SCHWAB_AUTH_REFRESH_FAILED"
+
+
+class SchwabAuthPersistenceFailed(SchwabAuthRefreshFailed):
+    diagnostic_code = "SCHWAB_AUTH_PERSISTENCE_FAILED"
+
+
+class SchwabReauthorizationRequired(SchwabMarketDataAuthorizationError):
+    diagnostic_code = "SCHWAB_REAUTH_REQUIRED"
 
 
 class SchwabMarketDataNetworkError(SchwabMarketDataError):
@@ -104,31 +128,87 @@ class BoundSchwabAccessTokenProvider:
                 secrets_repository=self.secrets,
             )
         self.bound_refresh = bound_refresh
+        self._refresh_lock = threading.Lock()
+        self._rejection_refresh_used = False
 
     def access_token(self) -> str:
-        try:
-            tokens = self.secrets.load_tokens()
+        tokens = self._load_tokens()
+        if not tokens.expired:
+            return tokens.access_token
+        with self._refresh_lock:
+            tokens = self._load_tokens()
             if not tokens.expired:
                 return tokens.access_token
+            return self._refresh_and_load()
+
+    def refresh_after_rejection(self) -> str:
+        """Refresh once after a provider 401, then fail closed on another request."""
+
+        with self._refresh_lock:
+            if self._rejection_refresh_used:
+                raise SchwabAuthRefreshFailed(
+                    "Schwab rejected the refreshed authorization; bounded recovery is exhausted."
+                )
+            self._rejection_refresh_used = True
+            return self._refresh_and_load()
+
+    def _load_tokens(self):
+        try:
+            return self.secrets.load_tokens()
+        except (SchwabOAuthError, SchwabSetupError, OSError) as exc:
+            if getattr(self.secrets, "exists", True) is False:
+                raise SchwabAuthStateMissingError(
+                    "The encrypted Schwab authorization store is missing."
+                ) from exc
+            raise SchwabAuthSecureStoreError(
+                "The encrypted Schwab authorization store could not be loaded."
+            ) from exc
+
+    def _refresh_and_load(self) -> str:
+        try:
             self.bound_refresh.refresh(
                 confirmation=BOUND_REFRESH_CONFIRMATION,
             )
-            refreshed = self.secrets.load_tokens()
+        except OSError as exc:
+            raise SchwabAuthPersistenceFailed(
+                "Refreshed Schwab authorization could not be persisted safely."
+            ) from exc
+        except SchwabBoundAccountRefreshPersistenceError as exc:
+            raise SchwabAuthPersistenceFailed(
+                "Refreshed Schwab authorization could not be persisted safely."
+            ) from exc
         except (
             AccountIsolationError,
             SchwabAccountDiscoveryError,
             SchwabAccountValidationError,
             SchwabBoundAccountRefreshError,
             SchwabOAuthError,
+            SchwabSetupError,
         ) as exc:
-            raise SchwabMarketDataAuthorizationError(
-                "Schwab market data OAuth refresh or bound-account revalidation failed safely."
+            if _exception_chain_contains(exc, SchwabOAuthResponseError):
+                raise SchwabReauthorizationRequired(
+                    "Schwab rejected the refresh credential; interactive reauthorization is required."
+                ) from exc
+            raise SchwabAuthRefreshFailed(
+                "Schwab authorization refresh or bound-account revalidation failed safely."
             ) from exc
+        refreshed = self._load_tokens()
         if refreshed.expired:
-            raise SchwabMarketDataAuthorizationError(
+            raise SchwabAuthRefreshFailed(
                 "Schwab market data access token remained expired after guarded refresh."
             )
         return refreshed.access_token
+
+
+def _exception_chain_contains(exc: BaseException, expected: type[BaseException]) -> bool:
+    current: BaseException | None = exc
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        if isinstance(current, expected):
+            return True
+        visited.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
 
 
 @dataclass(frozen=True)

@@ -13,7 +13,12 @@ from unittest.mock import patch
 
 import requests
 
-from momentum_hunter.schwab_account_discovery import DiscoveredSchwabAccount
+from momentum_hunter.schwab_account_discovery import (
+    DiscoveredSchwabAccount,
+    SchwabAccountDiscoveryForbiddenError,
+    SchwabAccountDiscoveryNetworkError,
+    SchwabAccountDiscoveryUnauthorizedError,
+)
 from momentum_hunter.schwab_candle_contract import SchwabCandleContractError
 from momentum_hunter.schwab_candle_observer import (
     EXPECTED_WEBSOCKET_CLIENT_VERSION,
@@ -25,10 +30,15 @@ from momentum_hunter.schwab_candle_observer import (
     SchwabCandleHttpTransport,
     SchwabCandleMarketHoursObserver,
     SchwabCandleObserverAuthorizationError,
+    SchwabCandleObserverAuthStateMissingError,
+    SchwabCandleObserverHttpForbiddenError,
+    SchwabCandleObserverHttpUnauthorizedError,
     SchwabCandleObserverError,
     SchwabCandleObserverNetworkError,
     SchwabCandleObserverReauthorizationRequired,
+    SchwabCandleObserverRequestFailed,
     SchwabCandleObserverResponseError,
+    SchwabCandleObserverSecureStoreError,
     StreamerBootstrap,
     WebSocketClientConnection,
     WebSocketClientFactory,
@@ -38,9 +48,14 @@ from momentum_hunter.schwab_candle_observer import (
     parse_streamer_bootstrap,
     require_safe_output_path,
     require_streamer_acknowledgement,
+    sanitized_candle_failure,
     write_proof_once,
 )
-from momentum_hunter.schwab_market_data import SchwabMarketDataAuthorizationError
+from momentum_hunter.schwab_market_data import (
+    SchwabAuthSecureStoreError,
+    SchwabAuthStateMissingError,
+    SchwabMarketDataAuthorizationError,
+)
 from momentum_hunter.schwab_onboarding import SchwabOAuthResponseError
 from momentum_hunter.schwab_readonly import SchwabAccountBinding
 
@@ -522,6 +537,171 @@ class SchwabCandleObserverTests(unittest.TestCase):
         ):
             guard.authorize(ACCOUNT_ENDING)
 
+    def test_access_guard_preserves_missing_state_and_secure_store_failures(self) -> None:
+        class FailingTokenProvider:
+            def __init__(self, error: Exception) -> None:
+                self.error = error
+
+            def access_token(self) -> str:
+                raise self.error
+
+        binding = FakeBindingStore(
+            SchwabAccountBinding(
+                account_hash=ACCOUNT_HASH,
+                account_number_last_four=ACCOUNT_ENDING,
+                account_type="INDIVIDUAL_CASH",
+            )
+        )
+        cases = (
+            (
+                SchwabAuthStateMissingError("synthetic missing store"),
+                SchwabCandleObserverAuthStateMissingError,
+                "SCHWAB_AUTH_STATE_MISSING",
+            ),
+            (
+                SchwabAuthSecureStoreError("synthetic DPAPI failure"),
+                SchwabCandleObserverSecureStoreError,
+                "SCHWAB_AUTH_SECURE_STORE_FAILED",
+            ),
+        )
+        for failure, expected, code in cases:
+            with self.subTest(code=code):
+                guard = SchwabCandleAccessGuard(
+                    token_provider=FailingTokenProvider(failure),
+                    binding_store=binding,
+                    discovery_transport=FakeDiscovery([]),
+                    details_transport=FakeDetails(),
+                )
+                with self.assertRaises(expected) as raised:
+                    guard.authorize(ACCOUNT_ENDING)
+                self.assertEqual(
+                    code,
+                    sanitized_candle_failure(raised.exception)["classification"],
+                )
+
+    def test_access_guard_refreshes_once_after_401_and_revalidates(self) -> None:
+        class RefreshingTokenProvider:
+            def __init__(self) -> None:
+                self.refresh_calls = 0
+
+            def access_token(self) -> str:
+                return "REJECTED-TOKEN"
+
+            def refresh_after_rejection(self) -> str:
+                self.refresh_calls += 1
+                return "REFRESHED-TOKEN"
+
+        class RejectOldTokenDiscovery:
+            def __init__(self) -> None:
+                self.tokens: list[str] = []
+
+            def discover(self, token: str):
+                self.tokens.append(token)
+                if token == "REJECTED-TOKEN":
+                    raise SchwabAccountDiscoveryUnauthorizedError("synthetic 401")
+                return [DiscoveredSchwabAccount(ACCOUNT_ENDING, ACCOUNT_HASH)]
+
+        token_provider = RefreshingTokenProvider()
+        discovery = RejectOldTokenDiscovery()
+        guard = SchwabCandleAccessGuard(
+            token_provider=token_provider,
+            binding_store=FakeBindingStore(
+                SchwabAccountBinding(
+                    account_hash=ACCOUNT_HASH,
+                    account_number_last_four=ACCOUNT_ENDING,
+                    account_type="INDIVIDUAL_CASH",
+                )
+            ),
+            discovery_transport=discovery,
+            details_transport=FakeDetails(),
+        )
+
+        access = guard.authorize(ACCOUNT_ENDING)
+
+        self.assertEqual("REFRESHED-TOKEN", access.access_token)
+        self.assertEqual(1, token_provider.refresh_calls)
+        self.assertEqual(["REJECTED-TOKEN", "REFRESHED-TOKEN"], discovery.tokens)
+
+    def test_access_guard_second_401_fails_closed_without_refresh_storm(self) -> None:
+        class RefreshingTokenProvider:
+            def __init__(self) -> None:
+                self.refresh_calls = 0
+
+            def access_token(self) -> str:
+                return "REJECTED-TOKEN"
+
+            def refresh_after_rejection(self) -> str:
+                self.refresh_calls += 1
+                return "REFRESHED-TOKEN"
+
+        class AlwaysUnauthorized:
+            def discover(self, token: str):
+                raise SchwabAccountDiscoveryUnauthorizedError("synthetic 401")
+
+        provider = RefreshingTokenProvider()
+        guard = SchwabCandleAccessGuard(
+            token_provider=provider,
+            binding_store=FakeBindingStore(
+                SchwabAccountBinding(
+                    account_hash=ACCOUNT_HASH,
+                    account_number_last_four=ACCOUNT_ENDING,
+                    account_type="INDIVIDUAL_CASH",
+                )
+            ),
+            discovery_transport=AlwaysUnauthorized(),
+            details_transport=FakeDetails(),
+        )
+
+        with self.assertRaises(SchwabCandleObserverHttpUnauthorizedError) as raised:
+            guard.authorize(ACCOUNT_ENDING)
+
+        self.assertEqual(1, provider.refresh_calls)
+        self.assertEqual(
+            "SCHWAB_HTTP_UNAUTHORIZED",
+            sanitized_candle_failure(raised.exception)["classification"],
+        )
+
+    def test_access_guard_preserves_403_and_network_without_refresh(self) -> None:
+        class FailureDiscovery:
+            def __init__(self, error: Exception) -> None:
+                self.error = error
+
+            def discover(self, token: str):
+                raise self.error
+
+        binding = FakeBindingStore(
+            SchwabAccountBinding(
+                account_hash=ACCOUNT_HASH,
+                account_number_last_four=ACCOUNT_ENDING,
+                account_type="INDIVIDUAL_CASH",
+            )
+        )
+        cases = (
+            (
+                SchwabAccountDiscoveryForbiddenError("synthetic 403"),
+                SchwabCandleObserverHttpForbiddenError,
+                "SCHWAB_HTTP_FORBIDDEN",
+            ),
+            (
+                SchwabAccountDiscoveryNetworkError("synthetic TLS failure"),
+                SchwabCandleObserverNetworkError,
+                "SCHWAB_CANDLE_NETWORK_FAILED",
+            ),
+        )
+        for failure, expected, code in cases:
+            with self.subTest(code=code):
+                guard = SchwabCandleAccessGuard(
+                    token_provider=FakeTokenProvider(),
+                    binding_store=binding,
+                    discovery_transport=FailureDiscovery(failure),
+                    details_transport=FakeDetails(),
+                )
+                with self.assertRaises(expected) as raised:
+                    guard.authorize(ACCOUNT_ENDING)
+                diagnostic = sanitized_candle_failure(raised.exception)
+                self.assertEqual(code, diagnostic["classification"])
+                self.assertFalse(diagnostic["credentialMaterialIncluded"])
+
     def test_bootstrap_requires_one_account_expected_host_and_permission(self) -> None:
         parsed = parse_streamer_bootstrap(
             bootstrap_payload(),
@@ -690,6 +870,26 @@ class SchwabCandleObserverTests(unittest.TestCase):
             SchwabCandleHttpTransport(
                 session=FakeSession([FakeResponse({}, is_redirect=True)])
             ).fetch_bootstrap(ACCESS_TOKEN)
+
+        with self.assertRaises(SchwabCandleObserverHttpUnauthorizedError):
+            SchwabCandleHttpTransport(
+                session=FakeSession([FakeResponse({}, status_code=401)])
+            ).fetch_bootstrap(ACCESS_TOKEN)
+
+        with self.assertRaises(SchwabCandleObserverHttpForbiddenError):
+            SchwabCandleHttpTransport(
+                session=FakeSession([FakeResponse({}, status_code=403)])
+            ).fetch_bootstrap(ACCESS_TOKEN)
+
+        with self.assertRaises(SchwabCandleObserverRequestFailed) as raised:
+            SchwabCandleHttpTransport(
+                session=FakeSession([FakeResponse({}, status_code=429)])
+            ).fetch_bootstrap(ACCESS_TOKEN)
+        self.assertEqual(429, raised.exception.http_status)
+        self.assertEqual(
+            "SCHWAB_CANDLE_REQUEST_FAILED",
+            sanitized_candle_failure(raised.exception)["classification"],
+        )
 
     def test_websocket_connection_handles_json_timeout_and_close(self) -> None:
         socket = FakeWebSocket([json.dumps({"notify": [{"heartbeat": "x"}]})])

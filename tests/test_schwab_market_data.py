@@ -5,7 +5,9 @@ import inspect
 import json
 import math
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
@@ -24,12 +26,17 @@ from momentum_hunter.schwab_market_data import (
     SCHWAB_QUOTES_URL,
     UNSPECIFIED_QUOTE_PROOF_ORIGIN,
     BoundSchwabAccessTokenProvider,
+    SchwabAuthPersistenceFailed,
+    SchwabAuthRefreshFailed,
+    SchwabAuthSecureStoreError,
+    SchwabAuthStateMissingError,
     SchwabMarketDataAuthorizationError,
     SchwabMarketDataError,
     SchwabMarketDataNetworkError,
     SchwabMarketDataQuoteSource,
     SchwabMarketDataResponseError,
     SchwabMarketDataTransport,
+    SchwabReauthorizationRequired,
     SchwabQuoteEvidenceBatch,
     StoredSchwabAccessTokenProvider,
     build_regular_market_quote_proof,
@@ -38,7 +45,12 @@ from momentum_hunter.schwab_market_data import (
     parse_quote_response,
 )
 from momentum_hunter.shadow_opening import build_https_clock_skew_proof
-from momentum_hunter.schwab_onboarding import SchwabOAuthTokens
+from momentum_hunter.schwab_onboarding import (
+    SchwabOAuthError,
+    SchwabOAuthResponseError,
+    SchwabOAuthTokens,
+)
+from momentum_hunter.schwab_setup import SchwabSetupError
 
 
 ACCESS_TOKEN = "SYNTHETIC-MARKET-DATA-ACCESS"
@@ -437,6 +449,114 @@ class SchwabMarketDataQuoteSourceTests(unittest.TestCase):
 
         with self.assertRaises(SchwabMarketDataAuthorizationError):
             provider.access_token()
+
+    def test_bound_token_provider_uses_valid_token_without_refresh(self) -> None:
+        secrets = _FakeSecrets()
+        refresh = _FakeBoundRefresh(secrets)
+        provider = BoundSchwabAccessTokenProvider(
+            secrets_repository=secrets,
+            bound_refresh=refresh,
+        )
+
+        self.assertEqual(ACCESS_TOKEN, provider.access_token())
+        self.assertEqual([], refresh.confirmations)
+
+    def test_bound_token_provider_classifies_missing_and_unreadable_stores(self) -> None:
+        class MissingSecrets:
+            exists = False
+
+            def load_tokens(self):
+                raise SchwabOAuthError("synthetic missing store")
+
+        class UnreadableSecrets:
+            exists = True
+
+            def load_tokens(self):
+                raise SchwabSetupError("synthetic DPAPI failure")
+
+        with self.assertRaises(SchwabAuthStateMissingError):
+            BoundSchwabAccessTokenProvider(
+                secrets_repository=MissingSecrets(),
+                bound_refresh=object(),
+            ).access_token()
+        with self.assertRaises(SchwabAuthSecureStoreError):
+            BoundSchwabAccessTokenProvider(
+                secrets_repository=UnreadableSecrets(),
+                bound_refresh=object(),
+            ).access_token()
+
+    def test_bound_token_provider_classifies_reauth_and_persistence_failure(self) -> None:
+        class RejectedRefresh:
+            def refresh(self, *, confirmation: str):
+                raise SchwabOAuthResponseError("synthetic HTTP 400")
+
+        class PersistenceFailure:
+            def refresh(self, *, confirmation: str):
+                raise OSError("synthetic persistence failure")
+
+        for refresh, expected in (
+            (RejectedRefresh(), SchwabReauthorizationRequired),
+            (PersistenceFailure(), SchwabAuthPersistenceFailed),
+        ):
+            with self.subTest(expected=expected.__name__):
+                with self.assertRaises(expected):
+                    BoundSchwabAccessTokenProvider(
+                        secrets_repository=_FakeSecrets(expired=True),
+                        bound_refresh=refresh,
+                    ).access_token()
+
+    def test_provider_rejection_refresh_is_bounded_to_one_attempt(self) -> None:
+        secrets = _FakeSecrets()
+        refresh = _FakeBoundRefresh(secrets)
+        provider = BoundSchwabAccessTokenProvider(
+            secrets_repository=secrets,
+            bound_refresh=refresh,
+        )
+
+        self.assertEqual(
+            "SYNTHETIC-REFRESHED-ACCESS",
+            provider.refresh_after_rejection(),
+        )
+        with self.assertRaises(SchwabAuthRefreshFailed):
+            provider.refresh_after_rejection()
+        self.assertEqual(1, len(refresh.confirmations))
+
+    def test_concurrent_expired_token_reads_share_one_refresh(self) -> None:
+        from momentum_hunter.schwab_bound_account_refresh import (
+            BOUND_REFRESH_CONFIRMATION,
+        )
+
+        class BlockingSecrets(_FakeSecrets):
+            def __init__(self) -> None:
+                super().__init__(expired=True)
+                self.barrier = threading.Barrier(2)
+                self.lock = threading.Lock()
+                self.load_count = 0
+
+            def load_tokens(self) -> SchwabOAuthTokens:
+                with self.lock:
+                    self.load_count += 1
+                    wait_for_peer = self.load_count <= 2
+                    tokens = self.tokens
+                if wait_for_peer:
+                    self.barrier.wait(timeout=2)
+                return tokens
+
+        secrets = BlockingSecrets()
+        refresh = _FakeBoundRefresh(secrets)
+        provider = BoundSchwabAccessTokenProvider(
+            secrets_repository=secrets,
+            bound_refresh=refresh,
+        )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            tokens = tuple(pool.map(lambda _value: provider.access_token(), range(2)))
+
+        self.assertEqual(
+            ("SYNTHETIC-REFRESHED-ACCESS", "SYNTHETIC-REFRESHED-ACCESS"),
+            tokens,
+        )
+        self.assertEqual([BOUND_REFRESH_CONFIRMATION], refresh.confirmations)
 
     def test_token_provider_and_secrets_repository_are_mutually_exclusive(self) -> None:
         with self.assertRaises(ValueError):

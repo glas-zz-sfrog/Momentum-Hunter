@@ -20,6 +20,9 @@ from momentum_hunter.schwab_candle_contract import (
     SCHWAB_PRICE_HISTORY_SOURCE,
     SchwabMinuteCandle,
 )
+from momentum_hunter.schwab_candle_observer import (
+    SchwabCandleObserverHttpForbiddenError,
+)
 from momentum_hunter.schwab_candle_store import SchwabCandleStore
 from momentum_hunter.time_normalized_rvol import TimeNormalizedRvolEvidence
 
@@ -182,6 +185,27 @@ class OpeningCandleReadinessTests(unittest.TestCase):
         self.assertTrue(
             all(item["error"] == "ConnectionError" for item in result.attempts)
         )
+
+    def test_coordinator_preserves_sanitized_underlying_auth_classification(self) -> None:
+        def failed():
+            raise SchwabCandleObserverHttpForbiddenError("synthetic secret sentinel")
+
+        result = OpeningCandleReadinessCoordinator(
+            run_backfill=failed,
+            inspect_store=lambda _symbols, _as_of: snapshot(ready=False),
+            sleep=lambda _seconds: None,
+        ).prepare(("AAA",), evidence_as_of=AS_OF)
+
+        self.assertEqual(OPENING_CANDLE_BACKFILL_FAILED, result.status)
+        self.assertTrue(
+            all(
+                attempt["failureClassification"] == "SCHWAB_HTTP_FORBIDDEN"
+                and attempt["httpStatus"] == 403
+                and not attempt["errorMessageIncluded"]
+                for attempt in result.attempts
+            )
+        )
+        self.assertNotIn("synthetic secret sentinel", str(result.to_evidence()))
 
     def test_setup_failure_creates_explicit_ineligible_rvol_for_every_symbol(self) -> None:
         result = failed_opening_candle_readiness(
