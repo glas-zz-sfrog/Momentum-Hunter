@@ -431,3 +431,26 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Implementation commit: `df31bc0`. Classification:
   `WRITER_PHYSICAL_INTEGRITY_HARDENED_PENDING_AUGUST_17_RECONCILIATION`.
   Nothing was merged, installed, scheduled, or activated.
+
+## 2026-08-17 - AUG17 Integration Qualification
+
+- Combined final research `c1eacec`, continuous/writer `870db12`, and Schwab
+  recovery `b1e05b7` lineages once on an isolated candidate from `ea056155`.
+- Resolved governance-only conflicts and skipped temporary duplicate
+  STAT-DATA-001 copies; source lineage comparison passed.
+- Fixed one integration defect where historical evidence time incorrectly
+  exhausted live Finviz pagination; 985 focused and 2,604 full tests passed.
+- Preserved failed sidecar Generation 1, then passed live read-only Generation 2
+  with 9 Finviz pages, 180 rows, 62 symbols, real Schwab quote/candle evidence,
+  three complete denominator cycles, six writer records, one restart, zero
+  orders, and zero production mutations.
+- Passed a separate 15-minute soak with 24 Finviz pages, 480 rows, 69 symbols,
+  10 complete denominator cycles, 20 writer records, exact restart continuity,
+  empty final queues, zero provider/system/writer failures, and zero orders.
+- Classified storage as `CONT_STORAGE_REMAINDER_IDENTIFIED`.
+- Frozen Pass 2 completed with exit 0 and honest MU/SKHY `DATA_FAILURE`
+  outcomes caused by absent morning candle partitions; it created no trade.
+- Final Hard Chew exposed and repaired one direct low-level IPC dependency in
+  the sidecar without broadening the security allowlist. Forty-eight focused
+  tests and all 2,608 Python tests pass. Classification:
+  `AUG17_INTEGRATION_CANDIDATE_MERGE_QUALIFIED`.

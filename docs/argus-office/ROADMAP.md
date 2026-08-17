@@ -29,6 +29,49 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+`ARGUS-AUG17-INTEGRATION-QUALIFICATION-001` is active on isolated branch
+`codex/ARGUS-AUG17-INTEGRATION-CANDIDATE-001`. It combines the final verified
+research stack `c1eacec`, continuous/writer stack `870db12`, and Schwab
+authorization-recovery stack `b1e05b7` once, with no source conflict or
+duplicate STAT-DATA lineage. Canonical `master` and the installed August 17
+runtime remain clean and unchanged at `ea056155`.
+
+The combined offline gate passes 985 focused tests and all 2,604 Python tests.
+Live read-only sidecar Generation 2 ran prospectively from 12:32:27 to 12:38:28
+Central and passed three broad discovery, Schwab readiness, composition,
+denominator, writer, and restart cycles. It observed 9 Finviz pages, 180 rows,
+62 unique symbols, 189 tier transitions, 80,268 one-minute bars, 3,207 Daily
+bars, one canonical-ready symbol, six explicit symbol-local RVOL readiness
+failures, zero incomplete/system-failed cycles, six immutable writer records,
+zero writer errors, zero orders, and zero production mutations. The first
+generation's invalid checkpoint root was preserved and repaired without
+weakening the Temp-root boundary.
+
+An extended 15-minute soak then passed 8 discovery cycles, 24 Finviz pages,
+480 rows, 69 unique symbols, 504 tier transitions, 8 Schwab refreshes, 10
+complete composition/denominator cycles, 20 immutable writer records, and one
+restart with an identical pre/post universe fingerprint. AXTI, COHR, and SNDK
+became canonical-ready; all 14 failed readiness attempts stayed explicit and
+symbol-local. Final queues were empty, and provider, system-cycle, writer,
+order, and sidecar-induced production-mutation counts were zero.
+
+`CONT_STORAGE_REMAINDER_IDENTIFIED`: physical immutable writer storage is
+proven, but research-only continuous activation still needs dedicated
+LocalService installation, complete business-payload persistence/indexing,
+production checkpoint/root ownership, and read/recovery proof. The frozen
+SETUP-002 Pass 2 completed at 15:05 Central on `ea056155` with exit 0 and
+terminal `DATA_FAILURE` outcomes for MU and SKHY because the morning Schwab
+failure left their canonical minute partitions absent. It created no
+hypothetical trade and preserved the Pass 1 decision-packet identity.
+
+The post-Pass-2 Hard Chew exposed one integration-only dependency defect: the
+live qualification sidecar imported the low-level writer IPC module directly.
+The sidecar now obtains ephemeral capability creation through the continuous
+evidence-writer facade; 48 focused IPC/writer/sidecar tests and the complete
+2,608-test Python suite pass. The candidate is classified
+`AUG17_INTEGRATION_CANDIDATE_MERGE_QUALIFIED`. Merge, installation, repinning,
+and research-only continuous activation remain separate later actions.
+
 The August 17 opening is permanently classified
 `AUG17_SYSTEM_EVIDENCE_FAILURE / DECISION_NOT_REACHED`, not a strategy
 `NO_TRADE`. Scheduler, clock, and Finviz succeeded with 20 received and 20
@@ -36,8 +79,9 @@ parsed rows; MU and SKHY qualified. The canonical Schwab candle guard failed
 before the price-history request on all three bounded attempts, leaving both
 candidates at zero opening bars and zero baseline sessions. Paper evaluated
 zero candidates and created no order or position. SETUP-002 Pass 1 completed
-and abstained as `INSUFFICIENT_PREMARKET_HISTORY`; its frozen Pass 2 remains
-scheduled for 15:05 Central on the original `ea056155` identity.
+and abstained as `INSUFFICIENT_PREMARKET_HISTORY`; Pass 2 subsequently
+completed on the original `ea056155` identity and preserved terminal
+`DATA_FAILURE` rather than inventing missing market evidence.
 
 `ARGUS-SCHWAB-AUTH-RECOVERY-001` is implemented on
 `codex/ARGUS-SCHWAB-AUTH-RECOVERY-001-service-context` and remains pending the

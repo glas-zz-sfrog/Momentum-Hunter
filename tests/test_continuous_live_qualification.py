@@ -75,6 +75,10 @@ class ContinuousLiveQualificationTests(unittest.TestCase):
         self.assertFalse(
             calls.intersection({"submit_order", "cancel_order", "replace_order"})
         )
+        self.assertNotIn(
+            "momentum_hunter.event_runtime_writer_ipc",
+            source.read_text(encoding="utf-8"),
+        )
 
 
 if __name__ == "__main__":

@@ -69,6 +69,12 @@ OFFLINE_REVIEW = "OFFLINE_REVIEW"
 READ = "READ"
 APPEND = "APPEND"
 
+
+def create_ephemeral_writer_capability() -> EphemeralWriterCapability:
+    """Create a session capability without exposing the low-level IPC module."""
+
+    return EphemeralWriterCapability.create()
+
 WRITER_CAPABILITIES = ("VALIDATE", "ORDER", "PERSIST", "ACKNOWLEDGE")
 FORBIDDEN_WRITER_CAPABILITIES = (
     "SCHWAB_CREDENTIALS",
@@ -1195,6 +1201,7 @@ __all__ = [
     "artifact_record_path",
     "authorize_topology_access",
     "build_continuous_writer_topology_v2",
+    "create_ephemeral_writer_capability",
     "read_evidence_snapshot",
     "topology_contradiction_inventory",
     "topology_v1_compatibility",

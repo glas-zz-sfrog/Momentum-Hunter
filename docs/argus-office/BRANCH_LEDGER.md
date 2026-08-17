@@ -1003,3 +1003,9 @@ Use a fresh task branch from local `master` instead.
 | Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
 | `codex/ARGUS-WRITER-HARDENING-001-single-writer-reparse` | Implementation `df31bc0`, based on physical-proof `b384680` with runtime ancestor `fd04452` and writer-topology ancestor `39bd45b` | Yes | No | `WRITER_PHYSICAL_INTEGRITY_HARDENED_PENDING_AUGUST_17_RECONCILIATION` | Root-scoped OS ownership, crash release, reparse-resistant handle-pinned persistence, complete physical Windows rerun, and retained same-SID/Admin limitations. | Preserve unmerged through August 17; then reconcile one authoritative writer lineage and separately plan research-only deployment/activation. |
+
+## 2026-08-17 Integration Qualification
+
+| Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-AUG17-INTEGRATION-CANDIDATE-001` | Live-sidecar commit `012b555` plus final qualification closeout on combined candidate from canonical `ea056155` | Yes | No | `AUG17_INTEGRATION_CANDIDATE_MERGE_QUALIFIED` | One authoritative research/continuous/writer/Schwab candidate; live sidecar, soak, terminal Pass 2, 48 focused tests, and all 2,608 Python tests pass. | Preserve the pushed branch for deliberate Git Steward fast-forward; activation remains separately gated by the identified storage/deployment remainder. |

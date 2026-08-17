@@ -39,6 +39,7 @@ from momentum_hunter.continuous_evidence_writer import (
     AuthenticatedEvidenceWriterClient,
     DedicatedEvidenceWriter,
     build_continuous_writer_topology_v2,
+    create_ephemeral_writer_capability,
     read_evidence_snapshot,
 )
 from momentum_hunter.continuous_runtime import (
@@ -57,7 +58,6 @@ from momentum_hunter.continuous_runtime import (
     RuntimeCadence,
     RuntimeCheckpointStore,
 )
-from momentum_hunter.event_runtime_writer_ipc import EphemeralWriterCapability
 from momentum_hunter.hot_universe import (
     HOT,
     TRACKED,
@@ -633,7 +633,7 @@ def run_live_qualification(
             _git_identity(worktree_root)["head"],
         ),
     )
-    capability = EphemeralWriterCapability.create()
+    capability = create_ephemeral_writer_capability()
     writer = DedicatedEvidenceWriter(topology)
     writer.activate_session(
         capability=capability,

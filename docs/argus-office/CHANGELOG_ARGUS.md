@@ -614,3 +614,19 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Emitted only the common `RESEARCH_ONLY / EXECUTION_AUTHORITY_NONE`
   Specialist Opinion plus a fingerprint-bound REGIME body. No production or
   execution behavior changed.
+
+## 2026-08-17 - Integration Qualification Candidate (Branch Only)
+
+- Combined the completed research, continuous runtime, dedicated writer, and
+  Schwab authorization-recovery work without changing canonical production.
+- Corrected live Finviz pagination budgeting to use monotonic elapsed time
+  rather than historical evidence time.
+- Added a disposable `LIVE_READ_ONLY_QUALIFICATION` sidecar for real Finviz and
+  Schwab evidence, exact continuous runtime/writer composition, and restart
+  proof with no broker/order authority.
+- Passed the live Generation 2 sidecar with explicit symbol-local readiness
+  failures, complete denominators, immutable writer evidence, zero orders, and
+  zero production mutation.
+- Extended live qualification through a separate 15-minute soak with 8 real
+  discovery/Schwab cycles, 10 complete denominator cycles, 20 writer records,
+  one exact checkpoint restart, and empty final queues.
