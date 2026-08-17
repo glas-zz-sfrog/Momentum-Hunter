@@ -75,6 +75,7 @@ from momentum_hunter.opportunity_denominator import (
     SAMPLE_STATUS,
     STRATEGY_REJECT,
     SYNTHETIC_TEST,
+    LIVE_READ_ONLY_QUALIFICATION,
     SYSTEM_FAILURE,
     OpportunityCycleRecord,
     OpportunityDenominatorError,
@@ -344,9 +345,10 @@ def produce_continuous_denominator(
 
     policy = policy or reference_continuous_denominator_policy()
     _validate_policy(policy)
-    if observation_mode != SYNTHETIC_TEST:
+    if observation_mode not in {SYNTHETIC_TEST, LIVE_READ_ONLY_QUALIFICATION}:
         raise ContinuousDenominatorError(
-            "The inactive STAT-DATA-002 producer accepts synthetic evidence only."
+            "The inactive STAT-DATA-002 producer accepts only synthetic or isolated "
+            "live read-only qualification evidence."
         )
     denominator_policy = current_policy()
     if denominator_policy.status != SAMPLE_STATUS:

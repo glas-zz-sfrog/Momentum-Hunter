@@ -69,6 +69,7 @@ from momentum_hunter.opportunity_denominator import (
     SAMPLE_IDENTITY,
     SAMPLE_STATUS,
     SYNTHETIC_TEST,
+    LIVE_READ_ONLY_QUALIFICATION,
     SYSTEM_FAILURE,
 )
 from tests import test_continuous_composition as composition_fixture
@@ -791,8 +792,8 @@ class ContinuousDenominatorNegativeAndIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(ContinuousDenominatorError, "before discovery"):
             self.produce(composition_cycle=early_cycle)
 
-    def test_only_synthetic_inactive_sample_is_admitted(self) -> None:
-        with self.assertRaisesRegex(ContinuousDenominatorError, "synthetic evidence only"):
+    def test_only_nonprospective_inactive_modes_are_admitted(self) -> None:
+        with self.assertRaisesRegex(ContinuousDenominatorError, "synthetic or isolated"):
             produce_continuous_denominator(
                 discovery_snapshot=self.snapshot,
                 universe_result=self.universe,
@@ -806,6 +807,21 @@ class ContinuousDenominatorNegativeAndIsolationTests(unittest.TestCase):
         self.assertEqual(SYNTHETIC_TEST, result.cycle.observation_mode)
         self.assertEqual(EXECUTION_AUTHORITY_NONE, result.linkage.execution_authority)
         self.assertEqual(policy.fingerprint, result.linkage.producer_policy_fingerprint)
+
+        qualification = produce_continuous_denominator(
+            discovery_snapshot=self.snapshot,
+            universe_result=self.universe,
+            composition_cycle=self.cycle,
+            observation_mode=LIVE_READ_ONLY_QUALIFICATION,
+        )
+        self.assertEqual(
+            LIVE_READ_ONLY_QUALIFICATION,
+            qualification.cycle.observation_mode,
+        )
+        self.assertEqual(
+            EXECUTION_AUTHORITY_NONE,
+            qualification.cycle.execution_authority,
+        )
 
     def test_no_specialist_attachment_outcome_or_profitability_is_generated(self) -> None:
         result = self.produce()

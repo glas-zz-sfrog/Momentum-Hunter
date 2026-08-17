@@ -542,6 +542,24 @@ class DiscoveryPaginationTests(unittest.TestCase):
         self.assertTrue(calls[1][0].endswith("&r=21"))
         self.assertEqual([3.5, 3.5], [item[1] for item in calls])
 
+    def test_evidence_timestamp_does_not_consume_live_request_budget(self) -> None:
+        calls: list[tuple[str, float]] = []
+        provider = provider_for_pages(
+            {
+                1: finviz_html(1, 20, total=40),
+                21: finviz_html(21, 20, total=40),
+            },
+            calls,
+        )
+        result = provider.discover_paginated(
+            INSTITUTIONAL_MOMENTUM,
+            pagination_policy=policy(max_pages=2, max_rows=40),
+            requested_at=BASE - timedelta(days=30),
+            evaluated_at=BASE,
+        )
+        self.assertEqual(COMPLETE_FILTERED_RESULT_SET, result.coverage_state)
+        self.assertEqual(2, len(calls))
+
     def test_opt_in_provider_preserves_second_page_contract_failure(self) -> None:
         calls: list[tuple[str, float]] = []
         provider = provider_for_pages(

@@ -465,7 +465,8 @@ class FinvizProvider(MarketDataProvider):
             raise ValueError(
                 "Finviz paginated discovery max_rows must accommodate one complete page."
             )
-        pulse_started = requested_at or now_central()
+        del requested_at
+        pulse_started_monotonic = time.monotonic()
         observed_evaluated_at = evaluated_at or now_central()
         source_query = self._screener_url(criteria)
         query_identity = DiscoveryQueryIdentity.from_criteria(
@@ -480,7 +481,7 @@ class FinvizProvider(MarketDataProvider):
         termination_reason: str | None = None
 
         for page_number in range(1, pagination_policy.max_pages + 1):
-            if pages and (now_central() - pulse_started).total_seconds() >= (
+            if pages and (time.monotonic() - pulse_started_monotonic) >= (
                 pagination_policy.maximum_elapsed_time_seconds
             ):
                 termination_reason = TRUNCATION_MAX_ELAPSED_TIME
