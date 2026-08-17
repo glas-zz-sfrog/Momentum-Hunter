@@ -45,7 +45,24 @@ class SchwabAccountValidationNetworkError(SchwabAccountValidationError):
 
 
 class SchwabAccountValidationResponseError(SchwabAccountValidationError):
-    pass
+    def __init__(self, message: str, *, http_status: int | None = None) -> None:
+        super().__init__(message)
+        if http_status is not None:
+            self.http_status = http_status
+
+
+class SchwabAccountValidationUnauthorizedError(
+    SchwabAccountValidationResponseError
+):
+    """The account-details endpoint rejected the bearer token with HTTP 401."""
+
+    http_status = 401
+
+
+class SchwabAccountValidationForbiddenError(SchwabAccountValidationResponseError):
+    """The account-details endpoint denied the request with HTTP 403."""
+
+    http_status = 403
 
 
 class _RedactedArgumentParser(argparse.ArgumentParser):
@@ -117,9 +134,18 @@ class SchwabAccountDetailsTransport:
             raise SchwabAccountValidationResponseError(
                 "Schwab account validation refused an HTTP redirect."
             )
+        if response.status_code == 401:
+            raise SchwabAccountValidationUnauthorizedError(
+                "Schwab account validation failed safely with HTTP 401."
+            )
+        if response.status_code == 403:
+            raise SchwabAccountValidationForbiddenError(
+                "Schwab account validation failed safely with HTTP 403."
+            )
         if response.status_code != 200:
             raise SchwabAccountValidationResponseError(
-                f"Schwab account validation failed safely with HTTP {response.status_code}."
+                f"Schwab account validation failed safely with HTTP {response.status_code}.",
+                http_status=response.status_code,
             )
         if len(response.content) > MAX_ACCOUNT_RESPONSE_BYTES:
             raise SchwabAccountValidationResponseError(

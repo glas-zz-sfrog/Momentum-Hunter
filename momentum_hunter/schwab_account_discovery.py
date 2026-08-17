@@ -34,7 +34,24 @@ class SchwabAccountDiscoveryNetworkError(SchwabAccountDiscoveryError):
 
 
 class SchwabAccountDiscoveryResponseError(SchwabAccountDiscoveryError):
-    pass
+    def __init__(self, message: str, *, http_status: int | None = None) -> None:
+        super().__init__(message)
+        if http_status is not None:
+            self.http_status = http_status
+
+
+class SchwabAccountDiscoveryUnauthorizedError(
+    SchwabAccountDiscoveryResponseError
+):
+    """The account-discovery endpoint rejected the bearer token with HTTP 401."""
+
+    http_status = 401
+
+
+class SchwabAccountDiscoveryForbiddenError(SchwabAccountDiscoveryResponseError):
+    """The account-discovery endpoint denied the request with HTTP 403."""
+
+    http_status = 403
 
 
 class _RedactedArgumentParser(argparse.ArgumentParser):
@@ -94,9 +111,18 @@ class SchwabAccountNumbersTransport:
             raise SchwabAccountDiscoveryResponseError(
                 "Schwab account discovery refused an HTTP redirect."
             )
+        if response.status_code == 401:
+            raise SchwabAccountDiscoveryUnauthorizedError(
+                "Schwab account discovery failed safely with HTTP 401."
+            )
+        if response.status_code == 403:
+            raise SchwabAccountDiscoveryForbiddenError(
+                "Schwab account discovery failed safely with HTTP 403."
+            )
         if response.status_code != 200:
             raise SchwabAccountDiscoveryResponseError(
-                f"Schwab account discovery failed safely with HTTP {response.status_code}."
+                f"Schwab account discovery failed safely with HTTP {response.status_code}.",
+                http_status=response.status_code,
             )
         if len(response.content) > MAX_DISCOVERY_RESPONSE_BYTES:
             raise SchwabAccountDiscoveryResponseError(

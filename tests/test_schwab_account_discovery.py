@@ -18,8 +18,10 @@ from momentum_hunter.schwab_account_discovery import (
     DiscoveredSchwabAccount,
     SchwabAccountDiscovery,
     SchwabAccountDiscoveryError,
+    SchwabAccountDiscoveryForbiddenError,
     SchwabAccountDiscoveryNetworkError,
     SchwabAccountDiscoveryResponseError,
+    SchwabAccountDiscoveryUnauthorizedError,
     SchwabAccountNumbersTransport,
     build_discovery_report,
     main,
@@ -135,7 +137,11 @@ class SchwabAccountDiscoveryTransportTests(unittest.TestCase):
             ),
             (
                 _FakeSession(_FakeResponse({}, status_code=401)),
-                SchwabAccountDiscoveryResponseError,
+                SchwabAccountDiscoveryUnauthorizedError,
+            ),
+            (
+                _FakeSession(_FakeResponse({}, status_code=403)),
+                SchwabAccountDiscoveryForbiddenError,
             ),
             (
                 _FakeSession(_FakeResponse({}, status_code=302, is_redirect=True)),

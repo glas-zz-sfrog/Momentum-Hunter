@@ -18,8 +18,10 @@ from momentum_hunter.schwab_account_validation import (
     SchwabAccountDetailsTransport,
     SchwabAccountIdentity,
     SchwabAccountValidationError,
+    SchwabAccountValidationForbiddenError,
     SchwabAccountValidationNetworkError,
     SchwabAccountValidationResponseError,
+    SchwabAccountValidationUnauthorizedError,
     SchwabCashAccountValidation,
     build_unpersisted_binding_candidate,
     build_validation_report,
@@ -184,7 +186,11 @@ class SchwabAccountDetailsTransportTests(unittest.TestCase):
             ),
             (
                 _FakeSession(_FakeResponse({}, status_code=401)),
-                SchwabAccountValidationResponseError,
+                SchwabAccountValidationUnauthorizedError,
+            ),
+            (
+                _FakeSession(_FakeResponse({}, status_code=403)),
+                SchwabAccountValidationForbiddenError,
             ),
             (
                 _FakeSession(_FakeResponse({}, status_code=302, is_redirect=True)),

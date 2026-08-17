@@ -23,7 +23,10 @@ from momentum_hunter.schwab_candle_backfill import (
 )
 from momentum_hunter.schwab_candle_collector import CandleSymbolUniverse
 from momentum_hunter.schwab_candle_contract import EASTERN_TZ, normalize_symbols
-from momentum_hunter.schwab_candle_observer import SchwabCandleHttpTransport
+from momentum_hunter.schwab_candle_observer import (
+    SchwabCandleHttpTransport,
+    sanitized_candle_failure,
+)
 from momentum_hunter.schwab_candle_store import SCHWAB_CANDLE_STORE_ROOT, SchwabCandleStore
 from momentum_hunter.schwab_daily_candle_store import (
     SCHWAB_DAILY_CANDLE_STORE_ROOT,
@@ -149,11 +152,16 @@ class OpeningCandleReadinessCoordinator:
             except Exception as exc:  # The opening decision remains fail-closed.
                 failure = f"BACKFILL_ATTEMPT_FAILED:{type(exc).__name__}"
                 failures.append(failure)
+                diagnostic = sanitized_candle_failure(exc)
                 attempts.append(
                     {
                         "attempt": attempt_number,
                         "status": "FAILED",
                         "error": type(exc).__name__,
+                        "failureClassification": diagnostic["classification"],
+                        "underlyingExceptionClass": diagnostic["exceptionClass"],
+                        "httpStatus": diagnostic["httpStatus"],
+                        "errorMessageIncluded": False,
                     }
                 )
 

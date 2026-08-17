@@ -24,12 +24,17 @@ from momentum_hunter.schwab_readonly import (
     SchwabAccountBinding,
     redact_value,
 )
+from momentum_hunter.schwab_setup import SchwabSetupError
 
 
 BOUND_REFRESH_CONFIRMATION = "REFRESH AND REVALIDATE SCHWAB CASH ACCOUNT"
 
 
 class SchwabBoundAccountRefreshError(RuntimeError):
+    pass
+
+
+class SchwabBoundAccountRefreshPersistenceError(SchwabBoundAccountRefreshError):
     pass
 
 
@@ -72,7 +77,12 @@ class SchwabBoundAccountRefresh:
             binding,
             access_token=refreshed_tokens.access_token,
         )
-        self.secrets.save_tokens(refreshed_tokens)
+        try:
+            self.secrets.save_tokens(refreshed_tokens)
+        except (OSError, SchwabSetupError) as exc:
+            raise SchwabBoundAccountRefreshPersistenceError(
+                "Refreshed Schwab authorization could not be persisted safely."
+            ) from exc
         return {
             "mode": "SCHWAB_BOUND_ACCOUNT_REFRESH_READ_ONLY",
             "tokenState": "ACTIVE",

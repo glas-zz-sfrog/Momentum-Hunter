@@ -26,6 +26,7 @@ from momentum_hunter.schwab_candle_contract import (
 )
 from momentum_hunter.schwab_candle_observer import (
     GuardedStreamerAccess,
+    SchwabCandleObserverHttpUnauthorizedError,
     SchwabCandleObserverNetworkError,
 )
 from momentum_hunter.schwab_candle_store import SchwabCandleStore, SchwabCandleStoreError
@@ -42,11 +43,24 @@ NOW = datetime(2026, 8, 6, 15, 0, tzinfo=UTC)
 class FakeAccessGuard:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.refresh_calls: list[str] = []
 
     def authorize(self, expected_account_ending: str) -> GuardedStreamerAccess:
         self.calls.append(expected_account_ending)
         return GuardedStreamerAccess(
             access_token="synthetic-token",
+            account_ending="2573",
+            account_type="INDIVIDUAL_CASH",
+            balances_present=True,
+        )
+
+    def refresh_after_rejection(
+        self,
+        expected_account_ending: str,
+    ) -> GuardedStreamerAccess:
+        self.refresh_calls.append(expected_account_ending)
+        return GuardedStreamerAccess(
+            access_token="synthetic-refreshed-token",
             account_ending="2573",
             account_type="INDIVIDUAL_CASH",
             balances_present=True,
@@ -60,10 +74,13 @@ class FakeHttpTransport:
         minute_rows: int = 35,
         daily_rows: int = 25,
         transient_failures: int = 0,
+        unauthorized_failures: int = 0,
     ) -> None:
         self.minute_rows = minute_rows
         self.daily_rows = daily_rows
         self.transient_failures = transient_failures
+        self.unauthorized_failures = unauthorized_failures
+        self.access_tokens: list[str] = []
         self.minute_calls: list[tuple[str, datetime, datetime, bool]] = []
         self.daily_calls: list[tuple[str, datetime, datetime]] = []
 
@@ -76,6 +93,8 @@ class FakeHttpTransport:
         end_at: datetime,
         extended_hours: bool,
     ) -> object:
+        self.access_tokens.append(access_token)
+        self._maybe_reject_authorization()
         self._maybe_fail()
         self.minute_calls.append((symbol, start_at, end_at, extended_hours))
         start = NOW - timedelta(minutes=self.minute_rows)
@@ -90,6 +109,8 @@ class FakeHttpTransport:
         start_at: datetime,
         end_at: datetime,
     ) -> object:
+        self.access_tokens.append(access_token)
+        self._maybe_reject_authorization()
         self._maybe_fail()
         self.daily_calls.append((symbol, start_at, end_at))
         start = datetime(2026, 7, 1, 4, 0, tzinfo=UTC)
@@ -100,6 +121,11 @@ class FakeHttpTransport:
         if self.transient_failures:
             self.transient_failures -= 1
             raise SchwabCandleObserverNetworkError("synthetic transient")
+
+    def _maybe_reject_authorization(self) -> None:
+        if self.unauthorized_failures:
+            self.unauthorized_failures -= 1
+            raise SchwabCandleObserverHttpUnauthorizedError("synthetic 401")
 
 
 class SchwabCandleContractBackfillTests(unittest.TestCase):
@@ -272,6 +298,40 @@ class SchwabHistoricalCandleBackfillerTests(unittest.TestCase):
         )
         self.assertEqual("COMPLETE", result["status"])
         self.assertEqual(2, result["symbols"][0]["minute"]["attempts"])
+
+    def test_http_401_refreshes_once_and_retries_original_candle_read(self) -> None:
+        transport = FakeHttpTransport(unauthorized_failures=1)
+
+        result = self._backfiller(transport).backfill(
+            explicit_universe(("NVDA",)),
+            CandleBackfillOptions(expected_account_ending="2573"),
+        )
+
+        self.assertEqual("COMPLETE", result["status"])
+        self.assertEqual(["2573"], self.guard.refresh_calls)
+        self.assertEqual("synthetic-token", transport.access_tokens[0])
+        self.assertTrue(
+            all(
+                token == "synthetic-refreshed-token"
+                for token in transport.access_tokens[1:]
+            )
+        )
+
+    def test_second_http_401_is_partial_failure_not_empty_valid_evidence(self) -> None:
+        transport = FakeHttpTransport(unauthorized_failures=2)
+
+        result = self._backfiller(transport).backfill(
+            explicit_universe(("NVDA",)),
+            CandleBackfillOptions(expected_account_ending="2573"),
+        )
+
+        self.assertEqual("PARTIAL", result["status"])
+        self.assertEqual(["2573"], self.guard.refresh_calls)
+        self.assertEqual("FAILED", result["symbols"][0]["minute"]["status"])
+        self.assertEqual(
+            "SchwabCandleObserverHttpUnauthorizedError",
+            result["symbols"][0]["minute"]["error"],
+        )
 
     def test_writer_conflict_fails_before_account_or_network_access(self) -> None:
         transport = FakeHttpTransport()

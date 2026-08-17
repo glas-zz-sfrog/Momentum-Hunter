@@ -33,6 +33,7 @@ from momentum_hunter.schwab_candle_observer import (
     SchwabCandleAccessGuard,
     SchwabCandleHttpTransport,
     SchwabCandleObserverAuthorizationError,
+    SchwabCandleObserverHttpUnauthorizedError,
     SchwabCandleObserverNetworkError,
     SchwabCandleObserverResponseError,
 )
@@ -86,6 +87,35 @@ class CandleBackfillOptions:
             )
 
 
+class _AuthorizedHistoryReader:
+    """Use one guarded token refresh across an entire bounded backfill run."""
+
+    def __init__(
+        self,
+        *,
+        access_guard: object,
+        access: GuardedStreamerAccess,
+        expected_account_ending: str,
+    ) -> None:
+        self.access_guard = access_guard
+        self.access = access
+        self.expected_account_ending = expected_account_ending
+        self.recovery_used = False
+
+    def fetch(self, operation: Callable[[str], object]) -> object:
+        try:
+            return operation(self.access.access_token)
+        except SchwabCandleObserverHttpUnauthorizedError:
+            if self.recovery_used:
+                raise
+            self.recovery_used = True
+            refresh = getattr(self.access_guard, "refresh_after_rejection", None)
+            if not callable(refresh):
+                raise
+            self.access = refresh(self.expected_account_ending)
+            return operation(self.access.access_token)
+
+
 class SchwabHistoricalCandleBackfiller:
     def __init__(
         self,
@@ -128,16 +158,21 @@ class SchwabHistoricalCandleBackfiller:
                 access: GuardedStreamerAccess = self.access_guard.authorize(
                     options.expected_account_ending
                 )
+                reader = _AuthorizedHistoryReader(
+                    access_guard=self.access_guard,
+                    access=access,
+                    expected_account_ending=options.expected_account_ending,
+                )
                 for symbol in universe.symbols:
                     minute_result = self._backfill_minute_symbol(
-                        access.access_token,
+                        reader,
                         symbol,
                         start_at=minute_start,
                         end_at=started_at,
                         options=options,
                     )
                     daily_result = self._backfill_daily_symbol(
-                        access.access_token,
+                        reader,
                         symbol,
                         start_at=daily_start,
                         end_at=started_at,
@@ -205,8 +240,8 @@ class SchwabHistoricalCandleBackfiller:
             "findings": sorted(set(findings)),
             "accountInvariant": {
                 "authorizedAccountCount": 1,
-                "accountEnding": access.account_ending,
-                "accountType": access.account_type,
+                "accountEnding": reader.access.account_ending,
+                "accountType": reader.access.account_type,
                 "positionsRequested": False,
                 "ordersRequested": False,
             },
@@ -226,7 +261,7 @@ class SchwabHistoricalCandleBackfiller:
 
     def _backfill_minute_symbol(
         self,
-        access_token: str,
+        reader: _AuthorizedHistoryReader,
         symbol: str,
         *,
         start_at: datetime,
@@ -234,12 +269,14 @@ class SchwabHistoricalCandleBackfiller:
         options: CandleBackfillOptions,
     ) -> dict[str, object]:
         payload, attempts, error = self._fetch(
-            lambda: self.http.fetch_price_history(
-                access_token,
-                symbol,
-                start_at=start_at,
-                end_at=end_at,
-                extended_hours=options.extended_hours,
+            lambda: reader.fetch(
+                lambda access_token: self.http.fetch_price_history(
+                    access_token,
+                    symbol,
+                    start_at=start_at,
+                    end_at=end_at,
+                    extended_hours=options.extended_hours,
+                )
             ),
             attempts=options.history_attempts,
         )
@@ -265,7 +302,7 @@ class SchwabHistoricalCandleBackfiller:
 
     def _backfill_daily_symbol(
         self,
-        access_token: str,
+        reader: _AuthorizedHistoryReader,
         symbol: str,
         *,
         start_at: datetime,
@@ -273,11 +310,13 @@ class SchwabHistoricalCandleBackfiller:
         options: CandleBackfillOptions,
     ) -> dict[str, object]:
         payload, attempts, error = self._fetch(
-            lambda: self.http.fetch_daily_price_history(
-                access_token,
-                symbol,
-                start_at=start_at,
-                end_at=end_at,
+            lambda: reader.fetch(
+                lambda access_token: self.http.fetch_daily_price_history(
+                    access_token,
+                    symbol,
+                    start_at=start_at,
+                    end_at=end_at,
+                )
             ),
             attempts=options.history_attempts,
         )
