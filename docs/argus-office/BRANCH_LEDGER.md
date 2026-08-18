@@ -9,8 +9,9 @@ The integrated software baseline is canonical at
 resilience, zero-opening/midday-first live qualification, writer security, and
 writer scale margin proven. The post-merge reconciliation branch
 `codex/ARGUS-POST-MERGE-RECONCILIATION-001` owns governance updates and the
-field-only repin of ordinary future opening jobs. Terminal historical jobs and
-frozen experiment jobs retain their original pins and evidence identities.
+field-only repin of ordinary future opening jobs and is now
+`POST_MERGE_RECONCILIATION_COMPLETE`. Terminal historical jobs and frozen
+experiment jobs retain their original pins and evidence identities.
 
 The next deployment stage is activation-only: dedicated LocalService writer
 installation, production evidence-root ownership, full payload/index

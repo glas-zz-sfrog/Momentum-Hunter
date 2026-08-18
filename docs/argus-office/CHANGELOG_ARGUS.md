@@ -1,6 +1,6 @@
 # Argus Changelog
 
-- Reconciled the post-merge governance baseline after the controlled fast-forward
+- Completed the post-merge governance reconciliation after the controlled fast-forward
   to `4526446eeab404ff02856d6a57c679c8b8b9b2a5`. Canonical software integration,
   continuous session resilience, midday-first live admission, writer security,
   and writer scale margin are now recorded as complete/proven rather than

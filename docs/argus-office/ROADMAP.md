@@ -44,7 +44,7 @@ midday-first symbols can enter, and restart does not require rerunning the
 opening bootstrap. Writer integrity, single-owner exclusion, reparse-resistant
 persistence, crash recovery, and measured write/recovery margins are canonical.
 
-Post-merge governance is now `RECONCILIATION_IN_PROGRESS`. The eligible
+Post-merge governance is now `RECONCILED`. The eligible
 ordinary future opening jobs are being repinned by code identity only. Their
 schedules, dependencies, enablement, time windows, strategy parameters,
 provider configuration, risk limits, Paper authority, and historical receipts
@@ -63,9 +63,11 @@ The remaining next-stage work is
 
 These are activation-only tasks, not merge blockers. Continuous Paper remains
 a later independent gate. Shadow, live Alpaca, Schwab orders, and live
-execution remain unavailable and unauthorized. The detailed pre-merge branch
-paragraphs below are retained as historical evidence and are not current-state
-claims.
+execution remain unavailable and unauthorized. The final canonical governance
+head is the post-merge reconciliation closeout commit on `master`; the
+integrated software identity remains `4526446eeab404ff02856d6a57c679c8b8b9b2a5`.
+The detailed pre-merge branch paragraphs below are retained as historical
+evidence and are not current-state claims.
 
 Profiling the exact 4,300-record full-session writer proof found a combined
 product and environmental margin defect rather than a hashing or indexing
