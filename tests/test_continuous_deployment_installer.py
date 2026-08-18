@@ -5,12 +5,16 @@ from pathlib import Path
 
 
 class ContinuousDeploymentInstallerTests(unittest.TestCase):
-    def test_config_fingerprint_runs_from_repository_root(self):
-        script = (
+    @staticmethod
+    def _script() -> str:
+        return (
             Path(__file__).resolve().parents[1]
             / "tools"
             / "install_research_only_continuous_deployment.ps1"
         ).read_text(encoding="utf-8")
+
+    def test_config_fingerprint_runs_from_repository_root(self):
+        script = self._script()
 
         fingerprint_call = "& $plan.pythonExecutable -B -m momentum_hunter.continuous_production"
         call_index = script.index(fingerprint_call)
@@ -24,6 +28,11 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
         self.assertGreaterEqual(push_index, 0)
         self.assertLess(push_index, call_index)
         self.assertGreater(pop_index, call_index)
+
+    def test_installer_does_not_assign_to_powershell_host_variable(self):
+        script = self._script()
+
+        self.assertNotIn("$host =", script.lower())
 
 
 if __name__ == "__main__":

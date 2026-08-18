@@ -352,9 +352,9 @@ if ($Stage -eq "Install") {
     Protect-File $ipcKeyPath $writerAccount ([string]$plan.runtimeAccount)
     Protect-File $configPath $writerAccount ([string]$plan.runtimeAccount)
 
-    $host = [string]$plan.serviceHostExecutable
-    $writerBinary = '"{0}" --role writer --repository-root "{1}" --python-executable "{2}" --config "{3}"' -f $host, $plan.repositoryRoot, $plan.pythonExecutable, $configPath
-    $runtimeBinary = '"{0}" --role runtime --repository-root "{1}" --python-executable "{2}" --config "{3}"' -f $host, $plan.repositoryRoot, $plan.pythonExecutable, $configPath
+    $serviceHostPath = [string]$plan.serviceHostExecutable
+    $writerBinary = '"{0}" --role writer --repository-root "{1}" --python-executable "{2}" --config "{3}"' -f $serviceHostPath, $plan.repositoryRoot, $plan.pythonExecutable, $configPath
+    $runtimeBinary = '"{0}" --role runtime --repository-root "{1}" --python-executable "{2}" --config "{3}"' -f $serviceHostPath, $plan.repositoryRoot, $plan.pythonExecutable, $configPath
     $credential = Get-Credential -UserName ([string]$plan.runtimeAccount) -Message "Windows credential required to run the research-only continuous runtime under the existing user account."
     Install-ContinuousService $writerServiceName "Momentum Hunter Continuous Writer (Research Only)" $writerBinary $writerAccount $null | Out-Null
     Install-ContinuousService $runtimeServiceName "Momentum Hunter Continuous Runtime (Research Only)" $runtimeBinary ([string]$plan.runtimeAccount) $credential | Out-Null
