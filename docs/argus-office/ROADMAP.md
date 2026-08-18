@@ -45,7 +45,7 @@ opening bootstrap. Writer integrity, single-owner exclusion, reparse-resistant
 persistence, crash recovery, and measured write/recovery margins are canonical.
 
 Post-merge governance is now `RECONCILED`. The eligible
-ordinary future opening jobs are being repinned by code identity only. Their
+ordinary future opening jobs are pinned by code identity only. Their
 schedules, dependencies, enablement, time windows, strategy parameters,
 provider configuration, risk limits, Paper authority, and historical receipts
 remain unchanged. Terminal and frozen experiment jobs retain their original
