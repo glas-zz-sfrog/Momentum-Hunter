@@ -167,6 +167,8 @@ class WriterEnvelopeSender:
         capability: EphemeralWriterCapability,
         configuration_fingerprint: str,
         source_identity: str,
+        starting_sequence: int = 1,
+        prior_envelope_fingerprint: str = GENESIS_FINGERPRINT,
     ) -> None:
         self.capability = capability
         self.configuration_fingerprint = _sha256(
@@ -174,8 +176,11 @@ class WriterEnvelopeSender:
             "Configuration fingerprint",
         )
         self.source_identity = _required_text(source_identity, "Source identity")
-        self._next_sequence = 1
-        self._prior_envelope_fingerprint = GENESIS_FINGERPRINT
+        if starting_sequence <= 0:
+            raise WriterIpcError("Starting envelope sequence must be positive.")
+        _sha256(prior_envelope_fingerprint, "Prior envelope fingerprint")
+        self._next_sequence = starting_sequence
+        self._prior_envelope_fingerprint = prior_envelope_fingerprint
 
     def build(
         self,

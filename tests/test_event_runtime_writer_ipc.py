@@ -371,7 +371,11 @@ class EventRuntimeWriterIpcTests(unittest.TestCase):
             if "event_runtime_writer_ipc" in text:
                 importers.append(path.name)
         self.assertEqual(
-            ["continuous_evidence_writer.py", "windows_isolation_proof.py"],
+            [
+                "continuous_evidence_writer.py",
+                "continuous_production.py",
+                "windows_isolation_proof.py",
+            ],
             sorted(importers),
         )
         proof_source = (package_root / "windows_isolation_proof.py").read_text(

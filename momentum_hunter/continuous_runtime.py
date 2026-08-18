@@ -9,7 +9,7 @@ from collections import OrderedDict, deque
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Iterable, Mapping, Protocol
+from typing import Any, Iterable, Mapping, Protocol
 
 
 CONTRACT_VERSION = 1
@@ -364,6 +364,7 @@ class EvidenceWriteIntent:
     requested_at: str
     payload_fingerprint: str
     fingerprint: str
+    payload_json: str | None = None
 
     def __post_init__(self) -> None:
         for label, value in (
@@ -400,6 +401,16 @@ def validate_evidence_write_intent(intent: EvidenceWriteIntent) -> None:
         "requested_at": intent.requested_at,
         "payload_fingerprint": intent.payload_fingerprint,
     }
+    if intent.payload_json is not None:
+        try:
+            decoded = json.loads(intent.payload_json)
+        except (TypeError, ValueError) as exc:
+            raise ContinuousRuntimeError("Evidence payload JSON is malformed.") from exc
+        if not isinstance(decoded, dict):
+            raise ContinuousRuntimeError("Evidence payload must be an object.")
+        if _fingerprint("continuous-evidence-payload-v1", decoded) != intent.payload_fingerprint:
+            raise ContinuousRuntimeError("Evidence payload fingerprint is invalid.")
+        payload["payload_json"] = intent.payload_json
     fingerprint = _fingerprint("continuous-evidence-write-intent-v1", payload)
     if intent.fingerprint != fingerprint:
         raise ContinuousRuntimeError("Evidence write intent fingerprint is invalid.")
@@ -417,8 +428,9 @@ def build_evidence_write_intent(
     predecessor_identity: str | None,
     requested_at: str,
     payload_fingerprint: str,
+    payload: Mapping[str, Any] | None = None,
 ) -> EvidenceWriteIntent:
-    payload = {
+    intent_payload = {
         "runtime_instance_id": runtime_instance_id,
         "sequence": sequence,
         "evidence_type": evidence_type,
@@ -428,11 +440,18 @@ def build_evidence_write_intent(
         "requested_at": requested_at,
         "payload_fingerprint": payload_fingerprint,
     }
-    fingerprint = _fingerprint("continuous-evidence-write-intent-v1", payload)
+    payload_json = None
+    if payload is not None:
+        payload_json = _canonical_json(dict(payload)).decode("ascii").strip()
+        expected_payload = _fingerprint("continuous-evidence-payload-v1", dict(payload))
+        if expected_payload != payload_fingerprint:
+            raise ContinuousRuntimeError("Evidence payload fingerprint does not match payload.")
+        intent_payload["payload_json"] = payload_json
+    fingerprint = _fingerprint("continuous-evidence-write-intent-v1", intent_payload)
     result = EvidenceWriteIntent(
         intent_id=f"continuous-intent-{fingerprint[:24]}",
         fingerprint=fingerprint,
-        **payload,
+        **intent_payload,
     )
     validate_evidence_write_intent(result)
     return result
@@ -696,20 +715,24 @@ class RuntimeHealth:
 
 
 class RuntimeCheckpointStore:
-    """Atomic offline checkpoint store restricted to the operating-system temp root."""
+    """Atomic checkpoint store with an explicit opt-in for production persistence."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, allow_persistent: bool = False) -> None:
         resolved = root.resolve()
-        temp_root = Path(tempfile.gettempdir()).resolve()
-        try:
-            resolved.relative_to(temp_root)
-        except ValueError as exc:
-            raise RuntimeCheckpointError(
-                "Runtime checkpoint root must remain under the temporary directory."
-            ) from exc
         lowered = str(resolved).lower()
-        if "momentumhunterdata" in lowered or "programdata" in lowered:
-            raise RuntimeCheckpointError("Production checkpoint roots are prohibited.")
+        if allow_persistent:
+            if "one drive" in lowered or "\\.git" in lowered or ".git\\" in lowered:
+                raise RuntimeCheckpointError("Production checkpoint root is not deployable.")
+        else:
+            temp_root = Path(tempfile.gettempdir()).resolve()
+            try:
+                resolved.relative_to(temp_root)
+            except ValueError as exc:
+                raise RuntimeCheckpointError(
+                    "Runtime checkpoint root must remain under the temporary directory."
+                ) from exc
+            if "momentumhunterdata" in lowered or "programdata" in lowered:
+                raise RuntimeCheckpointError("Production checkpoint roots are prohibited.")
         self.root = resolved
         self.root.mkdir(parents=True, exist_ok=True)
 
@@ -1431,6 +1454,14 @@ class ContinuousOpportunityRuntime:
             record_identity=result.cycle_id,
             record_fingerprint=result.fingerprint,
             payload_fingerprint=result.fingerprint,
+            payload={
+                "payloadType": "COMPOSITION_CYCLE",
+                "request": asdict(request),
+                "result": asdict(result),
+                "knownAt": _timestamp(now),
+                "authority": RESEARCH_AUTHORITY,
+                "executionAuthority": EXECUTION_AUTHORITY_NONE,
+            },
             now=now,
         )
         denominator_request = DenominatorRequest(
@@ -1456,6 +1487,14 @@ class ContinuousOpportunityRuntime:
             record_identity=denominator.cycle_id,
             record_fingerprint=denominator.fingerprint,
             payload_fingerprint=denominator.fingerprint,
+            payload={
+                "payloadType": "OPPORTUNITY_DENOMINATOR",
+                "request": asdict(denominator_request),
+                "result": asdict(denominator),
+                "knownAt": _timestamp(now),
+                "authority": RESEARCH_AUTHORITY,
+                "executionAuthority": EXECUTION_AUTHORITY_NONE,
+            },
             now=now,
         )
 
@@ -1466,8 +1505,11 @@ class ContinuousOpportunityRuntime:
         record_identity: str,
         record_fingerprint: str,
         payload_fingerprint: str,
+        payload: Mapping[str, Any] | None = None,
         now: datetime,
     ) -> str:
+        if payload is not None:
+            payload_fingerprint = _fingerprint("continuous-evidence-payload-v1", dict(payload))
         intent = build_evidence_write_intent(
             runtime_instance_id=self.runtime_instance_id,
             sequence=self._sequence + 1,
@@ -1477,6 +1519,7 @@ class ContinuousOpportunityRuntime:
             predecessor_identity=self._last_intent_id,
             requested_at=_timestamp(now),
             payload_fingerprint=payload_fingerprint,
+            payload=payload,
         )
         return self.admit_evidence_intent(intent, now)
 
@@ -1527,6 +1570,14 @@ class ContinuousOpportunityRuntime:
             record_identity=denominator.cycle_id,
             record_fingerprint=denominator.fingerprint,
             payload_fingerprint=source_fingerprint,
+            payload={
+                "payloadType": "PROVIDER_BOUND_DENOMINATOR_ROWS",
+                "request": asdict(request),
+                "result": asdict(denominator),
+                "knownAt": _timestamp(now),
+                "authority": RESEARCH_AUTHORITY,
+                "executionAuthority": EXECUTION_AUTHORITY_NONE,
+            },
             now=now,
         )
         if decision not in {REJECTED_CAPACITY, REJECTED_STALE}:

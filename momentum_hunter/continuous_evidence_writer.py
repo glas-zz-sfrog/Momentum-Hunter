@@ -52,6 +52,8 @@ from momentum_hunter.windows_writer_storage import (
 TOPOLOGY_VERSION = 2
 TOPOLOGY_SCHEMA_VERSION = 2
 TOPOLOGY_PROFILE = "continuous-evidence-writer-topology-v2"
+PRODUCTION_TOPOLOGY_PROFILE = "production-continuous-evidence-writer-topology-v1"
+PRODUCTION_ACTIVATION_STATE = "RESEARCH_ONLY_ACTIVE"
 WRITER_ROLE_PROFILE = "dedicated-evidence-writer-role-v1"
 RECORD_SCHEMA_VERSION = 1
 RECORD_PROFILE = "continuous-evidence-intent-record-v1"
@@ -268,6 +270,90 @@ def build_continuous_writer_topology_v2(
     result = replace(with_identity, fingerprint=_topology_fingerprint(with_identity))
     validate_continuous_writer_topology_v2(result)
     return result
+
+
+def build_production_continuous_writer_topology(
+    *,
+    root_path: Path,
+    evidence_program_id: str,
+    configuration_fingerprint: str,
+    runtime_build_hash: str,
+) -> ContinuousWriterTopologyV2:
+    """Build the explicitly active research-only deployment identity.
+
+    The historical v2 builder remains dormant by contract.  Production uses a
+    separate profile and identity domain so an installed process can never
+    truthfully present itself as the old uninstalled prototype.
+    """
+
+    dormant = build_continuous_writer_topology_v2(
+        root_path=root_path,
+        evidence_program_id=evidence_program_id,
+        configuration_fingerprint=configuration_fingerprint,
+        runtime_build_hash=runtime_build_hash,
+    )
+    provisional = replace(
+        dormant,
+        topology_id="",
+        activation_state=PRODUCTION_ACTIVATION_STATE,
+        activation_blockers=(),
+        profile=PRODUCTION_TOPOLOGY_PROFILE,
+        fingerprint="",
+    )
+    identity = _fingerprint(
+        "production-continuous-writer-topology-v1-identity",
+        asdict(provisional),
+    )
+    with_identity = replace(
+        provisional,
+        topology_id=f"production-continuous-writer-topology-{identity[:24]}",
+    )
+    result = replace(
+        with_identity,
+        fingerprint=_fingerprint(
+            "production-continuous-writer-topology-v1",
+            asdict(with_identity),
+        ),
+    )
+    validate_production_continuous_writer_topology(result)
+    return result
+
+
+def validate_production_continuous_writer_topology(
+    topology: ContinuousWriterTopologyV2,
+) -> None:
+    """Validate the immutable identity used by the installed research lane."""
+
+    if (
+        topology.topology_version != TOPOLOGY_VERSION
+        or topology.schema_version != TOPOLOGY_SCHEMA_VERSION
+        or topology.profile != PRODUCTION_TOPOLOGY_PROFILE
+        or topology.activation_state != PRODUCTION_ACTIVATION_STATE
+        or topology.activation_blockers != ()
+    ):
+        raise ContinuousEvidenceWriterError(
+            "Production writer topology is not the active research-only profile."
+        )
+    dormant_shape = replace(
+        topology,
+        topology_id="",
+        activation_state=PRODUCTION_ACTIVATION_STATE,
+        activation_blockers=(),
+        profile=PRODUCTION_TOPOLOGY_PROFILE,
+        fingerprint="",
+    )
+    expected_identity = _fingerprint(
+        "production-continuous-writer-topology-v1-identity",
+        asdict(dormant_shape),
+    )
+    if topology.topology_id != f"production-continuous-writer-topology-{expected_identity[:24]}":
+        raise ContinuousEvidenceWriterError("Production topology identity is invalid.")
+    expected_fingerprint = _fingerprint(
+        "production-continuous-writer-topology-v1",
+        asdict(replace(topology, fingerprint="")),
+    )
+    if topology.fingerprint != expected_fingerprint:
+        raise ContinuousEvidenceWriterError("Production topology fingerprint is invalid.")
 
 
 def validate_continuous_writer_topology_v2(
@@ -1227,9 +1313,13 @@ __all__ = [
     "artifact_record_path",
     "authorize_topology_access",
     "build_continuous_writer_topology_v2",
+    "build_production_continuous_writer_topology",
     "create_ephemeral_writer_capability",
     "read_evidence_snapshot",
     "topology_contradiction_inventory",
     "topology_v1_compatibility",
     "validate_continuous_writer_topology_v2",
+    "validate_production_continuous_writer_topology",
+    "PRODUCTION_ACTIVATION_STATE",
+    "PRODUCTION_TOPOLOGY_PROFILE",
 ]
