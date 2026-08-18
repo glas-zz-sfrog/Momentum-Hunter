@@ -70,6 +70,10 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
             "Grant-ReadExecuteDirectory $pythonEnvironmentRoot $writerAccount",
             script,
         )
+        self.assertIn("function Grant-PathTraverse", script)
+        self.assertIn("Get-PythonBaseRoot $pythonEnvironmentRoot", script)
+        self.assertIn("Grant-PathTraverse $pythonBaseRoot $writerAccount", script)
+        self.assertIn("Grant-ReadExecuteDirectory $pythonBaseRoot $writerAccount", script)
         self.assertIn(
             ' -f $serviceHostPath, $runtimeSourceRoot, $plan.pythonExecutable, $configPath',
             script,

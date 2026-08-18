@@ -195,6 +195,44 @@ function Grant-ReadExecuteDirectory {
     }
 }
 
+function Grant-PathTraverse {
+    param(
+        [Parameter(Mandatory)][string]$PathValue,
+        [Parameter(Mandatory)][string]$Account
+    )
+    $fullPath = [IO.Path]::GetFullPath($PathValue)
+    $root = [IO.Path]::GetPathRoot($fullPath)
+    $current = Split-Path -Parent $fullPath
+    while ($current -and $current -ne $root) {
+        & icacls $current /grant:r ("{0}:(X)" -f $Account) | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Traverse ACL grant failed for $current."
+        }
+        $current = Split-Path -Parent $current
+    }
+}
+
+function Get-PythonBaseRoot {
+    param([Parameter(Mandatory)][string]$VirtualEnvironmentRoot)
+    $configPath = Join-Path $VirtualEnvironmentRoot "pyvenv.cfg"
+    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
+        throw "Python virtualenv configuration is missing."
+    }
+    $homeLine = Get-Content -LiteralPath $configPath | Where-Object { $_ -match '^\s*home\s*=\s*(.+?)\s*$' } | Select-Object -First 1
+    if (-not $homeLine -or $homeLine -notmatch '^\s*home\s*=\s*(.+?)\s*$') {
+        throw "Python virtualenv base runtime is undefined."
+    }
+    $home = $Matches[1].Trim()
+    if (-not [IO.Path]::IsPathRooted($home)) {
+        $home = Join-Path $VirtualEnvironmentRoot $home
+    }
+    $fullHome = [IO.Path]::GetFullPath($home)
+    if (-not (Test-Path -LiteralPath $fullHome -PathType Container)) {
+        throw "Python virtualenv base runtime is missing."
+    }
+    return $fullHome
+}
+
 function New-IpcKey {
     param([Parameter(Mandatory)][string]$PathValue)
     if (Test-Path -LiteralPath $PathValue -PathType Leaf) {
@@ -351,6 +389,7 @@ $serviceHostRoot = Assert-ProductionPath ([string]$plan.serviceHostRoot)
 $serviceHostStagingRoot = [IO.Path]::GetFullPath([string]$plan.serviceHostStagingRoot)
 $runtimeSourceRoot = Assert-ProductionPath ([string]$plan.runtimeSourceRoot)
 $pythonEnvironmentRoot = Split-Path -Parent (Split-Path -Parent ([string]$plan.pythonExecutable))
+$pythonBaseRoot = Get-PythonBaseRoot $pythonEnvironmentRoot
 $writerRoot = Join-Path $evidence "writer"
 $automationBefore = Get-ServiceSnapshot "MomentumHunterAutomation"
 $manifestBefore = if (Test-Path -LiteralPath $plan.existingAutomationManifest -PathType Leaf) {
@@ -368,7 +407,12 @@ if ($Stage -eq "Install") {
     New-Item -ItemType Directory -Force -Path $runtimeSourceRoot | Out-Null
     Copy-Item -Path $sourcePackage -Destination $runtimeSourceRoot -Recurse -Force
     Protect-ReadOnlyDirectory $runtimeSourceRoot $writerAccount ([string]$plan.runtimeAccount)
+    # The interpreter remains in the existing venv, but LocalService must be able
+    # to traverse the user-profile parents without receiving broad profile access.
+    Grant-PathTraverse $pythonEnvironmentRoot $writerAccount
     Grant-ReadExecuteDirectory $pythonEnvironmentRoot $writerAccount
+    Grant-PathTraverse $pythonBaseRoot $writerAccount
+    Grant-ReadExecuteDirectory $pythonBaseRoot $writerAccount
     New-Item -ItemType Directory -Force -Path $serviceHostRoot | Out-Null
     Get-ChildItem -LiteralPath $serviceHostStagingRoot -Force | Copy-Item -Destination $serviceHostRoot -Recurse -Force
     Protect-ReadOnlyDirectory $serviceHostRoot $writerAccount ([string]$plan.runtimeAccount)
