@@ -335,7 +335,14 @@ if ($Stage -eq "Install") {
         shadowExecution = "UNAVAILABLE"
     }
     Write-JsonAscii $configPath $config
-    $fingerprint = (& $plan.pythonExecutable -B -m momentum_hunter.continuous_production --config $configPath --print-config-fingerprint 2>$null).Trim()
+    # The elevated installer may start in an unrelated directory such as System32.
+    # Run the repository module from the canonical checkout so imports resolve reliably.
+    Push-Location -LiteralPath ([string]$plan.repositoryRoot)
+    try {
+        $fingerprint = (& $plan.pythonExecutable -B -m momentum_hunter.continuous_production --config $configPath --print-config-fingerprint 2>$null).Trim()
+    } finally {
+        Pop-Location
+    }
     if ($LASTEXITCODE -ne 0 -or $fingerprint -notmatch '^[0-9a-f]{64}$') { throw "Could not calculate the deployment configuration fingerprint." }
     $config.configurationFingerprint = $fingerprint
     Write-JsonAscii $configPath $config
