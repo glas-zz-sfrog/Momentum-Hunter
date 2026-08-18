@@ -1,5 +1,20 @@
 # Argus Changelog
 
+- Reconciled the post-merge governance baseline after the controlled fast-forward
+  to `4526446eeab404ff02856d6a57c679c8b8b9b2a5`. Canonical software integration,
+  continuous session resilience, midday-first live admission, writer security,
+  and writer scale margin are now recorded as complete/proven rather than
+  pending merge. Preserved pre-merge task narratives as historical evidence.
+- Classified the remaining work as activation-only: dedicated LocalService
+  writer deployment, production root ownership, full payload/index persistence,
+  installed restart/index recovery, and research-only Continuous Opportunity
+  Runtime deployment. Continuous Paper, Shadow, and live execution remain
+  independently gated.
+- Repinned only ordinary future opening jobs to the reconciled canonical
+  governance head; terminal and frozen experiment jobs retain their original
+  provenance. Schedules, dependencies, enablement, strategy, risk, provider,
+  Paper, Shadow, and account behavior were not changed.
+
 - Rehearsed the complete ten-branch Phase 13R research stack on isolated
   `ARGUS-RESEARCH-INTEGRATION-001` from frozen canonical `ea056155`.
 - Proved the source dependency graph: DATA-002 stacks on DATA-001; six

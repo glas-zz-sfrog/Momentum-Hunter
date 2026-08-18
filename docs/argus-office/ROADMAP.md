@@ -29,13 +29,43 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-`ARGUS-WRITER-PERF-MARGIN-001` is `IMPLEMENTED_PENDING_MERGE` on
-`codex/ARGUS-WRITER-PERF-MARGIN-001`, a narrow descendant of merge candidate
-`308df4d2cbc898f55cf27677bbe53c9efdff4852`. Canonical `master` and
-`origin/master` remain unchanged at
-`ea056155182351be70bb03d23841aca55c6118ae`; no service, manifest, scheduler,
-provider, account, order, Paper, Shadow, installed writer, or continuous
-production runtime was changed.
+Canonical software integration is `COMPLETE` at
+`4526446eeab404ff02856d6a57c679c8b8b9b2a5`. This is the integrated software
+baseline; the post-merge governance reconciliation is a separate descendant
+and must never obscure that product identity. `master` and `origin/master`
+are synchronized at the integrated baseline before this reconciliation.
+
+The integrated baseline proves `CONTINUOUS_SESSION_RESILIENCE_PROVEN`,
+`AUG18_ZERO_OPENING_CONTINUOUS_SESSION_LIVE_PROVEN`,
+`AUG18_MIDDAY_FIRST_LIVE_ADMISSION_PROVEN`, and
+`WRITER_SCALE_MARGIN_STABILIZED`. A failed opening test or provider cycle is
+preserved as that test/cycle's result; later same-session discovery can resume,
+midday-first symbols can enter, and restart does not require rerunning the
+opening bootstrap. Writer integrity, single-owner exclusion, reparse-resistant
+persistence, crash recovery, and measured write/recovery margins are canonical.
+
+Post-merge governance is now `RECONCILIATION_IN_PROGRESS`. The eligible
+ordinary future opening jobs are being repinned by code identity only. Their
+schedules, dependencies, enablement, time windows, strategy parameters,
+provider configuration, risk limits, Paper authority, and historical receipts
+remain unchanged. Terminal and frozen experiment jobs retain their original
+software identities permanently.
+
+The remaining next-stage work is
+`RESEARCH_ONLY_CONTINUOUS_DEPLOYMENT-001`:
+
+1. Install the dedicated `LOCAL SERVICE` writer and production evidence-root
+   ownership/ACLs.
+2. Deploy full business-payload persistence and indexing.
+3. Prove production restart/index recovery in the installed topology.
+4. Install and separately activate the dormant research-only Continuous
+   Opportunity Runtime.
+
+These are activation-only tasks, not merge blockers. Continuous Paper remains
+a later independent gate. Shadow, live Alpaca, Schwab orders, and live
+execution remain unavailable and unauthorized. The detailed pre-merge branch
+paragraphs below are retained as historical evidence and are not current-state
+claims.
 
 Profiling the exact 4,300-record full-session writer proof found a combined
 product and environmental margin defect rather than a hashing or indexing
@@ -66,10 +96,10 @@ backpressure, Paper, and Schwab checks pass. Broader `CONT_STORAGE` payload,
 checkpoint, and read-model work is not the cause of this merge gate and
 remains deferred to research-only activation planning.
 
-The branch is classified `WRITER_SCALE_MARGIN_STABILIZED` and
-`MERGE_CANDIDATE_REQUALIFIED`. The next action is a separate controlled
-canonical-merge retry using the exact committed and pushed feature-branch
-head; this task does not merge or install it.
+The branch was classified `WRITER_SCALE_MARGIN_STABILIZED` and
+`MERGE_CANDIDATE_REQUALIFIED`; that candidate is now canonical at the
+integrated software baseline above. This historical performance record remains
+the evidence for the current writer gate.
 
 `ARGUS-AUG17-INTEGRATION-QUALIFICATION-001` is active on isolated branch
 `codex/ARGUS-AUG17-INTEGRATION-CANDIDATE-001`. It combines the final verified
@@ -2356,8 +2386,8 @@ Intended specialist architecture:
 
 #### ARGUS-SPECIALIST-CONTRACT-001 - Common Specialist Opinion Contract
 
-- Branch-local status: `IMPLEMENTED_PENDING_INTEGRATION` from `ea05615`; no
-  runtime consumer, persistence path, arbiter, activation, or authority exists.
+- Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; no runtime consumer,
+  persistence path, arbiter, activation, or authority exists.
 - Define one provider-neutral, read-only opinion packet containing specialist
   and version, opportunity/setup identity, as-of time, expiration, evidence
   hashes, opinion, confidence/calibration metadata, authority level, evidence
@@ -2369,8 +2399,8 @@ Intended specialist architecture:
 
 #### ARGUS-REGIME-002 - Exhaustion And Market-Stress Research
 
-- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` on Specialist
-  Contract parent `e65cb70`; policy fingerprint
+- Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; source branch parent was
+  Specialist Contract `e65cb70`; policy fingerprint
   `55d5e05f91553381ba162c70b09c5f9987262edfbe2a9ec687214cc29f9d1057`.
 - Extend CONTINUOUS-003 rolling regime rather than creating a competing regime
   engine.
@@ -2391,7 +2421,7 @@ Intended specialist architecture:
 
 #### ARGUS-TECH-STRUCTURE-002 - Technical Structure Research v2
 
-- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` from exact
+- Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; source branch was from exact
   parent SPECIALIST-CONTRACT-001 `e65cb70`; frozen policy fingerprint
   `6b40ecc89cbfe5d1b3fb0c4d5b1376a4b5e9fb8e3bc96282afccf4838cbb1aa0`.
 - Evolve Technical Breakout Research Engine v1 rather than creating a second
@@ -2420,8 +2450,8 @@ Intended specialist architecture:
 
 #### ARGUS-RESEARCH-DATA-001 - Research-Scale Historical Data And Universe Integrity
 
-- Status: `IMPLEMENTED_PENDING_MERGE` on
-  `codex/ARGUS-RESEARCH-DATA-001-data-inventory`.
+- Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; source branch
+  `codex/ARGUS-RESEARCH-DATA-001-data-inventory` remains preserved.
 - Frozen inventory fingerprint:
   `5D414FDC41BA78DBC07328653EA491847377D0C5690904F96E4067C6CB2BA735`.
 - Measured evidence: 38,286 canonical Schwab minute bars / 7 symbols / 17
@@ -2450,9 +2480,9 @@ Intended specialist architecture:
 
 #### ARGUS-RESEARCH-DATA-002 - Security Identity And Corporate-Action Basis
 
-- Status: `IMPLEMENTED_PENDING_MERGE` on
-  `codex/ARGUS-RESEARCH-DATA-002-security-action-basis`, stacked on DATA-001
-  `d03301c` from canonical baseline `ea056155`.
+- Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; source branch
+  `codex/ARGUS-RESEARCH-DATA-002-security-action-basis` remains preserved,
+  stacked on DATA-001 `d03301c` from the pre-merge baseline `ea056155`.
 - Define durable research security IDs, point-in-time aliases, inactive and
   delisted states, and fail-closed ambiguous/reused-symbol resolution.
 - Define verified forward split, reverse split, and symbol-change actions;
@@ -2473,7 +2503,7 @@ Intended specialist architecture:
 
 #### ARGUS-STAT-DATA-001 - Prospective Opportunity Denominator
 
-- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` from common
+- Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; source branch was from common
   Specialist Contract parent `e65cb70`; no runtime consumer or activation
   exists.
 - Preserve a cycle-level proof of the complete bounded source universe and one
@@ -2500,6 +2530,8 @@ Intended specialist architecture:
 
 #### ARGUS-STAT-DATA-002 - Prospective Producer Wiring And Activation
 
+- Status: `CANONICAL_INTEGRATED / ACTIVATION_PENDING`; producer wiring remains
+  dormant and must use a new immutable activation identity.
 - Begin only after the frozen Aug. 17 evidence is terminal and preserved.
 - Feed the denominator from the complete bounded source population, including
   rows that do not survive scanner/report admission, rather than treating a
@@ -2510,9 +2542,9 @@ Intended specialist architecture:
 
 #### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
 
-- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` from Specialist
-  Contract `e65cb70`; no runtime consumer, persistence, activation, or
-  authority exists.
+- Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; source branch was from
+  Specialist Contract `e65cb70`; no runtime consumer, persistence, activation,
+  or authority exists.
 - Preserve spread, spread expansion, quote age/stability, executable size only
   where proven, volume versus price progress, heuristic fill-risk state,
   halt/unavailable state, and provider capability as separate research
@@ -2540,10 +2572,10 @@ Intended specialist architecture:
 
 #### ARGUS-EXIT-RESEARCH-001 - Trade-Management And Exit Intelligence
 
-- Branch-local status: `IMPLEMENTED_PENDING_PARENT_INTEGRATION` on
-  `codex/ARGUS-EXIT-RESEARCH-001-trade-management-research`, stacked exactly on
-  Specialist Contract commit `e65cb70`; no runtime consumer, persistence path,
-  activation, or authority exists.
+- Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; source branch
+  `codex/ARGUS-EXIT-RESEARCH-001-trade-management-research` remains preserved,
+  stacked exactly on Specialist Contract commit `e65cb70`; no runtime consumer,
+  persistence path, activation, or authority exists.
 - Freeze `exit-management-research-v1` as a software-validation policy. Require
   the actual broker-confirmed fill, quantity, time, original protective stop,
   TradePlan, policy, and evidence identities before evaluating any alternative.
@@ -2568,9 +2600,9 @@ Intended specialist architecture:
 
 #### ARGUS-EVENT-SHOCK-001 - Unscheduled Event And Reaction Intelligence
 
-- Branch-local status: `IMPLEMENTED_PENDING_MERGE` from specialist-contract
-  head `e65cb70`; no producer, persistence, runtime consumer, activation, or
-  execution authority exists.
+- Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; source branch was based on
+  specialist-contract head `e65cb70`; no producer, persistence, runtime
+  consumer, activation, or execution authority exists.
 - Extend CONTINUOUS-003 macro-event and catalyst architecture rather than
   creating competing infrastructure.
 - Research supply disruptions, industrial incidents, geopolitical escalation,
@@ -2597,8 +2629,8 @@ Intended specialist architecture:
 
 #### ARGUS-RESEARCH-GOV-001 - Experiment Registry And Model-Health Discipline
 
-- Status: `IMPLEMENTED_PENDING_MERGE` on the isolated task branch; no runtime
-  integration or activation exists.
+- Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; source task branch remains
+  preserved and no runtime integration or activation exists.
 - Before broad parameter/model searches, preserve hypothesis, feature
   definitions, every attempted variant, training/validation/test periods,
   benchmark, success criteria, and untouched holdout. Failed variants remain

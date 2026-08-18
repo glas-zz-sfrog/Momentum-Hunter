@@ -1,5 +1,23 @@
 # Branch Ledger
 
+The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
+
+## Current Canonical Post-Merge Status - 2026-08-18
+
+The integrated software baseline is canonical at
+`4526446eeab404ff02856d6a57c679c8b8b9b2a5`, with continuous session
+resilience, zero-opening/midday-first live qualification, writer security, and
+writer scale margin proven. The post-merge reconciliation branch
+`codex/ARGUS-POST-MERGE-RECONCILIATION-001` owns governance updates and the
+field-only repin of ordinary future opening jobs. Terminal historical jobs and
+frozen experiment jobs retain their original pins and evidence identities.
+
+The next deployment stage is activation-only: dedicated LocalService writer
+installation, production evidence-root ownership, full payload/index
+persistence, installed restart/index recovery, and then research-only
+Continuous Opportunity Runtime installation/activation. Continuous Paper,
+Shadow, and live execution remain separately gated and inactive.
+
 ## ARGUS-RESEARCH-INTEGRATION-001 Stack Preflight
 
 `codex/ARGUS-RESEARCH-INTEGRATION-001-stack-preflight` is an isolated
@@ -828,8 +846,6 @@ Git evidence at reconciliation time:
 - `codex/ARGUS-R011-wpf-chart-candle-integration` starts from `a17eff8`; its implementation and proof are merged into `master`, and commit `268f3f8` is remotely backed up through `origin/master`.
 - `codex/ARGUS-R012-wpf-chart-readability` is merged and remotely backed up through `69feedf`.
 - R004 and R005 are integrated through the `d3a98d9` and `e141054` history; their historical feature branches remain preserved but are not active work bases.
-
-The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
 ## Known Commit Containment
 
