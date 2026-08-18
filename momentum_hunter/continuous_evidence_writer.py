@@ -584,8 +584,8 @@ class DedicatedEvidenceWriter:
                 return self._revalidate_record(existing_intent), False
             raise ContinuousEvidenceWriterError("Intent identity maps to conflicting evidence.")
         self._validate_new_intent_order(intent)
-        path = artifact_record_path(
-            self.topology,
+        path = _trusted_writer_record_path(
+            self._root,
             artifact_name=envelope.artifact_name,
             record_fingerprint=intent.record_fingerprint,
         )
@@ -651,7 +651,11 @@ class DedicatedEvidenceWriter:
         envelope: WriterEnvelope,
         acknowledgement: EvidenceWriterAcknowledgement,
     ) -> None:
-        path = _ack_path(self.topology, envelope.session_id, envelope.sequence)
+        path = _trusted_writer_ack_path(
+            self._root,
+            envelope.session_id,
+            envelope.sequence,
+        )
         document = {
             "schemaVersion": RECORD_SCHEMA_VERSION,
             "profile": ACK_PROFILE,
@@ -1082,6 +1086,28 @@ def _ack_path(
     result = base / "sessions" / session / f"{sequence:08d}.ack.json"
     _require_descendant(result, base)
     return result
+
+
+def _trusted_writer_record_path(
+    root: Path,
+    *,
+    artifact_name: str,
+    record_fingerprint: str,
+) -> Path:
+    """Derive a path from identities already validated at the writer boundary."""
+
+    artifact = _artifact_name(artifact_name)
+    fingerprint = _sha256(record_fingerprint, "Record fingerprint")
+    return root / "records" / artifact / fingerprint[:2] / f"{fingerprint}.json"
+
+
+def _trusted_writer_ack_path(root: Path, session_id: str, sequence: int) -> Path:
+    """Derive an acknowledgement path under the writer's pinned topology root."""
+
+    session = _session_id(session_id)
+    if not isinstance(sequence, int) or sequence < 1:
+        raise ContinuousEvidenceWriterError("Acknowledgement sequence is invalid.")
+    return root / "sessions" / session / f"{sequence:08d}.ack.json"
 
 
 def _evidence_root(topology: ContinuousWriterTopologyV2) -> Path:

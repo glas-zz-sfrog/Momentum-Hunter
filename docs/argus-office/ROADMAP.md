@@ -29,6 +29,48 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+`ARGUS-WRITER-PERF-MARGIN-001` is `IMPLEMENTED_PENDING_MERGE` on
+`codex/ARGUS-WRITER-PERF-MARGIN-001`, a narrow descendant of merge candidate
+`308df4d2cbc898f55cf27677bbe53c9efdff4852`. Canonical `master` and
+`origin/master` remain unchanged at
+`ea056155182351be70bb03d23841aca55c6118ae`; no service, manifest, scheduler,
+provider, account, order, Paper, Shadow, installed writer, or continuous
+production runtime was changed.
+
+Profiling the exact 4,300-record full-session writer proof found a combined
+product and environmental margin defect rather than a hashing or indexing
+problem. The pre-fix path spent 155.189 profiled seconds in 8,600 physical
+atomic creates and 105.624 cumulative seconds across 26,322 `CreateFileW`
+calls. The Windows backend redundantly reopened each newly committed target
+and combined synchronous `WRITE_THROUGH` with an explicit
+`FlushFileBuffers`. The repair retains the already pinned, flushed temporary
+handle through hard-link commit and link-count verification, removes the
+duplicate durability mechanism, and derives internal record/ack paths from
+the already validated frozen writer root. Canonical JSON, hashes, sequence and
+predecessor validation, duplicate replay rejection, write-once persistence,
+single-writer exclusion, reparse resistance, path confinement, crash safety,
+and restart recovery remain enforced.
+
+The strengthened scale contract preserves all 4,300 record/ack pairs, keeps a
+500 ms per-acknowledgement health threshold, requires the write phase below
+120 seconds, and now requires cold restart/index recovery below 120 seconds.
+That workload is about 195 times the expected sustained 4,300-record/6.5-hour
+session rate, while the recovery budget leaves three minutes before a
+five-minute cycle boundary. Five consecutive isolated proofs passed at
+186.786, 188.635, 185.000, 184.169, and 182.261 seconds total wall time
+(including snapshot and recovery); 331 representative adjacent tests passed;
+and one complete 2,608-test Python run passed in 528.900 seconds. Compileall,
+diff/whitespace, secret/credential-shape, provider/account/broker/order import,
+protected-path, writer-hardening, Windows-isolation, restart, replay,
+backpressure, Paper, and Schwab checks pass. Broader `CONT_STORAGE` payload,
+checkpoint, and read-model work is not the cause of this merge gate and
+remains deferred to research-only activation planning.
+
+The branch is classified `WRITER_SCALE_MARGIN_STABILIZED` and
+`MERGE_CANDIDATE_REQUALIFIED`. The next action is a separate controlled
+canonical-merge retry using the exact committed and pushed feature-branch
+head; this task does not merge or install it.
+
 `ARGUS-AUG17-INTEGRATION-QUALIFICATION-001` is active on isolated branch
 `codex/ARGUS-AUG17-INTEGRATION-CANDIDATE-001`. It combines the final verified
 research stack `c1eacec`, continuous/writer stack `870db12`, and Schwab

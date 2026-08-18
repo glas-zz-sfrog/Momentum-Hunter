@@ -58,6 +58,10 @@ RUNTIME_BUILD = "b" * 64
 PROGRAM = "continuous-research-v2"
 RUNTIME_1 = "continuous-runtime-instance-1"
 RUNTIME_2 = "continuous-runtime-instance-2"
+SCALE_SESSION_RECORDS = 4_300
+SCALE_WRITE_BUDGET_SECONDS = 120.0
+SCALE_ACK_BUDGET_SECONDS = 0.5
+SCALE_RECOVERY_BUDGET_SECONDS = 120.0
 
 
 def fp(value: str) -> str:
@@ -604,9 +608,10 @@ class DedicatedEvidenceWriterScaleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             fixture = WriterFixture(Path(temporary).resolve())
             try:
+                fixture.client.maximum_ack_seconds = SCALE_ACK_BUDGET_SECONDS
                 predecessor = None
                 started = time.perf_counter()
-                count = 4300
+                count = SCALE_SESSION_RECORDS
                 for sequence in range(1, count + 1):
                     intent = fixture.intent(
                         sequence=sequence,
@@ -627,8 +632,23 @@ class DedicatedEvidenceWriterScaleTests(unittest.TestCase):
                 self.assertEqual(count, len(record_files))
                 self.assertGreater(len({path.parent.name for path in record_files}), 32)
                 self.assertLess(max(path.stat().st_size for path in record_files), 8_192)
+                acknowledgement_files = list(
+                    (fixture.root / fixture.topology.namespace / "sessions").rglob("*.ack.json")
+                )
+                self.assertEqual(count, len(acknowledgement_files))
                 self.assertFalse((fixture.root / fixture.topology.namespace / "ledger.json").exists())
-                self.assertLess(elapsed, 180.0)
+                self.assertLess(elapsed, SCALE_WRITE_BUDGET_SECONDS)
+
+                fixture.writer.close()
+                recovery_started = time.perf_counter()
+                restarted = DedicatedEvidenceWriter(fixture.topology)
+                restarted.activate_session(
+                    capability=fixture.capability,
+                    source_identity=fixture.runtime_id,
+                )
+                recovery_elapsed = time.perf_counter() - recovery_started
+                fixture.writer = restarted
+                self.assertLess(recovery_elapsed, SCALE_RECOVERY_BUDGET_SECONDS)
             finally:
                 fixture.close()
 

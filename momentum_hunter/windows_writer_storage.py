@@ -432,6 +432,7 @@ class _WindowsStorageBackend:
         partial = self._directories[(".partial",)]
         temp = partial.path / f"{uuid.uuid4().hex}.tmp"
         temp_handle: _WindowsHandle | None = None
+        target_handle: _WindowsHandle | None = None
         try:
             temp_handle = _create_file_handle(
                 temp,
@@ -441,9 +442,11 @@ class _WindowsStorageBackend:
                 flags=(
                     _FILE_FLAG_OPEN_REPARSE_POINT
                     | _FILE_FLAG_SEQUENTIAL_SCAN
-                    | _FILE_FLAG_WRITE_THROUGH
                 ),
             )
+            # _write_handle performs one explicit FlushFileBuffers call before
+            # commit. WRITE_THROUGH here would force the same single payload
+            # through two synchronous durability paths.
             _write_handle(temp_handle, data)
             if crash_after_temp:
                 raise WriterStorageCrashAfterTemp(
@@ -455,45 +458,46 @@ class _WindowsStorageBackend:
                 if error not in {_ERROR_FILE_EXISTS, _ERROR_ALREADY_EXISTS}:
                     raise _windows_error("CreateHardLinkW failed", error)
                 created = False
-                if self._read_existing(target_parent, target_name) != data:
+                target_handle = self._open_existing_file(target_parent, target_name)
+                if _handle_information(target_handle).nNumberOfLinks != 1:
+                    raise WriterPhysicalStorageError(
+                        "Existing canonical target has an external hard-link alias."
+                    )
+                if _read_handle(target_handle) != data:
                     raise WriterPhysicalStorageError(
                         "Write-once target already conflicts."
                     )
             if created:
-                target_handle = self._open_existing_file(target_parent, target_name)
-                try:
-                    target_info = _handle_information(target_handle)
-                    if target_info.nNumberOfLinks != 2:
-                        raise WriterPhysicalStorageError(
-                            "New canonical target has an unexpected hard-link count."
-                        )
-                    if _file_identity(target_handle) != _file_identity(temp_handle):
-                        raise WriterPhysicalStorageError(
-                            "Committed target does not identify the completed temporary file."
-                        )
-                    if _read_handle(target_handle) != data:
-                        raise WriterPhysicalStorageError(
-                            "Committed target bytes differ from the completed temporary file."
-                        )
-                finally:
-                    target_handle.close()
+                # CreateHardLinkW can only add an alias for the pinned temp
+                # file. Every parent directory is held without SHARE_DELETE,
+                # so its path cannot be exchanged while the writer owns it.
+                if _handle_information(temp_handle).nNumberOfLinks != 2:
+                    raise WriterPhysicalStorageError(
+                        "New canonical target has an unexpected hard-link count."
+                    )
+            temp.unlink(missing_ok=True)
+            committed_handle = temp_handle if created else target_handle
+            if committed_handle is None:
+                raise WriterPhysicalStorageError("Canonical file handle is unavailable.")
+            if _handle_information(committed_handle).nNumberOfLinks != 1:
+                raise WriterPhysicalStorageError(
+                    "Canonical target retains an external hard-link alias."
+                )
+            if target_handle is not None:
+                target_handle.close()
+                target_handle = None
             temp_handle.close()
             temp_handle = None
-            temp.unlink(missing_ok=True)
-            committed = self._open_existing_file(target_parent, target_name)
-            try:
-                if _handle_information(committed).nNumberOfLinks != 1:
-                    raise WriterPhysicalStorageError(
-                        "Canonical target retains an external hard-link alias."
-                    )
-            finally:
-                committed.close()
             return created
         except WriterPhysicalStorageError:
+            if target_handle is not None:
+                target_handle.close()
             if temp_handle is not None:
                 temp_handle.close()
             raise
         except Exception:
+            if target_handle is not None:
+                target_handle.close()
             if temp_handle is not None:
                 temp_handle.close()
             temp.unlink(missing_ok=True)
