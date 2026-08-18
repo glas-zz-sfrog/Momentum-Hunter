@@ -168,6 +168,33 @@ function Protect-File {
     }
 }
 
+function Protect-ReadOnlyDirectory {
+    param(
+        [Parameter(Mandatory)][string]$PathValue,
+        [Parameter(Mandatory)][string]$ReaderAccount,
+        [Parameter(Mandatory)][string]$SecondReaderAccount
+    )
+    & icacls $PathValue /inheritance:r /grant:r `
+        "SYSTEM:(OI)(CI)(F)" `
+        "BUILTIN\Administrators:(OI)(CI)(F)" `
+        "${ReaderAccount}:(OI)(CI)(RX)" `
+        "${SecondReaderAccount}:(OI)(CI)(RX)" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Read-only ACL hardening failed for $PathValue."
+    }
+}
+
+function Grant-ReadExecuteDirectory {
+    param(
+        [Parameter(Mandatory)][string]$PathValue,
+        [Parameter(Mandatory)][string]$Account
+    )
+    & icacls $PathValue /grant "${Account}:(OI)(CI)(RX)" /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Read/execute ACL grant failed for $PathValue."
+    }
+}
+
 function New-IpcKey {
     param([Parameter(Mandatory)][string]$PathValue)
     if (Test-Path -LiteralPath $PathValue -PathType Leaf) {
@@ -199,6 +226,18 @@ function Get-ServiceSnapshot {
     }
 }
 
+function Test-ServiceAccountMatch {
+    param(
+        [Parameter(Mandatory)][string]$Actual,
+        [Parameter(Mandatory)][string]$Expected
+    )
+    if ($Actual -ieq $Expected) { return $true }
+    if ($Expected -match "^[^\\]+\\(?<user>[^\\]+)$") {
+        return $Actual -ieq (".\" + $Matches.user)
+    }
+    return $false
+}
+
 function Install-ContinuousService {
     param(
         [Parameter(Mandatory)][string]$Name,
@@ -209,10 +248,14 @@ function Install-ContinuousService {
     )
     $existing = Get-ServiceSnapshot $Name
     if ($existing) {
-        if ($existing.pathName -ne $BinaryPath -or $existing.startName -ine $Account) {
+        if (-not (Test-ServiceAccountMatch $existing.startName $Account)) {
             throw "Existing $Name service does not match the expected deployment identity."
         }
-        return $existing
+        if ($existing.pathName -ne $BinaryPath) {
+            & sc.exe config $Name binPath= $BinaryPath | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Could not update the $Name binary path." }
+        }
+        return Get-ServiceSnapshot $Name
     }
     if ($Credential) {
         New-Service -Name $Name -DisplayName $DisplayName -Description $DisplayName `
@@ -243,6 +286,8 @@ if ($Stage -eq "Prepare") {
     $python = Join-Path $project ".venv\Scripts\python.exe"
     if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "Project virtualenv Python is missing." }
     $publish = Join-Path $prepared ("host-" + $identity.head)
+    $hostInstallRoot = Assert-ProductionPath (Join-Path $ConfigRoot "continuous-service-host")
+    $runtimeSourceRoot = Assert-ProductionPath (Join-Path $ConfigRoot ("continuous-python-" + $identity.head))
     Invoke-DotnetPublish $project $publish
     $runtimeHash = Get-RuntimeBuildHash $project
     $plan = [ordered]@{
@@ -254,8 +299,10 @@ if ($Stage -eq "Prepare") {
         automationManifestSha256 = $identity.automationManifestSha256
         repositoryRoot = $project
         pythonExecutable = $python
-        serviceHostRoot = $publish
-        serviceHostExecutable = Join-Path $publish "MomentumHunter.ContinuousServiceHost.exe"
+        serviceHostStagingRoot = $publish
+        serviceHostRoot = $hostInstallRoot
+        serviceHostExecutable = Join-Path $hostInstallRoot "MomentumHunter.ContinuousServiceHost.exe"
+        runtimeSourceRoot = $runtimeSourceRoot
         writerServiceName = $writerServiceName
         runtimeServiceName = $runtimeServiceName
         writerAccount = $writerAccount
@@ -297,6 +344,10 @@ $evidence = Assert-ProductionPath ([string]$plan.evidenceRoot)
 $runtimeState = Assert-ProductionPath ([string]$plan.runtimeStateRoot)
 $configPath = Assert-ProductionPath ([string]$plan.configPath)
 $ipcKeyPath = Assert-ProductionPath ([string]$plan.ipcKeyPath)
+$serviceHostRoot = Assert-ProductionPath ([string]$plan.serviceHostRoot)
+$serviceHostStagingRoot = [IO.Path]::GetFullPath([string]$plan.serviceHostStagingRoot)
+$runtimeSourceRoot = Assert-ProductionPath ([string]$plan.runtimeSourceRoot)
+$pythonEnvironmentRoot = Split-Path -Parent (Split-Path -Parent ([string]$plan.pythonExecutable))
 $writerRoot = Join-Path $evidence "writer"
 $automationBefore = Get-ServiceSnapshot "MomentumHunterAutomation"
 $manifestBefore = if (Test-Path -LiteralPath $plan.existingAutomationManifest -PathType Leaf) {
@@ -304,6 +355,20 @@ $manifestBefore = if (Test-Path -LiteralPath $plan.existingAutomationManifest -P
 } else { "NOT_FOUND" }
 
 if ($Stage -eq "Install") {
+    if (-not (Test-Path -LiteralPath $serviceHostStagingRoot -PathType Container)) {
+        throw "Prepared service host staging root is missing: $serviceHostStagingRoot"
+    }
+    $sourcePackage = Join-Path ([string]$plan.repositoryRoot) "momentum_hunter"
+    if (-not (Test-Path -LiteralPath $sourcePackage -PathType Container)) {
+        throw "Canonical Python package is missing: $sourcePackage"
+    }
+    New-Item -ItemType Directory -Force -Path $runtimeSourceRoot | Out-Null
+    Copy-Item -Path $sourcePackage -Destination $runtimeSourceRoot -Recurse -Force
+    Protect-ReadOnlyDirectory $runtimeSourceRoot $writerAccount ([string]$plan.runtimeAccount)
+    Grant-ReadExecuteDirectory $pythonEnvironmentRoot $writerAccount
+    New-Item -ItemType Directory -Force -Path $serviceHostRoot | Out-Null
+    Get-ChildItem -LiteralPath $serviceHostStagingRoot -Force | Copy-Item -Destination $serviceHostRoot -Recurse -Force
+    Protect-ReadOnlyDirectory $serviceHostRoot $writerAccount ([string]$plan.runtimeAccount)
     foreach ($directory in @($evidence, $runtimeState, (Split-Path -Parent $configPath), (Split-Path -Parent $ipcKeyPath))) {
         New-Item -ItemType Directory -Force -Path $directory | Out-Null
     }
@@ -352,9 +417,9 @@ if ($Stage -eq "Install") {
     Protect-File $ipcKeyPath $writerAccount ([string]$plan.runtimeAccount)
     Protect-File $configPath $writerAccount ([string]$plan.runtimeAccount)
 
-    $serviceHostPath = [string]$plan.serviceHostExecutable
-    $writerBinary = '"{0}" --role writer --repository-root "{1}" --python-executable "{2}" --config "{3}"' -f $serviceHostPath, $plan.repositoryRoot, $plan.pythonExecutable, $configPath
-    $runtimeBinary = '"{0}" --role runtime --repository-root "{1}" --python-executable "{2}" --config "{3}"' -f $serviceHostPath, $plan.repositoryRoot, $plan.pythonExecutable, $configPath
+    $serviceHostPath = Join-Path $serviceHostRoot "MomentumHunter.ContinuousServiceHost.exe"
+    $writerBinary = '"{0}" --role writer --repository-root "{1}" --python-executable "{2}" --config "{3}"' -f $serviceHostPath, $runtimeSourceRoot, $plan.pythonExecutable, $configPath
+    $runtimeBinary = '"{0}" --role runtime --repository-root "{1}" --python-executable "{2}" --config "{3}"' -f $serviceHostPath, $runtimeSourceRoot, $plan.pythonExecutable, $configPath
     $credential = Get-Credential -UserName ([string]$plan.runtimeAccount) -Message "Windows credential required to run the research-only continuous runtime under the existing user account."
     Install-ContinuousService $writerServiceName "Momentum Hunter Continuous Writer (Research Only)" $writerBinary $writerAccount $null | Out-Null
     Install-ContinuousService $runtimeServiceName "Momentum Hunter Continuous Runtime (Research Only)" $runtimeBinary ([string]$plan.runtimeAccount) $credential | Out-Null
@@ -371,6 +436,7 @@ if ($Stage -eq "Install") {
         installedAt = (Get-Date).ToUniversalTime().ToString("o")
         canonicalHead = $identity.head
         runtimeBuildHash = $plan.runtimeBuildHash
+        runtimeSourceRoot = $runtimeSourceRoot
         configurationFingerprint = $fingerprint
         writerService = Get-ServiceSnapshot $writerServiceName
         runtimeService = Get-ServiceSnapshot $runtimeServiceName

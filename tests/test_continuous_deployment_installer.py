@@ -34,6 +34,47 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
 
         self.assertNotIn("$host =", script.lower())
 
+    def test_service_host_is_staged_then_installed_under_production_root(self):
+        script = self._script()
+
+        self.assertIn("serviceHostStagingRoot = $publish", script)
+        self.assertIn(
+            'serviceHostRoot = $hostInstallRoot',
+            script,
+        )
+        self.assertIn(
+            'Join-Path $ConfigRoot "continuous-service-host"',
+            script,
+        )
+        self.assertIn(
+            "Get-ChildItem -LiteralPath $serviceHostStagingRoot -Force | Copy-Item -Destination $serviceHostRoot",
+            script,
+        )
+        self.assertIn(
+            "Protect-ReadOnlyDirectory $serviceHostRoot",
+            script,
+        )
+
+    def test_services_use_hash_addressed_programdata_python_source(self):
+        script = self._script()
+
+        self.assertIn(
+            'runtimeSourceRoot = Assert-ProductionPath (Join-Path $ConfigRoot ("continuous-python-" + $identity.head))',
+            script,
+        )
+        self.assertIn(
+            "Copy-Item -Path $sourcePackage -Destination $runtimeSourceRoot -Recurse -Force",
+            script,
+        )
+        self.assertIn(
+            "Grant-ReadExecuteDirectory $pythonEnvironmentRoot $writerAccount",
+            script,
+        )
+        self.assertIn(
+            ' -f $serviceHostPath, $runtimeSourceRoot, $plan.pythonExecutable, $configPath',
+            script,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
