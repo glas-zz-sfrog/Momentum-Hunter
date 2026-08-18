@@ -75,6 +75,14 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
             script,
         )
 
+    def test_existing_runtime_service_accepts_reentered_windows_credential(self):
+        script = self._script()
+
+        self.assertIn(
+            "Set-Service -Name $Name -Credential $Credential",
+            script,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

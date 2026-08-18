@@ -255,6 +255,9 @@ function Install-ContinuousService {
             & sc.exe config $Name binPath= $BinaryPath | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "Could not update the $Name binary path." }
         }
+        if ($Credential) {
+            Set-Service -Name $Name -Credential $Credential
+        }
         return Get-ServiceSnapshot $Name
     }
     if ($Credential) {
