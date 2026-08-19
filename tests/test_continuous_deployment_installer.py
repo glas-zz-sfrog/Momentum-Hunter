@@ -33,6 +33,7 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
         script = self._script()
 
         self.assertNotIn("$host =", script.lower())
+        self.assertNotIn("$home =", script.lower())
 
     def test_service_host_is_staged_then_installed_under_production_root(self):
         script = self._script()

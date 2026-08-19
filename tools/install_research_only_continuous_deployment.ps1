@@ -222,15 +222,15 @@ function Get-PythonBaseRoot {
     if (-not $homeLine -or $homeLine -notmatch '^\s*home\s*=\s*(.+?)\s*$') {
         throw "Python virtualenv base runtime is undefined."
     }
-    $home = $Matches[1].Trim()
-    if (-not [IO.Path]::IsPathRooted($home)) {
-        $home = Join-Path $VirtualEnvironmentRoot $home
+    $baseRuntimePath = $Matches[1].Trim()
+    if (-not [IO.Path]::IsPathRooted($baseRuntimePath)) {
+        $baseRuntimePath = Join-Path $VirtualEnvironmentRoot $baseRuntimePath
     }
-    $fullHome = [IO.Path]::GetFullPath($home)
-    if (-not (Test-Path -LiteralPath $fullHome -PathType Container)) {
+    $fullBaseRuntimePath = [IO.Path]::GetFullPath($baseRuntimePath)
+    if (-not (Test-Path -LiteralPath $fullBaseRuntimePath -PathType Container)) {
         throw "Python virtualenv base runtime is missing."
     }
-    return $fullHome
+    return $fullBaseRuntimePath
 }
 
 function New-IpcKey {
