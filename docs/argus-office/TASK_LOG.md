@@ -455,3 +455,30 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   the sidecar without broadening the security allowlist. Forty-eight focused
   tests and all 2,608 Python tests pass. Classification:
   `AUG17_INTEGRATION_CANDIDATE_MERGE_QUALIFIED`.
+
+## 2026-08-19 - RESEARCH_ONLY_CONTINUOUS_DEPLOYMENT-001 Installation
+
+- Installed the research-only continuous deployment from canonical
+  `f2a3af58c4a90274f46e745ad74c8dcd80b201af` after the checkpoint namespace
+  repair. The v2 runtime namespace preserved the prior v1 checkpoint and
+  started cleanly with restart count zero.
+- Verified the dedicated writer is Automatic/Running as `NT AUTHORITY\\LOCAL
+  SERVICE` and the continuous runtime is Automatic/Running as
+  `BEASTCOMPUTER\\steve`. The runtime is healthy and idle because the market
+  session is closed; no provider, account, position, Paper, Shadow, or order
+  operation was requested.
+- Exercised the installed writer with deployment-proof-only synthetic payloads
+  for `DISCOVERY_CYCLE`, `OPPORTUNITY_DENOMINATOR`, `COMPOSITION_CYCLE`, and
+  `SYSTEM_FAILURE`. All four writes were `ACCEPTED`; a replay was
+  `DUPLICATE`; four write-once records, five ACKs, and five generations were
+  found; and all record fingerprints recomputed successfully.
+- Secret/forbidden-field scan of the deployment-proof root passed. Production
+  evidence ACLs show LocalService full control and Steven read-only access;
+  runtime-state ACLs preserve Steven Modify for service recovery. Existing
+  `MomentumHunterAutomation` and its manifest remained unchanged.
+- Classification remains
+  `INSTALLED_PENDING_LIVE_MARKET_CANARY_AND_ELEVATED_RESTART_PROOF`. A direct
+  restart attempt was denied by the non-elevated shell and a second attempt
+  was blocked by the declared runtime dependency; no service state was changed
+  by those failed attempts. One elevated controlled restart and the next
+  eligible market-session canary remain open.

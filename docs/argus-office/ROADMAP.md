@@ -51,21 +51,46 @@ provider configuration, risk limits, Paper authority, and historical receipts
 remain unchanged. Terminal and frozen experiment jobs retain their original
 software identities permanently.
 
-The remaining next-stage work is
-`RESEARCH_ONLY_CONTINUOUS_DEPLOYMENT-001`:
+`RESEARCH_ONLY_CONTINUOUS_DEPLOYMENT-001` is now
+`INSTALLED_PENDING_LIVE_MARKET_CANARY_AND_ELEVATED_RESTART_PROOF`.
 
-1. Install the dedicated `LOCAL SERVICE` writer and production evidence-root
-   ownership/ACLs.
-2. Deploy full business-payload persistence and indexing.
-3. Prove production restart/index recovery in the installed topology.
-4. Install and separately activate the dormant research-only Continuous
-   Opportunity Runtime.
+The installed deployment is bound to canonical `master` at
+`f2a3af58c4a90274f46e745ad74c8dcd80b201af`, with runtime build
+`add0723196a3d272965cb87062157046917301b2bd11d0bd0b428cc4ea5c4add` and
+configuration fingerprint
+`1dcf3a01a57caf9b5668fd97cf508b17f1cc5c025fc477fc67f15874fc19cfbf`.
+The installed deployment manifest is
+`C:\\ProgramData\\MomentumHunter\\Automation\\continuous-deployment-manifest.json`
+with SHA-256
+`B9FF2704F25C0E907F72FD622D2DED0EDA68F5EA60E343400D96A87835EAF6DD`.
+`MomentumHunterContinuousWriter` is installed as `NT AUTHORITY\\LOCAL SERVICE`
+and `MomentumHunterContinuousRuntime` as `BEASTCOMPUTER\\steve`; both are
+Automatic and Running. The runtime is currently `RESEARCH_ONLY`,
+`IDLE_OUT_OF_SESSION`, and `SESSION_CLOSED`, so no live provider canary has
+been claimed while the market is closed.
 
-These are activation-only tasks, not merge blockers. Continuous Paper remains
-a later independent gate. Shadow, live Alpaca, Schwab orders, and live
-execution remain unavailable and unauthorized. The final canonical governance
-head is the post-merge reconciliation closeout commit on `master`; the
-integrated software identity remains `4526446eeab404ff02856d6a57c679c8b8b9b2a5`.
+The installed writer/root proof passed through the real LocalService writer:
+four bounded synthetic business payloads were accepted across discovery,
+denominator, composition, and system-failure lanes; duplicate replay returned
+`DUPLICATE`; four immutable records, five ACKs, and five index generations are
+present; all four record fingerprints recompute; and the deployment-proof root
+contains no forbidden credential field names. The root ACL grants LocalService
+full control and Steven read-only access; the runtime-state root grants Steven
+Modify for service recovery. The existing `MomentumHunterAutomation` service
+and `automation-manifest.json` remain unchanged; the latter hash is
+`6B0FCA73BF56A04501AE016BFEFC39E85DA386C44BB9FA63DEF37ED837B18BE4`.
+
+Remaining gates are deliberately separate: (1) one elevated controlled writer
+restart with runtime dependency handling, followed by post-restart duplicate
+and sequence verification; and (2) the next eligible market session's bounded
+live read-only canary with six broad cycles or at least 30 minutes, then the
+authorized runtime-restart and writer-restart checks. Until those pass, do not
+claim continuous live hunting or same-day production recovery from this
+installation. Continuous Paper remains a later independent gate. Shadow, live
+Alpaca, Schwab orders, account reads, position reads, and live execution remain
+unavailable and unauthorized. The final canonical governance head is the
+post-merge reconciliation closeout commit on `master`; the integrated software
+identity remains `4526446eeab404ff02856d6a57c679c8b8b9b2a5`.
 The detailed pre-merge branch paragraphs below are retained as historical
 evidence and are not current-state claims.
 

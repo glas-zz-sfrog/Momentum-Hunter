@@ -645,3 +645,13 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Extended live qualification through a separate 15-minute soak with 8 real
   discovery/Schwab cycles, 10 complete denominator cycles, 20 writer records,
   one exact checkpoint restart, and empty final queues.
+
+## 2026-08-19 - Research-Only Continuous Deployment Installed
+
+- Installed canonical `f2a3af58c4a90274f46e745ad74c8dcd80b201af` under the
+  research-only activation profile with a new v2 checkpoint namespace.
+- Proved installed LocalService writer acceptance, duplicate replay,
+  write-once indexing, fingerprint integrity, and credential-field sanitation
+  using synthetic deployment payloads only.
+- Left live canary, elevated service restart recovery, and any Paper/Shadow or
+  live execution capability explicitly unclaimed.

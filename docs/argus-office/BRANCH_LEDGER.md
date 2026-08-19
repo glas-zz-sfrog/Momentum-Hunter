@@ -1026,3 +1026,9 @@ Use a fresh task branch from local `master` instead.
 | Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
 | `codex/ARGUS-AUG17-INTEGRATION-CANDIDATE-001` | Live-sidecar commit `012b555` plus final qualification closeout on combined candidate from canonical `ea056155` | Yes | No | `AUG17_INTEGRATION_CANDIDATE_MERGE_QUALIFIED` | One authoritative research/continuous/writer/Schwab candidate; live sidecar, soak, terminal Pass 2, 48 focused tests, and all 2,608 Python tests pass. | Preserve the pushed branch for deliberate Git Steward fast-forward; activation remains separately gated by the identified storage/deployment remainder. |
+
+## 2026-08-19 Research-Only Continuous Deployment
+
+| Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `master` | `f2a3af58c4a90274f46e745ad74c8dcd80b201af` / synchronized `master` and `origin/master` | Yes | Yes | `INSTALLED_PENDING_LIVE_MARKET_CANARY_AND_ELEVATED_RESTART_PROOF` | Canonical checkpoint-namespace repair plus installed research-only LocalService writer/runtime deployment. | Run one elevated writer/runtime restart proof, then the bounded live market canary; do not activate Paper, Shadow, or live execution. |
