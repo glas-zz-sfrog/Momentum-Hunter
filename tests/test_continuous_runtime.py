@@ -90,6 +90,15 @@ class SyntheticDiscovery:
             new_symbols=self.symbols if self.calls == 1 else (),
             retained_symbols=() if self.calls == 1 else self.symbols,
             provider_bound_symbols=self.symbols[10:],
+            evidence_payload_json=json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "profile": "synthetic-discovery-evidence-v1",
+                    "sourcePopulation": list(self.symbols),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
         )
 
 
@@ -171,6 +180,7 @@ class SyntheticWriter:
     def __init__(self) -> None:
         self.mode = WRITER_ACCEPTED
         self.receipts: dict[int, str] = {}
+        self.intents = []
 
     def write_intent(self, intent):
         if self.mode in {WRITER_UNAVAILABLE, WRITER_SLOW}:
@@ -181,6 +191,7 @@ class SyntheticWriter:
                 raise RuntimeError("writer sequence conflict")
             return WRITER_DUPLICATE
         self.receipts[intent.sequence] = intent.fingerprint
+        self.intents.append(intent)
         return WRITER_ACCEPTED
 
 
@@ -347,6 +358,61 @@ class ContinuousRuntimeTests(unittest.TestCase):
         self.fixture.clock.advance(300)
         health = self.fixture.runtime.tick(self.fixture.clock.now())
         self.assertEqual(RUNNING, health.process_state)
+
+    def test_discovery_cycle_persists_bounded_source_population(self) -> None:
+        self.start()
+
+        self.fixture.runtime.tick(self.fixture.clock.now())
+
+        discovery = next(
+            intent
+            for intent in self.fixture.writer.intents
+            if intent.evidence_type == "DISCOVERY_CYCLE"
+        )
+        payload = json.loads(discovery.payload_json)
+        self.assertEqual("DISCOVERY_CYCLE", payload["payloadType"])
+        self.assertEqual(30, payload["pulse"]["source_rows_represented"])
+        self.assertEqual(
+            [f"S{i:02d}" for i in range(30)],
+            payload["sourceEvidence"]["sourcePopulation"],
+        )
+        self.assertEqual("RESEARCH_ONLY", payload["authority"])
+        self.assertEqual("EXECUTION_AUTHORITY_NONE", payload["executionAuthority"])
+
+    def test_discovery_failure_persists_system_failure_evidence(self) -> None:
+        self.start()
+        self.fixture.discovery.failures.append(RuntimeError("schema failure"))
+
+        self.fixture.runtime.tick(self.fixture.clock.now())
+
+        failure = next(
+            intent
+            for intent in self.fixture.writer.intents
+            if intent.evidence_type == "SYSTEM_FAILURE"
+        )
+        payload = json.loads(failure.payload_json)
+        self.assertEqual("SYSTEM_FAILURE", payload["payloadType"])
+        self.assertEqual("DISCOVERY", payload["stage"])
+        self.assertEqual("RuntimeError", payload["reason"])
+        self.assertEqual("RESEARCH_ONLY", payload["authority"])
+        self.assertEqual("EXECUTION_AUTHORITY_NONE", payload["executionAuthority"])
+
+    def test_resolved_discovery_cadence_changes_without_restarting_runtime(self) -> None:
+        self.start()
+        self.fixture.runtime.tick(
+            self.fixture.clock.now(), discovery_cadence_seconds=600
+        )
+        self.assertEqual(1, self.fixture.discovery.calls)
+        self.fixture.clock.advance(300)
+        self.fixture.runtime.tick(
+            self.fixture.clock.now(), discovery_cadence_seconds=600
+        )
+        self.assertEqual(1, self.fixture.discovery.calls)
+        self.fixture.clock.advance(300)
+        self.fixture.runtime.tick(
+            self.fixture.clock.now(), discovery_cadence_seconds=300
+        )
+        self.assertEqual(2, self.fixture.discovery.calls)
 
     def test_adapter_identity_mismatch_is_symbol_scoped_and_fails_closed(self) -> None:
         self.start()

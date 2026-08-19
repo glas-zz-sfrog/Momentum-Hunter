@@ -297,6 +297,24 @@ class LiveDiscoverySource:
             new_symbols=tuple(sorted(new)),
             retained_symbols=tuple(sorted(active.intersection(previous))),
             provider_bound_symbols=(),
+            evidence_payload_json=_canonical_bytes(
+                {
+                    "schemaVersion": 1,
+                    "profile": "continuous-live-discovery-evidence-v1",
+                    "snapshot": snapshot.to_dict(),
+                    "universe": {
+                        "status": universe.status,
+                        "state": asdict(universe.state),
+                        "transitions": [
+                            asdict(item) for item in universe.transitions
+                        ],
+                        "summary": asdict(universe.summary),
+                    },
+                    "authority": AUTHORITY,
+                    "executionAuthority": EXECUTION_AUTHORITY,
+                    "orderCapability": ORDER_CAPABILITY,
+                }
+            ).decode("ascii"),
         )
 
 

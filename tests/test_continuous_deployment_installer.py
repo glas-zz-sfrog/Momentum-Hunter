@@ -150,6 +150,19 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
         self.assertNotIn("Set-Service -Name $Name -Credential", script)
         self.assertNotIn("sc.exe config $Name password=", script)
 
+    def test_verified_existing_runtime_update_reuses_windows_service_logon(self):
+        script = self._script()
+
+        self.assertIn(
+            "$credentialRequired = (-not $existingRuntime) -or [bool]$RepairAutomationCredential",
+            script,
+        )
+        self.assertIn(
+            'Existing continuous runtime service uses an unexpected Windows identity.',
+            script,
+        )
+        self.assertIn("premarketDiscoverySeconds = 600", script)
+
 
 if __name__ == "__main__":
     unittest.main()

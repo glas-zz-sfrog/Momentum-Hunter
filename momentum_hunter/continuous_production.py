@@ -59,6 +59,7 @@ from momentum_hunter.windows_writer_storage import WriterPhysicalStorage
 from momentum_hunter.continuous_evidence_writer import (
     build_production_continuous_writer_topology,
 )
+from momentum_hunter.scheduling import is_market_open_day, is_nyse_early_close
 
 
 CENTRAL = ZoneInfo("America/Chicago")
@@ -68,6 +69,13 @@ AUTHORITY = RESEARCH_AUTHORITY
 EXECUTION = EXECUTION_AUTHORITY_NONE
 ORDER_CAPABILITY = ORDER_CAPABILITY_UNAVAILABLE
 WRITER_PORT = 49281
+SESSION_CLOSED = "SESSION_CLOSED"
+PREMARKET = "PREMARKET"
+REGULAR_SESSION = "REGULAR_SESSION"
+PREMARKET_START = clock_time(7, 5)
+REGULAR_OPEN = clock_time(9, 30)
+REGULAR_CLOSE = clock_time(16, 0)
+EARLY_CLOSE = clock_time(13, 0)
 ARTIFACT_BY_EVIDENCE = {
     "DISCOVERY_CYCLE": "runtime-source-admission-ledger",
     "COMPOSITION_CYCLE": "event-decision-cycle-ledger",
@@ -163,16 +171,26 @@ def _topology(config: Mapping[str, Any]):
 
 
 def _runtime_config(config: Mapping[str, Any]) -> ContinuousRuntimeConfig:
+    regular_discovery = float(config["broadDiscoverySeconds"])
+    premarket_discovery = float(
+        config.get("premarketDiscoverySeconds", regular_discovery * 2)
+    )
     return ContinuousRuntimeConfig(
         runtime_identity=str(config["runtimeIdentity"]),
         # Continuous deployment identity must survive a midnight restart;
         # session dates belong to persisted market evidence, not this config.
         session_date=str(config.get("configurationSessionDate", "1970-01-01")),
         cadence=RuntimeCadence(
-            broad_discovery_seconds=float(config["broadDiscoverySeconds"]),
+            broad_discovery_seconds=regular_discovery,
             housekeeping_seconds=15,
-            discovery_stale_seconds=float(config["broadDiscoverySeconds"]) * 2,
-            composition_stale_seconds=float(config["broadDiscoverySeconds"]) * 2,
+            discovery_stale_seconds=max(
+                regular_discovery, premarket_discovery
+            )
+            * 2,
+            composition_stale_seconds=max(
+                regular_discovery, premarket_discovery
+            )
+            * 2,
         ),
         queues=QueueCapacities(discovery=2, readiness=64, composition=64, evidence=256, health=16),
         lease_ttl_seconds=30,
@@ -473,9 +491,53 @@ class ProductionRemoteWriter:
             return "UNAVAILABLE"
 
 
-def _is_regular_session(now: datetime) -> bool:
+def _market_session_phase(now: datetime) -> str:
     eastern = now.astimezone(EASTERN)
-    return eastern.weekday() < 5 and clock_time(9, 30) <= eastern.time() < clock_time(16, 0)
+    if not is_market_open_day(eastern.date()):
+        return SESSION_CLOSED
+    close = EARLY_CLOSE if is_nyse_early_close(eastern.date()) else REGULAR_CLOSE
+    if PREMARKET_START <= eastern.time() < REGULAR_OPEN:
+        return PREMARKET
+    if REGULAR_OPEN <= eastern.time() < close:
+        return REGULAR_SESSION
+    return SESSION_CLOSED
+
+
+def _is_regular_session(now: datetime) -> bool:
+    return _market_session_phase(now) == REGULAR_SESSION
+
+
+def _resolved_discovery_cadence(
+    phase: str, config: Mapping[str, Any]
+) -> float | None:
+    if phase == PREMARKET:
+        return float(config.get("premarketDiscoverySeconds", 600))
+    if phase == REGULAR_SESSION:
+        return float(config["broadDiscoverySeconds"])
+    return None
+
+
+def _qualification_metrics(state: QualificationState) -> dict[str, object]:
+    metrics = state.metrics
+    return {
+        "broadDiscoveryCycles": metrics.discovery_cycles,
+        "finvizPages": metrics.finviz_pages,
+        "finvizRows": metrics.finviz_rows,
+        "uniqueSymbols": len(metrics.unique_symbols),
+        "middayNewSymbols": len(metrics.midday_new_symbols),
+        "tierTransitions": metrics.tier_transitions,
+        "schwabRefreshes": metrics.schwab_refreshes,
+        "schwabQuoteSymbols": metrics.schwab_quote_symbols,
+        "schwabMinuteRows": metrics.schwab_minute_rows,
+        "schwabDailyRows": metrics.schwab_daily_rows,
+        "canonicalReadySymbols": len(metrics.canonical_ready_symbols),
+        "compositionCycles": len(metrics.composition_cycles),
+        "researchOnlyTradePlans": len(metrics.research_plans),
+        "successorSetups": len(metrics.successor_setups),
+        "systemFailedCycles": metrics.system_failed_cycles,
+        "providerFailureCount": len(metrics.provider_failures),
+        "providerFailures": list(metrics.provider_failures[-20:]),
+    }
 
 
 def _write_runtime_status(path: Path, health: RuntimeHealth | None, *, state: str, config: Mapping[str, Any], **extra: object) -> None:
@@ -567,16 +629,48 @@ def run_runtime(config_path: Path) -> int:
         )
     else:
         runtime.start(now)
-    _write_runtime_status(status_path, runtime.health(now), state="IDLE_OUT_OF_SESSION" if not _is_regular_session(now) else "RUNNING", config=config)
+    phase = _market_session_phase(now)
+    cadence = _resolved_discovery_cadence(phase, config)
+    _write_runtime_status(
+        status_path,
+        runtime.health(now),
+        state="IDLE_OUT_OF_SESSION" if phase == SESSION_CLOSED else "RUNNING",
+        config=config,
+        sessionPhase=phase,
+        resolvedDiscoveryCadenceSeconds=cadence,
+        qualification=_qualification_metrics(state),
+    )
     last_restart = 0.0
     try:
         while True:
             now = datetime.now().astimezone()
-            if _is_regular_session(now):
-                health = runtime.tick(now, work_budget=512)
-                _write_runtime_status(status_path, health, state="DEGRADED" if health.process_state == "DEGRADED" else "RUNNING", config=config)
+            phase = _market_session_phase(now)
+            cadence = _resolved_discovery_cadence(phase, config)
+            if cadence is not None:
+                health = runtime.tick(
+                    now,
+                    work_budget=512,
+                    discovery_cadence_seconds=cadence,
+                )
+                _write_runtime_status(
+                    status_path,
+                    health,
+                    state="DEGRADED" if health.process_state == "DEGRADED" else "RUNNING",
+                    config=config,
+                    sessionPhase=phase,
+                    resolvedDiscoveryCadenceSeconds=cadence,
+                    qualification=_qualification_metrics(state),
+                )
             else:
-                _write_runtime_status(status_path, runtime.health(now), state="IDLE_OUT_OF_SESSION", config=config)
+                _write_runtime_status(
+                    status_path,
+                    runtime.health(now),
+                    state="IDLE_OUT_OF_SESSION",
+                    config=config,
+                    sessionPhase=phase,
+                    resolvedDiscoveryCadenceSeconds=None,
+                    qualification=_qualification_metrics(state),
+                )
             time.sleep(5)
     except KeyboardInterrupt:
         return 0

@@ -9,12 +9,18 @@ import unittest
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from momentum_hunter.continuous_production import (
     ProductionDeploymentError,
     ProductionWriterServer,
+    PREMARKET,
+    REGULAR_SESSION,
+    SESSION_CLOSED,
     _canonical_bytes,
     _fingerprint,
+    _market_session_phase,
+    _resolved_discovery_cadence,
     _runtime_config,
     _safe_payload,
     deployment_configuration_fingerprint,
@@ -140,6 +146,54 @@ class ContinuousProductionTests(unittest.TestCase):
     def test_payload_secret_shape_is_rejected(self):
         with self.assertRaises(ProductionDeploymentError):
             _safe_payload({"api_key": "redacted-looking-value"})
+
+    def test_market_session_phase_supports_premarket_regular_and_calendar(self):
+        eastern = ZoneInfo("America/New_York")
+
+        self.assertEqual(
+            PREMARKET,
+            _market_session_phase(
+                datetime(2026, 8, 19, 7, 5, tzinfo=eastern)
+            ),
+        )
+        self.assertEqual(
+            REGULAR_SESSION,
+            _market_session_phase(
+                datetime(2026, 8, 19, 9, 30, tzinfo=eastern)
+            ),
+        )
+        self.assertEqual(
+            SESSION_CLOSED,
+            _market_session_phase(
+                datetime(2026, 8, 19, 16, 0, tzinfo=eastern)
+            ),
+        )
+        self.assertEqual(
+            SESSION_CLOSED,
+            _market_session_phase(
+                datetime(2026, 8, 22, 10, 0, tzinfo=eastern)
+            ),
+        )
+        self.assertEqual(
+            SESSION_CLOSED,
+            _market_session_phase(
+                datetime(2026, 11, 27, 13, 0, tzinfo=eastern)
+            ),
+        )
+
+    def test_session_phase_resolves_approved_discovery_cadence(self):
+        config = {
+            "premarketDiscoverySeconds": 600,
+            "broadDiscoverySeconds": 300,
+        }
+
+        self.assertEqual(600, _resolved_discovery_cadence(PREMARKET, config))
+        self.assertEqual(
+            300, _resolved_discovery_cadence(REGULAR_SESSION, config)
+        )
+        self.assertIsNone(
+            _resolved_discovery_cadence(SESSION_CLOSED, config)
+        )
 
 
 if __name__ == "__main__":

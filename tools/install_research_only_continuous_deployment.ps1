@@ -460,9 +460,16 @@ if ($Stage -eq "Install") {
     if (-not (Test-Path -LiteralPath (Join-Path $pythonRuntimeStagingRoot "Scripts\python.exe") -PathType Leaf)) {
         throw "Prepared continuous Python runtime is missing."
     }
-    $credential = Get-Credential -UserName ([string]$plan.runtimeAccount) -Message "Enter the Windows account password for the research-only continuous runtime. Do not enter a PIN or any broker credential."
-    if (-not $credential) { throw "Windows credential entry was cancelled." }
-    Assert-WindowsCredential $credential ([string]$plan.runtimeAccount)
+    $existingRuntime = Get-ServiceSnapshot $runtimeServiceName
+    $credentialRequired = (-not $existingRuntime) -or [bool]$RepairAutomationCredential
+    $credential = $null
+    if ($credentialRequired) {
+        $credential = Get-Credential -UserName ([string]$plan.runtimeAccount) -Message "Enter the Windows account password for the research-only continuous runtime. Do not enter a PIN or any broker credential."
+        if (-not $credential) { throw "Windows credential entry was cancelled." }
+        Assert-WindowsCredential $credential ([string]$plan.runtimeAccount)
+    } elseif (-not (Test-ServiceAccountMatch ([string]$existingRuntime.startName) ([string]$plan.runtimeAccount))) {
+        throw "Existing continuous runtime service uses an unexpected Windows identity."
+    }
 
     if ($RepairAutomationCredential) {
         if (-not $automationBefore) { throw "MomentumHunterAutomation is missing; credential repair stopped." }
@@ -516,6 +523,7 @@ if ($Stage -eq "Install") {
         ipcHost = "127.0.0.1"
         ipcPort = 49281
         expectedAccountEnding = [string]$plan.expectedAccountEnding
+        premarketDiscoverySeconds = 600
         broadDiscoverySeconds = 300
         configurationFingerprint = ""
         accountReads = "AUTHORIZATION_BOUNDARY_ONLY"

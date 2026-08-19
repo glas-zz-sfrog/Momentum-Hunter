@@ -225,11 +225,23 @@ class DiscoveryPulse:
     new_symbols: tuple[str, ...] = ()
     retained_symbols: tuple[str, ...] = ()
     provider_bound_symbols: tuple[str, ...] = ()
+    evidence_payload_json: str | None = None
 
     def __post_init__(self) -> None:
         _require_fingerprint(self.fingerprint, "Discovery pulse fingerprint")
         if self.source_rows_represented < 0:
             raise ContinuousRuntimeError("Discovery source-row count cannot be negative.")
+        if self.evidence_payload_json is not None:
+            try:
+                evidence = json.loads(self.evidence_payload_json)
+            except json.JSONDecodeError as exc:
+                raise ContinuousRuntimeError(
+                    "Discovery evidence payload is malformed."
+                ) from exc
+            if not isinstance(evidence, dict):
+                raise ContinuousRuntimeError(
+                    "Discovery evidence payload must be an object."
+                )
 
 
 @dataclass(frozen=True)
@@ -958,7 +970,13 @@ class ContinuousOpportunityRuntime:
         )
         return self._enqueue(DISCOVERY_QUEUE, work, now)
 
-    def tick(self, now: datetime, *, work_budget: int = 256) -> RuntimeHealth:
+    def tick(
+        self,
+        now: datetime,
+        *,
+        work_budget: int = 256,
+        discovery_cadence_seconds: float | None = None,
+    ) -> RuntimeHealth:
         if self.process_state not in {READY, RUNNING, DEGRADED}:
             raise ContinuousRuntimeError("Runtime is not available for ticking.")
         _positive(work_budget, "Work budget")
@@ -967,7 +985,10 @@ class ContinuousOpportunityRuntime:
         self.lease = self.lease_registry.heartbeat(
             self.lease, now, self.config.lease_ttl_seconds
         )
-        self._schedule_due_work(now)
+        self._schedule_due_work(
+            now,
+            discovery_cadence_seconds=discovery_cadence_seconds,
+        )
         for event in self.event_source.poll(now):
             self.submit_event(event, now)
         self._flush_provider_bound_cycle(now)
@@ -1250,12 +1271,23 @@ class ContinuousOpportunityRuntime:
             fingerprint=_fingerprint("continuous-runtime-health-v1", payload),
         )
 
-    def _schedule_due_work(self, now: datetime) -> None:
+    def _schedule_due_work(
+        self,
+        now: datetime,
+        *,
+        discovery_cadence_seconds: float | None = None,
+    ) -> None:
+        discovery_cadence = (
+            self.config.cadence.broad_discovery_seconds
+            if discovery_cadence_seconds is None
+            else discovery_cadence_seconds
+        )
+        _positive(discovery_cadence, "Resolved broad-discovery cadence")
         if self.next_discovery_at is not None and now >= self.next_discovery_at:
             self.request_discovery(now)
             while self.next_discovery_at <= now:
                 self.next_discovery_at += timedelta(
-                    seconds=self.config.cadence.broad_discovery_seconds
+                    seconds=discovery_cadence
                 )
         if self.next_housekeeping_at is not None and now >= self.next_housekeeping_at:
             heartbeat = RuntimeTriggerEvent(
@@ -1327,6 +1359,34 @@ class ContinuousOpportunityRuntime:
         self._counters["retained_symbols"] = len(pulse.retained_symbols)
         self._counters["provider_bound_symbols"] = len(pulse.provider_bound_symbols)
         self.last_successful_discovery_at = now
+        source_evidence = (
+            json.loads(pulse.evidence_payload_json)
+            if pulse.evidence_payload_json is not None
+            else None
+        )
+        discovery_payload = {
+            "payloadType": "DISCOVERY_CYCLE",
+            "request": asdict(request),
+            "pulse": {
+                key: value
+                for key, value in asdict(pulse).items()
+                if key != "evidence_payload_json"
+            },
+            "sourceEvidence": source_evidence,
+            "knownAt": _timestamp(now),
+            "authority": RESEARCH_AUTHORITY,
+            "executionAuthority": EXECUTION_AUTHORITY_NONE,
+        }
+        self._emit_intent(
+            evidence_type="DISCOVERY_CYCLE",
+            record_identity=pulse.pulse_id,
+            record_fingerprint=_fingerprint(
+                "continuous-discovery-cycle-record-v1", discovery_payload
+            ),
+            payload_fingerprint=pulse.fingerprint,
+            payload=discovery_payload,
+            now=now,
+        )
         for symbol in pulse.symbols_for_readiness:
             normalized = symbol.strip().upper()
             self._membership_generations.setdefault(normalized, 1)
@@ -1712,6 +1772,26 @@ class ContinuousOpportunityRuntime:
     ) -> None:
         self._record_symbol_failure(
             "__SYSTEM__", stage, reason, now, source_fingerprint
+        )
+        payload = {
+            "payloadType": "SYSTEM_FAILURE",
+            "stage": stage,
+            "reason": reason,
+            "sourceFingerprint": source_fingerprint,
+            "knownAt": _timestamp(now),
+            "authority": RESEARCH_AUTHORITY,
+            "executionAuthority": EXECUTION_AUTHORITY_NONE,
+        }
+        failure_fingerprint = _fingerprint(
+            "continuous-system-failure-record-v1", payload
+        )
+        self._emit_intent(
+            evidence_type="SYSTEM_FAILURE",
+            record_identity=f"system-failure-{failure_fingerprint[:24]}",
+            record_fingerprint=failure_fingerprint,
+            payload_fingerprint=source_fingerprint,
+            payload=payload,
+            now=now,
         )
 
     def _remember_event(self, event_id: str, fingerprint: str) -> None:

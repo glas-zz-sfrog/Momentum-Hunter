@@ -121,9 +121,11 @@ _RESERVED_DEVICE_NAMES = frozenset(
 )
 
 _EVIDENCE_TYPE_TO_ARTIFACT = {
+    "DISCOVERY_CYCLE": "runtime-source-admission-ledger",
     "COMPOSITION_CYCLE": "event-decision-cycle-ledger",
     "OPPORTUNITY_DENOMINATOR": "runtime-source-admission-ledger",
     "PROVIDER_BOUND_DENOMINATOR_ROWS": "runtime-source-admission-ledger",
+    "SYSTEM_FAILURE": "runtime-source-admission-ledger",
 }
 
 _ROOT_OWNERS_GUARD = threading.Lock()
