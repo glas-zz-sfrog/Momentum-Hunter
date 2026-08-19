@@ -8,7 +8,8 @@ param(
     [string]$ExpectedAccountEnding = "2573",
     [string]$EvidenceRoot = "C:\ProgramData\MomentumHunter\Continuous",
     [string]$RuntimeStateRoot = "C:\ProgramData\MomentumHunter\ContinuousRuntime",
-    [string]$ConfigRoot = "C:\ProgramData\MomentumHunter\Automation"
+    [string]$ConfigRoot = "C:\ProgramData\MomentumHunter\Automation",
+    [switch]$RepairAutomationCredential
 )
 
 $ErrorActionPreference = "Stop"
@@ -304,6 +305,36 @@ function Install-ContinuousService {
     return Get-ServiceSnapshot $Name
 }
 
+function Assert-WindowsCredential {
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.PSCredential]$Credential,
+        [Parameter(Mandatory)][string]$ExpectedAccount
+    )
+    if (-not (Test-ServiceAccountMatch $Credential.UserName $ExpectedAccount)) {
+        throw "The Windows credential must use $ExpectedAccount."
+    }
+    $proof = Start-Process `
+        -FilePath $env:ComSpec `
+        -ArgumentList "/d", "/c", "exit 0" `
+        -Credential $Credential `
+        -LoadUserProfile `
+        -WindowStyle Hidden `
+        -Wait `
+        -PassThru
+    if ($proof.ExitCode -ne 0) {
+        throw "The Windows service credential validation process failed."
+    }
+}
+
+function Stop-ServiceIfRunning {
+    param([Parameter(Mandatory)][string]$Name)
+    $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if ($service -and $service.Status -ne "Stopped") {
+        Stop-Service -Name $Name
+        $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
+    }
+}
+
 if (-not $ProjectRoot) { $ProjectRoot = Split-Path -Parent $PSScriptRoot }
 $project = Resolve-ProjectRoot $ProjectRoot
 if (-not $PreparedRoot) {
@@ -402,6 +433,22 @@ if ($Stage -eq "Install") {
     if (-not (Test-Path -LiteralPath (Join-Path $pythonRuntimeStagingRoot "Scripts\python.exe") -PathType Leaf)) {
         throw "Prepared continuous Python runtime is missing."
     }
+    $credential = Get-Credential -UserName ([string]$plan.runtimeAccount) -Message "Enter the Windows account password for the research-only continuous runtime. Do not enter a PIN or any broker credential."
+    if (-not $credential) { throw "Windows credential entry was cancelled." }
+    Assert-WindowsCredential $credential ([string]$plan.runtimeAccount)
+
+    if ($RepairAutomationCredential) {
+        if (-not $automationBefore) { throw "MomentumHunterAutomation is missing; credential repair stopped." }
+        if (-not (Test-ServiceAccountMatch ([string]$automationBefore.startName) ([string]$plan.runtimeAccount))) {
+            throw "MomentumHunterAutomation is bound to an unexpected Windows account."
+        }
+        Set-Service -Name "MomentumHunterAutomation" -Credential $credential
+        Start-Service -Name "MomentumHunterAutomation"
+        (Get-Service -Name "MomentumHunterAutomation").WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
+    }
+
+    Stop-ServiceIfRunning $runtimeServiceName
+    Stop-ServiceIfRunning $writerServiceName
     $sourcePackage = Join-Path ([string]$plan.repositoryRoot) "momentum_hunter"
     if (-not (Test-Path -LiteralPath $sourcePackage -PathType Container)) {
         throw "Canonical Python package is missing: $sourcePackage"
@@ -471,7 +518,6 @@ if ($Stage -eq "Install") {
     $serviceHostPath = Join-Path $serviceHostRoot "MomentumHunter.ContinuousServiceHost.exe"
     $writerBinary = '"{0}" --role writer --repository-root "{1}" --python-executable "{2}" --config "{3}"' -f $serviceHostPath, $runtimeSourceRoot, $plan.pythonExecutable, $configPath
     $runtimeBinary = '"{0}" --role runtime --repository-root "{1}" --python-executable "{2}" --config "{3}"' -f $serviceHostPath, $runtimeSourceRoot, $plan.pythonExecutable, $configPath
-    $credential = Get-Credential -UserName ([string]$plan.runtimeAccount) -Message "Windows credential required to run the research-only continuous runtime under the existing user account."
     Install-ContinuousService $writerServiceName "Momentum Hunter Continuous Writer (Research Only)" $writerBinary $writerAccount $null | Out-Null
     Install-ContinuousService $runtimeServiceName "Momentum Hunter Continuous Runtime (Research Only)" $runtimeBinary ([string]$plan.runtimeAccount) $credential | Out-Null
     & sc.exe config $runtimeServiceName depend= $writerServiceName | Out-Null
@@ -495,7 +541,8 @@ if ($Stage -eq "Install") {
         runtimeStateRoot = $runtimeState
         orderCapability = "UNAVAILABLE"
         shadowJobsEnabled = 0
-        existingAutomationServiceUnchanged = $true
+        existingAutomationServiceDefinitionUnchanged = $true
+        existingAutomationCredentialRefreshed = [bool]$RepairAutomationCredential
         existingAutomationManifestUnchanged = $true
     }
     Write-JsonAscii (Join-Path $ConfigRoot "continuous-deployment-manifest.json") $deploymentManifest
@@ -505,7 +552,16 @@ $automationAfter = Get-ServiceSnapshot "MomentumHunterAutomation"
 $manifestAfter = if (Test-Path -LiteralPath $plan.existingAutomationManifest -PathType Leaf) {
     (Get-FileHash -Algorithm SHA256 -LiteralPath $plan.existingAutomationManifest).Hash
 } else { "NOT_FOUND" }
-if (($automationBefore | ConvertTo-Json -Compress) -ne ($automationAfter | ConvertTo-Json -Compress)) { throw "Existing Automation Service changed unexpectedly." }
+if ($RepairAutomationCredential) {
+    foreach ($field in @("name", "startMode", "startName", "pathName")) {
+        if ([string]$automationBefore.$field -ne [string]$automationAfter.$field) {
+            throw "Existing Automation Service definition changed unexpectedly."
+        }
+    }
+    if ($automationAfter.state -ne "Running") { throw "Existing Automation Service did not recover after credential refresh." }
+} elseif (($automationBefore | ConvertTo-Json -Compress) -ne ($automationAfter | ConvertTo-Json -Compress)) {
+    throw "Existing Automation Service changed unexpectedly."
+}
 if ($manifestBefore -ne $manifestAfter) { throw "Existing automation manifest changed unexpectedly." }
 
 $result = [ordered]@{
@@ -522,7 +578,8 @@ $result = [ordered]@{
     accountValuesRequested = $false
     positionsRequested = $false
     ordersRequested = $false
-    existingAutomationServiceUnchanged = $true
+    existingAutomationServiceDefinitionUnchanged = $true
+    existingAutomationCredentialRefreshed = [bool]$RepairAutomationCredential
     existingAutomationManifestUnchanged = $true
     nextStep = "Run the separate physical writer/root and runtime restart proofs before any research-only activation claim."
 }

@@ -91,6 +91,55 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
             script,
         )
 
+    def test_credential_is_validated_before_service_or_file_mutation(self):
+        script = self._script()
+
+        validation = script.index(
+            "Assert-WindowsCredential $credential ([string]$plan.runtimeAccount)"
+        )
+        automation_repair = script.index(
+            'Set-Service -Name "MomentumHunterAutomation" -Credential $credential'
+        )
+        continuous_stop = script.index("Stop-ServiceIfRunning $writerServiceName")
+        source_copy = script.index(
+            "Copy-Item -Path $sourcePackage -Destination $runtimeSourceRoot"
+        )
+        runtime_install = script.index(
+            'Install-ContinuousService $runtimeServiceName'
+        )
+
+        self.assertLess(validation, automation_repair)
+        self.assertLess(validation, continuous_stop)
+        self.assertLess(validation, source_copy)
+        self.assertLess(validation, runtime_install)
+
+    def test_recovery_reuses_one_credential_without_changing_automation_definition(self):
+        script = self._script()
+
+        self.assertIn("[switch]$RepairAutomationCredential", script)
+        self.assertEqual(script.count("Get-Credential"), 1)
+        self.assertIn(
+            'Set-Service -Name "MomentumHunterAutomation" -Credential $credential',
+            script,
+        )
+        self.assertIn(
+            'existingAutomationCredentialRefreshed = [bool]$RepairAutomationCredential',
+            script,
+        )
+        self.assertIn(
+            'foreach ($field in @("name", "startMode", "startName", "pathName"))',
+            script,
+        )
+
+    def test_existing_continuous_services_stop_before_host_replacement(self):
+        script = self._script()
+
+        writer_stop = script.index("Stop-ServiceIfRunning $writerServiceName")
+        host_copy = script.index(
+            "Get-ChildItem -LiteralPath $serviceHostStagingRoot -Force | Copy-Item -Destination $serviceHostRoot"
+        )
+        self.assertLess(writer_stop, host_copy)
+
 
 if __name__ == "__main__":
     unittest.main()
