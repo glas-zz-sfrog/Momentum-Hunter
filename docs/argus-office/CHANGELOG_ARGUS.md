@@ -1,5 +1,20 @@
 # Argus Changelog
 
+- Preserved the August 19 installed continuous canary as
+  `SYSTEM_CONTRACT_FAILURE / DECISION_NOT_REACHED`: premarket readiness crossed
+  an illegal phase boundary and a cumulative, doubled 580,760-byte discovery
+  envelope became a permanently impossible active retry head.
+- Added explicit checkpointed premarket deferral and fresh regular-session
+  rollover, bounded current-cycle discovery evidence with predecessor hashes,
+  one-copy writer payloads, exact envelope preflight, typed permanent/transient
+  writer failures, compact terminal poison evidence, bounded retry/backoff, and
+  separate process-heartbeat versus pipeline-forward-progress health.
+- Proved 100 production-shaped 30-row discovery cycles remain bounded: maximum
+  140,517 bytes, median 113,399, p95 113,399, minimum headroom 383,771 bytes,
+  and only 135 bytes of stable cycle-10-through-100 spread. Compileall and one
+  full 2,637-test discovery pass succeed. Canonical merge, exact-SHA deployment,
+  checkpoint recovery, and live regular-session canary remain pending.
+
 - Completed the post-merge governance reconciliation after the controlled fast-forward
   to `4526446eeab404ff02856d6a57c679c8b8b9b2a5`. Canonical software integration,
   continuous session resilience, midday-first live admission, writer security,

@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from momentum_hunter.continuous_production import (
     ProductionDeploymentError,
+    ProductionRemoteWriter,
     ProductionWriterServer,
     PREMARKET,
     REGULAR_SESSION,
@@ -25,10 +26,14 @@ from momentum_hunter.continuous_production import (
     _safe_payload,
     deployment_configuration_fingerprint,
 )
-from momentum_hunter.continuous_runtime import build_evidence_write_intent
+from momentum_hunter.continuous_runtime import (
+    WRITER_ACCEPTED,
+    build_evidence_write_intent,
+)
 from momentum_hunter.event_runtime_writer_ipc import (
     EphemeralWriterCapability,
     WriterEnvelopeSender,
+    WriterEnvelope,
 )
 
 
@@ -113,6 +118,12 @@ class ContinuousProductionTests(unittest.TestCase):
             }
             envelope = sender.build(artifact_name="event-decision-cycle-ledger", payload=payload)
             self.assertEqual("ACCEPTED", server._persist(envelope)["status"])
+            stored_paths = list((server.root / "records").rglob("*.json"))
+            self.assertEqual(1, len(stored_paths))
+            stored = json.loads(stored_paths[0].read_text(encoding="ascii"))
+            self.assertEqual(2, stored["schemaVersion"])
+            self.assertNotIn("payload_json", stored["intent"])
+            self.assertEqual(json.loads(intent.payload_json or "{}"), stored["payload"])
             server.close()
 
             restarted = ProductionWriterServer(config)
@@ -142,6 +153,32 @@ class ContinuousProductionTests(unittest.TestCase):
             self.assertEqual(config["configurationFingerprint"], deployment_configuration_fingerprint(config))
             config["broadDiscoverySeconds"] = 301
             self.assertNotEqual(config["configurationFingerprint"], deployment_configuration_fingerprint(config))
+
+    def test_runtime_remote_and_dedicated_writer_compose_without_duplicate_payload(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "ipc.key").write_bytes(secrets.token_bytes(32))
+            config = self._config(root)
+            source = "production-continuous-runtime-composition"
+            server = ProductionWriterServer(config)
+            remote = ProductionRemoteWriter(config, source_identity=source)
+
+            def direct_request(frame):
+                if frame["frameType"] == "HELLO":
+                    return server._handshake(frame)
+                return server._persist(WriterEnvelope(**frame["envelope"]))
+
+            remote._request = direct_request
+            try:
+                result = remote.write_intent(self._intent(source))
+                self.assertEqual(WRITER_ACCEPTED, result.status)
+                stored_paths = list((server.root / "records").rglob("*.json"))
+                self.assertEqual(1, len(stored_paths))
+                stored = json.loads(stored_paths[0].read_text(encoding="ascii"))
+                self.assertNotIn("payload_json", stored["intent"])
+                self.assertEqual("COMPOSITION_CYCLE", stored["payload"]["payloadType"])
+            finally:
+                server.close()
 
     def test_payload_secret_shape_is_rejected(self):
         with self.assertRaises(ProductionDeploymentError):

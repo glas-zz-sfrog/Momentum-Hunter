@@ -73,16 +73,94 @@ EVICTED_LOWER_PRIORITY = "EVICTED_LOWER_PRIORITY"
 
 WRITER_ACCEPTED = "ACCEPTED"
 WRITER_DUPLICATE = "DUPLICATE"
-WRITER_UNAVAILABLE = "UNAVAILABLE"
-WRITER_SLOW = "SLOW"
+WRITER_UNAVAILABLE = "WRITER_UNAVAILABLE"
+WRITER_SLOW = "WRITER_SLOW"
+PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
+SERIALIZATION_INVALID = "SERIALIZATION_INVALID"
+SCHEMA_INVALID = "SCHEMA_INVALID"
+IPC_AUTH_REJECTED = "IPC_AUTH_REJECTED"
+IPC_PROTOCOL_REJECTED = "IPC_PROTOCOL_REJECTED"
+WRITER_OWNER_CONFLICT = "WRITER_OWNER_CONFLICT"
+WRITE_FAILED = "WRITE_FAILED"
+EVIDENCE_REJECTED_PERMANENT = "EVIDENCE_REJECTED_PERMANENT"
 WRITER_RESULTS = frozenset(
-    {WRITER_ACCEPTED, WRITER_DUPLICATE, WRITER_UNAVAILABLE, WRITER_SLOW}
+    {
+        WRITER_ACCEPTED,
+        WRITER_DUPLICATE,
+        WRITER_UNAVAILABLE,
+        WRITER_SLOW,
+        PAYLOAD_TOO_LARGE,
+        SERIALIZATION_INVALID,
+        SCHEMA_INVALID,
+        IPC_AUTH_REJECTED,
+        IPC_PROTOCOL_REJECTED,
+        WRITER_OWNER_CONFLICT,
+        WRITE_FAILED,
+    }
 )
+TRANSIENT_WRITER_RESULTS = frozenset(
+    {WRITER_UNAVAILABLE, WRITER_SLOW, WRITE_FAILED}
+)
+PERMANENT_RECORD_WRITER_RESULTS = frozenset(
+    {PAYLOAD_TOO_LARGE, SERIALIZATION_INVALID, SCHEMA_INVALID, IPC_PROTOCOL_REJECTED}
+)
+
+PREMARKET_DEFERRED = "PREMARKET_DEFERRED"
+REGULAR_SESSION_ROLLOVER = "REGULAR_SESSION_ROLLOVER"
+
+PIPELINE_INITIALIZING = "INITIALIZING"
+PIPELINE_FORWARD_PROGRESS = "FORWARD_PROGRESS"
+PIPELINE_STALLED = "STALLED"
+FAILED_FORWARD_PROGRESS = "FAILED_FORWARD_PROGRESS"
+
+CHECKPOINT_SCHEMA_VERSION = 2
 
 PROCESS_ALIVE = "PROCESS_ALIVE"
 DISCOVERY_STALE = "DISCOVERY_STALE"
 COMPOSITION_STALE = "COMPOSITION_STALE"
 DENOMINATOR_DEGRADED = "DENOMINATOR_DEGRADED"
+
+
+@dataclass(frozen=True)
+class WriterPreflight:
+    accepted: bool
+    payload_bytes: int
+    encoded_envelope_bytes: int
+    protocol_ceiling_bytes: int
+    failure_class: str | None = None
+
+    def __post_init__(self) -> None:
+        if min(
+            self.payload_bytes,
+            self.encoded_envelope_bytes,
+            self.protocol_ceiling_bytes,
+        ) < 0:
+            raise ContinuousRuntimeError("Writer preflight sizes cannot be negative.")
+        if self.protocol_ceiling_bytes <= 0:
+            raise ContinuousRuntimeError("Writer preflight ceiling must be positive.")
+        if self.accepted and self.failure_class is not None:
+            raise ContinuousRuntimeError("Accepted writer preflight has a failure class.")
+        if not self.accepted and self.failure_class not in WRITER_RESULTS:
+            raise ContinuousRuntimeError("Writer preflight failure class is unsupported.")
+
+
+@dataclass(frozen=True)
+class WriterWriteResult:
+    status: str
+    payload_bytes: int = 0
+    encoded_envelope_bytes: int = 0
+    protocol_ceiling_bytes: int = 0
+    detail_code: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.status not in WRITER_RESULTS:
+            raise ContinuousRuntimeError("Writer result status is unsupported.")
+        if min(
+            self.payload_bytes,
+            self.encoded_envelope_bytes,
+            self.protocol_ceiling_bytes,
+        ) < 0:
+            raise ContinuousRuntimeError("Writer result sizes cannot be negative.")
 
 
 class ContinuousRuntimeError(ValueError):
@@ -128,6 +206,13 @@ def _timestamp(value: datetime, label: str = "timestamp") -> str:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ContinuousRuntimeError(f"{label} must be timezone-aware.")
     return value.isoformat()
+
+
+def _optional_checkpoint_timestamp(
+    payload: Mapping[str, object], key: str
+) -> datetime | None:
+    value = payload.get(key)
+    return _parse_timestamp(str(value), key) if value else None
 
 
 def _require_fingerprint(value: str, label: str) -> None:
@@ -280,11 +365,18 @@ class ReadinessResult:
     fingerprint: str
     ready: bool
     failure_reason: str | None = None
+    deferred: bool = False
 
     def __post_init__(self) -> None:
         _require_fingerprint(self.fingerprint, "Readiness fingerprint")
         if self.ready and self.failure_reason:
             raise ContinuousRuntimeError("Ready evidence cannot carry a failure reason.")
+        if self.deferred and (self.ready or self.failure_reason):
+            raise ContinuousRuntimeError(
+                "Deferred readiness is neither ready nor failed."
+            )
+        if self.deferred and self.status != PREMARKET_DEFERRED:
+            raise ContinuousRuntimeError("Deferred readiness status is inconsistent.")
 
 
 @dataclass(frozen=True)
@@ -361,7 +453,11 @@ class DenominatorSource(Protocol):
 
 
 class EvidenceIntentWriter(Protocol):
-    def write_intent(self, intent: "EvidenceWriteIntent") -> str: ...
+    def write_intent(
+        self, intent: "EvidenceWriteIntent"
+    ) -> str | WriterWriteResult: ...
+
+    def preflight_intent(self, intent: "EvidenceWriteIntent") -> WriterPreflight: ...
 
 
 @dataclass(frozen=True)
@@ -398,6 +494,49 @@ class EvidenceWriteIntent:
         if self.predecessor_identity is not None and not self.predecessor_identity.strip():
             raise ContinuousRuntimeError("Intent predecessor identity is malformed.")
         _parse_timestamp(self.requested_at, "Intent timestamp")
+
+
+@dataclass(frozen=True)
+class EvidenceRejection:
+    failed_intent_id: str
+    failed_record_identity: str
+    failed_record_fingerprint: str
+    payload_fingerprint: str
+    payload_bytes: int
+    encoded_envelope_bytes: int
+    protocol_ceiling_bytes: int
+    retry_count: int
+    failure_class: str
+    source_cycle: str
+    known_at: str
+    compact_intent_id: str
+    fingerprint: str
+
+    def __post_init__(self) -> None:
+        for label, value in (
+            ("Failed intent identity", self.failed_intent_id),
+            ("Failed record identity", self.failed_record_identity),
+            ("Source cycle", self.source_cycle),
+            ("Compact intent identity", self.compact_intent_id),
+        ):
+            if not value.strip():
+                raise ContinuousRuntimeError(f"{label} is required.")
+        for label, value in (
+            ("Failed record fingerprint", self.failed_record_fingerprint),
+            ("Payload fingerprint", self.payload_fingerprint),
+            ("Evidence rejection fingerprint", self.fingerprint),
+        ):
+            _require_fingerprint(value, label)
+        if self.failure_class not in PERMANENT_RECORD_WRITER_RESULTS:
+            raise ContinuousRuntimeError("Evidence rejection is not record-terminal.")
+        if min(
+            self.payload_bytes,
+            self.encoded_envelope_bytes,
+            self.protocol_ceiling_bytes,
+            self.retry_count,
+        ) < 0:
+            raise ContinuousRuntimeError("Evidence rejection sizes cannot be negative.")
+        _parse_timestamp(self.known_at, "Evidence rejection timestamp")
 
 
 def validate_evidence_write_intent(intent: EvidenceWriteIntent) -> None:
@@ -706,6 +845,8 @@ class RuntimeHealth:
     provider_bound_symbols: int
     provider_bound_denominator_cycles: int
     readiness_requests: int
+    readiness_completed: int
+    readiness_deferred: int
     ready_members: int
     readiness_failures: int
     composition_cycles: int
@@ -723,6 +864,30 @@ class RuntimeHealth:
     restart_count: int
     writer_unavailable_events: int
     writer_slow_events: int
+    evidence_accepted_count: int
+    evidence_permanent_rejections: int
+    payload_too_large_events: int
+    heartbeat_count: int
+    last_evidence_payload_bytes: int
+    last_evidence_encoded_envelope_bytes: int
+    maximum_evidence_encoded_envelope_bytes: int
+    evidence_protocol_ceiling_bytes: int
+    last_tick_at: str | None
+    last_discovery_started_at: str | None
+    last_discovery_completed_at: str | None
+    last_readiness_completed_at: str | None
+    last_composition_completed_at: str | None
+    last_denominator_completed_at: str | None
+    last_evidence_accepted_at: str | None
+    active_queue: str | None
+    queue_head_age_seconds: float
+    queue_head_retry_count: int
+    queue_head_failure_class: str | None
+    last_forward_progress_at: str | None
+    stalled_since: str | None
+    pipeline_state: str
+    stall_blocker: str | None
+    stall_threshold_seconds: float
     fingerprint: str
 
 
@@ -838,6 +1003,21 @@ class ContinuousOpportunityRuntime:
         self.next_housekeeping_at: datetime | None = None
         self.last_successful_discovery_at: datetime | None = None
         self.last_successful_composition_at: datetime | None = None
+        self.last_tick_at: datetime | None = None
+        self.last_discovery_started_at: datetime | None = None
+        self.last_discovery_completed_at: datetime | None = None
+        self.last_readiness_completed_at: datetime | None = None
+        self.last_composition_completed_at: datetime | None = None
+        self.last_denominator_completed_at: datetime | None = None
+        self.last_evidence_accepted_at: datetime | None = None
+        self.last_forward_progress_at: datetime | None = None
+        self.stalled_since: datetime | None = None
+        self.pipeline_state = PIPELINE_INITIALIZING
+        self.stall_blocker: str | None = None
+        self._resolved_discovery_cadence_seconds = (
+            config.cadence.broad_discovery_seconds
+        )
+        self._session_work_eligible = False
         self._queues = {
             name: BoundedWorkQueue(name, capacity)
             for name, capacity in config.queues.as_mapping().items()
@@ -854,6 +1034,8 @@ class ContinuousOpportunityRuntime:
                 "provider_bound_symbols",
                 "provider_bound_denominator_cycles",
                 "readiness_requests",
+                "readiness_completed",
+                "readiness_deferred",
                 "ready_members",
                 "readiness_failures",
                 "composition_cycles",
@@ -867,6 +1049,10 @@ class ContinuousOpportunityRuntime:
                 "restart_count",
                 "writer_unavailable_events",
                 "writer_slow_events",
+                "evidence_accepted_count",
+                "evidence_permanent_rejections",
+                "payload_too_large_events",
+                "heartbeat_count",
             )
         }
         self._backpressure: deque[BackpressureDecision] = deque(
@@ -884,6 +1070,15 @@ class ContinuousOpportunityRuntime:
         self._membership_generations: dict[str, int] = {}
         self._terminal_cycle_ids: OrderedDict[str, str] = OrderedDict()
         self._provider_bound_events: OrderedDict[str, QueuedWork] = OrderedDict()
+        self._deferred_readiness: OrderedDict[str, QueuedWork] = OrderedDict()
+        self._evidence_rejections: OrderedDict[str, EvidenceRejection] = OrderedDict()
+        self._evidence_retry_counts: dict[str, int] = {}
+        self._evidence_retry_failure_class: dict[str, str] = {}
+        self._evidence_retry_not_before: dict[str, datetime] = {}
+        self._last_evidence_payload_bytes = 0
+        self._last_evidence_encoded_envelope_bytes = 0
+        self._maximum_evidence_encoded_envelope_bytes = 0
+        self._evidence_protocol_ceiling_bytes = 0
         self._active_degradations: set[str] = set()
         self._accepting_work = False
         self._stale_lease_takeovers = 0
@@ -902,6 +1097,7 @@ class ContinuousOpportunityRuntime:
         self._stale_lease_takeovers += int(stale)
         self.started_at = now
         self.last_heartbeat_at = now
+        self.last_tick_at = now
         self.next_discovery_at = now
         self.next_housekeeping_at = now
         self._accepting_work = True
@@ -970,6 +1166,49 @@ class ContinuousOpportunityRuntime:
         )
         return self._enqueue(DISCOVERY_QUEUE, work, now)
 
+    def set_session_eligibility(self, eligible: bool, now: datetime) -> None:
+        """Expose session eligibility to health without inventing strategy state."""
+
+        _timestamp(now)
+        self._session_work_eligible = bool(eligible)
+        if not eligible:
+            self.stalled_since = None
+            self.stall_blocker = None
+            self._active_degradations.discard(FAILED_FORWARD_PROGRESS)
+            if self.pipeline_state == PIPELINE_STALLED:
+                self.pipeline_state = (
+                    PIPELINE_FORWARD_PROGRESS
+                    if self.last_forward_progress_at is not None
+                    else PIPELINE_INITIALIZING
+                )
+
+    def release_deferred_readiness(self, now: datetime) -> int:
+        """Prospectively requeue retained premarket candidates at regular open."""
+
+        _timestamp(now)
+        released = 0
+        for symbol, deferred in tuple(self._deferred_readiness.items()):
+            rollover_fingerprint = _fingerprint(
+                "continuous-regular-session-rollover-v1",
+                {
+                    "symbol": symbol,
+                    "deferred_work": deferred.fingerprint,
+                    "released_at": _timestamp(now),
+                },
+            )
+            decision = self._enqueue_readiness(
+                symbol=symbol,
+                trigger=REGULAR_SESSION_ROLLOVER,
+                requested_at=_timestamp(now),
+                source_fingerprint=rollover_fingerprint,
+                priority=deferred.priority,
+                now=now,
+            )
+            if decision not in {REJECTED_CAPACITY, REJECTED_STALE}:
+                del self._deferred_readiness[symbol]
+                released += 1
+        return released
+
     def tick(
         self,
         now: datetime,
@@ -982,6 +1221,13 @@ class ContinuousOpportunityRuntime:
         _positive(work_budget, "Work budget")
         if self.lease is None:
             raise RuntimeLeaseError("Runtime has no logical lease.")
+        self.last_tick_at = now
+        self._session_work_eligible = True
+        self._resolved_discovery_cadence_seconds = (
+            self.config.cadence.broad_discovery_seconds
+            if discovery_cadence_seconds is None
+            else discovery_cadence_seconds
+        )
         self.lease = self.lease_registry.heartbeat(
             self.lease, now, self.config.lease_ttl_seconds
         )
@@ -1005,6 +1251,7 @@ class ContinuousOpportunityRuntime:
             processed += 1
             if not made_progress and queue_name == EVIDENCE_QUEUE:
                 break
+        self._apply_forward_progress_watchdog(now)
         if self.process_state != FAILED:
             self.process_state = DEGRADED if self._active_degradations else RUNNING
         self._checkpoint(now)
@@ -1069,6 +1316,9 @@ class ContinuousOpportunityRuntime:
         payload = checkpoint_store.load(config.runtime_identity)
         if payload.get("contract_version") != CONTRACT_VERSION:
             raise RuntimeCheckpointError("Checkpoint contract version is incompatible.")
+        checkpoint_schema = int(payload.get("checkpoint_schema_version", 1))
+        if checkpoint_schema not in {1, CHECKPOINT_SCHEMA_VERSION}:
+            raise RuntimeCheckpointError("Checkpoint schema version is incompatible.")
         if payload.get("config_fingerprint") != config.fingerprint:
             raise RuntimeCheckpointError("Checkpoint configuration identity changed.")
         runtime = cls(
@@ -1092,6 +1342,46 @@ class ContinuousOpportunityRuntime:
         runtime._stale_lease_takeovers = int(stale)
         runtime.started_at = _parse_timestamp(str(payload["started_at"]))
         runtime.last_heartbeat_at = _parse_timestamp(str(payload["last_heartbeat_at"]))
+        runtime.last_tick_at = _optional_checkpoint_timestamp(payload, "last_tick_at")
+        runtime.last_discovery_started_at = _optional_checkpoint_timestamp(
+            payload, "last_discovery_started_at"
+        )
+        runtime.last_discovery_completed_at = _optional_checkpoint_timestamp(
+            payload, "last_discovery_completed_at"
+        )
+        runtime.last_readiness_completed_at = _optional_checkpoint_timestamp(
+            payload, "last_readiness_completed_at"
+        )
+        runtime.last_composition_completed_at = _optional_checkpoint_timestamp(
+            payload, "last_composition_completed_at"
+        )
+        runtime.last_denominator_completed_at = _optional_checkpoint_timestamp(
+            payload, "last_denominator_completed_at"
+        )
+        runtime.last_evidence_accepted_at = _optional_checkpoint_timestamp(
+            payload, "last_evidence_accepted_at"
+        )
+        runtime.last_forward_progress_at = _optional_checkpoint_timestamp(
+            payload, "last_forward_progress_at"
+        )
+        runtime.stalled_since = _optional_checkpoint_timestamp(payload, "stalled_since")
+        runtime.pipeline_state = str(
+            payload.get("pipeline_state", PIPELINE_INITIALIZING)
+        )
+        runtime.stall_blocker = (
+            str(payload["stall_blocker"])
+            if payload.get("stall_blocker") is not None
+            else None
+        )
+        runtime._resolved_discovery_cadence_seconds = float(
+            payload.get(
+                "resolved_discovery_cadence_seconds",
+                config.cadence.broad_discovery_seconds,
+            )
+        )
+        runtime._session_work_eligible = bool(
+            payload.get("session_work_eligible", False)
+        )
         runtime.next_discovery_at = _parse_timestamp(str(payload["next_discovery_at"]))
         runtime.next_housekeeping_at = _parse_timestamp(str(payload["next_housekeeping_at"]))
         if payload.get("last_successful_discovery_at"):
@@ -1102,13 +1392,10 @@ class ContinuousOpportunityRuntime:
             runtime.last_successful_composition_at = _parse_timestamp(
                 str(payload["last_successful_composition_at"])
             )
-        runtime._counters.update({key: int(value) for key, value in dict(payload["counters"]).items()})
+        for key, value in dict(payload["counters"]).items():
+            if key in runtime._counters:
+                runtime._counters[key] = int(value)
         runtime._counters["restart_count"] += 1
-        for name, items in dict(payload["queues"]).items():
-            if name not in runtime._queues or not isinstance(items, list):
-                raise RuntimeCheckpointError("Checkpoint queue topology changed.")
-            for item in items:
-                runtime._queues[name].restore(QueuedWork(**item))
         for item in payload.get("backpressure", []):
             runtime._backpressure.append(BackpressureDecision(**item))
         runtime._symbol_failures = OrderedDict(
@@ -1121,6 +1408,42 @@ class ContinuousOpportunityRuntime:
         )
         runtime._sequence = int(payload.get("sequence", 0))
         runtime._last_intent_id = payload.get("last_intent_id")
+        runtime._evidence_rejections = OrderedDict(
+            (item["failed_intent_id"], EvidenceRejection(**item))
+            for item in payload.get("evidence_rejections", [])
+        )
+        runtime._evidence_retry_counts = {
+            str(key): int(value)
+            for key, value in dict(payload.get("evidence_retry_counts", {})).items()
+        }
+        runtime._evidence_retry_failure_class = {
+            str(key): str(value)
+            for key, value in dict(
+                payload.get("evidence_retry_failure_class", {})
+            ).items()
+        }
+        runtime._evidence_retry_not_before = {
+            str(key): _parse_timestamp(str(value), "Evidence retry timestamp")
+            for key, value in dict(
+                payload.get("evidence_retry_not_before", {})
+            ).items()
+        }
+        runtime._last_evidence_payload_bytes = int(
+            payload.get("last_evidence_payload_bytes", 0)
+        )
+        runtime._last_evidence_encoded_envelope_bytes = int(
+            payload.get("last_evidence_encoded_envelope_bytes", 0)
+        )
+        runtime._maximum_evidence_encoded_envelope_bytes = int(
+            payload.get("maximum_evidence_encoded_envelope_bytes", 0)
+        )
+        runtime._evidence_protocol_ceiling_bytes = int(
+            payload.get("evidence_protocol_ceiling_bytes", 0)
+        )
+        runtime._deferred_readiness = OrderedDict(
+            (item["key"], QueuedWork(**item))
+            for item in payload.get("deferred_readiness", [])
+        )
         runtime._setup_identities = {
             str(key): str(value) for key, value in dict(payload.get("setup_identities", {})).items()
         }
@@ -1139,12 +1462,33 @@ class ContinuousOpportunityRuntime:
         if len(runtime._provider_bound_events) > config.maximum_tracked_symbols:
             raise RuntimeCheckpointError("Provider-bound checkpoint state exceeds its bound.")
         runtime._active_degradations = set(payload.get("active_degradations", []))
+        for name, items in dict(payload["queues"]).items():
+            if name not in runtime._queues or not isinstance(items, list):
+                raise RuntimeCheckpointError("Checkpoint queue topology changed.")
+            for item in items:
+                work = QueuedWork(**item)
+                if name == EVIDENCE_QUEUE:
+                    runtime._restore_evidence_work(
+                        work,
+                        now,
+                        legacy_envelope=checkpoint_schema == 1,
+                    )
+                else:
+                    runtime._queues[name].restore(work)
         in_flight = payload.get("in_flight")
         if isinstance(in_flight, dict):
             queue_name = str(payload.get("in_flight_queue"))
             if queue_name not in runtime._queues:
                 raise RuntimeCheckpointError("Checkpoint in-flight queue is invalid.")
-            runtime._queues[queue_name].restore(QueuedWork(**in_flight))
+            work = QueuedWork(**in_flight)
+            if queue_name == EVIDENCE_QUEUE:
+                runtime._restore_evidence_work(
+                    work,
+                    now,
+                    legacy_envelope=checkpoint_schema == 1,
+                )
+            else:
+                runtime._queues[queue_name].restore(work)
         runtime._in_flight = None
         runtime._in_flight_queue = None
         runtime._accepting_work = True
@@ -1159,6 +1503,7 @@ class ContinuousOpportunityRuntime:
                 return WRITER_DUPLICATE
             self._degrade("EVIDENCE_SEQUENCE_CONFLICT")
             raise RuntimeSequenceError("Conflicting duplicate evidence sequence.")
+        validate_evidence_write_intent(intent)
         expected = self._sequence + 1
         if intent.sequence != expected:
             self._record_backpressure(
@@ -1186,6 +1531,23 @@ class ContinuousOpportunityRuntime:
             self._counters["incomplete_denominator_cycles"] += 1
             self._degrade("EVIDENCE_HISTORY_CAPACITY")
             return REJECTED_CAPACITY
+        preflight = self._writer_preflight(intent)
+        self._record_preflight(preflight)
+        if not preflight.accepted:
+            if preflight.failure_class not in PERMANENT_RECORD_WRITER_RESULTS:
+                self._degrade(preflight.failure_class or WRITER_UNAVAILABLE)
+                return preflight.failure_class or WRITER_UNAVAILABLE
+            return self._replace_with_compact_rejection(
+                intent,
+                preflight,
+                now,
+                replace_existing=False,
+            )
+        return self._admit_preflighted_intent(intent, now)
+
+    def _admit_preflighted_intent(
+        self, intent: EvidenceWriteIntent, now: datetime
+    ) -> str:
         work = build_work(
             kind="EVIDENCE",
             key=str(intent.sequence),
@@ -1203,6 +1565,175 @@ class ContinuousOpportunityRuntime:
         self._last_intent_id = intent.intent_id
         return decision
 
+    def _writer_preflight(self, intent: EvidenceWriteIntent) -> WriterPreflight:
+        callback = getattr(self.writer, "preflight_intent", None)
+        if callback is None:
+            payload_bytes = len((intent.payload_json or "").encode("utf-8"))
+            return WriterPreflight(
+                accepted=True,
+                payload_bytes=payload_bytes,
+                encoded_envelope_bytes=payload_bytes,
+                protocol_ceiling_bytes=2**31 - 1,
+            )
+        result = callback(intent)
+        if not isinstance(result, WriterPreflight):
+            raise ContinuousRuntimeError("Writer preflight returned an invalid result.")
+        return result
+
+    def _record_preflight(self, preflight: WriterPreflight) -> None:
+        self._last_evidence_payload_bytes = preflight.payload_bytes
+        self._last_evidence_encoded_envelope_bytes = preflight.encoded_envelope_bytes
+        self._maximum_evidence_encoded_envelope_bytes = max(
+            self._maximum_evidence_encoded_envelope_bytes,
+            preflight.encoded_envelope_bytes,
+        )
+        self._evidence_protocol_ceiling_bytes = preflight.protocol_ceiling_bytes
+
+    def _replace_with_compact_rejection(
+        self,
+        intent: EvidenceWriteIntent,
+        preflight: WriterPreflight,
+        now: datetime,
+        *,
+        replace_existing: bool,
+    ) -> str:
+        if preflight.failure_class not in PERMANENT_RECORD_WRITER_RESULTS:
+            raise ContinuousRuntimeError("Writer failure is not record-terminal.")
+        failure_payload = {
+            "payloadType": "EVIDENCE_REJECTED_PERMANENT",
+            "failedIntentId": intent.intent_id,
+            "failedRecordIdentity": intent.record_identity,
+            "failedRecordFingerprint": intent.record_fingerprint,
+            "payloadFingerprint": intent.payload_fingerprint,
+            "payloadBytes": preflight.payload_bytes,
+            "encodedEnvelopeBytes": preflight.encoded_envelope_bytes,
+            "protocolCeilingBytes": preflight.protocol_ceiling_bytes,
+            "retryCount": self._evidence_retry_counts.get(
+                intent.intent_id,
+                int(self._counters["writer_unavailable_events"]),
+            ),
+            "failureClass": preflight.failure_class,
+            "sourceCycle": intent.record_identity,
+            "knownAt": intent.requested_at,
+            "authority": RESEARCH_AUTHORITY,
+            "executionAuthority": EXECUTION_AUTHORITY_NONE,
+            "orderCapability": ORDER_CAPABILITY_UNAVAILABLE,
+        }
+        failure_fingerprint = _fingerprint(
+            "continuous-evidence-rejection-record-v1", failure_payload
+        )
+        compact = build_evidence_write_intent(
+            runtime_instance_id=intent.runtime_instance_id,
+            sequence=intent.sequence,
+            evidence_type="SYSTEM_FAILURE",
+            record_identity=f"evidence-rejection-{failure_fingerprint[:24]}",
+            record_fingerprint=failure_fingerprint,
+            predecessor_identity=intent.predecessor_identity,
+            requested_at=intent.requested_at,
+            payload_fingerprint=_fingerprint(
+                "continuous-evidence-payload-v1", failure_payload
+            ),
+            payload=failure_payload,
+        )
+        compact_preflight = self._writer_preflight(compact)
+        self._record_preflight(compact_preflight)
+        if not compact_preflight.accepted:
+            raise ContinuousRuntimeError(
+                "Compact evidence-rejection record failed writer preflight."
+            )
+        rejection_values = {
+            "failed_intent_id": intent.intent_id,
+            "failed_record_identity": intent.record_identity,
+            "failed_record_fingerprint": intent.record_fingerprint,
+            "payload_fingerprint": intent.payload_fingerprint,
+            "payload_bytes": preflight.payload_bytes,
+            "encoded_envelope_bytes": preflight.encoded_envelope_bytes,
+            "protocol_ceiling_bytes": preflight.protocol_ceiling_bytes,
+            "retry_count": self._evidence_retry_counts.get(
+                intent.intent_id,
+                int(self._counters["writer_unavailable_events"]),
+            ),
+            "failure_class": preflight.failure_class,
+            "source_cycle": intent.record_identity,
+            "known_at": intent.requested_at,
+            "compact_intent_id": compact.intent_id,
+        }
+        rejection = EvidenceRejection(
+            **rejection_values,
+            fingerprint=_fingerprint(
+                "continuous-evidence-rejection-v1", rejection_values
+            ),
+        )
+        if replace_existing:
+            if intent.sequence != self._sequence or self._last_intent_id != intent.intent_id:
+                raise RuntimeCheckpointError(
+                    "A terminal poison record is not the checkpoint lineage head."
+                )
+            self._intents[intent.sequence] = compact
+            self._last_intent_id = compact.intent_id
+        else:
+            self._intents[intent.sequence] = compact
+            self._sequence = intent.sequence
+            self._last_intent_id = compact.intent_id
+        self._evidence_rejections[intent.intent_id] = rejection
+        self._trim_ordered(
+            self._evidence_rejections, self.config.evidence_history_capacity
+        )
+        self._counters["evidence_permanent_rejections"] += 1
+        if preflight.failure_class == PAYLOAD_TOO_LARGE:
+            self._counters["payload_too_large_events"] += 1
+        self._evidence_retry_counts.pop(intent.intent_id, None)
+        self._evidence_retry_failure_class.pop(intent.intent_id, None)
+        self._evidence_retry_not_before.pop(intent.intent_id, None)
+        work = build_work(
+            kind="EVIDENCE",
+            key=str(compact.sequence),
+            requested_at=compact.requested_at,
+            priority=100,
+            payload=asdict(compact),
+        )
+        decision = self._enqueue(EVIDENCE_QUEUE, work, now)
+        if decision in {REJECTED_CAPACITY, REJECTED_STALE}:
+            raise ContinuousRuntimeError(
+                "Compact evidence-rejection record could not enter the queue."
+            )
+        self._degrade("EVIDENCE_REJECTED_PERMANENT")
+        return EVIDENCE_REJECTED_PERMANENT
+
+    def _restore_evidence_work(
+        self,
+        work: QueuedWork,
+        now: datetime,
+        *,
+        legacy_envelope: bool,
+    ) -> None:
+        intent = EvidenceWriteIntent(**work.payload)
+        legacy_callback = getattr(self.writer, "preflight_legacy_intent", None)
+        preflight = (
+            legacy_callback(intent)
+            if legacy_envelope and legacy_callback is not None
+            else self._writer_preflight(intent)
+        )
+        if not isinstance(preflight, WriterPreflight):
+            raise RuntimeCheckpointError(
+                "Legacy evidence preflight returned an invalid result."
+            )
+        self._record_preflight(preflight)
+        if preflight.accepted:
+            self._queues[EVIDENCE_QUEUE].restore(work)
+            return
+        if preflight.failure_class not in PERMANENT_RECORD_WRITER_RESULTS:
+            self._queues[EVIDENCE_QUEUE].restore(work)
+            return
+        self._replace_with_compact_rejection(
+            intent,
+            preflight,
+            now,
+            replace_existing=True,
+        )
+        self._active_degradations.discard("WRITER_UNAVAILABLE")
+        self._active_degradations.discard("WRITER_SLOW")
+
     @property
     def pending_work(self) -> int:
         return sum(len(queue) for queue in self._queues.values()) + int(self._in_flight is not None)
@@ -1218,6 +1749,14 @@ class ContinuousOpportunityRuntime:
     @property
     def evidence_intents(self) -> tuple[EvidenceWriteIntent, ...]:
         return tuple(self._intents.values())
+
+    @property
+    def evidence_rejections(self) -> tuple[EvidenceRejection, ...]:
+        return tuple(self._evidence_rejections.values())
+
+    @property
+    def deferred_readiness_symbols(self) -> tuple[str, ...]:
+        return tuple(self._deferred_readiness)
 
     def queue_metrics(self, now: datetime) -> dict[str, QueueMetrics]:
         return {name: queue.metrics(now) for name, queue in self._queues.items()}
@@ -1238,7 +1777,24 @@ class ContinuousOpportunityRuntime:
             flags.append(COMPOSITION_STALE)
         if any(reason.startswith("DENOMINATOR_") for reason in self._active_degradations):
             flags.append(DENOMINATOR_DEGRADED)
+        if FAILED_FORWARD_PROGRESS in self._active_degradations:
+            flags.append(FAILED_FORWARD_PROGRESS)
         metrics = self.queue_metrics(now)
+        active_queue = self._next_queue_with_work()
+        queue_head = (
+            self._queues[active_queue].peek() if active_queue is not None else None
+        )
+        queue_head_failure_class = None
+        queue_head_retry_count = 0
+        if active_queue == EVIDENCE_QUEUE and queue_head is not None:
+            queued_intent = EvidenceWriteIntent(**queue_head.payload)
+            queue_head_failure_class = self._evidence_retry_failure_class.get(
+                queued_intent.intent_id
+            )
+            queue_head_retry_count = self._evidence_retry_counts.get(
+                queued_intent.intent_id, 0
+            )
+        stall_threshold = self._stall_threshold_seconds()
         lease_id = self.lease.runtime_lease_id if self.lease else "NONE"
         payload = {
             "contract_version": CONTRACT_VERSION,
@@ -1264,6 +1820,68 @@ class ContinuousOpportunityRuntime:
                 _timestamp(self.last_successful_composition_at)
                 if self.last_successful_composition_at
                 else None
+            ),
+            "last_tick_at": (
+                _timestamp(self.last_tick_at) if self.last_tick_at else None
+            ),
+            "last_discovery_started_at": (
+                _timestamp(self.last_discovery_started_at)
+                if self.last_discovery_started_at
+                else None
+            ),
+            "last_discovery_completed_at": (
+                _timestamp(self.last_discovery_completed_at)
+                if self.last_discovery_completed_at
+                else None
+            ),
+            "last_readiness_completed_at": (
+                _timestamp(self.last_readiness_completed_at)
+                if self.last_readiness_completed_at
+                else None
+            ),
+            "last_composition_completed_at": (
+                _timestamp(self.last_composition_completed_at)
+                if self.last_composition_completed_at
+                else None
+            ),
+            "last_denominator_completed_at": (
+                _timestamp(self.last_denominator_completed_at)
+                if self.last_denominator_completed_at
+                else None
+            ),
+            "last_evidence_accepted_at": (
+                _timestamp(self.last_evidence_accepted_at)
+                if self.last_evidence_accepted_at
+                else None
+            ),
+            "active_queue": active_queue,
+            "queue_head_age_seconds": (
+                metrics[active_queue].oldest_age_seconds
+                if active_queue is not None
+                else 0.0
+            ),
+            "queue_head_retry_count": queue_head_retry_count,
+            "queue_head_failure_class": queue_head_failure_class,
+            "last_forward_progress_at": (
+                _timestamp(self.last_forward_progress_at)
+                if self.last_forward_progress_at
+                else None
+            ),
+            "stalled_since": (
+                _timestamp(self.stalled_since) if self.stalled_since else None
+            ),
+            "pipeline_state": self.pipeline_state,
+            "stall_blocker": self.stall_blocker,
+            "stall_threshold_seconds": stall_threshold,
+            "last_evidence_payload_bytes": self._last_evidence_payload_bytes,
+            "last_evidence_encoded_envelope_bytes": (
+                self._last_evidence_encoded_envelope_bytes
+            ),
+            "maximum_evidence_encoded_envelope_bytes": (
+                self._maximum_evidence_encoded_envelope_bytes
+            ),
+            "evidence_protocol_ceiling_bytes": (
+                self._evidence_protocol_ceiling_bytes
             ),
         }
         return RuntimeHealth(
@@ -1306,7 +1924,13 @@ class ContinuousOpportunityRuntime:
                 )
 
     def _next_queue_with_work(self) -> str | None:
-        for name in (EVIDENCE_QUEUE, DISCOVERY_QUEUE, READINESS_QUEUE, COMPOSITION_QUEUE, HEALTH_QUEUE):
+        for name in (
+            HEALTH_QUEUE,
+            EVIDENCE_QUEUE,
+            DISCOVERY_QUEUE,
+            READINESS_QUEUE,
+            COMPOSITION_QUEUE,
+        ):
             if len(self._queues[name]):
                 return name
         return None
@@ -1326,6 +1950,7 @@ class ContinuousOpportunityRuntime:
                 self._process_composition(work, now)
             elif queue_name == HEALTH_QUEUE:
                 self.last_heartbeat_at = now
+                self._counters["heartbeat_count"] += 1
         finally:
             self._in_flight = None
             self._in_flight_queue = None
@@ -1339,15 +1964,18 @@ class ContinuousOpportunityRuntime:
             reason=str(payload["reason"]),
         )
         self._counters["discovery_pulses_attempted"] += 1
+        self.last_discovery_started_at = now
         try:
             pulse = self.discovery_source.discover(request)
         except Exception as exc:
             self._counters["discovery_failures"] += 1
+            self.last_discovery_completed_at = now
             self._degrade("DISCOVERY_FAILURE")
             self._record_system_failure("DISCOVERY", type(exc).__name__, now, work.fingerprint)
             return
         if len(set(pulse.symbols_for_readiness)) > self.config.maximum_tracked_symbols:
             self._counters["discovery_failures"] += 1
+            self.last_discovery_completed_at = now
             self._degrade("DISCOVERY_MAXIMUM_TRACKED_SYMBOLS")
             self._record_system_failure("DISCOVERY", "MAXIMUM_TRACKED_SYMBOLS_EXCEEDED", now, pulse.fingerprint)
             return
@@ -1359,6 +1987,8 @@ class ContinuousOpportunityRuntime:
         self._counters["retained_symbols"] = len(pulse.retained_symbols)
         self._counters["provider_bound_symbols"] = len(pulse.provider_bound_symbols)
         self.last_successful_discovery_at = now
+        self.last_discovery_completed_at = now
+        self._mark_forward_progress(now)
         source_evidence = (
             json.loads(pulse.evidence_payload_json)
             if pulse.evidence_payload_json is not None
@@ -1377,7 +2007,7 @@ class ContinuousOpportunityRuntime:
             "authority": RESEARCH_AUTHORITY,
             "executionAuthority": EXECUTION_AUTHORITY_NONE,
         }
-        self._emit_intent(
+        evidence_decision = self._emit_intent(
             evidence_type="DISCOVERY_CYCLE",
             record_identity=pulse.pulse_id,
             record_fingerprint=_fingerprint(
@@ -1387,6 +2017,8 @@ class ContinuousOpportunityRuntime:
             payload=discovery_payload,
             now=now,
         )
+        if evidence_decision == EVIDENCE_REJECTED_PERMANENT:
+            return
         for symbol in pulse.symbols_for_readiness:
             normalized = symbol.strip().upper()
             self._membership_generations.setdefault(normalized, 1)
@@ -1414,7 +2046,13 @@ class ContinuousOpportunityRuntime:
         except Exception as exc:
             self._record_symbol_failure(request.symbol, "READINESS", type(exc).__name__, now, work.fingerprint)
             self._counters["readiness_failures"] += 1
+            self._counters["readiness_completed"] += 1
+            self.last_readiness_completed_at = now
+            self._mark_forward_progress(now)
             return
+        self._counters["readiness_completed"] += 1
+        self.last_readiness_completed_at = now
+        self._mark_forward_progress(now)
         if result.request_id != request.request_id or result.symbol != request.symbol:
             self._record_symbol_failure(
                 request.symbol,
@@ -1424,6 +2062,32 @@ class ContinuousOpportunityRuntime:
                 result.fingerprint,
             )
             self._counters["readiness_failures"] += 1
+            return
+        if result.deferred:
+            self._deferred_readiness[request.symbol] = work
+            self._deferred_readiness.move_to_end(request.symbol)
+            self._trim_ordered(
+                self._deferred_readiness, self.config.maximum_tracked_symbols
+            )
+            self._counters["readiness_deferred"] += 1
+            self._emit_intent(
+                evidence_type="READINESS_DEFERRED",
+                record_identity=(
+                    f"readiness-deferred-{result.fingerprint[:24]}"
+                ),
+                record_fingerprint=result.fingerprint,
+                payload_fingerprint=result.fingerprint,
+                payload={
+                    "payloadType": "READINESS_DEFERRED",
+                    "request": asdict(request),
+                    "result": asdict(result),
+                    "knownAt": _timestamp(now),
+                    "authority": RESEARCH_AUTHORITY,
+                    "executionAuthority": EXECUTION_AUTHORITY_NONE,
+                    "orderCapability": ORDER_CAPABILITY_UNAVAILABLE,
+                },
+                now=now,
+            )
             return
         if not result.ready:
             self._record_symbol_failure(
@@ -1436,6 +2100,7 @@ class ContinuousOpportunityRuntime:
             self._counters["readiness_failures"] += 1
             return
         self._counters["ready_members"] += 1
+        self._deferred_readiness.pop(request.symbol, None)
         composition_id = _fingerprint(
             "continuous-composition-request-v1",
             {"readiness": result.fingerprint, "trigger": request.trigger},
@@ -1509,7 +2174,9 @@ class ContinuousOpportunityRuntime:
                 raise ContinuousRuntimeError("Plan identity changed symbols.")
             self._counters["plans_created"] += int(is_new_plan)
         self.last_successful_composition_at = now
-        self._emit_intent(
+        self.last_composition_completed_at = now
+        self._mark_forward_progress(now)
+        evidence_decision = self._emit_intent(
             evidence_type="COMPOSITION_CYCLE",
             record_identity=result.cycle_id,
             record_fingerprint=result.fingerprint,
@@ -1524,6 +2191,8 @@ class ContinuousOpportunityRuntime:
             },
             now=now,
         )
+        if evidence_decision == EVIDENCE_REJECTED_PERMANENT:
+            return
         denominator_request = DenominatorRequest(
             request_id=_fingerprint("denominator-request", asdict(result)),
             symbol=result.symbol,
@@ -1539,6 +2208,8 @@ class ContinuousOpportunityRuntime:
             self._record_system_failure("DENOMINATOR", type(exc).__name__, now, result.fingerprint)
             return
         self._counters["denominator_cycles"] += 1
+        self.last_denominator_completed_at = now
+        self._mark_forward_progress(now)
         if not denominator.complete:
             self._counters["incomplete_denominator_cycles"] += 1
             self._degrade("DENOMINATOR_INCOMPLETE")
@@ -1648,20 +2319,79 @@ class ContinuousOpportunityRuntime:
         if work is None:
             return False
         intent = EvidenceWriteIntent(**work.payload)
-        result = self.writer.write_intent(intent)
-        if result not in WRITER_RESULTS:
-            raise ContinuousRuntimeError("Writer returned an unsupported result.")
-        if result == WRITER_UNAVAILABLE:
-            self._counters["writer_unavailable_events"] += 1
-            self._degrade("WRITER_UNAVAILABLE")
+        retry_at = self._evidence_retry_not_before.get(intent.intent_id)
+        if retry_at is not None and now < retry_at:
             return False
-        if result == WRITER_SLOW:
+        raw_result = self.writer.write_intent(intent)
+        if isinstance(raw_result, WriterWriteResult):
+            result = raw_result
+        else:
+            legacy_status = {
+                "UNAVAILABLE": WRITER_UNAVAILABLE,
+                "SLOW": WRITER_SLOW,
+            }.get(str(raw_result), str(raw_result))
+            result = WriterWriteResult(status=legacy_status)
+        if result.status not in WRITER_RESULTS:
+            raise ContinuousRuntimeError("Writer returned an unsupported result.")
+        if result.status in TRANSIENT_WRITER_RESULTS:
+            retries = self._evidence_retry_counts.get(intent.intent_id, 0) + 1
+            self._evidence_retry_counts[intent.intent_id] = retries
+            self._evidence_retry_failure_class[intent.intent_id] = result.status
+            delay_seconds = min(60.0, 5.0 * (2 ** min(retries - 1, 4)))
+            self._evidence_retry_not_before[intent.intent_id] = now + timedelta(
+                seconds=delay_seconds
+            )
+        if result.status == WRITER_UNAVAILABLE:
+            self._counters["writer_unavailable_events"] += 1
+            self._degrade(WRITER_UNAVAILABLE)
+            return False
+        if result.status == WRITER_SLOW:
             self._counters["writer_slow_events"] += 1
-            self._degrade("WRITER_SLOW")
+            self._degrade(WRITER_SLOW)
+            return False
+        if result.status == WRITE_FAILED:
+            self._degrade(WRITE_FAILED)
+            return False
+        if result.status in PERMANENT_RECORD_WRITER_RESULTS:
+            preflight = WriterPreflight(
+                accepted=False,
+                payload_bytes=result.payload_bytes,
+                encoded_envelope_bytes=result.encoded_envelope_bytes,
+                protocol_ceiling_bytes=(
+                    result.protocol_ceiling_bytes or 524_288
+                ),
+                failure_class=result.status,
+            )
+            self._replace_with_compact_rejection(
+                intent,
+                preflight,
+                now,
+                replace_existing=True,
+            )
+            return True
+        if result.status in {IPC_AUTH_REJECTED, WRITER_OWNER_CONFLICT}:
+            retries = self._evidence_retry_counts.get(intent.intent_id, 0) + 1
+            self._evidence_retry_counts[intent.intent_id] = retries
+            self._evidence_retry_failure_class[intent.intent_id] = result.status
+            self._evidence_retry_not_before[intent.intent_id] = now + timedelta(
+                seconds=60
+            )
+            self._degrade(result.status)
             return False
         self._queues[EVIDENCE_QUEUE].pop()
-        self._active_degradations.discard("WRITER_UNAVAILABLE")
-        self._active_degradations.discard("WRITER_SLOW")
+        self._evidence_retry_counts.pop(intent.intent_id, None)
+        self._evidence_retry_failure_class.pop(intent.intent_id, None)
+        self._evidence_retry_not_before.pop(intent.intent_id, None)
+        for recovered in (
+            WRITER_UNAVAILABLE,
+            WRITER_SLOW,
+            WRITE_FAILED,
+            EVIDENCE_REJECTED_PERMANENT,
+        ):
+            self._active_degradations.discard(recovered)
+        self._counters["evidence_accepted_count"] += 1
+        self.last_evidence_accepted_at = now
+        self._mark_forward_progress(now)
         return True
 
     def _enqueue_readiness(
@@ -1808,11 +2538,64 @@ class ContinuousOpportunityRuntime:
         if self.process_state not in {DRAINING, STOPPED, FAILED}:
             self.process_state = DEGRADED
 
+    def _mark_forward_progress(self, now: datetime) -> None:
+        self.last_forward_progress_at = now
+        self.stalled_since = None
+        self.stall_blocker = None
+        self.pipeline_state = PIPELINE_FORWARD_PROGRESS
+        self._active_degradations.discard(FAILED_FORWARD_PROGRESS)
+
+    def _stall_threshold_seconds(self) -> float:
+        return (
+            2.0 * self._resolved_discovery_cadence_seconds
+            + self.config.cadence.housekeeping_seconds
+        )
+
+    def _stall_blocker(self) -> str:
+        evidence = self._queues[EVIDENCE_QUEUE].peek()
+        if evidence is not None:
+            intent = EvidenceWriteIntent(**evidence.payload)
+            failure = self._evidence_retry_failure_class.get(intent.intent_id)
+            if failure in PERMANENT_RECORD_WRITER_RESULTS:
+                return "POISON_EVIDENCE_RECORD"
+            if failure in {
+                WRITER_UNAVAILABLE,
+                WRITER_SLOW,
+                WRITE_FAILED,
+                IPC_AUTH_REJECTED,
+                WRITER_OWNER_CONFLICT,
+            }:
+                return "WRITER_UNAVAILABLE"
+        if any(
+            reason.startswith("DISCOVERY_")
+            for reason in self._active_degradations
+        ):
+            return "PROVIDER_UNAVAILABLE"
+        if len(self._queues[READINESS_QUEUE]) or self._deferred_readiness:
+            return "READINESS_BLOCKED"
+        if self.pending_work:
+            return "QUEUE_BACKLOG"
+        return "UNKNOWN_FORWARD_PROGRESS_FAILURE"
+
+    def _apply_forward_progress_watchdog(self, now: datetime) -> None:
+        if not self._session_work_eligible:
+            return
+        anchor = self.last_forward_progress_at or self.started_at or now
+        threshold = self._stall_threshold_seconds()
+        if (now - anchor).total_seconds() < threshold:
+            return
+        if self.stalled_since is None:
+            self.stalled_since = now
+        self.pipeline_state = PIPELINE_STALLED
+        self.stall_blocker = self._stall_blocker()
+        self._degrade(FAILED_FORWARD_PROGRESS)
+
     def _checkpoint(self, now: datetime) -> Path:
         if self.started_at is None or self.last_heartbeat_at is None:
             raise RuntimeCheckpointError("Runtime cannot checkpoint before start.")
         payload = {
             "contract_version": CONTRACT_VERSION,
+            "checkpoint_schema_version": CHECKPOINT_SCHEMA_VERSION,
             "runtime_profile": RUNTIME_PROFILE,
             "config_fingerprint": self.config.fingerprint,
             "runtime_identity": self.config.runtime_identity,
@@ -1820,6 +2603,47 @@ class ContinuousOpportunityRuntime:
             "process_state": self.process_state,
             "started_at": _timestamp(self.started_at),
             "last_heartbeat_at": _timestamp(self.last_heartbeat_at),
+            "last_tick_at": _timestamp(self.last_tick_at) if self.last_tick_at else None,
+            "last_discovery_started_at": (
+                _timestamp(self.last_discovery_started_at)
+                if self.last_discovery_started_at
+                else None
+            ),
+            "last_discovery_completed_at": (
+                _timestamp(self.last_discovery_completed_at)
+                if self.last_discovery_completed_at
+                else None
+            ),
+            "last_readiness_completed_at": (
+                _timestamp(self.last_readiness_completed_at)
+                if self.last_readiness_completed_at
+                else None
+            ),
+            "last_composition_completed_at": (
+                _timestamp(self.last_composition_completed_at)
+                if self.last_composition_completed_at
+                else None
+            ),
+            "last_denominator_completed_at": (
+                _timestamp(self.last_denominator_completed_at)
+                if self.last_denominator_completed_at
+                else None
+            ),
+            "last_evidence_accepted_at": (
+                _timestamp(self.last_evidence_accepted_at)
+                if self.last_evidence_accepted_at
+                else None
+            ),
+            "last_forward_progress_at": (
+                _timestamp(self.last_forward_progress_at)
+                if self.last_forward_progress_at
+                else None
+            ),
+            "stalled_since": _timestamp(self.stalled_since) if self.stalled_since else None,
+            "pipeline_state": self.pipeline_state,
+            "stall_blocker": self.stall_blocker,
+            "resolved_discovery_cadence_seconds": self._resolved_discovery_cadence_seconds,
+            "session_work_eligible": self._session_work_eligible,
             "next_discovery_at": _timestamp(self.next_discovery_at or now),
             "next_housekeeping_at": _timestamp(self.next_housekeeping_at or now),
             "last_successful_discovery_at": (
@@ -1840,6 +2664,29 @@ class ContinuousOpportunityRuntime:
             "intents": [asdict(item) for item in self._intents.values()],
             "sequence": self._sequence,
             "last_intent_id": self._last_intent_id,
+            "evidence_rejections": [
+                asdict(item) for item in self._evidence_rejections.values()
+            ],
+            "evidence_retry_counts": self._evidence_retry_counts,
+            "evidence_retry_failure_class": self._evidence_retry_failure_class,
+            "evidence_retry_not_before": {
+                key: _timestamp(value)
+                for key, value in self._evidence_retry_not_before.items()
+            },
+            "last_evidence_payload_bytes": self._last_evidence_payload_bytes,
+            "last_evidence_encoded_envelope_bytes": (
+                self._last_evidence_encoded_envelope_bytes
+            ),
+            "maximum_evidence_encoded_envelope_bytes": (
+                self._maximum_evidence_encoded_envelope_bytes
+            ),
+            "evidence_protocol_ceiling_bytes": (
+                self._evidence_protocol_ceiling_bytes
+            ),
+            "deferred_readiness": [
+                {"key": key, **asdict(item)}
+                for key, item in self._deferred_readiness.items()
+            ],
             "setup_identities": self._setup_identities,
             "plan_identities": self._plan_identities,
             "membership_generations": self._membership_generations,

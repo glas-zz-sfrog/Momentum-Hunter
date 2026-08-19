@@ -443,9 +443,11 @@ class ContinuousRuntimeTests(unittest.TestCase):
         self.assertGreater(self.fixture.runtime.queue_metrics(self.fixture.clock.now())[EVIDENCE_QUEUE].current_depth, 0)
         self.assertEqual(1, health.writer_unavailable_events)
         self.fixture.writer.mode = WRITER_SLOW
+        self.fixture.clock.advance(5)
         health = self.fixture.runtime.tick(self.fixture.clock.now())
         self.assertEqual(1, health.writer_slow_events)
         self.fixture.writer.mode = WRITER_ACCEPTED
+        self.fixture.clock.advance(10)
         health = self.fixture.runtime.tick(self.fixture.clock.now())
         self.assertEqual(0, dict(health.queue_depths)[EVIDENCE_QUEUE])
         self.assertEqual(RUNNING, health.process_state)

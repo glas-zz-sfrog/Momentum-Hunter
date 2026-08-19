@@ -38,12 +38,26 @@ from momentum_hunter.continuous_runtime import (
     RESEARCH_AUTHORITY,
     ContinuousOpportunityRuntime,
     ContinuousRuntimeConfig,
+    ContinuousRuntimeError,
     LogicalRuntimeLeaseRegistry,
     QueueCapacities,
     RuntimeCadence,
     RuntimeCheckpointStore,
     RuntimeHealth,
-    build_evidence_write_intent,
+    EvidenceWriteIntent,
+    IPC_AUTH_REJECTED,
+    IPC_PROTOCOL_REJECTED,
+    PAYLOAD_TOO_LARGE,
+    SCHEMA_INVALID,
+    SERIALIZATION_INVALID,
+    WRITE_FAILED,
+    WRITER_ACCEPTED,
+    WRITER_DUPLICATE,
+    WRITER_UNAVAILABLE,
+    FAILED_FORWARD_PROGRESS,
+    WriterPreflight,
+    WriterWriteResult,
+    validate_evidence_write_intent,
 )
 from momentum_hunter.event_runtime_writer_ipc import (
     ALLOWED_ARTIFACTS,
@@ -51,8 +65,10 @@ from momentum_hunter.event_runtime_writer_ipc import (
     EphemeralWriterCapability,
     GENESIS_FINGERPRINT,
     MAX_FRAME_BYTES,
+    MAX_PAYLOAD_BYTES,
     WriterEnvelope,
     WriterEnvelopeSender,
+    WriterIpcError,
     verify_envelope_authentication,
 )
 from momentum_hunter.windows_writer_storage import WriterPhysicalStorage
@@ -82,6 +98,7 @@ ARTIFACT_BY_EVIDENCE = {
     "OPPORTUNITY_DENOMINATOR": "runtime-source-admission-ledger",
     "PROVIDER_BOUND_DENOMINATOR_ROWS": "runtime-source-admission-ledger",
     "SYSTEM_FAILURE": "runtime-source-admission-ledger",
+    "READINESS_DEFERRED": "runtime-source-admission-ledger",
 }
 
 
@@ -89,8 +106,28 @@ class ProductionDeploymentError(RuntimeError):
     """Raised when research deployment must fail closed."""
 
 
+class ProductionWriterRequestError(ProductionDeploymentError):
+    """Typed writer rejection returned without exception-string parsing."""
+
+    def __init__(self, failure_class: str, message: str) -> None:
+        super().__init__(message)
+        self.failure_class = failure_class
+
+
 def _canonical_bytes(value: object) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("ascii")
+
+
+def _canonical_text(value: object) -> str:
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+
+
+def _intent_metadata(intent: EvidenceWriteIntent) -> dict[str, Any]:
+    metadata = asdict(intent)
+    metadata.pop("payload_json", None)
+    return metadata
 
 
 def _fingerprint(domain: str, value: object) -> str:
@@ -269,15 +306,24 @@ class ProductionWriterServer:
         configuration = str(frame.get("configurationFingerprint", ""))
         proof = str(frame.get("proof", ""))
         if len(session_id) != 32 or any(c not in "0123456789abcdef" for c in session_id):
-            raise ProductionDeploymentError("Writer handshake session is invalid.")
+            raise ProductionWriterRequestError(
+                IPC_PROTOCOL_REJECTED, "Writer handshake session is invalid."
+            )
         if not source.startswith("production-continuous-runtime-"):
-            raise ProductionDeploymentError("Writer handshake source is invalid.")
+            raise ProductionWriterRequestError(
+                IPC_AUTH_REJECTED, "Writer handshake source is invalid."
+            )
         if configuration != self.topology.configuration_fingerprint:
-            raise ProductionDeploymentError("Writer handshake configuration is invalid.")
+            raise ProductionWriterRequestError(
+                IPC_PROTOCOL_REJECTED,
+                "Writer handshake configuration is invalid.",
+            )
         material = f"{session_id}\n{source}\n{configuration}".encode("ascii")
         expected = hmac.new(self.ipc_key, material, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(proof, expected):
-            raise ProductionDeploymentError("Writer handshake authentication failed.")
+            raise ProductionWriterRequestError(
+                IPC_AUTH_REJECTED, "Writer handshake authentication failed."
+            )
         self.session_id = session_id
         self.source_identity = source
         self.session_key = hmac.new(self.ipc_key, f"session:{session_id}".encode("ascii"), hashlib.sha256).digest()
@@ -286,43 +332,96 @@ class ProductionWriterServer:
 
     def _persist(self, envelope: WriterEnvelope) -> dict[str, Any]:
         if self.session_id is None or self.source_identity is None or self.session_key is None:
-            raise ProductionDeploymentError("Writer session is not established.")
-        verify_envelope_authentication(
-            envelope,
-            session_id=self.session_id,
-            key_material=self.session_key,
-            configuration_fingerprint=self.topology.configuration_fingerprint,
-            source_identity=self.source_identity,
-        )
+            raise ProductionWriterRequestError(
+                IPC_AUTH_REJECTED, "Writer session is not established."
+            )
+        try:
+            verify_envelope_authentication(
+                envelope,
+                session_id=self.session_id,
+                key_material=self.session_key,
+                configuration_fingerprint=self.topology.configuration_fingerprint,
+                source_identity=self.source_identity,
+            )
+        except WriterIpcError as exc:
+            raise ProductionWriterRequestError(
+                IPC_AUTH_REJECTED, "Writer envelope authentication failed."
+            ) from exc
         if envelope.sequence != self.expected_sequence:
-            raise ProductionDeploymentError("Writer envelope sequence is not contiguous.")
+            raise ProductionWriterRequestError(
+                IPC_PROTOCOL_REJECTED,
+                "Writer envelope sequence is not contiguous.",
+            )
         if envelope.prior_envelope_fingerprint != self.prior_envelope:
-            raise ProductionDeploymentError("Writer envelope predecessor is invalid.")
+            raise ProductionWriterRequestError(
+                IPC_PROTOCOL_REJECTED,
+                "Writer envelope predecessor is invalid.",
+            )
         try:
             outer = json.loads(envelope.payload_json)
             intent_raw = outer["intent"]
             payload = _safe_payload(outer["payload"])
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise ProductionDeploymentError("Writer envelope payload is malformed.") from exc
+        except (
+            KeyError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+            ProductionDeploymentError,
+        ) as exc:
+            raise ProductionWriterRequestError(
+                SERIALIZATION_INVALID, "Writer envelope payload is malformed."
+            ) from exc
         if not isinstance(intent_raw, dict) or not isinstance(payload, dict):
-            raise ProductionDeploymentError("Writer envelope payload shape is invalid.")
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Writer envelope payload shape is invalid."
+            )
+        intent_raw = dict(intent_raw)
+        legacy_payload_json = intent_raw.pop("payload_json", None)
         if outer.get("topologyFingerprint") != self.topology.fingerprint:
-            raise ProductionDeploymentError("Writer envelope topology is invalid.")
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Writer envelope topology is invalid."
+            )
         if not isinstance(intent_raw.get("sequence"), int) or int(intent_raw["sequence"]) <= 0:
-            raise ProductionDeploymentError("Writer intent sequence is invalid.")
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Writer intent sequence is invalid."
+            )
         if intent_raw.get("runtime_instance_id") != self.source_identity:
-            raise ProductionDeploymentError("Writer intent identity is invalid.")
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Writer intent identity is invalid."
+            )
         evidence_type = str(intent_raw.get("evidence_type", ""))
         artifact = ARTIFACT_BY_EVIDENCE.get(evidence_type)
         if artifact is None or artifact not in ALLOWED_ARTIFACTS:
-            raise ProductionDeploymentError("Writer artifact is not allowlisted.")
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Writer artifact is not allowlisted."
+            )
         record_fingerprint = str(intent_raw.get("record_fingerprint", ""))
         if len(record_fingerprint) != 64 or any(c not in "0123456789abcdef" for c in record_fingerprint):
-            raise ProductionDeploymentError("Writer record fingerprint is invalid.")
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Writer record fingerprint is invalid."
+            )
+        canonical_payload_json = _canonical_text(payload)
+        if (
+            legacy_payload_json is not None
+            and legacy_payload_json != canonical_payload_json
+        ):
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID,
+                "Legacy duplicated payload contradicts the canonical payload.",
+            )
+        try:
+            validated_intent = EvidenceWriteIntent(
+                **intent_raw, payload_json=canonical_payload_json
+            )
+            validate_evidence_write_intent(validated_intent)
+        except (TypeError, ContinuousRuntimeError) as exc:
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Writer intent contract is invalid."
+            ) from exc
         record_path = self.root / "records" / artifact / record_fingerprint[:2] / f"{record_fingerprint}.json"
         record = {
-            "schemaVersion": 1,
-            "profile": "production-continuous-evidence-record-v1",
+            "schemaVersion": 2,
+            "profile": "production-continuous-evidence-record-v2",
             "authority": AUTHORITY,
             "executionAuthority": EXECUTION,
             "orderCapability": ORDER_CAPABILITY,
@@ -333,22 +432,35 @@ class ProductionWriterServer:
         }
         record["recordFingerprint"] = _fingerprint("production-continuous-record-v1", record)
         record_bytes = _canonical_bytes(record)
-        created = self.storage.atomic_create(
-            PurePath(record_path.relative_to(self.root)),
-            record_bytes,
-        )
+        try:
+            created = self.storage.atomic_create(
+                PurePath(record_path.relative_to(self.root)),
+                record_bytes,
+            )
+        except (OSError, RuntimeError) as exc:
+            raise ProductionWriterRequestError(
+                WRITE_FAILED, "Writer could not persist the immutable record."
+            ) from exc
         if not created:
             try:
                 existing_record = json.loads(record_path.read_text(encoding="ascii"))
             except (OSError, UnicodeError, json.JSONDecodeError) as exc:
                 raise ProductionDeploymentError("Existing immutable record is unreadable.") from exc
+            existing_intent = (
+                dict(existing_record.get("intent", {}))
+                if isinstance(existing_record, dict)
+                else {}
+            )
+            existing_intent.pop("payload_json", None)
             if (
                 not isinstance(existing_record, dict)
-                or existing_record.get("intent") != intent_raw
+                or existing_intent != intent_raw
                 or existing_record.get("payload") != payload
                 or existing_record.get("topologyFingerprint") != self.topology.fingerprint
             ):
-                raise ProductionDeploymentError("Conflicting immutable record already exists.")
+                raise ProductionWriterRequestError(
+                    WRITE_FAILED, "Conflicting immutable record already exists."
+                )
             record_bytes = _canonical_bytes(existing_record)
         record_sha = hashlib.sha256(record_bytes).hexdigest()
         ack = {
@@ -401,8 +513,20 @@ class ProductionWriterServer:
                             raise ProductionDeploymentError("Writer frame type is unsupported.")
                         self.wfile.write(_canonical_bytes(response))
                         self.wfile.flush()
+                    except ProductionWriterRequestError as exc:
+                        response = {
+                            "status": "REJECTED",
+                            "failureClass": exc.failure_class,
+                            "error": type(exc).__name__,
+                        }
+                        self.wfile.write(_canonical_bytes(response))
+                        self.wfile.flush()
                     except Exception as exc:
-                        response = {"status": "REJECTED", "error": type(exc).__name__}
+                        response = {
+                            "status": "REJECTED",
+                            "failureClass": WRITE_FAILED,
+                            "error": type(exc).__name__,
+                        }
                         self.wfile.write(_canonical_bytes(response))
                         self.wfile.flush()
 
@@ -439,7 +563,12 @@ class ProductionRemoteWriter:
         }
         response = self._request(hello)
         if response.get("status") != "READY":
-            raise ProductionDeploymentError("Writer handshake was rejected.")
+            failure = str(response.get("failureClass", IPC_AUTH_REJECTED))
+            if failure not in {IPC_AUTH_REJECTED, IPC_PROTOCOL_REJECTED}:
+                failure = IPC_AUTH_REJECTED
+            raise ProductionWriterRequestError(
+                failure, "Writer handshake was rejected."
+            )
         self.sender = WriterEnvelopeSender(
             capability=EphemeralWriterCapability(session_id=session_id, key_material=session_key),
             configuration_fingerprint=configuration,
@@ -458,37 +587,201 @@ class ProductionRemoteWriter:
             raise ProductionDeploymentError("Writer response is malformed.")
         return value
 
-    def write_intent(self, intent: Any) -> str:
+    def _writer_payload(self, intent: EvidenceWriteIntent) -> dict[str, Any]:
+        try:
+            validate_evidence_write_intent(intent)
+        except ContinuousRuntimeError as exc:
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Evidence intent contract is invalid."
+            ) from exc
+        artifact = ARTIFACT_BY_EVIDENCE.get(intent.evidence_type)
+        if artifact is None or artifact not in ALLOWED_ARTIFACTS:
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Evidence type has no allowlisted writer artifact."
+            )
+        try:
+            payload = (
+                json.loads(intent.payload_json)
+                if intent.payload_json
+                else {
+                    "payloadType": intent.evidence_type,
+                    "knownAt": intent.requested_at,
+                    "authority": AUTHORITY,
+                    "executionAuthority": EXECUTION,
+                }
+            )
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ProductionWriterRequestError(
+                SERIALIZATION_INVALID, "Evidence payload is not canonical JSON."
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Evidence payload must be an object."
+            )
+        try:
+            sanitized = _safe_payload(payload)
+        except ProductionDeploymentError as exc:
+            raise ProductionWriterRequestError(
+                SCHEMA_INVALID, "Evidence payload failed sanitation."
+            ) from exc
+        return {
+            "topologyFingerprint": self.topology.fingerprint,
+            "intent": _intent_metadata(intent),
+            "payload": sanitized,
+        }
+
+    def preflight_intent(self, intent: EvidenceWriteIntent) -> WriterPreflight:
+        payload_bytes = len((intent.payload_json or "").encode("utf-8"))
+        try:
+            outer = self._writer_payload(intent)
+            encoded_bytes = len(_canonical_text(outer).encode("utf-8"))
+        except ProductionWriterRequestError as exc:
+            return WriterPreflight(
+                accepted=False,
+                payload_bytes=payload_bytes,
+                encoded_envelope_bytes=0,
+                protocol_ceiling_bytes=MAX_PAYLOAD_BYTES,
+                failure_class=exc.failure_class,
+            )
+        return WriterPreflight(
+            accepted=encoded_bytes <= MAX_PAYLOAD_BYTES,
+            payload_bytes=payload_bytes,
+            encoded_envelope_bytes=encoded_bytes,
+            protocol_ceiling_bytes=MAX_PAYLOAD_BYTES,
+            failure_class=(
+                None if encoded_bytes <= MAX_PAYLOAD_BYTES else PAYLOAD_TOO_LARGE
+            ),
+        )
+
+    def preflight_legacy_intent(
+        self, intent: EvidenceWriteIntent
+    ) -> WriterPreflight:
+        """Measure the v1 duplicated envelope when migrating a v1 checkpoint."""
+
+        payload_bytes = len((intent.payload_json or "").encode("utf-8"))
+        try:
+            payload = (
+                json.loads(intent.payload_json)
+                if intent.payload_json
+                else {
+                    "payloadType": intent.evidence_type,
+                    "knownAt": intent.requested_at,
+                    "authority": AUTHORITY,
+                    "executionAuthority": EXECUTION,
+                }
+            )
+            legacy_outer = {
+                "topologyFingerprint": self.topology.fingerprint,
+                "intent": asdict(intent),
+                "payload": _safe_payload(payload),
+            }
+            encoded_bytes = len(_canonical_text(legacy_outer).encode("utf-8"))
+        except (TypeError, ValueError, ProductionDeploymentError):
+            return WriterPreflight(
+                accepted=False,
+                payload_bytes=payload_bytes,
+                encoded_envelope_bytes=0,
+                protocol_ceiling_bytes=MAX_PAYLOAD_BYTES,
+                failure_class=SERIALIZATION_INVALID,
+            )
+        return WriterPreflight(
+            accepted=encoded_bytes <= MAX_PAYLOAD_BYTES,
+            payload_bytes=payload_bytes,
+            encoded_envelope_bytes=encoded_bytes,
+            protocol_ceiling_bytes=MAX_PAYLOAD_BYTES,
+            failure_class=(
+                None if encoded_bytes <= MAX_PAYLOAD_BYTES else PAYLOAD_TOO_LARGE
+            ),
+        )
+
+    def write_intent(self, intent: EvidenceWriteIntent) -> WriterWriteResult:
+        preflight = self.preflight_intent(intent)
+        if not preflight.accepted:
+            return WriterWriteResult(
+                status=preflight.failure_class or SCHEMA_INVALID,
+                payload_bytes=preflight.payload_bytes,
+                encoded_envelope_bytes=preflight.encoded_envelope_bytes,
+                protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
+            )
         if self.sender is None:
             try:
                 self._connect()
+            except ProductionWriterRequestError as exc:
+                return WriterWriteResult(
+                    status=exc.failure_class,
+                    payload_bytes=preflight.payload_bytes,
+                    encoded_envelope_bytes=preflight.encoded_envelope_bytes,
+                    protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
+                )
+            except (TypeError, ValueError, KeyError):
+                return WriterWriteResult(
+                    status=IPC_PROTOCOL_REJECTED,
+                    payload_bytes=preflight.payload_bytes,
+                    encoded_envelope_bytes=preflight.encoded_envelope_bytes,
+                    protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
+                )
             except (OSError, ProductionDeploymentError):
-                return "UNAVAILABLE"
+                return WriterWriteResult(
+                    status=WRITER_UNAVAILABLE,
+                    payload_bytes=preflight.payload_bytes,
+                    encoded_envelope_bytes=preflight.encoded_envelope_bytes,
+                    protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
+                )
         try:
-            payload = json.loads(intent.payload_json) if intent.payload_json else {
-                "payloadType": intent.evidence_type,
-                "intent": asdict(intent),
-                "knownAt": intent.requested_at,
-                "authority": AUTHORITY,
-                "executionAuthority": EXECUTION,
-            }
             envelope = self.sender.build(
                 artifact_name=ARTIFACT_BY_EVIDENCE[intent.evidence_type],
-                payload={
-                    "topologyFingerprint": self.topology.fingerprint,
-                    "intent": asdict(intent),
-                    "payload": payload,
-                },
+                payload=self._writer_payload(intent),
             )
             response = self._request({"frameType": "WRITE", "envelope": asdict(envelope)})
             status = str(response.get("status", "REJECTED"))
-            if status not in {"ACCEPTED", "DUPLICATE"}:
+            if status not in {WRITER_ACCEPTED, WRITER_DUPLICATE}:
                 self.sender = None
-                return "UNAVAILABLE"
-            return status
-        except (OSError, KeyError, TypeError, ValueError, ProductionDeploymentError):
+                failure = str(response.get("failureClass", WRITE_FAILED))
+                if failure not in {
+                    IPC_AUTH_REJECTED,
+                    IPC_PROTOCOL_REJECTED,
+                    PAYLOAD_TOO_LARGE,
+                    SERIALIZATION_INVALID,
+                    SCHEMA_INVALID,
+                    WRITE_FAILED,
+                }:
+                    failure = WRITE_FAILED
+                return WriterWriteResult(
+                    status=failure,
+                    payload_bytes=preflight.payload_bytes,
+                    encoded_envelope_bytes=preflight.encoded_envelope_bytes,
+                    protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
+                )
+            return WriterWriteResult(
+                status=status,
+                payload_bytes=preflight.payload_bytes,
+                encoded_envelope_bytes=preflight.encoded_envelope_bytes,
+                protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
+            )
+        except WriterIpcError:
             self.sender = None
-            return "UNAVAILABLE"
+            return WriterWriteResult(
+                status=IPC_PROTOCOL_REJECTED,
+                payload_bytes=preflight.payload_bytes,
+                encoded_envelope_bytes=preflight.encoded_envelope_bytes,
+                protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
+            )
+        except (TypeError, ValueError, KeyError):
+            self.sender = None
+            return WriterWriteResult(
+                status=IPC_PROTOCOL_REJECTED,
+                payload_bytes=preflight.payload_bytes,
+                encoded_envelope_bytes=preflight.encoded_envelope_bytes,
+                protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
+            )
+        except (OSError, ProductionDeploymentError):
+            self.sender = None
+            return WriterWriteResult(
+                status=WRITER_UNAVAILABLE,
+                payload_bytes=preflight.payload_bytes,
+                encoded_envelope_bytes=preflight.encoded_envelope_bytes,
+                protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
+            )
 
 
 def _market_session_phase(now: datetime) -> str:
@@ -531,6 +824,7 @@ def _qualification_metrics(state: QualificationState) -> dict[str, object]:
         "schwabMinuteRows": metrics.schwab_minute_rows,
         "schwabDailyRows": metrics.schwab_daily_rows,
         "canonicalReadySymbols": len(metrics.canonical_ready_symbols),
+        "readinessDeferred": metrics.readiness_deferred,
         "compositionCycles": len(metrics.composition_cycles),
         "researchOnlyTradePlans": len(metrics.research_plans),
         "successorSetups": len(metrics.successor_setups),
@@ -647,6 +941,9 @@ def run_runtime(config_path: Path) -> int:
             phase = _market_session_phase(now)
             cadence = _resolved_discovery_cadence(phase, config)
             if cadence is not None:
+                runtime.set_session_eligibility(True, now)
+                if phase == REGULAR_SESSION:
+                    runtime.release_deferred_readiness(now)
                 health = runtime.tick(
                     now,
                     work_budget=512,
@@ -655,13 +952,22 @@ def run_runtime(config_path: Path) -> int:
                 _write_runtime_status(
                     status_path,
                     health,
-                    state="DEGRADED" if health.process_state == "DEGRADED" else "RUNNING",
+                    state=(
+                        FAILED_FORWARD_PROGRESS
+                        if FAILED_FORWARD_PROGRESS in health.health_flags
+                        else (
+                            "DEGRADED"
+                            if health.process_state == "DEGRADED"
+                            else "RUNNING"
+                        )
+                    ),
                     config=config,
                     sessionPhase=phase,
                     resolvedDiscoveryCadenceSeconds=cadence,
                     qualification=_qualification_metrics(state),
                 )
             else:
+                runtime.set_session_eligibility(False, now)
                 _write_runtime_status(
                     status_path,
                     runtime.health(now),

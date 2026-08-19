@@ -53,6 +53,7 @@ from momentum_hunter.continuous_runtime import (
     DiscoveryRequest,
     LogicalRuntimeLeaseRegistry,
     QueueCapacities,
+    PREMARKET_DEFERRED,
     ReadinessRequest,
     ReadinessResult,
     RuntimeCadence,
@@ -187,6 +188,7 @@ class QualificationMetrics:
     schwab_minute_rows: int = 0
     schwab_daily_rows: int = 0
     canonical_ready_symbols: set[str] = field(default_factory=set)
+    readiness_deferred: int = 0
     composition_cycles: set[str] = field(default_factory=set)
     research_plans: set[str] = field(default_factory=set)
     successor_setups: set[str] = field(default_factory=set)
@@ -237,9 +239,10 @@ class LiveDiscoverySource:
         )
 
     def discover(self, request: DiscoveryRequest) -> DiscoveryPulse:
+        predecessor_state = self.store.load()
         previous = {
             item.symbol
-            for item in self.store.load().members
+            for item in predecessor_state.members
             if item.current_state == TRACKED
         }
         try:
@@ -299,16 +302,46 @@ class LiveDiscoverySource:
             provider_bound_symbols=(),
             evidence_payload_json=_canonical_bytes(
                 {
-                    "schemaVersion": 1,
-                    "profile": "continuous-live-discovery-evidence-v1",
+                    "schemaVersion": 2,
+                    "profile": "continuous-live-discovery-evidence-v2",
                     "snapshot": snapshot.to_dict(),
                     "universe": {
                         "status": universe.status,
-                        "state": asdict(universe.state),
-                        "transitions": [
+                        "state": {
+                            "schemaVersion": universe.state.schema_version,
+                            "profile": universe.state.profile,
+                            "policyVersion": universe.state.policy_version,
+                            "policyFingerprint": universe.state.policy_fingerprint,
+                            "currentSessionDate": universe.state.current_session_date,
+                            "members": [
+                                asdict(item) for item in universe.state.members
+                            ],
+                            "transitionCount": len(universe.state.transitions),
+                            "snapshotReceiptCount": len(
+                                universe.state.snapshot_receipts
+                            ),
+                            "failureReceiptCount": len(
+                                universe.state.failure_receipts
+                            ),
+                            "fingerprint": universe.state.fingerprint,
+                        },
+                        "transitionDelta": [
                             asdict(item) for item in universe.transitions
                         ],
                         "summary": asdict(universe.summary),
+                        "predecessor": {
+                            "universeFingerprint": predecessor_state.fingerprint,
+                            "snapshotId": (
+                                predecessor_state.snapshot_receipts[-1].snapshot_id
+                                if predecessor_state.snapshot_receipts
+                                else None
+                            ),
+                            "snapshotFingerprint": (
+                                predecessor_state.snapshot_receipts[-1].snapshot_fingerprint
+                                if predecessor_state.snapshot_receipts
+                                else None
+                            ),
+                        },
                     },
                     "authority": AUTHORITY,
                     "executionAuthority": EXECUTION_AUTHORITY,
@@ -407,7 +440,6 @@ class LiveMarketDataSource:
         self.state.refreshed_snapshot_id = snapshot_id
 
     def evaluate(self, request: ReadinessRequest) -> ReadinessResult:
-        self._refresh()
         if self.state.universe is None or self.state.snapshot is None:
             raise LiveQualificationError("Readiness has no hot-universe state.")
         member = next(
@@ -423,6 +455,38 @@ class LiveMarketDataSource:
                 "Readiness symbol is absent from the current universe."
             )
         evaluated = _aware_now()
+        eastern = evaluated.astimezone(EASTERN_TZ)
+        if (
+            eastern.date().isoformat() == member.session_date
+            and eastern.time() < REGULAR_OPEN
+        ):
+            deferred_payload = {
+                "requestId": request.request_id,
+                "symbol": request.symbol,
+                "trigger": request.trigger,
+                "sourceFingerprint": request.source_fingerprint,
+                "memberId": member.member_id,
+                "memberFingerprint": member.fingerprint,
+                "snapshotId": self.state.snapshot.snapshot_id,
+                "snapshotFingerprint": self.state.snapshot.fingerprint,
+                "evaluatedAt": evaluated.isoformat(),
+                "sessionDate": member.session_date,
+                "status": PREMARKET_DEFERRED,
+            }
+            self.state.metrics.readiness_deferred += 1
+            return ReadinessResult(
+                request_id=request.request_id,
+                symbol=request.symbol,
+                status=PREMARKET_DEFERRED,
+                fingerprint=_fingerprint(
+                    "continuous-premarket-readiness-deferred-v1",
+                    deferred_payload,
+                ),
+                ready=False,
+                failure_reason=None,
+                deferred=True,
+            )
+        self._refresh()
         all_bars = load_canonical_minute_bars(
             store_root=self.minute_root,
             symbols=(request.symbol,),

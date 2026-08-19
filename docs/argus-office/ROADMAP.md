@@ -29,6 +29,32 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+`ARGUS-CONTINUOUS-CANARY-HARDENING-001` is
+`IMPLEMENTED_PENDING_MERGE` on isolated branch
+`codex/ARGUS-CONTINUOUS-CANARY-HARDENING-001` from synchronized canonical
+`e2dd14031331ee0611a51126e260be72ce96b9a8`. The August 19 installed canary is
+preserved permanently as `SYSTEM_CONTRACT_FAILURE / DECISION_NOT_REACHED`, not
+`NO_TRADE`: premarket SKHY readiness was incorrectly attempted before the
+regular-session consumer contract became legal, and a cumulative/doubled
+580,760-byte discovery envelope exceeded the 524,288-byte protocol ceiling and
+became an indefinitely retried queue head.
+
+The branch adds explicit checkpointed `PREMARKET_DEFERRED` handling and fresh
+regular-session rollover without requiring opening rediscovery. Discovery
+evidence is now current-cycle/delta/predecessor based, the writer carries one
+canonical logical payload, final envelope size is preflighted before active
+queue admission, deterministic record failures become compact terminal
+evidence, transient writer failures retain bounded backoff, and process
+liveness is reported separately from cadence-derived pipeline progress. The
+100-cycle production-shaped proof peaked at 140,517 bytes (26.801% of the
+524,288-byte ceiling) with 383,771 bytes minimum headroom and only 135 bytes of
+cycle-10-through-100 spread. Compileall, focused/adjacent proofs, and one full
+2,637-test discovery pass are green. Canonical merge, exact-SHA deployment,
+historical-checkpoint migration, and a 30-minute/six-completed-cycle live
+regular-session canary remain pending. The currently installed services remain
+Running and unchanged on `f2a3af58`; account reads, position reads, Paper,
+Shadow, and all order capability remain `UNAVAILABLE`.
+
 Canonical software integration is `COMPLETE` at
 `4526446eeab404ff02856d6a57c679c8b8b9b2a5`. This is the integrated software
 baseline; the post-merge governance reconciliation is a separate descendant

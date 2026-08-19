@@ -2,6 +2,31 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-CONTINUOUS-CANARY-HARDENING-001 - 2026-08-19
+
+`codex/ARGUS-CONTINUOUS-CANARY-HARDENING-001` starts from clean synchronized
+canonical `e2dd14031331ee0611a51126e260be72ce96b9a8`. Installed runtime identity
+`f2a3af58c4a90274f46e745ad74c8dcd80b201af` is an ancestor of that governance
+head and remains the untouched deployed code during feature work.
+
+The branch preserves the failed canary bundle at
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-CONTINUOUS-CANARY-HARDENING-001-FAILED-CANARY-20260819T150412Z-corrected.zip`
+with SHA-256
+`E306295195F1A477411B919B4454E526B7E275C86E243773862CB21BE3884605`.
+The incident remains `SYSTEM_CONTRACT_FAILURE / DECISION_NOT_REACHED`; no
+historical cycle or trade was fabricated.
+
+Implementation adds premarket deferral/regular-open rollover, bounded
+delta/reference discovery evidence, single-copy writer payloads, exact
+preflight sizing, explicit failure taxonomy, terminal compact poison evidence,
+bounded transient retry, and separate forward-progress health. The measured
+100-cycle envelope curve is 140,517 bytes at cycle 1; 113,264 at cycle 5;
+113,362 at cycles 10 and 20; 113,399 at cycle 50; and 113,497 at cycle 100.
+Maximum ceiling use is 26.801%. Compileall and one complete 2,637-test run pass.
+Classification is `IMPLEMENTED_PENDING_MERGE`; feature commit/push, canonical
+fast-forward, deployment, historical-checkpoint recovery, and live canary are
+not yet claimed.
+
 ## Current Canonical Post-Merge Status - 2026-08-18
 
 The integrated software baseline is canonical at

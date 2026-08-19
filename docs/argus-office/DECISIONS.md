@@ -2,6 +2,7 @@
 
 | Date | Decision | Owner | Rationale | Status |
 | --- | --- | --- | --- | --- |
+| 2026-08-19 | Treat premarket readiness as explicit deferral, deterministic record-invalidity as terminal per-record evidence, and pipeline forward progress as a health property independent of Windows service state. | Steven / CEO Advisor / Argus | Premarket discovery is intentional and must not be disabled, while one impossible evidence envelope must never starve a trading day behind a misleading Running service. | Implemented pending canonical merge, installed recovery proof, and live canary in ARGUS-CONTINUOUS-CANARY-HARDENING-001. |
 | 2026-06-27 | Create Argus Office v0.1 scaffold. | Steven | Reduce manual project-management burden while preserving code control. | Accepted |
 | 2026-06-27 | Make Codex Orchestrator the single Codex-side front door. | Steven | Keep multiagent work coordinated and reportable. | Accepted |
 | 2026-06-27 | Distinguish recommendation-only agents from Builder. | Steven | Prevent accidental code changes from analysis roles. | Accepted |
