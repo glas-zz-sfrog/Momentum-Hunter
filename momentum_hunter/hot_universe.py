@@ -714,9 +714,12 @@ def record_discovery_failure(
 class HotUniverseStore:
     """Caller-rooted atomic persistence prototype for deterministic restart tests."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, allow_persistent: bool = False) -> None:
         self.path = Path(path)
-        if any(part.lower() == "programdata" for part in self.path.parts):
+        if (
+            any(part.lower() == "programdata" for part in self.path.parts)
+            and not allow_persistent
+        ):
             raise HotUniverseError("Hot-universe store must not target ProgramData.")
         self._lease = PathTransactionLease(self.path)
 

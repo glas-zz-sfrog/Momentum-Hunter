@@ -516,7 +516,11 @@ def run_runtime(config_path: Path) -> int:
     runtime_root = Path(str(config["runtimeStateRoot"]))
     runtime_root.mkdir(parents=True, exist_ok=True)
     status_path = runtime_root / "runtime-status.json"
-    state = QualificationState(root=runtime_root / "session", launch_at=datetime.now().astimezone())
+    state = QualificationState(
+        root=runtime_root / "session",
+        launch_at=datetime.now().astimezone(),
+        allow_persistent=True,
+    )
     discovery = LiveDiscoverySource(state)
     market = LiveMarketDataSource(state, expected_account_ending=str(config["expectedAccountEnding"]))
     composition = LiveCompositionSource(state)

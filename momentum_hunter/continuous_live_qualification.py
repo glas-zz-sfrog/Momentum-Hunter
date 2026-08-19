@@ -200,6 +200,7 @@ class QualificationMetrics:
 class QualificationState:
     root: Path
     launch_at: datetime
+    allow_persistent: bool = False
     metrics: QualificationMetrics = field(default_factory=QualificationMetrics)
     snapshot: DiscoverySnapshot | None = None
     universe: HotUniverseResult | None = None
@@ -230,7 +231,10 @@ class LiveDiscoverySource:
             maximum_warm_symbols=12,
             fairness_promotion_after_provider_bound_observations=3,
         )
-        self.store = HotUniverseStore(state.root / "state" / "hot-universe.json")
+        self.store = HotUniverseStore(
+            state.root / "state" / "hot-universe.json",
+            allow_persistent=state.allow_persistent,
+        )
 
     def discover(self, request: DiscoveryRequest) -> DiscoveryPulse:
         previous = {

@@ -281,6 +281,15 @@ class HotUniverseTests(unittest.TestCase):
             with self.assertRaises(HotUniverseError):
                 HotUniverseStore(path).load()
 
+    def test_programdata_store_requires_explicit_persistent_opt_in(self) -> None:
+        path = Path("C:/ProgramData/MomentumHunter/ContinuousRuntime/session/state/hot-universe.json")
+
+        with self.assertRaisesRegex(HotUniverseError, "must not target ProgramData"):
+            HotUniverseStore(path)
+
+        store = HotUniverseStore(path, allow_persistent=True)
+        self.assertEqual(path, store.path)
+
     def test_exact_duplicate_store_replay_is_idempotent_and_byte_identical(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "hot-universe.json"
