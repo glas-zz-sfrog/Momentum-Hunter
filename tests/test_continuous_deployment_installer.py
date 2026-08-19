@@ -67,14 +67,17 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
             "Copy-Item -Path $sourcePackage -Destination $runtimeSourceRoot -Recurse -Force",
             script,
         )
-        self.assertIn(
-            "Grant-ReadExecuteDirectory $pythonEnvironmentRoot $writerAccount",
-            script,
-        )
-        self.assertIn("function Grant-PathTraverse", script)
-        self.assertIn("Get-PythonBaseRoot $pythonEnvironmentRoot", script)
-        self.assertIn("Grant-PathTraverse $pythonBaseRoot $writerAccount", script)
-        self.assertIn("Grant-ReadExecuteDirectory $pythonBaseRoot $writerAccount", script)
+        self.assertIn("function Invoke-PythonRuntimeBuild", script)
+        self.assertIn('Get-SystemPythonExecutable', script)
+        self.assertIn('continuous_runtime_requirements.txt', script)
+        self.assertIn('pythonRuntimeStagingRoot = $pythonRuntimeStagingRoot', script)
+        self.assertIn('pythonRuntimeRoot = $pythonRuntimeRoot', script)
+        self.assertIn('("continuous-python-runtime-" + $identity.head)', script)
+        self.assertIn('pythonExecutable = Join-Path $pythonRuntimeRoot "Scripts\\python.exe"', script)
+        self.assertIn("Protect-ReadOnlyDirectory $pythonRuntimeRoot", script)
+        self.assertNotIn("Grant-PathTraverse", script)
+        self.assertNotIn("Grant-ReadExecuteDirectory", script)
+        self.assertNotIn('Join-Path $project ".venv\\Scripts\\python.exe"', script)
         self.assertIn(
             ' -f $serviceHostPath, $runtimeSourceRoot, $plan.pythonExecutable, $configPath',
             script,

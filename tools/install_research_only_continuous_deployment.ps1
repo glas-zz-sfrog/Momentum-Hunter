@@ -184,53 +184,47 @@ function Protect-ReadOnlyDirectory {
     }
 }
 
-function Grant-ReadExecuteDirectory {
-    param(
-        [Parameter(Mandatory)][string]$PathValue,
-        [Parameter(Mandatory)][string]$Account
-    )
-    & icacls $PathValue /grant "${Account}:(OI)(CI)(RX)" /T /C | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Read/execute ACL grant failed for $PathValue."
+function Get-SystemPythonExecutable {
+    $candidate = "C:\Program Files\Python311\python.exe"
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+        throw "System Python 3.11 is unavailable for the dedicated service runtime."
     }
+    return $candidate
 }
 
-function Grant-PathTraverse {
+function Invoke-PythonRuntimeBuild {
     param(
-        [Parameter(Mandatory)][string]$PathValue,
-        [Parameter(Mandatory)][string]$Account
+        [Parameter(Mandatory)][string]$SystemPython,
+        [Parameter(Mandatory)][string]$RequirementsPath,
+        [Parameter(Mandatory)][string]$OutputPath,
+        [Parameter(Mandatory)][string]$RepositoryRoot
     )
-    $fullPath = [IO.Path]::GetFullPath($PathValue)
-    $root = [IO.Path]::GetPathRoot($fullPath)
-    $current = Split-Path -Parent $fullPath
-    while ($current -and $current -ne $root) {
-        & icacls $current /grant:r ("{0}:(X)" -f $Account) | Out-Null
+    if (-not (Test-Path -LiteralPath $RequirementsPath -PathType Leaf)) {
+        throw "Continuous runtime requirements are missing."
+    }
+    $deploymentPython = Join-Path $OutputPath "Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $deploymentPython -PathType Leaf)) {
+        Write-Host "Building isolated system-Python runtime..."
+        & $SystemPython -m venv $OutputPath | Out-Host
         if ($LASTEXITCODE -ne 0) {
-            throw "Traverse ACL grant failed for $current."
+            throw "Continuous Python runtime creation failed."
         }
-        $current = Split-Path -Parent $current
     }
-}
-
-function Get-PythonBaseRoot {
-    param([Parameter(Mandatory)][string]$VirtualEnvironmentRoot)
-    $configPath = Join-Path $VirtualEnvironmentRoot "pyvenv.cfg"
-    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
-        throw "Python virtualenv configuration is missing."
+    Write-Host "Installing pinned continuous-runtime dependencies..."
+    & $deploymentPython -m pip install --disable-pip-version-check --requirement $RequirementsPath | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "Continuous Python runtime dependency installation failed."
     }
-    $homeLine = Get-Content -LiteralPath $configPath | Where-Object { $_ -match '^\s*home\s*=\s*(.+?)\s*$' } | Select-Object -First 1
-    if (-not $homeLine -or $homeLine -notmatch '^\s*home\s*=\s*(.+?)\s*$') {
-        throw "Python virtualenv base runtime is undefined."
+    Push-Location -LiteralPath $RepositoryRoot
+    try {
+        & $deploymentPython -B -c "import momentum_hunter.continuous_production; print('continuous-runtime-import-ok')" | Out-Host
+    } finally {
+        Pop-Location
     }
-    $baseRuntimePath = $Matches[1].Trim()
-    if (-not [IO.Path]::IsPathRooted($baseRuntimePath)) {
-        $baseRuntimePath = Join-Path $VirtualEnvironmentRoot $baseRuntimePath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Continuous Python runtime import validation failed."
     }
-    $fullBaseRuntimePath = [IO.Path]::GetFullPath($baseRuntimePath)
-    if (-not (Test-Path -LiteralPath $fullBaseRuntimePath -PathType Container)) {
-        throw "Python virtualenv base runtime is missing."
-    }
-    return $fullBaseRuntimePath
+    return $deploymentPython
 }
 
 function New-IpcKey {
@@ -324,9 +318,12 @@ if (-not $RuntimeUser) { $RuntimeUser = [System.Security.Principal.WindowsIdenti
 
 if ($Stage -eq "Prepare") {
     $identity = Get-CanonicalIdentity $project
-    $python = Join-Path $project ".venv\Scripts\python.exe"
-    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "Project virtualenv Python is missing." }
     $publish = Join-Path $prepared ("host-" + $identity.head)
+    $pythonRuntimeStagingRoot = Join-Path $prepared ("python-runtime-" + $identity.head)
+    $pythonRuntimeRoot = Assert-ProductionPath (Join-Path $ConfigRoot ("continuous-python-runtime-" + $identity.head))
+    $systemPython = Get-SystemPythonExecutable
+    $runtimeRequirements = Join-Path $project "tools\continuous_runtime_requirements.txt"
+    $python = Invoke-PythonRuntimeBuild $systemPython $runtimeRequirements $pythonRuntimeStagingRoot $project
     $hostInstallRoot = Assert-ProductionPath (Join-Path $ConfigRoot "continuous-service-host")
     $runtimeSourceRoot = Assert-ProductionPath (Join-Path $ConfigRoot ("continuous-python-" + $identity.head))
     Invoke-DotnetPublish $project $publish
@@ -339,7 +336,9 @@ if ($Stage -eq "Prepare") {
         originMaster = $identity.originMaster
         automationManifestSha256 = $identity.automationManifestSha256
         repositoryRoot = $project
-        pythonExecutable = $python
+        pythonRuntimeStagingRoot = $pythonRuntimeStagingRoot
+        pythonRuntimeRoot = $pythonRuntimeRoot
+        pythonExecutable = Join-Path $pythonRuntimeRoot "Scripts\python.exe"
         serviceHostStagingRoot = $publish
         serviceHostRoot = $hostInstallRoot
         serviceHostExecutable = Join-Path $hostInstallRoot "MomentumHunter.ContinuousServiceHost.exe"
@@ -388,8 +387,8 @@ $ipcKeyPath = Assert-ProductionPath ([string]$plan.ipcKeyPath)
 $serviceHostRoot = Assert-ProductionPath ([string]$plan.serviceHostRoot)
 $serviceHostStagingRoot = [IO.Path]::GetFullPath([string]$plan.serviceHostStagingRoot)
 $runtimeSourceRoot = Assert-ProductionPath ([string]$plan.runtimeSourceRoot)
-$pythonEnvironmentRoot = Split-Path -Parent (Split-Path -Parent ([string]$plan.pythonExecutable))
-$pythonBaseRoot = Get-PythonBaseRoot $pythonEnvironmentRoot
+$pythonRuntimeStagingRoot = [IO.Path]::GetFullPath([string]$plan.pythonRuntimeStagingRoot)
+$pythonRuntimeRoot = Assert-ProductionPath ([string]$plan.pythonRuntimeRoot)
 $writerRoot = Join-Path $evidence "writer"
 $automationBefore = Get-ServiceSnapshot "MomentumHunterAutomation"
 $manifestBefore = if (Test-Path -LiteralPath $plan.existingAutomationManifest -PathType Leaf) {
@@ -400,6 +399,9 @@ if ($Stage -eq "Install") {
     if (-not (Test-Path -LiteralPath $serviceHostStagingRoot -PathType Container)) {
         throw "Prepared service host staging root is missing: $serviceHostStagingRoot"
     }
+    if (-not (Test-Path -LiteralPath (Join-Path $pythonRuntimeStagingRoot "Scripts\python.exe") -PathType Leaf)) {
+        throw "Prepared continuous Python runtime is missing."
+    }
     $sourcePackage = Join-Path ([string]$plan.repositoryRoot) "momentum_hunter"
     if (-not (Test-Path -LiteralPath $sourcePackage -PathType Container)) {
         throw "Canonical Python package is missing: $sourcePackage"
@@ -407,12 +409,14 @@ if ($Stage -eq "Install") {
     New-Item -ItemType Directory -Force -Path $runtimeSourceRoot | Out-Null
     Copy-Item -Path $sourcePackage -Destination $runtimeSourceRoot -Recurse -Force
     Protect-ReadOnlyDirectory $runtimeSourceRoot $writerAccount ([string]$plan.runtimeAccount)
-    # The interpreter remains in the existing venv, but LocalService must be able
-    # to traverse the user-profile parents without receiving broad profile access.
-    Grant-PathTraverse $pythonEnvironmentRoot $writerAccount
-    Grant-ReadExecuteDirectory $pythonEnvironmentRoot $writerAccount
-    Grant-PathTraverse $pythonBaseRoot $writerAccount
-    Grant-ReadExecuteDirectory $pythonBaseRoot $writerAccount
+    Write-Host "Installing the isolated Python runtime under ProgramData..."
+    New-Item -ItemType Directory -Force -Path $pythonRuntimeRoot | Out-Null
+    Protect-ReadOnlyDirectory $pythonRuntimeRoot $writerAccount ([string]$plan.runtimeAccount)
+    Get-ChildItem -LiteralPath $pythonRuntimeStagingRoot -Force | Copy-Item -Destination $pythonRuntimeRoot -Recurse -Force
+    Protect-ReadOnlyDirectory $pythonRuntimeRoot $writerAccount ([string]$plan.runtimeAccount)
+    if (-not (Test-Path -LiteralPath ([string]$plan.pythonExecutable) -PathType Leaf)) {
+        throw "Installed continuous Python runtime is missing."
+    }
     New-Item -ItemType Directory -Force -Path $serviceHostRoot | Out-Null
     Get-ChildItem -LiteralPath $serviceHostStagingRoot -Force | Copy-Item -Destination $serviceHostRoot -Recurse -Force
     Protect-ReadOnlyDirectory $serviceHostRoot $writerAccount ([string]$plan.runtimeAccount)
