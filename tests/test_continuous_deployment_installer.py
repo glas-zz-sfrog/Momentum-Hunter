@@ -162,6 +162,10 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
             script,
         )
         self.assertIn("premarketDiscoverySeconds = 600", script)
+        self.assertIn(
+            'runtimeIdentity = "production-continuous-runtime-v2"',
+            script,
+        )
 
 
 if __name__ == "__main__":

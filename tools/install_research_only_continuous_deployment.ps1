@@ -513,7 +513,10 @@ if ($Stage -eq "Install") {
         authority = "RESEARCH_ONLY"
         executionAuthority = "NONE"
         orderCapability = "UNAVAILABLE"
-        runtimeIdentity = "production-continuous-runtime-v1"
+        # A cadence/configuration change gets a new checkpoint namespace. The prior
+        # namespace remains preserved as historical evidence and is never restored
+        # under a different configuration fingerprint.
+        runtimeIdentity = "production-continuous-runtime-v2"
         configurationSessionDate = "1970-01-01"
         runtimeBuildHash = [string]$plan.runtimeBuildHash
         evidenceProgramId = "continuous-opportunity-production"
