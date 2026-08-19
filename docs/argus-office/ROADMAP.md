@@ -79,6 +79,8 @@ full control and Steven read-only access; the runtime-state root grants Steven
 Modify for service recovery. The existing `MomentumHunterAutomation` service
 and `automation-manifest.json` remain unchanged; the latter hash is
 `6B0FCA73BF56A04501AE016BFEFC39E85DA386C44BB9FA63DEF37ED837B18BE4`.
+The explicit installed continuous production/runtime/writer suite passed
+`57` tests in `313.127` seconds.
 
 Remaining gates are deliberately separate: (1) one elevated controlled writer
 restart with runtime dependency handling, followed by post-restart duplicate
