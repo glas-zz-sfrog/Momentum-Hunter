@@ -87,7 +87,7 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
         script = self._script()
 
         self.assertIn(
-            "Set-Service -Name $Name -Credential $Credential",
+            "Set-ServiceLogonCredential $Name ([string]$existing.startName) $Credential",
             script,
         )
 
@@ -98,7 +98,7 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
             "Assert-WindowsCredential $credential ([string]$plan.runtimeAccount)"
         )
         automation_repair = script.index(
-            'Set-Service -Name "MomentumHunterAutomation" -Credential $credential'
+            'Set-ServiceLogonCredential "MomentumHunterAutomation" ([string]$automationBefore.startName) $credential'
         )
         continuous_stop = script.index("Stop-ServiceIfRunning $writerServiceName")
         source_copy = script.index(
@@ -119,7 +119,7 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
         self.assertIn("[switch]$RepairAutomationCredential", script)
         self.assertEqual(script.count("Get-Credential"), 1)
         self.assertIn(
-            'Set-Service -Name "MomentumHunterAutomation" -Credential $credential',
+            'Set-ServiceLogonCredential "MomentumHunterAutomation" ([string]$automationBefore.startName) $credential',
             script,
         )
         self.assertIn(
@@ -139,6 +139,16 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
             "Get-ChildItem -LiteralPath $serviceHostStagingRoot -Force | Copy-Item -Destination $serviceHostRoot"
         )
         self.assertLess(writer_stop, host_copy)
+
+    def test_existing_service_logon_uses_native_change_api_without_password_command_line(self):
+        script = self._script()
+
+        self.assertIn("function Set-ServiceLogonCredential", script)
+        self.assertIn("Invoke-CimMethod -InputObject $service -MethodName Change", script)
+        self.assertIn("StartPassword = $password", script)
+        self.assertIn("ZeroFreeBSTR($passwordPointer)", script)
+        self.assertNotIn("Set-Service -Name $Name -Credential", script)
+        self.assertNotIn("sc.exe config $Name password=", script)
 
 
 if __name__ == "__main__":

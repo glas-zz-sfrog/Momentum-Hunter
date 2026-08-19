@@ -289,7 +289,7 @@ function Install-ContinuousService {
             if ($LASTEXITCODE -ne 0) { throw "Could not update the $Name binary path." }
         }
         if ($Credential) {
-            Set-Service -Name $Name -Credential $Credential
+            Set-ServiceLogonCredential $Name ([string]$existing.startName) $Credential
         }
         return Get-ServiceSnapshot $Name
     }
@@ -303,6 +303,33 @@ function Install-ContinuousService {
         if ($LASTEXITCODE -ne 0) { throw "Could not bind $Name to $Account." }
     }
     return Get-ServiceSnapshot $Name
+}
+
+function Set-ServiceLogonCredential {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Account,
+        [Parameter(Mandatory)][System.Management.Automation.PSCredential]$Credential
+    )
+    $service = Get-CimInstance Win32_Service -Filter "Name='$Name'" -ErrorAction Stop
+    $passwordPointer = [IntPtr]::Zero
+    $password = $null
+    try {
+        $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Credential.Password)
+        $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+        $change = Invoke-CimMethod -InputObject $service -MethodName Change -Arguments @{
+            StartName = $Account
+            StartPassword = $password
+        }
+        if ([int]$change.ReturnValue -ne 0) {
+            throw "Windows rejected the $Name service logon update (code $($change.ReturnValue))."
+        }
+    } finally {
+        $password = $null
+        if ($passwordPointer -ne [IntPtr]::Zero) {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
+        }
+    }
 }
 
 function Assert-WindowsCredential {
@@ -442,7 +469,7 @@ if ($Stage -eq "Install") {
         if (-not (Test-ServiceAccountMatch ([string]$automationBefore.startName) ([string]$plan.runtimeAccount))) {
             throw "MomentumHunterAutomation is bound to an unexpected Windows account."
         }
-        Set-Service -Name "MomentumHunterAutomation" -Credential $credential
+        Set-ServiceLogonCredential "MomentumHunterAutomation" ([string]$automationBefore.startName) $credential
         Start-Service -Name "MomentumHunterAutomation"
         (Get-Service -Name "MomentumHunterAutomation").WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
     }
