@@ -653,5 +653,9 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Proved installed LocalService writer acceptance, duplicate replay,
   write-once indexing, fingerprint integrity, and credential-field sanitation
   using synthetic deployment payloads only.
-- Left live canary, elevated service restart recovery, and any Paper/Shadow or
-  live execution capability explicitly unclaimed.
+- Passed the elevated controlled writer/runtime restart proof: restart counter
+  `1`, fresh duplicate replay, sequence continuity, and no post-start service
+  host errors.
+- Left the live canary and any Paper/Shadow or live execution capability
+  explicitly unclaimed; only the live market canary remains before research-
+  only continuous operation can be claimed.

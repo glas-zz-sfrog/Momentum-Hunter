@@ -480,9 +480,11 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   `313.127` seconds. Git remained clean and synchronized after the governance
   closeout; Windows Time reported synchronized to `time.nist.gov` and the
   High performance plan keeps AC sleep/hibernate disabled.
-- Classification remains
-  `INSTALLED_PENDING_LIVE_MARKET_CANARY_AND_ELEVATED_RESTART_PROOF`. A direct
-  restart attempt was denied by the non-elevated shell and a second attempt
-  was blocked by the declared runtime dependency; no service state was changed
-  by those failed attempts. One elevated controlled restart and the next
-  eligible market-session canary remain open.
+- The elevated controlled restart then passed. The runtime restart counter
+  advanced to `1`; a fresh authenticated replay returned `DUPLICATE`; the
+  writer resumed at sequence `6` and advanced to `7`; proof-record count stayed
+  at four; and no post-start ContinuousServiceHost errors occurred. The
+  controlled-stop wrapper `-1` event is retained as expected shutdown evidence.
+- Classification is now `INSTALLED_PENDING_LIVE_MARKET_CANARY`. The next
+  eligible market session must provide the bounded live read-only canary before
+  continuous hunting or same-day production recovery is claimed.

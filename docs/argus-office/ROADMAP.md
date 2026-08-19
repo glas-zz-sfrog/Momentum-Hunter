@@ -52,7 +52,7 @@ remain unchanged. Terminal and frozen experiment jobs retain their original
 software identities permanently.
 
 `RESEARCH_ONLY_CONTINUOUS_DEPLOYMENT-001` is now
-`INSTALLED_PENDING_LIVE_MARKET_CANARY_AND_ELEVATED_RESTART_PROOF`.
+`INSTALLED_PENDING_LIVE_MARKET_CANARY`.
 
 The installed deployment is bound to canonical `master` at
 `f2a3af58c4a90274f46e745ad74c8dcd80b201af`, with runtime build
@@ -82,11 +82,16 @@ and `automation-manifest.json` remain unchanged; the latter hash is
 The explicit installed continuous production/runtime/writer suite passed
 `57` tests in `313.127` seconds.
 
-Remaining gates are deliberately separate: (1) one elevated controlled writer
-restart with runtime dependency handling, followed by post-restart duplicate
-and sequence verification; and (2) the next eligible market session's bounded
-live read-only canary with six broad cycles or at least 30 minutes, then the
-authorized runtime-restart and writer-restart checks. Until those pass, do not
+The elevated controlled writer/runtime restart proof is now passed: the
+runtime restart counter advanced to `1`, a fresh authenticated replay returned
+`DUPLICATE`, the writer resumed at sequence `6`, and the post-restart sequence
+advanced to `7` without creating another proof record. The controlled stop's
+wrapper exit-code `-1` event is preserved as expected shutdown evidence; no
+post-start ContinuousServiceHost errors occurred.
+
+The remaining gate is the next eligible market session's bounded live
+read-only canary with six broad cycles or at least 30 minutes, followed by the
+authorized runtime restart after healthy records. Until that passes, do not
 claim continuous live hunting or same-day production recovery from this
 installation. Continuous Paper remains a later independent gate. Shadow, live
 Alpaca, Schwab orders, account reads, position reads, and live execution remain

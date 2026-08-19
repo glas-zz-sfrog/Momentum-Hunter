@@ -1031,4 +1031,4 @@ Use a fresh task branch from local `master` instead.
 
 | Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
-| `master` | `f2a3af58c4a90274f46e745ad74c8dcd80b201af` / synchronized `master` and `origin/master` | Yes | Yes | `INSTALLED_PENDING_LIVE_MARKET_CANARY_AND_ELEVATED_RESTART_PROOF` | Canonical checkpoint-namespace repair plus installed research-only LocalService writer/runtime deployment. | Run one elevated writer/runtime restart proof, then the bounded live market canary; do not activate Paper, Shadow, or live execution. |
+| `master` | `f2a3af58c4a90274f46e745ad74c8dcd80b201af` / synchronized `master` and `origin/master` | Yes | Yes | `INSTALLED_PENDING_LIVE_MARKET_CANARY` | Canonical checkpoint-namespace repair plus installed research-only LocalService writer/runtime deployment and passed elevated restart proof. | Run the bounded live market canary; do not activate Paper, Shadow, or live execution. |
