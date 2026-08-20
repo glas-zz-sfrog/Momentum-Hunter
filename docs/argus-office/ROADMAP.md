@@ -29,102 +29,73 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-`ARGUS-CONTINUOUS-CANARY-HARDENING-001` is
-`IMPLEMENTED_PENDING_MERGE` on isolated branch
-`codex/ARGUS-CONTINUOUS-CANARY-HARDENING-001` from synchronized canonical
-`e2dd14031331ee0611a51126e260be72ce96b9a8`. The August 19 installed canary is
-preserved permanently as `SYSTEM_CONTRACT_FAILURE / DECISION_NOT_REACHED`, not
-`NO_TRADE`: premarket SKHY readiness was incorrectly attempted before the
-regular-session consumer contract became legal, and a cumulative/doubled
-580,760-byte discovery envelope exceeded the 524,288-byte protocol ceiling and
-became an indefinitely retried queue head.
+`ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001` is complete. Product commit
+`e69426b3b7bd179cd62eba2e28a5d0553da47154` was pushed, strictly
+fast-forwarded to canonical `master`, pushed normally, and installed as the
+exact Continuous Runtime and writer source identity. Runtime build
+`a44e9f35cfdf804efc85bad9459b5102902d695b9d8db179885e65b31450ef45`
+and configuration fingerprint
+`1dcf3a01a57caf9b5668fd97cf508b17f1cc5c025fc477fc67f15874fc19cfbf`
+are active. `MomentumHunterContinuousRuntime` is Automatic/Running as
+`BEASTCOMPUTER\\steve`; `MomentumHunterContinuousWriter` is Automatic/Running
+as `NT AUTHORITY\\LOCAL SERVICE`.
 
-The branch adds explicit checkpointed `PREMARKET_DEFERRED` handling and fresh
-regular-session rollover without requiring opening rediscovery. Discovery
-evidence is now current-cycle/delta/predecessor based, the writer carries one
-canonical logical payload, final envelope size is preflighted before active
-queue admission, deterministic record failures become compact terminal
-evidence, transient writer failures retain bounded backoff, and process
-liveness is reported separately from cadence-derived pipeline progress. The
-100-cycle production-shaped proof peaked at 140,517 bytes (26.801% of the
-524,288-byte ceiling) with 383,771 bytes minimum headroom and only 135 bytes of
-cycle-10-through-100 spread. Compileall, focused/adjacent proofs, and one full
-2,637-test discovery pass are green. Canonical merge, exact-SHA deployment,
-historical-checkpoint migration, and a 30-minute/six-completed-cycle live
-regular-session canary remain pending. The currently installed services remain
-Running and unchanged on `f2a3af58`; account reads, position reads, Paper,
-Shadow, and all order capability remain `UNAVAILABLE`.
+The exact observed auth failure was `REFRESH_STATE_REJECTED_HTTP_400`.
+`MULTIPROCESS_AUTH_STATE_RACE` is the strongly corroborated enabling defect,
+not a forensically confirmed provider transaction: the old implementation let
+multiple processes load, refresh, and overwrite the same user-DPAPI state
+without cross-process ownership, and the exact competing provider exchange was
+not persisted. The repair adds one path-scoped cross-process refresh owner,
+rereads after ownership, adopts newer state without redundant refresh, persists
+atomically, reloads state instead of trusting stale in-memory tokens, permits
+one bounded 401 refresh/retry, preserves 403 separately, and reports actual
+interactive reauthorization only when refresh state cannot restore access.
 
-Canonical software integration is `COMPLETE` at
-`4526446eeab404ff02856d6a57c679c8b8b9b2a5`. This is the integrated software
-baseline; the post-merge governance reconciliation is a separate descendant
-and must never obscure that product identity. `master` and `origin/master`
-are synchronized at the integrated baseline before this reconciliation.
+The installed Session-0 runtime physically proved the lifecycle twice during
+the August 20 canary. It detected an expired token, performed one unattended
+refresh, persisted the result under CurrentUser DPAPI, and completed quote,
+minute-history, Daily-history, canonical-readiness, composition, and denominator
+work. At the next natural expiry it refreshed unattended a second time.
+Final auth health is 16 state loads, 2 refresh-needed events, 2 attempts,
+2 successes, 0 interactive reauthorizations, 0 HTTP 401s, and 0 HTTP 403s.
 
-The integrated baseline proves `CONTINUOUS_SESSION_RESILIENCE_PROVEN`,
-`AUG18_ZERO_OPENING_CONTINUOUS_SESSION_LIVE_PROVEN`,
-`AUG18_MIDDAY_FIRST_LIVE_ADMISSION_PROVEN`, and
-`WRITER_SCALE_MARGIN_STABILIZED`. A failed opening test or provider cycle is
-preserved as that test/cycle's result; later same-session discovery can resume,
-midday-first symbols can enter, and restart does not require rerunning the
-opening bootstrap. Writer integrity, single-owner exclusion, reparse-resistant
-persistence, crash recovery, and measured write/recovery margins are canonical.
+The new canary is `LIVE_READ_ONLY_CONTINUOUS_CANARY_PASSED`: 35.118 minutes,
+6 completed broad cycles, 18 Finviz pages, 360 rows, 64 unique symbols,
+12 Schwab market-data successes, 18 candle-readiness successes, 8 canonical-
+ready results, 12 composition cycles, and 15 cumulative denominator cycles.
+Writer sequence advanced from pre-canary 99 through 131, active retry stayed
+zero, no stall occurred, and the largest accepted record was 206,191 bytes
+against the 524,288-byte ceiling. Two separate Finviz pagination failures were
+preserved honestly and later same-session cycles recovered. No setup/TradePlan
+was fabricated merely to pass the canary.
 
-Post-merge governance is now `RECONCILED`. The eligible
-ordinary future opening jobs are pinned by code identity only. Their
-schedules, dependencies, enablement, time windows, strategy parameters,
-provider configuration, risk limits, Paper authority, and historical receipts
-remain unchanged. Terminal and frozen experiment jobs retain their original
-software identities permanently.
+The earlier failed canary remains permanently `FAILED / SYSTEM_CONTRACT_FAILURE
+/ DECISION_NOT_REACHED` at SHA-256
+`D519AC3423CDF5D6E29C70BF2343C7C9EC7D22D64414652CCD2CC9BD77A4297C`.
+The historical oversized intent remains one terminal permanent rejection with
+zero active retry. Its premarket rollover, bounded-envelope, writer, poison,
+and forward-progress evidence remains valid and unchanged.
 
-`RESEARCH_ONLY_CONTINUOUS_DEPLOYMENT-001` is now
-`INSTALLED_PENDING_LIVE_MARKET_CANARY`.
-
-The installed deployment is bound to canonical `master` at
-`f2a3af58c4a90274f46e745ad74c8dcd80b201af`, with runtime build
-`add0723196a3d272965cb87062157046917301b2bd11d0bd0b428cc4ea5c4add` and
-configuration fingerprint
-`1dcf3a01a57caf9b5668fd97cf508b17f1cc5c025fc477fc67f15874fc19cfbf`.
-The installed deployment manifest is
-`C:\\ProgramData\\MomentumHunter\\Automation\\continuous-deployment-manifest.json`
+The passed sanitized bundle is
+`C:\\Users\\steve\\OneDrive\\Documents\\ArgusReviewBundles\\ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001-PASSED-CANARY-20260820T190752Z.zip`
 with SHA-256
-`B9FF2704F25C0E907F72FD622D2DED0EDA68F5EA60E343400D96A87835EAF6DD`.
-`MomentumHunterContinuousWriter` is installed as `NT AUTHORITY\\LOCAL SERVICE`
-and `MomentumHunterContinuousRuntime` as `BEASTCOMPUTER\\steve`; both are
-Automatic and Running. The runtime is currently `RESEARCH_ONLY`,
-`IDLE_OUT_OF_SESSION`, and `SESSION_CLOSED`, so no live provider canary has
-been claimed while the market is closed.
+`A5066FC9FC7E046D2A2CA3AB7143846C11DECB11A36A741E7ADF7C6D2CE8B426`.
+The rollback bundle is SHA-256
+`CD9D70D32C33A15F4536950B0FBD833ACEF24D36F51F286FE0C53C2BA8BC00E3`.
+Compileall, 164 focused tests, one complete 2,648-test run, 17 post-merge tests,
+diff, secret, credential, capability, and protected-path checks pass.
 
-The installed writer/root proof passed through the real LocalService writer:
-four bounded synthetic business payloads were accepted across discovery,
-denominator, composition, and system-failure lanes; duplicate replay returned
-`DUPLICATE`; four immutable records, five ACKs, and five index generations are
-present; all four record fingerprints recompute; and the deployment-proof root
-contains no forbidden credential field names. The root ACL grants LocalService
-full control and Steven read-only access; the runtime-state root grants Steven
-Modify for service recovery. The existing `MomentumHunterAutomation` service
-and `automation-manifest.json` remain unchanged; the latter hash is
+Current classifications are `SCHWAB_CONTINUOUS_AUTH_LIFECYCLE_HARDENED`,
+`SCHWAB_UNATTENDED_REFRESH_PROVEN`,
+`RESEARCH_ONLY_CONTINUOUS_DEPLOYMENT_PROVEN`, and
+`CONTINUOUS_RESEARCH_ACTIVE_READ_ONLY`. The ordinary Automation Service and
+manifest remain unchanged; manifest SHA-256 is
 `6B0FCA73BF56A04501AE016BFEFC39E85DA386C44BB9FA63DEF37ED837B18BE4`.
-The explicit installed continuous production/runtime/writer suite passed
-`57` tests in `313.127` seconds.
+Account reads, position reads, Alpaca Paper, Alpaca Live, Shadow, broker orders,
+and order capability remain `UNAVAILABLE`. `CONTINUOUS_PAPER_READY = NO` and
+`LIVE_EXECUTION_READY = NO`.
 
-The elevated controlled writer/runtime restart proof is now passed: the
-runtime restart counter advanced to `1`, a fresh authenticated replay returned
-`DUPLICATE`, the writer resumed at sequence `6`, and the post-restart sequence
-advanced to `7` without creating another proof record. The controlled stop's
-wrapper exit-code `-1` event is preserved as expected shutdown evidence; no
-post-start ContinuousServiceHost errors occurred.
-
-The remaining gate is the next eligible market session's bounded live
-read-only canary with six broad cycles or at least 30 minutes, followed by the
-authorized runtime restart after healthy records. Until that passes, do not
-claim continuous live hunting or same-day production recovery from this
-installation. Continuous Paper remains a later independent gate. Shadow, live
-Alpaca, Schwab orders, account reads, position reads, and live execution remain
-unavailable and unauthorized. The final canonical governance head is the
-post-merge reconciliation closeout commit on `master`; the integrated software
-identity remains `4526446eeab404ff02856d6a57c679c8b8b9b2a5`.
-The detailed pre-merge branch paragraphs below are retained as historical
+The detailed earlier implementation paragraphs below are retained as historical
 evidence and are not current-state claims.
 
 Profiling the exact 4,300-record full-session writer proof found a combined

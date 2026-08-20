@@ -2,6 +2,24 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001 - 2026-08-20
+
+`codex/ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001` started from clean,
+synchronized canonical `e1ea386f4640686569e2fb5a9a88e261ac974da3`.
+Implementation commit `e69426b3b7bd179cd62eba2e28a5d0553da47154` passed
+compileall, 164 focused tests, one 2,648-test full run, secret/capability/path
+checks, and 17 post-merge tests. It was pushed, strictly fast-forwarded to
+`master`, pushed normally, and deployed as the exact runtime/writer source.
+
+The installed live canary passed 35.118 regular-session minutes and 6 completed
+broad cycles. Two natural OAuth refreshes succeeded without interaction;
+18 readiness and 12 composition results completed; writer sequence advanced
+99->131 with zero active retry or stall. The sanitized bundle is SHA-256
+`A5066FC9FC7E046D2A2CA3AB7143846C11DECB11A36A741E7ADF7C6D2CE8B426`.
+Classification is `SCHWAB_CONTINUOUS_AUTH_LIFECYCLE_HARDENED /
+LIVE_READ_ONLY_CONTINUOUS_CANARY_PASSED`. Continuous Paper and live execution
+remain unauthorized.
+
 ## ARGUS-CONTINUOUS-CANARY-HARDENING-001 - 2026-08-19
 
 `codex/ARGUS-CONTINUOUS-CANARY-HARDENING-001` starts from clean synchronized

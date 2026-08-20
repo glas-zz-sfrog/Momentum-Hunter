@@ -1,5 +1,17 @@
 # Argus Changelog
 
+- Hardened the shared Schwab read-only auth lifecycle with cross-process
+  single-flight refresh ownership, post-lock state reread, atomic CurrentUser
+  DPAPI persistence, stale-state adoption, and bounded 401/403/interactive-
+  reauth classification.
+- Integrated and deployed product `e69426b3`; one complete 2,648-test run and
+  the post-merge gate pass. The installed Session-0 runtime performed two
+  natural unattended refreshes and completed 6 live broad cycles in 35.118
+  minutes with 18 canonical readiness successes and writer sequence 99->131.
+- Classified the deployment `CONTINUOUS_RESEARCH_ACTIVE_READ_ONLY`; account,
+  position, Paper, Shadow, broker-order, and live-execution authority remain
+  unavailable. The earlier failed canary remains failed and immutable.
+
 - Preserved the August 19 installed continuous canary as
   `SYSTEM_CONTRACT_FAILURE / DECISION_NOT_REACHED`: premarket readiness crossed
   an illegal phase boundary and a cumulative, doubled 580,760-byte discovery
