@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from contextlib import nullcontext
 
 from momentum_hunter.schwab_account_discovery import SchwabAccountNumbersTransport
 from momentum_hunter.schwab_account_validation import (
@@ -65,24 +66,76 @@ class SchwabBoundAccountRefresh:
         self.details_transport = details_transport or SchwabAccountDetailsTransport()
 
     def refresh(self, *, confirmation: str) -> dict[str, object]:
+        return self._refresh(
+            confirmation=confirmation,
+            expected_access_token=None,
+        )
+
+    def refresh_if_current(
+        self,
+        *,
+        confirmation: str,
+        expected_access_token: str,
+    ) -> dict[str, object]:
+        return self._refresh(
+            confirmation=confirmation,
+            expected_access_token=expected_access_token,
+        )
+
+    def _refresh(
+        self,
+        *,
+        confirmation: str,
+        expected_access_token: str | None,
+    ) -> dict[str, object]:
         if confirmation != BOUND_REFRESH_CONFIRMATION:
             raise SchwabBoundAccountRefreshError(
                 "Bound Schwab refresh requires the exact confirmation phrase."
             )
-        binding = self.bindings.load()
-        credentials = self.secrets.load_credentials()
-        current_tokens = self.secrets.load_tokens()
-        refreshed_tokens = self.oauth_transport.refresh(credentials, current_tokens)
-        candidate = self._revalidate_binding(
-            binding,
-            access_token=refreshed_tokens.access_token,
+        ownership_factory = getattr(self.secrets, "refresh_ownership", None)
+        ownership = (
+            ownership_factory()
+            if callable(ownership_factory)
+            else nullcontext()
         )
-        try:
-            self.secrets.save_tokens(refreshed_tokens)
-        except (OSError, SchwabSetupError) as exc:
-            raise SchwabBoundAccountRefreshPersistenceError(
-                "Refreshed Schwab authorization could not be persisted safely."
-            ) from exc
+        with ownership:
+            binding = self.bindings.load()
+            credentials = self.secrets.load_credentials()
+            current_tokens = self.secrets.load_tokens()
+            another_process_refreshed = (
+                expected_access_token is not None
+                and current_tokens.access_token != expected_access_token
+                and not current_tokens.expired
+            )
+            if not another_process_refreshed:
+                refreshed_tokens = self.oauth_transport.refresh(
+                    credentials,
+                    current_tokens,
+                )
+                candidate = self._revalidate_binding(
+                    binding,
+                    access_token=refreshed_tokens.access_token,
+                )
+                try:
+                    save_under_ownership = getattr(
+                        self.secrets,
+                        "save_tokens_under_ownership",
+                        None,
+                    )
+                    if callable(save_under_ownership):
+                        save_under_ownership(refreshed_tokens)
+                    else:
+                        self.secrets.save_tokens(refreshed_tokens)
+                except (OSError, SchwabSetupError) as exc:
+                    raise SchwabBoundAccountRefreshPersistenceError(
+                        "Refreshed Schwab authorization could not be persisted safely."
+                    ) from exc
+            else:
+                refreshed_tokens = current_tokens
+                candidate = self._revalidate_binding(
+                    binding,
+                    access_token=refreshed_tokens.access_token,
+                )
         return {
             "mode": "SCHWAB_BOUND_ACCOUNT_REFRESH_READ_ONLY",
             "tokenState": "ACTIVE",

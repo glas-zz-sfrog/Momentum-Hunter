@@ -26,10 +26,13 @@ from momentum_hunter.schwab_bound_account_refresh import (
     SchwabBoundAccountRefreshError,
     SchwabBoundAccountRefreshPersistenceError,
 )
+from momentum_hunter.schwab_auth_lock import SchwabAuthLockError
 from momentum_hunter.schwab_onboarding import (
     SchwabOAuthError,
+    SchwabOAuthNetworkError,
     SchwabOAuthResponseError,
     SchwabOAuthSecretRepository,
+    SchwabOAuthTransport,
 )
 from momentum_hunter.schwab_readonly import AccountIsolationError
 from momentum_hunter.schwab_setup import SchwabSetupError
@@ -89,7 +92,51 @@ class SchwabMarketDataNetworkError(SchwabMarketDataError):
 
 
 class SchwabMarketDataResponseError(SchwabMarketDataError):
-    pass
+    diagnostic_code = "SCHWAB_MARKET_DATA_RESPONSE_FAILED"
+
+    def __init__(self, message: str, *, http_status: int | None = None) -> None:
+        super().__init__(message)
+        self.http_status = http_status
+
+
+class SchwabMarketDataHttpUnauthorizedError(SchwabMarketDataResponseError):
+    diagnostic_code = "SCHWAB_HTTP_UNAUTHORIZED"
+    http_status = 401
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, http_status=401)
+
+
+class SchwabMarketDataHttpForbiddenError(SchwabMarketDataResponseError):
+    diagnostic_code = "SCHWAB_HTTP_FORBIDDEN"
+    http_status = 403
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, http_status=403)
+
+
+@dataclass
+class SchwabAuthLifecycleMetrics:
+    state_loads: int = 0
+    refresh_needed: int = 0
+    refresh_attempts: int = 0
+    refresh_successes: int = 0
+    interactive_reauth_required: int = 0
+    http_401: int = 0
+    http_403: int = 0
+    last_successful_refresh: str | None = None
+
+    def sanitized(self) -> dict[str, object]:
+        return {
+            "authStateLoadCount": self.state_loads,
+            "refreshNeededCount": self.refresh_needed,
+            "refreshAttemptCount": self.refresh_attempts,
+            "refreshSuccessCount": self.refresh_successes,
+            "interactiveReauthCount": self.interactive_reauth_required,
+            "http401Count": self.http_401,
+            "http403Count": self.http_403,
+            "lastSuccessfulRefresh": self.last_successful_refresh,
+        }
 
 
 class StoredSchwabAccessTokenProvider:
@@ -139,7 +186,7 @@ class BoundSchwabAccessTokenProvider:
             tokens = self._load_tokens()
             if not tokens.expired:
                 return tokens.access_token
-            return self._refresh_and_load()
+            return self._refresh_and_load(tokens.access_token)
 
     def refresh_after_rejection(self) -> str:
         """Refresh once after a provider 401, then fail closed on another request."""
@@ -150,7 +197,8 @@ class BoundSchwabAccessTokenProvider:
                     "Schwab rejected the refreshed authorization; bounded recovery is exhausted."
                 )
             self._rejection_refresh_used = True
-            return self._refresh_and_load()
+            current = self._load_tokens()
+            return self._refresh_and_load(current.access_token)
 
     def _load_tokens(self):
         try:
@@ -164,11 +212,22 @@ class BoundSchwabAccessTokenProvider:
                 "The encrypted Schwab authorization store could not be loaded."
             ) from exc
 
-    def _refresh_and_load(self) -> str:
+    def _refresh_and_load(self, expected_access_token: str) -> str:
         try:
-            self.bound_refresh.refresh(
-                confirmation=BOUND_REFRESH_CONFIRMATION,
+            refresh_if_current = getattr(
+                self.bound_refresh,
+                "refresh_if_current",
+                None,
             )
+            if callable(refresh_if_current):
+                refresh_if_current(
+                    confirmation=BOUND_REFRESH_CONFIRMATION,
+                    expected_access_token=expected_access_token,
+                )
+            else:
+                self.bound_refresh.refresh(
+                    confirmation=BOUND_REFRESH_CONFIRMATION,
+                )
         except OSError as exc:
             raise SchwabAuthPersistenceFailed(
                 "Refreshed Schwab authorization could not be persisted safely."
@@ -198,6 +257,109 @@ class BoundSchwabAccessTokenProvider:
                 "Schwab market data access token remained expired after guarded refresh."
             )
         return refreshed.access_token
+
+
+class SchwabReadOnlyAccessTokenProvider:
+    """Single-flight OAuth lifecycle for market-data-only consumers."""
+
+    def __init__(
+        self,
+        *,
+        secrets_repository: SchwabOAuthSecretRepository | None = None,
+        oauth_transport: SchwabOAuthTransport | None = None,
+    ) -> None:
+        self.secrets = secrets_repository or SchwabOAuthSecretRepository()
+        self.oauth_transport = oauth_transport or SchwabOAuthTransport()
+        self.metrics = SchwabAuthLifecycleMetrics()
+        self._thread_lock = threading.Lock()
+
+    def access_token(self) -> str:
+        tokens = self._load_tokens()
+        if not tokens.expired:
+            return tokens.access_token
+        self.metrics.refresh_needed += 1
+        return self._refresh(rejected_access_token=None)
+
+    def refresh_after_rejection(
+        self,
+        rejected_access_token: str | None = None,
+    ) -> str:
+        self.metrics.http_401 += 1
+        self.metrics.refresh_needed += 1
+        return self._refresh(rejected_access_token=rejected_access_token)
+
+    def record_http_forbidden(self) -> None:
+        self.metrics.http_403 += 1
+
+    def record_http_unauthorized(self) -> None:
+        self.metrics.http_401 += 1
+
+    def metrics_snapshot(self) -> dict[str, object]:
+        return self.metrics.sanitized()
+
+    def _load_tokens(self):
+        self.metrics.state_loads += 1
+        try:
+            return self.secrets.load_tokens()
+        except (SchwabOAuthError, SchwabSetupError, OSError) as exc:
+            if getattr(self.secrets, "exists", True) is False:
+                raise SchwabAuthStateMissingError(
+                    "The encrypted Schwab authorization store is missing."
+                ) from exc
+            raise SchwabAuthSecureStoreError(
+                "The encrypted Schwab authorization store could not be loaded."
+            ) from exc
+
+    def _refresh(self, *, rejected_access_token: str | None) -> str:
+        with self._thread_lock:
+            try:
+                with self.secrets.refresh_ownership():
+                    current = self._load_tokens()
+                    another_process_refreshed = (
+                        not current.expired
+                        and (
+                            rejected_access_token is None
+                            or current.access_token != rejected_access_token
+                        )
+                    )
+                    if another_process_refreshed:
+                        return current.access_token
+                    self.metrics.refresh_attempts += 1
+                    credentials = self.secrets.load_credentials()
+                    try:
+                        refreshed = self.oauth_transport.refresh(
+                            credentials,
+                            current,
+                        )
+                    except SchwabOAuthResponseError as exc:
+                        self.metrics.interactive_reauth_required += 1
+                        raise SchwabReauthorizationRequired(
+                            "Schwab rejected the refresh credential; interactive reauthorization is required."
+                        ) from exc
+                    except (SchwabOAuthNetworkError, SchwabOAuthError) as exc:
+                        raise SchwabAuthRefreshFailed(
+                            "Schwab OAuth refresh failed before persistence."
+                        ) from exc
+                    try:
+                        self.secrets.save_tokens_under_ownership(refreshed)
+                    except (OSError, SchwabOAuthError, SchwabSetupError) as exc:
+                        raise SchwabAuthPersistenceFailed(
+                            "Refreshed Schwab authorization could not be persisted safely."
+                        ) from exc
+                    persisted = self._load_tokens()
+                    if persisted.expired:
+                        raise SchwabAuthRefreshFailed(
+                            "Schwab market data access token remained expired after refresh."
+                        )
+                    self.metrics.refresh_successes += 1
+                    self.metrics.last_successful_refresh = datetime.now(
+                        timezone.utc
+                    ).isoformat()
+                    return persisted.access_token
+            except SchwabAuthLockError as exc:
+                raise SchwabAuthRefreshFailed(
+                    "Schwab auth refresh ownership could not be acquired."
+                ) from exc
 
 
 def _exception_chain_contains(exc: BaseException, expected: type[BaseException]) -> bool:
@@ -331,9 +493,18 @@ class SchwabMarketDataTransport:
             raise SchwabMarketDataResponseError(
                 "Schwab market data refused an HTTP redirect."
             )
+        if response.status_code == 401:
+            raise SchwabMarketDataHttpUnauthorizedError(
+                "Schwab market data rejected authorization with HTTP 401."
+            )
+        if response.status_code == 403:
+            raise SchwabMarketDataHttpForbiddenError(
+                "Schwab market data denied authorization with HTTP 403."
+            )
         if response.status_code != 200:
             raise SchwabMarketDataResponseError(
-                f"Schwab market data failed safely with HTTP {response.status_code}."
+                f"Schwab market data failed safely with HTTP {response.status_code}.",
+                http_status=response.status_code,
             )
         if len(response.content) > MAX_QUOTE_RESPONSE_BYTES:
             raise SchwabMarketDataResponseError(
@@ -385,7 +556,7 @@ class SchwabMarketDataQuoteSource:
             else (
                 StoredSchwabAccessTokenProvider(secrets_repository)
                 if secrets_repository is not None
-                else BoundSchwabAccessTokenProvider()
+                else SchwabReadOnlyAccessTokenProvider()
             )
         )
         self.transport = transport or SchwabMarketDataTransport()
@@ -401,12 +572,30 @@ class SchwabMarketDataQuoteSource:
         if not normalized:
             return {}
         access_token = self.token_provider.access_token()
-        return {
-            symbol: quote.to_shadow_quote()
-            for symbol, quote in self.transport.fetch_quotes(
+        try:
+            rows = self.transport.fetch_quotes(
                 access_token,
                 normalized,
-            ).items()
+            )
+        except SchwabMarketDataHttpUnauthorizedError:
+            access_token = self._refresh_after_rejection(access_token)
+            try:
+                rows = self.transport.fetch_quotes(
+                    access_token,
+                    normalized,
+                )
+            except SchwabMarketDataHttpUnauthorizedError:
+                self._record_unauthorized()
+                raise
+            except SchwabMarketDataHttpForbiddenError:
+                self._record_forbidden()
+                raise
+        except SchwabMarketDataHttpForbiddenError:
+            self._record_forbidden()
+            raise
+        return {
+            symbol: quote.to_shadow_quote()
+            for symbol, quote in rows.items()
         }
 
     def quotes_with_clock(
@@ -420,10 +609,27 @@ class SchwabMarketDataQuoteSource:
         if not normalized:
             return SchwabQuoteEvidenceBatch({}, {})
         access_token = self.token_provider.access_token()
-        batch = self.transport.fetch_quotes_with_clock(
-            access_token,
-            normalized,
-        )
+        try:
+            batch = self.transport.fetch_quotes_with_clock(
+                access_token,
+                normalized,
+            )
+        except SchwabMarketDataHttpUnauthorizedError:
+            access_token = self._refresh_after_rejection(access_token)
+            try:
+                batch = self.transport.fetch_quotes_with_clock(
+                    access_token,
+                    normalized,
+                )
+            except SchwabMarketDataHttpUnauthorizedError:
+                self._record_unauthorized()
+                raise
+            except SchwabMarketDataHttpForbiddenError:
+                self._record_forbidden()
+                raise
+        except SchwabMarketDataHttpForbiddenError:
+            self._record_forbidden()
+            raise
         return SchwabQuoteEvidenceBatch(
             quotes={
                 symbol: quote.to_shadow_quote()
@@ -431,6 +637,27 @@ class SchwabMarketDataQuoteSource:
             },
             clock_skew_proof=dict(batch.clock_skew_proof),
         )
+
+    def _refresh_after_rejection(self, rejected_access_token: str) -> str:
+        refresh = getattr(self.token_provider, "refresh_after_rejection", None)
+        if not callable(refresh):
+            raise SchwabMarketDataHttpUnauthorizedError(
+                "Schwab rejected authorization and no bounded refresh path is available."
+            )
+        try:
+            return refresh(rejected_access_token=rejected_access_token)
+        except TypeError:
+            return refresh()
+
+    def _record_forbidden(self) -> None:
+        record = getattr(self.token_provider, "record_http_forbidden", None)
+        if callable(record):
+            record()
+
+    def _record_unauthorized(self) -> None:
+        record = getattr(self.token_provider, "record_http_unauthorized", None)
+        if callable(record):
+            record()
 
 
 def normalize_symbols(symbols: Sequence[str]) -> tuple[str, ...]:

@@ -22,6 +22,7 @@ from requests.auth import HTTPBasicAuth
 from momentum_hunter.schwab_loopback_certificate import (
     WindowsLoopbackCertificateManager,
 )
+from momentum_hunter.schwab_auth_lock import SchwabAuthStateLock
 from momentum_hunter.schwab_oauth_listener import (
     OneShotOAuthCallbackListener,
     REGISTERED_CALLBACK_URL,
@@ -61,7 +62,9 @@ class SchwabOAuthNetworkError(SchwabOAuthError):
 
 
 class SchwabOAuthResponseError(SchwabOAuthError):
-    pass
+    def __init__(self, message: str, *, http_status: int | None = None) -> None:
+        super().__init__(message)
+        self.http_status = http_status
 
 
 class _RedactedArgumentParser(argparse.ArgumentParser):
@@ -102,18 +105,19 @@ class SchwabOAuthSecretRepository:
         return self.store.path.is_file()
 
     def save_new_credentials(self, credentials: SchwabApplicationCredentials) -> Path:
-        if self.exists:
-            raise SchwabOAuthError(
-                "Local Schwab authorization material already exists; delete it explicitly before replacing credentials."
+        with self.refresh_ownership():
+            if self.exists:
+                raise SchwabOAuthError(
+                    "Local Schwab authorization material already exists; delete it explicitly before replacing credentials."
+                )
+            return self.store.save(
+                {
+                    "schema_version": ONBOARDING_SCHEMA_VERSION,
+                    "application_id": credentials.application_id,
+                    "application_secret": credentials.application_secret,
+                    "created_at": _utc_now().isoformat(),
+                }
             )
-        return self.store.save(
-            {
-                "schema_version": ONBOARDING_SCHEMA_VERSION,
-                "application_id": credentials.application_id,
-                "application_secret": credentials.application_secret,
-                "created_at": _utc_now().isoformat(),
-            }
-        )
 
     def load_credentials(self) -> SchwabApplicationCredentials:
         payload = self._load()
@@ -124,6 +128,10 @@ class SchwabOAuthSecretRepository:
         return SchwabApplicationCredentials(application_id, application_secret)
 
     def save_tokens(self, tokens: SchwabOAuthTokens) -> Path:
+        with self.refresh_ownership():
+            return self.save_tokens_under_ownership(tokens)
+
+    def save_tokens_under_ownership(self, tokens: SchwabOAuthTokens) -> Path:
         payload = self._load()
         payload.update(
             {
@@ -136,6 +144,16 @@ class SchwabOAuthSecretRepository:
             }
         )
         return self.store.save(payload)
+
+    def refresh_ownership(
+        self,
+        *,
+        timeout_seconds: float = 45.0,
+    ) -> SchwabAuthStateLock:
+        return SchwabAuthStateLock(
+            self.store.path,
+            timeout_seconds=timeout_seconds,
+        )
 
     def load_tokens(self) -> SchwabOAuthTokens:
         payload = self._load()
@@ -156,7 +174,8 @@ class SchwabOAuthSecretRepository:
         return tokens
 
     def delete(self) -> bool:
-        return self.store.delete()
+        with self.refresh_ownership():
+            return self.store.delete()
 
     def status(self) -> dict[str, object]:
         if not self.exists:
@@ -317,7 +336,8 @@ class SchwabOAuthTransport:
             raise SchwabOAuthResponseError("Schwab OAuth token exchange refused an HTTP redirect.")
         if response.status_code != 200:
             raise SchwabOAuthResponseError(
-                f"Schwab OAuth token exchange failed safely with HTTP {response.status_code}."
+                f"Schwab OAuth token exchange failed safely with HTTP {response.status_code}.",
+                http_status=response.status_code,
             )
         if len(response.content) > MAX_TOKEN_RESPONSE_BYTES:
             raise SchwabOAuthResponseError("Schwab OAuth token response exceeded the size limit.")

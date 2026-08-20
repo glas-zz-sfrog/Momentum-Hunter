@@ -33,6 +33,7 @@ from momentum_hunter.schwab_candle_observer import (
     SchwabCandleAccessGuard,
     SchwabCandleHttpTransport,
     SchwabCandleObserverAuthorizationError,
+    SchwabCandleObserverHttpForbiddenError,
     SchwabCandleObserverHttpUnauthorizedError,
     SchwabCandleObserverNetworkError,
     SchwabCandleObserverResponseError,
@@ -113,7 +114,31 @@ class _AuthorizedHistoryReader:
             if not callable(refresh):
                 raise
             self.access = refresh(self.expected_account_ending)
-            return operation(self.access.access_token)
+            try:
+                return operation(self.access.access_token)
+            except SchwabCandleObserverHttpUnauthorizedError:
+                record = getattr(
+                    self.access_guard,
+                    "record_http_unauthorized",
+                    None,
+                )
+                if callable(record):
+                    record()
+                raise
+            except SchwabCandleObserverHttpForbiddenError:
+                record = getattr(
+                    self.access_guard,
+                    "record_http_forbidden",
+                    None,
+                )
+                if callable(record):
+                    record()
+                raise
+        except SchwabCandleObserverHttpForbiddenError:
+            record = getattr(self.access_guard, "record_http_forbidden", None)
+            if callable(record):
+                record()
+            raise
 
 
 class SchwabHistoricalCandleBackfiller:
@@ -239,9 +264,7 @@ class SchwabHistoricalCandleBackfiller:
             },
             "findings": sorted(set(findings)),
             "accountInvariant": {
-                "authorizedAccountCount": 1,
-                "accountEnding": reader.access.account_ending,
-                "accountType": reader.access.account_type,
+                **reader.access.evidence(),
                 "positionsRequested": False,
                 "ordersRequested": False,
             },

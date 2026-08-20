@@ -100,6 +100,7 @@ def run_read_only_probe(
         daily_store=SchwabDailyCandleStore(daily_store_root),
         access_guard=guard,
         http_transport=candle_transport or SchwabCandleHttpTransport(),
+        utc_clock=lambda: evidence_as_of.astimezone(timezone.utc),
     ).backfill(
         universe,
         CandleBackfillOptions(

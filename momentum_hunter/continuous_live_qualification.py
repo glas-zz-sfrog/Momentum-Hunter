@@ -75,9 +75,13 @@ from momentum_hunter.schwab_candle_backfill import (
     explicit_universe,
 )
 from momentum_hunter.schwab_candle_contract import EASTERN_TZ
+from momentum_hunter.schwab_candle_observer import SchwabMarketDataOnlyAccessGuard
 from momentum_hunter.schwab_candle_store import SchwabCandleStore
 from momentum_hunter.schwab_daily_candle_store import SchwabDailyCandleStore
-from momentum_hunter.schwab_market_data import SchwabMarketDataQuoteSource
+from momentum_hunter.schwab_market_data import (
+    SchwabMarketDataQuoteSource,
+    SchwabReadOnlyAccessTokenProvider,
+)
 from momentum_hunter.time_normalized_rvol import load_time_normalized_rvol_evidence
 
 
@@ -93,6 +97,14 @@ REGULAR_CLOSE = datetime.strptime("16:00", "%H:%M").time()
 
 class LiveQualificationError(RuntimeError):
     """Raised when the qualification boundary or evidence fails closed."""
+
+
+class LiveSchwabAuthFailure(LiveQualificationError):
+    def __init__(self, diagnostic_code: str) -> None:
+        super().__init__(
+            "Schwab canonical evidence was unavailable because authentication failed."
+        )
+        self.diagnostic_code = diagnostic_code
 
 
 def _canonical_bytes(value: object) -> bytes:
@@ -187,6 +199,10 @@ class QualificationMetrics:
     schwab_quote_symbols: int = 0
     schwab_minute_rows: int = 0
     schwab_daily_rows: int = 0
+    schwab_market_data_successes: int = 0
+    candle_readiness_successes: int = 0
+    last_successful_schwab_read: str | None = None
+    auth_health: dict[str, object] = field(default_factory=dict)
     canonical_ready_symbols: set[str] = field(default_factory=set)
     readiness_deferred: int = 0
     composition_cycles: set[str] = field(default_factory=set)
@@ -362,8 +378,46 @@ class LiveMarketDataSource:
         self.expected_account_ending = expected_account_ending
         self.minute_root = state.root / "market-data" / "minute"
         self.daily_root = state.root / "market-data" / "daily"
-        self.quote_source = SchwabMarketDataQuoteSource()
+        self.token_provider = SchwabReadOnlyAccessTokenProvider()
+        self.access_guard = SchwabMarketDataOnlyAccessGuard(
+            token_provider=self.token_provider,
+        )
+        self.quote_source = SchwabMarketDataQuoteSource(
+            token_provider=self.token_provider,
+        )
         self.composition_policy = ContinuousCompositionPolicy()
+
+    def _sync_auth_metrics(self) -> None:
+        self.state.metrics.auth_health = self.token_provider.metrics_snapshot()
+
+    @staticmethod
+    def _failure_code(exc: BaseException) -> str:
+        current: BaseException | None = exc
+        visited: set[int] = set()
+        while current is not None and id(current) not in visited:
+            code = getattr(current, "diagnostic_code", None)
+            if isinstance(code, str) and code:
+                return (
+                    "SCHWAB_INTERACTIVE_REAUTH_REQUIRED"
+                    if code == "SCHWAB_REAUTH_REQUIRED"
+                    else code
+                )
+            visited.add(id(current))
+            current = current.__cause__ or current.__context__
+        return type(exc).__name__
+
+    @staticmethod
+    def _history_failure_code(error: object) -> str:
+        mapping = {
+            "SchwabCandleObserverReauthorizationRequired": "SCHWAB_INTERACTIVE_REAUTH_REQUIRED",
+            "SchwabCandleObserverAuthStateMissingError": "SCHWAB_AUTH_STATE_MISSING",
+            "SchwabCandleObserverSecureStoreError": "SCHWAB_AUTH_SECURE_STORE_FAILED",
+            "SchwabCandleObserverRefreshFailed": "SCHWAB_AUTH_REFRESH_FAILED",
+            "SchwabCandleObserverHttpUnauthorizedError": "SCHWAB_HTTP_UNAUTHORIZED",
+            "SchwabCandleObserverHttpForbiddenError": "SCHWAB_HTTP_FORBIDDEN",
+        }
+        value = str(error or "").strip()
+        return mapping.get(value, value)
 
     def _refresh(self) -> None:
         if self.state.snapshot is None or self.state.universe is None:
@@ -386,14 +440,17 @@ class LiveMarketDataSource:
         try:
             quote_batch = self.quote_source.quotes_with_clock(symbols)
             self.state.metrics.schwab_quote_symbols += len(quote_batch.quotes)
+            self.state.metrics.schwab_market_data_successes += 1
+            self.state.metrics.last_successful_schwab_read = _aware_now().isoformat()
         except Exception as exc:
             self.state.metrics.provider_failures.append(
-                f"SCHWAB_QUOTES:{type(exc).__name__}"
+                f"SCHWAB_QUOTES:{self._failure_code(exc)}"
             )
         try:
             result = SchwabHistoricalCandleBackfiller(
                 minute_store=SchwabCandleStore(self.minute_root),
                 daily_store=SchwabDailyCandleStore(self.daily_root),
+                access_guard=self.access_guard,
             ).backfill(
                 explicit_universe(symbols),
                 CandleBackfillOptions(
@@ -405,9 +462,27 @@ class LiveMarketDataSource:
             )
         except Exception as exc:
             self.state.metrics.provider_failures.append(
-                f"SCHWAB_CANDLES:{type(exc).__name__}"
+                f"SCHWAB_CANDLES:{self._failure_code(exc)}"
             )
             raise
+        finally:
+            self._sync_auth_metrics()
+        auth_failure_codes: set[str] = set()
+        for item in result.get("symbols", []):
+            for timeframe in ("minute", "daily"):
+                evidence = item.get(timeframe, {})
+                error = self._history_failure_code(evidence.get("error"))
+                if (
+                    error.startswith("SCHWAB_AUTH")
+                    or error.startswith("SCHWAB_HTTP")
+                    or error == "SCHWAB_INTERACTIVE_REAUTH_REQUIRED"
+                ):
+                    auth_failure_codes.add(error)
+                    self.state.metrics.provider_failures.append(
+                        f"SCHWAB_CANDLES:{error}"
+                    )
+        if auth_failure_codes:
+            raise LiveSchwabAuthFailure(sorted(auth_failure_codes)[0])
         minute_rows = sum(
             int(item["minute"]["rows"]) for item in result.get("symbols", [])
         )
@@ -417,6 +492,8 @@ class LiveMarketDataSource:
         self.state.metrics.schwab_refreshes += 1
         self.state.metrics.schwab_minute_rows += minute_rows
         self.state.metrics.schwab_daily_rows += daily_rows
+        self.state.metrics.schwab_market_data_successes += 1
+        self.state.metrics.last_successful_schwab_read = _aware_now().isoformat()
         sanitized = {
             "snapshotId": snapshot_id,
             "symbols": list(symbols),
@@ -548,6 +625,9 @@ class LiveMarketDataSource:
             evaluated_at=evaluated,
             policy=self.composition_policy,
         )
+        self.state.metrics.candle_readiness_successes += 1
+        self.state.metrics.last_successful_schwab_read = _aware_now().isoformat()
+        self._sync_auth_metrics()
         self.state.readiness_inputs[request.symbol] = CompositionMemberInput(
             universe_member_id=member.member_id,
             canonical_evidence=evidence,
