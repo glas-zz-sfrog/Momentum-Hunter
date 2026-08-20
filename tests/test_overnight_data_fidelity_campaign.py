@@ -6,12 +6,15 @@ import sys
 import unittest
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from momentum_hunter.overnight_data_fidelity import OvernightDataFidelityError
 from tools.run_overnight_data_fidelity_campaign import (
     _acquire_lock,
     _source_commit,
     campaign_schedule,
+    run_campaign,
 )
 
 
@@ -61,6 +64,103 @@ class OvernightDataFidelityCampaignTests(unittest.TestCase):
         self.assertEqual("a" * 40, _source_commit("A" * 40))
         with self.assertRaises(OvernightDataFidelityError):
             _source_commit("abc123")
+
+    def test_campaign_runs_all_checkpoints_and_releases_lock(self) -> None:
+        eastern = ZoneInfo("America/New_York")
+        current = [datetime(2026, 8, 20, 3, 54, tzinfo=eastern).astimezone(timezone.utc)]
+
+        def clock() -> datetime:
+            return current[0]
+
+        def sleeper(seconds: float) -> None:
+            current[0] += timedelta(seconds=seconds)
+
+        def fake_checkpoint(**kwargs: object) -> dict[str, object]:
+            return {"checkpointCode": str(kwargs["checkpoint_code"])}
+
+        def fake_write(proof: dict[str, object], *, output_root: Path):
+            code = str(proof["checkpointCode"])
+            json_path = output_root / "checkpoints" / f"{code}.json"
+            markdown_path = output_root / "checkpoints" / f"{code}.md"
+            json_path.parent.mkdir(parents=True, exist_ok=True)
+            json_path.write_text("{}\n", encoding="utf-8")
+            markdown_path.write_text("proof\n", encoding="utf-8")
+            return json_path, markdown_path, "A" * 64, "B" * 64
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch(
+                "tools.run_overnight_data_fidelity_campaign.run_checkpoint",
+                side_effect=fake_checkpoint,
+            ), patch(
+                "tools.run_overnight_data_fidelity_campaign.write_checkpoint",
+                side_effect=fake_write,
+            ):
+                state = run_campaign(
+                    session_date=date(2026, 8, 20),
+                    output_root=root,
+                    universe_source=None,
+                    source_commit="a" * 40,
+                    clock=clock,
+                    sleeper=sleeper,
+                )
+
+            self.assertEqual("TERMINAL", state["status"])
+            self.assertEqual(15, len(state["results"]))
+            self.assertTrue(all(row["classification"] == "COMPLETED" for row in state["results"]))
+            self.assertFalse((root / "campaign.lock").exists())
+            self.assertTrue((root / "campaign-state.json").exists())
+
+    def test_checkpoint_failure_is_preserved_and_later_work_continues(self) -> None:
+        eastern = ZoneInfo("America/New_York")
+        current = [datetime(2026, 8, 20, 3, 54, tzinfo=eastern).astimezone(timezone.utc)]
+        attempts = [0]
+
+        def clock() -> datetime:
+            return current[0]
+
+        def sleeper(seconds: float) -> None:
+            current[0] += timedelta(seconds=seconds)
+
+        def fake_checkpoint(**kwargs: object) -> dict[str, object]:
+            attempts[0] += 1
+            if attempts[0] == 1:
+                raise RuntimeError("synthetic provider failure")
+            return {"checkpointCode": str(kwargs["checkpoint_code"])}
+
+        def fake_write(proof: dict[str, object], *, output_root: Path):
+            code = str(proof["checkpointCode"])
+            json_path = output_root / "checkpoints" / f"{code}.json"
+            markdown_path = output_root / "checkpoints" / f"{code}.md"
+            json_path.parent.mkdir(parents=True, exist_ok=True)
+            json_path.write_text("{}\n", encoding="utf-8")
+            markdown_path.write_text("proof\n", encoding="utf-8")
+            return json_path, markdown_path, "A" * 64, "B" * 64
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch(
+                "tools.run_overnight_data_fidelity_campaign.run_checkpoint",
+                side_effect=fake_checkpoint,
+            ), patch(
+                "tools.run_overnight_data_fidelity_campaign.write_checkpoint",
+                side_effect=fake_write,
+            ):
+                state = run_campaign(
+                    session_date=date(2026, 8, 20),
+                    output_root=root,
+                    universe_source=None,
+                    source_commit="a" * 40,
+                    clock=clock,
+                    sleeper=sleeper,
+                )
+
+            self.assertEqual("FAILED_SAFE", state["results"][0]["classification"])
+            self.assertTrue(
+                all(row["classification"] == "COMPLETED" for row in state["results"][1:])
+            )
+            self.assertTrue((root / "campaign-events" / "BOUNDARY_0355_ET.json").exists())
+            self.assertFalse((root / "campaign.lock").exists())
 
 
 if __name__ == "__main__":
