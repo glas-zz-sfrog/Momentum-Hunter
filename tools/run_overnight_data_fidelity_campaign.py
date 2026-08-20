@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from momentum_hunter.overnight_data_fidelity import (
     TASK_ID,
     OvernightDataFidelityError,

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import tempfile
+import subprocess
+import sys
 import unittest
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -14,6 +16,19 @@ from tools.run_overnight_data_fidelity_campaign import (
 
 
 class OvernightDataFidelityCampaignTests(unittest.TestCase):
+    def test_direct_file_invocation_can_resolve_project_package(self) -> None:
+        script = Path(__file__).resolve().parents[1] / "tools" / "run_overnight_data_fidelity_campaign.py"
+        completed = subprocess.run(
+            [sys.executable, "-B", str(script), "--help"],
+            cwd=script.parent,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("--source-commit", completed.stdout)
+
     def test_schedule_straddles_required_boundaries_in_eastern_time(self) -> None:
         schedule = campaign_schedule(date(2026, 8, 20))
         by_code = {item.code: item for item in schedule}
