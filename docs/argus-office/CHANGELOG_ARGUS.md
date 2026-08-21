@@ -734,3 +734,13 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - No Momentum Hunter product/runtime source, provider behavior, service,
   scheduler, manifest, credential, account, broker, order, or historical
   evidence changed.
+
+## 2026-08-21 - Isolated thinkorswim RTD Capability Observer (Branch Only)
+
+- Added a Windows desktop Excel observer for the officially documented
+  `tos.rtd` COM server with fixed market-only symbols and fields.
+- Added exact true-overnight checkpoint pinning, write-once raw observations,
+  independent update/static/empty/error adjudication, provenance freezing, and
+  secret/account/order-field rejection.
+- Added no Momentum Hunter provider integration, runtime behavior, account
+  access, Paper/Shadow capability, trading capability, service, or scheduler.

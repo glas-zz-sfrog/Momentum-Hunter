@@ -29,6 +29,19 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+`ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is
+`IMPLEMENTED_PENDING_PHASE_A_AND_TRUE_OVERNIGHT_EVIDENCE` on isolated branch
+`codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` from exact clean synchronized base
+`85e73bebe785c5493cf1983dba68fada0e29cff8`. The task uses only Schwab's
+officially documented Windows `tos.rtd` COM server through desktop Excel and a
+fixed market-only 5-symbol/15-field matrix. It does not scrape the UI, inspect
+private protocols, automate credentials, request account/position/order fields,
+or change Momentum Hunter. Phase A can prove only post-04:00 ET behavior because
+the observer was prepared after the exact boundary. The decisive campaign is
+the fixed 19:55, 20:00, 20:05, 21:00, 00:30, 01:30, 03:55, and 04:05 Eastern
+sequence. No provider role or production authority changes unless later
+separately authorized from terminal evidence.
+
 `ARGUS-SCHWAB-OVERNIGHT-API-PROBE-001` is
 `SCHWAB_TRUE_OVERNIGHT_API_NOT_AVAILABLE / COMPLETE`. The proven task branch
 through `ff74555f6bb24f6d0368d885c85800cccd91e3f8` was pushed normally and

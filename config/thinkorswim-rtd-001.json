@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "taskId": "ARGUS-THINKORSWIM-OVERNIGHT-RTD-001",
+  "symbols": ["SPY", "QQQ", "NVDA", "AAPL", "MU"],
+  "fields": [
+    "SYMBOL",
+    "DESCRIPTION",
+    "LAST",
+    "BID",
+    "ASK",
+    "MARK",
+    "LAST_SIZE",
+    "BID_SIZE",
+    "ASK_SIZE",
+    "OPEN",
+    "HIGH",
+    "LOW",
+    "CLOSE",
+    "VOLUME",
+    "EXCHANGE"
+  ],
+  "sampleIntervalSeconds": 2,
+  "phaseADurationSeconds": 1200,
+  "checkpointDurationSeconds": 120,
+  "checkpointLeadSeconds": 60,
+  "checkpoints": [
+    {"checkpointId": "A_1955_ET", "scheduledAtEastern": "2026-08-21T19:55:00-04:00"},
+    {"checkpointId": "B_2000_ET", "scheduledAtEastern": "2026-08-21T20:00:00-04:00"},
+    {"checkpointId": "C_2005_ET", "scheduledAtEastern": "2026-08-21T20:05:00-04:00"},
+    {"checkpointId": "D_2100_ET", "scheduledAtEastern": "2026-08-21T21:00:00-04:00"},
+    {"checkpointId": "E_0030_ET", "scheduledAtEastern": "2026-08-22T00:30:00-04:00"},
+    {"checkpointId": "F_0130_ET", "scheduledAtEastern": "2026-08-22T01:30:00-04:00"},
+    {"checkpointId": "G_0355_ET", "scheduledAtEastern": "2026-08-22T03:55:00-04:00"},
+    {"checkpointId": "H_0405_ET", "scheduledAtEastern": "2026-08-22T04:05:00-04:00"}
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "taskId": "ARGUS-THINKORSWIM-OVERNIGHT-RTD-001",
+  "retrievedAt": "2026-08-21T04:20:00-04:00",
+  "sources": [
+    {
+      "title": "Real-Time Data (RTD) Function for thinkorswim",
+      "url": "https://toslc.thinkorswim.com/center/howToTos/thinkManual/Miscellaneous/Real-Time-Data-%28RTD%29-Function-for-thinkorswim.html",
+      "publisher": "Charles Schwab / thinkorswim Learning Center"
+    },
+    {
+      "title": "Extended Hours Trading",
+      "url": "https://www.schwab.com/stocks/extended-hours-trading",
+      "publisher": "Charles Schwab"
+    },
+    {
+      "title": "Custom Quotes",
+      "url": "https://toslc.thinkorswim.com/center/howToTos/thinkManual/MarketWatch/Quotes/customquotes.html",
+      "publisher": "Charles Schwab / thinkorswim Learning Center"
+    },
+    {
+      "title": "Stock Hacker",
+      "url": "https://toslc.thinkorswim.com/center/howToTos/thinkManual/Scan/Stock-Hacker",
+      "publisher": "Charles Schwab / thinkorswim Learning Center"
+    }
+  ],
+  "interfaces": [
+    {"name": "Real-Time Data / RTD", "classification": "OFFICIALLY_SUPPORTED_EXTERNAL_DATA_PATH", "notes": "Windows desktop Excel consumes market-watch data through RTD formulas."},
+    {"name": "tos.rtd COM Automation server", "classification": "OFFICIALLY_SUPPORTED_EXTERNAL_DATA_PATH", "notes": "Official RTD documentation identifies tos.rtd and formula syntax."},
+    {"name": "Export to Microsoft Excel", "classification": "OFFICIALLY_SUPPORTED_EXTERNAL_DATA_PATH", "notes": "Desktop Excel only; web Excel is unsupported."},
+    {"name": "Static export / CSV", "classification": "NOT_DOCUMENTED", "notes": "No official current external market-data CSV path was found."},
+    {"name": "thinkScript custom watchlist columns", "classification": "SUPPORTED_INSIDE_TOS_ONLY", "notes": "Custom Quotes are official; external RTD export requires physical proof."},
+    {"name": "thinkScript scan output", "classification": "SUPPORTED_INSIDE_TOS_ONLY", "notes": "Stock Hacker and scan alerts are official inside thinkorswim."},
+    {"name": "Dynamic scanner/watchlist RTD membership", "classification": "UNSUITABLE_FOR_MH", "notes": "Official RTD FAQ says symbol/column changes require manual re-export."},
+    {"name": "Alerts", "classification": "SUPPORTED_INSIDE_TOS_ONLY", "notes": "No documented general external market-data stream."},
+    {"name": "DDE", "classification": "NOT_DOCUMENTED", "notes": "No official current DDE mechanism was found."},
+    {"name": "Local SDK/API", "classification": "NOT_DOCUMENTED", "notes": "No official local market-data SDK/API was found."},
+    {"name": "Historical one-minute bars", "classification": "NOT_DOCUMENTED", "notes": "The official RTD field list exposes current fields, not historical bars."}
+  ],
+  "officialOperationalFacts": {
+    "windowsOnly": true,
+    "desktopExcelRequired": true,
+    "allUsersInstallMayRequireElevatedExcel": true,
+    "oneThinkorswimInstanceRecommended": true,
+    "oneRtdWorkbookRecommended": true,
+    "automaticWatchlistMembershipSync": false,
+    "overnightEligibleUniverse": "All S&P 500, Nasdaq 100, and Dow 30 stocks plus over 600 ETFs; exact eligibility remains platform metadata.",
+    "overnightDisplayedFields": ["MARK", "BID", "ASK", "BID_SIZE", "ASK_SIZE"],
+    "incrementalCostForExistingLocalAccess": "$0_PENDING_PHYSICAL_ENTITLEMENT_CONFIRMATION",
+    "historicalExternalMinuteBars": "NOT_DOCUMENTED",
+    "streamingExternalChartBars": "NOT_DOCUMENTED"
+  }
+}

@@ -1130,3 +1130,9 @@ Use a fresh task branch from local `master` instead.
 | Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
 | `codex/ARGUS-OVERNIGHT-EVIDENCE-ISOLATION-RECONCILIATION-001` | Audit `75ace1334fe86a77eb09b2e5919cc6afa37dbc28` / exact synchronized base `a413ced546c205e1e83e9c35fc7a82ac80488bfa` | Yes | Yes, clean fast-forward | `OVERNIGHT_EVIDENCE_RECONCILED / COMPLETE` | Preserve the original global nonmutation failure while adjudicating all 15 checkpoints and 32 provider/system claims under the canonical provenance model. | No full rerun. Run only the smallest separately authorized provider probe before promoting an unproven capability. |
+
+## 2026-08-21 thinkorswim Overnight RTD Capability Experiment
+
+| Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` | Unfrozen preparation / exact synchronized base `85e73bebe785c5493cf1983dba68fada0e29cff8` | No | No | `IMPLEMENTED_PENDING_PHASE_A_AND_TRUE_OVERNIGHT_EVIDENCE` | Test only the officially supported desktop Excel `tos.rtd` market-data route using a fixed market-only basket and separate durable evidence. | Freeze/push exact source, run post-04:00 Phase A, then preserve all eight true-overnight checkpoints through 04:05 ET. |

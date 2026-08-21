@@ -521,3 +521,19 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Audit commit `75ace1334fe86a77eb09b2e5919cc6afa37dbc28` was pushed on the
   feature branch, cleanly fast-forwarded to synchronized canonical `master`,
   and pushed normally. The integration changed no product/runtime path.
+
+## 2026-08-21 - thinkorswim Overnight RTD Capability Preparation
+
+- Created an isolated feature worktree from exact clean synchronized canonical
+  `85e73bebe785c5493cf1983dba68fada0e29cff8`.
+- Confirmed the official external path is desktop Excel using the documented
+  Windows `tos.rtd` COM server. No official DDE, local SDK/API, dynamic exported
+  scanner membership, or external historical minute-bar path was found.
+- Built a fixed SPY/QQQ/NVDA/AAPL/MU market-only observer with 15 documented
+  fields, local observation timestamps only, a 20-minute post-04:00 phase, and
+  eight exact true-overnight checkpoints.
+- Added exact source/configuration/formula/COM binary/Excel/thinkorswim/process,
+  production-service, manifest, and long-running provenance identities.
+- The observer has no account, position, P/L, order, provider-role, production
+  evidence, OAuth, service, manifest, scheduler, or Momentum Hunter mutation
+  capability. Physical RTD evidence remains pending one deliberate UAC launch.
