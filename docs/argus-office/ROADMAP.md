@@ -31,7 +31,9 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` has a proven downstream implementation
 on feature branch `codex/ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` at product
-commit `2b93182cbedd7d93bcf1b6fc7766cceca1f32bc6`. It adds an immutable,
+commit `2b93182cbedd7d93bcf1b6fc7766cceca1f32bc6`; governance closeout
+`eae9d6275f6b9dc600c6c3b4fec1d396aeb87f63` is backed up on the remote feature
+branch. It adds an immutable,
 broker-blind Continuous TradePlan admission contract, a separate Alpaca Paper
 supervisor/service role, exact-Paper-host enforcement, the frozen `$100 / $2 /
 $95 / $5 / $2 / $4 / 1 / 30s` Canary profile, one-entry locking, restart-safe

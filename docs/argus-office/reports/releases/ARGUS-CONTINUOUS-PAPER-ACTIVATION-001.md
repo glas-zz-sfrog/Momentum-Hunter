@@ -15,6 +15,8 @@ submitted. The exact pre-arm blocker is
 - Base: `dca0671b7856c11b432304a544477246d2764faf`
 - Branch: `codex/ARGUS-CONTINUOUS-PAPER-ACTIVATION-001`
 - Product commit: `2b93182cbedd7d93bcf1b6fc7766cceca1f32bc6`
+- Governance closeout: `eae9d6275f6b9dc600c6c3b4fec1d396aeb87f63`
+- Feature backup: pushed normally through `eae9d62`
 - Canonical during development: clean synchronized `master` at `dca0671b`
 - Installed product: `e69426b3b7bd179cd62eba2e28a5d0553da47154`
 - Merge/install/arm: no/no/no
