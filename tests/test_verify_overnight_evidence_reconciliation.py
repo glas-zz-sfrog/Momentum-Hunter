@@ -57,6 +57,14 @@ class OvernightEvidenceReconciliationTests(unittest.TestCase):
         ):
             MODULE.validate_overlay(report)
 
+    def test_audit_integration_identity_is_required(self) -> None:
+        report = copy.deepcopy(self.report)
+        report["authority"]["auditCommitFastForwardedToMaster"] = False
+        with self.assertRaisesRegex(
+            MODULE.ReconciliationValidationError, "integration identity mismatch"
+        ):
+            MODULE.validate_overlay(report)
+
     def test_historical_rewrite_claim_is_rejected(self) -> None:
         report = copy.deepcopy(self.report)
         report["historicalCampaignResult"]["historicalFilesRewritten"] = True

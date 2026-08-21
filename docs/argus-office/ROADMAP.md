@@ -29,10 +29,12 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-`ARGUS-OVERNIGHT-EVIDENCE-ISOLATION-RECONCILIATION-001` is
-`IMPLEMENTED_PENDING_MERGE` on branch
+`ARGUS-OVERNIGHT-EVIDENCE-ISOLATION-RECONCILIATION-001` is complete and
+canonically integrated. Audit commit
+`75ace1334fe86a77eb09b2e5919cc6afa37dbc28` was created on branch
 `codex/ARGUS-OVERNIGHT-EVIDENCE-ISOLATION-RECONCILIATION-001` from exact clean
-canonical `a413ced546c205e1e83e9c35fc7a82ac80488bfa`. The original
+canonical `a413ced546c205e1e83e9c35fc7a82ac80488bfa`, pushed normally,
+fast-forwarded to `master`, and pushed normally. The original
 `ARGUS-OVERNIGHT-DATA-FIDELITY-001` campaign remains permanently
 `GLOBAL_PRODUCTION_NONMUTATION = FAILED`; no historical file or classification
 was rewritten. The retained 51-file evidence tree independently recomputes to

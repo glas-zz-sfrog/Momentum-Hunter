@@ -21,6 +21,7 @@ was rewritten. This is a new claim-level overlay.
 | Installed product | `e69426b3b7bd179cd62eba2e28a5d0553da47154` |
 | Integrated provenance model | `d683d0180b3a1ed06265be635ebdee9a1d88692a` |
 | Audit branch | `codex/ARGUS-OVERNIGHT-EVIDENCE-ISOLATION-RECONCILIATION-001` |
+| Audit commit / integration | `75ace1334fe86a77eb09b2e5919cc6afa37dbc28`, pushed and fast-forwarded to `master`/`origin/master` |
 | Frozen campaign source | `a75422605e67575d267d7d2980519878ec3a5a26` |
 | Overnight branch HEAD | `147ad753fbfdbeef1146205a0bfcca133cba2457` |
 | Campaign/production baseline | `e1ea386f4640686569e2fb5a9a88e261ac974da3` |

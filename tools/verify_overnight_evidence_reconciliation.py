@@ -298,6 +298,19 @@ def validate_overlay(overlay: Mapping[str, object]) -> dict[str, object]:
     if overlay.get("classification") != "OVERNIGHT_EVIDENCE_RECONCILED":
         raise ReconciliationValidationError("Overlay classification is not reconciled.")
 
+    authority = _mapping(overlay, "authority")
+    if (
+        authority.get("auditCommit")
+        != "75ace1334fe86a77eb09b2e5919cc6afa37dbc28"
+        or authority.get("auditCommitPushed") is not True
+        or authority.get("auditCommitFastForwardedToMaster") is not True
+        or authority.get("masterAtAuditIntegration")
+        != authority.get("auditCommit")
+        or authority.get("originMasterAtAuditIntegration")
+        != authority.get("auditCommit")
+    ):
+        raise ReconciliationValidationError("Audit integration identity mismatch.")
+
     historical = _mapping(overlay, "historicalCampaignResult")
     if historical.get("globalProductionNonmutation") != "FAILED":
         raise ReconciliationValidationError(
