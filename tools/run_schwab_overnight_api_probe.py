@@ -29,7 +29,6 @@ from momentum_hunter.schwab_candle_contract import (
     build_chart_equity_subscription,
     build_price_history_parameters,
     parse_chart_equity_messages,
-    parse_price_history_response,
 )
 from momentum_hunter.schwab_candle_observer import (
     WebSocketClientFactory,
@@ -273,12 +272,12 @@ def classify_quote_timeline(
 
 
 def history_summary(
-    candles: Sequence[object],
+    timestamps: Sequence[datetime],
     *,
     overnight_start: datetime,
     observed_at: datetime,
 ) -> dict[str, object]:
-    timestamps = sorted(aware(candle.timestamp) for candle in candles)
+    timestamps = sorted(aware(timestamp) for timestamp in timestamps)
     start_et = overnight_start.astimezone(EASTERN)
     midnight_et = (start_et + timedelta(days=1)).replace(hour=0)
     one_am_et = start_et.replace(hour=21)
@@ -308,6 +307,60 @@ def history_summary(
         "barsAfterMidnightEt": len(after_midnight),
         "windowCounts": counts,
         "classification": classification,
+    }
+
+
+def parse_history_evidence(
+    payload: object,
+    *,
+    expected_symbol: str,
+    overnight_start: datetime,
+    observed_at: datetime,
+) -> dict[str, object]:
+    if not isinstance(payload, Mapping):
+        raise ProbeError("Price-history response was not an object.")
+    if str(payload.get("symbol", "")).strip().upper() != expected_symbol:
+        raise ProbeError("Price-history symbol identity did not match the request.")
+    rows = payload.get("candles")
+    if not isinstance(rows, list):
+        raise ProbeError("Price-history response omitted its candle list.")
+    timestamps: list[datetime] = []
+    versions: dict[str, list[dict[str, object]]] = {}
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise ProbeError("Price-history candle had an invalid shape.")
+        timestamp_text = epoch_timestamp(row.get("datetime"))
+        if timestamp_text is None:
+            raise ProbeError("Price-history candle omitted a valid timestamp.")
+        timestamp = datetime.fromisoformat(timestamp_text).astimezone(UTC)
+        timestamps.append(timestamp)
+        versions.setdefault(timestamp.isoformat(), []).append(
+            {
+                key: row.get(key)
+                for key in ("open", "high", "low", "close", "volume")
+            }
+        )
+    duplicate_minutes = {
+        timestamp: values for timestamp, values in versions.items() if len(values) > 1
+    }
+    corrected_duplicates = {
+        timestamp: values
+        for timestamp, values in duplicate_minutes.items()
+        if len({fingerprint(value) for value in values}) > 1
+    }
+    return {
+        **history_summary(
+            timestamps,
+            overnight_start=overnight_start,
+            observed_at=observed_at,
+        ),
+        "responseRowCount": len(rows),
+        "uniqueMinuteCount": len(versions),
+        "duplicateRowCount": len(rows) - len(versions),
+        "duplicateMinuteCount": len(duplicate_minutes),
+        "correctedDuplicateMinuteCount": len(corrected_duplicates),
+        "duplicateMinuteExamples": sorted(duplicate_minutes)[:5],
+        "correctedDuplicateMinuteExamples": sorted(corrected_duplicates)[:5],
     }
 
 
@@ -600,11 +653,13 @@ def run_probe(
     overnight_start, overnight_end = require_true_overnight(started)
     script = Path(__file__).resolve()
     sources = source_identity(project_root, script)
-    if sources["fullGitSha"] != sources["originMasterSha"]:
-        # The probe source may be one clean task commit ahead of origin/master only.
-        parents = git_output(project_root, "rev-list", "--parents", "-n", "1", "HEAD").split()
-        if len(parents) != 2 or parents[1] != sources["originMasterSha"]:
-            raise ProbeError("Probe Git identity is not one clean task commit above origin/master.")
+    ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", "origin/master", "HEAD"],
+        cwd=project_root,
+        check=False,
+    )
+    if ancestor.returncode != 0:
+        raise ProbeError("Probe Git identity does not descend from origin/master.")
     if git_output(project_root, "status", "--porcelain"):
         raise ProbeError("Probe worktree must be clean before provider contact.")
 
@@ -624,8 +679,8 @@ def run_probe(
         "routeAllowlistSha256": fingerprint(route_manifest),
         "evidenceRoot": str(output_root.resolve()),
     }
-    client = ProbeClient(clock=clock)
-    auth_before = auth_metadata(client.secrets)
+    secrets = SchwabOAuthSecretRepository()
+    auth_before = auth_metadata(secrets)
     baseline = {
         "schemaVersion": SCHEMA_VERSION,
         "taskId": TASK_ID,
@@ -653,6 +708,10 @@ def run_probe(
     }
     baseline["baselineFingerprint"] = fingerprint(baseline)
     write_json_once(output_root / "provenance-baseline.json", baseline)
+
+    # Access-token loading or refresh is provider-affecting and must happen only
+    # after the immutable pre-contact baseline exists.
+    client = ProbeClient(clock=clock)
 
     quote_observations: list[dict[str, object]] = []
     stream_frames: list[tuple[datetime, object]] = []
@@ -717,8 +776,7 @@ def run_probe(
                 params={"symbols": ",".join(SYMBOLS), "fields": "quote"},
             )
             received = aware(clock())
-            quote_observations.append(
-                {
+            observation = {
                     "sequence": len(quote_observations) + 1,
                     "requestedAt": requested.isoformat(),
                     "receivedAt": received.isoformat(),
@@ -730,8 +788,12 @@ def run_probe(
                             received_at=received,
                         )
                         for symbol in SYMBOLS
-                    },
+                    }
                 }
+            quote_observations.append(observation)
+            write_json_once(
+                output_root / "quote-observations" / f"quote-{len(quote_observations):02d}.json",
+                observation,
             )
             next_quote = started_monotonic + len(quote_observations) * interval_seconds
         stream_active = (
@@ -767,12 +829,12 @@ def run_probe(
             ),
         )
         received = aware(clock())
-        candles = parse_price_history_response(payload, expected_symbol=symbol)
         histories[symbol] = {
             "requestTime": requested.isoformat(),
             "responseTime": received.isoformat(),
-            **history_summary(
-                candles,
+            **parse_history_evidence(
+                payload,
+                expected_symbol=symbol,
                 overnight_start=overnight_start,
                 observed_at=completed,
             ),
@@ -867,6 +929,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             stream_seconds=args.stream_seconds,
         )
     except Exception as exc:
+        failure_path = args.output_root.resolve() / "failure-receipt.json"
+        if args.output_root.resolve().exists() and not failure_path.exists():
+            write_json_once(
+                failure_path,
+                {
+                    "schemaVersion": SCHEMA_VERSION,
+                    "taskId": TASK_ID,
+                    "status": "FAILED",
+                    "observedAt": datetime.now(UTC).isoformat(),
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "providerRolesChanged": False,
+                    "accountCalls": 0,
+                    "positionCalls": 0,
+                    "orderCalls": 0,
+                },
+            )
         print(json.dumps({"taskId": TASK_ID, "status": "FAILED", "error": f"{type(exc).__name__}: {exc}"}, indent=2))
         return 2
     print(

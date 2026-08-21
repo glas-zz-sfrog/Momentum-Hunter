@@ -44,13 +44,33 @@ class SchwabOvernightApiProbeTests(unittest.TestCase):
             Candle(datetime(2026, 8, 21, 5, 30, tzinfo=timezone.utc)),
         ]
         result = probe.history_summary(
-            rows,
+            [row.timestamp for row in rows],
             overnight_start=start,
             observed_at=datetime(2026, 8, 21, 6, 30, tzinfo=timezone.utc),
         )
         self.assertEqual("OVERNIGHT_HISTORY_PRESENT", result["classification"])
         self.assertEqual(2, result["barsAfter20Et"])
         self.assertEqual(1, result["barsAfterMidnightEt"])
+
+    def test_history_parser_preserves_duplicate_and_corrected_rows(self) -> None:
+        start = datetime(2026, 8, 21, 0, 0, tzinfo=timezone.utc)
+        timestamp = int(datetime(2026, 8, 21, 1, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        result = probe.parse_history_evidence(
+            {
+                "symbol": "SPY",
+                "candles": [
+                    {"datetime": timestamp, "open": 1, "high": 2, "low": 1, "close": 2, "volume": 3},
+                    {"datetime": timestamp, "open": 1, "high": 2, "low": 1, "close": 1.5, "volume": 4},
+                ],
+            },
+            expected_symbol="SPY",
+            overnight_start=start,
+            observed_at=datetime(2026, 8, 21, 2, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(2, result["responseRowCount"])
+        self.assertEqual(1, result["uniqueMinuteCount"])
+        self.assertEqual(1, result["duplicateRowCount"])
+        self.assertEqual(1, result["correctedDuplicateMinuteCount"])
 
     def test_route_inventory_rejects_account_and_alpaca_routes(self) -> None:
         session = probe.RecordingSession(lambda: datetime.now(timezone.utc))
