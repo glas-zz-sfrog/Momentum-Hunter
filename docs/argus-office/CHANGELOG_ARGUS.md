@@ -1,5 +1,18 @@
 # Argus Changelog
 
+- Ran and independently verified the smallest fingerprinted read-only Schwab
+  true-overnight API probe on fixed SPY/QQQ/NVDA/AAPL/MU scope.
+- Classified quotes, bid/ask, mark, and price history as
+  `STALE_EXTENDED_HOURS_ONLY`, trades as `NOT_AVAILABLE_OVERNIGHT`, streaming
+  quotes as `UNPROVEN`, and streaming candles as
+  `STALE_EXTENDED_HOURS_ONLY`.
+- Preserved two probe-harness failures separately, then completed a 15-minute
+  successful attempt with 75 HTTP-200 quote snapshots, five history pulls, and
+  bounded Level One/Chart Streamer observations.
+- Verified exact source/evidence identities, 21 allowed GET routes, unchanged
+  OAuth state/manifests/services, zero account/position/order/Alpaca/Paper
+  calls, and no provider-role or runtime change.
+
 - Fast-forwarded the proven long-running campaign provenance correction through
   `d683d018`, pushed canonical `master` normally, and changed no product runtime,
   installed service, scheduler, provider, broker, or historical overnight

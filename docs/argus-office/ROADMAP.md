@@ -29,6 +29,30 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+`ARGUS-SCHWAB-OVERNIGHT-API-PROBE-001` is
+`IMPLEMENTED_PENDING_MERGE`. Successful attempt source
+`b59cc37eb10a1478781c59ae140a73b7ee5690bd` ran from 02:21:37 through
+02:36:39 Eastern on August 21 against fixed `SPY`, `QQQ`, `NVDA`, `AAPL`, and
+`MU`. All 75 HTTP-200 quote snapshots were frozen at the 20:00 ET boundary;
+all five price-history responses stopped at 19:59 ET; `CHART_EQUITY` produced
+only one stale 19:59 seed frame; and `LEVELONE_EQUITIES` produced one seed frame
+whose numeric field semantics remain unproven. The verified classification is
+`SCHWAB_TRUE_OVERNIGHT_API_NOT_AVAILABLE`.
+
+Evidence fingerprint
+`0417AC70A58B26D8966A5C58F2B8E8B197161AC79FF89EAEDD74F39DB5F32EBB`,
+capability-matrix fingerprint
+`939C1FEFA21A168502803EECD49EBE692935CDD7D9284B6C8ADC78316169E974`,
+44-file manifest SHA-256
+`6ABC83D6B38C16347E633F7F8D3C644D414BB16101B0EBA2FBF6E778C1AE7750`,
+exact source verification, incremental evidence, route allowlist, nonmutation,
+known-live-value secret scan, and 74 focused/adjacent tests pass. The successful
+attempt made zero account, position, order, Alpaca, Paper, or live-order calls
+and no OAuth refresh. No provider role changed: Schwab remains authoritative
+only in its already-proven sessions, while the validated Alpaca/Finviz
+true-overnight architecture remains unchanged. Two earlier harness failures
+remain preserved separately and do not support the provider conclusion.
+
 `ARGUS-OVERNIGHT-EVIDENCE-ISOLATION-RECONCILIATION-001` is complete and
 canonically integrated. Audit commit
 `75ace1334fe86a77eb09b2e5919cc6afa37dbc28` was created on branch

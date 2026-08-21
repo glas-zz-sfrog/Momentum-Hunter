@@ -2,6 +2,26 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-SCHWAB-OVERNIGHT-API-PROBE-001 - 2026-08-21
+
+`codex/ARGUS-SCHWAB-OVERNIGHT-API-PROBE-001` started from synchronized
+canonical `701e6932645165e5e3d8a38f317dbd0e3d68258f`. Probe commits
+`57a2b98`, `624328d`, and `b59cc37` are pushed normally. The successful exact
+source is `b59cc37eb10a1478781c59ae140a73b7ee5690bd`; the closeout verifier and
+governance commit remain pending at this entry.
+
+The 15-minute true-overnight run observed five fixed symbols through quotes,
+price history, and bounded Streamer subscriptions. It found only frozen
+extended-hours boundary values and classified Schwab true-overnight data as
+unavailable. Two earlier harness failures are separately preserved and are not
+provider evidence. Seventy-four focused/adjacent tests, exact source and
+evidence verification, route inventory, nonmutation, and secret scans pass.
+A monolithic full-discovery run and its first 50-module bounded batch reached
+their wrapper limits without emitted failures and are not claimed as passes.
+No account, position, order, Alpaca, Paper, live execution, provider-role,
+runtime, service, scheduler, manifest, credential, or production-evidence
+change occurred. Classification is `IMPLEMENTED_PENDING_MERGE`.
+
 ## ARGUS-GIT-PROVENANCE-RECONCILIATION-001 - 2026-08-20
 
 `codex/ARGUS-GIT-PROVENANCE-RECONCILIATION-001` started from clean,
