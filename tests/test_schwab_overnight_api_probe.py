@@ -102,6 +102,41 @@ class SchwabOvernightApiProbeTests(unittest.TestCase):
         self.assertNotIn("unexpected", result["quote"])
         self.assertIn("unexpected", result["quote"]["availableFields"])
 
+    def test_stream_summary_accepts_levelone_and_chart_frames(self) -> None:
+        receipt = datetime(2026, 8, 21, 2, 1, tzinfo=timezone.utc)
+        chart_time = int(datetime(2026, 8, 21, 2, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        payload = {
+            "data": [
+                {
+                    "service": "LEVELONE_EQUITIES",
+                    "timestamp": chart_time,
+                    "content": [{"key": "SPY", "1": 100.0}],
+                },
+                {
+                    "service": "CHART_EQUITY",
+                    "timestamp": chart_time,
+                    "content": [
+                        {
+                            "key": "SPY",
+                            "1": 0,
+                            "2": 100.0,
+                            "3": 101.0,
+                            "4": 99.0,
+                            "5": 100.5,
+                            "6": 50,
+                            "7": chart_time,
+                            "8": 0,
+                        }
+                    ],
+                },
+            ]
+        }
+        result = probe.summarize_stream_frames([(receipt, payload)])
+        self.assertEqual(1, result["levelOne"]["frameCount"])
+        self.assertEqual(["SPY"], result["levelOne"]["symbolsObserved"])
+        self.assertEqual(1, result["chartEquity"]["observationCount"])
+        self.assertEqual("2026-08-21T02:00:00+00:00", result["chartEquity"]["latestCandleTimestamp"])
+
 
 if __name__ == "__main__":
     unittest.main()

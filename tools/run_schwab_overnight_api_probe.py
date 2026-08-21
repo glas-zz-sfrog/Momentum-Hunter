@@ -28,7 +28,7 @@ from momentum_hunter.schwab_candle_contract import (
     SCHWAB_USER_PREFERENCE_URL,
     build_chart_equity_subscription,
     build_price_history_parameters,
-    parse_chart_equity_messages,
+    inspect_chart_equity_observations,
 )
 from momentum_hunter.schwab_candle_observer import (
     WebSocketClientFactory,
@@ -517,7 +517,7 @@ def summarize_stream_frames(
                 chart_receipts.append(receipt)
     chart_rows: list[dict[str, object]] = []
     if chart_frames:
-        observations = parse_chart_equity_messages(
+        observations = inspect_chart_equity_observations(
             chart_frames,
             expected_symbols=STREAM_SYMBOLS,
             received_at_by_payload=chart_receipts,
@@ -829,7 +829,7 @@ def run_probe(
             ),
         )
         received = aware(clock())
-        histories[symbol] = {
+        history_evidence = {
             "requestTime": requested.isoformat(),
             "responseTime": received.isoformat(),
             **parse_history_evidence(
@@ -839,6 +839,11 @@ def run_probe(
                 observed_at=completed,
             ),
         }
+        histories[symbol] = history_evidence
+        write_json_once(
+            output_root / "price-history" / f"{symbol}.json",
+            history_evidence,
+        )
 
     quote_timeline = {
         symbol: classify_quote_timeline(
