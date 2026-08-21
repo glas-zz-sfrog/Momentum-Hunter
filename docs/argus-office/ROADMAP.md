@@ -32,7 +32,8 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is
 `IMPLEMENTED_PENDING_PHASE_A_AND_TRUE_OVERNIGHT_EVIDENCE` on isolated branch
 `codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` from exact clean synchronized base
-`85e73bebe785c5493cf1983dba68fada0e29cff8`. The task uses only Schwab's
+`85e73bebe785c5493cf1983dba68fada0e29cff8`; implementation
+`4b297d6da673a719597b99d3d6954a72a3d85fa7` is backed up normally. The task uses only Schwab's
 officially documented Windows `tos.rtd` COM server through desktop Excel and a
 fixed market-only 5-symbol/15-field matrix. It does not scrape the UI, inspect
 private protocols, automate credentials, request account/position/order fields,
