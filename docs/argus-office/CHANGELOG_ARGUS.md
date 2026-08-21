@@ -703,3 +703,19 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Left the live canary and any Paper/Shadow or live execution capability
   explicitly unclaimed; only the live market canary remains before research-
   only continuous operation can be claimed.
+
+## 2026-08-21 - Overnight Evidence Claim Reconciliation
+
+- Added a new read-only JSON/Markdown reconciliation overlay for the historical
+  overnight-provider campaign without changing any original artifact.
+- Added exact 15-checkpoint and 32-claim ledgers, authorized-change timeline,
+  dependency/intersection matrix, provider conclusions, 07:05 conclusion, and
+  smallest-rerun boundary.
+- Added `tools/verify_overnight_evidence_reconciliation.py` and focused tamper
+  tests for tree/manifest/checkpoint identity, historical-failure preservation,
+  claim invariants, secret-shaped values, and zero production/provider activity.
+- Recorded the original closeout manifest's one self-referential stdout timing
+  exception rather than silently treating it as a fully matching manifest.
+- No Momentum Hunter product/runtime source, provider behavior, service,
+  scheduler, manifest, credential, account, broker, order, or historical
+  evidence changed.

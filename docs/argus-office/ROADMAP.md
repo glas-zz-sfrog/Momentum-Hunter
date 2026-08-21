@@ -29,6 +29,34 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+`ARGUS-OVERNIGHT-EVIDENCE-ISOLATION-RECONCILIATION-001` is
+`IMPLEMENTED_PENDING_MERGE` on branch
+`codex/ARGUS-OVERNIGHT-EVIDENCE-ISOLATION-RECONCILIATION-001` from exact clean
+canonical `a413ced546c205e1e83e9c35fc7a82ac80488bfa`. The original
+`ARGUS-OVERNIGHT-DATA-FIDELITY-001` campaign remains permanently
+`GLOBAL_PRODUCTION_NONMUTATION = FAILED`; no historical file or classification
+was rewritten. The retained 51-file evidence tree independently recomputes to
+`5F52C966F5724A940C0B855ED1DC73AD6F60DFA1629FCA7F3CC6F93141573ED6`,
+and all 15 checkpoint file hashes and evidence fingerprints pass.
+
+The claim-level overlay preserves 17 `VALIDATED`, 7
+`VALID_WITH_PROVENANCE_LIMITATION`, 6 `UNPROVEN`, and 2 `INVALIDATED` claims.
+Alpaca direct market-data observations and bounded 263-symbol capacity remain
+usable; exact Basic credential identity and a hard 30-channel ceiling are not
+fully proven. Four Finviz first-page access/count/schema observations remain
+usable; exact 04:00 availability, full paging/universe coverage, and named
+real-time entitlement do not. Schwab's final response is real but followed a
+shared OAuth replacement and contained no post-20:00 quote or candle, so this
+campaign did not prove Schwab true-overnight capability.
+
+No full overnight rerun is required. Before granting Schwab a true-overnight
+role, the smallest remaining experiment is one fingerprinted read-only
+post-20:05 ET quote/candle probe. A separate 31-subscription Alpaca rejection
+probe is needed only if a hard websocket ceiling will be encoded. Neither probe
+is launched or authorized by this audit. Product/runtime code, services,
+scheduler, manifests, credentials, provider state, accounts, brokers, orders,
+and historical evidence remain untouched.
+
 `ARGUS-GIT-PROVENANCE-RECONCILIATION-001` is complete and canonically
 integrated. The proven feature branch started from clean synchronized canonical
 `dca0671b7856c11b432304a544477246d2764faf`; implementation commit

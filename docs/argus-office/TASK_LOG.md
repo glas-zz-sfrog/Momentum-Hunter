@@ -491,3 +491,29 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Classification is now `INSTALLED_PENDING_LIVE_MARKET_CANARY`. The next
   eligible market session must provide the bounded live read-only canary before
   continuous hunting or same-day production recovery is claimed.
+
+## 2026-08-21 - Overnight Evidence Isolation Reconciliation
+
+- Started from exact clean synchronized canonical
+  `a413ced546c205e1e83e9c35fc7a82ac80488bfa` in a separate audit worktree.
+- Recomputed the immutable overnight tree at 51 files and exact SHA-256
+  `5F52C966F5724A940C0B855ED1DC73AD6F60DFA1629FCA7F3CC6F93141573ED6`.
+- Verified all 15 terminal checkpoint file hashes, evidence fingerprints,
+  source-module identity, state bindings, and the permanent original
+  `GLOBAL_PRODUCTION_NONMUTATION = FAILED` result.
+- Preserved one original self-referential closeout-manifest exception: the
+  finisher recorded its stdout log as empty before emitting terminal JSON to
+  that same log; the terminal log is already bound by the exact retained tree
+  and semantically matches `CLOSEOUT-RESULT.json`.
+- Reconstructed five authorized production/auth events, 13 dependency classes,
+  and 32 claim adjudications: 17 validated, 7 valid with provenance limitation,
+  6 unproven, and 2 invalidated.
+- Retained Alpaca and Finviz bounded observations, refused to promote Alpaca's
+  exact Basic identity or a hard 30-channel ceiling, and classified fresh IEX
+  premarket evidence as invalidated by the stored stale records.
+- Preserved the final Schwab HTTP response with a shared-OAuth provenance
+  limitation while refusing to call it overnight capability: newest quote was
+  20:00 ET and newest bar 19:58 ET after a 20:01:26 shared-state replacement.
+- Added a standalone verifier and 14 tamper tests. No provider, account, broker,
+  order, OAuth refresh, service, scheduler, manifest, runtime, or historical
+  evidence mutation was performed.

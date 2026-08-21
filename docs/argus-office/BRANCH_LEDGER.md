@@ -1101,3 +1101,9 @@ Use a fresh task branch from local `master` instead.
 | Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
 | --- | --- | --- | --- | --- | --- | --- |
 | `master` | `f2a3af58c4a90274f46e745ad74c8dcd80b201af` / synchronized `master` and `origin/master` | Yes | Yes | `INSTALLED_PENDING_LIVE_MARKET_CANARY` | Canonical checkpoint-namespace repair plus installed research-only LocalService writer/runtime deployment and passed elevated restart proof. | Run the bounded live market canary; do not activate Paper, Shadow, or live execution. |
+
+## 2026-08-21 Overnight Evidence Isolation Reconciliation
+
+| Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `codex/ARGUS-OVERNIGHT-EVIDENCE-ISOLATION-RECONCILIATION-001` | Pending audit commit / exact synchronized base `a413ced546c205e1e83e9c35fc7a82ac80488bfa` | No | No | `IMPLEMENTED_PENDING_MERGE` | Preserve the original global nonmutation failure while adjudicating all 15 checkpoints and 32 provider/system claims under the canonical provenance model. | Complete Hard Chew, push normally, and fast-forward only if the diff remains audit/docs/tests with no product/runtime code. |
