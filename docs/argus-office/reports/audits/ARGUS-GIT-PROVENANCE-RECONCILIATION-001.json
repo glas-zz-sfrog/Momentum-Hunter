@@ -1,0 +1,373 @@
+{
+  "taskId": "ARGUS-GIT-PROVENANCE-RECONCILIATION-001",
+  "schemaVersion": 1,
+  "classification": [
+    "GIT_PROVENANCE_RECONCILIATION_COMPLETE",
+    "LONG_RUNNING_CAMPAIGN_PROVENANCE_MODEL_CORRECTED"
+  ],
+  "historicalResultPreserved": {
+    "campaign": "ARGUS-OVERNIGHT-DATA-FIDELITY-001",
+    "globalProductionNonmutation": "FAILED",
+    "rewritten": false,
+    "providerEvidenceAdjudicated": false
+  },
+  "currentAuthority": {
+    "observedAt": "2026-08-21T02:48:16.3414050Z",
+    "localMaster": "dca0671b7856c11b432304a544477246d2764faf",
+    "originMaster": "dca0671b7856c11b432304a544477246d2764faf",
+    "canonicalClean": true,
+    "installedProductGitHead": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+    "governanceHead": "dca0671b7856c11b432304a544477246d2764faf",
+    "automationManifestSha256": "6B0FCA73BF56A04501AE016BFEFC39E85DA386C44BB9FA63DEF37ED837B18BE4",
+    "continuousConfigSha256": "EF1986A35000CA8EB425BCD7470BE0A9C4496007853F4AF20F779B565AF9D982",
+    "continuousDeploymentManifestSha256": "FC2810BAA3730EDFB7679026A70F305992EC772A381E733819B54FFFD29B73EB",
+    "services": [
+      {
+        "name": "MomentumHunterAutomation",
+        "state": "Running",
+        "startMode": "Auto",
+        "startName": ".\\steve",
+        "executableSha256": "9DDACD6AD2A24545BA7A1A69BE5085AFC4B09DF77D300A00F1B8FAC37AB22A1A"
+      },
+      {
+        "name": "MomentumHunterContinuousRuntime",
+        "state": "Running",
+        "startMode": "Auto",
+        "startName": ".\\steve",
+        "executableSha256": "2A3A7BBA1E0FC6B215D739FEB8315AF193DBB28796876EE7AA26E87467F728BE"
+      },
+      {
+        "name": "MomentumHunterContinuousWriter",
+        "state": "Running",
+        "startMode": "Auto",
+        "startName": "NT AUTHORITY\\LOCAL SERVICE",
+        "executableSha256": "2A3A7BBA1E0FC6B215D739FEB8315AF193DBB28796876EE7AA26E87467F728BE"
+      }
+    ]
+  },
+  "ancestry": {
+    "commits": [
+      {
+        "sha": "e1ea386f4640686569e2fb5a9a88e261ac974da3",
+        "parent": "e2dd14031331ee0611a51126e260be72ce96b9a8",
+        "role": ["CAMPAIGN_ERA_CANONICAL", "PRODUCTION_BASELINE_AT_START"],
+        "remoteContainment": [
+          "origin/master ancestor",
+          "origin/codex/ARGUS-CONTINUOUS-CANARY-HARDENING-001"
+        ]
+      },
+      {
+        "sha": "a75422605e67575d267d7d2980519878ec3a5a26",
+        "parent": "6a706e9c7975d57d96ff984e116331efce8a27f0",
+        "role": ["FROZEN_CAMPAIGN_SOURCE", "EXPERIMENT_SOURCE"],
+        "remoteContainment": ["origin/codex/ARGUS-OVERNIGHT-DATA-FIDELITY-001 ancestor"]
+      },
+      {
+        "sha": "147ad753fbfdbeef1146205a0bfcca133cba2457",
+        "parent": "2cf159789e97acc257aa23e9399d08238008e149",
+        "role": ["OVERNIGHT_FEATURE_BRANCH_HEAD", "CLOSEOUT_SOURCE"],
+        "remoteContainment": ["origin/codex/ARGUS-OVERNIGHT-DATA-FIDELITY-001"]
+      },
+      {
+        "sha": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+        "parent": "e1ea386f4640686569e2fb5a9a88e261ac974da3",
+        "role": ["INSTALLED_PRODUCT", "SCHWAB_AUTH_LIFECYCLE_PRODUCT"],
+        "remoteContainment": [
+          "origin/master ancestor",
+          "origin/codex/ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001"
+        ]
+      },
+      {
+        "sha": "dca0671b7856c11b432304a544477246d2764faf",
+        "parent": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+        "role": ["CURRENT_CANONICAL", "CURRENT_GOVERNANCE_HEAD"],
+        "remoteContainment": ["origin/master"]
+      }
+    ],
+    "relations": [
+      "e1ea386f4640686569e2fb5a9a88e261ac974da3 is an ancestor of a75422605e67575d267d7d2980519878ec3a5a26",
+      "a75422605e67575d267d7d2980519878ec3a5a26 is an ancestor of 147ad753fbfdbeef1146205a0bfcca133cba2457",
+      "e1ea386f4640686569e2fb5a9a88e261ac974da3 is the direct parent of e69426b3b7bd179cd62eba2e28a5d0553da47154",
+      "e69426b3b7bd179cd62eba2e28a5d0553da47154 is the direct parent of dca0671b7856c11b432304a544477246d2764faf",
+      "a75422605e67575d267d7d2980519878ec3a5a26 and e69426b3b7bd179cd62eba2e28a5d0553da47154 diverge after e1ea386f4640686569e2fb5a9a88e261ac974da3",
+      "147ad753fbfdbeef1146205a0bfcca133cba2457 and dca0671b7856c11b432304a544477246d2764faf diverge after e1ea386f4640686569e2fb5a9a88e261ac974da3"
+    ]
+  },
+  "installedProductVsGovernance": {
+    "installedProductGitHead": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+    "governanceHead": "dca0671b7856c11b432304a544477246d2764faf",
+    "interveningCommits": [
+      {
+        "sha": "dca0671b7856c11b432304a544477246d2764faf",
+        "subject": "Record Schwab auth lifecycle closeout",
+        "pathClass": "GOVERNANCE_ONLY",
+        "changedPaths": [
+          "docs/argus-office/BRANCH_LEDGER.md",
+          "docs/argus-office/CHANGELOG_ARGUS.md",
+          "docs/argus-office/RISK_REGISTER.md",
+          "docs/argus-office/ROADMAP.md",
+          "docs/argus-office/TASK_LOG.md"
+        ]
+      }
+    ],
+    "productTreeComparison": [
+      {
+        "path": "momentum_hunter",
+        "installedTree": "96be6ad16f4670506cb2a93b734f0d75e72b45c9",
+        "governanceTree": "96be6ad16f4670506cb2a93b734f0d75e72b45c9",
+        "equal": true
+      },
+      {
+        "path": "tools",
+        "installedTree": "ebe60e59e4b3683c4e2ef590860225a2b6a67a8f",
+        "governanceTree": "ebe60e59e4b3683c4e2ef590860225a2b6a67a8f",
+        "equal": true
+      },
+      {
+        "path": "src",
+        "installedTree": "8472c2bc64cb94080c160046b042ae65d2eb30c6",
+        "governanceTree": "8472c2bc64cb94080c160046b042ae65d2eb30c6",
+        "equal": true
+      },
+      {
+        "path": "tests",
+        "installedTree": "692f83e56f087b5c73532aee34cc907d8faa6be6",
+        "governanceTree": "692f83e56f087b5c73532aee34cc907d8faa6be6",
+        "equal": true
+      }
+    ],
+    "classification": "AUTHORIZED_GOVERNANCE_ONLY_DIVERGENCE"
+  },
+  "overnightCampaign": {
+    "startedAt": "2026-08-20T06:44:37.084955+00:00",
+    "completedAt": "2026-08-21T00:05:18.735620+00:00",
+    "processId": 65020,
+    "frozenSourceGitHead": "a75422605e67575d267d7d2980519878ec3a5a26",
+    "productionCanonicalAtStart": "e1ea386f4640686569e2fb5a9a88e261ac974da3",
+    "installedProductAtStart": "e1ea386f4640686569e2fb5a9a88e261ac974da3",
+    "runnerSha256PersistedAtStart": "5809D0F2FB4BEE1CAF194E2E778AB9EA0C7ED27B3BE78CC7FB8E7DC94DCBC2C5",
+    "campaignModuleSha256PersistedPerCheckpoint": "B25E99BB7AB9581A5140F237E872D5133B71C99EC8CBC278FD1F1A4E450EEB13",
+    "sourceFileManifestSha256AtStart": "NOT_CREATED",
+    "recoveredSourceFileManifest": {
+      "status": "RECOVERED_POST_HOC_FROM_FROZEN_GIT_NOT_START_TIME_PROOF",
+      "sha256": "6F698AA4CE55F6E5C8AE6FC18B70CCF5383D439F0B5402F7736FFA0177A68116",
+      "files": [
+        {"path": "momentum_hunter/alpaca_overnight_probe.py", "sha256": "C9F604F521A333EDB323AD88D7A266C62D927673DEE11EC8D8B550353FE3B798"},
+        {"path": "momentum_hunter/alpaca_paper_onboarding.py", "sha256": "0E6FB5FDC1B6246B80C49E73FB242568C9F671F614647C8531FC181770AEC3ED"},
+        {"path": "momentum_hunter/models.py", "sha256": "2792ACD34B9A8D1884BC8011840DC9300498B996A89BB470F12258218D0ED9C0"},
+        {"path": "momentum_hunter/overnight_data_fidelity.py", "sha256": "B25E99BB7AB9581A5140F237E872D5133B71C99EC8CBC278FD1F1A4E450EEB13"},
+        {"path": "momentum_hunter/providers.py", "sha256": "E1D02D0FE87FD1B2832B9BB309B44AA486943CEF42EBBCFEED618953CE5AFA31"},
+        {"path": "momentum_hunter/schwab_candle_contract.py", "sha256": "A6ECDCB0A5148B4FEDF64531AB0761F3D3EA789552C8D2C25D28F42F3A0BCD97"},
+        {"path": "momentum_hunter/schwab_candle_observer.py", "sha256": "C2D2380C3872AA8CF0BDE4B01A8B2604CBCA9DB1CF9A8276320016D4AEFD5D96"},
+        {"path": "momentum_hunter/schwab_market_data.py", "sha256": "4007945FA7D03B8D0B1600029E5C5AA048FC3186168922826708D74A07900A32"},
+        {"path": "momentum_hunter/schwab_onboarding.py", "sha256": "EF705A7B79E76DDBC9B04A3C1D10BD42B1E8201F2CCD0D9A360E9956BBADD92E"},
+        {"path": "tools/run_overnight_data_fidelity_campaign.py", "sha256": "5809D0F2FB4BEE1CAF194E2E778AB9EA0C7ED27B3BE78CC7FB8E7DC94DCBC2C5"}
+      ]
+    },
+    "researchUniverse": {
+      "path": "MomentumHunterData/data/daily-ohlc-bars.json",
+      "sha256": "2B1FDC1482D9D98A810D6F06AACDB7E9DE1E6123BE39E5F35634DF34C66BB521",
+      "pathWasPersistedByCampaign": false,
+      "hashWasPersistedByCapacityCheckpoints": true
+    },
+    "branchChangesAfterCampaignLaunch": [
+      {
+        "timestamp": "2026-08-20T06:50:26+00:00",
+        "sha": "d51baaae781c9c7f34853ad4497f77e58429f1fc",
+        "effect": "SOURCE_CONTRACT_DOCUMENT_ONLY"
+      },
+      {
+        "timestamp": "2026-08-20T06:51:39+00:00",
+        "sha": "2cf159789e97acc257aa23e9399d08238008e149",
+        "effect": "TEST_ONLY"
+      },
+      {
+        "timestamp": "2026-08-20T06:56:51+00:00",
+        "sha": "147ad753fbfdbeef1146205a0bfcca133cba2457",
+        "effect": "CLOSEOUT_MODULE_AND_TESTS_ONLY"
+      }
+    ],
+    "loadedCampaignFilesChangedByThoseCommits": false,
+    "historicalEvidenceTreeSha256BeforeReconciliation": "5F52C966F5724A940C0B855ED1DC73AD6F60DFA1629FCA7F3CC6F93141573ED6",
+    "historicalEvidenceFileCount": 51
+  },
+  "authorizedProductionChanges": [
+    {
+      "sequence": 1,
+      "taskId": "ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001",
+      "timestamp": "2026-08-20T18:28:17+00:00",
+      "timestampEvidence": "local master reflog fast-forward",
+      "authorization": "Steven directive plus bounded Goal Charter",
+      "canonicalOld": "e1ea386f4640686569e2fb5a9a88e261ac974da3",
+      "canonicalNew": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+      "originPushObservedAt": "2026-08-20T18:28:33+00:00",
+      "installedProductOld": "e1ea386f4640686569e2fb5a9a88e261ac974da3",
+      "installedProductNew": "e1ea386f4640686569e2fb5a9a88e261ac974da3",
+      "serviceChanges": [],
+      "manifestChanges": [],
+      "reason": "Integrate the proven unattended Schwab read-only auth-lifecycle repair."
+    },
+    {
+      "sequence": 2,
+      "taskId": "ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001",
+      "timestamp": "2026-08-20T18:32:51.9898474+00:00",
+      "timestampEvidence": "installed continuous deployment manifest installedAt",
+      "authorization": "Steven directive plus bounded Goal Charter",
+      "canonicalOld": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+      "canonicalNew": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+      "installedProductOld": "e1ea386f4640686569e2fb5a9a88e261ac974da3",
+      "installedProductNew": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+      "manifestChanges": [
+        {
+          "name": "continuous-deployment.json",
+          "oldSha256": "D8D96E4A720F10981929552F778C5B814E6B6E97528ABA57C11072621A43DA42",
+          "newSha256": "EF1986A35000CA8EB425BCD7470BE0A9C4496007853F4AF20F779B565AF9D982"
+        },
+        {
+          "name": "continuous-deployment-manifest.json",
+          "oldSha256": "F4185708F67ED1A25780DD849FC2FEE037D90A9C0DE3F6B56DD7800743B81C13",
+          "newSha256": "FC2810BAA3730EDFB7679026A70F305992EC772A381E733819B54FFFD29B73EB"
+        },
+        {
+          "name": "automation-manifest.json",
+          "oldSha256": "6B0FCA73BF56A04501AE016BFEFC39E85DA386C44BB9FA63DEF37ED837B18BE4",
+          "newSha256": "6B0FCA73BF56A04501AE016BFEFC39E85DA386C44BB9FA63DEF37ED837B18BE4"
+        }
+      ],
+      "serviceChanges": [
+        "MomentumHunterContinuousRuntime repository and Python roots e1ea386 -> e69426b",
+        "MomentumHunterContinuousWriter repository and Python roots e1ea386 -> e69426b"
+      ],
+      "continuousServiceHostOldSha256": "AF15D370287AC50CE826BE699FD29E6E891A6E4969FF55EC721CEA796D30955C",
+      "continuousServiceHostCurrentObservedSha256": "2A3A7BBA1E0FC6B215D739FEB8315AF193DBB28796876EE7AA26E87467F728BE",
+      "continuousServiceHostNewHashAtTransitionPersisted": false,
+      "sharedResourcesTouched": ["SCHWAB_USER_DPAPI_OAUTH_STATE"],
+      "campaignIsolationRevalidatedAtTransition": false,
+      "reason": "Deploy the authorized read-only auth-lifecycle repair and canary it."
+    },
+    {
+      "sequence": 3,
+      "taskId": "ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001",
+      "timestamp": "2026-08-20T19:11:06+00:00",
+      "timestampEvidence": "Git commit/reflog timestamp",
+      "authorization": "Roadmap and release closeout under standing nonvisual delegation",
+      "canonicalOld": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+      "canonicalNew": "dca0671b7856c11b432304a544477246d2764faf",
+      "originPushObservedAt": "2026-08-20T19:11:19+00:00",
+      "installedProductOld": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+      "installedProductNew": "e69426b3b7bd179cd62eba2e28a5d0553da47154",
+      "serviceChanges": [],
+      "manifestChanges": [],
+      "pathClass": "GOVERNANCE_ONLY",
+      "reason": "Record terminal Schwab auth-lifecycle and canary evidence."
+    }
+  ],
+  "rootCauseOfHistoricalAuditFailure": {
+    "classification": "AUTHORIZED_EXTERNAL_PRODUCTION_CHANGE_DURING_LONG_RUNNING_CAMPAIGN",
+    "expectedCanonical": "e1ea386f4640686569e2fb5a9a88e261ac974da3",
+    "observedCanonical": "dca0671b7856c11b432304a544477246d2764faf",
+    "expectedContinuousConfigSha256": "D8D96E4A720F10981929552F778C5B814E6B6E97528ABA57C11072621A43DA42",
+    "observedContinuousConfigSha256": "EF1986A35000CA8EB425BCD7470BE0A9C4496007853F4AF20F779B565AF9D982",
+    "expectedDeploymentManifestSha256": "F4185708F67ED1A25780DD849FC2FEE037D90A9C0DE3F6B56DD7800743B81C13",
+    "observedDeploymentManifestSha256": "FC2810BAA3730EDFB7679026A70F305992EC772A381E733819B54FFFD29B73EB",
+    "automationManifestChanged": false,
+    "originalGlobalProductionNonmutationRemains": "FAILED"
+  },
+  "sharedResourceInventory": [
+    {
+      "resourceId": "OVERNIGHT_CAMPAIGN_EVIDENCE_ROOT",
+      "owner": "ARGUS-OVERNIGHT-DATA-FIDELITY-001 campaign and closeout",
+      "campaignAccess": "READ_WRITE",
+      "productionAccess": "NONE",
+      "mutationObserved": "CAMPAIGN_AND_CLOSEOUT_ONLY",
+      "problematic": false
+    },
+    {
+      "resourceId": "OVERNIGHT_FEATURE_WORKTREE",
+      "owner": "overnight feature branch",
+      "campaignAccess": "EXECUTE_LOADED_FILES",
+      "externalAccess": "BRANCH_ADVANCED_AFTER_LAUNCH",
+      "mutationObserved": "DOCS_TESTS_AND_CLOSEOUT_ONLY; loaded runner/provider files unchanged",
+      "problematic": false,
+      "futureRule": "Full source and dependency manifest must be frozen before launch."
+    },
+    {
+      "resourceId": "RESEARCH_DAILY_UNIVERSE",
+      "owner": "research data pipeline",
+      "campaignAccess": "READ_ONLY",
+      "allowedWriters": ["separately governed research data jobs"],
+      "baselineSha256": "2B1FDC1482D9D98A810D6F06AACDB7E9DE1E6123BE39E5F35634DF34C66BB521",
+      "mutationObserved": false,
+      "problematic": false
+    },
+    {
+      "resourceId": "ALPACA_CANARY_PAPER_DPAPI_CREDENTIAL_STATE",
+      "owner": "Alpaca Paper onboarding",
+      "campaignAccess": "READ_ONLY",
+      "allowedWriters": ["explicit local credential onboarding/replacement"],
+      "baselineFingerprintPersisted": false,
+      "mutationObserved": "NOT_PROVEN",
+      "problematic": true,
+      "classification": "CAMPAIGN_PROVENANCE_GAP"
+    },
+    {
+      "resourceId": "SCHWAB_USER_DPAPI_OAUTH_STATE",
+      "owner": "Schwab auth lifecycle",
+      "campaignAccess": "READ_ONLY",
+      "allowedWriters": ["authorized production OAuth refresh workflows"],
+      "baselineFingerprintPersisted": false,
+      "mutationObserved": true,
+      "behavioralEvidence": "Early checkpoints recorded EXPIRED/NOT_RUN; the final 20:05 ET checkpoint recorded SUCCESS after production refresh activity.",
+      "problematic": true,
+      "classification": "CAMPAIGN_PROVENANCE_GAP"
+    },
+    {
+      "resourceId": "PYTHON_INTERPRETER_AND_DEPENDENCY_ENVIRONMENT",
+      "owner": "local campaign runtime",
+      "campaignAccess": "EXECUTE",
+      "baselineFingerprintPersisted": false,
+      "mutationObserved": "NOT_PROVEN",
+      "problematic": true,
+      "classification": "CAMPAIGN_PROVENANCE_GAP"
+    },
+    {
+      "resourceId": "PROVIDER_ROUTE_ALLOWLIST",
+      "owner": "overnight campaign source",
+      "campaignAccess": "ENFORCED_BY_CODE",
+      "baselineFingerprintPersisted": false,
+      "mutationObserved": false,
+      "problematic": true,
+      "classification": "CAMPAIGN_PROVENANCE_GAP"
+    }
+  ],
+  "prospectiveModel": {
+    "oldContract": "One broad PRODUCTION_DID_NOT_CHANGE boolean compared current production to a frozen baseline.",
+    "campaignNonmutation": "Frozen campaign source, file manifest, configuration, process, evidence root, checkpoints, provider contract, and declared shared-resource contract remained intact.",
+    "globalProductionNonmutation": "No production Git, installed product, manifest, service, scheduler, or declared production resource changed at all.",
+    "authorizedExternalChangeLedger": "Append-only old/new Git, installed-product, manifest, service, authorization, shared-resource, and revalidation records.",
+    "revalidationPass": "AUTHORIZED_EXTERNAL_CHANGE_ISOLATION_REVALIDATED",
+    "revalidationFail": "CAMPAIGN_ISOLATION_BROKEN",
+    "tool": "tools/verify_campaign_provenance.py",
+    "governanceTemplate": "docs/argus-office/templates/LONG_RUNNING_CAMPAIGN_PROVENANCE_TEMPLATE.md"
+  },
+  "historicalCampaignAssessmentUnderProspectiveFields": {
+    "campaignNonmutation": "NOT_RETROACTIVELY_ADJUDICATED",
+    "globalProductionNonmutation": false,
+    "authorizedExternalChangesPresent": true,
+    "isolationRevalidationPresent": false,
+    "provenanceGapsPresent": true,
+    "reason": "The historical campaign did not freeze the full dependency/interpreter/shared-resource contract or revalidate isolation after the authorized production deployment."
+  },
+  "productionProtectionBaseline": {
+    "serviceSnapshotSha256": "C711BEA0FA78338719269048CF8DA287BE3D58B9CE45B583B66D7146688D0B5D",
+    "schedulerTaskCount": 23,
+    "schedulerSnapshotSha256": "52F51F9E9C858B5D7CB563C9D51C1589F3241DDC36B8ED3B699E89F8CF2905DC",
+    "providerCalls": 0,
+    "accountCalls": 0,
+    "orderCalls": 0,
+    "servicesRestarted": 0,
+    "manifestsChanged": 0,
+    "schedulerChanged": 0
+  },
+  "nextTask": "Separate read-only overnight-evidence isolation reconciliation; do not start automatically."
+}

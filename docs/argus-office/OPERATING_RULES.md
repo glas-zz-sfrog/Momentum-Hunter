@@ -46,6 +46,31 @@ Specialists produce role-specific artifacts and may include recommendations insi
 
 `BRANCH_LEDGER.md` records branch evidence; `TASK_LOG.md` and `CHANGELOG_ARGUS.md` record history. They do not replace the Roadmap's current state or next-action decision.
 
+## Long-Running Campaign Provenance
+
+Long-running experiments must follow
+`templates/LONG_RUNNING_CAMPAIGN_PROVENANCE_TEMPLATE.md` and preserve four
+separate domains: campaign-frozen identity, production baseline at start,
+append-only authorized external changes, and campaign-integrity observations.
+Every campaign is pinned by full Git SHA, actual executable/dependency file-
+manifest SHA-256, configuration fingerprint, process identity, evidence-root
+identity, and provider-route allowlist. Branch labels and current governance
+HEAD are not substitutes.
+
+`CAMPAIGN_NONMUTATION` and `GLOBAL_PRODUCTION_NONMUTATION` are distinct claims.
+The former concerns the experiment's own frozen contract; the latter means no
+production state changed anywhere. Separately authorized production work may
+occur while a campaign runs only when every change is appended with old/new Git,
+installed-product, manifest, service, authorization, and shared-resource
+identity and a bounded isolation revalidation passes. An undeclared shared
+mutable dependency or failed revalidation is `CAMPAIGN_ISOLATION_BROKEN`.
+
+Installed product identity is first-class and separate from governance HEAD.
+Deployment evidence must preserve installed product Git head, executable hash,
+configuration hash, and deployment-manifest hash. Use
+`tools/verify_campaign_provenance.py` to finalize write-once evidence and verify
+fingerprint, transition-chain, shared-resource, and dual-claim consistency.
+
 ## Deferred Operator Verification
 `VERIFICATION_QUEUE.md` is the durable, item-by-item list of Steven's deferred visual/manual checks and anomaly decisions. Every visual change must record the exact screen, action, expected result, forbidden or unchanged behavior, automated evidence, and current manual status. Routine nonvisual work records automated evidence and does not create a Steven approval item.
 
