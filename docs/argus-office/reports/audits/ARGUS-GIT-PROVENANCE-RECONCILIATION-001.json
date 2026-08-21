@@ -5,6 +5,12 @@
     "GIT_PROVENANCE_RECONCILIATION_COMPLETE",
     "LONG_RUNNING_CAMPAIGN_PROVENANCE_MODEL_CORRECTED"
   ],
+  "governance": {
+    "branch": "codex/ARGUS-GIT-PROVENANCE-RECONCILIATION-001",
+    "baseCommit": "dca0671b7856c11b432304a544477246d2764faf",
+    "implementationCommit": "0050dd4a31e27351d6aadface62a6b7ba9e03acc",
+    "status": "IMPLEMENTED_PENDING_MERGE"
+  },
   "historicalResultPreserved": {
     "campaign": "ARGUS-OVERNIGHT-DATA-FIDELITY-001",
     "globalProductionNonmutation": "FAILED",
@@ -362,6 +368,30 @@
     "serviceSnapshotSha256": "C711BEA0FA78338719269048CF8DA287BE3D58B9CE45B583B66D7146688D0B5D",
     "schedulerTaskCount": 23,
     "schedulerSnapshotSha256": "52F51F9E9C858B5D7CB563C9D51C1589F3241DDC36B8ED3B699E89F8CF2905DC",
+    "providerCalls": 0,
+    "accountCalls": 0,
+    "orderCalls": 0,
+    "servicesRestarted": 0,
+    "manifestsChanged": 0,
+    "schedulerChanged": 0
+  },
+  "productionProtectionFinal": {
+    "checkedAt": "2026-08-21T03:07:21.4898587Z",
+    "canonicalHead": "dca0671b7856c11b432304a544477246d2764faf",
+    "originMaster": "dca0671b7856c11b432304a544477246d2764faf",
+    "canonicalClean": true,
+    "serviceSnapshotSha256": "C711BEA0FA78338719269048CF8DA287BE3D58B9CE45B583B66D7146688D0B5D",
+    "serviceSnapshotMatchesBaseline": true,
+    "schedulerTaskCount": 23,
+    "schedulerTaskCountMatchesBaseline": true,
+    "schedulerMutationEventsObserved": 0,
+    "historicalEvidenceFileCount": 51,
+    "historicalEvidenceTreeSha256": "5F52C966F5724A940C0B855ED1DC73AD6F60DFA1629FCA7F3CC6F93141573ED6",
+    "historicalEvidenceMatchesBaseline": true,
+    "automationManifestSha256": "6B0FCA73BF56A04501AE016BFEFC39E85DA386C44BB9FA63DEF37ED837B18BE4",
+    "continuousConfigSha256": "EF1986A35000CA8EB425BCD7470BE0A9C4496007853F4AF20F779B565AF9D982",
+    "continuousDeploymentManifestSha256": "FC2810BAA3730EDFB7679026A70F305992EC772A381E733819B54FFFD29B73EB",
+    "manifestsMatchBaseline": true,
     "providerCalls": 0,
     "accountCalls": 0,
     "orderCalls": 0,

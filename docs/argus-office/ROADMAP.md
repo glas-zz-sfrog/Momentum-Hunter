@@ -29,6 +29,46 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+`ARGUS-GIT-PROVENANCE-RECONCILIATION-001` is implemented on
+`codex/ARGUS-GIT-PROVENANCE-RECONCILIATION-001` from clean synchronized
+canonical `dca0671b7856c11b432304a544477246d2764faf`. Implementation commit
+`0050dd4a31e27351d6aadface62a6b7ba9e03acc` preserves the original
+`ARGUS-OVERNIGHT-DATA-FIDELITY-001` result exactly:
+`GLOBAL_PRODUCTION_NONMUTATION = FAILED`. No checkpoint, closeout, provider
+observation, or historical classification was changed.
+
+The exact authority map is now explicit. The overnight campaign ran from
+frozen source `a75422605e67575d267d7d2980519878ec3a5a26` against canonical and
+installed baseline `e1ea386f4640686569e2fb5a9a88e261ac974da3`. Separately
+authorized Schwab auth-lifecycle work fast-forwarded canonical to product
+`e69426b3b7bd179cd62eba2e28a5d0553da47154`, deployed that exact product with
+new continuous config/deployment-manifest identities, then added governance-
+only closeout `dca0671b7856c11b432304a544477246d2764faf`. Installed product remains
+`e69426b3`; every path from it to governance HEAD is under
+`docs/argus-office/`, and the `momentum_hunter`, `tools`, `src`, and `tests`
+trees at those two commits are identical.
+
+The historical audit failed because the old contract used one broad
+production-nonmutation boolean. The prospective contract now separates
+`CAMPAIGN_NONMUTATION` from `GLOBAL_PRODUCTION_NONMUTATION`, requires full Git
+and executable/dependency/config/process identity, declares shared mutable
+resources, chains authorized external changes, and requires bounded isolation
+revalidation after every change. The standalone verifier rejects tampering,
+abbreviated identity, malformed hashes, broken transition chains, undeclared
+shared resources, secret-shaped fields, and contradictory integrity claims.
+
+The historical sidecar shared mutable Schwab OAuth state with production;
+earlier checkpoints saw expired state while the final checkpoint succeeded
+after authorized production refresh activity. Alpaca credential,
+interpreter/dependency, and route-allowlist start fingerprints were also not
+fully preserved. These are explicit `CAMPAIGN_PROVENANCE_GAP` findings, not
+provider-data adjudications, so historical `CAMPAIGN_NONMUTATION` is not
+retroactively claimed. Classification is
+`GIT_PROVENANCE_RECONCILIATION_COMPLETE /
+LONG_RUNNING_CAMPAIGN_PROVENANCE_MODEL_CORRECTED /
+IMPLEMENTED_PENDING_MERGE`. The next task is a separate read-only overnight-
+evidence isolation reconciliation; do not begin it automatically.
+
 `ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001` is complete. Product commit
 `e69426b3b7bd179cd62eba2e28a5d0553da47154` was pushed, strictly
 fast-forwarded to canonical `master`, pushed normally, and installed as the

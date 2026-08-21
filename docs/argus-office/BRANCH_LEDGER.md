@@ -2,6 +2,29 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-GIT-PROVENANCE-RECONCILIATION-001 - 2026-08-20
+
+`codex/ARGUS-GIT-PROVENANCE-RECONCILIATION-001` started from clean,
+synchronized canonical `dca0671b7856c11b432304a544477246d2764faf`.
+Implementation commit `0050dd4a31e27351d6aadface62a6b7ba9e03acc` adds the
+long-running campaign provenance contract, standalone finalizer/verifier,
+focused tests, and exact historical ancestry/deployment/shared-resource audit.
+
+The original overnight broad production-nonmutation failure is preserved and
+provider evidence is not adjudicated. Installed product `e69426b3` differs from
+governance HEAD only by the `dca0671` governance closeout; product/deployment
+trees are identical. The historical shared Schwab OAuth state and incomplete
+start-time dependency/credential/route fingerprints are recorded as
+`CAMPAIGN_PROVENANCE_GAP`, not repaired facts.
+
+Compile/check, 11 focused tests, full-SHA/tree/remote checks, JSON parsing,
+diff, secret-shape, import-capability, protected-path, service, scheduler,
+manifest, and 51-file overnight evidence nonmutation checks pass.
+Classification is `GIT_PROVENANCE_RECONCILIATION_COMPLETE /
+LONG_RUNNING_CAMPAIGN_PROVENANCE_MODEL_CORRECTED / IMPLEMENTED_PENDING_MERGE`.
+No service, scheduler, manifest, credential, provider, broker, runtime, or
+historical evidence mutation occurred.
+
 ## ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001 - 2026-08-20
 
 `codex/ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001` started from clean,

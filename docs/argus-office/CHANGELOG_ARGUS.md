@@ -1,5 +1,18 @@
 # Argus Changelog
 
+- Reconciled the August 20 overnight campaign's exact Git and deployment
+  ancestry without changing its original `GLOBAL_PRODUCTION_NONMUTATION =
+  FAILED` result or adjudicating provider evidence.
+- Added separate `CAMPAIGN_NONMUTATION` and
+  `GLOBAL_PRODUCTION_NONMUTATION` claims, an append-only authorized external-
+  change ledger, declared shared-resource ownership, post-change isolation
+  revalidation, and first-class installed-product identity.
+- Added a standalone provenance finalizer/verifier with write-once fingerprints
+  and fail-closed checks for tampering, abbreviated SHA, invalid hashes, broken
+  transition chains, undeclared shared resources, contradictory claims, and
+  secret-shaped fields. No runtime/product import or production mutation was
+  added.
+
 - Hardened the shared Schwab read-only auth lifecycle with cross-process
   single-flight refresh ownership, post-lock state reread, atomic CurrentUser
   DPAPI persistence, stale-state adoption, and bounded 401/403/interactive-

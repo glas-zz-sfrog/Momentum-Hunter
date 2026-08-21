@@ -6,6 +6,12 @@
 
 `LONG_RUNNING_CAMPAIGN_PROVENANCE_MODEL_CORRECTED`
 
+Branch: `codex/ARGUS-GIT-PROVENANCE-RECONCILIATION-001`
+
+Implementation commit: `0050dd4a31e27351d6aadface62a6b7ba9e03acc`
+
+Integration status: `IMPLEMENTED_PENDING_MERGE`
+
 The original `ARGUS-OVERNIGHT-DATA-FIDELITY-001` result remains permanently:
 
 ```text
@@ -201,5 +207,21 @@ is enforced by `tools/verify_campaign_provenance.py`.
 ## Production Protection
 
 No service, manifest, scheduler, credential, provider, account, broker, order,
-runtime evidence, or overnight evidence was changed by this task. A final
-before/after hash comparison is required at branch closeout.
+runtime evidence, or overnight evidence was changed by this task. The terminal
+read-only comparison at `2026-08-21T03:07:21.4898587Z` matched the baseline:
+
+- service snapshot SHA-256:
+  `C711BEA0FA78338719269048CF8DA287BE3D58B9CE45B583B66D7146688D0B5D`;
+- scheduled task count: `23`, with no Momentum Hunter scheduler mutation event
+  observed during the reconciliation;
+- historical evidence: `51` files, tree SHA-256
+  `5F52C966F5724A940C0B855ED1DC73AD6F60DFA1629FCA7F3CC6F93141573ED6`;
+- automation manifest SHA-256:
+  `6B0FCA73BF56A04501AE016BFEFC39E85DA386C44BB9FA63DEF37ED837B18BE4`;
+- continuous configuration SHA-256:
+  `EF1986A35000CA8EB425BCD7470BE0A9C4496007853F4AF20F779B565AF9D982`;
+- continuous deployment manifest SHA-256:
+  `FC2810BAA3730EDFB7679026A70F305992EC772A381E733819B54FFFD29B73EB`.
+
+Canonical remained clean at synchronized
+`dca0671b7856c11b432304a544477246d2764faf`.
