@@ -15,24 +15,30 @@ public sealed record ContinuousServiceOptions(
         var values = Parse(args);
         var role = values.GetValueOrDefault("--role")
             ?? throw new ArgumentException("--role is required.");
-        if (role is not ("writer" or "runtime"))
+        if (role is not ("writer" or "runtime" or "paper"))
         {
-            throw new ArgumentException("--role must be writer or runtime.");
+            throw new ArgumentException("--role must be writer, runtime, or paper.");
         }
 
         var repositoryRoot = Required(values, "--repository-root");
         var pythonExecutable = Required(values, "--python-executable");
         var configPath = Required(values, "--config");
-        var suffix = role.Equals("writer", StringComparison.Ordinal)
-            ? "Writer"
-            : "Runtime";
+        var suffix = role switch
+        {
+            "writer" => "Writer",
+            "runtime" => "Runtime",
+            _ => "Paper",
+        };
+        var displayName = role.Equals("paper", StringComparison.Ordinal)
+            ? "Momentum Hunter Continuous Paper (One-Entry Canary)"
+            : $"Momentum Hunter Continuous {suffix} (Research Only)";
         return new ContinuousServiceOptions(
             role,
             Path.GetFullPath(repositoryRoot),
             pythonExecutable,
             Path.GetFullPath(configPath),
             $"MomentumHunterContinuous{suffix}",
-            $"Momentum Hunter Continuous {suffix} (Research Only)");
+            displayName);
     }
 
     private static string Required(IReadOnlyDictionary<string, string> values, string name)
@@ -134,13 +140,25 @@ public sealed class ContinuousProcessWorker(
         }
         info.ArgumentList.Add("-B");
         info.ArgumentList.Add("-m");
-        info.ArgumentList.Add("momentum_hunter.continuous_production");
-        info.ArgumentList.Add("--role");
-        info.ArgumentList.Add(options.Role);
-        info.ArgumentList.Add("--config");
-        info.ArgumentList.Add(options.ConfigPath);
+        if (options.Role.Equals("paper", StringComparison.Ordinal))
+        {
+            info.ArgumentList.Add("momentum_hunter.continuous_paper");
+            info.ArgumentList.Add("--config");
+            info.ArgumentList.Add(options.ConfigPath);
+            info.ArgumentList.Add("run");
+        }
+        else
+        {
+            info.ArgumentList.Add("momentum_hunter.continuous_production");
+            info.ArgumentList.Add("--role");
+            info.ArgumentList.Add(options.Role);
+            info.ArgumentList.Add("--config");
+            info.ArgumentList.Add(options.ConfigPath);
+        }
         info.Environment["PYTHONUTF8"] = "1";
         info.Environment["MOMENTUM_HUNTER_CONTINUOUS_SERVICE_MODE"] = "1";
+        info.Environment["MOMENTUM_HUNTER_CONTINUOUS_PAPER_MODE"] =
+            options.Role.Equals("paper", StringComparison.Ordinal) ? "1" : "0";
         info.Environment.Remove("OPENAI_API_KEY");
         info.Environment.Remove("CODEX_API_KEY");
         info.Environment.Remove("ALPACA_API_KEY");

@@ -126,6 +126,8 @@ _EVIDENCE_TYPE_TO_ARTIFACT = {
     "OPPORTUNITY_DENOMINATOR": "runtime-source-admission-ledger",
     "PROVIDER_BOUND_DENOMINATOR_ROWS": "runtime-source-admission-ledger",
     "SYSTEM_FAILURE": "runtime-source-admission-ledger",
+    "PAPER_ADMISSION_INTENT": "continuous-plan-ledger",
+    "PAPER_EXECUTION_EVENT": "paper-execution-ledger",
 }
 
 _ROOT_OWNERS_GUARD = threading.Lock()

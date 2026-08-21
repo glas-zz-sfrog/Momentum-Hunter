@@ -34,6 +34,9 @@ from momentum_hunter.continuous_denominator import (
     ContinuousDenominatorResult,
     produce_continuous_denominator,
 )
+from momentum_hunter.continuous_paper_contract import (
+    build_continuous_paper_admission_intent,
+)
 from momentum_hunter.continuous_evidence_writer import (
     OFFLINE_REVIEW,
     AuthenticatedEvidenceWriterClient,
@@ -219,6 +222,8 @@ class QualificationState:
     root: Path
     launch_at: datetime
     allow_persistent: bool = False
+    runtime_configuration_fingerprint: str = ""
+    product_sha: str = ""
     metrics: QualificationMetrics = field(default_factory=QualificationMetrics)
     snapshot: DiscoverySnapshot | None = None
     universe: HotUniverseResult | None = None
@@ -669,6 +674,20 @@ class LiveCompositionSource:
         member = next(
             item for item in cycle.member_results if item.symbol == request.symbol
         )
+        universe_member = next(
+            item
+            for item in self.state.universe.state.members
+            if item.member_id == member.universe_member_id
+        )
+        admission = build_continuous_paper_admission_intent(
+            cycle=cycle,
+            member=member,
+            universe_member=universe_member,
+            runtime_configuration_fingerprint=(
+                self.state.runtime_configuration_fingerprint
+            ),
+            product_sha=self.state.product_sha,
+        )
         if member.intraday_plan is not None:
             self.state.metrics.research_plans.add(member.intraday_plan.plan_id)
         if (
@@ -690,6 +709,16 @@ class LiveCompositionSource:
                 else None
             ),
             plan_id=(member.intraday_plan.plan_id if member.intraday_plan else None),
+            admission_payload_json=(
+                json.dumps(
+                    admission.to_dict(),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                )
+                if admission is not None
+                else None
+            ),
         )
 
 

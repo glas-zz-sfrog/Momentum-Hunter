@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from momentum_hunter.continuous_production import (
     ProductionDeploymentError,
     ProductionRemoteWriter,
+    ProductionWriterRequestError,
     ProductionWriterServer,
     PREMARKET,
     REGULAR_SESSION,
@@ -58,9 +59,12 @@ class ContinuousProductionTests(unittest.TestCase):
         return value
 
     def _intent(self, runtime_id: str, sequence: int = 1):
+        record_fingerprint = hashlib.sha256(
+            f"{runtime_id}:{sequence}".encode("ascii")
+        ).hexdigest()
         payload = {
             "payloadType": "COMPOSITION_CYCLE",
-            "cycleId": "cycle-1",
+            "cycleId": f"cycle-{record_fingerprint[:12]}",
             "knownAt": "2026-08-18T20:00:00+00:00",
         }
         payload_fingerprint = _fingerprint("continuous-evidence-payload-v1", payload)
@@ -68,8 +72,8 @@ class ContinuousProductionTests(unittest.TestCase):
             runtime_instance_id=runtime_id,
             sequence=sequence,
             evidence_type="COMPOSITION_CYCLE",
-            record_identity="cycle-1",
-            record_fingerprint="b" * 64,
+            record_identity=f"cycle-{record_fingerprint[:12]}",
+            record_fingerprint=record_fingerprint,
             predecessor_identity=None if sequence == 1 else "prior-intent",
             requested_at="2026-08-18T20:00:00+00:00",
             payload_fingerprint=payload_fingerprint,
@@ -177,6 +181,70 @@ class ContinuousProductionTests(unittest.TestCase):
                 stored = json.loads(stored_paths[0].read_text(encoding="ascii"))
                 self.assertNotIn("payload_json", stored["intent"])
                 self.assertEqual("COMPOSITION_CYCLE", stored["payload"]["payloadType"])
+            finally:
+                server.close()
+
+    def test_runtime_and_paper_clients_share_writer_without_session_clobber(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "ipc.key").write_bytes(secrets.token_bytes(32))
+            config = self._config(root)
+            server = ProductionWriterServer(config)
+            runtime_source = "production-continuous-runtime-shared"
+            paper_source = "production-continuous-paper-shared"
+            runtime = ProductionRemoteWriter(config, source_identity=runtime_source)
+            paper = ProductionRemoteWriter(config, source_identity=paper_source)
+
+            def direct_request(frame):
+                try:
+                    if frame["frameType"] == "HELLO":
+                        return server._handshake(frame)
+                    return server._persist(WriterEnvelope(**frame["envelope"]))
+                except ProductionWriterRequestError as exc:
+                    return {
+                        "status": "REJECTED",
+                        "failureClass": exc.failure_class,
+                    }
+
+            runtime._request = direct_request
+            paper._request = direct_request
+            try:
+                self.assertIn(
+                    runtime.write_intent(self._intent(runtime_source, 1)).status,
+                    {WRITER_ACCEPTED, "DUPLICATE"},
+                )
+                self.assertIn(
+                    paper.write_intent(self._intent(paper_source, 1)).status,
+                    {WRITER_ACCEPTED, "DUPLICATE"},
+                )
+                self.assertIn(
+                    runtime.write_intent(self._intent(runtime_source, 2)).status,
+                    {WRITER_ACCEPTED, "DUPLICATE"},
+                )
+                self.assertEqual(3, len(list((server.root / "index" / "generations").glob("*.json"))))
+            finally:
+                server.close()
+
+    def test_new_handshake_replaces_only_the_prior_session_for_same_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "ipc.key").write_bytes(secrets.token_bytes(32))
+            server = ProductionWriterServer(self._config(root))
+            try:
+                runtime_source = "production-continuous-runtime-session"
+                paper_source = "production-continuous-paper-session"
+                first_runtime = secrets.token_hex(16)
+                paper = secrets.token_hex(16)
+                second_runtime = secrets.token_hex(16)
+
+                self._handshake(server, runtime_source, first_runtime)
+                self._handshake(server, paper_source, paper)
+                self._handshake(server, runtime_source, second_runtime)
+
+                self.assertNotIn(first_runtime, server.sessions)
+                self.assertIn(second_runtime, server.sessions)
+                self.assertIn(paper, server.sessions)
+                self.assertEqual(2, len(server.sessions))
             finally:
                 server.close()
 

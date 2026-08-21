@@ -40,6 +40,7 @@ ALLOWED_ARTIFACTS = frozenset(
         "continuous-plan-ledger",
         "runtime-source-admission-ledger",
         "event-decision-cycle-ledger",
+        "paper-execution-ledger",
     }
 )
 ACTIVATION_BLOCKERS = (

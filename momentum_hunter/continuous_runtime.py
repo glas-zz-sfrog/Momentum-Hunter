@@ -397,11 +397,21 @@ class CompositionResult:
     lifecycle_transitions: int = 0
     setup_id: str | None = None
     plan_id: str | None = None
+    admission_payload_json: str | None = None
 
     def __post_init__(self) -> None:
         _require_fingerprint(self.fingerprint, "Composition fingerprint")
         if self.lifecycle_transitions < 0:
             raise ContinuousRuntimeError("Lifecycle transition count cannot be negative.")
+        if self.admission_payload_json is not None:
+            try:
+                payload = json.loads(self.admission_payload_json)
+            except json.JSONDecodeError:
+                raise ContinuousRuntimeError("Admission payload is not valid JSON.") from None
+            if not isinstance(payload, dict) or payload.get("payloadType") != "PAPER_ADMISSION_INTENT":
+                raise ContinuousRuntimeError("Admission payload contract is invalid.")
+            if json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True) != self.admission_payload_json:
+                raise ContinuousRuntimeError("Admission payload is not canonical JSON.")
 
 
 @dataclass(frozen=True)
@@ -2176,6 +2186,8 @@ class ContinuousOpportunityRuntime:
         self.last_successful_composition_at = now
         self.last_composition_completed_at = now
         self._mark_forward_progress(now)
+        compact_result = asdict(result)
+        compact_result.pop("admission_payload_json", None)
         evidence_decision = self._emit_intent(
             evidence_type="COMPOSITION_CYCLE",
             record_identity=result.cycle_id,
@@ -2184,7 +2196,7 @@ class ContinuousOpportunityRuntime:
             payload={
                 "payloadType": "COMPOSITION_CYCLE",
                 "request": asdict(request),
-                "result": asdict(result),
+                "result": compact_result,
                 "knownAt": _timestamp(now),
                 "authority": RESEARCH_AUTHORITY,
                 "executionAuthority": EXECUTION_AUTHORITY_NONE,
@@ -2193,6 +2205,18 @@ class ContinuousOpportunityRuntime:
         )
         if evidence_decision == EVIDENCE_REJECTED_PERMANENT:
             return
+        if result.admission_payload_json is not None:
+            admission = json.loads(result.admission_payload_json)
+            admission_decision = self._emit_intent(
+                evidence_type="PAPER_ADMISSION_INTENT",
+                record_identity=str(admission["admissionId"]),
+                record_fingerprint=str(admission["fingerprint"]),
+                payload_fingerprint=str(admission["fingerprint"]),
+                payload=admission,
+                now=now,
+            )
+            if admission_decision == EVIDENCE_REJECTED_PERMANENT:
+                return
         denominator_request = DenominatorRequest(
             request_id=_fingerprint("denominator-request", asdict(result)),
             symbol=result.symbol,

@@ -86,7 +86,13 @@ function Get-RuntimeBuildHash {
         "momentum_hunter\continuous_runtime.py",
         "momentum_hunter\continuous_live_qualification.py",
         "momentum_hunter\continuous_evidence_writer.py",
+        "momentum_hunter\continuous_paper.py",
+        "momentum_hunter\continuous_paper_contract.py",
         "momentum_hunter\event_runtime_writer_ipc.py",
+        "momentum_hunter\alpaca_paper_engineering.py",
+        "momentum_hunter\alpaca_paper_broker.py",
+        "momentum_hunter\paper_risk_governor.py",
+        "momentum_hunter\provider_neutral_allocation.py",
         "momentum_hunter\windows_writer_storage.py"
     )
     $parts = foreach ($relative in $paths) {
@@ -519,6 +525,8 @@ if ($Stage -eq "Install") {
         runtimeIdentity = "production-continuous-runtime-v2"
         configurationSessionDate = "1970-01-01"
         runtimeBuildHash = [string]$plan.runtimeBuildHash
+        installedProductSha = [string]$plan.canonicalHead
+        continuousTradePlanProducer = "UNAVAILABLE"
         evidenceProgramId = "continuous-opportunity-production"
         evidenceRoot = $evidence
         runtimeStateRoot = $runtimeState
@@ -572,12 +580,16 @@ if ($Stage -eq "Install") {
         canonicalHead = $identity.head
         runtimeBuildHash = $plan.runtimeBuildHash
         runtimeSourceRoot = $runtimeSourceRoot
+        serviceHostExecutable = $serviceHostPath
+        pythonExecutable = [string]$plan.pythonExecutable
+        configurationPath = $configPath
         configurationFingerprint = $fingerprint
         writerService = Get-ServiceSnapshot $writerServiceName
         runtimeService = Get-ServiceSnapshot $runtimeServiceName
         evidenceRoot = $evidence
         runtimeStateRoot = $runtimeState
         orderCapability = "UNAVAILABLE"
+        continuousTradePlanProducer = "UNAVAILABLE"
         shadowJobsEnabled = 0
         existingAutomationServiceDefinitionUnchanged = $true
         existingAutomationCredentialRefreshed = [bool]$RepairAutomationCredential

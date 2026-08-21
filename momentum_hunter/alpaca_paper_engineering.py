@@ -37,9 +37,14 @@ from momentum_hunter.alpaca_paper_onboarding import (
     AlpacaPaperLane,
 )
 from momentum_hunter.broker_capabilities import BrokerCapabilityRegistry
+from momentum_hunter.continuous_paper_contract import (
+    ContinuousPaperAdmissionIntent,
+    parse_continuous_paper_admission_intent,
+)
 from momentum_hunter.paper_risk_governor import (
     PaperRiskDecision,
     PaperRiskPolicy,
+    evaluate_continuous_paper_admission,
     evaluate_paper_candidate,
 )
 from momentum_hunter.provider_neutral_allocation import (
@@ -75,6 +80,9 @@ PAPER_ENGINEERING_ROLLOVER_CONFIRMATION = (
     "CLOSE INVALIDATED PAPER SAMPLE AND START VERSION 2"
 )
 PAPER_ENGINEERING_DECISION_CONFIRMATION = "RUN PROSPECTIVE ALPACA PAPER DECISION"
+CONTINUOUS_PAPER_DECISION_CONFIRMATION = (
+    "RUN PROSPECTIVE CONTINUOUS ALPACA PAPER ADMISSION"
+)
 PAPER_TRADE_CREATED = "PAPER_TRADE_CREATED"
 NO_TRADE = "NO_TRADE"
 DEFAULT_PAPER_ENGINEERING_DIRECTORY = (
@@ -197,6 +205,14 @@ class CandidateEvaluation:
                 else None
             ),
         }
+
+
+@dataclass(frozen=True)
+class _ContinuousExecutionPlan:
+    bullish_entry: Decimal
+    bullish_stop: Decimal
+    bullish_target_1: Decimal
+    intraday_evidence: object
 
 
 def freeze_paper_engineering_sample(
@@ -827,6 +843,224 @@ class AlpacaPaperEngineeringEngine:
             receipts=receipts,
         )
 
+    def run_continuous_admission(
+        self,
+        admission_payload: Mapping[str, object],
+        *,
+        source_path: Path,
+        confirmation: str,
+    ) -> dict[str, object]:
+        """Execute one immutable continuous admission through the A004 path."""
+
+        if confirmation != CONTINUOUS_PAPER_DECISION_CONFIRMATION:
+            raise PaperEngineeringError(
+                "The exact continuous Paper admission confirmation was not provided."
+            )
+        policy = load_paper_engineering_policy(self.output_directory)
+        arm, capabilities = load_paper_engineering_arm(
+            policy=policy,
+            output_directory=self.output_directory,
+        )
+        admission = parse_continuous_paper_admission_intent(admission_payload)
+        try:
+            source_bytes = source_path.read_bytes()
+        except OSError:
+            raise PaperEngineeringError(
+                "Continuous Paper admission source is unavailable."
+            ) from None
+        source_sha = hashlib.sha256(source_bytes).hexdigest().upper()
+        cycle_id = _stable_id(
+            "continuous-paper-cycle",
+            arm.fingerprint,
+            policy.fingerprint,
+            admission.admission_id,
+        )
+        final_path = self._decision_path(cycle_id)
+        if final_path.is_file():
+            return _load_verified_final(final_path)
+        intent_path = self.output_directory / "intents" / f"{cycle_id}.json"
+        if intent_path.is_file():
+            receipts: list[AlpacaPaperProviderReceipt] = []
+            self.adapter.evidence_sink = receipts.append
+            return self._recover_intent(
+                intent_path=intent_path,
+                final_path=final_path,
+                cycle_id=cycle_id,
+                policy=policy,
+                arm=arm,
+                report_sha=source_sha,
+                receipts=receipts,
+            )
+
+        decision_started_at = self.clock()
+        _require_aware(decision_started_at, "Continuous Paper decision start")
+        base = {
+            "schemaVersion": PAPER_ENGINEERING_SCHEMA_VERSION,
+            "profile": PAPER_ENGINEERING_PROFILE,
+            "sampleId": policy.sample_id,
+            "sampleArmFingerprint": arm.fingerprint,
+            "policyFingerprint": policy.fingerprint,
+            "decisionCycleId": cycle_id,
+            "decisionStartedAt": decision_started_at.isoformat(),
+            "decisionAt": decision_started_at.isoformat(),
+            "sourceReportPath": str(source_path.resolve()),
+            "sourceReportSha256": source_sha,
+            "sourceCapturePath": "",
+            "sourceCaptureTime": admission.known_at,
+            "continuousAdmissionId": admission.admission_id,
+            "continuousAdmissionFingerprint": admission.fingerprint,
+            "continuousCompositionCycleId": admission.composition_cycle_id,
+            "mode": "CONTINUOUS ALPACA PAPER ENGINEERING",
+            "lane": AlpacaPaperLane.CANARY_REALISTIC.value,
+            "endpoint": ALPACA_PAPER_BASE_URL,
+            "liveEndpointReachable": False,
+            "countsTowardFinalStrategySample": False,
+            "retrospective": False,
+        }
+        try:
+            quote_proof = build_regular_market_quote_proof(
+                self.quote_source,
+                (admission.symbol,),
+                clock=self.clock,
+                require_clock_proof=True,
+            )
+        except Exception as exc:
+            return self._write_final(
+                final_path,
+                {
+                    **base,
+                    "classification": "PAPER_SYSTEM_FAILURE",
+                    "terminal": True,
+                    "reasons": [
+                        f"PAPER_SCHWAB_QUOTE_PROOF_UNAVAILABLE:{type(exc).__name__}"
+                    ],
+                    "candidatesEvaluated": 0,
+                    "candidateEvaluations": [],
+                    "providerCalls": [],
+                    "paperOrderCreated": False,
+                },
+            )
+        quote_result = next(
+            (
+                dict(item)
+                for item in quote_proof.get("quotes", [])
+                if isinstance(item, Mapping)
+                and str(item.get("symbol", "")).strip().upper()
+                == admission.symbol
+            ),
+            None,
+        )
+        base["quoteProof"] = quote_proof
+        receipts: list[AlpacaPaperProviderReceipt] = []
+        self.adapter.evidence_sink = receipts.append
+        try:
+            account = self._account_snapshot(cycle_id, policy, receipts)
+        except (AlpacaPaperBrokerError, PaperEngineeringError) as exc:
+            return self._write_final(
+                final_path,
+                {
+                    **base,
+                    "classification": "PAPER_SYSTEM_FAILURE",
+                    "terminal": True,
+                    "reasons": [
+                        f"PAPER_ACCOUNT_PREFLIGHT_FAILED:{type(exc).__name__}"
+                    ],
+                    "candidatesEvaluated": 0,
+                    "candidateEvaluations": [],
+                    "providerCalls": [_receipt_dict(item) for item in receipts],
+                    "paperOrderCreated": False,
+                },
+            )
+
+        decision_at = self.clock()
+        _require_aware(decision_at, "Continuous Paper decision")
+        base["decisionAt"] = decision_at.isoformat()
+        base["evidenceAcquiredAt"] = decision_at.isoformat()
+        risk = evaluate_continuous_paper_admission(
+            admission,
+            quote_result=quote_result,
+            decision_at=decision_at,
+            policy=policy.risk,
+        )
+        allocation: ProviderNeutralAllocationDecision | None = None
+        blockers = list(risk.blockers)
+        plan = admission.trade_plan
+        if risk.authorized and risk.execution_price is not None:
+            request = AllocationRequest(
+                decision_cycle_id=cycle_id,
+                candidate_id=admission.candidate_id,
+                canonical_rank=admission.canonical_rank,
+                symbol=admission.symbol,
+                trade_plan_id=admission.trade_plan_id,
+                risk_decision_id=risk.risk_decision_id,
+                entry_order_type="market",
+                entry_price=risk.execution_price,
+                stop_price=Decimal(str(plan.stop_price)),
+                target_price=Decimal(str(plan.target_prices[0])),
+                decision_at=decision_at.isoformat(),
+            )
+            allocation = allocate_provider_neutral_position(
+                request=request,
+                policy=policy.allocation,
+                account=account,
+                capabilities=capabilities,
+            )
+            blockers.extend(allocation.blockers)
+        evaluation = CandidateEvaluation(
+            candidate_id=admission.candidate_id,
+            symbol=admission.symbol,
+            canonical_rank=admission.canonical_rank,
+            composite_score=None,
+            setup_family=admission.setup_family,
+            risk=risk,
+            allocation=allocation,
+            blockers=tuple(dict.fromkeys(blockers)),
+        )
+        if not evaluation.eligible or allocation is None:
+            capacity = any(
+                item in {
+                    "MAX_OPEN_POSITIONS_REACHED",
+                    "MAX_TOTAL_OPEN_RISK_REACHED",
+                    "INSUFFICIENT_BUYING_POWER",
+                }
+                for item in evaluation.blockers
+            )
+            return self._write_final(
+                final_path,
+                {
+                    **base,
+                    "classification": (
+                        "PAPER_CAPACITY_BLOCKED"
+                        if capacity
+                        else "PAPER_RISK_REJECTED"
+                    ),
+                    "terminal": True,
+                    "reasons": list(evaluation.blockers),
+                    "candidatesEvaluated": 1,
+                    "candidateEvaluations": [evaluation.to_dict()],
+                    "accountSnapshot": _account_dict(account),
+                    "providerCalls": [_receipt_dict(item) for item in receipts],
+                    "paperOrderCreated": False,
+                },
+            )
+        execution_plan = _ContinuousExecutionPlan(
+            bullish_entry=Decimal(str(plan.planned_entry)),
+            bullish_stop=Decimal(str(plan.stop_price)),
+            bullish_target_1=Decimal(str(plan.target_prices[0])),
+            intraday_evidence=plan,
+        )
+        return self._execute_selected(
+            base=base,
+            final_path=final_path,
+            cycle_id=cycle_id,
+            policy=policy,
+            selected=evaluation,
+            plan=execution_plan,
+            account=account,
+            evaluations=[evaluation],
+            receipts=receipts,
+        )
+
     def run_session(
         self,
         report_path: Path,
@@ -969,7 +1203,11 @@ class AlpacaPaperEngineeringEngine:
                 final_path,
                 {
                     **base,
-                    "classification": NO_TRADE,
+                    "classification": (
+                        "PAPER_RISK_REJECTED"
+                        if base.get("mode") == "CONTINUOUS ALPACA PAPER ENGINEERING"
+                        else NO_TRADE
+                    ),
                     "terminal": True,
                     "reasons": ["PAPER_ENTRY_NOTIONAL_BELOW_PROVEN_MINIMUM"],
                     "candidatesEvaluated": len(evaluations),
@@ -1014,7 +1252,11 @@ class AlpacaPaperEngineeringEngine:
                 final_path,
                 {
                     **base,
-                    "classification": NO_TRADE,
+                    "classification": (
+                        "PAPER_BROKER_REJECTED"
+                        if base.get("mode") == "CONTINUOUS ALPACA PAPER ENGINEERING"
+                        else NO_TRADE
+                    ),
                     "terminal": True,
                     "reasons": ["PAPER_ASSET_NOT_ACTIVE_TRADABLE_FRACTIONABLE"],
                     "candidatesEvaluated": len(evaluations),
@@ -1060,7 +1302,11 @@ class AlpacaPaperEngineeringEngine:
                 final_path,
                 {
                     **base,
-                    "classification": NO_TRADE,
+                    "classification": (
+                        "PAPER_BROKER_REJECTED"
+                        if base.get("mode") == "CONTINUOUS ALPACA PAPER ENGINEERING"
+                        else NO_TRADE
+                    ),
                     "terminal": True,
                     "reasons": ["PAPER_ENTRY_UNFILLED"],
                     "candidatesEvaluated": len(evaluations),
@@ -1372,7 +1618,11 @@ class AlpacaPaperEngineeringEngine:
                 final_path,
                 {
                     **base,
-                    "classification": NO_TRADE,
+                    "classification": (
+                        "PAPER_RECOVERY_REQUIRED"
+                        if base.get("mode") == "CONTINUOUS ALPACA PAPER ENGINEERING"
+                        else NO_TRADE
+                    ),
                     "terminal": True,
                     "reasons": ["PAPER_RECOVERY_UNSUBMITTED_INTENT"],
                     "candidatesEvaluated": len(evaluations),
@@ -1411,7 +1661,11 @@ class AlpacaPaperEngineeringEngine:
                 final_path,
                 {
                     **base,
-                    "classification": NO_TRADE,
+                    "classification": (
+                        "PAPER_BROKER_REJECTED"
+                        if base.get("mode") == "CONTINUOUS ALPACA PAPER ENGINEERING"
+                        else NO_TRADE
+                    ),
                     "terminal": True,
                     "reasons": ["PAPER_ENTRY_UNFILLED_AFTER_RECOVERY"],
                     "candidatesEvaluated": len(evaluations),
@@ -2148,7 +2402,9 @@ def _validate_policy(policy: PaperEngineeringPolicy) -> None:
         policy.schema_version != PAPER_ENGINEERING_SCHEMA_VERSION
         or policy.profile != PAPER_ENGINEERING_PROFILE
         or not policy.policy_id.strip()
-        or not policy.sample_id.startswith("alpaca-paper-engineering-")
+        or not policy.sample_id.startswith(
+            ("alpaca-paper-engineering-", "continuous-paper-engineering-")
+        )
     ):
         raise PaperEngineeringError("Paper engineering policy identity is invalid.")
     for value, label in (
@@ -2617,6 +2873,9 @@ def main(argv: list[str] | None = None) -> int:
     freeze.add_argument("--minimum-entry-notional", default="1")
     freeze.add_argument("--confirmation", required=True)
     freeze.add_argument("--lifecycle-proof", type=Path)
+    freeze.add_argument("--output-directory", type=Path)
+    freeze.add_argument("--sample-id")
+    freeze.add_argument("--activated-at")
     rollover = subparsers.add_parser("rollover-invalidated-sample")
     rollover.add_argument("--expected-sample-id", required=True)
     rollover.add_argument("--new-sample-id", required=True)
@@ -2636,9 +2895,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "freeze-sample":
             sample_date = now_central().date().isoformat().replace("-", "")
+            sample_id = args.sample_id or f"alpaca-paper-engineering-{sample_date}-v1"
             policy = PaperEngineeringPolicy(
-                policy_id=f"alpaca-paper-canary-engineering-policy-{sample_date}-v1",
-                sample_id=f"alpaca-paper-engineering-{sample_date}-v1",
+                policy_id=f"continuous-paper-canary-engineering-policy-{sample_date}-v1",
+                sample_id=sample_id,
                 allocation=ProviderNeutralAllocationPolicy(
                     policy_id=f"alpaca-paper-canary-allocation-{sample_date}-v1",
                     fixed_unit_risk_dollars=Decimal(args.risk_dollars),
@@ -2663,11 +2923,23 @@ def main(argv: list[str] | None = None) -> int:
             arm = freeze_paper_engineering_sample(
                 policy=policy,
                 lifecycle_proof_path=args.lifecycle_proof or _default_lifecycle_proof(),
+                output_directory=(
+                    args.output_directory
+                    if args.output_directory is not None
+                    else DEFAULT_PAPER_ENGINEERING_DIRECTORY
+                ),
                 confirmation=args.confirmation,
+                activated_at=(
+                    datetime.fromisoformat(args.activated_at.replace("Z", "+00:00"))
+                    if args.activated_at
+                    else None
+                ),
             )
             result: object = {
                 "classification": "ALPACA_PAPER_ENGINEERING_SAMPLE_FROZEN",
                 "sampleId": arm.sample_id,
+                "policyFingerprint": arm.policy_fingerprint,
+                "activationTimestamp": arm.activated_at,
                 "armFingerprint": arm.fingerprint,
                 "endpoint": arm.endpoint,
                 "liveEndpointReachable": False,

@@ -17,6 +17,7 @@ import secrets
 import socket
 import socketserver
 import sys
+import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, time as clock_time
@@ -99,7 +100,13 @@ ARTIFACT_BY_EVIDENCE = {
     "PROVIDER_BOUND_DENOMINATOR_ROWS": "runtime-source-admission-ledger",
     "SYSTEM_FAILURE": "runtime-source-admission-ledger",
     "READINESS_DEFERRED": "runtime-source-admission-ledger",
+    "PAPER_ADMISSION_INTENT": "continuous-plan-ledger",
+    "PAPER_EXECUTION_EVENT": "paper-execution-ledger",
 }
+WRITER_SOURCE_PREFIXES = (
+    "production-continuous-runtime-",
+    "production-continuous-paper-",
+)
 
 
 class ProductionDeploymentError(RuntimeError):
@@ -258,9 +265,8 @@ class ProductionWriterServer:
         )
         self.ipc_key = _read_ipc_key(Path(str(config["ipcKeyPath"])))
         self.expected_sequence, self.prior_envelope = self._load_checkpoint()
-        self.session_id: str | None = None
-        self.source_identity: str | None = None
-        self.session_key: bytes | None = None
+        self.sessions: dict[str, tuple[str, bytes]] = {}
+        self.write_lock = threading.RLock()
         self.status_path = self.root / "status" / "writer-status.json"
         self._write_status("STARTING")
 
@@ -309,7 +315,7 @@ class ProductionWriterServer:
             raise ProductionWriterRequestError(
                 IPC_PROTOCOL_REJECTED, "Writer handshake session is invalid."
             )
-        if not source.startswith("production-continuous-runtime-"):
+        if not source.startswith(WRITER_SOURCE_PREFIXES):
             raise ProductionWriterRequestError(
                 IPC_AUTH_REJECTED, "Writer handshake source is invalid."
             )
@@ -324,24 +330,37 @@ class ProductionWriterServer:
             raise ProductionWriterRequestError(
                 IPC_AUTH_REJECTED, "Writer handshake authentication failed."
             )
-        self.session_id = session_id
-        self.source_identity = source
-        self.session_key = hmac.new(self.ipc_key, f"session:{session_id}".encode("ascii"), hashlib.sha256).digest()
+        session_key = hmac.new(
+            self.ipc_key,
+            f"session:{session_id}".encode("ascii"),
+            hashlib.sha256,
+        ).digest()
+        with self.write_lock:
+            for prior_session_id, (prior_source, _) in tuple(self.sessions.items()):
+                if prior_source == source:
+                    self.sessions.pop(prior_session_id, None)
+            self.sessions[session_id] = (source, session_key)
         self._write_status("READY", sessionId=session_id, sourceIdentity=source)
         return {"status": "READY", "nextSequence": self.expected_sequence, "priorEnvelopeFingerprint": self.prior_envelope}
 
     def _persist(self, envelope: WriterEnvelope) -> dict[str, Any]:
-        if self.session_id is None or self.source_identity is None or self.session_key is None:
+        with self.write_lock:
+            return self._persist_locked(envelope)
+
+    def _persist_locked(self, envelope: WriterEnvelope) -> dict[str, Any]:
+        session = self.sessions.get(envelope.session_id)
+        if session is None:
             raise ProductionWriterRequestError(
                 IPC_AUTH_REJECTED, "Writer session is not established."
             )
+        source_identity, session_key = session
         try:
             verify_envelope_authentication(
                 envelope,
-                session_id=self.session_id,
-                key_material=self.session_key,
+                session_id=envelope.session_id,
+                key_material=session_key,
                 configuration_fingerprint=self.topology.configuration_fingerprint,
-                source_identity=self.source_identity,
+                source_identity=source_identity,
             )
         except WriterIpcError as exc:
             raise ProductionWriterRequestError(
@@ -385,7 +404,7 @@ class ProductionWriterServer:
             raise ProductionWriterRequestError(
                 SCHEMA_INVALID, "Writer intent sequence is invalid."
             )
-        if intent_raw.get("runtime_instance_id") != self.source_identity:
+        if intent_raw.get("runtime_instance_id") != source_identity:
             raise ProductionWriterRequestError(
                 SCHEMA_INVALID, "Writer intent identity is invalid."
             )
@@ -544,10 +563,11 @@ class ProductionRemoteWriter:
         self.config = config
         self.topology = _topology(config)
         self.key = _read_ipc_key(Path(str(config["ipcKeyPath"])))
-        if not source_identity.startswith("production-continuous-runtime-"):
-            raise ProductionDeploymentError("Production runtime identity is invalid.")
+        if not source_identity.startswith(WRITER_SOURCE_PREFIXES):
+            raise ProductionDeploymentError("Production writer client identity is invalid.")
         self.source_identity = source_identity
         self.sender: WriterEnvelopeSender | None = None
+        self._retrying_fingerprint: str | None = None
 
     def _connect(self) -> None:
         session_id = secrets.token_hex(16)
@@ -746,6 +766,15 @@ class ProductionRemoteWriter:
                     WRITE_FAILED,
                 }:
                     failure = WRITE_FAILED
+                if (
+                    failure in {IPC_AUTH_REJECTED, IPC_PROTOCOL_REJECTED}
+                    and self._retrying_fingerprint != intent.fingerprint
+                ):
+                    self._retrying_fingerprint = intent.fingerprint
+                    try:
+                        return self.write_intent(intent)
+                    finally:
+                        self._retrying_fingerprint = None
                 return WriterWriteResult(
                     status=failure,
                     payload_bytes=preflight.payload_bytes,
@@ -880,6 +909,8 @@ def run_runtime(config_path: Path) -> int:
         root=runtime_root / "session",
         launch_at=datetime.now().astimezone(),
         allow_persistent=True,
+        runtime_configuration_fingerprint=_runtime_config(config).fingerprint,
+        product_sha=str(config.get("installedProductSha", "")),
     )
     discovery = LiveDiscoverySource(state)
     market = LiveMarketDataSource(state, expected_account_ending=str(config["expectedAccountEnding"]))

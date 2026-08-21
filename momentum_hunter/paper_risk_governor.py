@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Mapping
 
 from momentum_hunter.autonomy.view_models import stable_trade_plan_id
+from momentum_hunter.continuous_paper_contract import ContinuousPaperAdmissionIntent
 from momentum_hunter.evidence_integrity import EXECUTION_ELIGIBLE
 from momentum_hunter.intraday_trade_plan import intraday_plan_decision_findings
 from momentum_hunter.provider_neutral_allocation import evidence_fingerprint
@@ -204,6 +205,91 @@ def evaluate_paper_candidate(
             quote_evidence_fingerprint=quote_fingerprint,
         ),
         plan,
+    )
+
+
+def evaluate_continuous_paper_admission(
+    admission: ContinuousPaperAdmissionIntent,
+    *,
+    quote_result: Mapping[str, object] | None,
+    decision_at: datetime,
+    policy: PaperRiskPolicy,
+) -> PaperRiskDecision:
+    """Apply the existing Paper execution gates to one continuous TradePlan."""
+
+    plan = admission.trade_plan
+    blockers = _policy_findings(policy)
+    blockers.extend(
+        f"PAPER_INTRADAY_PLAN:{item}"
+        for item in intraday_plan_decision_findings(
+            plan,
+            decision_at=decision_at,
+        )
+    )
+    entry = _positive_decimal(plan.planned_entry)
+    stop = _positive_decimal(plan.stop_price)
+    target = _positive_decimal(plan.target_prices[0] if plan.target_prices else None)
+    if not (entry and stop and target and stop < entry < target):
+        blockers.append("PAPER_TRADE_PLAN_LEVELS_INVALID")
+
+    quote = dict(quote_result or {})
+    quote_fingerprint = evidence_fingerprint(quote)
+    execution_price, spread, quote_blockers = _quote_findings(
+        quote,
+        symbol=admission.symbol,
+        decision_at=decision_at,
+        entry=entry,
+        stop=stop,
+        target=target,
+        policy=policy,
+    )
+    blockers.extend(quote_blockers)
+
+    reward_risk: Decimal | None = None
+    if execution_price is not None and stop is not None and target is not None:
+        risk = execution_price - stop
+        reward = target - execution_price
+        if risk <= 0 or reward <= 0:
+            blockers.append("PAPER_EXECUTION_LEVELS_INVALID")
+        else:
+            reward_risk = reward / risk
+            if reward_risk < policy.minimum_reward_risk:
+                blockers.append("PAPER_EXECUTION_REWARD_RISK_TOO_LOW")
+
+    blockers = list(dict.fromkeys(str(item) for item in blockers if str(item)))
+    identity = {
+        "schemaVersion": PAPER_RISK_SCHEMA_VERSION,
+        "profile": PAPER_RISK_PROFILE,
+        "admissionId": admission.admission_id,
+        "candidateId": admission.candidate_id,
+        "symbol": admission.symbol,
+        "canonicalRank": admission.canonical_rank,
+        "tradePlanId": admission.trade_plan_id,
+        "setupId": admission.setup_id,
+        "decisionAt": decision_at.isoformat(),
+        "policyFingerprint": policy.fingerprint,
+        "sourceEvidenceFingerprint": admission.fingerprint,
+        "quoteEvidenceFingerprint": quote_fingerprint,
+    }
+    return PaperRiskDecision(
+        risk_decision_id=(
+            "paper-risk-" + evidence_fingerprint(identity)[:24].lower()
+        ),
+        candidate_id=admission.candidate_id,
+        symbol=admission.symbol,
+        canonical_rank=admission.canonical_rank,
+        trade_plan_id=admission.trade_plan_id,
+        setup_id=admission.setup_id,
+        decision_at=decision_at.isoformat(),
+        mode=PAPER_RISK_MODE,
+        status="BLOCKED" if blockers else "AUTHORIZED",
+        execution_price=execution_price,
+        spread_percent=spread,
+        reward_risk_at_execution=reward_risk,
+        blockers=tuple(blockers),
+        policy_fingerprint=policy.fingerprint,
+        source_evidence_fingerprint=admission.fingerprint,
+        quote_evidence_fingerprint=quote_fingerprint,
     )
 
 
