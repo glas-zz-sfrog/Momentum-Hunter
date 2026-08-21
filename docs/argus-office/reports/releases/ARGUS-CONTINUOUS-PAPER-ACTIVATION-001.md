@@ -107,3 +107,10 @@ install even disabled Paper service code from this branch yet. First authorize
 and prove the missing production TradePlan producer, then reconcile the bridge
 onto current canonical and repeat full Hard Chew before disabled installation,
 read-only Paper preflight, and separate one-entry arming.
+
+## Evidence Bundle
+
+- Path: `C:\\Users\\steve\\OneDrive\\Documents\\ArgusReviewBundles\\ARGUS-CONTINUOUS-PAPER-ACTIVATION-001-BLOCKED-20260821T000953Z.zip`
+- SHA-256: `C10ABEA15F5918586957F66DFDD259029EC19561BAC42EA2DA16ACE1168E9F20`
+- Files: 9
+- Secret scan: `PASS`

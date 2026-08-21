@@ -52,6 +52,11 @@ loosened to obtain a canary. Current truth is
 Live, Schwab orders, live execution, account reads, position reads, and Paper
 requests remain unavailable to the installed runtime.
 
+The sanitized blocked-closeout bundle is
+`C:\\Users\\steve\\OneDrive\\Documents\\ArgusReviewBundles\\ARGUS-CONTINUOUS-PAPER-ACTIVATION-001-BLOCKED-20260821T000953Z.zip`
+with SHA-256
+`C10ABEA15F5918586957F66DFDD259029EC19561BAC42EA2DA16ACE1168E9F20`.
+
 Verification passes 34 exact focused tests, 437 broad continuous/Paper/Alpaca/
 writer/allocation/risk tests, compileall, the Release .NET service-host build,
 PowerShell parsing, diff/whitespace, credential-shape, capability, and
