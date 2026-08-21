@@ -9,7 +9,9 @@
     "branch": "codex/ARGUS-GIT-PROVENANCE-RECONCILIATION-001",
     "baseCommit": "dca0671b7856c11b432304a544477246d2764faf",
     "implementationCommit": "0050dd4a31e27351d6aadface62a6b7ba9e03acc",
-    "status": "IMPLEMENTED_PENDING_MERGE"
+    "integratedCommit": "d683d0180b3a1ed06265be635ebdee9a1d88692a",
+    "integratedToMaster": true,
+    "status": "COMPLETE"
   },
   "historicalResultPreserved": {
     "campaign": "ARGUS-OVERNIGHT-DATA-FIDELITY-001",

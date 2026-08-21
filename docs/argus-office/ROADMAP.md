@@ -29,10 +29,12 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
-`ARGUS-GIT-PROVENANCE-RECONCILIATION-001` is implemented on
-`codex/ARGUS-GIT-PROVENANCE-RECONCILIATION-001` from clean synchronized
-canonical `dca0671b7856c11b432304a544477246d2764faf`. Implementation commit
-`0050dd4a31e27351d6aadface62a6b7ba9e03acc` preserves the original
+`ARGUS-GIT-PROVENANCE-RECONCILIATION-001` is complete and canonically
+integrated. The proven feature branch started from clean synchronized canonical
+`dca0671b7856c11b432304a544477246d2764faf`; implementation commit
+`0050dd4a31e27351d6aadface62a6b7ba9e03acc` and closeout commit
+`d683d0180b3a1ed06265be635ebdee9a1d88692a` were fast-forwarded to `master`
+and pushed normally. The implementation preserves the original
 `ARGUS-OVERNIGHT-DATA-FIDELITY-001` result exactly:
 `GLOBAL_PRODUCTION_NONMUTATION = FAILED`. No checkpoint, closeout, provider
 observation, or historical classification was changed.
@@ -65,8 +67,8 @@ fully preserved. These are explicit `CAMPAIGN_PROVENANCE_GAP` findings, not
 provider-data adjudications, so historical `CAMPAIGN_NONMUTATION` is not
 retroactively claimed. Classification is
 `GIT_PROVENANCE_RECONCILIATION_COMPLETE /
-LONG_RUNNING_CAMPAIGN_PROVENANCE_MODEL_CORRECTED /
-IMPLEMENTED_PENDING_MERGE`. The next task is a separate read-only overnight-
+LONG_RUNNING_CAMPAIGN_PROVENANCE_MODEL_CORRECTED / COMPLETE`. The next task is
+a separate read-only overnight-
 evidence isolation reconciliation; do not begin it automatically.
 
 `ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001` is complete. Product commit

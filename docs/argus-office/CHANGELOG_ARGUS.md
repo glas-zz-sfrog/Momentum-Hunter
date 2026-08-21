@@ -1,5 +1,9 @@
 # Argus Changelog
 
+- Fast-forwarded the proven long-running campaign provenance correction through
+  `d683d018`, pushed canonical `master` normally, and changed no product runtime,
+  installed service, scheduler, provider, broker, or historical overnight
+  evidence.
 - Reconciled the August 20 overnight campaign's exact Git and deployment
   ancestry without changing its original `GLOBAL_PRODUCTION_NONMUTATION =
   FAILED` result or adjudicating provider evidence.

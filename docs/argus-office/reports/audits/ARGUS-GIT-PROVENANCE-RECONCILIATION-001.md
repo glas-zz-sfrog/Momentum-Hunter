@@ -10,7 +10,9 @@ Branch: `codex/ARGUS-GIT-PROVENANCE-RECONCILIATION-001`
 
 Implementation commit: `0050dd4a31e27351d6aadface62a6b7ba9e03acc`
 
-Integration status: `IMPLEMENTED_PENDING_MERGE`
+Integrated commit: `d683d0180b3a1ed06265be635ebdee9a1d88692a`
+
+Integration status: `COMPLETE`
 
 The original `ARGUS-OVERNIGHT-DATA-FIDELITY-001` result remains permanently:
 
