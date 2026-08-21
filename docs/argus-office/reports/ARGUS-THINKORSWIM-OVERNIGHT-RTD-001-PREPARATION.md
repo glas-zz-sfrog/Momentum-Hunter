@@ -9,7 +9,8 @@
 - Official desktop Excel `tos.rtd` path only.
 - Fixed symbols: SPY, QQQ, NVDA, AAPL, MU.
 - Fixed documented market fields only; 75 total RTD cells.
-- Phase A: 20 minutes after 04:00 Eastern, without claiming the exact boundary.
+- Phase A: 20-minute current-session functional smoke, explicitly not an exact
+  04:00 Eastern boundary proof because that boundary has passed.
 - Phase B: eight exact checkpoints from 19:55 through 04:05 Eastern.
 
 ## Verification Before Physical Launch

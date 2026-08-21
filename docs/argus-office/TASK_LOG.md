@@ -537,3 +537,11 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - The observer has no account, position, P/L, order, provider-role, production
   evidence, OAuth, service, manifest, scheduler, or Momentum Hunter mutation
   capability. Physical RTD evidence remains pending one deliberate UAC launch.
+- Physical attempt 1 passed UAC and froze its provenance baseline, then failed
+  before formula creation because Excel rejected calculation-mode assignment
+  before a workbook existed (`0x800A03EC`). It produced no market observation.
+  The failed evidence remains immutable. The repair orders workbook creation
+  before calculation setup and guarantees COM/Excel cleanup on initialization
+  failure. Because the exact 04:00 boundary has passed, Phase A is now labeled
+  only as a current-session functional smoke; tonight's eight checkpoints remain
+  the true capability test.

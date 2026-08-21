@@ -20,6 +20,7 @@ def configuration() -> dict[str, object]:
         "symbols": verify.SYMBOLS.copy(),
         "fields": verify.ORDERED_FIELDS.copy(),
         "sampleIntervalSeconds": 2,
+        "phaseAClassification": "CURRENT_SESSION_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY",
         "phaseADurationSeconds": 1200,
         "checkpointDurationSeconds": 120,
         "checkpointLeadSeconds": 60,
@@ -50,6 +51,12 @@ class ThinkorswimRtdCampaignTests(unittest.TestCase):
         value = configuration()
         value["checkpointDurationSeconds"] = 30
         with self.assertRaisesRegex(verify.VerificationError, "checkpoint window"):
+            verify.validate_configuration(value)
+
+    def test_phase_a_boundary_overclaim_is_rejected(self) -> None:
+        value = configuration()
+        value["phaseAClassification"] = "EXACT_0400_BOUNDARY"
+        with self.assertRaisesRegex(verify.VerificationError, "overclaim"):
             verify.validate_configuration(value)
 
     def test_formula_manifest_requires_exact_documented_shape(self) -> None:

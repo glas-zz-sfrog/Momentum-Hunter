@@ -73,6 +73,8 @@ def validate_configuration(value: Mapping[str, object]) -> None:
         raise VerificationError("Configuration contains an account/order field.")
     if value.get("sampleIntervalSeconds") != 2:
         raise VerificationError("Fixed two-second observation cadence mismatch.")
+    if value.get("phaseAClassification") != "CURRENT_SESSION_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY":
+        raise VerificationError("Phase A classification would overclaim the missed 04:00 boundary.")
     if value.get("phaseADurationSeconds") != 1200:
         raise VerificationError("Fixed Phase A duration mismatch.")
     if value.get("checkpointDurationSeconds") != 120 or value.get("checkpointLeadSeconds") != 60:
@@ -184,7 +186,7 @@ def verify(root: Path) -> dict[str, object]:
     checkpoint_summaries: dict[str, object] = {}
     for path in sorted(root.glob("checkpoints/*/observations.ndjson")):
         checkpoint_summaries[path.parent.name] = summarize_observations(read_observations(path))
-    phase = root / "phase-a-post-0400-et" / "observations.ndjson"
+    phase = root / "phase-a-current-session-functional-smoke" / "observations.ndjson"
     phase_summary = summarize_observations(read_observations(phase)) if phase.exists() else None
     return {
         "taskId": TASK_ID,

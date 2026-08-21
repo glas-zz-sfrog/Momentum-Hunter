@@ -20,6 +20,7 @@
     "EXCHANGE"
   ],
   "sampleIntervalSeconds": 2,
+  "phaseAClassification": "CURRENT_SESSION_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY",
   "phaseADurationSeconds": 1200,
   "checkpointDurationSeconds": 120,
   "checkpointLeadSeconds": 60,

@@ -181,6 +181,9 @@ function Assert-Configuration([object]$Configuration) {
         }
     }
     if ($Configuration.sampleIntervalSeconds -lt 1) { throw 'Sample cadence is too aggressive.' }
+    if ($Configuration.phaseAClassification -ne 'CURRENT_SESSION_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY') {
+        throw 'Phase A must not claim the missed exact 04:00 ET boundary.'
+    }
     if ($Configuration.phaseADurationSeconds -lt 1200) { throw 'Phase A must run for at least 20 minutes.' }
     if ([int]$Configuration.checkpointDurationSeconds -ne 120) { throw 'Checkpoint duration must remain 120 seconds.' }
     if ([int]$Configuration.checkpointLeadSeconds -ne 60) { throw 'Checkpoint lead must remain 60 seconds.' }
@@ -221,28 +224,48 @@ function New-FormulaManifest([object]$Configuration) {
 
 function New-ExcelSession([object]$FormulaManifest) {
     $before = @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-    $excel = New-Object -ComObject Excel.Application
-    $excel.Visible = $false
-    $excel.DisplayAlerts = $false
-    $excel.EnableEvents = $false
-    $excel.AskToUpdateLinks = $false
-    $excel.Calculation = -4105
-    $workbook = $excel.Workbooks.Add()
-    $sheet = $workbook.Worksheets.Item(1)
-    $sheet.Name = 'MARKET_RTD_ONLY'
-    foreach ($cell in @($FormulaManifest.cells)) {
-        $sheet.Cells.Item($cell.row, $cell.column).Formula = $cell.formula
+    $excel = $null
+    $workbook = $null
+    $sheet = $null
+    try {
+        $excel = New-Object -ComObject Excel.Application
+        $excel.Visible = $false
+        $excel.DisplayAlerts = $false
+        $excel.EnableEvents = $false
+        $excel.AskToUpdateLinks = $false
+        $workbook = $excel.Workbooks.Add()
+        $excel.Calculation = -4105
+        $sheet = $workbook.Worksheets.Item(1)
+        $sheet.Name = 'MARKET_RTD_ONLY'
+        foreach ($cell in @($FormulaManifest.cells)) {
+            $sheet.Cells.Item($cell.row, $cell.column).Formula = $cell.formula
+        }
+        Start-Sleep -Seconds 15
+        $after = @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue)
+        $newProcess = @($after | Where-Object { $before -notcontains $_.Id })
+        if ($newProcess.Count -ne 1) { throw "Expected one experiment Excel process; found $($newProcess.Count)." }
+        return [ordered]@{
+            application = $excel
+            workbook = $workbook
+            sheet = $sheet
+            processId = $newProcess[0].Id
+            processStart = ConvertTo-OffsetTimestamp $newProcess[0].StartTime
+        }
     }
-    Start-Sleep -Seconds 15
-    $after = @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue)
-    $newProcess = @($after | Where-Object { $before -notcontains $_.Id })
-    if ($newProcess.Count -ne 1) { throw "Expected one experiment Excel process; found $($newProcess.Count)." }
-    return [ordered]@{
-        application = $excel
-        workbook = $workbook
-        sheet = $sheet
-        processId = $newProcess[0].Id
-        processStart = ConvertTo-OffsetTimestamp $newProcess[0].StartTime
+    catch {
+        try { if ($null -ne $workbook) { $workbook.Close($false) } } catch {}
+        try { if ($null -ne $excel) { $excel.Quit() } } catch {}
+        foreach ($value in @($sheet, $workbook, $excel)) {
+            try {
+                if ($null -ne $value -and [Runtime.InteropServices.Marshal]::IsComObject($value)) {
+                    [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($value)
+                }
+            }
+            catch {}
+        }
+        [GC]::Collect()
+        [GC]::WaitForPendingFinalizers()
+        throw
     }
 }
 
@@ -507,8 +530,8 @@ try {
 
     $excelSession = New-ExcelSession $formulaManifest
     Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='PHASE_A_RUNNING'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; excelProcessId=$excelSession.processId})
-    $phaseRoot = Join-Path $EvidenceRoot 'phase-a-post-0400-et'
-    Observe-Checkpoint $excelSession $formulaManifest 'PHASE_A_POST_0400_ET' ([DateTimeOffset]::Now) ([int]$configuration.phaseADurationSeconds) ([int]$configuration.sampleIntervalSeconds) $phaseRoot | Out-Null
+    $phaseRoot = Join-Path $EvidenceRoot 'phase-a-current-session-functional-smoke'
+    Observe-Checkpoint $excelSession $formulaManifest 'PHASE_A_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY' ([DateTimeOffset]::Now) ([int]$configuration.phaseADurationSeconds) ([int]$configuration.sampleIntervalSeconds) $phaseRoot | Out-Null
     Close-ExcelSession $excelSession
     $excelSession = $null
 
