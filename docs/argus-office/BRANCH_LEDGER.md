@@ -2,6 +2,31 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - 2026-08-20
+
+`codex/ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` started from clean synchronized
+canonical `dca0671b7856c11b432304a544477246d2764faf`. Product commit
+`2b93182cbedd7d93bcf1b6fc7766cceca1f32bc6` implements the broker-blind
+admission bridge, independent one-entry Paper supervisor/service, exact Paper
+host gate, restart-safe TradePlan exact-once identity, shared writer sessions,
+and A004/PAPER-005 reuse.
+
+Focused proof is 34/34 and broad affected proof is 437/437 after final
+exact-once hardening. Compileall, Release .NET build, PowerShell parsing,
+whitespace, credential, capability, and protected-path checks pass; a prior
+complete branch discovery passed 2,673/2,673. Production composition has no
+lifecycle/successor producer, so arm fails before any broker read as
+`CONTINUOUS_TRADEPLAN_PRODUCER_UNAVAILABLE`. Classification is
+`IMPLEMENTED_PENDING_UPSTREAM_TRADEPLAN_PRODUCER`. Preserve the branch unmerged,
+uninstalled, and unarmed; the next authorized task must prove that upstream
+producer without changing strategy semantics.
+
+The overnight campaign completed 15/15 checkpoints but separately reported
+`productionNonmutation = FAIL`: its frozen `e1ea386` and old deployment hashes
+were superseded by the authorized `dca0671` / installed `e69426b3` Schwab-auth
+deployment while it ran. This branch caused no canonical, service, manifest, or
+production-data mutation and does not reinterpret that campaign failure.
+
 ## ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001 - 2026-08-20
 
 `codex/ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001` started from clean,

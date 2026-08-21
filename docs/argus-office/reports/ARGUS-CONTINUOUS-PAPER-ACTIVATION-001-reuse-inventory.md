@@ -28,4 +28,3 @@
 ## Architectural Decision
 
 No second execution engine will be created. The new code is limited to an immutable continuous-plan admission contract, a continuous-specific risk adapter, and an independent supervisor that invokes the existing Alpaca Paper engineering lifecycle.
-

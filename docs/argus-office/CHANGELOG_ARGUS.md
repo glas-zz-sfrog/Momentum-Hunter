@@ -1,5 +1,20 @@
 # Argus Changelog
 
+- Built the bounded Continuous Paper admission/execution bridge on isolated
+  feature commit `2b93182`: immutable broker-blind admission, deterministic
+  TradePlan exact-once identity, independent Paper service, exact Paper-host
+  rejection, one-entry budget locking, shared authenticated writer sessions,
+  and reuse of A004/PAPER-005 execution and recovery.
+- Proved 34 focused and 437 broader continuous/Paper/Alpaca/writer/allocation/
+  risk tests after final exact-once hardening. Compileall, Release .NET build,
+  PowerShell parse, whitespace, credential-shape, capability, and protected-
+  path checks pass; the prior full branch run passed all 2,673 tests.
+- Stopped activation honestly at `CONTINUOUS_TRADEPLAN_PRODUCER_UNAVAILABLE`:
+  installed production composition currently has no lifecycle/successor
+  producer and therefore cannot emit a genuine TradePlan. No merge, install,
+  Paper preflight, account/position read, broker request, service restart, or
+  order occurred. Continuous research remains active and read-only.
+
 - Hardened the shared Schwab read-only auth lifecycle with cross-process
   single-flight refresh ownership, post-lock state reread, atomic CurrentUser
   DPAPI persistence, stale-state adoption, and bounded 401/403/interactive-

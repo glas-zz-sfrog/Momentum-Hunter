@@ -68,4 +68,3 @@ At task start, the installed Continuous Runtime has produced zero TradePlans bec
 - [x] Protected areas and stop conditions are explicit.
 - [x] No-trade and missing-producer truth remain distinguishable.
 - [x] Completion requires proof, not configuration labels.
-

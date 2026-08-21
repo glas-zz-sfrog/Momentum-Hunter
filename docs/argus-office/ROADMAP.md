@@ -29,6 +29,51 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+`ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` has a proven downstream implementation
+on feature branch `codex/ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` at product
+commit `2b93182cbedd7d93bcf1b6fc7766cceca1f32bc6`. It adds an immutable,
+broker-blind Continuous TradePlan admission contract, a separate Alpaca Paper
+supervisor/service role, exact-Paper-host enforcement, the frozen `$100 / $2 /
+$95 / $5 / $2 / $4 / 1 / 30s` Canary profile, one-entry locking, restart-safe
+TradePlan idempotency, authenticated shared-writer evidence, and reuse of the
+existing A004/PAPER-005 account, allocation, fill, protection, recovery, and
+flattening path. The research runtime remains credential- and broker-blind.
+
+Activation is correctly blocked before installation or any Paper read. The
+installed production composition source supplies readiness evidence but no
+lifecycle/successor-setup evidence, so it currently produces zero legitimate
+continuous TradePlans. The exact arm blocker is
+`CONTINUOUS_TRADEPLAN_PRODUCER_UNAVAILABLE`. No strategy rule was invented or
+loosened to obtain a canary. Current truth is
+`CONTINUOUS_RESEARCH_ACTIVE_READ_ONLY = YES`, `CONTINUOUS_PAPER_INSTALLED = NO`,
+`CONTINUOUS_PAPER_NEW_ENTRY_AUTHORITY = ENTRY_AUTHORITY_DISABLED`, and Alpaca
+Live, Schwab orders, live execution, account reads, position reads, and Paper
+requests remain unavailable to the installed runtime.
+
+Verification passes 34 exact focused tests, 437 broad continuous/Paper/Alpaca/
+writer/allocation/risk tests, compileall, the Release .NET service-host build,
+PowerShell parsing, diff/whitespace, credential-shape, capability, and
+protected-path checks. One complete 2,673-test run also passed before the final
+exact-once tightening; the affected and broader 437-test suites passed after
+that tightening. The branch is `IMPLEMENTED_PENDING_UPSTREAM_TRADEPLAN_PRODUCER`
+and must remain unmerged, uninstalled, and unarmed. Next work is a separately
+authorized `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` task that wires the already
+defined prospective lifecycle/successor semantics into production composition
+without changing those semantics. After that producer is proven, rebase-free
+reconciliation onto current canonical, full Hard Chew, disabled installation,
+read-only Paper-environment preflight, and a separate one-entry arm may proceed.
+
+The independent `ARGUS-OVERNIGHT-DATA-FIDELITY-001` campaign reached terminal
+`15/15` checkpoint completion with zero account, position, or order requests,
+but its strict production-nonmutation closeout is `FAIL`. It froze canonical
+`e1ea386` and older continuous deployment hashes; the separately authorized
+Schwab auth-lifecycle work advanced canonical to `dca0671`, installed
+`e69426b3`, and changed both continuous deployment hashes while the campaign was
+running. Automation manifest SHA-256 remained unchanged and all three services
+remain Automatic/Running. The market-data observations are preserved, but the
+campaign must not be cited as a production-nonmutation pass. This Paper branch
+made none of those production changes.
+
 `ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001` is complete. Product commit
 `e69426b3b7bd179cd62eba2e28a5d0553da47154` was pushed, strictly
 fast-forwarded to canonical `master`, pushed normally, and installed as the
