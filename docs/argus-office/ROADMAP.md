@@ -29,6 +29,33 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 
 ## Now
 
+`ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is
+`IN_PROGRESS / TRUE_OVERNIGHT_EVIDENCE_PENDING` on isolated branch
+`codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001`. Official `tos.rtd` through
+desktop Excel is physically functional in the current interactive Windows
+session for the fixed market-only `SPY`, `QQQ`, `NVDA`, `AAPL`, and `MU`
+basket. Regular-session observations prove the supported RTD/COM path and
+observer plumbing only; they do not prove post-20:00 ET availability. Three
+failed harness attempts remain preserved separately and make no overnight
+provider claim. The next bounded action is to finish the reduced-COM-read
+observer stability proof, then preserve the fixed 19:55, 20:00, 20:05, 21:00,
+00:30, 01:30, 03:55, and 04:05 ET checkpoints. Momentum Hunter production,
+provider roles, services, scheduler, OAuth state, accounts, Paper, Shadow, and
+orders remain unchanged.
+
+`ARGUS-TRADE-REPLAY-001` and `ARGUS-EXIT-POLICY-001` are now durable Phase 13R
+parallel-research milestones. This placement record does not promote either to
+the active `Now` priority or modify the prospective Momentum/Paper baseline.
+Candidate recovery and
+failure-boundary inventory are ready for later bounded work, but replay claims
+remain fail-closed unless each event chain is admitted under verified security
+identity, price-basis, corporate-action, timestamp, and historical-market-data
+lineage. Tiered-exit and protected-runner research is dependency-blocked on a
+sufficiently trustworthy fixed-entry replay population. The current/historical
+sell-all policy remains the retrospective control and the current prospective
+exit policy remains the live control unless an alternative later passes both
+retrospective research and a separately activated prospective shadow A/B gate.
+
 `ARGUS-SCHWAB-OVERNIGHT-API-PROBE-001` is
 `SCHWAB_TRUE_OVERNIGHT_API_NOT_AVAILABLE / COMPLETE`. The proven task branch
 through `ff74555f6bb24f6d0368d885c85800cccd91e3f8` was pushed normally and
@@ -2469,7 +2496,7 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_IN
 
 ### Phase 13R - Specialist Intelligence Research And Strategy Diversification
 
-Status: `STARTED - SPECIALIST-CONTRACT-001 AND STAT-DATA-001 IMPLEMENTED_PENDING_INTEGRATION`
+Status: `ACTIVE - RESEARCH-ONLY STACK CANONICAL; PRODUCER ACTIVATION AND RETROSPECTIVE REPLAY PLANNED`
 
 Roadmap inclusion authorizes planning and bounded research preparation only.
 It does not activate runtime imports, begin or modify a Paper sample, grant
@@ -2699,6 +2726,185 @@ Intended specialist architecture:
   they prove incremental value. Require walk-forward/out-of-sample evidence;
   in-sample performance grants no authority.
 
+#### ARGUS-TRADE-REPLAY-001 - Historical Candidate Recovery And Baseline Replay
+
+- Status: `PLANNED / PARALLEL_RESEARCH / INVENTORY_READY /
+  REPLAY_ADMISSION_BLOCKED`. Failure-boundary discovery and evidence inventory
+  may proceed in an isolated research lane. No candidate or trade may enter a
+  replay population until its complete event chain passes the data-admission
+  rules below.
+- Objective: recover candidates identified before and around the relevant
+  recent system/data-contract failure boundary, determine which were merely
+  surfaced versus prospectively actionable under the strategy and
+  configuration then in force, and replay the historical baseline exit policy
+  before any alternative exit is compared.
+- Establish the exact failure timestamp and timezone, affected subsystem,
+  parser/runtime/configuration identity, whether candidate production or other
+  subsystems continued, and the earliest time at which candidate, TradePlan,
+  risk, allocation, or lifecycle state became unreliable. Do not discard an
+  entire period merely because one subsystem failed, and do not call surviving
+  evidence trustworthy without a bounded proof.
+- Classify every recovered field permanently as exactly one of
+  `RECORDED_AT_THE_TIME`, `DERIVED_FROM_RECORDED_STATE`,
+  `RECONSTRUCTED_FROM_HISTORICAL_MARKET_DATA`, or `UNAVAILABLE`. Reports must
+  preserve that classification at field level; hindsight reconstruction may
+  never be presented as contemporaneous Momentum Hunter knowledge.
+- Preserve separate `CANDIDATE` and `ACTIONABLE_ENTRY` identities. A surfaced,
+  ranked, rejected, provider-bound, stale, risk-blocked, untriggered, or
+  decision-not-reached row is not a trade. Actionability requires the exact
+  strategy/configuration fingerprint and sufficient contemporaneous gate,
+  TradePlan, entry, stop, target, risk, and timing evidence.
+- For each recovered candidate seek symbol and durable security identity,
+  signal/cutoff timestamp, reference price, candidate features/reasons,
+  strategy/configuration version, applicable gates and their results,
+  actionable status, intended entry, initial stop and target, position/risk
+  assumptions, regime/specialist attachments if they actually existed, and the
+  exit policy active at that time. Missing evidence stays missing.
+- Before any new exit experiment, replay the actual historical control using
+  the policy then in force. Where evidence permits, preserve entry time/price,
+  initial stop/target, baseline exit time/price/reason, P/L, R, MFE, MAE, peak
+  favorable price, holding duration, evidence classification, intrabar
+  ambiguity, and data limitations. The baseline cannot be redefined after an
+  alternative result is observed.
+- Data admission is fail-closed. `ARGUS-RESEARCH-DATA-002` supplies the durable
+  security-identity and price-basis contract, while
+  `ARGUS-DATA-CORPACTION-001` or a later proven equivalent must supply verified
+  corporate-action-safe analysis history for any affected event. The current
+  ticker-keyed, unknown-basis, survivorship-uncontrolled datasets do not support
+  broad statistical replay. An individually unaffected event may proceed only
+  when its identity, raw/adjusted basis, corporate-action window, timestamps,
+  and source lineage are positively verified and preserved; absence of a known
+  split is not proof of an unaffected series.
+- Use only information available at each simulated timestamp. Subsequent data
+  may evaluate MFE/MAE and outcome, but may not change entry, stop, target,
+  actionability, or exit decisions. If available bar resolution cannot prove
+  whether competing stop/target events occurred first, preserve
+  `AMBIGUOUS_INTRABAR` or obtain finer admitted data; never choose the more
+  favorable sequence.
+- Preserve exact input hashes, replay software/configuration identity, original
+  market time versus replay evaluation time, deterministic formulas and
+  rounding, transaction-cost assumptions, and write-once output identity.
+  Historical backfill into the prospective STAT-DATA or SETUP-002 samples is
+  prohibited.
+- Acceptance requires a complete failure-boundary report, an immutable
+  candidate denominator with explicit unavailable/provider-bound/system-failed
+  rows, deterministic duplicate-safe replay, independently verifiable input
+  hashes, an admitted fixed-entry actionable subset, byte-stable baseline
+  results, no source mutation, and explicit accounting reconciliation from the
+  source population through actionable entries and terminal baseline outcomes.
+- This milestone does not change scanning, scoring, ranking, TradePlans, Risk
+  Governor, allocation, candidate generation, current exit behavior, Paper,
+  Shadow, broker integration, orders, services, scheduler, UI, or any
+  prospective sample. It does not block current continuous-market-data,
+  research-only activation, Paper, Shadow, or live-canary engineering. It
+  blocks only claims and downstream experiments that require its replay
+  population.
+
+#### ARGUS-EXIT-POLICY-001 - Tiered Exit And Runner Counterfactual Research
+
+- Status: `PLANNED / PARALLEL_RESEARCH /
+  BLOCKED_BY_ARGUS-TRADE-REPLAY-001`. Begin only after TRADE-REPLAY-001 produces
+  a sufficiently trustworthy, admitted, fixed-entry actionable population and
+  the experiment is preregistered under `ARGUS-RESEARCH-GOV-001`.
+- Hypothesis: selling 100 percent at the existing first target may truncate the
+  right tail of Momentum Hunter returns when some valid entries continue
+  materially higher. Null hypothesis: the historical sell-all control is
+  superior after risk, giveback, execution cost, and implementation complexity,
+  and tiering merely surrenders profit.
+- Hold candidate population, entry qualification, entry time, entry price,
+  initial stop/risk, position assumptions, market-data inputs, and their
+  evidence identities constant. Only the exit policy may vary. The exact
+  historical sell-all policy remains Policy A and cannot be weakened or
+  retrospectively redefined to favor an alternative.
+- Evaluate a small hypothesis-driven family rather than a broad optimizer. The
+  initial architecture is two profit tiers plus a protected runner, while the
+  number of tiers remains a research question. Candidate position fractions
+  include `33/33/34`, `25/25/50`, and `50/25/25`; they are hypotheses, not
+  production settings.
+- Define targets on a scale-independent basis, preferably frozen original-risk
+  multiples such as `+2R` and `+4R`, rather than fixed dollar prices. Original
+  1R remains stable after entry so later stop ratchets cannot rewrite the
+  denominator used to evaluate the trade.
+- Ratchet protection monotonically: after progressively higher tiers or new
+  highs, the minimum permitted exit for the remaining position may tighten but
+  may not loosen. Research candidates include break-even after Tier 1, a stop
+  below the prior tier, completed-bar structural/swing protection, and a
+  volatility-adjusted level. A stop request or hypothetical touch is not a
+  broker fill.
+- Compare a bounded set of runner exits where the admitted evidence supports
+  them: fixed-percentage trailing stop, next-bar-effective ATR trail,
+  completed-bar structural/swing-low trail, and an existing strategy-native
+  momentum-decay exit if it can be computed prospectively without lookahead.
+  Do not assume a 2 percent trail is correct, and do not create an enormous
+  parameter search.
+- Specify deterministic degradation for unsplittable positions and broker
+  capabilities. Research at least one-share single-exit, two-share
+  partial-plus-runner, three-or-more-share tiering, and fractional-capable
+  cases without assuming fractions are executable at every broker or order
+  type. Quantity conservation, actual-fill semantics, partial fills, spread,
+  slippage, order count, and execution constraints must be represented.
+- MFE and MAE are first-class evaluation metrics. Document partial-exit MFE
+  capture precisely and compare total/average/median P/L, win rate, average
+  winner/loser, profit factor, R distribution, drawdown, worst trade, downside
+  distribution, variability, peak-profit giveback, Tier 1/Tier 2 reach rates,
+  runner help/harm frequency, and average/median runner contribution.
+- Measure tail concentration: contribution from the best trade and the top 5,
+  10, and 20 percent of trades where sample size permits. Determine whether a
+  broad set of modest winners or a small exceptional right tail drives the
+  result; report when the sample is too small to support those claims.
+- Every exit decision may use only evidence known at that timestamp. MFE/MAE
+  may inspect later prices for evaluation only. Future highs, ATR, structure,
+  news, regime state, or specialist opinions cannot influence earlier simulated
+  decisions. Preserve `AMBIGUOUS_INTRABAR`, gap uncertainty, and unavailable
+  execution ordering rather than selecting favorable chronology.
+- Apply `ARGUS-RESEARCH-GOV-001`: preregister the policy family, formulas,
+  rounding, cost assumptions, evaluation windows, success/kill criteria, and
+  search count. Prefer development plus untouched holdout and freeze parameters
+  before holdout access. If the admitted population is inadequate, report
+  `INSUFFICIENT_SAMPLE_FOR_PARAMETER_SELECTION`.
+- The terminal research report must answer, with confidence and evidence
+  limits: what pre-error candidates existed; which were actionable; what the
+  historical control did; what MFE/MAE followed; how much MFE sell-all
+  captured; whether sell-all truncated major winners; whether tiering improved
+  total and risk-adjusted return; how often runners helped or surrendered
+  profit; which runner family was robust; whether one or a few trades dominated
+  apparent improvement; whether returns are right-tail concentrated; whether
+  the sample supports parameter selection; whether results survive realistic
+  costs and holdout/prospective evidence; whether the baseline should remain;
+  and whether an EXIT-POLICY-002 experiment is warranted.
+- Relationship to `ARGUS-EXIT-RESEARCH-001`: this milestone uses admitted
+  historical fixed entries for bounded retrospective policy comparison;
+  EXIT-RESEARCH-001 remains the prospective, actual-fill-attached silent exit
+  research contract. Neither may rewrite the other, and historical results
+  alone cannot activate or promote an exit rule.
+- Retrospective acceptance requires deterministic control-versus-alternative
+  results on the exact same admitted entries; conservation of quantity and
+  risk; realistic cost sensitivity; explicit MFE/MAE, runner, giveback, and
+  tail-contribution results; ambiguity accounting; holdout or an explicit
+  insufficient-sample result; and proof that no current strategy or evidence
+  was mutated.
+- Promotion is not authorized here. A promising result may only propose
+  `ARGUS-EXIT-POLICY-002 - Experimental Tiered Exit Engine`, requiring a formal
+  policy contract, unit and deterministic replay tests, small-position and
+  fractional behavior, risk and execution review, partial-fill/protection
+  handling, rollback, a new policy/configuration/sample identity, and a silent
+  prospective A/B comparison in which each new live candidate is evaluated by
+  the unchanged baseline and the shadow alternative. Production eligibility
+  requires both retrospective evidence and sufficient prospective evidence.
+- Kill or defer this experiment when the replay population is insufficient or
+  untrustworthy; no material improvement survives the baseline comparison;
+  improvement disappears after realistic spread/slippage/order costs; drawdown
+  or downside risk increases unacceptably; results are dominated by one or two
+  trades; holdout or prospective shadow evidence fails; parameter stability is
+  poor; or implementation/operational complexity is disproportionate to the
+  measured benefit. A killed experiment remains preserved and does not become
+  an immortal roadmap item.
+- This milestone changes no current entry or exit logic, candidate generation,
+  TradePlan, Risk Governor, allocation, position sizing, Paper, Shadow,
+  live-canary behavior, broker integration, order capability, service,
+  scheduler, UI, or prospective baseline. It blocks only a future
+  EXIT-POLICY-002 promotion claim.
+
 #### ARGUS-EXIT-RESEARCH-001 - Trade-Management And Exit Intelligence
 
 - Status: `CANONICAL_INTEGRATED / RESEARCH_ONLY`; source branch
@@ -2786,11 +2992,34 @@ Intended specialist architecture:
 
 #### Phase 13R Dependencies And Promotion Gates
 
-- DATA-CORPACTION-001 precedes serious TECH-STRUCTURE-002 and
-  STAT-OUTCOME-001 historical claims.
+- DATA-CORPACTION-001 precedes serious TECH-STRUCTURE-002,
+  STAT-OUTCOME-001, TRADE-REPLAY-001, and EXIT-POLICY-001 historical claims
+  whenever the source series may be affected by corporate actions.
+  RESEARCH-DATA-002 supplies the identity/price-basis admission contract but
+  does not by itself make the current unknown-basis datasets replay-safe.
 - SPECIALIST-CONTRACT-001 precedes any combination of specialist opinions.
 - STAT-DATA-001 precedes STAT-OUTCOME-001, and RESEARCH-DATA-001 must prove
   sufficient depth before broad historical/statistical claims.
+- TRADE-REPLAY-001 failure-boundary and evidence-inventory work may run in
+  parallel with the prospective roadmap. Its baseline replay population is
+  admitted event by event only after identity, price basis, corporate-action,
+  timestamp, strategy/configuration, and market-data lineage pass. A specialist
+  or regime attachment may be replayed only when it was recorded
+  contemporaneously; later specialist output cannot be backfilled as though it
+  existed at the historical decision time.
+- EXIT-POLICY-001 depends on a sufficiently trustworthy fixed-entry
+  TRADE-REPLAY-001 population and RESEARCH-GOV-001 preregistration. It does not
+  block EXIT-RESEARCH-001 prospective actual-fill observations, specialist
+  research, continuous market-data work, denominator activation, current
+  Paper/Shadow engineering, or live-canary safety work. It blocks only a claim
+  that a retrospective tiered-exit comparison is valid and any later
+  EXIT-POLICY-002 promotion.
+- The explicit research chain is admitted historical evidence ->
+  TRADE-REPLAY-001 fixed-entry control population -> EXIT-POLICY-001
+  counterfactual comparison -> preserved research conclusion. A favorable
+  retrospective conclusion may propose, but cannot activate,
+  EXIT-POLICY-002. Promotion then requires a new prospective identity and a
+  silent baseline-versus-alternative A/B sample before any strategy influence.
 - REGIME-002 and TECH-STRUCTURE-002 may initially operate silently and
   independently after their prerequisites exist. EVENT-SHOCK-001 and
   EXIT-RESEARCH-001 remain independent research lanes and need not wait for the
