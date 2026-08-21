@@ -24,7 +24,7 @@ $command = @"
 & '$runner' -ProjectRoot '$ProjectRoot' -CanonicalRoot '$CanonicalRoot' -EvidenceRoot '$EvidenceRoot' -ExpectedSourceHead '$ExpectedSourceHead' -ConfigurationPath '$configuration'
 "@
 $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-$process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Hidden -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand',$encoded) -PassThru
+$process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Normal -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand',$encoded) -PassThru
 [ordered]@{
     status = 'UAC_LAUNCH_REQUESTED'
     taskId = 'ARGUS-THINKORSWIM-OVERNIGHT-RTD-001'
