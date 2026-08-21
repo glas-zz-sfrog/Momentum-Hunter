@@ -12,6 +12,8 @@
 - Verified exact source/evidence identities, 21 allowed GET routes, unchanged
   OAuth state/manifests/services, zero account/position/order/Alpaca/Paper
   calls, and no provider-role or runtime change.
+- Pushed the proven task branch normally and strictly fast-forwarded it through
+  `ff74555` into canonical `master`; no installed runtime was deployed.
 
 - Fast-forwarded the proven long-running campaign provenance correction through
   `d683d018`, pushed canonical `master` normally, and changed no product runtime,

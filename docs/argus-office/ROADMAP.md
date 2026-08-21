@@ -30,7 +30,9 @@ When an anomaly occurs, stop before the consequential action and ask Steven one 
 ## Now
 
 `ARGUS-SCHWAB-OVERNIGHT-API-PROBE-001` is
-`IMPLEMENTED_PENDING_MERGE`. Successful attempt source
+`SCHWAB_TRUE_OVERNIGHT_API_NOT_AVAILABLE / COMPLETE`. The proven task branch
+through `ff74555f6bb24f6d0368d885c85800cccd91e3f8` was pushed normally and
+strictly fast-forwarded into canonical `master`. Successful attempt source
 `b59cc37eb10a1478781c59ae140a73b7ee5690bd` ran from 02:21:37 through
 02:36:39 Eastern on August 21 against fixed `SPY`, `QQQ`, `NVDA`, `AAPL`, and
 `MU`. All 75 HTTP-200 quote snapshots were frozen at the 20:00 ET boundary;

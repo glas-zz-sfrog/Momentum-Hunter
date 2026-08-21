@@ -16,6 +16,7 @@ boundary. No provider role changed.
 | --- | --- |
 | Canonical base | `701e6932645165e5e3d8a38f317dbd0e3d68258f` |
 | Successful probe source | `b59cc37eb10a1478781c59ae140a73b7ee5690bd` |
+| Integrated task commit | `ff74555f6bb24f6d0368d885c85800cccd91e3f8` |
 | Installed product | `e69426b3b7bd179cd62eba2e28a5d0553da47154` |
 | Evidence fingerprint | `0417AC70A58B26D8966A5C58F2B8E8B197161AC79FF89EAEDD74F39DB5F32EBB` |
 | Capability-matrix fingerprint | `939C1FEFA21A168502803EECD49EBE692935CDD7D9284B6C8ADC78316169E974` |
