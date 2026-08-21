@@ -60,6 +60,29 @@ function ConvertTo-OffsetTimestamp([DateTime]$Value) {
     return $offset.ToString('o')
 }
 
+function Invoke-ExcelComCall(
+    [scriptblock]$Action,
+    [string]$Operation,
+    [int]$MaxAttempts = 80,
+    [int]$DelayMilliseconds = 250
+) {
+    $retryable = @('80010001', '8001010A', '800AC472')
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            return & $Action
+        }
+        catch [Runtime.InteropServices.COMException] {
+            $code = $_.Exception.HResult.ToString('X8')
+            if ($retryable -contains $code -and $attempt -lt $MaxAttempts) {
+                Start-Sleep -Milliseconds $DelayMilliseconds
+                continue
+            }
+            throw "Excel COM operation '$Operation' failed at attempt $attempt with HRESULT 0x$code."
+        }
+    }
+    throw "Excel COM operation '$Operation' exhausted its bounded retry loop."
+}
+
 function Write-JsonCreateNew([string]$Path, [object]$Value, [int]$Depth = 12) {
     $parent = Split-Path -Parent $Path
     if ($parent) {
@@ -162,6 +185,10 @@ function Get-CurrentEnvironment {
             sessionId = $tos[0].SessionId
             requiredByObservedTopology = $true
         }
+        elevation = [ordered]@{
+            currentProcessIsAdministrator = (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+            policy = 'CURRENT_USER_PROVEN_75_CELL_RTD_SMOKE'
+        }
     }
 }
 
@@ -183,6 +210,9 @@ function Assert-Configuration([object]$Configuration) {
     if ($Configuration.sampleIntervalSeconds -lt 1) { throw 'Sample cadence is too aggressive.' }
     if ($Configuration.phaseAClassification -ne 'CURRENT_SESSION_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY') {
         throw 'Phase A must not claim the missed exact 04:00 ET boundary.'
+    }
+    if ($Configuration.excelElevationPolicy -ne 'CURRENT_USER_PROVEN_75_CELL_RTD_SMOKE') {
+        throw 'Excel elevation policy does not match the observed local RTD proof.'
     }
     if ($Configuration.phaseADurationSeconds -lt 1200) { throw 'Phase A must run for at least 20 minutes.' }
     if ([int]$Configuration.checkpointDurationSeconds -ne 120) { throw 'Checkpoint duration must remain 120 seconds.' }
@@ -229,16 +259,19 @@ function New-ExcelSession([object]$FormulaManifest) {
     $sheet = $null
     try {
         $excel = New-Object -ComObject Excel.Application
-        $excel.Visible = $false
-        $excel.DisplayAlerts = $false
-        $excel.EnableEvents = $false
-        $excel.AskToUpdateLinks = $false
-        $workbook = $excel.Workbooks.Add()
-        $excel.Calculation = -4105
-        $sheet = $workbook.Worksheets.Item(1)
-        $sheet.Name = 'MARKET_RTD_ONLY'
+        Invoke-ExcelComCall { $excel.Visible = $false } 'SET_VISIBLE_FALSE' | Out-Null
+        Invoke-ExcelComCall { $excel.DisplayAlerts = $false } 'SET_DISPLAY_ALERTS_FALSE' | Out-Null
+        Invoke-ExcelComCall { $excel.EnableEvents = $false } 'SET_ENABLE_EVENTS_FALSE' | Out-Null
+        Invoke-ExcelComCall { $excel.AskToUpdateLinks = $false } 'SET_ASK_TO_UPDATE_LINKS_FALSE' | Out-Null
+        $workbook = Invoke-ExcelComCall { $excel.Workbooks.Add() } 'CREATE_WORKBOOK'
+        Invoke-ExcelComCall { $excel.Calculation = -4105 } 'SET_AUTOMATIC_CALCULATION' | Out-Null
+        $sheet = Invoke-ExcelComCall { $workbook.Worksheets.Item(1) } 'GET_WORKSHEET'
+        Invoke-ExcelComCall { $sheet.Name = 'MARKET_RTD_ONLY' } 'NAME_WORKSHEET' | Out-Null
         foreach ($cell in @($FormulaManifest.cells)) {
-            $sheet.Cells.Item($cell.row, $cell.column).Formula = $cell.formula
+            $row = $cell.row
+            $column = $cell.column
+            $formula = $cell.formula
+            Invoke-ExcelComCall { $sheet.Cells.Item($row, $column).Formula = $formula } "SET_FORMULA_${row}_${column}" | Out-Null
         }
         Start-Sleep -Seconds 15
         $after = @(Get-Process -Name EXCEL -ErrorAction SilentlyContinue)
@@ -308,7 +341,10 @@ function Observe-Checkpoint(
         while ([DateTimeOffset]::Now -lt $deadline) {
             $values = @()
             foreach ($cell in @($FormulaManifest.cells)) {
-                $normalized = Convert-CellValue $Session.sheet.Cells.Item($cell.row, $cell.column).Value2
+                $row = $cell.row
+                $column = $cell.column
+                $rawValue = Invoke-ExcelComCall { $Session.sheet.Cells.Item($row, $column).Value2 } "READ_CELL_${row}_${column}"
+                $normalized = Convert-CellValue $rawValue
                 $values += [ordered]@{
                     symbol = $cell.symbol
                     field = $cell.field
@@ -515,20 +551,19 @@ if ($ValidateOnly) {
     exit 0
 }
 
-$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'READY_FOR_UAC: all-users thinkorswim installation requires elevated Excel for the documented RTD path.'
-}
-
 if (Test-Path -LiteralPath $EvidenceRoot) { throw 'Evidence root already exists; refusing to overwrite or resume ambiguously.' }
 [IO.Directory]::CreateDirectory($EvidenceRoot) | Out-Null
 $excelSession = $null
+$campaignStage = 'FREEZING_BASELINE'
 try {
     $environment = Get-CurrentEnvironment
     New-ProvenanceBaseline $configuration $environment $formulaManifest $EvidenceRoot
     Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='BASELINE_FROZEN'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID})
 
+    $campaignStage = 'INITIALIZING_PHASE_A_EXCEL'
+    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status=$campaignStage; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID})
     $excelSession = New-ExcelSession $formulaManifest
+    $campaignStage = 'PHASE_A_RUNNING'
     Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='PHASE_A_RUNNING'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; excelProcessId=$excelSession.processId})
     $phaseRoot = Join-Path $EvidenceRoot 'phase-a-current-session-functional-smoke'
     Observe-Checkpoint $excelSession $formulaManifest 'PHASE_A_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY' ([DateTimeOffset]::Now) ([int]$configuration.phaseADurationSeconds) ([int]$configuration.sampleIntervalSeconds) $phaseRoot | Out-Null
@@ -540,6 +575,8 @@ try {
     while ([DateTimeOffset]::Now -lt $first) {
         Start-Sleep -Seconds ([Math]::Min(60, [Math]::Max(1, [int]($first - [DateTimeOffset]::Now).TotalSeconds)))
     }
+    $campaignStage = 'INITIALIZING_OVERNIGHT_EXCEL'
+    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status=$campaignStage; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID})
     $excelSession = New-ExcelSession $formulaManifest
     foreach ($checkpoint in @($configuration.checkpoints)) {
         $scheduled = [DateTimeOffset]::Parse($checkpoint.scheduledAtEastern)
@@ -548,6 +585,7 @@ try {
             Start-Sleep -Seconds ([Math]::Min(30, [Math]::Max(1, [int]($start - [DateTimeOffset]::Now).TotalSeconds)))
         }
         $checkpointRoot = Join-Path $EvidenceRoot ("checkpoints\" + $checkpoint.checkpointId)
+        $campaignStage = "CHECKPOINT_$($checkpoint.checkpointId)"
         Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='CHECKPOINT_RUNNING'; checkpointId=$checkpoint.checkpointId; scheduledAtEastern=$scheduled.ToString('o'); observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; excelProcessId=$excelSession.processId})
         Observe-Checkpoint $excelSession $formulaManifest $checkpoint.checkpointId $scheduled ([int]$configuration.checkpointDurationSeconds) ([int]$configuration.sampleIntervalSeconds) $checkpointRoot | Out-Null
     }
@@ -561,6 +599,7 @@ catch {
         observedAt = [DateTimeOffset]::Now.ToString('o')
         errorType = $_.Exception.GetType().Name
         error = $_.Exception.Message
+        stage = $campaignStage
         accountFields = 0
         orderFields = 0
     }

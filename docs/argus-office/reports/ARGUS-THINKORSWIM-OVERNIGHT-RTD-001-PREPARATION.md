@@ -33,6 +33,6 @@ path is changed. The evidence root is separate and write-once per checkpoint.
 ## Pending Evidence
 
 The official RTD route has not yet been physically invoked by this source.
-One elevated Excel launch is required because thinkorswim is installed for all
-users. The true-overnight capability classification cannot be made before the
-04:05 Eastern checkpoint completes.
+The current-user 75-cell RTD diagnostic proves that Excel elevation is not
+required in this observed machine/session. The true-overnight capability
+classification cannot be made before the 04:05 Eastern checkpoint completes.

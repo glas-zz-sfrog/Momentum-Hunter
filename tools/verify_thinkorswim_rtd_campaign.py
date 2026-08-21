@@ -75,6 +75,8 @@ def validate_configuration(value: Mapping[str, object]) -> None:
         raise VerificationError("Fixed two-second observation cadence mismatch.")
     if value.get("phaseAClassification") != "CURRENT_SESSION_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY":
         raise VerificationError("Phase A classification would overclaim the missed 04:00 boundary.")
+    if value.get("excelElevationPolicy") != "CURRENT_USER_PROVEN_75_CELL_RTD_SMOKE":
+        raise VerificationError("Excel elevation policy mismatch.")
     if value.get("phaseADurationSeconds") != 1200:
         raise VerificationError("Fixed Phase A duration mismatch.")
     if value.get("checkpointDurationSeconds") != 120 or value.get("checkpointLeadSeconds") != 60:

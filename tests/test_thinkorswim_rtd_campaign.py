@@ -21,6 +21,7 @@ def configuration() -> dict[str, object]:
         "fields": verify.ORDERED_FIELDS.copy(),
         "sampleIntervalSeconds": 2,
         "phaseAClassification": "CURRENT_SESSION_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY",
+        "excelElevationPolicy": "CURRENT_USER_PROVEN_75_CELL_RTD_SMOKE",
         "phaseADurationSeconds": 1200,
         "checkpointDurationSeconds": 120,
         "checkpointLeadSeconds": 60,
@@ -57,6 +58,12 @@ class ThinkorswimRtdCampaignTests(unittest.TestCase):
         value = configuration()
         value["phaseAClassification"] = "EXACT_0400_BOUNDARY"
         with self.assertRaisesRegex(verify.VerificationError, "overclaim"):
+            verify.validate_configuration(value)
+
+    def test_unproven_elevation_policy_is_rejected(self) -> None:
+        value = configuration()
+        value["excelElevationPolicy"] = "ASSUME_ADMIN_REQUIRED"
+        with self.assertRaisesRegex(verify.VerificationError, "elevation policy"):
             verify.validate_configuration(value)
 
     def test_formula_manifest_requires_exact_documented_shape(self) -> None:

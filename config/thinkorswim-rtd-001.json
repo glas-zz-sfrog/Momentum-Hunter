@@ -21,6 +21,7 @@
   ],
   "sampleIntervalSeconds": 2,
   "phaseAClassification": "CURRENT_SESSION_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY",
+  "excelElevationPolicy": "CURRENT_USER_PROVEN_75_CELL_RTD_SMOKE",
   "phaseADurationSeconds": 1200,
   "checkpointDurationSeconds": 120,
   "checkpointLeadSeconds": 60,

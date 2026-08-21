@@ -545,3 +545,16 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   failure. Because the exact 04:00 boundary has passed, Phase A is now labeled
   only as a current-session functional smoke; tonight's eight checkpoints remain
   the true capability test.
+- Physical attempt 2 passed UAC, provenance, and the calculation-order repair,
+  then failed before sampling with Excel `RPC_E_CALL_REJECTED`. No market
+  observation was written. The next source retries only `RPC_E_CALL_REJECTED`,
+  `RPC_E_SERVERCALL_RETRYLATER`, and Excel's busy `0x800AC472`, with a fixed
+  80-attempt/250-millisecond ceiling per operation. All other HRESULTs fail
+  immediately, and every failure now records its exact campaign stage.
+- A nonpersistent current-user diagnostic then exercised all 75 exact
+  market-only formulas through `tos.rtd`: 75 present, zero error, zero empty,
+  and 38 changed values over five seconds. It created no durable market
+  evidence and requested no account/order field. This physically proves that
+  Excel elevation is not required in the observed machine/session, so the
+  campaign now defaults to the normal interactive user token and retains UAC
+  only as an explicit optional launcher switch.
