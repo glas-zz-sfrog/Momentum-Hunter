@@ -39,4 +39,8 @@ readiness all pass. Otherwise the task restores the exact-Git model.
 
 ## Classification
 
-`PROMOTED_PENDING_ZERO_PROVIDER_CANARY_AND_MIGRATION`
+`COMPLETE / APPROVED_RUNTIME_ACTIVE`
+
+The physical different-HEAD service canary, future-only migration,
+idempotency, rollback integrity, and Monday readiness gates all passed. No
+manual visual verification remains.

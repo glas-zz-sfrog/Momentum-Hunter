@@ -17,7 +17,7 @@
   `6e3bf54ad156ecdd82a8d5f105285f83714958c0`.
 - Runtime fingerprint:
   `b7f9069a246ed2d99bc86396fbc5914a0e541adf8bb766258e01cd0f1e5a85df`.
-- Classification: `PROMOTED_PENDING_ZERO_PROVIDER_CANARY_AND_MIGRATION`.
+- Classification: `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 
 ## Runtime Contract
 
@@ -77,23 +77,37 @@ Shadow, broker orders, and transmission unavailable.
 
 ## Production Gate
 
-The installed manifest remains SHA-256
-`7757FEED119C13A209E7573BCBD315E78092C50CCFCC2DA0802D8641168496CD`.
-The installed service executable remains SHA-256
-`9DDACD6AD2A24545BA7A1A69BE5085AFC4B09DF77D300A00F1B8FAC37AB22A1A`.
-Production remains on the exact-Git schedule with 15 pending openings, Monday
-August 24 at 08:35 CT / latest 08:40 CT, service Running/Automatic, zero Shadow
-jobs, and order transmission unavailable.
+The installed migrated manifest is SHA-256
+`F293CE95F143BB8853E83F88D83F6ACED62A891CA88AFDE8780B95AB023EB862`.
+The installed service executable is SHA-256
+`891897683C1F0E6600473618434822B5DDC4D02D405A0D9ABE67B0F9FFDC3411`.
+The loaded supervisor and runtime-identity module are respectively
+`f9097fc9523e0873a756340397bda4e544b3573c7599693eda9927b1baf3cefd`
+and `1764dad2851893f5f89f4fb38b3f923f40d7e79a85b138fca90136b261bb4380`.
+
+Physical service canary `runtime-identity-canary-20260822t012058` completed
+with exit `0`. It bound release source Git `6e3bf54`, execution Git `45ff047`,
+release `OPENING-RUNTIME-B7F9069A246ED2D99BC8`, and exact approved runtime
+match. Its durable evidence sets provider, account, position, Paper, Shadow,
+and order requests to false and transmission to unavailable. The canary is no
+longer in the active manifest; its receipt and one log remain preserved.
+
+Migration changed exactly 15 future pending openings from legacy Git pins to
+the `opening-capture` approved channel. The immediate plan and apply reruns
+changed zero jobs. Monday August 24 remains enabled and `PENDING` at 08:35 CT /
+latest 08:40 CT. The service is Running/Automatic with a fresh heartbeat,
+zero jobs are running, zero Shadow/Paper jobs are enabled, order transmission
+is unavailable, and Windows Time is synchronized to NIST.
 
 Rollback package:
 `C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-AUTOMATION-RUNTIME-IDENTITY-001-ROLLBACK-f2c2b65d.zip`,
 SHA-256
 `C7FEE933E5F623A6FD4C72DC999B124357364F5897A85DEC433A63F3D8693F5B`.
 
-The feature is integrated. Two initial service-update UAC prompts were canceled
-and the exact-Git fallback was immediately restored. The attended retry then
-updated the service successfully; installed and loaded identities match, and
-explicit promotion created the release above. No provider/capture/account/Paper/
-Shadow/order action occurred. Remaining activation gates are this docs-only Git
-advance, the real zero-provider different-HEAD canary, future-only atomic
-migration, and final Monday readiness.
+The feature is integrated, promoted, physically proven, migrated, and ready.
+Two initial service-update UAC prompts were canceled and the exact-Git fallback
+was immediately restored; the later attended update passed. No provider,
+capture, account, Paper, Shadow, broker, or order operation occurred during the
+production proof. The approved release now decouples future opening eligibility
+from unrelated Git-only changes while preserving fail-closed runtime identity
+and the executable exact-Git rollback.

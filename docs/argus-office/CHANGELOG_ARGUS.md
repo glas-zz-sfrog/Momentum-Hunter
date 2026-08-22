@@ -743,3 +743,15 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   behavior, session times, latest-start rules, capture semantics, and authority.
 - Added atomic future-pending-opening migration and service update/rollback
   tooling. No production activation is claimed before the physical canary.
+
+## 2026-08-22 - Approved Opening Runtime Activated
+
+- Updated the installed Automation Service and explicitly promoted
+  `OPENING-RUNTIME-B7F9069A246ED2D99BC8` from source Git `6e3bf54`.
+- Proved a docs-only Git advance through the real service boundary with one
+  terminal zero-provider canary and exact approved-runtime match.
+- Migrated exactly 15 future openings to the approved `opening-capture`
+  channel; the idempotent rerun changed zero jobs and historical receipts were
+  preserved.
+- Preserved the executable exact-Git rollback, Monday 08:35/08:40 readiness,
+  unavailable order transmission, and zero enabled Paper/Shadow jobs.

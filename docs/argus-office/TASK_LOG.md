@@ -550,3 +550,15 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   `6e3bf54`, fingerprint `b7f9069a...e5a85df`; no Paper, Shadow, broker, order,
   provider, or capture operation occurred. Docs-only divergence, canary,
   migration, and final readiness remain pending.
+- Docs-only commit `45ff047` advanced canonical Git without changing the
+  approved opening runtime fingerprint. The installed service completed
+  `runtime-identity-canary-20260822t012058` with exit `0`, release source
+  `6e3bf54`, execution Git `45ff047`, and `runtimeMatch=true`; its evidence
+  records every provider/account/Paper/Shadow/position/order request as false
+  and transmission as unavailable.
+- Removed the terminal canary from the active manifest while preserving its
+  state, log, and recovery copies. Atomically migrated exactly 15 future
+  openings from legacy exact-Git pins to `opening-capture`; plan and apply
+  reruns changed zero jobs. Monday August 24 remains enabled and `PENDING` at
+  08:35/08:40 CT, service heartbeat is fresh, zero jobs are running, zero
+  Shadow/Paper jobs are enabled, and NIST-backed Windows Time is synchronized.

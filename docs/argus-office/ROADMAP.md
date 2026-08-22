@@ -62,18 +62,21 @@ attended elevated service update passed after the earlier canceled attempts,
 and explicit promotion created
 `OPENING-RUNTIME-B7F9069A246ED2D99BC8` from source Git `6e3bf54` with runtime
 fingerprint `b7f9069a246ed2d99bc86396fbc5914a0e541adf8bb766258e01cd0f1e5a85df`.
-The next gates are the docs-only different-HEAD zero-provider canary, atomic
-future-only channel migration, and Monday readiness. Exact-Git remains the
-rollback model until those gates pass. This work may not touch the active RTD
-worktree or its evidence.
+The installed service then completed the physical zero-provider canary with
+release source Git `6e3bf54`, current docs-only Git `45ff047`, exact runtime
+match, and no provider, account, Paper, Shadow, position, or order request.
+All 15 future openings were atomically migrated to the `opening-capture`
+approved channel, the idempotent rerun changed zero jobs, and legacy receipts
+remain unchanged. Monday August 24 is enabled and `PENDING` at 08:35 CT with
+latest start 08:40 CT. The active RTD worktree and evidence were not changed.
 Branch Hard Chew now passes 85 focused tests, all 2,714 Python tests, all 259
 .NET tests, compileall, PowerShell parsing, mutation/tamper coverage, and a
 complete Codex Security diff review. The review's three findings were repaired:
 the environment binds every installed distribution, the full promotion chain
 binds every receipt and historical release, and promotion requires a fresh
-timezone-aware supervisor heartbeat. Classification remains
-`PROMOTED_PENDING_ZERO_PROVIDER_CANARY_AND_MIGRATION`; no future job is migrated
-until the zero-provider service proof passes. Rollback package SHA-256 is
+timezone-aware supervisor heartbeat. Classification is
+`COMPLETE / APPROVED_RUNTIME_ACTIVE`. The exact-Git package remains the
+executable rollback path. Rollback package SHA-256 is
 `C7FEE933E5F623A6FD4C72DC999B124357364F5897A85DEC433A63F3D8693F5B`.
 
 `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is `ACTIVE` on isolated branch
