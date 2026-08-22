@@ -755,3 +755,21 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   preserved.
 - Preserved the executable exact-Git rollback, Monday 08:35/08:40 readiness,
   unavailable order transmission, and zero enabled Paper/Shadow jobs.
+
+## 2026-08-22 - Opening Runtime Boundary Completeness
+
+- Measured the active V1 whole-package rule at 208 package Python files and the
+  conservative static service/runner closure at 94 package modules plus three
+  explicit files.
+- Proved a positively isolated research-only Python mutation still changes V1,
+  while WPF-only and governance/documentation mutations do not.
+- Added offline fail-closed checks for local import escape and dynamic loading,
+  a complete opening-dependency mutation matrix, environment-overbreadth proof,
+  and a realistic docs/research/WPF/parser development-sequence regression.
+- Classified V1 `BOUNDARY_SAFE_BUT_OVERBROAD` and its full installed-package
+  inventory `ENVIRONMENT_BOUNDARY_OVERBROAD`; no production narrowing occurred
+  before Monday.
+- Passed 132 focused and all 2,723 Python tests, compileall, PowerShell parse,
+  diff, secret, capability, and protected-path checks. Strict fast-forward to
+  `87f2ebf` advanced Git while the approved surface and runtime match remained
+  unchanged, requiring no service restart, repin, or promotion.

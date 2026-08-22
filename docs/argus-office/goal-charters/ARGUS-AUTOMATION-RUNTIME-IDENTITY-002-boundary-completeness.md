@@ -46,8 +46,7 @@ unavailable order transmission.
 
 ## Qualification Result
 
-`BOUNDARY_SAFE_BUT_OVERBROAD / ENVIRONMENT_BOUNDARY_OVERBROAD /
-IMPLEMENTED_PENDING_MERGE`
+`BOUNDARY_SAFE_BUT_OVERBROAD / ENVIRONMENT_BOUNDARY_OVERBROAD / COMPLETE`
 
 The actual opening graph is contained, has zero local import escapes and zero
 dynamic-loading sites, and remains protected by the active conservative V1
@@ -55,3 +54,7 @@ release. The audit adds offline fail-closed qualification checks for future
 outside-root imports and dynamic loading. No production fingerprint semantics
 were changed before Monday. Full Python discovery passes 2,723 tests with one
 expected non-elevated symlink skip.
+
+Integrated commit:
+`87f2ebf8d3a35260d32ad5f68e39fc3d9e186af5`. The controlled fast-forward
+left the production runtime surface and approved release match unchanged.

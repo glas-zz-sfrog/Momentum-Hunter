@@ -3,11 +3,17 @@
 ## Classification
 
 `BOUNDARY_SAFE_BUT_OVERBROAD / ENVIRONMENT_BOUNDARY_OVERBROAD /
-IMPLEMENTED_PENDING_MERGE`
+COMPLETE`
 
 No production runtime-identity semantics, installed service, manifest, job,
 schedule, provider, strategy, account, Paper, Shadow, broker, or order behavior
 changed. The production V1 boundary remains authoritative.
+
+Implementation/audit commit
+`87f2ebf8d3a35260d32ad5f68e39fc3d9e186af5` was pushed and strictly
+fast-forwarded into canonical. Post-merge canonical surface remained
+`ee3888b57d4f283074c37e231a2c27419387f519fc0a77bad9f7421b5dfd389d`,
+and the active release remained `APPROVED_RUNTIME_MATCH`.
 
 ## Production Identity
 

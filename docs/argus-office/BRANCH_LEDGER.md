@@ -2,6 +2,35 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-AUTOMATION-RUNTIME-IDENTITY-002 - 2026-08-22
+
+`codex/ARGUS-AUTOMATION-RUNTIME-IDENTITY-002` started from clean synchronized
+canonical `d5d37cad84970bf8779eb1839568ad1eba5fdaa8`. Commit
+`87f2ebf8d3a35260d32ad5f68e39fc3d9e186af5` adds an offline static dependency
+audit, nine disposable mutation/escape/environment tests, the V2 ADR
+reconciliation, Goal Charter, and release report. The branch was pushed,
+strictly fast-forwarded into canonical, and pushed normally.
+
+The audit measures 208 package modules, 94 statically reachable opening
+modules, 114 excluded modules, 97 proposed closure files, zero current local
+import escapes, and zero current dynamic-loading sites. It proves WPF and docs
+are decoupled, while proven research-only package Python and unused installed
+distributions still force V1 promotion. Recent 20-commit analysis finds four
+V1 promotions versus two under the conservative prototype closure.
+
+Nine new tests, 132 focused tests, all 2,723 Python tests, compileall,
+PowerShell parse, diff, secret-shape, capability, and protected-path checks
+pass; one non-elevated symlink test is expectedly skipped. The initial full run
+had two environment-layout failures because the isolated worktree lacked its
+expected `.venv` path; both modules and then the complete suite passed after an
+ignored junction to the canonical environment. No .NET/shared source changed.
+
+Classification is `BOUNDARY_SAFE_BUT_OVERBROAD /
+ENVIRONMENT_BOUNDARY_OVERBROAD / COMPLETE`. No production fingerprint
+semantics, service, manifest, job, schedule, provider, account, strategy,
+Paper, Shadow, broker, order, or RTD experiment state changed. The controlled
+merge left the approved runtime surface and `runtimeMatch` unchanged.
+
 ## ARGUS-SCHWAB-OVERNIGHT-API-PROBE-001 - 2026-08-21
 
 `codex/ARGUS-SCHWAB-OVERNIGHT-API-PROBE-001` started from synchronized

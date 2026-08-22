@@ -79,6 +79,21 @@ timezone-aware supervisor heartbeat. Classification is
 executable rollback path. Rollback package SHA-256 is
 `C7FEE933E5F623A6FD4C72DC999B124357364F5897A85DEC433A63F3D8693F5B`.
 
+`ARGUS-AUTOMATION-RUNTIME-IDENTITY-002` is complete, integrated, and pushed at
+`87f2ebf8d3a35260d32ad5f68e39fc3d9e186af5`. The current V1 opening boundary
+is `BOUNDARY_SAFE_BUT_OVERBROAD / ENVIRONMENT_BOUNDARY_OVERBROAD`: it binds all
+208 package Python files and all installed distributions, while the measured
+static opening closure reaches 94 package modules and three explicit files.
+The live graph has zero local import escapes and zero dynamic-loading sites.
+New offline qualification tests reject future outside-root imports and dynamic
+loading before a dependency-closure release can be promoted. WPF and docs stay
+decoupled; proven research-only package Python still requires promotion under
+V1. Full discovery passes 2,723 tests, and the controlled merge advanced Git
+without changing the approved `ee3888...` surface or invalidating
+`OPENING-RUNTIME-B7F9069A246ED2D99BC8`. No production semantic, service,
+manifest, schedule, provider, account, Paper, Shadow, broker, or order change
+occurred. Monday remains protected by unchanged V1; narrowing is deferred.
+
 `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is `ACTIVE` on isolated branch
 `codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` at committed head `e383ac1`, with a
 preserved uncommitted observer-hardening change. Official `tos.rtd` through
@@ -153,6 +168,11 @@ The authoritative ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
 
+- `ARGUS-AUTOMATION-RUNTIME-IDENTITY-002` measured the actual opening closure,
+  proved the current boundary safe but overbroad, added import-escape and
+  dynamic-load qualification guards, and merged only offline tests/tooling and
+  documentation. Canonical Git advanced while the approved runtime remained a
+  match; no repin or promotion was required.
 - `ARGUS-AUTOMATION-FUTURE-REPIN-001` makes future opening-job reconciliation
   prune only terminal historical Paper/SETUP-002 dependencies before rebuilding
   the pending schedule. Terminal receipts remain immutable, every future
@@ -209,6 +229,9 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 5. Deferred / Later
 
+- `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` may refine V1 to an authoritative
+  dependency-closure and relevant-distribution contract only after Monday
+  evidence, with promotion-time integration and repeated physical validation.
 - `ARGUS-EXIT-POLICY-002`, ARBITER-001, BEAR-001, broader specialist influence,
   and Phase 14 unattended live execution remain future work and gain no
   authority from roadmap presence.
