@@ -57,7 +57,7 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
     }
 }
 
-$terminalPaperJobIds = @()
+$terminalDependentJobIds = @()
 if ($state) {
     $terminalStatuses = @(
         "COMPLETED",
@@ -66,10 +66,14 @@ if ($state) {
         "BLOCKED_DEPENDENCY",
         "DISABLED"
     )
-    $terminalPaperJobIds = @(
+    $terminalDependentJobIds = @(
         $state.jobs.PSObject.Properties.Value |
             Where-Object {
-                $_.kind -eq "paper_engineering" -and
+                $_.kind -in @(
+                    "paper_engineering",
+                    "successor_setup_pass1",
+                    "successor_setup_pass2"
+                ) -and
                 $_.status -in $terminalStatuses
             } |
             ForEach-Object { $_.job_id }
@@ -95,7 +99,7 @@ try {
         "--market-sessions",
         $MarketSessions
     )
-    foreach ($terminalJobId in $terminalPaperJobIds) {
+    foreach ($terminalJobId in $terminalDependentJobIds) {
         $plannerArguments += @("--terminal-job-id", $terminalJobId)
     }
     $plannerOutput = & $pythonPath @plannerArguments

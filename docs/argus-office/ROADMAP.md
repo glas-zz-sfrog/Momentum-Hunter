@@ -129,6 +129,11 @@ The authoritative ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
 
+- `ARGUS-AUTOMATION-FUTURE-REPIN-001` makes future opening-job reconciliation
+  prune only terminal historical Paper/SETUP-002 dependencies before rebuilding
+  the pending schedule. Terminal receipts remain immutable, every future
+  opening retains an exact canonical Git pin, and the repair adds no Shadow,
+  broker, provider, or order authority.
 - `ARGUS-SCHWAB-OVERNIGHT-API-PROBE-001` proved fresh Schwab Trader API data is
   unavailable during true overnight hours.
 - `ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001` proved unattended read-only

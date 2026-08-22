@@ -80,19 +80,24 @@ def plan_opening_capture_manifest(
         raise ValueError("Automation manifest jobs must be a list.")
     terminal_ids = set(terminal_job_ids)
     retained_jobs: list[dict[str, object]] = []
+    historical_dependency_kinds = {
+        "paper_engineering",
+        "successor_setup_pass1",
+        "successor_setup_pass2",
+    }
     for raw_job in raw_jobs:
         if not isinstance(raw_job, dict):
             continue
         job = dict(raw_job)
         if job.get("kind") == OPENING_CAPTURE_KIND:
             continue
-        if job.get("kind") == "paper_engineering":
+        if job.get("kind") in historical_dependency_kinds:
             scheduled_at = datetime.fromisoformat(str(job.get("scheduledAt", "")))
             if scheduled_at.date() < start_date:
                 job_id = str(job.get("jobId", ""))
                 if job_id not in terminal_ids:
                     raise ValueError(
-                        "A historical Paper job has no terminal service receipt."
+                        "A historical dependent job has no terminal service receipt."
                     )
                 continue
         retained_jobs.append(job)

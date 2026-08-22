@@ -260,11 +260,87 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "historical Paper job has no terminal service receipt",
+            "historical dependent job has no terminal service receipt",
         ):
             plan_opening_capture_manifest(
                 payload,
                 start_date=date(2026, 8, 12),
+                market_sessions=2,
+                expected_git_head=self.expected_git_head,
+            )
+
+    def test_replan_drops_terminal_historical_successor_dependencies(self) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260817",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-08-17T08:35:00-05:00",
+                    "latestStartAt": "2026-08-17T08:40:00-05:00",
+                    "expectedGitHead": "b" * 40,
+                },
+                {
+                    "jobId": "successor-setup-pass1-20260817",
+                    "kind": "successor_setup_pass1",
+                    "scheduledAt": "2026-08-17T08:35:00-05:00",
+                    "latestStartAt": "2026-08-17T08:50:00-05:00",
+                    "timeoutSeconds": 600,
+                    "expectedGitHead": "b" * 40,
+                    "dependsOnJobId": "opening-capture-20260817",
+                },
+                {
+                    "jobId": "successor-setup-pass2-20260817",
+                    "kind": "successor_setup_pass2",
+                    "scheduledAt": "2026-08-17T15:05:00-05:00",
+                    "latestStartAt": "2026-08-17T16:00:00-05:00",
+                    "timeoutSeconds": 900,
+                    "expectedGitHead": "b" * 40,
+                    "dependsOnJobId": "successor-setup-pass1-20260817",
+                },
+            ]
+        )
+
+        planned = plan_opening_capture_manifest(
+            payload,
+            start_date=date(2026, 8, 24),
+            market_sessions=2,
+            expected_git_head=self.expected_git_head,
+            terminal_job_ids={
+                "successor-setup-pass1-20260817",
+                "successor-setup-pass2-20260817",
+            },
+        )
+
+        identifiers = {str(job["jobId"]) for job in planned["jobs"]}
+        self.assertNotIn("opening-capture-20260817", identifiers)
+        self.assertNotIn("successor-setup-pass1-20260817", identifiers)
+        self.assertNotIn("successor-setup-pass2-20260817", identifiers)
+        self.assertIn("opening-capture-20260824", identifiers)
+
+    def test_replan_rejects_nonterminal_historical_successor_dependency(
+        self,
+    ) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "successor-setup-pass1-20260817",
+                    "kind": "successor_setup_pass1",
+                    "scheduledAt": "2026-08-17T08:35:00-05:00",
+                    "latestStartAt": "2026-08-17T08:50:00-05:00",
+                    "timeoutSeconds": 600,
+                    "expectedGitHead": "b" * 40,
+                    "dependsOnJobId": "opening-capture-20260817",
+                }
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "historical dependent job has no terminal service receipt",
+        ):
+            plan_opening_capture_manifest(
+                payload,
+                start_date=date(2026, 8, 24),
                 market_sessions=2,
                 expected_git_head=self.expected_git_head,
             )
@@ -342,7 +418,7 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
         self.assertIn('"--expected-git-head"', installer)
         self.assertIn("$gitHead", installer)
         self.assertIn('"--terminal-job-id"', installer)
-        self.assertIn("$terminalPaperJobIds", installer)
+        self.assertIn("$terminalDependentJobIds", installer)
         self.assertIn('"UNAVAILABLE"', installer)
         self.assertIn('"opening"', runner)
         self.assertIn("$OpeningRetryCount = 1", runner)
