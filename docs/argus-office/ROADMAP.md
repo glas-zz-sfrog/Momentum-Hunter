@@ -56,21 +56,26 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 ### Active Priority
 
 `ARGUS-AUTOMATION-RUNTIME-IDENTITY-001` is an urgent weekend reliability
-exception running in the separate branch/worktree
-`codex/ARGUS-AUTOMATION-RUNTIME-IDENTITY-001`. It is replacing per-date
-whole-repository eligibility for future opening captures with a conservative,
-explicitly promoted opening-runtime release identity. The current exact-Git
-schedule remains the known-good production/rollback state until branch proof,
-physical zero-provider service proof, atomic migration, and Monday readiness
-all pass. This work may not touch the active RTD worktree or its evidence.
+exception. Qualified implementation commit
+`ec199549e96062570864262f181fd339d7596121` is integrated and pushed, but the
+replacement is not activated. Two required service-update UAC prompts were
+canceled, so no approved release, physical zero-provider canary, or channel
+migration is claimed. The proven exact-Git rollback was immediately applied;
+15 future openings are again pending with zero pin mismatches, Monday remains
+08:35/08:40 CT, and the service is Running/Automatic. The next action is one
+attended elevated service update followed by release promotion, the A-to-B
+docs-only canary, atomic migration, and final readiness. This work may not touch
+the active RTD worktree or its evidence.
 Branch Hard Chew now passes 85 focused tests, all 2,714 Python tests, all 259
 .NET tests, compileall, PowerShell parsing, mutation/tamper coverage, and a
 complete Codex Security diff review. The review's three findings were repaired:
 the environment binds every installed distribution, the full promotion chain
 binds every receipt and historical release, and promotion requires a fresh
 timezone-aware supervisor heartbeat. Classification remains
-`IMPLEMENTED_PENDING_PRODUCTION_PROOF`; no release is promoted and no future
-job is migrated until the zero-provider service proof and rollback package pass.
+`IMPLEMENTED_PENDING_PRODUCTION_PROOF / EXACT_GIT_FALLBACK_ACTIVE`; no release
+is promoted and no future job is migrated until the zero-provider service proof
+passes. Rollback package SHA-256 is
+`C7FEE933E5F623A6FD4C72DC999B124357364F5897A85DEC433A63F3D8693F5B`.
 
 `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is `ACTIVE` on isolated branch
 `codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` at committed head `e383ac1`, with a

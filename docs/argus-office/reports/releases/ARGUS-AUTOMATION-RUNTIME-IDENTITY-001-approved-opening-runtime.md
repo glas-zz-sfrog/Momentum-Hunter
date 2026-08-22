@@ -10,7 +10,11 @@
   loaded-process identity.
 - ADR:
   `docs/argus-office/architecture/OPENING_RUNTIME_IDENTITY_ADR_V1.md`.
-- Classification: `IMPLEMENTED_PENDING_PRODUCTION_PROOF`.
+- Implementation commit:
+  `ec199549e96062570864262f181fd339d7596121`, pushed and cleanly
+  fast-forwarded to canonical.
+- Classification:
+  `IMPLEMENTED_PENDING_PRODUCTION_PROOF / EXACT_GIT_FALLBACK_ACTIVE`.
 
 ## Runtime Contract
 
@@ -78,9 +82,16 @@ Production remains on the exact-Git schedule with 15 pending openings, Monday
 August 24 at 08:35 CT / latest 08:40 CT, service Running/Automatic, zero Shadow
 jobs, and order transmission unavailable.
 
-Before activation: commit and push the feature, create the rollback package,
-fast-forward canonical, update the service with rollback, explicitly promote
-Release A, advance canonical by docs only to B, pass the real zero-provider
-service canary with A/B provenance, migrate only future pending openings
-atomically, then perform final Monday readiness. Any failed gate restores the
-exact-Git model.
+Rollback package:
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-AUTOMATION-RUNTIME-IDENTITY-001-ROLLBACK-f2c2b65d.zip`,
+SHA-256
+`C7FEE933E5F623A6FD4C72DC999B124357364F5897A85DEC433A63F3D8693F5B`.
+
+The feature is integrated. Two service-update UAC prompts were canceled, so no
+release, channel, canary, or future-job migration was created. The exact-Git
+fallback was immediately repinned; 15 future jobs are pending at the integrated
+head, Monday remains 08:35/08:40 CT, service is Running/Automatic, Shadow is
+zero, and order transmission is unavailable. Post-merge 85 Python and 51 .NET
+tests pass. Remaining activation requires one attended elevated service update,
+then explicit Release A promotion, docs-only B, the real zero-provider A/B
+canary, future-only atomic migration, and final Monday readiness.

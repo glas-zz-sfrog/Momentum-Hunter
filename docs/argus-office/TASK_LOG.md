@@ -538,3 +538,9 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Passed 85 focused tests, 2,714 full Python tests, 259 full .NET tests,
   compileall, PowerShell parsing, and diff checks. Production remains unchanged
   on 15 exact-Git-pinned future openings pending physical proof.
+- Integrated and pushed implementation commit `ec199549`. Two elevated service
+  update prompts were canceled, so activation stopped before release promotion
+  or channel migration. The proven exact-Git repin path restored 15 pending
+  future openings at the integrated head with zero mismatches; post-merge 85
+  Python and 51 .NET tests pass. Physical proof remains pending one attended
+  UAC approval.

@@ -39,4 +39,4 @@ readiness all pass. Otherwise the task restores the exact-Git model.
 
 ## Classification
 
-`IN_PROGRESS`
+`IMPLEMENTED_PENDING_PRODUCTION_PROOF / EXACT_GIT_FALLBACK_ACTIVE`
