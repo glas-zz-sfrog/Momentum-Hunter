@@ -12,6 +12,28 @@ Supporting records have narrower roles:
 - Routine opening captures are indexed by their ignored, date-partitioned operational evidence: the terminal service receipt in `C:\ProgramData\MomentumHunter\Automation\state\automation-service-state.json`, `MomentumHunterData/data/captures/<DATE>/opening.*`, `MomentumHunterData/logs/capture-opening-<DATE>-*.log`, and `MomentumHunterData/data/reports/*-<DATE>-opening.*`. These generated records preserve routine capture truth without changing canonical Git identity.
 - Historical architecture notes and release reports remain evidence of their original decisions; they do not override this Roadmap.
 
+### Roadmap Reading Order And Authority
+
+A fresh session reads this document in this order:
+
+1. `Authority`.
+2. `Now`.
+3. `Next / Queue`.
+4. The relevant active, ready, or blocking milestone.
+5. Phase dependency and promotion-gate sections.
+6. Historical records only when chronology or evidence detail is needed.
+
+`CURRENT AUTHORITY` consists of `Authority`, `Now`, `Next / Queue`, current
+milestone lifecycle records, and current dependency/gate sections.
+`HISTORICAL EVIDENCE` consists of prior snapshots, campaign narratives,
+completed-work chronology, previous next-action statements, and detailed
+evidence retained below or in the supporting records. Historical words such as
+`current`, `next`, `active`, `ready`, or `pending` are relative to their stated
+date/commit and never override `Now` or `Next / Queue`.
+
+If current implementation or installed-state evidence contradicts current
+Roadmap authority, reconcile the Roadmap before consequential work continues.
+
 ## Delegated Authority And Interruption Policy
 
 Steven delegates routine nonvisual execution to Codex. Do the work, prove it, integrate it, and back it up without asking Steven to approve an expected result.
@@ -28,6 +50,146 @@ Steven remains the decision-maker for:
 When an anomaly occurs, stop before the consequential action and ask Steven one concrete question that explains the observed state and practical exposure. A software confirmation phrase is an internal interlock, not a recurring CEO approval request.
 
 ## Now
+
+This section is `CURRENT AUTHORITY` and intentionally concise.
+
+### Active Priority
+
+`ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is `ACTIVE` on isolated branch
+`codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` at committed head `e383ac1`, with a
+preserved uncommitted observer-hardening change. Official `tos.rtd` through
+desktop Excel is physically functional for the fixed market-only `SPY`, `QQQ`,
+`NVDA`, `AAPL`, and `MU` basket in the current interactive Windows session.
+Regular-session observations prove the supported RTD/COM path and observer
+plumbing only. True 20:00-04:00 ET availability, field-level overnight
+freshness, unattended stability, and useful capacity remain unproven.
+
+The exact next bounded action is to finish the reduced-COM-read stability proof,
+then collect and adjudicate the fixed 19:55, 20:00, 20:05, 21:00, 00:30, 01:30,
+03:55, and 04:05 ET checkpoints. Failed harness attempts remain preserved and
+make no provider-capability claim.
+
+### Current Runtime And Strategy Truth
+
+- The installed product remains `e69426b3b7bd179cd62eba2e28a5d0553da47154`.
+  `MomentumHunterAutomation`, `MomentumHunterContinuousRuntime`, and
+  `MomentumHunterContinuousWriter` are Automatic/Running; the writer uses the
+  dedicated `LOCAL SERVICE` principal.
+- Continuous Runtime is `RESEARCH_ONLY`. Order capability is `UNAVAILABLE`;
+  position and order requests remain disabled. Continuous Paper is not
+  installed or armed, and Alpaca Live, Schwab order transmission, Shadow
+  execution, and unattended live execution remain unavailable.
+- The current prospective Momentum/Paper strategy remains the control.
+  Documentation and research may not change candidate admission, ranking,
+  TradePlan, Risk Governor, allocation, entry, stop, target, exit, broker, or
+  sample semantics.
+- Schwab remains authoritative for its proven premarket, regular-session, and
+  after-hours quote/candle roles and is proven unavailable for fresh
+  20:00-04:00 ET Trader API data. Alpaca Basic/Finviz retain only their already
+  adjudicated overnight/context roles and limitations. thinkorswim has no
+  Momentum Hunter provider authority while the RTD experiment is incomplete.
+- Official Shadow v1/v2/v3 evidence remains preserved at `0 / 30`; v3 is
+  unarmed. FakeBroker and prior Paper evidence remain immutable and do not
+  imply current trade authority.
+
+### Parallel Authorized Research
+
+- `ARGUS-TRADE-REPLAY-001` is `PLANNED`, lane `PARALLEL_RESEARCH`, readiness
+  `INVENTORY_READY`, gate `EVENT_LEVEL_ADMISSION_REQUIRED`. Failure-boundary
+  and candidate inventory work may proceed without changing the prospective
+  engine. Each replay event requires positive identity, price-basis,
+  corporate-action-window, timestamp, strategy/configuration, and source-lineage
+  admission.
+- `ARGUS-EXIT-POLICY-001` is `PLANNED`, lane `PARALLEL_RESEARCH`, and depends on
+  a sufficiently trustworthy admitted TRADE-REPLAY population plus
+  RESEARCH-GOV preregistration. It changes no current exit behavior.
+- The integrated specialist stack remains `RESEARCH_ONLY`. It has no strategy,
+  Paper, Shadow, broker, order, or arbiter authority.
+
+### Current Blocking Gates
+
+- `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` is branch-only and correctly blocked
+  on `CONTINUOUS_TRADEPLAN_PRODUCER_UNAVAILABLE`. It remains unmerged,
+  uninstalled, and unarmed until `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` is
+  separately implemented and proven without changing setup semantics.
+- Broad historical replay/statistical claims require corporate-action-safe,
+  positively admitted history. `ARGUS-RESEARCH-DATA-002` supplies contracts but
+  current broad datasets retain unknown basis and survivorship limitations.
+- EXIT-POLICY-001 cannot begin comparative policy evaluation until its fixed
+  entry population and preregistration gates pass.
+- R034 remains blocked on Steven's explicit destructive-cutover decision.
+- Any live endpoint, real order, funding, money movement, or unattended live
+  authority remains separately decision-gated.
+
+### Immediate Next
+
+Finish and adjudicate the active RTD experiment. The exact next implementation
+task after that active task is `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001`.
+The authoritative ordered sequence is maintained only in `Next / Queue` below.
+
+### Recent Material Completions
+
+- `ARGUS-SCHWAB-OVERNIGHT-API-PROBE-001` proved fresh Schwab Trader API data is
+  unavailable during true overnight hours.
+- `ARGUS-SCHWAB-CONTINUOUS-AUTH-LIFECYCLE-001` proved unattended read-only
+  Schwab refresh and a live read-only continuous canary.
+- Overnight campaign provenance and evidence-isolation reconciliation now
+  separate campaign nonmutation from authorized external production changes.
+- `ARGUS-TRADE-REPLAY-001` and `ARGUS-EXIT-POLICY-001` were added as gated
+  Phase 13R research without changing the prospective baseline.
+
+## Next / Queue
+
+This is the only authoritative statement of what happens next. Historical
+next-action language preserved elsewhere cannot supersede this queue.
+
+### 1. Active
+
+1. `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001`: prove observer stability, collect the
+   true-overnight checkpoints, and adjudicate official RTD capability without
+   changing provider authority.
+
+### 2. Ready / Next
+
+1. Close the RTD experiment truthfully as useful, limited, unavailable, or
+   incomplete; preserve every failed attempt and reconcile its feature branch
+   onto current canonical without rebasing or absorbing unrelated changes.
+2. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` as the bounded producer
+   required by the already-defined continuous lifecycle/successor contracts.
+3. Reconcile and fully requalify the existing
+   `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch only after the producer passes;
+   installation, Paper preflight, and one-entry arming remain separate gates.
+
+### 3. Parallel Research
+
+1. `ARGUS-TRADE-REPLAY-001` failure-boundary and candidate inventory may proceed
+   under event-level positive admission; no historical candidate becomes a
+   trade merely because it was surfaced.
+2. Integrated specialist and denominator research may continue only under their
+   dormant/read-only contracts and existing activation gates.
+
+### 4. Blocked
+
+1. `ARGUS-EXIT-POLICY-001`: blocked from comparative evaluation until an
+   admitted fixed-entry replay population and preregistration exist.
+2. `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001`: blocked on the TradePlan producer,
+   then canonical reconciliation and disabled-install proof.
+3. R034: blocked on explicit destructive approval.
+4. Continuous/live order authority: blocked on separate Paper, safety,
+   account/broker, prospective-evidence, and Steven decision gates.
+
+### 5. Deferred / Later
+
+- `ARGUS-EXIT-POLICY-002`, ARBITER-001, BEAR-001, broader specialist influence,
+  and Phase 14 unattended live execution remain future work and gain no
+  authority from roadmap presence.
+
+## Historical Current-State Record
+
+`HISTORICAL EVIDENCE`: the chronology below preserves prior current-state and
+next-action snapshots through roadmap commit `293e7ab` on 2026-08-21. Every
+use of `current`, `next`, `active`, `ready`, or `pending` below is relative to
+the described historical closeout and cannot override `Now` or `Next / Queue`.
 
 `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is
 `IN_PROGRESS / TRUE_OVERNIGHT_EVIDENCE_PENDING` on isolated branch
@@ -535,6 +697,10 @@ post-August-17 one-lineage reconciliation followed by separately authorized
 research-only deployment/activation planning.
 
 ## Integrated Work History
+
+`HISTORICAL EVIDENCE`: this section preserves completed-work chronology and
+the status/next-action language recorded at each closeout. It does not override
+`Now`, `Next / Queue`, or current milestone lifecycle records.
 
 ARGUS-SETUP-002 prospective successor-setup research is integrated on canonical
 `master` through the post-August-14 reconciliation. Its original implementation
@@ -1940,37 +2106,68 @@ SHADOW-007 status truthfulness is integrated and backed up from `79e75b2` throug
 
 SHADOW-008 proof-bundle assembly is integrated and backed up at `fdcf898`. Quote-proof schema v2 distinguishes `LIVE_SCHWAB_TRADER_API`, `INJECTED_SOURCE`, and unspecified sources; only the normal CLI-created Schwab transport path is marked production. The nontransmitting assembler creates 11 atomic static proof artifacts on synchronized canonical `master` and never calls `selector-arm`, writes policy, creates a cycle or trade, or exposes an order endpoint. SHADOW-009 supersedes the earlier caller-supplied candidate input with report-derived identity and expands the runtime/test evidence, so the retained SHADOW-008 production bundle is stale by design and cannot pass current canonical verification.
 
-| Item | Current truth |
+| Item | Historical status at the 2026-08-14 reconciliation / Aug. 17 preflight |
 | --- | --- |
 | Canonical baseline | Canonical `master` contains the post-August-14 reconciliation: SETUP-001/002, PAPER-005, DATA-008, SESSION-FIDELITY-008, AFTER-CLOSE-001/002, Phase 13R, and the SNDK stop-authority repair. SETUP-002A adds only the separate silent research activation boundary. |
-| Active implementation | SETUP-002A begins the empty prospective successor-setup denominator on August 17 with two exact-head, write-once, research-only receipts. DATA-008 intrinsic Finviz plausibility runs after structural parsing and before filtering/scoring; contextual Schwab/candle and distribution checks still require explicit authoritative input. R034 remains a separate destructive approval gate. |
+| Historical active implementation | SETUP-002A begins the empty prospective successor-setup denominator on August 17 with two exact-head, write-once, research-only receipts. DATA-008 intrinsic Finviz plausibility runs after structural parsing and before filtering/scoring; contextual Schwab/candle and distribution checks still require explicit authoritative input. R034 remains a separate destructive approval gate. |
 | Shadow sample | `official-shadow-v1` is preserved as a failed prospective ceremony at `0 / 30`; `official-shadow-v2` is preserved activated-empty and unarmed at `0 / 30`; prospective `official-shadow-v3` is activated-empty, unarmed, and `0 / 30`. Order transmission is `UNAVAILABLE`. |
-| Active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Use a separately versioned canary-realistic Alpaca Paper engineering sample to prove prospective selection, fractional allocation, provider execution, protection, recovery, and terminal evidence. Do not count it as the final continuous-intraday strategy sample. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
+| Historical active decision | Keep `official-shadow-v3` unarmed and preserve it at `0 / 30`. Use a separately versioned canary-realistic Alpaca Paper engineering sample to prove prospective selection, fractional allocation, provider execution, protection, recovery, and terminal evidence. Do not count it as the final continuous-intraday strategy sample. Thirty trades remains an engineering gate rather than proof of edge or live authorization. |
 | Blocked by | Candidate-bearing Paper execution remains unobserved because the August 7/10/11/12 candidate-admission evidence is invalid and did not reach a strategy decision. Provider schema drift is the leading inferred cause and is strongly corroborated only for August 12; exact-run payloads are unavailable. V2 starts cleanly, but partial-fill and provider-restart behavior remain synthetic-only; broker-resident linked protection and status streaming remain separate unknowns. DATA-002 authority remains fail-closed on incomplete current-window/baseline bars; DATA-004 requires real chronology and successor identity for reclaim. R034 remains separately destructive approval-gated. Fully powered-off recovery still depends on BIOS RTC/restore-on-AC-loss. |
-| Scheduled operational proof | The Aug. 14 fidelity, opening, and Paper evidence is terminal and preserved. Twenty future openings remain, the Aug. 17 Paper job is pending, and SETUP-002A adds Aug. 17 Pass 1/Pass 2 research receipts without enabling Shadow. All are bound to the final canonical activation identity. |
-| Immediate operational work | Preserve and adjudicate the Aug. 17 opening, Paper, and successor-setup research receipts. Verify the first research denominator, provider-bound exclusions, cutoff hashes, outcome separation, and production nonmutation. Present R034's exact deletion plan only when Steven is ready. |
+| Historical scheduled proof | The Aug. 14 fidelity, opening, and Paper evidence is terminal and preserved. Twenty future openings remain, the Aug. 17 Paper job is pending, and SETUP-002A adds Aug. 17 Pass 1/Pass 2 research receipts without enabling Shadow. All are bound to the final canonical activation identity. |
+| Historical next work | Preserve and adjudicate the Aug. 17 opening, Paper, and successor-setup research receipts. Verify the first research denominator, provider-bound exclusions, cutoff hashes, outcome separation, and production nonmutation. Present R034's exact deletion plan only when Steven is ready. |
 | Broker state | Schwab OAuth and immutable `2573` `INDIVIDUAL_CASH` binding remain read-only market-data/account evidence. No transmitting Schwab method exists. The Canary Alpaca Paper credential is encrypted outside Git. The exact Paper host accepted and completed one bounded fractional lifecycle; the activation preflight found the account active with `$100` cash/buying power, zero positions, and zero open orders. The research credential slot is empty. Invalidated Paper v1 is archived; v2 is active with unchanged policy and no carried decisions, intents, positions, or orders. The live Alpaca host cannot be enabled by a mode flip. |
 | Steven action | No routine nonvisual approval is pending. Interrupt Steven before funding, money movement, any live endpoint/order, unexpected brokerage scope, destructive R034 cutover, or visual acceptance. Do not ask Steven to re-enter the stored Canary credential. |
 | Data caveat | Schwab remains authoritative for proven quote/candle evidence while execution-provider capability remains separate. Finviz structural schema/row/value drift is validated prospectively; structurally valid but economically implausible provider values remain the explicit ARGUS-DATA-008 risk. Historical raw payloads and raw/parsed row counts for August 7/10/11/12 were never persisted and remain unknown; their empty candidate sets are adjudicated contract failures and may not be interpreted as market no-trades. Schema drift is `ROOT_CAUSE_INFERRED` for August 7/10/11 and `ROOT_CAUSE_STRONGLY_CORROBORATED` for August 12, never confirmed for the exact opening runs. DATA-001 through DATA-004 retain their provenance, RVOL, setup, and same-session chronology gates. DATA-005 makes `$500` reference sizing nonexecutable; DATA-005A supplies fresh bound-account/portfolio evidence. Fractional support may alter provider-executable quantity prospectively but may never rewrite old allocation or Shadow evidence. Legacy RVOL remains research-only; insufficient candle history and unknown broker capability fail closed. |
 
-### Status Legend
+## Status Legend
 
-- `NOT_STARTED`: no implementation has begun.
-- `ACTIVE`: work is underway on the named branch.
+- `PLANNED`: valid work is defined but implementation has not begun.
+- `READY`: prerequisites for the next bounded action are satisfied; it is not
+  necessarily the active priority.
+- `ACTIVE`: work is underway on the named branch and is identified in the
+  authoritative queue.
+- `COMPLETE`: the scoped implementation/evidence is merged into canonical
+  `master` and verified. A complete foundation may still have separately named
+  activation or promotion gates.
+- `BLOCKED`: a stated external, safety, dependency, evidence, or CEO gate
+  prevents the named next action.
+- `DEFERRED`: valid future work intentionally not in the current queue.
+- `RETIRED`: the capability or lane is intentionally no longer used; historical
+  evidence remains preserved.
+- `SUPERSEDED`: a later named contract or implementation replaces current use;
+  the earlier record remains historical evidence.
+- `NOT_STARTED`: historical synonym retained for older records; new current
+  records should prefer `PLANNED`.
 - `ACTIVE_ENGINEERING_PRECURSOR`: useful provider-neutral implementation is in progress, but consequential policy and activation remain intentionally unfrozen.
 - `ACTIVE_PROVIDER_RESEARCH`: official contract research or isolated provider proof is the current implementation lane; production authority has not been granted.
 - `IMPLEMENTED_PENDING_MERGE`: work is committed and verified on a branch but has not yet been integrated. Proven nonvisual work may integrate automatically; visual work waits for Steven's manual acceptance.
-- `COMPLETE`: work is merged into local `master` and verified.
-- `BLOCKED`: a stated gate or CEO decision prevents work from starting.
 - `BLOCKED_VENDOR_CAPABILITY`: the required broker capability does not exist; implementation cannot proceed by configuration alone.
-- `DEFERRED`: valid future work, intentionally not the current priority.
 
-### Roadmap Governance
+Lifecycle is separate from qualifiers:
+
+- Lane `PARALLEL_RESEARCH`: work may proceed beside the active product queue
+  without displacing it.
+- Authority `RESEARCH_ONLY`: outputs cannot alter strategy, risk, Paper,
+  Shadow, broker, or orders.
+- Readiness `INVENTORY_READY`: bounded evidence inventory may begin but does not
+  imply downstream analytical admission.
+- Gate `ADMISSION_REQUIRED` or `EVENT_LEVEL_ADMISSION_REQUIRED`: positive
+  evidence admission is required before a record enters the claimed population;
+  this is not a claim that every possible event is globally blocked.
+- Gate `ACTIVATION_PENDING`: implementation may exist, but no prospective
+  producer, sample, scheduler, runtime, or authority is active until a separate
+  activation contract passes.
+
+## Roadmap Governance
 
 Status: `COMPLETE`
 
 - The authoritative Roadmap is integrated into `master`; `CURRENT_STATE.md` remains deleted.
 - This file is the single live state view; branch history and canonical paths are recorded in their supporting governance files.
+- `Now` and `Next / Queue` outrank every historical current-state or next-action
+  statement. Preserve historical wording under an explicit historical heading;
+  promote it back into current authority only after reconciling Git and
+  installed-state evidence.
 
 ## Roadmap
 
@@ -2083,14 +2280,14 @@ Status: `COMPLETE` on local and remote `master` through `a17eff8`
 
 ### Phase 11 - Shadow Evidence, Schwab Capability, And Pre-Execution Hardening
 
-Status: `ACTIVE`; the prior SHADOW-017 opening-runtime repair and Schwab
-read-only foundations are `COMPLETE` on synchronized `master`; the
-SHADOW-017 live-position-marking amendment is
-implemented and visually accepted, while its 2026-07-30 prospective opening is
-`FAILED_TASK_DID_NOT_RUN`;
-v1 and activated-empty v2 are preserved at `0 / 30`, prospective v3 is
-activated-empty and unarmed at `0 / 30`, A017 is
-`BLOCKED_VENDOR_CAPABILITY`, and every real-order gate remains closed.
+Lifecycle: `COMPLETE` for the integrated Shadow/read-only foundation. No Shadow
+sample or ceremony is currently active. The SHADOW-017 live-position-marking
+amendment is integrated and visually accepted; its 2026-07-30 prospective
+opening remains historical `FAILED_TASK_DID_NOT_RUN`. V1, activated-empty v2,
+and activated-empty v3 are preserved at `0 / 30`; v3 is unarmed. A017 remains
+historical `BLOCKED_VENDOR_CAPABILITY`, FakeBroker evidence remains
+nontransmitting, and every real-order gate is closed. Any future Shadow sample
+activation requires a separately named current task and prospective identity.
 
 #### 11A - Shadow Trading Evidence Program
 
@@ -2102,8 +2299,8 @@ activated-empty and unarmed at `0 / 30`, A017 is
   WPF consumes the versioned cached snapshot only. The material cadence change
   requires `official-shadow-v3` and
   `prospective-fakebroker-live-mark-v2`; Steven accepted all seven WPF checks
-  and implementation `94f5074` is integrated and backed up, while final-head
-  task/proof rebinding remains pending.
+  and implementation `94f5074` is integrated and backed up. Final-head
+  task/proof rebinding was a historical closeout gate, not current work.
 - ARGUS-SHADOW-001 is integrated into local `master` at `bb962be`. It connects frozen current evidence to canonical TradePlan and Risk Governor decisions, conservative quote-driven FakeBroker orders/positions/exits, durable ledger/audit/outcomes, executable P&L/R/MFE/MAE, sample-gated metrics, and a nontransmitting manual paperMoney ticket.
 - ARGUS-SHADOW-002 is integrated into local `master` after Steven's explicit fast-forward approval. It adds a read-only WPF review surface over canonical Shadow/FakeBroker evidence; it creates no execution authority and cannot edit completed trades, plans, or risk decisions.
 - ARGUS-SHADOW-003 is integrated into local `master` after Steven's explicit fast-forward approval. Implementation `9002df0` freezes sample version, strategy/configuration fingerprint, fill-model version, evidence-schema version, and explicit sample authorization on new records; preserves legacy records without backfill; excludes unauthorized, obsolete, malformed, or mismatched records; gates every aggregate metric path; and exposes a read-only `SAMPLE START LOCKED` audit in WPF.
@@ -2172,15 +2369,27 @@ activated-empty and unarmed at `0 / 30`, A017 is
   API cannot access paperMoney and has no retail sandbox remains true; Schwab
   remains the proven market-data source rather than the Paper execution lab.
 - FakeBroker remains the only currently integrated automated execution boundary.
-  Alpaca Paper is now the preferred next execution laboratory pending official
-  documentation and direct Paper proof. thinkorswim remains optional manual
-  visual/paperMoney reconciliation and is not a runtime dependency.
+  The historical A016 decision selected Alpaca Paper as the execution
+  laboratory; its current Continuous Paper status is governed by Phase 13 and
+  `Next / Queue`. thinkorswim remains optional manual visual/paperMoney
+  reconciliation and is not a runtime dependency.
 - SCHWAB-001/002/002A/003, live `CASH` validation, immutable binding, and bound-refresh safety are integrated. The production app, loopback callback, certificate trust, OAuth, DPAPI vault, and sole `2573` `INDIVIDUAL_CASH` binding are active and read-only.
 - Account discovery and validation fail closed on any unexpected account count, suffix, type, hash, position, or permission. Sensitive account and balance values remain suppressed.
 - The Client Secret was surfaced to the browser-automation channel during portal research. No credential or token was found in Git, but no rotation occurred. Read-only use continues under the recorded risk; transmitting code is blocked until Schwab supplies rotation, replacement, or explicit vendor remediation.
 - The first future real-money gate is a broker-plumbing canary using a boring, liquid, preapproved instrument. A strategy-driven canary is separate and later. Pre-canary, canary-active, and post-canary position invariants must be implemented first.
 - Detailed chronology, certificate identifiers, test counts, containment evidence, and remaining gates are preserved in `reports/security/SCHWAB-READONLY-ONBOARDING-AND-CREDENTIAL-INCIDENT.md`.
-- No task may ask for a Schwab username, password, or MFA; place credentials/tokens/account hashes in Git or chat; automate thinkorswim; or transmit, replace, or cancel a real broker order without the applicable Steven decision.
+- No task may ask for a Schwab username, password, or MFA; place credentials,
+  tokens, or account hashes in Git or chat; automate thinkorswim UI, login,
+  credentials, MFA, account/position/order fields, order entry, trade management,
+  or unsupported remote control; or transmit, replace, or cancel a real broker
+  order without the applicable Steven decision.
+- A separately bounded read-only capability task may use the officially
+  supported `tos.rtd` COM server through desktop Excel for market-only fields.
+  It must exclude account, position, P/L, and order fields; perform no login/UI
+  scraping or trade action; preserve interactive-session and provenance limits;
+  and grant no general thinkorswim automation or Momentum Hunter provider
+  authority. `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` remains governed by its own
+  field, timing, safety, and acceptance evidence.
 
 #### Standing Authorization And Branch Discipline
 
@@ -2191,7 +2400,10 @@ activated-empty and unarmed at `0 / 30`, A017 is
 
 ### Phase 12 - Incremental Capability Migration And Qt Retirement
 
-Status: `ACTIVE`; R011-R029 plus Shadow-001/002/003 are `COMPLETE` on local `master`; remaining Qt retirement stays incremental
+Lifecycle: `BLOCKED`. R011-R034A are canonical `COMPLETE`; the remaining R034
+legacy-candle cutover is blocked on Steven's explicit destructive-operation
+approval. No Phase 12 implementation is the current active priority. Any later
+Qt retirement remains incremental and separately scoped.
 
 - R011 adds one versioned `get_chart_snapshot` host command backed only by stored `opportunity-minute-bars.json` and `daily-ohlc-bars.json` evidence.
 - WPF renders `1m`, deterministically aggregated `5m`/`15m`, and `Daily` candles with bodies, wicks, and volume. Source lineage and `AVAILABLE`, `STALE`, `INSUFFICIENT_DATA`, or `UNAVAILABLE` state remain visible.
@@ -2279,7 +2491,10 @@ Status: `COMPLETE`; bounded collector and exact-code live proof verified
 
 #### ARGUS-R032B - Schwab Historical Candle Backfill
 
-Status: `VERIFIED_ON_INTEGRATION_BRANCH`; source commit `9f9ac96`
+Lifecycle: `COMPLETE`; source implementation `9f9ac96` was reconciled as
+canonical integration commit `a4a208e` and included in combined closeout
+`af783da`, which is an ancestor of current `master` and installed product
+`e69426b3`.
 
 - Fill the product gap exposed by R033's visual review: the 60-second R032 proof
   is transport evidence, not a usable chart history.
@@ -2301,8 +2516,10 @@ Status: `VERIFIED_ON_INTEGRATION_BRANCH`; source commit `9f9ac96`
 
 #### ARGUS-R033 - Live Chart And Engine Host Integration
 
-Status: `VISUAL_ACCEPTED / COMBINED_VERIFIED_PENDING_MASTER_INTEGRATION`;
-source commit `c88faa4`
+Lifecycle: `COMPLETE`; source implementation `c88faa4` and Steven's visual
+acceptance were reconciled as canonical integration commit `ba5afcc` and
+combined closeout `af783da`, which is an ancestor of current `master` and
+installed product `e69426b3`.
 
 - Python remains authoritative and exposes versioned candle snapshots through
   the Engine Host. WPF consumes only that cached contract and performs no
@@ -2426,7 +2643,12 @@ Status: `BLOCKED`; destructive-operation gate after R032C and R034A pass
 
 ### Phase 13 - Broker Execution Validation Gate
 
-Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_INTRADAY_FOUNDATION_NEXT`
+Lifecycle: `BLOCKED`. The bounded Paper engineering foundation and August 14
+decision evidence are canonical, but no continuous Paper runtime is installed
+or armed. Branch-only `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` is blocked on
+`CONTINUOUS_TRADEPLAN_PRODUCER_UNAVAILABLE`; the next enabling implementation
+is `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001`. Live execution remains separately
+blocked and gains no authority from Paper evidence.
 
 - A001-A003, DATA-005B, and the bounded A004 Paper-engineering runtime are
   integrated. The direct lifecycle proved fractional market/limit/stop/
@@ -2494,9 +2716,45 @@ Status: `PAPER_ENGINEERING_V2_ACTIVE / AUGUST_14_DECISION_PROVEN / CONTINUOUS_IN
   extended-hours execution, and broker-resident linked protection remain
   unproven and fail closed.
 
+#### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001 - Continuous Prospective TradePlan Producer
+
+- Lifecycle: `READY`. This is the exact next implementation task after the
+  active RTD capability task closes.
+- Wire the already-defined prospective lifecycle and successor-setup semantics
+  into production composition so a legitimate same-session opportunity can
+  produce one immutable continuous TradePlan input. Do not invent or loosen a
+  setup, entry, stop, target, freshness, rank, risk, or allocation rule merely
+  to produce a plan.
+- Preserve opening failure independence, arbitrary same-session startup,
+  missed-entry immutability, successor setup identity, current evidence
+  authority, denominator accounting, restart idempotency, and read-only
+  Continuous Runtime operation.
+- Acceptance requires deterministic synthetic and replay proof, current-head
+  integration, full bounded regressions, write-once evidence, no broker/account/
+  order capability, and proof that a valid producer output can be consumed by
+  the existing branch-only Continuous Paper contract without changing either
+  contract's semantics.
+
+#### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
+
+- Lifecycle: `BLOCKED`. Branch
+  `codex/ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` contains a proven downstream
+  implementation, but it is not canonical, installed, or armed.
+- Gate: `CONTINUOUS_TRADEPLAN_PRODUCER_UNAVAILABLE`. After the producer is
+  proven, reconcile the branch onto current canonical without rebase/force,
+  repeat complete Hard Chew, install disabled, prove the exact Paper-only
+  environment read-only, and treat one-entry arming as a separate gate.
+- Current authority remains `CONTINUOUS_PAPER_INSTALLED = NO`,
+  `ENTRY_AUTHORITY_DISABLED`, no Continuous Runtime account/position/order
+  reads, and no Alpaca Live or real-order capability.
+
 ### Phase 13R - Specialist Intelligence Research And Strategy Diversification
 
-Status: `ACTIVE - RESEARCH-ONLY STACK CANONICAL; PRODUCER ACTIVATION AND RETROSPECTIVE REPLAY PLANNED`
+Lifecycle: `READY`. Lane: `RESEARCH_ONLY`. The specialist and denominator
+foundations are canonical; producer activation remains separately gated, while
+TRADE-REPLAY inventory is ready as parallel research and EXIT-POLICY evaluation
+requires an admitted fixed-entry population. Phase 13R does not displace the
+active RTD task or alter the prospective Momentum/Paper control.
 
 Roadmap inclusion authorizes planning and bounded research preparation only.
 It does not activate runtime imports, begin or modify a Paper sample, grant
@@ -2529,6 +2787,8 @@ Intended specialist architecture:
 
 #### ARGUS-DATA-CORPACTION-001 - Analysis Price-Basis And Security-Identity Integrity
 
+- Lifecycle: `PLANNED`. Lane: `RESEARCH_ONLY`. Role:
+  `DATA_INTEGRITY_PREREQUISITE`. Gate: `ADMISSION_REQUIRED`.
 - Preserve raw provider candles unchanged and maintain a separately identified,
   analysis-consistent price/volume basis with complete lineage.
 - Initial scope is forward splits, reverse splits, effective timestamps,
@@ -2539,6 +2799,18 @@ Intended specialist architecture:
   levels, patterns, gaps, MFE/MAE, or historical analogs.
 - This is data-integrity work, not a split strategy. It grants no split score,
   candidate bonus, entry trigger, or strategy authority.
+- `ARGUS-RESEARCH-DATA-002` already provides durable identity, alias,
+  corporate-action event, price-basis, transformation-lineage, and fail-closed
+  admission contracts. It does not provide verified provider-backed action
+  history, point-in-time universe membership, or positive price-basis lineage
+  for the current broad datasets. DATA-CORPACTION-001 must close that operational
+  evidence gap before broad corporate-action-sensitive technical, statistical,
+  replay, MFE/MAE, or exit-policy claims are valid.
+- Broad historical populations remain blocked while identity/basis/action
+  evidence is unresolved. Individual events may proceed only through positive
+  event-level admission proving durable identity, price basis, the relevant
+  corporate-action window, timestamps, and source lineage. No known action is
+  not equivalent to proof that an event is unaffected.
 
 #### ARGUS-SPECIALIST-CONTRACT-001 - Common Specialist Opinion Contract
 
@@ -2728,11 +3000,15 @@ Intended specialist architecture:
 
 #### ARGUS-TRADE-REPLAY-001 - Historical Candidate Recovery And Baseline Replay
 
-- Status: `PLANNED / PARALLEL_RESEARCH / INVENTORY_READY /
-  REPLAY_ADMISSION_BLOCKED`. Failure-boundary discovery and evidence inventory
-  may proceed in an isolated research lane. No candidate or trade may enter a
-  replay population until its complete event chain passes the data-admission
-  rules below.
+- Lifecycle: `PLANNED`. Lane: `PARALLEL_RESEARCH`. Readiness:
+  `INVENTORY_READY`. Gate: `EVENT_LEVEL_ADMISSION_REQUIRED`.
+  Failure-boundary discovery and evidence inventory may proceed in an isolated
+  research lane. No candidate or trade may enter a replay population until its
+  complete event chain passes the data-admission rules below. The resulting
+  inventory must distinguish `REPLAY_READY`,
+  `BLOCKED_CORPORATE_ACTION_OR_BASIS`, `INCOMPLETE_EVIDENCE`, and
+  `REJECTED_UNRELIABLE` populations and reconcile their counts to the complete
+  recovered denominator.
 - Objective: recover candidates identified before and around the relevant
   recent system/data-contract failure boundary, determine which were merely
   surfaced versus prospectively actionable under the strategy and
@@ -2802,10 +3078,11 @@ Intended specialist architecture:
 
 #### ARGUS-EXIT-POLICY-001 - Tiered Exit And Runner Counterfactual Research
 
-- Status: `PLANNED / PARALLEL_RESEARCH /
-  BLOCKED_BY_ARGUS-TRADE-REPLAY-001`. Begin only after TRADE-REPLAY-001 produces
-  a sufficiently trustworthy, admitted, fixed-entry actionable population and
-  the experiment is preregistered under `ARGUS-RESEARCH-GOV-001`.
+- Lifecycle: `PLANNED`. Lane: `PARALLEL_RESEARCH`. Gate:
+  `BLOCKED_BY_ARGUS-TRADE-REPLAY-001`. Begin comparative evaluation only after
+  TRADE-REPLAY-001 produces a sufficiently trustworthy, admitted, fixed-entry
+  actionable population and the experiment is preregistered under
+  `ARGUS-RESEARCH-GOV-001`.
 - Hypothesis: selling 100 percent at the existing first target may truncate the
   right tail of Momentum Hunter returns when some valid entries continue
   materially higher. Null hypothesis: the historical sell-all control is
@@ -2891,6 +3168,14 @@ Intended specialist architecture:
   prospective A/B comparison in which each new live candidate is evaluated by
   the unchanged baseline and the shadow alternative. Production eligibility
   requires both retrospective evidence and sufficient prospective evidence.
+- Any EXIT-POLICY-002 promotion must first adapt, configure, or extend the
+  already-integrated `ARGUS-EXIT-RESEARCH-001` prospective counterfactual
+  framework under a new immutable policy identity. A second independent exit
+  research/runtime engine is permitted only through an explicit architecture
+  decision proving that the selected policy cannot be represented faithfully
+  by the existing framework, identifying the missing capability, preventing
+  duplicate logic/state ownership, and preserving one singular evidence
+  lineage.
 - Kill or defer this experiment when the replay population is insufficient or
   untrustworthy; no material improvement survives the baseline comparison;
   improvement disappears after realistic spread/slippage/order costs; drawdown
@@ -2904,6 +3189,19 @@ Intended specialist architecture:
   live-canary behavior, broker integration, order capability, service,
   scheduler, UI, or prospective baseline. It blocks only a future
   EXIT-POLICY-002 promotion claim.
+
+#### ARGUS-EXIT-POLICY-002 - Experimental Tiered Exit Engine
+
+- Lifecycle: `DEFERRED`. It may begin only after EXIT-POLICY-001 produces a
+  promising admitted retrospective result and a separate promotion decision
+  authorizes a prospective shadow experiment.
+- Prefer configuring or extending `ARGUS-EXIT-RESEARCH-001` under a new
+  immutable policy/sample identity. A distinct engine requires the explicit
+  reuse-insufficiency architecture decision defined by EXIT-POLICY-001.
+- Require deterministic replay tests, small/fractional-position behavior,
+  actual-fill and partial-fill safety, risk/execution review, rollback, and a
+  prospective unchanged-control-versus-shadow-alternative A/B sample. This
+  milestone grants no Paper, Shadow, broker, order, or production authority.
 
 #### ARGUS-EXIT-RESEARCH-001 - Trade-Management And Exit Intelligence
 
