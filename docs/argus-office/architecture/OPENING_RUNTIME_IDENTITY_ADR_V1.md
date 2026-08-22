@@ -160,3 +160,80 @@ repin tool against the resulting clean canonical head. Verify Monday remains
 08:35/08:40 Pending, service heartbeat advances, Shadow enabled is zero, and
 order transmission is unavailable. No reset, rebase, force-push, historical
 receipt rewrite, or market replay is used.
+
+## V2 Boundary Completeness Reconciliation
+
+`ARGUS-AUTOMATION-RUNTIME-IDENTITY-002` audited the active V1 contract without
+changing its production semantics. The active surface is safe for the August
+24 opening, but it is broader than the actual static opening dependency graph.
+
+### Measured Boundary
+
+- V1 includes 208 Python files below `momentum_hunter/` plus the Python runner,
+  PowerShell launcher, and `requirements.txt`: 211 files total.
+- Static import closure from `automation_supervisor.py` and
+  `tools/capture_job.py` reaches 94 package modules plus the three explicit
+  files: 97 files total.
+- The other 114 package modules are not imported by the current opening roots.
+- No local import escapes the proposed closure and no `importlib`,
+  `__import__`, plugin-discovery, `runpy`, or `pkgutil` dynamic-loading call is
+  present in the current closure.
+- The static closure remains conservative because the shared runner imports
+  branch-only Paper, Shadow, and administrative code. It is not represented as
+  the mathematically minimal opening execution set.
+
+### Broadness Decision
+
+The V1 package rule is `BOUNDARY_SAFE_BUT_OVERBROAD`. A one-byte change to the
+positively isolated `event_shock_specialist.py` research module changes V1
+identity even though that module is absent from the opening closure. WPF-only
+source, Roadmap/governance Markdown, release documentation, tests, and
+non-runner tools remain excluded and do not change V1 identity.
+
+The environment rule is `ENVIRONMENT_BOUNDARY_OVERBROAD`. It binds the full
+installed Python distribution inventory, so adding an unused analysis package
+requires promotion. This is safe but operationally broader than binding only
+declared and imported opening dependencies. Imported third-party roots observed
+in the opening closure are `bs4`, `requests`, and `websocket`; the approved
+environment also binds interpreter bytes/version, PowerShell bytes/version,
+service-host bytes, platform, machine, Windows version, and timezone.
+
+No production narrowing is authorized by this reconciliation. Conservative
+false positives remain preferable to an unqualified false negative before the
+first Monday opening under the new channel.
+
+### Qualification Rules For A Future Refinement
+
+A dependency-closure implementation may replace the whole-package rule only
+after all of the following remain mandatory qualification gates:
+
+1. Recompute the closure from the supervisor and actual runner roots.
+2. Reject every local import resolving outside the proposed surface.
+3. Reject dynamic loading until each site and target is explicitly classified
+   and fingerprinted.
+4. Include the runner, PowerShell launcher, requirements contract, nonsecret
+   runtime configuration, imported distributions, interpreter, PowerShell,
+   service host, and loaded-process hashes.
+5. Prove modify/add/delete/rename behavior and the complete runtime mutation
+   matrix on disposable roots.
+6. Keep unknown project configuration fields fail closed.
+7. Preserve separate source-Git provenance and execution authority.
+
+The offline `tools/audit_opening_runtime_boundary.py` tool and
+`tests/test_opening_runtime_boundary.py` enforce the first three rules during
+qualification. They do not define production authority and are not imported by
+the service.
+
+### Future Development Workflow
+
+Under V1, docs and WPF commits can advance canonical Git without promotion,
+but a positively isolated research-package commit still requires promotion.
+A future refined release should allow docs, WPF, tests, offline tools, and
+positively excluded research modules to advance without promotion, then fail
+closed as soon as an opening parser, schema/plausibility gate, candidate,
+scoring, TradePlan/report, calendar, runner, launcher, configuration,
+interpreter, or relevant dependency changes.
+
+The loaded-bytes guarantee is unchanged: the release's supervisor,
+runtime-identity gate, and service-host hashes must match the long-running
+process identities before `runtimeMatch` can be true.
