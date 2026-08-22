@@ -521,3 +521,20 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Audit commit `75ace1334fe86a77eb09b2e5919cc6afa37dbc28` was pushed on the
   feature branch, cleanly fast-forwarded to synchronized canonical `master`,
   and pushed normally. The integration changed no product/runtime path.
+## 2026-08-21 - AUTOMATION-RUNTIME-IDENTITY-001 Branch Qualification
+
+- Created an isolated task worktree from clean synchronized canonical
+  `f2c2b65d3741d7658947aec7493b08ad5096336d`; the active RTD experiment was
+  neither staged nor changed.
+- Selected checkout fingerprint Model B after comparing whole-Git pinning and
+  immutable deployed-runtime alternatives. Added the versioned runtime surface,
+  environment/config identity, immutable release and promotion chain, explicit
+  promotion CLI, supervisor execution gate, receipt fields, future-only atomic
+  migration, service loaded-host identity, and bounded update tooling.
+- A complete Codex Security diff review found three authorization-evidence
+  gaps. Fixed all three before qualification by binding all installed Python
+  distributions, every historical release/receipt filename, and fresh
+  timezone-aware supervisor heartbeat state.
+- Passed 85 focused tests, 2,714 full Python tests, 259 full .NET tests,
+  compileall, PowerShell parsing, and diff checks. Production remains unchanged
+  on 15 exact-Git-pinned future openings pending physical proof.

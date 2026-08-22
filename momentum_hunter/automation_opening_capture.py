@@ -27,7 +27,8 @@ def build_opening_capture_jobs(
     *,
     start_date: date,
     market_sessions: int,
-    expected_git_head: str,
+    expected_git_head: str = "",
+    approved_runtime_channel: str = "",
     shadow_dates: Iterable[date] = (),
 ) -> list[dict[str, object]]:
     if not 1 <= market_sessions <= MAX_MARKET_SESSIONS:
@@ -35,8 +36,20 @@ def build_opening_capture_jobs(
             f"market_sessions must be between 1 and {MAX_MARKET_SESSIONS}."
         )
     normalized_head = expected_git_head.strip()
-    if not GIT_SHA_PATTERN.fullmatch(normalized_head):
+    normalized_channel = approved_runtime_channel.strip()
+    if not normalized_head and not normalized_channel:
+        raise ValueError(
+            "expected_git_head must be a full lowercase Git SHA or an "
+            "approved_runtime_channel must be supplied."
+        )
+    if normalized_head and normalized_channel:
+        raise ValueError(
+            "Exactly one expected_git_head or approved_runtime_channel is required."
+        )
+    if normalized_head and not GIT_SHA_PATTERN.fullmatch(normalized_head):
         raise ValueError("expected_git_head must be a full lowercase Git SHA.")
+    if normalized_channel and normalized_channel != "opening-capture":
+        raise ValueError("approved_runtime_channel must be opening-capture.")
     shadow_days = set(shadow_dates)
     jobs: list[dict[str, object]] = []
     candidate = start_date
@@ -50,8 +63,7 @@ def build_opening_capture_jobs(
                     OPENING_CAPTURE_TIME,
                     tzinfo=CENTRAL_TZ,
                 )
-                jobs.append(
-                    {
+                job = {
                         "jobId": f"opening-capture-{candidate:%Y%m%d}",
                         "kind": OPENING_CAPTURE_KIND,
                         "scheduledAt": scheduled_at.isoformat(),
@@ -60,9 +72,12 @@ def build_opening_capture_jobs(
                         ).isoformat(),
                         "enabled": True,
                         "timeoutSeconds": 900,
-                        "expectedGitHead": normalized_head,
                     }
-                )
+                if normalized_channel:
+                    job["approvedRuntimeChannel"] = normalized_channel
+                else:
+                    job["expectedGitHead"] = normalized_head
+                jobs.append(job)
         candidate += timedelta(days=1)
     return jobs
 
@@ -73,6 +88,7 @@ def plan_opening_capture_manifest(
     start_date: date,
     market_sessions: int,
     expected_git_head: str,
+    approved_runtime_channel: str = "",
     terminal_job_ids: Iterable[str] = (),
 ) -> dict[str, object]:
     raw_jobs = payload.get("jobs", [])
@@ -111,6 +127,7 @@ def plan_opening_capture_manifest(
         start_date=start_date,
         market_sessions=market_sessions,
         expected_git_head=expected_git_head,
+        approved_runtime_channel=approved_runtime_channel,
         shadow_dates=shadow_dates,
     )
     opening_by_id = {str(job["jobId"]): job for job in opening_jobs}
@@ -123,7 +140,7 @@ def plan_opening_capture_manifest(
             raise ValueError(
                 "A retained dependent opening job has no repinned opening capture."
             )
-        job["expectedGitHead"] = dependency["expectedGitHead"]
+        job["expectedGitHead"] = expected_git_head
     retained_by_id = {str(job.get("jobId", "")): job for job in retained_jobs}
     for job in retained_jobs:
         if job.get("kind") != "successor_setup_pass2":
@@ -154,6 +171,7 @@ def write_validated_plan(
     start_date: date,
     market_sessions: int,
     expected_git_head: str,
+    approved_runtime_channel: str = "",
     terminal_job_ids: Iterable[str] = (),
 ) -> dict[str, object]:
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -162,6 +180,7 @@ def write_validated_plan(
         start_date=start_date,
         market_sessions=market_sessions,
         expected_git_head=expected_git_head,
+        approved_runtime_channel=approved_runtime_channel,
         terminal_job_ids=terminal_job_ids,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -204,7 +223,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--start-date", type=date.fromisoformat, required=True)
-    parser.add_argument("--expected-git-head", required=True)
+    parser.add_argument("--expected-git-head", default="")
+    parser.add_argument("--approved-runtime-channel", default="")
     parser.add_argument(
         "--market-sessions",
         type=int,
@@ -222,6 +242,7 @@ def main() -> int:
         start_date=args.start_date,
         market_sessions=args.market_sessions,
         expected_git_head=args.expected_git_head,
+        approved_runtime_channel=args.approved_runtime_channel,
         terminal_job_ids=args.terminal_job_id,
     )
     print(json.dumps(summary, indent=2))

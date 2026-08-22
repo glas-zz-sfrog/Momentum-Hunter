@@ -734,3 +734,12 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - No Momentum Hunter product/runtime source, provider behavior, service,
   scheduler, manifest, credential, account, broker, order, or historical
   evidence changed.
+## 2026-08-21 - Approved Opening Runtime Identity
+
+- Added a conservative actual-byte/configuration/environment identity for the
+  unattended opening path, immutable approved releases, tamper-evident promotion
+  receipts, an atomic active channel, and pre-run supervisor enforcement.
+- Added dual Git provenance to opening receipts and preserved legacy exact-Git
+  behavior, session times, latest-start rules, capture semantics, and authority.
+- Added atomic future-pending-opening migration and service update/rollback
+  tooling. No production activation is claimed before the physical canary.

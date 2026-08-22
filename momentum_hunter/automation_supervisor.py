@@ -39,6 +39,15 @@ from momentum_hunter.schwab_onboarding import (
     SchwabOAuthSecretRepository,
 )
 from momentum_hunter.schwab_readonly import redact_value
+from momentum_hunter.opening_runtime_identity import (
+    DEFAULT_RELEASE_ROOT,
+    LOADED_RUNTIME_IDENTITY_MODULE_SHA256,
+    OpeningRuntimeGateResult,
+    OpeningRuntimeIdentityError,
+    RuntimeIdentityContext,
+    file_sha256 as runtime_file_sha256,
+    verify_execution_gate,
+)
 
 
 MANIFEST_SCHEMA_VERSION = 1
@@ -48,6 +57,7 @@ STATE_REPLACE_RETRY_DELAY_SECONDS = 0.05
 JOB_KINDS = frozenset(
     {
         "nonmarket_canary",
+        "runtime_identity_canary",
         "opening_capture",
         "shadow_opening",
         "paper_engineering",
@@ -108,6 +118,7 @@ class AutomationJob:
     prompt_path: Path | None = None
     expected_output: str = ""
     timeout_seconds: int = 1800
+    approved_runtime_channel: str = ""
 
 
 @dataclass(frozen=True)
@@ -122,6 +133,8 @@ class AutomationManifest:
     jobs: tuple[AutomationJob, ...]
     expected_account_ending: str = ""
     expected_account_type: str = "INDIVIDUAL_CASH"
+    service_host_executable: Path | None = None
+    opening_runtime_release_root: Path = DEFAULT_RELEASE_ROOT
 
 
 @dataclass
@@ -138,6 +151,18 @@ class JobReceipt:
     reason: str = ""
     log_path: str = ""
     depends_on_job_id: str = ""
+    runtime_identity_mode: str = "LEGACY_EXACT_GIT"
+    approved_runtime_channel: str = ""
+    approved_release_id: str = ""
+    approved_release_fingerprint: str = ""
+    runtime_surface_fingerprint: str = ""
+    configuration_fingerprint: str = ""
+    environment_fingerprint: str = ""
+    approved_runtime_fingerprint: str = ""
+    release_source_git_sha: str = ""
+    current_git_sha_at_execution: str = ""
+    runtime_match: bool | None = None
+    runtime_identity_failure_code: str = ""
 
 
 @dataclass
@@ -149,12 +174,19 @@ class SupervisorState:
     engine_host_state: str = "UNKNOWN"
     engine_host_detail: str = ""
     engine_host_observed_at: str = ""
+    loaded_supervisor_sha256: str = ""
+    loaded_runtime_identity_module_sha256: str = ""
+    loaded_service_host_sha256: str = ""
     jobs: dict[str, JobReceipt] = field(default_factory=dict)
 
 
 Clock = Callable[[], datetime]
 EngineHostProbe = Callable[[], Mapping[str, object]]
 JobExecutor = Callable[[AutomationJob, Path], tuple[int, str]]
+RuntimeGate = Callable[[AutomationJob], OpeningRuntimeGateResult]
+
+
+LOADED_SUPERVISOR_SHA256 = runtime_file_sha256(Path(__file__))
 
 
 def parse_manifest(path: Path) -> AutomationManifest:
@@ -178,6 +210,22 @@ def parse_manifest(path: Path) -> AutomationManifest:
     engine_host_state_directory = _required_path(
         payload,
         "engineHostStateDirectory",
+    )
+    service_host_value = str(payload.get("serviceHostExecutable", "")).strip()
+    service_host_executable = (
+        Path(service_host_value).resolve() if service_host_value else None
+    )
+    if service_host_executable is not None and not service_host_executable.is_file():
+        raise ManifestValidationError(
+            "Configured serviceHostExecutable file does not exist."
+        )
+    release_root_value = str(
+        payload.get("openingRuntimeReleaseRoot", "")
+    ).strip()
+    opening_runtime_release_root = (
+        Path(release_root_value).resolve()
+        if release_root_value
+        else DEFAULT_RELEASE_ROOT
     )
     codex_value = str(payload.get("codexExecutable", "")).strip()
     codex_executable = Path(codex_value).resolve() if codex_value else None
@@ -308,6 +356,8 @@ def parse_manifest(path: Path) -> AutomationManifest:
         jobs=jobs,
         expected_account_ending=expected_account_ending,
         expected_account_type=expected_account_type,
+        service_host_executable=service_host_executable,
+        opening_runtime_release_root=opening_runtime_release_root,
     )
 
 
@@ -385,15 +435,41 @@ def _parse_job(
             f"Job {job_id!r} timeoutSeconds must be between 1 and {maximum_timeout}."
         )
     expected_git_head = str(payload.get("expectedGitHead", "")).strip().lower()
+    approved_runtime_channel = str(
+        payload.get("approvedRuntimeChannel", "")
+    ).strip()
     proof_bundle_path = _optional_path(payload.get("proofBundlePath"))
     task_definition_path = _optional_path(payload.get("taskDefinitionPath"))
     prompt_path = _optional_path(payload.get("promptPath"))
     expected_output = str(payload.get("expectedOutput", "")).strip()
 
-    if kind in REPOSITORY_PINNED_JOB_KINDS:
+    if kind == "opening_capture":
+        if bool(expected_git_head) == bool(approved_runtime_channel):
+            raise ManifestValidationError(
+                "Opening captures require exactly one full expectedGitHead or "
+                "approvedRuntimeChannel."
+            )
+        if expected_git_head and not GIT_SHA_PATTERN.fullmatch(expected_git_head):
+            raise ManifestValidationError(
+                "Legacy opening captures require a full expectedGitHead."
+            )
+        if approved_runtime_channel != "opening-capture" and approved_runtime_channel:
+            raise ManifestValidationError(
+                "Opening captures require the opening-capture runtime channel."
+            )
+    elif kind == "runtime_identity_canary":
+        if expected_git_head or approved_runtime_channel != "opening-capture":
+            raise ManifestValidationError(
+                "Runtime identity canaries require only the opening-capture channel."
+            )
+    elif kind in REPOSITORY_PINNED_JOB_KINDS:
         if not GIT_SHA_PATTERN.fullmatch(expected_git_head):
             raise ManifestValidationError(
                 "Market runtime jobs require a full expectedGitHead."
+            )
+        if approved_runtime_channel:
+            raise ManifestValidationError(
+                "Only opening captures may resolve an approved runtime channel."
             )
     if kind == "shadow_opening":
         if proof_bundle_path is None or not proof_bundle_path.is_dir():
@@ -416,7 +492,12 @@ def _parse_job(
             raise ManifestValidationError(
                 f"Job {job_id!r} cannot carry Shadow opening authority."
             )
-    elif expected_git_head or proof_bundle_path or task_definition_path:
+    elif (
+        expected_git_head
+        or approved_runtime_channel and kind != "runtime_identity_canary"
+        or proof_bundle_path
+        or task_definition_path
+    ):
         raise ManifestValidationError(
             f"Job {job_id!r} cannot carry Shadow opening authority."
         )
@@ -452,6 +533,7 @@ def _parse_job(
         prompt_path=prompt_path,
         expected_output=expected_output,
         timeout_seconds=timeout_seconds,
+        approved_runtime_channel=approved_runtime_channel,
     )
 
 
@@ -542,6 +624,15 @@ class SupervisorStateStore:
             engine_host_observed_at=str(
                 payload.get("engine_host_observed_at", "")
             ),
+            loaded_supervisor_sha256=str(
+                payload.get("loaded_supervisor_sha256", "")
+            ),
+            loaded_runtime_identity_module_sha256=str(
+                payload.get("loaded_runtime_identity_module_sha256", "")
+            ),
+            loaded_service_host_sha256=str(
+                payload.get("loaded_service_host_sha256", "")
+            ),
             jobs=jobs,
         )
 
@@ -584,11 +675,13 @@ class AutomationSupervisor:
         clock: Clock | None = None,
         engine_host_probe: EngineHostProbe | None = None,
         job_executor: JobExecutor | None = None,
+        runtime_gate: RuntimeGate | None = None,
     ) -> None:
         self.manifest = manifest
         self.clock = clock or (lambda: datetime.now().astimezone())
         self.engine_host_probe = engine_host_probe or self._probe_engine_host
         self.job_executor = job_executor or self._execute_job
+        self.runtime_gate = runtime_gate or self._verify_runtime_identity
         started_at = self.clock()
         self.state_store = SupervisorStateStore(
             manifest.state_directory / "automation-service-state.json"
@@ -596,6 +689,14 @@ class AutomationSupervisor:
         self.state = self.state_store.load(started_at=started_at)
         self.state.service_instance_id = uuid.uuid4().hex
         self.state.service_started_at = started_at.isoformat()
+        self.state.loaded_supervisor_sha256 = LOADED_SUPERVISOR_SHA256
+        self.state.loaded_runtime_identity_module_sha256 = (
+            LOADED_RUNTIME_IDENTITY_MODULE_SHA256
+        )
+        self.state.loaded_service_host_sha256 = os.environ.get(
+            "MOMENTUM_HUNTER_LOADED_SERVICE_HOST_SHA256",
+            "",
+        )
         self._last_engine_probe_monotonic = 0.0
 
     def tick(self) -> SupervisorState:
@@ -607,6 +708,10 @@ class AutomationSupervisor:
         )
         for job in opening_jobs:
             self._evaluate_job(job, now)
+        now = self.clock()
+        for job in self.manifest.jobs:
+            if job.kind == "runtime_identity_canary":
+                self._evaluate_job(job, now)
         now = self.clock()
         for job in self.manifest.jobs:
             if job.kind == "successor_setup_pass1":
@@ -740,7 +845,29 @@ class AutomationSupervisor:
                 )
                 return
 
+        gate_result: OpeningRuntimeGateResult | None = None
+        if job.approved_runtime_channel:
+            try:
+                gate_result = self.runtime_gate(job)
+            except OpeningRuntimeIdentityError as exc:
+                failed = self._receipt(
+                    job,
+                    now,
+                    "FAILED",
+                    f"Opening runtime identity rejected before launch: {exc.code}.",
+                )
+                failed.runtime_identity_mode = "APPROVED_RUNTIME_RELEASE"
+                failed.approved_runtime_channel = job.approved_runtime_channel
+                failed.runtime_match = False
+                failed.runtime_identity_failure_code = exc.code
+                failed.completed_at = now.isoformat()
+                self.state.jobs[job.job_id] = failed
+                self.state_store.save(self.state)
+                return
+
         running = self._receipt(job, now, "RUNNING", "Job process started.")
+        if gate_result is not None:
+            self._apply_runtime_gate(running, gate_result)
         running.started_at = now.isoformat()
         self.state.jobs[job.job_id] = running
         self.state_store.save(self.state)
@@ -781,6 +908,51 @@ class AutomationSupervisor:
             observed_at=now.isoformat(),
             reason=reason,
             depends_on_job_id=job.depends_on_job_id,
+            approved_runtime_channel=job.approved_runtime_channel,
+        )
+
+    @staticmethod
+    def _apply_runtime_gate(
+        receipt: JobReceipt,
+        result: OpeningRuntimeGateResult,
+    ) -> None:
+        receipt.runtime_identity_mode = "APPROVED_RUNTIME_RELEASE"
+        receipt.approved_runtime_channel = result.channel
+        receipt.approved_release_id = result.release_id
+        receipt.approved_release_fingerprint = result.release_fingerprint
+        receipt.runtime_surface_fingerprint = result.runtime_surface_fingerprint
+        receipt.configuration_fingerprint = result.configuration_fingerprint
+        receipt.environment_fingerprint = result.environment_fingerprint
+        receipt.approved_runtime_fingerprint = result.approved_runtime_fingerprint
+        receipt.release_source_git_sha = result.release_source_git_sha
+        receipt.current_git_sha_at_execution = result.current_git_sha
+        receipt.runtime_match = result.runtime_match
+
+    def _verify_runtime_identity(
+        self,
+        job: AutomationJob,
+    ) -> OpeningRuntimeGateResult:
+        if self.manifest.service_host_executable is None:
+            raise OpeningRuntimeIdentityError(
+                "SERVICE_HOST_IDENTITY_MISSING",
+                "Approved runtime jobs require a configured service host identity.",
+            )
+        context = RuntimeIdentityContext(
+            repository_root=self.manifest.repository_root,
+            python_executable=self.manifest.python_executable,
+            powershell_executable=self.manifest.powershell_executable,
+            state_directory=self.manifest.state_directory,
+            engine_host_state_directory=self.manifest.engine_host_state_directory,
+            poll_interval_seconds=self.manifest.poll_interval_seconds,
+            service_host_executable=self.manifest.service_host_executable,
+            release_root=self.manifest.opening_runtime_release_root,
+        )
+        return verify_execution_gate(
+            context,
+            channel=job.approved_runtime_channel,
+            loaded_supervisor_sha256=LOADED_SUPERVISOR_SHA256,
+            loaded_identity_module_sha256=LOADED_RUNTIME_IDENTITY_MODULE_SHA256,
+            loaded_service_host_sha256=self.state.loaded_service_host_sha256,
         )
 
     def _probe_engine_host(self) -> Mapping[str, object]:
@@ -801,8 +973,11 @@ class AutomationSupervisor:
     ) -> tuple[int, str]:
         if job.kind == "nonmarket_canary":
             return self._run_nonmarket_canary(log_path)
+        if job.kind == "runtime_identity_canary":
+            return self._run_runtime_identity_canary(job, log_path)
         if job.kind == "opening_capture":
-            self._validate_repository_identity(job.expected_git_head)
+            if not job.approved_runtime_channel:
+                self._validate_repository_identity(job.expected_git_head)
             command = self._opening_capture_command()
             return self._run_process(
                 command,
@@ -867,6 +1042,40 @@ class AutomationSupervisor:
                 return 1, "Codex service probe returned unexpected output."
             return 0, "Codex service probe returned the expected output."
         raise AutomationSupervisorError(f"Unsupported job kind: {job.kind}")
+
+    def _run_runtime_identity_canary(
+        self,
+        job: AutomationJob,
+        log_path: Path,
+    ) -> tuple[int, str]:
+        receipt = self.state.jobs[job.job_id]
+        evidence = {
+            "schemaVersion": 1,
+            "mode": "OPENING_RUNTIME_IDENTITY_CANARY",
+            "jobId": job.job_id,
+            "approvedRuntimeChannel": receipt.approved_runtime_channel,
+            "approvedReleaseId": receipt.approved_release_id,
+            "approvedReleaseFingerprint": receipt.approved_release_fingerprint,
+            "runtimeSurfaceFingerprint": receipt.runtime_surface_fingerprint,
+            "configurationFingerprint": receipt.configuration_fingerprint,
+            "environmentFingerprint": receipt.environment_fingerprint,
+            "releaseSourceGitSha": receipt.release_source_git_sha,
+            "currentGitShaAtExecution": receipt.current_git_sha_at_execution,
+            "runtimeMatch": receipt.runtime_match,
+            "providerRequested": False,
+            "accountValuesRequested": False,
+            "positionsRequested": False,
+            "paperRequested": False,
+            "shadowRequested": False,
+            "ordersRequested": False,
+            "orderTransmission": "UNAVAILABLE",
+        }
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return 0, "Approved opening runtime identity canary completed."
 
     def _run_nonmarket_canary(self, log_path: Path) -> tuple[int, str]:
         binding = EncryptedSchwabAccountBindingStore().load()
@@ -1163,6 +1372,8 @@ def _manifest_runtime_identity(
         manifest.poll_interval_seconds,
         manifest.expected_account_ending,
         manifest.expected_account_type,
+        manifest.service_host_executable,
+        manifest.opening_runtime_release_root,
     )
 
 
@@ -1303,6 +1514,11 @@ def status_report(manifest_path: Path) -> dict[str, object]:
         "lastHeartbeatAt": state.last_heartbeat_at,
         "engineHostState": state.engine_host_state,
         "engineHostDetail": state.engine_host_detail,
+        "loadedSupervisorSha256": state.loaded_supervisor_sha256,
+        "loadedRuntimeIdentityModuleSha256": (
+            state.loaded_runtime_identity_module_sha256
+        ),
+        "loadedServiceHostSha256": state.loaded_service_host_sha256,
         "jobs": {
             key: {
                 "kind": value.kind,
@@ -1311,6 +1527,15 @@ def status_report(manifest_path: Path) -> dict[str, object]:
                 "observedAt": value.observed_at,
                 "exitCode": value.exit_code,
                 "reason": value.reason,
+                "runtimeIdentityMode": value.runtime_identity_mode,
+                "approvedRuntimeChannel": value.approved_runtime_channel,
+                "approvedReleaseId": value.approved_release_id,
+                "releaseSourceGitSha": value.release_source_git_sha,
+                "currentGitShaAtExecution": value.current_git_sha_at_execution,
+                "runtimeMatch": value.runtime_match,
+                "runtimeIdentityFailureCode": (
+                    value.runtime_identity_failure_code
+                ),
             }
             for key, value in sorted(state.jobs.items())
         },

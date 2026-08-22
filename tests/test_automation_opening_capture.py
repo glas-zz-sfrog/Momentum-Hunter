@@ -60,6 +60,22 @@ class AutomationOpeningCaptureTests(unittest.TestCase):
         self.assertTrue(all(
             str(job["scheduledAt"])[11:19] == "08:35:00" for job in jobs
         ))
+
+    def test_release_channel_plan_preserves_dates_without_per_job_git_pins(self) -> None:
+        jobs = build_opening_capture_jobs(
+            start_date=date(2026, 8, 24),
+            market_sessions=3,
+            approved_runtime_channel="opening-capture",
+        )
+
+        self.assertEqual(3, len(jobs))
+        self.assertTrue(all(
+            job["approvedRuntimeChannel"] == "opening-capture" for job in jobs
+        ))
+        self.assertTrue(all("expectedGitHead" not in job for job in jobs))
+        self.assertTrue(all(
+            str(job["scheduledAt"])[11:19] == "08:35:00" for job in jobs
+        ))
         self.assertTrue(all(
             (
                 datetime.fromisoformat(str(job["latestStartAt"]))

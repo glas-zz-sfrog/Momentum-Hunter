@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 
 namespace MomentumHunter.AutomationService;
 
@@ -139,6 +140,7 @@ public sealed class PythonAutomationSupervisorWorker(
     : BackgroundService
 {
     private Process? _process;
+    private readonly string _loadedServiceHostSha256 = ComputeLoadedServiceHostSha256();
 
     public ProcessStartInfo BuildStartInfo()
     {
@@ -167,9 +169,24 @@ public sealed class PythonAutomationSupervisorWorker(
         startInfo.ArgumentList.Add(options.ManifestPath);
         startInfo.Environment["PYTHONUTF8"] = "1";
         startInfo.Environment["MOMENTUM_HUNTER_SERVICE_MODE"] = "1";
+        startInfo.Environment["MOMENTUM_HUNTER_LOADED_SERVICE_HOST_SHA256"] =
+            _loadedServiceHostSha256;
         startInfo.Environment.Remove("OPENAI_API_KEY");
         startInfo.Environment.Remove("CODEX_API_KEY");
         return startInfo;
+    }
+
+    private static string ComputeLoadedServiceHostSha256()
+    {
+        var executable = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
+        {
+            throw new InvalidOperationException(
+                "The loaded Automation Service executable cannot be identified.");
+        }
+
+        using var stream = File.OpenRead(executable);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

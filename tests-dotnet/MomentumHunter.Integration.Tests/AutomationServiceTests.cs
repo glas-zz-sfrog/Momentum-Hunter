@@ -35,6 +35,9 @@ public sealed class AutomationServiceTests
             },
             startInfo.ArgumentList);
         Assert.Equal("1", startInfo.Environment["MOMENTUM_HUNTER_SERVICE_MODE"]);
+        Assert.Matches(
+            "^[0-9a-f]{64}$",
+            startInfo.Environment["MOMENTUM_HUNTER_LOADED_SERVICE_HOST_SHA256"]!);
         Assert.False(startInfo.Environment.ContainsKey("OPENAI_API_KEY"));
         Assert.False(startInfo.Environment.ContainsKey("CODEX_API_KEY"));
     }

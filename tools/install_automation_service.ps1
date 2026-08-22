@@ -461,6 +461,8 @@ try {
         codexExecutable = $codexPath
         stateDirectory = $stateDirectory
         engineHostStateDirectory = $engineStateDirectory
+        serviceHostExecutable = $serviceExecutable
+        openingRuntimeReleaseRoot = Join-Path $ServiceRoot "opening-runtime"
         expectedAccountEnding = "2573"
         expectedAccountType = "INDIVIDUAL_CASH"
         pollIntervalSeconds = 1

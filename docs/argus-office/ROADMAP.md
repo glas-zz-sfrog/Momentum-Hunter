@@ -55,6 +55,23 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-AUTOMATION-RUNTIME-IDENTITY-001` is an urgent weekend reliability
+exception running in the separate branch/worktree
+`codex/ARGUS-AUTOMATION-RUNTIME-IDENTITY-001`. It is replacing per-date
+whole-repository eligibility for future opening captures with a conservative,
+explicitly promoted opening-runtime release identity. The current exact-Git
+schedule remains the known-good production/rollback state until branch proof,
+physical zero-provider service proof, atomic migration, and Monday readiness
+all pass. This work may not touch the active RTD worktree or its evidence.
+Branch Hard Chew now passes 85 focused tests, all 2,714 Python tests, all 259
+.NET tests, compileall, PowerShell parsing, mutation/tamper coverage, and a
+complete Codex Security diff review. The review's three findings were repaired:
+the environment binds every installed distribution, the full promotion chain
+binds every receipt and historical release, and promotion requires a fresh
+timezone-aware supervisor heartbeat. Classification remains
+`IMPLEMENTED_PENDING_PRODUCTION_PROOF`; no release is promoted and no future
+job is migrated until the zero-provider service proof and rollback package pass.
+
 `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is `ACTIVE` on isolated branch
 `codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` at committed head `e383ac1`, with a
 preserved uncommitted observer-hardening change. Official `tos.rtd` through

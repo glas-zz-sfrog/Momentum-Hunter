@@ -105,3 +105,4 @@
 
 ## Protected Areas
 Protected areas require exact task scope and Hard Chew proof. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, real execution, or unexpected external state.
+| R-101 | Whole-repository Git identity either blocks byte-identical openings after unrelated commits or, if loosened without a complete replacement, permits unqualified runtime drift. | Automation reliability / runtime authorization | Critical | Preserve legacy exact-Git behavior until a conservative actual-byte/config/environment identity, immutable release/promotion chain, fresh loaded-process proof, zero-provider physical canary, atomic future migration, and executable rollback all pass. Bind every installed Python distribution and every promotion-chain release. | Mitigated in branch software; production activation remains blocked on physical proof and Monday readiness. |

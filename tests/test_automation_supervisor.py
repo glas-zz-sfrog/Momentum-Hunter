@@ -18,6 +18,10 @@ from momentum_hunter.automation_supervisor import (
     SupervisorStateStore,
     parse_manifest,
 )
+from momentum_hunter.opening_runtime_identity import (
+    OpeningRuntimeGateResult,
+    OpeningRuntimeIdentityError,
+)
 
 
 UTC = timezone.utc
@@ -660,6 +664,33 @@ class AutomationSupervisorTests(unittest.TestCase):
         ):
             self.parse_payload(payload)
 
+    def test_manifest_accepts_release_channel_opening_and_rejects_dual_identity(
+        self,
+    ) -> None:
+        payload = self.manifest_payload(
+            jobs=[
+                {
+                    "jobId": "opening-capture-20260730",
+                    "kind": "opening_capture",
+                    "scheduledAt": "2026-07-30T08:35:00-05:00",
+                    "latestStartAt": "2026-07-30T08:40:00-05:00",
+                    "approvedRuntimeChannel": "opening-capture",
+                }
+            ]
+        )
+
+        manifest = self.parse_payload(payload)
+
+        self.assertEqual(
+            "opening-capture",
+            manifest.jobs[0].approved_runtime_channel,
+        )
+        self.assertEqual("", manifest.jobs[0].expected_git_head)
+
+        payload["jobs"][0]["expectedGitHead"] = "a" * 40
+        with self.assertRaisesRegex(ManifestValidationError, "exactly one"):
+            self.parse_payload(payload)
+
     def test_manifest_rejects_opening_capture_authority_and_wide_window(
         self,
     ) -> None:
@@ -1132,6 +1163,85 @@ class AutomationSupervisorTests(unittest.TestCase):
 
         run.assert_not_called()
 
+    def test_approved_runtime_opening_records_release_and_current_git(self) -> None:
+        job = self.job(
+            kind="opening_capture",
+            approved_runtime_channel="opening-capture",
+        )
+        gate = self.runtime_gate_result()
+        supervisor = AutomationSupervisor(
+            self.manifest(job),
+            clock=lambda: self.now,
+            engine_host_probe=self.healthy_engine,
+            job_executor=self.execute,
+            runtime_gate=lambda _job: gate,
+        )
+
+        state = supervisor.tick()
+
+        receipt = state.jobs[job.job_id]
+        self.assertEqual([job.job_id], self.executed)
+        self.assertEqual("COMPLETED", receipt.status)
+        self.assertEqual("APPROVED_RUNTIME_RELEASE", receipt.runtime_identity_mode)
+        self.assertEqual("OPENING-RUNTIME-" + "1" * 20, receipt.approved_release_id)
+        self.assertEqual("a" * 40, receipt.release_source_git_sha)
+        self.assertEqual("b" * 40, receipt.current_git_sha_at_execution)
+        self.assertTrue(receipt.runtime_match)
+
+    def test_approved_runtime_failure_stops_before_job_executor(self) -> None:
+        job = self.job(
+            kind="opening_capture",
+            approved_runtime_channel="opening-capture",
+        )
+
+        def reject(_job: AutomationJob) -> OpeningRuntimeGateResult:
+            raise OpeningRuntimeIdentityError(
+                "APPROVED_RUNTIME_MISMATCH",
+                "fixture mismatch",
+            )
+
+        supervisor = AutomationSupervisor(
+            self.manifest(job),
+            clock=lambda: self.now,
+            engine_host_probe=self.healthy_engine,
+            job_executor=self.execute,
+            runtime_gate=reject,
+        )
+
+        state = supervisor.tick()
+
+        receipt = state.jobs[job.job_id]
+        self.assertEqual([], self.executed)
+        self.assertEqual("FAILED", receipt.status)
+        self.assertFalse(receipt.runtime_match)
+        self.assertEqual(
+            "APPROVED_RUNTIME_MISMATCH",
+            receipt.runtime_identity_failure_code,
+        )
+
+    def test_runtime_identity_canary_uses_service_boundary_without_provider(self) -> None:
+        job = self.job(
+            kind="runtime_identity_canary",
+            approved_runtime_channel="opening-capture",
+        )
+        supervisor = AutomationSupervisor(
+            self.manifest(job),
+            clock=lambda: self.now,
+            engine_host_probe=self.healthy_engine,
+            runtime_gate=lambda _job: self.runtime_gate_result(),
+        )
+
+        state = supervisor.tick()
+
+        receipt = state.jobs[job.job_id]
+        evidence = json.loads(Path(receipt.log_path).read_text(encoding="utf-8"))
+        self.assertEqual("COMPLETED", receipt.status)
+        self.assertTrue(evidence["runtimeMatch"])
+        self.assertFalse(evidence["providerRequested"])
+        self.assertFalse(evidence["accountValuesRequested"])
+        self.assertFalse(evidence["ordersRequested"])
+        self.assertEqual("UNAVAILABLE", evidence["orderTransmission"])
+
     def test_hot_reload_accepts_jobs_only_and_rejects_runtime_change(self) -> None:
         first = self.job(kind="nonmarket_canary", job_id="first")
         second = self.job(kind="opening_capture", job_id="second")
@@ -1230,6 +1340,7 @@ class AutomationSupervisorTests(unittest.TestCase):
         task_definition_path: Path | None = None,
         prompt_path: Path | None = None,
         expected_output: str = "",
+        approved_runtime_channel: str = "",
     ) -> AutomationJob:
         scheduled = scheduled_at or self.now
         latest = latest_start_at or (
@@ -1250,11 +1361,28 @@ class AutomationSupervisorTests(unittest.TestCase):
             prompt_path=prompt_path,
             expected_output=expected_output,
             timeout_seconds=30,
+            approved_runtime_channel=approved_runtime_channel,
         )
 
     def execute(self, job: AutomationJob, _log_path: Path) -> tuple[int, str]:
         self.executed.append(job.job_id)
         return 0, "completed"
+
+    @staticmethod
+    def runtime_gate_result() -> OpeningRuntimeGateResult:
+        return OpeningRuntimeGateResult(
+            channel="opening-capture",
+            release_id="OPENING-RUNTIME-" + "1" * 20,
+            release_fingerprint="2" * 64,
+            runtime_surface_fingerprint="3" * 64,
+            configuration_fingerprint="4" * 64,
+            environment_fingerprint="5" * 64,
+            approved_runtime_fingerprint="6" * 64,
+            release_source_git_sha="a" * 40,
+            current_git_sha="b" * 40,
+            current_worktree_clean=True,
+            runtime_match=True,
+        )
 
     @staticmethod
     def healthy_engine() -> dict[str, object]:
