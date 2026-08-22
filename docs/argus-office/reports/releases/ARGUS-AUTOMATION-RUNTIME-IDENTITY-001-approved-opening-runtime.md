@@ -13,8 +13,11 @@
 - Implementation commit:
   `ec199549e96062570864262f181fd339d7596121`, pushed and cleanly
   fast-forwarded to canonical.
-- Classification:
-  `IMPLEMENTED_PENDING_PRODUCTION_PROOF / EXACT_GIT_FALLBACK_ACTIVE`.
+- Approved release: `OPENING-RUNTIME-B7F9069A246ED2D99BC8` from source Git
+  `6e3bf54ad156ecdd82a8d5f105285f83714958c0`.
+- Runtime fingerprint:
+  `b7f9069a246ed2d99bc86396fbc5914a0e541adf8bb766258e01cd0f1e5a85df`.
+- Classification: `PROMOTED_PENDING_ZERO_PROVIDER_CANARY_AND_MIGRATION`.
 
 ## Runtime Contract
 
@@ -87,11 +90,10 @@ Rollback package:
 SHA-256
 `C7FEE933E5F623A6FD4C72DC999B124357364F5897A85DEC433A63F3D8693F5B`.
 
-The feature is integrated. Two service-update UAC prompts were canceled, so no
-release, channel, canary, or future-job migration was created. The exact-Git
-fallback was immediately repinned; 15 future jobs are pending at the integrated
-head, Monday remains 08:35/08:40 CT, service is Running/Automatic, Shadow is
-zero, and order transmission is unavailable. Post-merge 85 Python and 51 .NET
-tests pass. Remaining activation requires one attended elevated service update,
-then explicit Release A promotion, docs-only B, the real zero-provider A/B
-canary, future-only atomic migration, and final Monday readiness.
+The feature is integrated. Two initial service-update UAC prompts were canceled
+and the exact-Git fallback was immediately restored. The attended retry then
+updated the service successfully; installed and loaded identities match, and
+explicit promotion created the release above. No provider/capture/account/Paper/
+Shadow/order action occurred. Remaining activation gates are this docs-only Git
+advance, the real zero-provider different-HEAD canary, future-only atomic
+migration, and final Monday readiness.

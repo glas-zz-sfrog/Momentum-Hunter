@@ -57,24 +57,23 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 `ARGUS-AUTOMATION-RUNTIME-IDENTITY-001` is an urgent weekend reliability
 exception. Qualified implementation commit
-`ec199549e96062570864262f181fd339d7596121` is integrated and pushed, but the
-replacement is not activated. Two required service-update UAC prompts were
-canceled, so no approved release, physical zero-provider canary, or channel
-migration is claimed. The proven exact-Git rollback was immediately applied;
-15 future openings are again pending with zero pin mismatches, Monday remains
-08:35/08:40 CT, and the service is Running/Automatic. The next action is one
-attended elevated service update followed by release promotion, the A-to-B
-docs-only canary, atomic migration, and final readiness. This work may not touch
-the active RTD worktree or its evidence.
+`ec199549e96062570864262f181fd339d7596121` is integrated and pushed. The
+attended elevated service update passed after the earlier canceled attempts,
+and explicit promotion created
+`OPENING-RUNTIME-B7F9069A246ED2D99BC8` from source Git `6e3bf54` with runtime
+fingerprint `b7f9069a246ed2d99bc86396fbc5914a0e541adf8bb766258e01cd0f1e5a85df`.
+The next gates are the docs-only different-HEAD zero-provider canary, atomic
+future-only channel migration, and Monday readiness. Exact-Git remains the
+rollback model until those gates pass. This work may not touch the active RTD
+worktree or its evidence.
 Branch Hard Chew now passes 85 focused tests, all 2,714 Python tests, all 259
 .NET tests, compileall, PowerShell parsing, mutation/tamper coverage, and a
 complete Codex Security diff review. The review's three findings were repaired:
 the environment binds every installed distribution, the full promotion chain
 binds every receipt and historical release, and promotion requires a fresh
 timezone-aware supervisor heartbeat. Classification remains
-`IMPLEMENTED_PENDING_PRODUCTION_PROOF / EXACT_GIT_FALLBACK_ACTIVE`; no release
-is promoted and no future job is migrated until the zero-provider service proof
-passes. Rollback package SHA-256 is
+`PROMOTED_PENDING_ZERO_PROVIDER_CANARY_AND_MIGRATION`; no future job is migrated
+until the zero-provider service proof passes. Rollback package SHA-256 is
 `C7FEE933E5F623A6FD4C72DC999B124357364F5897A85DEC433A63F3D8693F5B`.
 
 `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is `ACTIVE` on isolated branch

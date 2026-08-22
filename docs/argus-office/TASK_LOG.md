@@ -544,3 +544,9 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   future openings at the integrated head with zero mismatches; post-merge 85
   Python and 51 .NET tests pass. Physical proof remains pending one attended
   UAC approval.
+- The attended retry updated the Automation Service and produced matching
+  installed/loaded host, supervisor, and identity-gate hashes. Explicit
+  promotion created `OPENING-RUNTIME-B7F9069A246ED2D99BC8` from source Git
+  `6e3bf54`, fingerprint `b7f9069a...e5a85df`; no Paper, Shadow, broker, order,
+  provider, or capture operation occurred. Docs-only divergence, canary,
+  migration, and final readiness remain pending.
