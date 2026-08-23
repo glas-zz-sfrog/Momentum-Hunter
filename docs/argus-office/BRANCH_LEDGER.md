@@ -1160,3 +1160,9 @@ Use a fresh task branch from local `master` instead.
 | --- | --- | --- | --- | --- | --- | --- |
 | `codex/ARGUS-OVERNIGHT-EVIDENCE-ISOLATION-RECONCILIATION-001` | Audit `75ace1334fe86a77eb09b2e5919cc6afa37dbc28` / exact synchronized base `a413ced546c205e1e83e9c35fc7a82ac80488bfa` | Yes | Yes, clean fast-forward | `OVERNIGHT_EVIDENCE_RECONCILED / COMPLETE` | Preserve the original global nonmutation failure while adjudicating all 15 checkpoints and 32 provider/system claims under the canonical provenance model. | No full rerun. Run only the smallest separately authorized provider probe before promoting an unproven capability. |
 | `codex/ARGUS-AUTOMATION-RUNTIME-IDENTITY-001` | base `f2c2b65`; implementation `ec199549e96062570864262f181fd339d7596121`; promoted release source `6e3bf54`; docs-only canary head `45ff047` | Yes | Yes, clean fast-forward | `COMPLETE / APPROVED_RUNTIME_ACTIVE` | Approved opening runtime identity, explicit promotion, execution gate, physical different-HEAD canary, and future-only migration. | Operate the 15 future openings through `opening-capture`; retain exact-Git rollback and promote a new release for any runtime-surface change. |
+
+## 2026-08-23 Tax Sentinel Roadmap Record
+
+| Branch | HEAD / base | Pushed | Merged to local master | Classification | Purpose | Next action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `codex/TAX-SENTINEL-001-roadmap-record` | documentation record / base `6933e49bc42c07914ad319d726625f1ac5692936` | Yes | No | `FUTURE / RECORDED / NOT_AUTHORIZED_FOR_IMPLEMENTATION` | Record a future passive, cross-account, read-only tax-intelligence capability without granting account access, implementation authority, strategy influence, or trading authority. | Preserve branch-only through Monday August 24 opening evidence; later perform a clean documentation-only reconciliation without changing current execution priorities. |

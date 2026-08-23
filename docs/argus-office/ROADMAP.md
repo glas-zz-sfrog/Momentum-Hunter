@@ -232,6 +232,17 @@ next-action language preserved elsewhere cannot supersede this queue.
 - `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` may refine V1 to an authoritative
   dependency-closure and relevant-distribution contract only after Monday
   evidence, with promotion-time integration and repeated physical validation.
+- `TAX-SENTINEL-001 — Cross-Account Read-Only Tax Intelligence` is
+  `FUTURE / RECORDED / NOT_AUTHORIZED_FOR_IMPLEMENTATION`. A later passive,
+  advisory capability may reconcile explicitly authorized read-only brokerage
+  activity across taxable and retirement accounts to surface possible
+  same-account, cross-account, or IRA replacement-purchase tax interactions,
+  estimated recognized-versus-economic P&L, and missing-visibility warnings.
+  It is not an authoritative tax system, may not infer unseen activity, and has
+  no order, cash-transfer, credential, account-setting, TradePlan, stop, target,
+  sizing, or execution authority. No brokerage connection is authorized by
+  this roadmap record. Revisit only when live-trading scale and tax complexity
+  justify separately approved data access and governance.
 - `ARGUS-EXIT-POLICY-002`, ARBITER-001, BEAR-001, broader specialist influence,
   and Phase 14 unattended live execution remain future work and gain no
   authority from roadmap presence.

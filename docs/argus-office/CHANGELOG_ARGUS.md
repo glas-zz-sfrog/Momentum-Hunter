@@ -773,3 +773,15 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   diff, secret, capability, and protected-path checks. Strict fast-forward to
   `87f2ebf` advanced Git while the approved surface and runtime match remained
   unchanged, requiring no service restart, repin, or promotion.
+
+## 2026-08-23 - Tax Sentinel Future Capability Recorded
+
+- Added `TAX-SENTINEL-001 — Cross-Account Read-Only Tax Intelligence` to the
+  deferred Roadmap as `FUTURE / RECORDED / NOT_AUTHORIZED_FOR_IMPLEMENTATION`.
+- Defined the future capability as passive detection, reconciliation, warning,
+  and estimation across separately authorized read-only brokerage sources;
+  authoritative tax records and professional review remain outside Argus.
+- Added no implementation, account connection, credential handling, provider
+  call, runtime behavior, strategy influence, broker scope, or order authority.
+- Preserved Monday's approved opening runtime and canonical Git baseline by
+  keeping this documentation record branch-only until the evidence event closes.

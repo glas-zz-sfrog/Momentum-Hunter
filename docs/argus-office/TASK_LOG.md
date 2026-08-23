@@ -563,3 +563,20 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   reruns changed zero jobs. Monday August 24 remains enabled and `PENDING` at
   08:35/08:40 CT, service heartbeat is fresh, zero jobs are running, zero
   Shadow/Paper jobs are enabled, and NIST-backed Windows Time is synchronized.
+
+## 2026-08-23 - TAX-SENTINEL-001 Future Roadmap Record
+
+- Recorded `TAX-SENTINEL-001 — Cross-Account Read-Only Tax Intelligence` as
+  `FUTURE / RECORDED / NOT_AUTHORIZED_FOR_IMPLEMENTATION` on isolated branch
+  `codex/TAX-SENTINEL-001-roadmap-record` from canonical `6933e49`.
+- Preserved a passive advisory boundary for future cross-account wash-sale,
+  IRA replacement-purchase, realized gain/loss, tax-reserve, tax-lot, and
+  missing-visibility warnings. Broker tax documents, tax software, and a
+  qualified tax professional remain authoritative.
+- Granted no account connection, credential access, provider call, trading
+  scope, order capability, cash or securities movement, or authority over
+  TradePlans, stops, targets, risk sizing, or execution.
+- Kept Monday August 24 opening evidence, the approved runtime, future identity
+  work, Trade Replay / Exit Policy, specialist research, and RTD work unchanged.
+  Canonical integration is intentionally deferred until Monday evidence is
+  terminal so the observer's frozen Git baseline remains exact.
