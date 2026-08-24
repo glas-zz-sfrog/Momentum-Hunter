@@ -17,7 +17,9 @@ param(
 
     [switch]$ValidateOnly,
 
-    [switch]$SyntheticObserverTest
+    [switch]$SyntheticObserverTest,
+
+    [switch]$Resume
 )
 
 $ErrorActionPreference = 'Stop'
@@ -472,6 +474,7 @@ function New-ProvenanceBaseline(
 
     $sourcePaths = @(
         (Join-Path $ProjectRoot 'tools\run_thinkorswim_rtd_campaign.ps1'),
+        (Join-Path $ProjectRoot 'tools\supervise_thinkorswim_rtd_campaign.ps1'),
         (Join-Path $ProjectRoot 'tools\start_thinkorswim_rtd_campaign.ps1'),
         (Join-Path $ProjectRoot 'tools\verify_thinkorswim_rtd_campaign.py'),
         (Join-Path $ProjectRoot 'tools\verify_campaign_provenance.py'),
@@ -488,7 +491,13 @@ function New-ProvenanceBaseline(
         [ordered]@{path=$relative; sha256=Get-Sha256 $resolved}
     })
     $sourceManifestPayload = $sourceManifest | ConvertTo-Json -Compress -Depth 5
-    $process = Get-Process -Id $PID
+    $campaignProcessId = if ($env:MOMENTUM_HUNTER_RTD_SUPERVISOR_PID) {
+        [int]$env:MOMENTUM_HUNTER_RTD_SUPERVISOR_PID
+    }
+    else {
+        $PID
+    }
+    $process = Get-Process -Id $campaignProcessId
     $processExecutable = $process.Path
     $draft = [ordered]@{
         schemaVersion = 1
@@ -568,6 +577,107 @@ function New-ProvenanceBaseline(
     Copy-Item -LiteralPath $ConfigurationPath -Destination (Join-Path $Root 'campaign-configuration.json')
 }
 
+function Remove-OwnedOrphanExcel([string]$Root) {
+    $statusPath = Join-Path $Root 'campaign-status.json'
+    if (-not (Test-Path -LiteralPath $statusPath)) { return }
+    $status = Get-Content -Raw -LiteralPath $statusPath | ConvertFrom-Json
+    if ($null -eq $status.PSObject.Properties['excelProcessId']) { return }
+    $excelProcessId = [int]$status.excelProcessId
+    $process = Get-Process -Id $excelProcessId -ErrorAction SilentlyContinue
+    if ($null -eq $process) { return }
+    if ($process.ProcessName -ne 'EXCEL') {
+        throw "Recorded Excel PID $excelProcessId belongs to a different process."
+    }
+    $eventRoot = Join-Path $Root 'recovery-events'
+    [IO.Directory]::CreateDirectory($eventRoot) | Out-Null
+    $eventPath = Join-Path $eventRoot ("orphan-excel-{0}-{1}.json" -f ([DateTimeOffset]::Now.ToString('yyyyMMddTHHmmssfff')), $excelProcessId)
+    Stop-Process -Id $excelProcessId -Force
+    $deadline = [DateTimeOffset]::Now.AddSeconds(10)
+    while ((Get-Process -Id $excelProcessId -ErrorAction SilentlyContinue) -and [DateTimeOffset]::Now -lt $deadline) {
+        Start-Sleep -Milliseconds 100
+    }
+    if (Get-Process -Id $excelProcessId -ErrorAction SilentlyContinue) {
+        throw "Unable to terminate the recorded orphan Excel PID $excelProcessId."
+    }
+    Write-JsonCreateNew $eventPath ([ordered]@{
+        schemaVersion = 1
+        taskId = $taskId
+        classification = 'RECORDED_ORPHAN_EXCEL_TERMINATED'
+        observedAt = [DateTimeOffset]::Now.ToString('o')
+        excelProcessId = $excelProcessId
+        priorCampaignStatus = $status.status
+        priorCheckpointId = if ($null -ne $status.PSObject.Properties['checkpointId']) {$status.checkpointId} else {$null}
+    })
+}
+
+function Assert-ResumeIdentity([string]$Root) {
+    foreach ($name in @(
+        'campaign-configuration.json',
+        'campaign-provenance-start.json',
+        'source-file-manifest.json',
+        'rtd-formula-manifest.json'
+    )) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Root $name))) {
+            throw "Resume evidence identity is incomplete: $name"
+        }
+    }
+    $sourceHead = Get-Git $ProjectRoot @('rev-parse', 'HEAD')
+    if ($sourceHead -ne $ExpectedSourceHead) { throw 'Resume source HEAD mismatch.' }
+    if (Get-Git $ProjectRoot @('status', '--porcelain')) { throw 'Resume source worktree is dirty.' }
+    $canonicalHead = Get-Git $CanonicalRoot @('rev-parse', 'HEAD')
+    $originHead = Get-Git $CanonicalRoot @('rev-parse', 'origin/master')
+    if ($canonicalHead -ne $originHead -or (Get-Git $CanonicalRoot @('status', '--porcelain'))) {
+        throw 'Canonical Git is not clean and synchronized during resume.'
+    }
+    if ((Get-Sha256 (Join-Path $Root 'campaign-configuration.json')) -ne (Get-Sha256 $ConfigurationPath)) {
+        throw 'Resume configuration hash mismatch.'
+    }
+    $sourceManifest = Get-Content -Raw -LiteralPath (Join-Path $Root 'source-file-manifest.json') | ConvertFrom-Json
+    if ($sourceManifest.sourceGitHead -ne $ExpectedSourceHead) { throw 'Resume source manifest identity mismatch.' }
+    $provenance = Get-Content -Raw -LiteralPath (Join-Path $Root 'campaign-provenance-start.json') | ConvertFrom-Json
+    if ($provenance.campaignFrozenIdentity.sourceGitHead -ne $ExpectedSourceHead) {
+        throw 'Resume provenance source identity mismatch.'
+    }
+}
+
+function Preserve-InterruptedObservation([string]$ObservationRoot, [string]$CheckpointId) {
+    $observationPath = Join-Path $ObservationRoot 'observations.ndjson'
+    $receiptPath = Join-Path $ObservationRoot 'checkpoint-receipt.json'
+    $interruptionPath = Join-Path $ObservationRoot 'interruption-receipt.json'
+    if (-not (Test-Path -LiteralPath $observationPath) -or (Test-Path -LiteralPath $receiptPath)) {
+        return $false
+    }
+    if (-not (Test-Path -LiteralPath $interruptionPath)) {
+        $sampleCount = (Get-Content -LiteralPath $observationPath | Measure-Object -Line).Lines
+        Write-JsonCreateNew $interruptionPath ([ordered]@{
+            schemaVersion = 1
+            taskId = $taskId
+            checkpointId = $CheckpointId
+            classification = 'INTERRUPTED_PARTIAL_OBSERVATION_NOT_ACCEPTED'
+            observedAt = [DateTimeOffset]::Now.ToString('o')
+            sampleCount = $sampleCount
+            observationSha256 = Get-Sha256 $observationPath
+        })
+    }
+    return $true
+}
+
+function Write-MissedCheckpoint([string]$CheckpointRoot, [object]$Checkpoint, [string]$Reason) {
+    [IO.Directory]::CreateDirectory($CheckpointRoot) | Out-Null
+    $path = Join-Path $CheckpointRoot 'missed-checkpoint-receipt.json'
+    if (-not (Test-Path -LiteralPath $path)) {
+        Write-JsonCreateNew $path ([ordered]@{
+            schemaVersion = 1
+            taskId = $taskId
+            checkpointId = $Checkpoint.checkpointId
+            scheduledAtEastern = $Checkpoint.scheduledAtEastern
+            classification = 'CHECKPOINT_MISSED_NOT_BACKFILLED'
+            reason = $Reason
+            observedAt = [DateTimeOffset]::Now.ToString('o')
+        })
+    }
+}
+
 $configuration = Get-Content -Raw -LiteralPath $ConfigurationPath | ConvertFrom-Json
 Assert-Configuration $configuration
 $formulaManifest = New-FormulaManifest $configuration
@@ -625,45 +735,118 @@ if ($SyntheticObserverTest) {
     exit 0
 }
 
-if (Test-Path -LiteralPath $EvidenceRoot) { throw 'Evidence root already exists; refusing to overwrite or resume ambiguously.' }
-[IO.Directory]::CreateDirectory($EvidenceRoot) | Out-Null
+$supervisorProcessId = if ($env:MOMENTUM_HUNTER_RTD_SUPERVISOR_PID) {
+    [int]$env:MOMENTUM_HUNTER_RTD_SUPERVISOR_PID
+}
+else {
+    $null
+}
+
+if ($Resume) {
+    if (-not (Test-Path -LiteralPath $EvidenceRoot)) {
+        throw 'Resume evidence root does not exist.'
+    }
+}
+else {
+    if (Test-Path -LiteralPath $EvidenceRoot) {
+        throw 'Evidence root already exists; refusing an ambiguous initial launch.'
+    }
+    [IO.Directory]::CreateDirectory($EvidenceRoot) | Out-Null
+}
 $excelSession = $null
-$campaignStage = 'FREEZING_BASELINE'
+$campaignStage = if ($Resume) {'VALIDATING_RESUME'} else {'FREEZING_BASELINE'}
 try {
-    $environment = Get-CurrentEnvironment
-    New-ProvenanceBaseline $configuration $environment $formulaManifest $EvidenceRoot
-    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='BASELINE_FROZEN'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID})
+    if ($Resume) {
+        Remove-OwnedOrphanExcel $EvidenceRoot
+        Assert-ResumeIdentity $EvidenceRoot
+        $environment = Get-CurrentEnvironment
+        $resumeRoot = Join-Path $EvidenceRoot 'recovery-events'
+        [IO.Directory]::CreateDirectory($resumeRoot) | Out-Null
+        $resumePath = Join-Path $resumeRoot ("resume-{0}-{1}.json" -f ([DateTimeOffset]::Now.ToString('yyyyMMddTHHmmssfff')), $PID)
+        Write-JsonCreateNew $resumePath ([ordered]@{
+            schemaVersion = 1
+            taskId = $taskId
+            classification = 'SUPERVISED_CHILD_RESUME'
+            observedAt = [DateTimeOffset]::Now.ToString('o')
+            childProcessId = $PID
+            supervisorProcessId = $supervisorProcessId
+            sourceGitHead = $ExpectedSourceHead
+        })
+    }
+    else {
+        $environment = Get-CurrentEnvironment
+        New-ProvenanceBaseline $configuration $environment $formulaManifest $EvidenceRoot
+        Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{
+            taskId=$taskId
+            status='BASELINE_FROZEN'
+            observedAt=[DateTimeOffset]::Now.ToString('o')
+            processId=$PID
+            supervisorProcessId=$supervisorProcessId
+        })
+    }
 
-    $campaignStage = 'INITIALIZING_PHASE_A_EXCEL'
-    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status=$campaignStage; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID})
-    $excelSession = New-ExcelSession $formulaManifest
-    $campaignStage = 'PHASE_A_RUNNING'
-    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='PHASE_A_RUNNING'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; excelProcessId=$excelSession.processId})
     $phaseRoot = Join-Path $EvidenceRoot 'phase-a-current-session-functional-smoke'
-    Observe-Checkpoint $excelSession $formulaManifest 'PHASE_A_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY' ([DateTimeOffset]::Now) ([int]$configuration.phaseADurationSeconds) ([int]$configuration.sampleIntervalSeconds) $phaseRoot | Out-Null
-    Close-ExcelSession $excelSession
-    $excelSession = $null
+    $phaseReceipt = Join-Path $phaseRoot 'checkpoint-receipt.json'
+    if (-not (Test-Path -LiteralPath $phaseReceipt)) {
+        $phaseInterrupted = Preserve-InterruptedObservation $phaseRoot 'PHASE_A_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY'
+        if (-not $phaseInterrupted) {
+            $firstLead = [DateTimeOffset]::Parse($configuration.checkpoints[0].scheduledAtEastern).AddSeconds(-[int]$configuration.checkpointLeadSeconds)
+            if ([DateTimeOffset]::Now.AddSeconds([int]$configuration.phaseADurationSeconds + 30) -ge $firstLead) {
+                throw 'Insufficient time remains for the required Phase A smoke before the first checkpoint.'
+            }
+            $campaignStage = 'INITIALIZING_PHASE_A_EXCEL'
+            Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status=$campaignStage; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; supervisorProcessId=$supervisorProcessId})
+            $excelSession = New-ExcelSession $formulaManifest
+            $campaignStage = 'PHASE_A_RUNNING'
+            Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='PHASE_A_RUNNING'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; supervisorProcessId=$supervisorProcessId; excelProcessId=$excelSession.processId})
+            Observe-Checkpoint $excelSession $formulaManifest 'PHASE_A_FUNCTIONAL_SMOKE_NOT_0400_BOUNDARY' ([DateTimeOffset]::Now) ([int]$configuration.phaseADurationSeconds) ([int]$configuration.sampleIntervalSeconds) $phaseRoot | Out-Null
+            Close-ExcelSession $excelSession
+            $excelSession = $null
+        }
+    }
 
-    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='WAITING_FOR_TRUE_OVERNIGHT'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; nextCheckpoint=$configuration.checkpoints[0].scheduledAtEastern})
-    $first = [DateTimeOffset]::Parse($configuration.checkpoints[0].scheduledAtEastern).AddSeconds(-[int]$configuration.checkpointLeadSeconds)
+    $pending = @()
+    foreach ($checkpoint in @($configuration.checkpoints)) {
+        $checkpointRoot = Join-Path $EvidenceRoot ("checkpoints\" + $checkpoint.checkpointId)
+        if (Test-Path -LiteralPath (Join-Path $checkpointRoot 'checkpoint-receipt.json')) { continue }
+        if (Preserve-InterruptedObservation $checkpointRoot $checkpoint.checkpointId) { continue }
+        if (Test-Path -LiteralPath (Join-Path $checkpointRoot 'missed-checkpoint-receipt.json')) { continue }
+        $scheduled = [DateTimeOffset]::Parse($checkpoint.scheduledAtEastern)
+        if ([DateTimeOffset]::Now -gt $scheduled.AddSeconds(5)) {
+            Write-MissedCheckpoint $checkpointRoot $checkpoint 'SUPERVISOR_RESUMED_AFTER_CHECKPOINT_START'
+            continue
+        }
+        $pending += $checkpoint
+    }
+    if ($pending.Count -eq 0) {
+        Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='OBSERVATION_COMPLETE_PENDING_ADJUDICATION'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; supervisorProcessId=$supervisorProcessId})
+        exit 0
+    }
+
+    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='WAITING_FOR_TRUE_OVERNIGHT'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; supervisorProcessId=$supervisorProcessId; nextCheckpoint=$pending[0].scheduledAtEastern})
+    $first = [DateTimeOffset]::Parse($pending[0].scheduledAtEastern).AddSeconds(-[int]$configuration.checkpointLeadSeconds)
     while ([DateTimeOffset]::Now -lt $first) {
         Start-Sleep -Seconds ([Math]::Min(60, [Math]::Max(1, [int]($first - [DateTimeOffset]::Now).TotalSeconds)))
     }
     $campaignStage = 'INITIALIZING_OVERNIGHT_EXCEL'
-    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status=$campaignStage; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID})
+    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status=$campaignStage; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; supervisorProcessId=$supervisorProcessId})
     $excelSession = New-ExcelSession $formulaManifest
-    foreach ($checkpoint in @($configuration.checkpoints)) {
+    foreach ($checkpoint in $pending) {
         $scheduled = [DateTimeOffset]::Parse($checkpoint.scheduledAtEastern)
         $start = $scheduled.AddSeconds(-[int]$configuration.checkpointLeadSeconds)
         while ([DateTimeOffset]::Now -lt $start) {
             Start-Sleep -Seconds ([Math]::Min(30, [Math]::Max(1, [int]($start - [DateTimeOffset]::Now).TotalSeconds)))
         }
         $checkpointRoot = Join-Path $EvidenceRoot ("checkpoints\" + $checkpoint.checkpointId)
+        if ([DateTimeOffset]::Now -gt $scheduled.AddSeconds(5)) {
+            Write-MissedCheckpoint $checkpointRoot $checkpoint 'CHECKPOINT_START_WINDOW_EXPIRED_DURING_RECOVERY'
+            continue
+        }
         $campaignStage = "CHECKPOINT_$($checkpoint.checkpointId)"
-        Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='CHECKPOINT_RUNNING'; checkpointId=$checkpoint.checkpointId; scheduledAtEastern=$scheduled.ToString('o'); observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; excelProcessId=$excelSession.processId})
+        Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='CHECKPOINT_RUNNING'; checkpointId=$checkpoint.checkpointId; scheduledAtEastern=$scheduled.ToString('o'); observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; supervisorProcessId=$supervisorProcessId; excelProcessId=$excelSession.processId})
         Observe-Checkpoint $excelSession $formulaManifest $checkpoint.checkpointId $scheduled ([int]$configuration.checkpointDurationSeconds) ([int]$configuration.sampleIntervalSeconds) $checkpointRoot | Out-Null
     }
-    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='OBSERVATION_COMPLETE_PENDING_ADJUDICATION'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID})
+    Write-JsonAtomic (Join-Path $EvidenceRoot 'campaign-status.json') ([ordered]@{taskId=$taskId; status='OBSERVATION_COMPLETE_PENDING_ADJUDICATION'; observedAt=[DateTimeOffset]::Now.ToString('o'); processId=$PID; supervisorProcessId=$supervisorProcessId})
 }
 catch {
     $failure = [ordered]@{

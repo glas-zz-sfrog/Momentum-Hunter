@@ -36,6 +36,31 @@ def configuration() -> dict[str, object]:
 
 
 class ThinkorswimRtdCampaignTests(unittest.TestCase):
+    def test_launcher_routes_campaign_through_supervisor(self) -> None:
+        project_root = Path(__file__).parents[1]
+        launcher = (project_root / "tools" / "start_thinkorswim_rtd_campaign.ps1").read_text(encoding="utf-8")
+        self.assertIn("supervise_thinkorswim_rtd_campaign.ps1", launcher)
+        self.assertIn("& '$supervisor'", launcher)
+        self.assertNotIn("& '$runner' -ProjectRoot", launcher)
+
+    def test_supervisor_restarts_failed_child_with_resume(self) -> None:
+        project_root = Path(__file__).parents[1]
+        supervisor = (project_root / "tools" / "supervise_thinkorswim_rtd_campaign.ps1").read_text(encoding="utf-8")
+        self.assertIn("MOMENTUM_HUNTER_RTD_SUPERVISOR_PID", supervisor)
+        self.assertIn("if ($resume) { $arguments += '-Resume' }", supervisor)
+        self.assertIn("$child.WaitForExit()", supervisor)
+        self.assertIn("supervisor-attempts", supervisor)
+        self.assertIn("MaximumAttempts", supervisor)
+
+    def test_resume_preserves_partial_and_never_backfills_missed_checkpoint(self) -> None:
+        project_root = Path(__file__).parents[1]
+        runner = (project_root / "tools" / "run_thinkorswim_rtd_campaign.ps1").read_text(encoding="utf-8")
+        self.assertIn("Assert-ResumeIdentity", runner)
+        self.assertIn("INTERRUPTED_PARTIAL_OBSERVATION_NOT_ACCEPTED", runner)
+        self.assertIn("CHECKPOINT_MISSED_NOT_BACKFILLED", runner)
+        self.assertIn("SUPERVISOR_RESUMED_AFTER_CHECKPOINT_START", runner)
+        self.assertIn("RECORDED_ORPHAN_EXCEL_TERMINATED", runner)
+
     def test_synthetic_observer_preserves_two_dimensional_matrix_mapping(self) -> None:
         powershell = shutil.which("powershell.exe")
         if powershell is None:
