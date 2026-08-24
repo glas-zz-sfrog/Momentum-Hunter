@@ -76,8 +76,9 @@ computes 68. The entire -11 delta is the removed unauthorized
 The scoring path is protected and was explicitly authorized by the directive.
 No provider, account, Paper, Shadow, broker, order, service, scheduler, runtime
 installation, production evidence, WPF source, threshold, or setup semantics
-changed. The presentation contract now reports the actual score-engine identity
-and is queued for exact operator truthfulness/layout verification.
+changed. The nonvisual presentation contract now reports the actual persisted
+score-engine identity without changing layout or controls; automated contract
+tests are the acceptance evidence and no manual verification item is required.
 
 ## Promotion Gate
 
