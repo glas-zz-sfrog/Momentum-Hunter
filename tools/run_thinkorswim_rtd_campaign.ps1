@@ -15,7 +15,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ConfigurationPath,
 
-    [switch]$ValidateOnly
+    [switch]$ValidateOnly,
+
+    [switch]$SyntheticObserverTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,19 +31,27 @@ $allowedFields = @(
 )
 $allowedSymbols = @('SPY', 'QQQ', 'NVDA', 'AAPL', 'MU')
 $expectedCheckpoints = @(
-    'A_1955_ET|2026-08-21T19:55:00-04:00',
-    'B_2000_ET|2026-08-21T20:00:00-04:00',
-    'C_2005_ET|2026-08-21T20:05:00-04:00',
-    'D_2100_ET|2026-08-21T21:00:00-04:00',
-    'E_0030_ET|2026-08-22T00:30:00-04:00',
-    'F_0130_ET|2026-08-22T01:30:00-04:00',
-    'G_0355_ET|2026-08-22T03:55:00-04:00',
-    'H_0405_ET|2026-08-22T04:05:00-04:00'
+    'A_1955_ET|2026-08-24T19:55:00-04:00',
+    'B_2000_ET|2026-08-24T20:00:00-04:00',
+    'C_2005_ET|2026-08-24T20:05:00-04:00',
+    'D_2100_ET|2026-08-24T21:00:00-04:00',
+    'E_0030_ET|2026-08-25T00:30:00-04:00',
+    'F_0130_ET|2026-08-25T01:30:00-04:00',
+    'G_0355_ET|2026-08-25T03:55:00-04:00',
+    'H_0405_ET|2026-08-25T04:05:00-04:00'
 )
 $forbiddenFieldFragments = @('POSITION', 'P_L', 'ACCOUNT', 'BUYING_POWER', 'ORDER')
 
 function Get-Sha256([string]$Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToUpperInvariant()
+    $stream = [IO.File]::OpenRead($Path)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '')
+    }
+    finally {
+        $sha.Dispose()
+        $stream.Dispose()
+    }
 }
 
 function Get-TextSha256([string]$Text) {
@@ -78,6 +88,9 @@ function Invoke-ExcelComCall(
                 continue
             }
             throw "Excel COM operation '$Operation' failed at attempt $attempt with HRESULT 0x$code."
+        }
+        catch {
+            throw "Excel COM operation '$Operation' failed with $($_.Exception.GetType().Name): $($_.Exception.Message)"
         }
     }
     throw "Excel COM operation '$Operation' exhausted its bounded retry loop."
@@ -154,6 +167,18 @@ function Get-CurrentEnvironment {
     $rtdServer = (Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\CLSID\$rtdClsid\InprocServer32" -ErrorAction Stop).'(default)'
     if (-not (Test-Path -LiteralPath $rtdServer)) { throw 'Registered tos.rtd COM server is unavailable.' }
     $tosInstall = Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\9968-4488-2169-7623' -ErrorAction Stop
+    $sessionConfigurationIdentity = if ($tos[0].MainWindowTitle -match '^Main@thinkorswim \[build [0-9]+\]$') {
+        'LIVE_TRADING_WINDOW_TITLE_OBSERVED'
+    }
+    elseif ($tos[0].MainWindowTitle -like 'Paper@thinkorswim*') {
+        'PAPERMONEY_WINDOW_TITLE_OBSERVED'
+    }
+    else {
+        'MODE_IDENTITY_UNPROVEN'
+    }
+    if ($sessionConfigurationIdentity -ne 'LIVE_TRADING_WINDOW_TITLE_OBSERVED') {
+        throw "thinkorswim session configuration is not the frozen Live Trading window shape: $sessionConfigurationIdentity"
+    }
     return [ordered]@{
         observedAt = [DateTimeOffset]::Now.ToString('o')
         thinkorswim = [ordered]@{
@@ -166,6 +191,8 @@ function Get-CurrentEnvironment {
             installedDisplayVersion = $tosInstall.DisplayVersion
             installScope = 'ALL_USERS_PROGRAM_FILES'
             sessionId = $tos[0].SessionId
+            sessionConfigurationIdentity = $sessionConfigurationIdentity
+            sessionConfigurationEvidence = 'PROCESS_WINDOW_TITLE_ONLY_NO_ACCOUNT_DATA'
         }
         excel = [ordered]@{
             executablePath = $excelPath
@@ -213,6 +240,9 @@ function Assert-Configuration([object]$Configuration) {
     }
     if ($Configuration.excelElevationPolicy -ne 'CURRENT_USER_PROVEN_75_CELL_RTD_SMOKE') {
         throw 'Excel elevation policy does not match the observed local RTD proof.'
+    }
+    if ($Configuration.sessionConfigurationRequirement -ne 'LIVE_TRADING_WINDOW_TITLE_OBSERVED') {
+        throw 'thinkorswim session configuration requirement changed.'
     }
     if ($Configuration.phaseADurationSeconds -lt 1200) { throw 'Phase A must run for at least 20 minutes.' }
     if ([int]$Configuration.checkpointDurationSeconds -ne 120) { throw 'Checkpoint duration must remain 120 seconds.' }
@@ -340,10 +370,16 @@ function Observe-Checkpoint(
     try {
         while ([DateTimeOffset]::Now -lt $deadline) {
             $values = @()
+            $matrix = Invoke-ExcelComCall { ,($Session.sheet.Range('B2', 'P6').Value2) } 'READ_MARKET_MATRIX'
+            if ($null -eq $matrix -or $matrix.Rank -ne 2) {
+                throw 'Excel market matrix was null or not two-dimensional.'
+            }
+            $rowLower = $matrix.GetLowerBound(0)
+            $columnLower = $matrix.GetLowerBound(1)
             foreach ($cell in @($FormulaManifest.cells)) {
-                $row = $cell.row
-                $column = $cell.column
-                $rawValue = Invoke-ExcelComCall { $Session.sheet.Cells.Item($row, $column).Value2 } "READ_CELL_${row}_${column}"
+                $matrixRow = $rowLower + ([int]$cell.row - 2)
+                $matrixColumn = $columnLower + ([int]$cell.column - 2)
+                $rawValue = $matrix[$matrixRow, $matrixColumn]
                 $normalized = Convert-CellValue $rawValue
                 $values += [ordered]@{
                     symbol = $cell.symbol
@@ -547,6 +583,44 @@ if ($ValidateOnly) {
         orderFields = 0
         excelContacted = $false
         thinkorswimContacted = $false
+    } | ConvertTo-Json -Depth 5
+    exit 0
+}
+
+if ($SyntheticObserverTest) {
+    if (Test-Path -LiteralPath $EvidenceRoot) {
+        throw 'Synthetic observer evidence root already exists.'
+    }
+    $matrix = New-Object 'object[,]' 5, 15
+    for ($row = 0; $row -lt 5; $row++) {
+        for ($column = 0; $column -lt 15; $column++) {
+            $matrix[$row, $column] = "SYNTHETIC_${row}_${column}"
+        }
+    }
+    $fakeRange = [pscustomobject]@{Value2=$matrix}
+    $fakeSheet = [pscustomobject]@{RangeObject=$fakeRange}
+    $fakeSheet | Add-Member -MemberType ScriptMethod -Name Range -Value {
+        param([string]$From, [string]$To)
+        if ($From -ne 'B2' -or $To -ne 'P6') { throw 'Synthetic matrix range mismatch.' }
+        return $this.RangeObject
+    }
+    $fakeSession = [ordered]@{sheet=$fakeSheet; processId=[int]::MaxValue}
+    $receipt = Observe-Checkpoint $fakeSession $formulaManifest 'SYNTHETIC_MATRIX_MAPPING' ([DateTimeOffset]::Now) 2 1 $EvidenceRoot
+    $records = @(Get-Content -LiteralPath (Join-Path $EvidenceRoot 'observations.ndjson') | ForEach-Object { $_ | ConvertFrom-Json })
+    if ($records.Count -lt 1 -or @($records[0].values).Count -ne 75) {
+        throw 'Synthetic observer did not preserve the exact 75-cell contract.'
+    }
+    if ($records[0].values[0].value -ne 'SYNTHETIC_0_0' -or $records[0].values[74].value -ne 'SYNTHETIC_4_14') {
+        throw 'Synthetic observer matrix coordinate mapping failed.'
+    }
+    [ordered]@{
+        status = 'SYNTHETIC_OBSERVER_PASS'
+        excelContacted = $false
+        thinkorswimRtdContacted = $false
+        sampleCount = $receipt.sampleCount
+        valuesPerSample = 75
+        firstValue = $records[0].values[0].value
+        lastValue = $records[0].values[74].value
     } | ConvertTo-Json -Depth 5
     exit 0
 }

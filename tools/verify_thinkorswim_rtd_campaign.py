@@ -24,14 +24,14 @@ ORDERED_FIELDS = [
 ]
 SYMBOLS = ["SPY", "QQQ", "NVDA", "AAPL", "MU"]
 CHECKPOINTS = [
-    ("A_1955_ET", "2026-08-21T19:55:00-04:00"),
-    ("B_2000_ET", "2026-08-21T20:00:00-04:00"),
-    ("C_2005_ET", "2026-08-21T20:05:00-04:00"),
-    ("D_2100_ET", "2026-08-21T21:00:00-04:00"),
-    ("E_0030_ET", "2026-08-22T00:30:00-04:00"),
-    ("F_0130_ET", "2026-08-22T01:30:00-04:00"),
-    ("G_0355_ET", "2026-08-22T03:55:00-04:00"),
-    ("H_0405_ET", "2026-08-22T04:05:00-04:00"),
+    ("A_1955_ET", "2026-08-24T19:55:00-04:00"),
+    ("B_2000_ET", "2026-08-24T20:00:00-04:00"),
+    ("C_2005_ET", "2026-08-24T20:05:00-04:00"),
+    ("D_2100_ET", "2026-08-24T21:00:00-04:00"),
+    ("E_0030_ET", "2026-08-25T00:30:00-04:00"),
+    ("F_0130_ET", "2026-08-25T01:30:00-04:00"),
+    ("G_0355_ET", "2026-08-25T03:55:00-04:00"),
+    ("H_0405_ET", "2026-08-25T04:05:00-04:00"),
 ]
 FORBIDDEN_FRAGMENTS = ("POSITION", "P_L", "ACCOUNT", "BUYING_POWER", "ORDER")
 SECRET_PATTERNS = (
@@ -77,6 +77,8 @@ def validate_configuration(value: Mapping[str, object]) -> None:
         raise VerificationError("Phase A classification would overclaim the missed 04:00 boundary.")
     if value.get("excelElevationPolicy") != "CURRENT_USER_PROVEN_75_CELL_RTD_SMOKE":
         raise VerificationError("Excel elevation policy mismatch.")
+    if value.get("sessionConfigurationRequirement") != "LIVE_TRADING_WINDOW_TITLE_OBSERVED":
+        raise VerificationError("thinkorswim session configuration requirement mismatch.")
     if value.get("phaseADurationSeconds") != 1200:
         raise VerificationError("Fixed Phase A duration mismatch.")
     if value.get("checkpointDurationSeconds") != 120 or value.get("checkpointLeadSeconds") != 60:

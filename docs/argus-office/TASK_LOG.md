@@ -558,3 +558,20 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   Excel elevation is not required in the observed machine/session, so the
   campaign now defaults to the normal interactive user token and retains UAC
   only as an explicit optional launcher switch.
+- Physical attempt 3 ran under the proven current-user token and persisted 61
+  complete live samples across all 75 market cells before a cell-by-cell COM
+  read returned a transient null object. Excel closed cleanly and no overnight
+  claim was made. The repair replaces 75 COM reads per sample with one bounded
+  `B2:P6` matrix read, validates the returned two-dimensional array, and maps
+  its fixed indices back to the exact frozen formula manifest.
+- The August 24 preparation moved only the fixed checkpoint dates to August
+  24/25 and requires the observed `Main@thinkorswim [build N]` Live Trading
+  window shape; paperMoney substitution and unknown mode identity fail closed.
+  This records process-window evidence only and requests no account fields.
+- Synthetic observer proof reproduced and repaired two harness failures before
+  the live campaign: PowerShell flattened Excel's two-dimensional `Value2`
+  matrix unless it crossed the function boundary as one scalar object, and
+  child Windows PowerShell could lack the module supplying `Get-FileHash`.
+  The hardened path uses one scalar matrix read plus .NET SHA-256. Automated
+  proof preserves two samples, all 75 fixed market cells, and exact first/last
+  coordinate mapping without contacting Excel or `tos.rtd`.
