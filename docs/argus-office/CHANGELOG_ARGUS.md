@@ -11,8 +11,10 @@
   unauthorized Eightco/OpenAI +11 contribution.
 - Passed 73 focused/adjacent tests, compileall, static safety scans, and every
   discovered Python test after exact rerun of two isolated-worktree environment
-  failures. Integration, V1 promotion, repin, and physical runtime validation
-  remain separate gates.
+  failures. Clean fast-forward integration and normal push passed. V1 promotion
+  created `OPENING-RUNTIME-2698312C5F3749F4916C`; live runtime-match
+  verification passed and all 14 future opening jobs already use the approved
+  channel, so zero jobs changed.
 
 - Ran and independently verified the smallest fingerprinted read-only Schwab
   true-overnight API probe on fixed SPY/QQQ/NVDA/AAPL/MU scope.

@@ -63,17 +63,21 @@ Schwab quote evidence, and complete TradePlan proved the full installed opening
 pipeline. The terminal `DO_NOT_TRADE_MISSED_ENTRY` result is legitimate and
 unchanged.
 
-`ARGUS-CATALYST-SCORE-AUTHORITY-001` is the immediate product repair on isolated
-branch `codex/ARGUS-CATALYST-SCORE-AUTHORITY-001`. Implementation commit
+`ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
+Implementation commit
 `d1a6e14ae3bec1a565a2eb07b47a3b1491356b16` moves the existing catalyst
 relationship-authority contract to the point where score points are assigned.
 Unrelated, ambiguous, unresolved, or keyword-only headlines remain visible but
 contribute zero positive or negative scoring authority. Monday's immutable BMNR
 capture remains score 79; a separately labeled counterfactual diagnostic under
 `momentum_score_v2` computes 68 because the unrelated Eightco/OpenAI +11 is
-removed. Classification is `IMPLEMENTED_PENDING_CLOSEOUT_AND_PROMOTION`.
-`ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` remains blocked until this repair is
-integrated, promoted under the safe V1 process, and physically revalidated.
+removed. The task branch was pushed through `290ea31`, cleanly fast-forwarded
+to canonical, and pushed normally. Safe V1 promotion created approved release
+`OPENING-RUNTIME-2698312C5F3749F4916C` with runtime fingerprint
+`2698312c5f3749f4916cd581f48fa713cc4af31015ed63d21279e9a1f8145aa3`.
+Live verification reports exact runtime match and a fresh supervisor heartbeat;
+all 14 future openings already use `opening-capture`, so zero jobs changed.
+`ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` is now unblocked but not started.
 
 `ARGUS-AUTOMATION-RUNTIME-IDENTITY-001` is an urgent weekend reliability
 exception. Qualified implementation commit
@@ -186,14 +190,18 @@ Momentum Hunter provider authority.
 
 ### Immediate Next
 
-Finish, integrate, promote, and physically validate
-`ARGUS-CATALYST-SCORE-AUTHORITY-001` while independently arming and observing
-the isolated time-gated RTD campaign. The exact next implementation task after
-those gates is `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001`.
+Arm and observe the isolated time-gated RTD campaign. After the RTD evidence is
+preserved, `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` is the next implementation
+task; `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` remains upcoming behind it.
 The authoritative ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
 
+- `ARGUS-CATALYST-SCORE-AUTHORITY-001` prospectively blocks unauthorized
+  catalyst and risk keywords before score assignment, preserves Monday's score
+  79 evidence, and promotes the corrected v2 runtime under the safe V1 release
+  contract. No job repin, service restart, provider call, or execution authority
+  was required.
 - `ARGUS-AUTOMATION-RUNTIME-IDENTITY-002` measured the actual opening closure,
   proved the current boundary safe but overbroad, added import-escape and
   dynamic-load qualification guards, and merged only offline tests/tooling and
@@ -220,10 +228,7 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-CATALYST-SCORE-AUTHORITY-001`: complete the bounded scoring-authority
-   repair, safe V1 promotion, future-job reconciliation, and physical runtime
-   validation without rewriting Monday's evidence.
-2. `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001`: collect the
+1. `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001`: collect the
    true-overnight checkpoints, and adjudicate official RTD capability without
    changing provider authority.
 
@@ -232,9 +237,11 @@ next-action language preserved elsewhere cannot supersede this queue.
 1. Close the RTD experiment truthfully as useful, limited, unavailable, or
    incomplete; preserve every failed attempt and reconcile its feature branch
    onto current canonical without rebasing or absorbing unrelated changes.
-2. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` as the bounded producer
+2. Implement and physically qualify `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` now
+   that the catalyst repair and V1 promotion gate are complete.
+3. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` as the bounded producer
    required by the already-defined continuous lifecycle/successor contracts.
-3. Reconcile and fully requalify the existing
+4. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch only after the producer passes;
    installation, Paper preflight, and one-entry arming remain separate gates.
 

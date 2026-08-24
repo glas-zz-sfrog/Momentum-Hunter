@@ -2,7 +2,7 @@
 
 ## Classification
 
-`IMPLEMENTED_PENDING_PROMOTION`
+`COMPLETE / APPROVED_RUNTIME_ACTIVE`
 
 ## Scope
 
@@ -80,8 +80,21 @@ changed. The nonvisual presentation contract now reports the actual persisted
 score-engine identity without changing layout or controls; automated contract
 tests are the acceptance evidence and no manual verification item is required.
 
-## Promotion Gate
+## Promotion Closeout
 
-After integration, use the established V1 runtime-identity promotion and
-future-job reconciliation process. Physically prove the corrected approved
-runtime before unblocking `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003`.
+The proven branch was pushed through
+`290ea31934bdae53d26645b2767f8f0918652622`, cleanly fast-forwarded into
+canonical `master`, and pushed normally. The established V1 promotion created:
+
+- release `OPENING-RUNTIME-2698312C5F3749F4916C`;
+- release fingerprint
+  `478a25a75736381aac69e67a2da1ec2ec383e46ec53da5d6462b0bc126299dff`;
+- runtime fingerprint
+  `2698312c5f3749f4916cd581f48fa713cc4af31015ed63d21279e9a1f8145aa3`;
+- source Git `290ea31934bdae53d26645b2767f8f0918652622`.
+
+The live verifier reports `APPROVED_RUNTIME_MATCH`, a fresh supervisor
+heartbeat, clean synchronized Git, and order transmission `UNAVAILABLE`.
+Fourteen future openings already use the approved channel; migration planning
+reported zero changed jobs. No service restart or manifest rewrite was needed.
+`ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` is unblocked but not started.

@@ -19,11 +19,14 @@ pass. Full discovery passed 2,728 tests with two environment-layout failures
 and one expected skip; the exact failed modules then passed 39/39 after the
 worktree received its expected ignored `.venv` junction.
 
-Classification is `IMPLEMENTED_PENDING_PROMOTION`. No provider, account,
+Classification is `COMPLETE / APPROVED_RUNTIME_ACTIVE`. No provider, account,
 Paper, Shadow, broker, order, service, scheduler, installed runtime, WPF source,
-threshold, setup, or historical evidence changed. The branch must be pushed,
-integrated cleanly, promoted through the existing V1 process, and physically
-validated before `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` can start.
+threshold, setup, or historical evidence changed. The branch was pushed through
+`290ea31`, cleanly fast-forwarded into canonical, and pushed normally. V1
+promotion created `OPENING-RUNTIME-2698312C5F3749F4916C`; live verification
+reports exact runtime match. All 14 future openings already use the approved
+channel and zero jobs changed. `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` is now
+unblocked but not started.
 
 ## ARGUS-AUTOMATION-RUNTIME-IDENTITY-002 - 2026-08-22
 
