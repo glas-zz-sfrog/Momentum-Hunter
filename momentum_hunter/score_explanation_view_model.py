@@ -95,7 +95,7 @@ Reconciliation status: {escape(str(reconciliation.get('status', record.get('reco
       </pre>
       <h3>Compact Summary</h3>
       <p class="meta">
-        Contributions are the points actually counted by <b>momentum_score_v1</b>. Context rows can show important
+        Contributions are the points actually counted by <b>{escape(str(record.get('score_engine_version', 'current score engine')))}</b>. Context rows can show important
         information, such as HOT freshness, while still contributing 0 points when the current scoring engine is
         measurement-only for that signal.
       </p>
@@ -240,7 +240,7 @@ def score_component_explanation(component: dict) -> str:
     explanation = str(component.get("explanation", ""))
     if component.get("key") == "freshness_context":
         context_note = (
-            "Freshness is recorded for research/explainability only in momentum_score_v1, "
+            "Freshness is recorded for research/explainability only in the current score engine, "
             "so HOT/high freshness can still have Applied Impact 0."
         )
         return f"{explanation} {context_note}".strip()

@@ -5,13 +5,18 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from momentum_hunter.models import Candidate, MarketRegime
+from momentum_hunter.evidence_integrity import (
+    CATALYST_SCORE_SUPPORTED,
+    CatalystAttribution,
+    classify_catalyst_attribution,
+)
+from momentum_hunter.models import Candidate, MarketRegime, NewsItem
 from momentum_hunter.news_age import apply_candidate_news_stack, filter_news_known_at_capture
 from momentum_hunter.time_utils import now_central
 
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "scoring_profiles.json"
-SCORE_ENGINE_VERSION = "momentum_score_v1"
+SCORE_ENGINE_VERSION = "momentum_score_v2"
 SCORE_EXPLANATION_SCHEMA_VERSION = "score-breakdown-v1"
 
 
@@ -192,7 +197,45 @@ def build_score_breakdown(
         reasons.append(price_momentum_reason)
 
     scoring_news = filter_news_known_at_capture(candidate.news, evaluation_time)
-    catalyst_text = " ".join([item.headline + " " + item.summary for item in scoring_news]).lower()
+    authorized_news: list[tuple[NewsItem, CatalystAttribution]] = []
+    blocked_attributions: list[CatalystAttribution] = []
+    for item in scoring_news:
+        attribution = classify_catalyst_attribution(candidate, item.headline)
+        if attribution.score_authority == CATALYST_SCORE_SUPPORTED:
+            authorized_news.append((item, attribution))
+        else:
+            blocked_attributions.append(attribution)
+    catalyst_text = " ".join(
+        f"{item.headline} {item.summary}" for item, _attribution in authorized_news
+    ).lower()
+    authority_inputs = {
+        "headline_count_known_at_score_time": len(scoring_news),
+        "authorized_headline_count": len(authorized_news),
+        "blocked_headline_count": len(blocked_attributions),
+        "authorized_relationship_types": sorted(
+            {attribution.relationship_type for _item, attribution in authorized_news}
+        ),
+        "blocked_relationship_types": sorted(
+            {attribution.relationship_type for attribution in blocked_attributions}
+        ),
+    }
+    add_component(
+        components,
+        key="catalyst_authority_context",
+        label="Catalyst Authority",
+        raw_inputs=authority_inputs,
+        rule=(
+            "Only news with a supported candidate relationship may affect catalyst-derived "
+            "bonuses or risk terms."
+        ),
+        before=0,
+        after=0,
+        explanation=(
+            f"{len(authorized_news)} known article(s) were score-authorized and "
+            f"{len(blocked_attributions)} were blocked."
+        ),
+        category="context",
+    )
     matched_positive_catalyst = False
     for keyword, points in profile.payload["positive_catalysts"].items():
         if keyword in catalyst_text:
@@ -205,11 +248,14 @@ def build_score_breakdown(
                 label=f"Positive Catalyst: {keyword}",
                 raw_inputs={
                     "keyword": keyword,
-                    "headline_count_known_at_score_time": len(scoring_news),
+                    **authority_inputs,
                     "base_points": points,
                     "multiplier": adjustment.positive_catalyst_multiplier,
                 },
-                rule="Keyword must appear in news known at the scoring timestamp; then apply regime catalyst multiplier.",
+                rule=(
+                    "Keyword must appear in score-authorized news known at the scoring timestamp; "
+                    "then apply regime catalyst multiplier."
+                ),
                 before=int(points),
                 after=adjusted,
                 explanation=reason,
@@ -222,8 +268,8 @@ def build_score_breakdown(
             components,
             key="positive_catalysts.none",
             label="Positive Catalysts",
-            raw_inputs={"headline_count_known_at_score_time": len(scoring_news)},
-            rule="Configured positive catalyst keywords must appear in known news.",
+            raw_inputs=authority_inputs,
+            rule="Configured positive catalyst keywords must appear in score-authorized known news.",
             before=0,
             after=0,
             explanation="No configured positive catalyst keyword was found in news known at the scoring timestamp.",
@@ -239,7 +285,10 @@ def build_score_breakdown(
             "latest_article_age_hours": candidate.news_stack.latest_article_age_hours,
             "article_count": candidate.news_stack.article_count,
         },
-        rule="Current engine records freshness for explainability; freshness does not add or subtract points in momentum_score_v1.",
+        rule=(
+            f"Current engine records freshness for explainability; freshness does not add or "
+            f"subtract points in {SCORE_ENGINE_VERSION}."
+        ),
         before=0,
         after=0,
         explanation=(
@@ -261,11 +310,14 @@ def build_score_breakdown(
                 label=f"Risk Term: {keyword}",
                 raw_inputs={
                     "keyword": keyword,
-                    "headline_count_known_at_score_time": len(scoring_news),
+                    **authority_inputs,
                     "base_points": points,
                     "multiplier": adjustment.risk_term_multiplier,
                 },
-                rule="Keyword must appear in news known at the scoring timestamp; then apply regime risk multiplier.",
+                rule=(
+                    "Keyword must appear in score-authorized news known at the scoring timestamp; "
+                    "then apply regime risk multiplier."
+                ),
                 before=int(points),
                 after=adjusted,
                 explanation=reason,
@@ -278,8 +330,8 @@ def build_score_breakdown(
             components,
             key="risk_terms.none",
             label="Risk Terms",
-            raw_inputs={"headline_count_known_at_score_time": len(scoring_news)},
-            rule="Configured risk keywords subtract points when present in known news.",
+            raw_inputs=authority_inputs,
+            rule="Configured risk keywords subtract points when present in score-authorized known news.",
             before=0,
             after=0,
             explanation="No configured risk keyword was found in news known at the scoring timestamp.",
