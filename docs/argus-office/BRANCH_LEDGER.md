@@ -2,6 +2,29 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-CATALYST-SCORE-AUTHORITY-001 - 2026-08-24
+
+`codex/ARGUS-CATALYST-SCORE-AUTHORITY-001` started from clean synchronized
+canonical `6933e49bc42c07914ad319d726625f1ac5692936`. Implementation commit
+`d1a6e14ae3bec1a565a2eb07b47a3b1491356b16` reuses the existing catalyst
+relationship contract before assigning positive or negative score points,
+adds explicit authority context, and advances the engine identity to
+`momentum_score_v2`.
+
+Monday's raw capture and score-breakdown stores remain byte-identical. Stored
+BMNR remains score 79; a nonpersisted BULL counterfactual is 68 because the
+unrelated Eightco/OpenAI +11 is blocked. Seventy-three focused/adjacent tests,
+compileall, diff, secret, capability, protected-path, and historical-hash checks
+pass. Full discovery passed 2,728 tests with two environment-layout failures
+and one expected skip; the exact failed modules then passed 39/39 after the
+worktree received its expected ignored `.venv` junction.
+
+Classification is `IMPLEMENTED_PENDING_PROMOTION`. No provider, account,
+Paper, Shadow, broker, order, service, scheduler, installed runtime, WPF source,
+threshold, setup, or historical evidence changed. The branch must be pushed,
+integrated cleanly, promoted through the existing V1 process, and physically
+validated before `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` can start.
+
 ## ARGUS-AUTOMATION-RUNTIME-IDENTITY-002 - 2026-08-22
 
 `codex/ARGUS-AUTOMATION-RUNTIME-IDENTITY-002` started from clean synchronized

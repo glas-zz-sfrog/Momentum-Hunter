@@ -55,6 +55,26 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+Monday August 24 is terminal as `OPENING_EVIDENCE_PASS_WITH_FINDINGS` with
+`AUTOMATION_RUNTIME_PASS`, `PIPELINE_COMPLETE`, `EXECUTION_EVIDENCE_READY`,
+and `CANDIDATES_NO_EXECUTION_READY_PLAN_BY_POLICY`. BMNR was the sole qualified
+candidate. Its 5/5 opening candles, five baseline sessions, 1.95 RVOL, fresh
+Schwab quote evidence, and complete TradePlan proved the full installed opening
+pipeline. The terminal `DO_NOT_TRADE_MISSED_ENTRY` result is legitimate and
+unchanged.
+
+`ARGUS-CATALYST-SCORE-AUTHORITY-001` is the immediate product repair on isolated
+branch `codex/ARGUS-CATALYST-SCORE-AUTHORITY-001`. Implementation commit
+`d1a6e14ae3bec1a565a2eb07b47a3b1491356b16` moves the existing catalyst
+relationship-authority contract to the point where score points are assigned.
+Unrelated, ambiguous, unresolved, or keyword-only headlines remain visible but
+contribute zero positive or negative scoring authority. Monday's immutable BMNR
+capture remains score 79; a separately labeled counterfactual diagnostic under
+`momentum_score_v2` computes 68 because the unrelated Eightco/OpenAI +11 is
+removed. Classification is `IMPLEMENTED_PENDING_CLOSEOUT_AND_PROMOTION`.
+`ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` remains blocked until this repair is
+integrated, promoted under the safe V1 process, and physically revalidated.
+
 `ARGUS-AUTOMATION-RUNTIME-IDENTITY-001` is an urgent weekend reliability
 exception. Qualified implementation commit
 `ec199549e96062570864262f181fd339d7596121` is integrated and pushed. The
@@ -95,18 +115,22 @@ manifest, schedule, provider, account, Paper, Shadow, broker, or order change
 occurred. Monday remains protected by unchanged V1; narrowing is deferred.
 
 `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is `ACTIVE` on isolated branch
-`codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` at committed head `e383ac1`, with a
-preserved uncommitted observer-hardening change. Official `tos.rtd` through
-desktop Excel is physically functional for the fixed market-only `SPY`, `QQQ`,
+`codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` at pushed committed head
+`306807dafcc617bb0e1e8c06a1b284d3a2f807b2`, with a clean worktree. Official
+`tos.rtd` through desktop Excel is physically functional for the fixed market-only `SPY`, `QQQ`,
 `NVDA`, `AAPL`, and `MU` basket in the current interactive Windows session.
 Regular-session observations prove the supported RTD/COM path and observer
 plumbing only. True 20:00-04:00 ET availability, field-level overnight
 freshness, unattended stability, and useful capacity remain unproven.
 
-The exact next bounded action is to finish the reduced-COM-read stability proof,
-then collect and adjudicate the fixed 19:55, 20:00, 20:05, 21:00, 00:30, 01:30,
-03:55, and 04:05 ET checkpoints. Failed harness attempts remain preserved and
-make no provider-capability claim.
+The exact matrix-mapping harness now passes 5 symbols by 15 market-only fields
+using one reduced COM read, including the PowerShell 2D-array scalar-return
+guard that caused prior flattening. The next bounded action is to arm the clean
+source before 18:55 CT, then collect and adjudicate the fixed 19:55, 20:00,
+20:05, 21:00, 00:30, 01:30, 03:55, and 04:05 ET checkpoints. Failed harness
+attempts remain preserved and make no provider-capability claim. RTD remains
+isolated research with no account, position, P/L, buying-power, order, or
+Momentum Hunter provider authority.
 
 ### Current Runtime And Strategy Truth
 
@@ -162,8 +186,10 @@ make no provider-capability claim.
 
 ### Immediate Next
 
-Finish and adjudicate the active RTD experiment. The exact next implementation
-task after that active task is `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001`.
+Finish, integrate, promote, and physically validate
+`ARGUS-CATALYST-SCORE-AUTHORITY-001` while independently arming and observing
+the isolated time-gated RTD campaign. The exact next implementation task after
+those gates is `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001`.
 The authoritative ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
@@ -194,7 +220,10 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001`: prove observer stability, collect the
+1. `ARGUS-CATALYST-SCORE-AUTHORITY-001`: complete the bounded scoring-authority
+   repair, safe V1 promotion, future-job reconciliation, and physical runtime
+   validation without rewriting Monday's evidence.
+2. `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001`: collect the
    true-overnight checkpoints, and adjudicate official RTD capability without
    changing provider authority.
 
@@ -230,8 +259,9 @@ next-action language preserved elsewhere cannot supersede this queue.
 ### 5. Deferred / Later
 
 - `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` may refine V1 to an authoritative
-  dependency-closure and relevant-distribution contract only after Monday
-  evidence, with promotion-time integration and repeated physical validation.
+  dependency-closure and relevant-distribution contract only after the Monday
+  catalyst-score authority defect is integrated, promoted through V1, and
+  physically validated.
 - `ARGUS-EXIT-POLICY-002`, ARBITER-001, BEAR-001, broader specialist influence,
   and Phase 14 unattended live execution remain future work and gain no
   authority from roadmap presence.
@@ -2771,7 +2801,7 @@ blocked and gains no authority from Paper evidence.
 #### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001 - Continuous Prospective TradePlan Producer
 
 - Lifecycle: `READY`. This is the exact next implementation task after the
-  active RTD capability task closes.
+  active catalyst and RTD gates close.
 - Wire the already-defined prospective lifecycle and successor-setup semantics
   into production composition so a legitimate same-session opportunity can
   produce one immutable continuous TradePlan input. Do not invent or loosen a
@@ -2786,6 +2816,21 @@ blocked and gains no authority from Paper evidence.
   order capability, and proof that a valid producer output can be consumed by
   the existing branch-only Continuous Paper contract without changing either
   contract's semantics.
+- Historical-context readiness is a recorded design requirement, not an
+  implementation in the catalyst repair. A newly discovered symbol must begin
+  current observation and bounded authoritative historical backfill
+  concurrently, then evaluate when its setup-specific evidence is complete.
+  The opening 5/5 bars are current evidence, not a universal continuous
+  readiness or arbitrary five-minute waiting rule.
+- The future analysis/read model must join completed new one-minute bars with
+  backfilled recent history, older aggregated context, and Daily context while
+  keeping a provisional forming bar distinct. Recent history should retain
+  finer resolution than older history; the proposed 12-24 hour one-minute,
+  older hourly, and longer Daily bands are an unfrozen concept pending source,
+  cost, and contract audit. No cutoff or destructive compaction is authorized.
+- A later chart verification must prove that selecting a newly discovered
+  symbol shows meaningful backfilled history rather than beginning at discovery
+  time. No WPF work is authorized by this recorded requirement.
 
 #### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
 

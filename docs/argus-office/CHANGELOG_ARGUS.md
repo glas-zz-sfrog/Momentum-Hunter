@@ -1,5 +1,19 @@
 # Argus Changelog
 
+- Enforced the existing catalyst relationship-authority contract at the point
+  where score points are assigned, so unrelated, ambiguous, unresolved, and
+  keyword-only headlines remain visible but contribute zero scoring authority.
+- Advanced the scoring implementation identity to `momentum_score_v2` and
+  exposed deterministic authorized/blocked headline counts without changing
+  relationship semantics, thresholds, setup rules, or execution authority.
+- Preserved the August 24 BMNR evidence byte-for-byte at stored score 79; a
+  nonpersisted BULL counterfactual computes 68 after removing only the
+  unauthorized Eightco/OpenAI +11 contribution.
+- Passed 73 focused/adjacent tests, compileall, static safety scans, and every
+  discovered Python test after exact rerun of two isolated-worktree environment
+  failures. Integration, V1 promotion, repin, and physical runtime validation
+  remain separate gates.
+
 - Ran and independently verified the smallest fingerprinted read-only Schwab
   true-overnight API probe on fixed SPY/QQQ/NVDA/AAPL/MU scope.
 - Classified quotes, bid/ask, mark, and price history as
