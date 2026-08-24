@@ -116,7 +116,7 @@ occurred. Monday remains protected by unchanged V1; narrowing is deferred.
 
 `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is `ACTIVE` on isolated branch
 `codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` at pushed committed head
-`306807dafcc617bb0e1e8c06a1b284d3a2f807b2`, with a clean worktree. Official
+`a714c7cc81f1f7dd19240bf994e57616790b1663`, with a clean worktree. Official
 `tos.rtd` through desktop Excel is physically functional for the fixed market-only `SPY`, `QQQ`,
 `NVDA`, `AAPL`, and `MU` basket in the current interactive Windows session.
 Regular-session observations prove the supported RTD/COM path and observer
