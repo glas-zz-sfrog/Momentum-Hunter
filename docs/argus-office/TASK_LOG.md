@@ -564,3 +564,38 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   reruns changed zero jobs. Monday August 24 remains enabled and `PENDING` at
   08:35/08:40 CT, service heartbeat is fresh, zero jobs are running, zero
   Shadow/Paper jobs are enabled, and NIST-backed Windows Time is synchronized.
+
+## 2026-08-25 - Authoritative Opening Dependency Closure
+
+- Started from clean synchronized canonical
+  `db91583f2d4e2318ee839d3cd6e86ebd237560e4` in an isolated task worktree.
+- Replaced V1's whole-package/all-distribution promotion input with an
+  independently recomputed V2 boundary: 96 reachable package modules, three
+  explicit runtime files, and 10 relevant installed distributions. Local
+  import escape, unclassified dynamic loading, contradictory evidence,
+  loaded-byte mismatch, and post-promotion tampering remain fail closed.
+- Preserved V1 as an executable rollback policy and proved mixed V1/V2/V1
+  promotion-chain verification.
+- Replayed the exact Identity-002 20-commit sample: V1 required four
+  promotions, while V2 required two. The two avoided promotions were opening-
+  unreachable administration and Continuous-only changes; the supervisor/gate
+  and shared Schwab changes remained correctly promotion-requiring.
+- Passed the isolated physical promotion/runtime match, seven mutation/release
+  tests, 159 focused regressions, all 2,737 Python tests, compileall,
+  PowerShell parsing, protected-path review, and secret/authority scans.
+- Integrated and pushed the implementation, updated the loaded Automation
+  supervisor/identity gate, and promoted production V2 release
+  `OPENING-RUNTIME-C7667168C3746B2968A9` with runtime fingerprint
+  `c7667168c3746b2968a9b862e3322b8d7a12029a8f97b129e54625e51e148018`.
+- Repaired a stale-readback defect found during the service update. The
+  corrected updater requires exact loaded hashes and a post-restart heartbeat;
+  94 broader tests passed with one expected Windows skip, and the physical
+  updater run returned exact fresh loaded identity.
+- Restored the updater-created exact approved host backup after .NET build
+  provenance changed the rebuilt host bytes. The active V2 release returned to
+  `APPROVED_RUNTIME_MATCH` without a promotion or job repin. A later admin-
+  tool/test Git commit remains outside the opening closure, physically proving
+  unnecessary-promotion reduction on the installed topology.
+- Final safety state: 13 pending future openings, zero enabled Shadow/Paper
+  jobs, order transmission unavailable, all three services Running/Automatic,
+  and Continuous configuration/service hashes unchanged.

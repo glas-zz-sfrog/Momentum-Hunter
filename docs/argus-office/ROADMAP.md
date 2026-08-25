@@ -77,7 +77,26 @@ to canonical, and pushed normally. Safe V1 promotion created approved release
 `2698312c5f3749f4916cd581f48fa713cc4af31015ed63d21279e9a1f8145aa3`.
 Live verification reports exact runtime match and a fresh supervisor heartbeat;
 all 14 future openings already use `opening-capture`, so zero jobs changed.
-`ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` is now unblocked but not started.
+That immutable V1 release remains in the promotion chain as rollback evidence
+and has been superseded operationally by the Identity-003 V2 release below.
+
+`ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` is
+`COMPLETE / APPROVED_RUNTIME_ACTIVE`. The implementation and qualification
+chain is pushed and integrated through
+`b79070fad464dcf52a7cf862ebe5b2b9bc6aab54`. Promotion
+now recomputes the authoritative opening closure from the actual supervisor,
+release wrapper, capture entrypoint, explicit runtime files, configuration,
+executables, and relevant installed distributions. The active V2 release is
+`OPENING-RUNTIME-C7667168C3746B2968A9`, source Git
+`09a116e71e149aca9d456e67ee88d2e052373b87`, runtime fingerprint
+`c7667168c3746b2968a9b862e3322b8d7a12029a8f97b129e54625e51e148018`,
+and release fingerprint
+`d43a34a8d39471c56cd7952f984fda74a2789d1a068b3f0fc51b1baadb2f0e6e`.
+Current later Git is accepted with `APPROVED_RUNTIME_MATCH` because the
+admin-tool/test and governance changes are outside the measured opening
+closure. No future job was repinned. The service state has 13 pending future
+openings; zero Shadow/Paper jobs are enabled and order transmission is
+unavailable. V1 remains executable and promotable as the broad rollback path.
 
 `ARGUS-AUTOMATION-RUNTIME-IDENTITY-001` is an urgent weekend reliability
 exception. Qualified implementation commit
@@ -104,8 +123,8 @@ executable rollback path. Rollback package SHA-256 is
 `C7FEE933E5F623A6FD4C72DC999B124357364F5897A85DEC433A63F3D8693F5B`.
 
 `ARGUS-AUTOMATION-RUNTIME-IDENTITY-002` is complete, integrated, and pushed at
-`87f2ebf8d3a35260d32ad5f68e39fc3d9e186af5`. The current V1 opening boundary
-is `BOUNDARY_SAFE_BUT_OVERBROAD / ENVIRONMENT_BOUNDARY_OVERBROAD`: it binds all
+`87f2ebf8d3a35260d32ad5f68e39fc3d9e186af5`. The prior V1 opening boundary
+was `BOUNDARY_SAFE_BUT_OVERBROAD / ENVIRONMENT_BOUNDARY_OVERBROAD`: it binds all
 208 package Python files and all installed distributions, while the measured
 static opening closure reaches 94 package modules and three explicit files.
 The live graph has zero local import escapes and zero dynamic-loading sites.
@@ -116,7 +135,8 @@ V1. Full discovery passes 2,723 tests, and the controlled merge advanced Git
 without changing the approved `ee3888...` surface or invalidating
 `OPENING-RUNTIME-B7F9069A246ED2D99BC8`. No production semantic, service,
 manifest, schedule, provider, account, Paper, Shadow, broker, or order change
-occurred. Monday remains protected by unchanged V1; narrowing is deferred.
+occurred in Identity-002. Identity-003 has now completed that deferred
+narrowing while preserving V1 as rollback.
 
 `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is terminal as
 `TOS_RTD_OVERNIGHT_QUOTES_ONLY / TOS_RTD_HOT_SET_USEFUL`. The authoritative
@@ -144,8 +164,12 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Current Runtime And Strategy Truth
 
-- The installed product remains `e69426b3b7bd179cd62eba2e28a5d0553da47154`.
-  `MomentumHunterAutomation`, `MomentumHunterContinuousRuntime`, and
+- The installed research-only Continuous product remains
+  `e69426b3b7bd179cd62eba2e28a5d0553da47154`. Canonical Git is synchronized
+  through the Identity-003 integration, while opening execution is governed by
+  active V2 release `OPENING-RUNTIME-C7667168C3746B2968A9` rather than whole-
+  checkout identity. `MomentumHunterAutomation`,
+  `MomentumHunterContinuousRuntime`, and
   `MomentumHunterContinuousWriter` are Automatic/Running; the writer uses the
   dedicated `LOCAL SERVICE` principal.
 - Continuous Runtime is `RESEARCH_ONLY`. Order capability is `UNAVAILABLE`;
@@ -197,9 +221,9 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-`ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` is the exact next implementation task.
-The Monday pipeline, catalyst authority repair, and terminal RTD gates have
-passed. `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` follows it and can own the
+`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` is the exact next implementation
+task. The Monday pipeline, catalyst authority repair, terminal RTD gates, and
+authoritative opening dependency closure have passed. The producer can own the
 new-symbol history-admission, current-plus-historical composition, material-
 evidence reevaluation, and successor-setup production boundary by reusing
 existing candle and Continuous contracts; no new prerequisite is required.
@@ -207,6 +231,13 @@ The authoritative ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
 
+- `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` activates the authoritative V2
+  promotion boundary: 96 reachable package modules plus three explicit files,
+  10 relevant distributions, exact loaded-byte/configuration checks, fail-
+  closed import/dynamic-load/tamper enforcement, V1 rollback, and physical
+  promotion/runtime-match proof. The original 20-commit replay reduces four V1
+  promotions to two explained V2 promotions; a later admin-tool/test commit
+  physically advanced Git without changing the approved opening release.
 - `ARGUS-CATALYST-SCORE-AUTHORITY-001` prospectively blocks unauthorized
   catalyst and risk keywords before score assignment, preserves Monday's score
   79 evidence, and promotes the corrected v2 runtime under the safe V1 release
@@ -242,19 +273,17 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No implementation task is active. The post-RTD reconciliation is
-   documentation-only and must close before the next implementation begins.
+1. No implementation task is active. Identity-003 is terminal, integrated,
+   pushed, and reconciled into the authoritative Roadmap.
 
 ### 2. Ready / Next
 
-1. Implement and physically qualify `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` now
-   that the catalyst repair and V1 promotion gate are complete.
-2. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` as the bounded producer
+1. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` as the bounded producer
    required by the already-defined continuous lifecycle/successor contracts.
-3. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
+2. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
    research identity after the producer can supply the complete bounded cycle;
    this grants no Paper or order authority.
-4. Reconcile and fully requalify the existing
+3. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch only after the producer passes;
    first prove the disabled installation. Paper preflight and one-entry arming
    remain separate later gates.
@@ -2834,9 +2863,9 @@ blocked and gains no authority from Paper evidence.
 
 #### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001 - Continuous Prospective TradePlan Producer
 
-- Lifecycle: `READY / SECOND`. Begin after
-  `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003`; the catalyst and RTD gates are
-  terminal and no additional prerequisite is required.
+- Lifecycle: `READY / NEXT`. `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003`, catalyst,
+  Monday opening, and RTD gates are terminal; no additional prerequisite is
+  required.
 - Wire the already-defined prospective lifecycle and successor-setup semantics
   into production composition so a legitimate same-session opportunity can
   produce one immutable continuous TradePlan input. Do not invent or loosen a

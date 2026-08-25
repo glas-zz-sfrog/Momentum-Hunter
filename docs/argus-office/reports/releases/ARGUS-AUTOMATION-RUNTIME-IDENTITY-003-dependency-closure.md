@@ -2,28 +2,32 @@
 
 ## Qualification Status
 
-`IMPLEMENTED_PENDING_CONTROLLED_INTEGRATION`
+`COMPLETE / APPROVED_RUNTIME_ACTIVE`
 
 Task branch: `codex/ARGUS-AUTOMATION-RUNTIME-IDENTITY-003`
 
 Qualified implementation source: `4661568aaac1f2ac1ee3efb8a45db247ad120f84`
 
+Integrated qualification documentation: `09a116e71e149aca9d456e67ee88d2e052373b87`
+
+Service updater readback repair: `b79070fad464dcf52a7cf862ebe5b2b9bc6aab54`
+
 Starting canonical identity: `db91583f2d4e2318ee839d3cd6e86ebd237560e4`
 
-The V2 source and environment boundary is implemented, the original
-IDENTITY-002 comparison is reproduced, and an isolated physical promotion plus
-runtime match passed. Production remains on V1 pending controlled integration.
+The V2 source and environment boundary is implemented, integrated, pushed,
+promoted, and active. The original IDENTITY-002 comparison is reproduced; both
+an isolated promotion and the installed production promotion report exact
+runtime match. V1 remains preserved as the executable broad rollback policy.
 
 ## Direct Classifications
 
-- `DEPENDENCY_CLOSURE_AUTHORITATIVE = YES` in the qualified V2 implementation.
+- `DEPENDENCY_CLOSURE_AUTHORITATIVE = YES`.
 - `ENVIRONMENT_BOUNDARY_NARROWED = YES`.
 - `FAIL_CLOSED_EQUIVALENCE_PRESERVED = YES`.
 - `UNNECESSARY_PROMOTION_REDUCTION_PROVEN = YES`.
-- `PHYSICAL_PROMOTION_RUNTIME_MATCH_PROVEN = YES` in an isolated release root.
+- `PHYSICAL_PROMOTION_RUNTIME_MATCH_PROVEN = YES`.
 - `V1_ROLLBACK_PRESERVED = YES`.
-- `CONTINUOUS_TRADEPLAN_PRODUCER_READY_NEXT = NO` until controlled integration
-  and production readback are terminal.
+- `CONTINUOUS_TRADEPLAN_PRODUCER_READY_NEXT = YES`.
 
 ## Root Findings
 
@@ -130,21 +134,51 @@ root. No provider, account, Paper, Shadow, position, or order request occurred.
 - Authority scan: opening only; Paper, Shadow, broker orders, and transmission
   remain false/unavailable.
 
-## Production Nonmutation At Qualification
+## Production Integration And Runtime Match
 
-Canonical and `origin/master` remain clean at
-`db91583f2d4e2318ee839d3cd6e86ebd237560e4`. The active production release is
-still V1 `OPENING-RUNTIME-2698312C5F3749F4916C` and reports
-`APPROVED_RUNTIME_MATCH` with a fresh heartbeat. Automation, Continuous Runtime,
-and Continuous Writer remain Running/Automatic. The Automation manifest,
-Continuous config, Automation service host, and Continuous service-host hashes
-remain unchanged. Thirteen future opening jobs use `opening-capture`; zero
+The implementation was cleanly fast-forwarded and pushed. Production V2
+promotion created:
+
+- release `OPENING-RUNTIME-C7667168C3746B2968A9`;
+- source Git `09a116e71e149aca9d456e67ee88d2e052373b87`;
+- runtime fingerprint
+  `c7667168c3746b2968a9b862e3322b8d7a12029a8f97b129e54625e51e148018`;
+- release fingerprint
+  `d43a34a8d39471c56cd7952f984fda74a2789d1a068b3f0fc51b1baadb2f0e6e`;
+- closure fingerprint
+  `ebd7aa74b81da57bb7eca51409a73bbb9c0e0dcd71a60bd60d2db732c67fadcc`.
+
+The service updater initially accepted stale hash-shaped readback too early.
+The bounded repair now requires the exact new host, supervisor, and identity-
+gate hashes plus a post-restart heartbeat; rollback stops the service before
+restoring installed files. Focused and broader regression passed 94 tests with
+one expected Windows skip. The corrected updater then returned `UPDATED` with
+exact fresh loaded identity. Because the rebuilt .NET host embedded the newer
+Git provenance and changed bytes despite unchanged service source, the
+updater-created exact backup was restored instead of promoting or repinning an
+unnecessary release.
+
+Current canonical and `origin/master` are synchronized through `b79070f` before
+this documentation closeout. The active release still reports
+`APPROVED_RUNTIME_MATCH` even though current Git is later than release source
+Git, physically proving that the unreachable admin-tool/test change does not
+force opening promotion. Automation, Continuous Runtime, and Continuous Writer
+remain Running/Automatic. Installed hashes are:
+
+- Automation manifest:
+  `F293CE95F143BB8853E83F88D83F6ACED62A891CA88AFDE8780B95AB023EB862`;
+- Automation service host:
+  `C1AFEB80A0794A438B6EA406DC7B3CEBA9715C9752CE8F33EC52FFBDB89D823A`;
+- Continuous configuration:
+  `EF1986A35000CA8EB425BCD7470BE0A9C4496007853F4AF20F779B565AF9D982`;
+- Continuous service host:
+  `2A3A7BBA1E0FC6B215D739FEB8315AF193DBB28796876EE7AA26E87467F728BE`.
+
+The service state has 13 pending future openings on `opening-capture`; zero
 Shadow and zero Paper jobs are enabled; order transmission is unavailable.
 
-## Controlled Integration Requirement
+## Next Recommendation
 
-Merging this runtime code changes the broad V1 disk surface. Therefore a
-controlled integration must update the loaded Automation Supervisor/identity
-gate and promote the exact integrated V2 runtime before the next opening. The
-current V1 release record must remain immutable and available for rollback. No
-job repin is required.
+Begin `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` from clean synchronized
+canonical. Do not repin opening jobs or create another opening release unless
+the V2 fingerprint changes. Keep V1 and every prior release/receipt immutable.

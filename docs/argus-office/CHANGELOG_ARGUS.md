@@ -789,3 +789,17 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   diff, secret, capability, and protected-path checks. Strict fast-forward to
   `87f2ebf` advanced Git while the approved surface and runtime match remained
   unchanged, requiring no service restart, repin, or promotion.
+
+## 2026-08-25 - Authoritative Opening Runtime Identity V2
+
+- Activated a promotion-time dependency closure over 96 reachable package
+  modules, three explicit runtime files, configuration/executable bytes, and
+  10 evidence-derived relevant distributions.
+- Preserved V1 rollback while retaining fail-closed import escape, dynamic
+  loading, incomplete evidence, loaded-byte mismatch, and tamper rejection.
+- Proved four V1 promotions reduce to two explained V2 promotions in the exact
+  Identity-002 replay, then physically proved a later unreachable admin-tool
+  and test commit does not invalidate the approved opening release.
+- Promoted and verified `OPENING-RUNTIME-C7667168C3746B2968A9`; no future job
+  repin, provider/broker call, Paper/Shadow activation, or order authority was
+  introduced.
