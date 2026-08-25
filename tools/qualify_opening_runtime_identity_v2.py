@@ -47,6 +47,9 @@ def qualify(
     task_context = replace(
         production_context,
         repository_root=repository_root.absolute(),
+        config_path=(
+            production_context.repository_root / "MomentumHunterData" / "config.json"
+        ),
     )
     source_git_sha, worktree_status = current_git_identity(task_context.repository_root)
     if worktree_status:
