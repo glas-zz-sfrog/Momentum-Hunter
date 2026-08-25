@@ -16,19 +16,22 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Mapping
 from zoneinfo import ZoneInfo
 
+from momentum_hunter.automatic_candle_backfill import (
+    ACTIVE_STATES,
+    TERMINAL_STATES,
+    AutomaticCandleBackfillCoordinator,
+)
 from momentum_hunter.broad_discovery import DiscoveryPaginationPolicy, DiscoverySnapshot
-from momentum_hunter.canonical_candle_evidence import load_canonical_minute_bars
 from momentum_hunter.continuous_composition import (
     READY,
-    CanonicalEvidenceInput,
     CompositionMemberInput,
     ContinuousCompositionCycle,
     ContinuousCompositionPolicy,
     assess_readiness,
     build_readiness_request,
-    compose_cycle,
 )
 from momentum_hunter.continuous_denominator import (
     ContinuousDenominatorResult,
@@ -43,6 +46,8 @@ from momentum_hunter.continuous_evidence_writer import (
     read_evidence_snapshot,
 )
 from momentum_hunter.continuous_runtime import (
+    DATA_RECOVERED,
+    READINESS_CHANGED,
     CompositionRequest,
     CompositionResult,
     ContinuousOpportunityRuntime,
@@ -58,6 +63,18 @@ from momentum_hunter.continuous_runtime import (
     ReadinessResult,
     RuntimeCadence,
     RuntimeCheckpointStore,
+    RuntimeTriggerEvent,
+)
+from momentum_hunter.continuous_tradeplan_producer import (
+    HISTORY_BACKFILL_PENDING,
+    ContinuousHistoryAdmissionCoordinator,
+    ContinuousTradePlanProducer,
+    ContinuousTradePlanProducerStore,
+    CurrentMarketEvidence,
+    HistoricalContextEvidence,
+    InstrumentAdmissionEvidence,
+    build_current_market_evidence,
+    unavailable_instrument_admission,
 )
 from momentum_hunter.hot_universe import (
     HOT,
@@ -223,11 +240,15 @@ class QualificationState:
     snapshot: DiscoverySnapshot | None = None
     universe: HotUniverseResult | None = None
     readiness_inputs: dict[str, CompositionMemberInput] = field(default_factory=dict)
+    historical_contexts: dict[str, HistoricalContextEvidence] = field(default_factory=dict)
+    current_market_evidence: dict[str, CurrentMarketEvidence] = field(default_factory=dict)
+    instrument_admissions: dict[str, InstrumentAdmissionEvidence] = field(default_factory=dict)
     cycles: dict[str, ContinuousCompositionCycle] = field(default_factory=dict)
     denominator_results: dict[str, ContinuousDenominatorResult] = field(
         default_factory=dict
     )
     refreshed_snapshot_id: str = ""
+    configuration_fingerprint: str = ""
 
 
 class LiveDiscoverySource:
@@ -385,7 +406,21 @@ class LiveMarketDataSource:
         self.quote_source = SchwabMarketDataQuoteSource(
             token_provider=self.token_provider,
         )
-        self.composition_policy = ContinuousCompositionPolicy()
+        self.composition_policy = ContinuousCompositionPolicy(
+            required_recent_minute_bars=1,
+        )
+        self.backfill = AutomaticCandleBackfillCoordinator(
+            state_path=state.root / "state" / "continuous-history-backfill.json",
+            minute_store_root=self.minute_root,
+            daily_store_root=self.daily_root,
+            run_backfill=self._run_bounded_backfill,
+        )
+        self.history_admission = ContinuousHistoryAdmissionCoordinator(
+            minute_store_root=self.minute_root,
+            daily_store_root=self.daily_root,
+            backfill=self.backfill,
+            policy=self.composition_policy,
+        )
 
     def _sync_auth_metrics(self) -> None:
         self.state.metrics.auth_health = self.token_provider.metrics_snapshot()
@@ -419,33 +454,7 @@ class LiveMarketDataSource:
         value = str(error or "").strip()
         return mapping.get(value, value)
 
-    def _refresh(self) -> None:
-        if self.state.snapshot is None or self.state.universe is None:
-            raise LiveQualificationError(
-                "Schwab refresh has no discovery generation."
-            )
-        snapshot_id = self.state.snapshot.snapshot_id
-        if self.state.refreshed_snapshot_id == snapshot_id:
-            return
-        symbols = tuple(
-            item.symbol
-            for item in self.state.universe.state.members
-            if item.current_state == TRACKED and item.current_tier == HOT
-        )[:MAX_READY_SYMBOLS]
-        if not symbols:
-            raise LiveQualificationError(
-                "Discovery produced no hot symbols for Schwab qualification."
-            )
-        quote_batch = None
-        try:
-            quote_batch = self.quote_source.quotes_with_clock(symbols)
-            self.state.metrics.schwab_quote_symbols += len(quote_batch.quotes)
-            self.state.metrics.schwab_market_data_successes += 1
-            self.state.metrics.last_successful_schwab_read = _aware_now().isoformat()
-        except Exception as exc:
-            self.state.metrics.provider_failures.append(
-                f"SCHWAB_QUOTES:{self._failure_code(exc)}"
-            )
+    def _run_bounded_backfill(self, symbols: tuple[str, ...]) -> dict[str, object]:
         try:
             result = SchwabHistoricalCandleBackfiller(
                 minute_store=SchwabCandleStore(self.minute_root),
@@ -494,27 +503,71 @@ class LiveMarketDataSource:
         self.state.metrics.schwab_daily_rows += daily_rows
         self.state.metrics.schwab_market_data_successes += 1
         self.state.metrics.last_successful_schwab_read = _aware_now().isoformat()
+        return result
+
+    def _load_current_market_evidence(
+        self, symbol: str, cutoff: datetime
+    ) -> CurrentMarketEvidence:
+        del cutoff
+        try:
+            quote_batch = self.quote_source.quotes_with_clock((symbol,))
+        except Exception as exc:
+            self.state.metrics.provider_failures.append(
+                f"SCHWAB_QUOTES:{self._failure_code(exc)}"
+            )
+            self._sync_auth_metrics()
+            raise
+        quote = quote_batch.quotes.get(symbol)
+        if not isinstance(quote, dict):
+            raise LiveQualificationError(
+                "Schwab current evidence omitted the requested symbol."
+            )
+        received = _aware_now()
+        evidence_payload = {
+            "symbol": symbol,
+            "quote": quote,
+            "clockSkewProof": quote_batch.clock_skew_proof,
+        }
+        self.state.metrics.schwab_quote_symbols += 1
+        self.state.metrics.schwab_market_data_successes += 1
+        self.state.metrics.last_successful_schwab_read = received.isoformat()
+        self._sync_auth_metrics()
+        return build_current_market_evidence(
+            symbol=symbol,
+            provider_timestamp=str(quote.get("timestamp", "")),
+            receipt_timestamp=received.isoformat(),
+            source_identity=str(quote.get("source", "")),
+            market_payload=evidence_payload,
+        )
+
+    def _preserve_admission(
+        self,
+        *,
+        symbol: str,
+        context: HistoricalContextEvidence,
+        current: CurrentMarketEvidence,
+        backfill_evidence: Mapping[str, object] | None,
+    ) -> None:
         sanitized = {
-            "snapshotId": snapshot_id,
-            "symbols": list(symbols),
-            "quoteStatus": "PASS" if quote_batch is not None else "FAILED_LOCALIZED",
-            "quoteSymbolCount": len(quote_batch.quotes) if quote_batch else 0,
-            "candleStatus": result.get("status"),
-            "minuteRows": minute_rows,
-            "dailyRows": daily_rows,
-            "resultFingerprint": result.get("resultFingerprint"),
+            "symbol": symbol,
+            "currentMarketEvidence": asdict(current),
+            "historicalContext": asdict(context),
+            "backfill": dict(backfill_evidence) if backfill_evidence else None,
+            "accountValuesRequested": False,
             "positionsRequested": False,
             "ordersRequested": False,
             "orderTransmission": ORDER_CAPABILITY,
         }
+        admission_fingerprint = _fingerprint(
+            "continuous-history-admission-v1", sanitized
+        )
         _write_once(
             self.state.root
             / "source-evidence"
             / "schwab"
-            / f"{snapshot_id}.json",
+            / f"continuous-history-admission-{admission_fingerprint[:24]}.json",
             _canonical_bytes(sanitized),
         )
-        self.state.refreshed_snapshot_id = snapshot_id
 
     def evaluate(self, request: ReadinessRequest) -> ReadinessResult:
         if self.state.universe is None or self.state.snapshot is None:
@@ -563,49 +616,24 @@ class LiveMarketDataSource:
                 failure_reason=None,
                 deferred=True,
             )
-        self._refresh()
-        all_bars = load_canonical_minute_bars(
-            store_root=self.minute_root,
-            symbols=(request.symbol,),
-        ).get(request.symbol, [])
-        completed_cutoff = evaluated - timedelta(
-            seconds=self.composition_policy.minimum_completed_bar_lag_seconds
+        admission = self.history_admission.admit(
+            member=member,
+            cutoff=evaluated,
+            current_evidence_loader=self._load_current_market_evidence,
         )
-        regular_bars = tuple(
-            item
-            for item in all_bars
-            if _parse_timestamp(item.timestamp) <= completed_cutoff
-            and item.session_date == member.session_date
-            and REGULAR_OPEN
-            <= _parse_timestamp(item.timestamp).astimezone(EASTERN_TZ).time()
-            < REGULAR_CLOSE
+        evidence = admission.canonical_evidence
+        self.state.historical_contexts[request.symbol] = admission.context
+        self.state.current_market_evidence[request.symbol] = (
+            admission.current_market_evidence
         )
-        daily = SchwabDailyCandleStore(self.daily_root).canonical_bars(
-            request.symbol
+        self.state.instrument_admissions[request.symbol] = (
+            unavailable_instrument_admission(request.symbol, observed_at=evaluated)
         )
-        evidence = CanonicalEvidenceInput(
-            evidence_id=(
-                f"qualification-minute:{request.symbol}:{member.session_date}:"
-                f"{self.state.snapshot.snapshot_id}"
-            ),
+        self._preserve_admission(
             symbol=request.symbol,
-            session_date=member.session_date,
-            provider_timestamp=(
-                regular_bars[-1].timestamp
-                if regular_bars
-                else evaluated.isoformat()
-            ),
-            receipt_timestamp=evaluated.isoformat(),
-            bars=regular_bars,
-            daily_evidence_id=(
-                f"qualification-daily:{request.symbol}:"
-                f"{daily[0]['sessionDate'] if daily else 'missing'}:"
-                f"{daily[-1]['sessionDate'] if daily else 'missing'}"
-            ),
-            daily_evidence_fingerprint=_fingerprint(
-                "qualification-daily-evidence-v1", daily
-            ),
-            history_depth_sessions=len({item.session_date for item in all_bars}),
+            context=admission.context,
+            current=admission.current_market_evidence,
+            backfill_evidence=admission.backfill_evidence,
         )
         rvol = load_time_normalized_rvol_evidence(
             (request.symbol,),
@@ -649,26 +677,65 @@ class LiveMarketDataSource:
 
 
 class LiveCompositionSource:
-    def __init__(self, state: QualificationState) -> None:
+    def __init__(
+        self,
+        state: QualificationState,
+        *,
+        configuration_fingerprint: str | None = None,
+    ) -> None:
         self.state = state
-        self.policy = ContinuousCompositionPolicy()
+        self.policy = ContinuousCompositionPolicy(
+            required_recent_minute_bars=1,
+        )
+        resolved_configuration = (
+            str(configuration_fingerprint or state.configuration_fingerprint).strip()
+            or _fingerprint(
+                "continuous-qualification-producer-configuration-v1",
+                {"root": str(state.root.resolve(strict=False))},
+            )
+        )
+        self.producer = ContinuousTradePlanProducer(
+            store=ContinuousTradePlanProducerStore(
+                state.root / "state" / "continuous-tradeplan-producer.json"
+            ),
+            configuration_fingerprint=resolved_configuration,
+            policy=self.policy,
+        )
 
     def compose(self, request: CompositionRequest) -> CompositionResult:
         if self.state.universe is None:
             raise LiveQualificationError("Composition has no hot-universe state.")
         cutoff = _aware_now()
-        cycle = compose_cycle(
+        member_input = self.state.readiness_inputs.get(request.symbol)
+        history_context = self.state.historical_contexts.get(request.symbol)
+        current_market = self.state.current_market_evidence.get(request.symbol)
+        instrument = self.state.instrument_admissions.get(request.symbol)
+        if (
+            member_input is None
+            or history_context is None
+            or current_market is None
+            or instrument is None
+        ):
+            raise LiveQualificationError(
+                "Composition omitted producer readiness or admission evidence."
+            )
+        evaluation = self.producer.evaluate(
             universe_state=self.state.universe.state,
-            member_inputs=tuple(self.state.readiness_inputs.values()),
-            started_at=cutoff - timedelta(microseconds=1),
+            member_input=member_input,
+            history_context=history_context,
+            current_market_evidence=current_market,
+            instrument_admission=instrument,
             evidence_cutoff=cutoff,
-            policy=self.policy,
+            trigger=request.trigger,
         )
+        if evaluation.cycle is None or evaluation.member_result is None:
+            raise LiveQualificationError(
+                "Producer did not return a reconstructable composition cycle."
+            )
+        cycle = evaluation.cycle
         self.state.cycles[cycle.cycle_id] = cycle
         self.state.metrics.composition_cycles.add(cycle.cycle_id)
-        member = next(
-            item for item in cycle.member_results if item.symbol == request.symbol
-        )
+        member = evaluation.member_result
         if member.intraday_plan is not None:
             self.state.metrics.research_plans.add(member.intraday_plan.plan_id)
         if (
@@ -690,6 +757,7 @@ class LiveCompositionSource:
                 else None
             ),
             plan_id=(member.intraday_plan.plan_id if member.intraday_plan else None),
+            evidence_payload_json=evaluation.record.payload_json,
         )
 
 
@@ -724,6 +792,59 @@ class LiveDenominatorSource:
 class NoEvents:
     def poll(self, _now: datetime) -> tuple[()]:
         return ()
+
+
+class LiveMaterialEvents:
+    """Turn one terminal asynchronous history load into one bounded reevaluation."""
+
+    def __init__(
+        self,
+        state: QualificationState,
+        backfill: AutomaticCandleBackfillCoordinator,
+    ) -> None:
+        self.state = state
+        self.backfill = backfill
+        self._last_status: dict[str, str] = {}
+        self._emitted: set[str] = set()
+
+    def poll(self, now: datetime) -> tuple[RuntimeTriggerEvent, ...]:
+        observed = now if now.tzinfo is not None and now.utcoffset() is not None else _aware_now()
+        events: list[RuntimeTriggerEvent] = []
+        for symbol, context in sorted(self.state.historical_contexts.items()):
+            evidence = self.backfill.status(symbol)
+            if evidence is None:
+                continue
+            status = str(evidence.get("status", "")).upper()
+            previous = self._last_status.get(symbol, "")
+            self._last_status[symbol] = status
+            if context.status != HISTORY_BACKFILL_PENDING or status not in TERMINAL_STATES:
+                continue
+            source = _fingerprint(
+                "continuous-history-terminal-event-v1",
+                {
+                    "symbol": symbol,
+                    "status": status,
+                    "completedAt": evidence.get("completedAt"),
+                    "attemptCount": evidence.get("attemptCount"),
+                    "contextId": context.context_id,
+                },
+            )
+            if source in self._emitted:
+                continue
+            if previous and previous not in ACTIVE_STATES and previous == status:
+                continue
+            self._emitted.add(source)
+            events.append(
+                RuntimeTriggerEvent(
+                    event_id=f"continuous-history-event-{source[:24]}",
+                    trigger=(DATA_RECOVERED if status in {"COMPLETE", "PARTIAL"} else READINESS_CHANGED),
+                    occurred_at=observed.isoformat(),
+                    symbol=symbol,
+                    source_fingerprint=source,
+                    priority=80,
+                )
+            )
+        return tuple(events)
 
 
 def run_live_qualification(
@@ -765,7 +886,7 @@ def run_live_qualification(
     )
     composition = LiveCompositionSource(state)
     denominator = LiveDenominatorSource(state)
-    events = NoEvents()
+    events = LiveMaterialEvents(state, market.backfill)
     runtime_id = (
         f"aug17-live-qualification-{launch_at.strftime('%Y%m%d%H%M%S')}"
     )

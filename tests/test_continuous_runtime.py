@@ -139,6 +139,7 @@ class SyntheticComposer:
         self.calls: list[str] = []
         self.fail_symbols: set[str] = set()
         self.mismatch_symbols: set[str] = set()
+        self.evidence_payload_json: str | None = None
 
     def compose(self, request: CompositionRequest) -> CompositionResult:
         self.calls.append(request.symbol)
@@ -153,6 +154,7 @@ class SyntheticComposer:
             lifecycle_transitions=1,
             setup_id=f"setup-{request.symbol}",
             plan_id=f"plan-{request.symbol}",
+            evidence_payload_json=self.evidence_payload_json,
         )
 
 
@@ -294,6 +296,33 @@ class ContinuousRuntimeTests(unittest.TestCase):
         self.assertEqual(discovery_calls, self.fixture.discovery.calls)
         self.assertIn("MIDDAY", self.fixture.composer.calls)
         self.assertGreater(health.composition_cycles, 0)
+
+    def test_composition_producer_payload_reaches_writer_unchanged(self) -> None:
+        producer_payload = json.dumps(
+            {
+                "payloadType": "CONTINUOUS_TRADEPLAN_PRODUCER",
+                "producerFingerprint": fp("producer"),
+                "executionAuthority": "NONE",
+                "orderCapability": "UNAVAILABLE",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        self.fixture.composer.evidence_payload_json = producer_payload
+        self.start()
+        self.fixture.runtime.submit_event(
+            self.fixture.event("AAA"), self.fixture.clock.now()
+        )
+        self.fixture.runtime.tick(self.fixture.clock.now())
+        composition_intents = tuple(
+            item
+            for item in self.fixture.writer.intents
+            if item.evidence_type == "COMPOSITION_CYCLE"
+        )
+        self.assertTrue(composition_intents)
+        self.assertTrue(
+            all(item.payload_json == producer_payload for item in composition_intents)
+        )
 
     def test_queue_coalescing_replacement_and_saturation_are_explicit(self) -> None:
         queue = BoundedWorkQueue("readiness", 2)

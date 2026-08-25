@@ -28,8 +28,8 @@ from momentum_hunter.continuous_live_qualification import (
     LiveCompositionSource,
     LiveDenominatorSource,
     LiveDiscoverySource,
+    LiveMaterialEvents,
     LiveMarketDataSource,
-    NoEvents,
     QualificationState,
 )
 from momentum_hunter.continuous_runtime import (
@@ -880,12 +880,16 @@ def run_runtime(config_path: Path) -> int:
         root=runtime_root / "session",
         launch_at=datetime.now().astimezone(),
         allow_persistent=True,
+        configuration_fingerprint=str(config["configurationFingerprint"]),
     )
     discovery = LiveDiscoverySource(state)
     market = LiveMarketDataSource(state, expected_account_ending=str(config["expectedAccountEnding"]))
-    composition = LiveCompositionSource(state)
+    composition = LiveCompositionSource(
+        state,
+        configuration_fingerprint=str(config["configurationFingerprint"]),
+    )
     denominator = LiveDenominatorSource(state)
-    events = NoEvents()
+    events = LiveMaterialEvents(state, market.backfill)
     checkpoints = RuntimeCheckpointStore(runtime_root / "checkpoint", allow_persistent=True)
     checkpoint_path = checkpoints.path_for(str(config["runtimeIdentity"]))
     if checkpoint_path.exists():

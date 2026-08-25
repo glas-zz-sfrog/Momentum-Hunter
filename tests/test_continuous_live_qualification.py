@@ -3,12 +3,19 @@ from __future__ import annotations
 import ast
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 from momentum_hunter.continuous_live_qualification import (
+    LiveMaterialEvents,
     LiveQualificationError,
+    QualificationState,
     validate_qualification_root,
 )
+from momentum_hunter.continuous_runtime import DATA_RECOVERED
+from momentum_hunter.continuous_tradeplan_producer import HISTORY_BACKFILL_PENDING
 from momentum_hunter.opportunity_denominator import (
     LIVE_READ_ONLY_QUALIFICATION,
     OBSERVATION_MODES,
@@ -42,6 +49,41 @@ class ContinuousLiveQualificationTests(unittest.TestCase):
     def test_live_qualification_mode_is_distinct_and_nonprospective(self) -> None:
         self.assertIn(LIVE_READ_ONLY_QUALIFICATION, OBSERVATION_MODES)
         self.assertNotEqual("PROSPECTIVE", LIVE_READ_ONLY_QUALIFICATION)
+
+    def test_terminal_backfill_emits_one_bounded_data_recovered_event(self) -> None:
+        class Backfill:
+            status_value = "QUEUED"
+
+            def status(self, symbol: str):
+                return {
+                    "symbol": symbol,
+                    "status": self.status_value,
+                    "completedAt": (
+                        "2026-08-18T10:05:00-04:00"
+                        if self.status_value == "COMPLETE"
+                        else None
+                    ),
+                    "attemptCount": 1,
+                }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            now = datetime(
+                2026, 8, 18, 10, 5, tzinfo=ZoneInfo("America/New_York")
+            )
+            state = QualificationState(root=Path(temporary), launch_at=now)
+            state.historical_contexts["AAA"] = SimpleNamespace(
+                status=HISTORY_BACKFILL_PENDING,
+                context_id="continuous-history-pending",
+            )
+            backfill = Backfill()
+            events = LiveMaterialEvents(state, backfill)
+            self.assertEqual((), events.poll(now))
+            backfill.status_value = "COMPLETE"
+            emitted = events.poll(now)
+            self.assertEqual(1, len(emitted))
+            self.assertEqual(DATA_RECOVERED, emitted[0].trigger)
+            self.assertEqual("AAA", emitted[0].symbol)
+            self.assertEqual((), events.poll(now))
 
     def test_module_has_no_order_or_broker_capability(self) -> None:
         source = (

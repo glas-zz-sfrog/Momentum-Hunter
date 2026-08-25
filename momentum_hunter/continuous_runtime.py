@@ -397,11 +397,23 @@ class CompositionResult:
     lifecycle_transitions: int = 0
     setup_id: str | None = None
     plan_id: str | None = None
+    evidence_payload_json: str | None = None
 
     def __post_init__(self) -> None:
         _require_fingerprint(self.fingerprint, "Composition fingerprint")
         if self.lifecycle_transitions < 0:
             raise ContinuousRuntimeError("Lifecycle transition count cannot be negative.")
+        if self.evidence_payload_json is not None:
+            try:
+                evidence = json.loads(self.evidence_payload_json)
+            except json.JSONDecodeError as exc:
+                raise ContinuousRuntimeError(
+                    "Composition evidence payload is malformed."
+                ) from exc
+            if not isinstance(evidence, dict):
+                raise ContinuousRuntimeError(
+                    "Composition evidence payload must be an object."
+                )
 
 
 @dataclass(frozen=True)
@@ -2176,19 +2188,25 @@ class ContinuousOpportunityRuntime:
         self.last_successful_composition_at = now
         self.last_composition_completed_at = now
         self._mark_forward_progress(now)
+        if result.evidence_payload_json is not None:
+            evidence_payload = json.loads(result.evidence_payload_json)
+        else:
+            result_payload = asdict(result)
+            result_payload.pop("evidence_payload_json", None)
+            evidence_payload = {
+                "payloadType": "COMPOSITION_CYCLE",
+                "request": asdict(request),
+                "result": result_payload,
+                "knownAt": _timestamp(now),
+                "authority": RESEARCH_AUTHORITY,
+                "executionAuthority": EXECUTION_AUTHORITY_NONE,
+            }
         evidence_decision = self._emit_intent(
             evidence_type="COMPOSITION_CYCLE",
             record_identity=result.cycle_id,
             record_fingerprint=result.fingerprint,
             payload_fingerprint=result.fingerprint,
-            payload={
-                "payloadType": "COMPOSITION_CYCLE",
-                "request": asdict(request),
-                "result": asdict(result),
-                "knownAt": _timestamp(now),
-                "authority": RESEARCH_AUTHORITY,
-                "executionAuthority": EXECUTION_AUTHORITY_NONE,
-            },
+            payload=evidence_payload,
             now=now,
         )
         if evidence_decision == EVIDENCE_REJECTED_PERMANENT:
