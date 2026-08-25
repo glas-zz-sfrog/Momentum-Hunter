@@ -81,12 +81,19 @@ instrument rejection. No ticker/name inference was added.
 - Opening boundary audit: 96 reachable package modules, 99 closure files, zero
   outside-root imports, zero dynamic-load sites; every changed production file
   is outside the authoritative opening closure.
-- Approved opening runtime: `OPENING-RUNTIME-C7667168C3746B2968A9`, exact
-  `APPROVED_RUNTIME_MATCH`, no promotion or repin required.
-- Canonical source and origin remained synchronized at the base during
-  qualification. Automation manifest and Continuous deployment configuration
-  hashes/timestamps remained unchanged. No service or scheduler mutation
-  occurred.
+- Initial post-merge verification found zero changed opening components but a
+  changed V2 closure fingerprint because the policy still binds total/excluded
+  package-file counts. The clean qualified tree was therefore promoted under
+  the existing V2 contract as `OPENING-RUNTIME-EC11418BBC35F5285CA8`, runtime
+  fingerprint `ec11418bbc35f5285ca8b0ce50e6813b0a8d5c62f0b50d716d3b4daf0ded33da`,
+  and release fingerprint
+  `238a93e44e126bd1b06f982e85f3e8992abf4b11d4b7230e1fe38e348ee3cfab`.
+  Exact live verification returned `APPROVED_RUNTIME_MATCH`; no service restart
+  or job repin occurred.
+- Canonical source and origin remained synchronized. Automation manifest and
+  Continuous deployment configuration hashes/timestamps remained unchanged.
+  No service or scheduler mutation occurred; only the approved opening-release
+  pointer advanced under the established promotion contract.
 - Historical production evidence was not written or changed.
 
 ## Classification
@@ -115,6 +122,10 @@ instrument rejection. No ticker/name inference was added.
 
 ## Next
 
-Wire and activate `ARGUS-STAT-DATA-002` under a new immutable research identity.
-Then reconcile and requalify the existing Continuous Paper branch and prove a
-disabled installation. Do not arm Paper as part of either reconciliation.
+First correct the Identity-003 overbinding that lets unreachable package-file
+inventory counts force an opening promotion, while preserving import-expansion,
+escape, dynamic-load, byte, configuration, and environment detection. Then wire
+and activate `ARGUS-STAT-DATA-002` under a new immutable research identity.
+After that, reconcile and requalify the existing Continuous Paper branch and
+prove a disabled installation. Do not arm Paper as part of either
+reconciliation.

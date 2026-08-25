@@ -13,9 +13,15 @@
 - Recorded the authoritative subtype/leverage metadata gap and fail-closed real
   candidate eligibility. Forty-one direct/adjacent, 366 focused, and 17 Paper
   tests pass; full discovery ran 2,752 tests with `OK (skipped=1)`. Opening
-  runtime, services, schedules, historical
-  evidence, Paper, Shadow, brokers, accounts, positions, and orders were not
-  changed.
+  component bytes, services, schedules, historical evidence, Paper, Shadow,
+  brokers, accounts, positions, and orders were not changed.
+- Found that Identity-003 still includes diagnostic total/excluded package-file
+  counts in its V2 closure fingerprint. The new unreachable producer module
+  changed those counts despite zero changed opening components, so the clean
+  qualified tree was safely promoted as
+  `OPENING-RUNTIME-EC11418BBC35F5285CA8`. Exact runtime verification passed;
+  no service restart or job repin occurred. A narrow Identity-003A correction
+  is queued before more package modules are added.
 
 - Enforced the existing catalyst relationship-authority contract at the point
   where score points are assigned, so unrelated, ambiguous, unresolved, and

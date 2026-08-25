@@ -20,13 +20,17 @@ closed because authoritative subtype/leverage metadata is unavailable.
 
 Forty-one direct/adjacent tests, 366 focused tests, and 17 branch-only Paper
 tests pass; full discovery ran 2,752 tests with `OK (skipped=1)`. Compileall,
-diff, secret, protected-path,
-opening-closure, approved-runtime-match, and installed-state nonmutation checks
-pass. The branch was pushed and cleanly fast-forwarded through `1068265`; the
+diff, secret, protected-path, opening-closure, and pre-promotion installed-state
+nonmutation checks pass. The branch was pushed and cleanly fast-forwarded
+through `1068265`; the
 post-merge canonical suite passed 41/41. Classification is
-`COMPLETE / CANONICAL / RESEARCH_ONLY`. No
-account, position, broker, Paper, Shadow, order, service, scheduler, installed
-runtime, opening promotion, repin, or historical-evidence mutation occurred.
+`COMPLETE / CANONICAL / RESEARCH_ONLY`. No account, position, broker, Paper,
+Shadow, order, service, scheduler, installed
+runtime, repin, or historical-evidence mutation occurred. Zero opening
+component bytes changed, but V2 still fingerprinted total/excluded package
+counts; adding the unreachable producer module therefore required safe
+promotion to `OPENING-RUNTIME-EC11418BBC35F5285CA8`. Exact runtime verification
+passed without a service restart. Identity-003A now owns that overbinding.
 
 ## ARGUS-CATALYST-SCORE-AUTHORITY-001 - 2026-08-24
 

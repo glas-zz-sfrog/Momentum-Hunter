@@ -77,10 +77,16 @@ Paper consumes the producer contract without semantic changes but remains
 unmerged, uninstalled, and unarmed. Live Schwab evidence cannot yet positively
 classify security subtype/leverage, so real candidates fail closed with
 `AUTHORITATIVE_SUBTYPE_AND_LEVERAGE_CLASSIFICATION_UNAVAILABLE`. No account,
-position, broker, Paper, Shadow, order, service, scheduler, installed runtime,
-or opening-runtime authority changed. The pushed branch was cleanly
-fast-forwarded through `1068265`; the post-merge canonical producer/runtime
-suite passed 41/41.
+position, broker, Paper, Shadow, order, service, scheduler, or installed
+Continuous runtime changed. The pushed branch was cleanly fast-forwarded
+through `1068265`; the post-merge canonical producer/runtime suite passed
+41/41. The merge changed zero opening component bytes, but Identity-003 still
+binds total/excluded package-file counts, so adding the unreachable producer
+module changed the V2 closure fingerprint. The clean qualified tree was
+promoted without service restart or job repin as
+`OPENING-RUNTIME-EC11418BBC35F5285CA8`; live verification is
+`APPROVED_RUNTIME_MATCH`. This unnecessary-promotion overbinding is recorded as
+the next narrow reliability correction.
 
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
@@ -105,17 +111,26 @@ chain is pushed and integrated through
 `b79070fad464dcf52a7cf862ebe5b2b9bc6aab54`. Promotion
 now recomputes the authoritative opening closure from the actual supervisor,
 release wrapper, capture entrypoint, explicit runtime files, configuration,
-executables, and relevant installed distributions. The active V2 release is
+executables, and relevant installed distributions. The initial V2 release was
 `OPENING-RUNTIME-C7667168C3746B2968A9`, source Git
 `09a116e71e149aca9d456e67ee88d2e052373b87`, runtime fingerprint
 `c7667168c3746b2968a9b862e3322b8d7a12029a8f97b129e54625e51e148018`,
 and release fingerprint
 `d43a34a8d39471c56cd7952f984fda74a2789d1a068b3f0fc51b1baadb2f0e6e`.
-Current later Git is accepted with `APPROVED_RUNTIME_MATCH` because the
-admin-tool/test and governance changes are outside the measured opening
-closure. No future job was repinned. The service state has 13 pending future
-openings; zero Shadow/Paper jobs are enabled and order transmission is
-unavailable. V1 remains executable and promotable as the broad rollback path.
+That release accepted later admin-tool/test and governance changes. The
+Continuous producer merge then exposed a remaining overbinding: adding one
+unreachable package module changed total/excluded inventory counts embedded in
+the closure fingerprint even though zero opening components changed. The
+qualified canonical tree was promoted through the unchanged V2 mechanism as
+`OPENING-RUNTIME-EC11418BBC35F5285CA8`, source Git
+`cf296d5eefd67bbc1f5d7ecd427436d3ed9eedcb`, runtime fingerprint
+`ec11418bbc35f5285ca8b0ce50e6813b0a8d5c62f0b50d716d3b4daf0ded33da`, and
+release fingerprint
+`238a93e44e126bd1b06f982e85f3e8992abf4b11d4b7230e1fe38e348ee3cfab`.
+Live verification is `APPROVED_RUNTIME_MATCH`; no future job was repinned or
+service restarted. Zero Shadow/Paper jobs are enabled and order transmission
+is unavailable. V1 and the initial V2 release remain immutable rollback and
+provenance evidence.
 
 `ARGUS-AUTOMATION-RUNTIME-IDENTITY-001` is an urgent weekend reliability
 exception. Qualified implementation commit
@@ -185,9 +200,9 @@ requires a separate current-head reconciliation and qualification task.
 
 - The installed research-only Continuous product remains
   `e69426b3b7bd179cd62eba2e28a5d0553da47154`. Canonical Git is synchronized
-  through the Identity-003 integration, while opening execution is governed by
-  active V2 release `OPENING-RUNTIME-C7667168C3746B2968A9` rather than whole-
-  checkout identity. `MomentumHunterAutomation`,
+  through the producer closeout, while opening execution is governed by active
+  V2 release `OPENING-RUNTIME-EC11418BBC35F5285CA8` rather than whole-checkout
+  identity. `MomentumHunterAutomation`,
   `MomentumHunterContinuousRuntime`, and
   `MomentumHunterContinuousWriter` are Automatic/Running; the writer uses the
   dedicated `LOCAL SERVICE` principal.
@@ -241,11 +256,15 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
-research identity. After that research denominator is collecting, reconcile
-and fully requalify the branch-only Continuous Paper implementation and prove
-it installs disabled. Paper arming remains a separate later gate. The
-authoritative ordered sequence is maintained only in `Next / Queue` below.
+Implement `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` as a narrow correction so
+diagnostic total/excluded package inventory cannot change opening identity when
+the authoritative closure, components, imports, configuration, environment,
+and loaded bytes are unchanged. Then wire and activate `ARGUS-STAT-DATA-002`
+prospectively under a new immutable research identity. After that research
+denominator is collecting, reconcile and fully requalify the branch-only
+Continuous Paper implementation and prove it installs disabled. Paper arming
+remains a separate later gate. The authoritative ordered sequence is maintained
+only in `Next / Queue` below.
 
 ### Recent Material Completions
 
@@ -255,7 +274,9 @@ authoritative ordered sequence is maintained only in `Next / Queue` below.
   explicit successor plans, restart idempotency, and downstream Continuous
   Paper contract compatibility. It adds no execution authority and records the
   missing authoritative instrument-subtype/leverage classification as a
-  fail-closed gap.
+  fail-closed gap. Its merge also physically exposed the remaining V2
+  diagnostic-inventory overbinding; the clean tree was safely promoted and the
+  narrow correction is now queued explicitly.
 - `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` activates the authoritative V2
   promotion boundary: 96 reachable package modules plus three explicit files,
   10 relevant distributions, exact loaded-byte/configuration checks, fail-
@@ -303,10 +324,14 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 2. Ready / Next
 
-1. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
+1. Correct the Identity-003 closure-fingerprint overbinding under
+   `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A`: retain fail-closed authority over
+   reachable components and imports while excluding purely diagnostic
+   total/excluded package inventory from promotion identity.
+2. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
    research identity after the producer can supply the complete bounded cycle;
    this grants no Paper or order authority.
-2. Reconcile and fully requalify the existing
+3. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch only after the producer passes;
    first prove the disabled installation. Paper preflight and one-entry arming
    remain separate later gates.
@@ -2938,8 +2963,13 @@ blocked and gains no authority from Paper evidence.
   Continuous Paper contract tests pass; full discovery ran 2,752 tests with
   `OK (skipped=1)`. Compileall, diff,
   secret, protected-path, opening-closure, runtime-match, and installed-state
-  nonmutation checks pass. The changed product files are outside the
-  authoritative opening closure, so no opening promotion or repin is required.
+  checks pass. The changed product files are outside the authoritative opening
+  component closure, but total/excluded package counts still changed its V2
+  fingerprint. Safe promotion created
+  `OPENING-RUNTIME-EC11418BBC35F5285CA8`; exact live verification passed and no
+  job repin or service restart occurred. Identity-003A owns removing this
+  diagnostic-inventory overbinding without weakening closure expansion,
+  escape, dynamic-load, byte, configuration, or environment detection.
 - Instrument admission remains fail closed for real candidates because the live
   Schwab evidence does not authoritatively distinguish common stock, ordinary
   ETF, leveraged/inverse ETP, ETN, and unknown subtype. Synthetic authoritative
