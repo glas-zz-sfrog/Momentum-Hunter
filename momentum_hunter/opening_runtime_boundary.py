@@ -12,7 +12,10 @@ from typing import Iterable, Mapping
 BOUNDARY_SCHEMA = "OpeningRuntimeDependencyClosureV2"
 BOUNDARY_POLICY_VERSION = "opening-runtime-dependency-closure-v2"
 PACKAGE_ROOT = "momentum_hunter"
-ENTRY_MODULES = ("momentum_hunter.automation_supervisor",)
+ENTRY_MODULES = (
+    "momentum_hunter.automation_supervisor",
+    "momentum_hunter.opening_runtime_release",
+)
 ENTRY_FILES = ("tools/capture_job.py",)
 EXPLICIT_RUNTIME_FILES = (
     "tools/capture_job.py",

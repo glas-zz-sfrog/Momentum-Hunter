@@ -193,6 +193,8 @@ def plan(
         for key in set(active_components) | set(candidate_components)
         if active_components.get(key) != candidate_components.get(key)
     )
+    closure = identity["runtimeSurface"].get("dependencyClosureEvidence", {})
+    relevant = identity["environment"].get("relevantDistributions", [])
     return {
         "status": "PLAN_ONLY",
         "candidatePolicy": policy,
@@ -205,6 +207,16 @@ def plan(
         "runtimeMatch": active.get("approvedRuntimeFingerprint")
         == identity["approvedRuntimeFingerprint"],
         "changedRuntimeComponents": changed,
+        "candidateRuntimeComponentCount": len(candidate_components),
+        "dependencyClosureFingerprint": closure.get(
+            "dependencyClosureFingerprint",
+            "",
+        ),
+        "reachablePackageCount": closure.get("reachablePackageCount", 0),
+        "excludedPackageCount": closure.get("excludedPackageCount", 0),
+        "relevantDistributionCount": (
+            len(relevant) if isinstance(relevant, list) else 0
+        ),
         "configurationFingerprint": identity["configuration"][
             "configurationFingerprint"
         ],
@@ -333,6 +345,11 @@ def promote(
         "releaseFingerprint": release["releaseFingerprint"],
         "runtimeFingerprint": release["approvedRuntimeFingerprint"],
         "sourceGitSha": release["sourceGitSha"],
+        "runtimeComponentCount": len(release["runtimeComponents"]),
+        "dependencyClosureFingerprint": release.get(
+            "dependencyClosureEvidence",
+            {},
+        ).get("dependencyClosureFingerprint", ""),
         "pointerFingerprint": pointer.get("pointerFingerprint", ""),
         "supervisorHeartbeatAt": heartbeat.isoformat(),
         "promotionChanged": changed,

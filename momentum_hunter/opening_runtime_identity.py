@@ -779,6 +779,34 @@ def build_runtime_identity_v2(
                 "A V2 relevant dependency identity is incomplete.",
             )
     closure = surface["dependencyClosureEvidence"]
+    component_hashes = {
+        str(item["path"]): str(item["sha256"])
+        for item in surface["components"]
+        if isinstance(item, dict)
+    }
+    executable_contracts = (
+        ("python", context.python_executable),
+        ("powershell", context.powershell_executable),
+        ("serviceHost", context.service_host_executable),
+    )
+    if environment_payload.get("requirementsSha256") != component_hashes.get(
+        "requirements.txt"
+    ):
+        raise OpeningRuntimeIdentityError(
+            "DEPENDENCY_PROVENANCE_INCOMPLETE",
+            "V2 requirements identity does not match promoted bytes.",
+        )
+    for field, path in executable_contracts:
+        value = environment_payload.get(field)
+        if (
+            not isinstance(value, dict)
+            or value.get("path") != str(path.absolute())
+            or value.get("sha256") != file_sha256(path)
+        ):
+            raise OpeningRuntimeIdentityError(
+                "ENVIRONMENT_IDENTITY_INVALID",
+                f"V2 {field} identity does not match configured runtime bytes.",
+            )
     roots = closure["externalImportRoots"]
     explicit_names = sorted(
         str(item["name"]) for item in closure["explicitDistributions"]

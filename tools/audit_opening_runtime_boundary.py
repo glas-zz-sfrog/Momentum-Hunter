@@ -19,6 +19,10 @@ from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping, Sequence
 
 
+PROJECT_ROOT_PATH = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT_PATH))
+
+
 PACKAGE_ROOT = "momentum_hunter"
 ENTRY_MODULES = ("momentum_hunter.automation_supervisor",)
 ENTRY_FILES = ("tools/capture_job.py",)
@@ -436,12 +440,17 @@ def _path_class(path: str, dependency_paths: frozenset[str]) -> str:
     return "OTHER_OR_UNKNOWN"
 
 
-def recent_commit_analysis(repository_root: Path, count: int = 20) -> dict[str, object]:
+def recent_commit_analysis(
+    repository_root: Path,
+    count: int = 20,
+    *,
+    revision: str = "HEAD",
+) -> dict[str, object]:
     root = repository_root.resolve()
     inventory = analyze_opening_boundary(root)
     dependency_paths = frozenset(inventory.dependency_closure_files)
     log = subprocess.run(
-        ["git", "log", f"-{count}", "--format=%H%x09%s"],
+        ["git", "log", revision, f"-{count}", "--format=%H%x09%s"],
         cwd=root,
         text=True,
         capture_output=True,
@@ -471,6 +480,7 @@ def recent_commit_analysis(repository_root: Path, count: int = 20) -> dict[str, 
             }
         )
     return {
+        "revision": revision,
         "commitCount": len(commits),
         "currentV1PromotionRequiredCount": sum(
             bool(item["currentV1PromotionRequired"]) for item in commits
@@ -495,6 +505,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository-root", type=Path, default=Path.cwd())
     parser.add_argument("--recent-commits", type=int, default=20)
+    parser.add_argument("--revision", default="HEAD")
     return parser
 
 
@@ -502,15 +513,16 @@ def main() -> int:
     args = _parser().parse_args()
     inventory = analyze_opening_boundary(args.repository_root)
     payload = {
-        "schemaVersion": "OpeningRuntimeBoundaryAuditV1",
-        "authority": "OFFLINE_NONAUTHORITATIVE_AUDIT",
+        "schemaVersion": "OpeningRuntimeBoundaryAuditV2",
+        "authority": "READ_ONLY_VIEW_OF_AUTHORITATIVE_V2_ANALYZER",
         "inventory": asdict(inventory),
-        "prototypeDependencyClosureFingerprint": dependency_closure_fingerprint(
+        "authoritativeDependencyClosureFileFingerprint": dependency_closure_fingerprint(
             args.repository_root
         ),
         "recentCommitAnalysis": recent_commit_analysis(
             args.repository_root,
             count=args.recent_commits,
+            revision=args.revision,
         ),
     }
     print(json.dumps(payload, indent=2, sort_keys=True, default=_json_default))

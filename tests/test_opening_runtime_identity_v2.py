@@ -184,12 +184,22 @@ class OpeningRuntimeIdentityV2Tests(unittest.TestCase):
         )
         self.mutate(self.root / "tools/run_capture_job.ps1", "# launcher mutation\n")
         self.assertNotEqual(baseline, self.identity()["approvedRuntimeFingerprint"])
+        shutil.copy2(
+            REPOSITORY_ROOT / "tools/run_capture_job.ps1",
+            self.root / "tools/run_capture_job.ps1",
+        )
 
         changed_environment = self.environment_identity("b")
         self.assertNotEqual(
             baseline,
             self.identity(changed_environment)["approvedRuntimeFingerprint"],
         )
+
+        (self.root / "MomentumHunterData/config.json").write_text(
+            '{"provider":"finviz"}',
+            encoding="utf-8",
+        )
+        self.assertNotEqual(baseline, self.identity()["approvedRuntimeFingerprint"])
 
     def test_research_wpf_docs_and_unused_distribution_do_not_change_identity(self) -> None:
         baseline = self.identity()["approvedRuntimeFingerprint"]
@@ -322,6 +332,37 @@ class OpeningRuntimeIdentityV2Tests(unittest.TestCase):
             git_identity=(HEAD, ""),
         )
         self.assertTrue(result.runtime_match)
+
+    def test_mixed_v1_v2_chain_can_promote_v1_rollback(self) -> None:
+        v1_environment: dict[str, object] = {
+            "schemaVersion": "OpeningRuntimeEnvironmentV1",
+            "serviceHost": {"sha256": file_sha256(self.service)},
+        }
+        v1_environment["environmentFingerprint"] = payload_fingerprint(
+            v1_environment,
+            "environmentFingerprint",
+        )
+        store = OpeningRuntimeReleaseStore(self.release_root)
+        v1 = build_release_record(
+            self.context,
+            source_git_sha=HEAD,
+            qualification_evidence=["test://v1"],
+            environment=v1_environment,
+        )
+        store.promote(v1, current_git_sha=HEAD)
+        v2 = build_release_record_v2(
+            self.context,
+            source_git_sha="2" * 40,
+            qualification_evidence=["test://v2"],
+            predecessor_release_id=str(v1["releaseId"]),
+            environment=self.environment,
+        )
+        store.promote(v2, current_git_sha="2" * 40)
+        active, _, changed = store.promote(v1, current_git_sha="3" * 40)
+
+        self.assertTrue(changed)
+        self.assertEqual(v1["releaseId"], active["releaseId"])
+        self.assertEqual("OpeningRuntimeReleaseV1", active["schemaVersion"])
 
 
 if __name__ == "__main__":
