@@ -10,7 +10,8 @@ Date: 2026-08-25
 - Authority: `RESEARCH_ONLY`
 - Execution authority: `NONE`
 - Order capability: `UNAVAILABLE`
-- Branch status at this report: `IMPLEMENTED_PENDING_MERGE`
+- Branch status at this report: `COMPLETE / CANONICAL / RESEARCH_ONLY`
+- Qualified branch closeout and canonical fast-forward: `1068265`
 
 ## Result
 
@@ -73,6 +74,7 @@ instrument rejection. No ticker/name inference was added.
 - Focused lifecycle/backfill/candle/TradePlan suites: 366 passed.
 - Branch-only Continuous Paper contract tests: 17 passed.
 - Full Python discovery: 2,752 tests ran, `OK (skipped=1)`.
+- Post-merge canonical producer/runtime suite: 41 passed.
 - Compileall: passed.
 - Diff check: passed.
 - Bounded credential/secret scan: no matches.
@@ -113,7 +115,6 @@ instrument rejection. No ticker/name inference was added.
 
 ## Next
 
-After controlled integration, wire and activate `ARGUS-STAT-DATA-002` under a
-new immutable research identity. Then reconcile and requalify the existing
-Continuous Paper branch and prove a disabled installation. Do not arm Paper as
-part of either reconciliation.
+Wire and activate `ARGUS-STAT-DATA-002` under a new immutable research identity.
+Then reconcile and requalify the existing Continuous Paper branch and prove a
+disabled installation. Do not arm Paper as part of either reconciliation.

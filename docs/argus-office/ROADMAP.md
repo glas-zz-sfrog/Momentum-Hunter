@@ -64,7 +64,7 @@ pipeline. The terminal `DO_NOT_TRADE_MISSED_ENTRY` result is legitimate and
 unchanged.
 
 `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` is
-`IMPLEMENTED_PENDING_MERGE` at qualified implementation
+`COMPLETE / CANONICAL / RESEARCH_ONLY` at qualified implementation
 `aeea192896a8203113807fb03a657fa4f6218774`. It reuses the canonical
 R032B/R032C backfill, minute/Daily stores, time-normalized RVOL, Continuous
 universe/lifecycle/composition, and DATA-004 contracts to produce immutable
@@ -78,7 +78,9 @@ unmerged, uninstalled, and unarmed. Live Schwab evidence cannot yet positively
 classify security subtype/leverage, so real candidates fail closed with
 `AUTHORITATIVE_SUBTYPE_AND_LEVERAGE_CLASSIFICATION_UNAVAILABLE`. No account,
 position, broker, Paper, Shadow, order, service, scheduler, installed runtime,
-or opening-runtime authority changed.
+or opening-runtime authority changed. The pushed branch was cleanly
+fast-forwarded through `1068265`; the post-merge canonical producer/runtime
+suite passed 41/41.
 
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
@@ -239,13 +241,11 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Complete the controlled fast-forward of
-`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001`. Then wire and activate
-`ARGUS-STAT-DATA-002` prospectively under a new immutable research identity.
-After that research denominator is collecting, reconcile and fully requalify
-the branch-only Continuous Paper implementation and prove it installs disabled.
-Paper arming remains a separate later gate. The authoritative ordered sequence
-is maintained only in `Next / Queue` below.
+Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
+research identity. After that research denominator is collecting, reconcile
+and fully requalify the branch-only Continuous Paper implementation and prove
+it installs disabled. Paper arming remains a separate later gate. The
+authoritative ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
 
@@ -298,9 +298,8 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` is implementation-complete and in
-   controlled integration closeout only. No further product behavior is being
-   added.
+1. No implementation task is active. The Continuous TradePlan producer is
+   terminal, integrated, pushed on its task branch, and reconciled here.
 
 ### 2. Ready / Next
 
@@ -2888,10 +2887,11 @@ blocked and gains no authority from Paper evidence.
 
 #### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001 - Continuous Prospective TradePlan Producer
 
-- Lifecycle: `IMPLEMENTED_PENDING_MERGE`. Qualified implementation
+- Lifecycle: `COMPLETE / CANONICAL / RESEARCH_ONLY`. Qualified implementation
   `aeea192896a8203113807fb03a657fa4f6218774` is on
   `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` from synchronized canonical
-  `3b4bb97b07fd661258d353f3bfc01a9623bf81e4`.
+  `3b4bb97b07fd661258d353f3bfc01a9623bf81e4`; the pushed branch was cleanly
+  fast-forwarded through `1068265`, and post-merge tests passed 41/41.
 - Wire the already-defined prospective lifecycle and successor-setup semantics
   into production composition so a legitimate same-session opportunity can
   produce one immutable continuous TradePlan input. Do not invent or loosen a

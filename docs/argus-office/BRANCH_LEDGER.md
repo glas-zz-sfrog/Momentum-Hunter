@@ -22,7 +22,9 @@ Forty-one direct/adjacent tests, 366 focused tests, and 17 branch-only Paper
 tests pass; full discovery ran 2,752 tests with `OK (skipped=1)`. Compileall,
 diff, secret, protected-path,
 opening-closure, approved-runtime-match, and installed-state nonmutation checks
-pass. Classification is `IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY`. No
+pass. The branch was pushed and cleanly fast-forwarded through `1068265`; the
+post-merge canonical suite passed 41/41. Classification is
+`COMPLETE / CANONICAL / RESEARCH_ONLY`. No
 account, position, broker, Paper, Shadow, order, service, scheduler, installed
 runtime, opening promotion, repin, or historical-evidence mutation occurred.
 
