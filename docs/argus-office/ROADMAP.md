@@ -118,23 +118,29 @@ without changing the approved `ee3888...` surface or invalidating
 manifest, schedule, provider, account, Paper, Shadow, broker, or order change
 occurred. Monday remains protected by unchanged V1; narrowing is deferred.
 
-`ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is `ACTIVE` on isolated branch
-`codex/ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` at pushed committed head
-`a714c7cc81f1f7dd19240bf994e57616790b1663`, with a clean worktree. Official
-`tos.rtd` through desktop Excel is physically functional for the fixed market-only `SPY`, `QQQ`,
-`NVDA`, `AAPL`, and `MU` basket in the current interactive Windows session.
-Regular-session observations prove the supported RTD/COM path and observer
-plumbing only. True 20:00-04:00 ET availability, field-level overnight
-freshness, unattended stability, and useful capacity remain unproven.
+`ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is terminal as
+`TOS_RTD_OVERNIGHT_QUOTES_ONLY / TOS_RTD_HOT_SET_USEFUL`. The authoritative
+hardened source is pushed commit
+`9f73e9196a75069bcde464af5ab9df7f584c7ad0`. Official `tos.rtd` through desktop
+Excel completed all eight fixed checkpoints in
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-THINKORSWIM-OVERNIGHT-RTD-001-20260824-LIVE-HARDENED-9F73E919`
+with 480 samples, 36,000 market-only cells, matching observation hashes, one
+supervisor attempt, zero missed checkpoints, zero backfill, and no recovery
+during the authoritative run.
+`TRANSPORT_AVAILABILITY = PASS`, `FIELD_FRESHNESS = PARTIAL`,
+`UNATTENDED_STABILITY = PASS`, `RECOVERY_BEHAVIOR = NOT_EXERCISED_NATURALLY`,
+and `USEFUL_CAPACITY = 5_SYMBOL / 75_CELL HOT_SET PROVEN`.
 
-The exact matrix-mapping harness now passes 5 symbols by 15 market-only fields
-using one reduced COM read, including the PowerShell 2D-array scalar-return
-guard that caused prior flattening. The next bounded action is to arm the clean
-source before 18:55 CT, then collect and adjudicate the fixed 19:55, 20:00,
-20:05, 21:00, 00:30, 01:30, 03:55, and 04:05 ET checkpoints. Failed harness
-attempts remain preserved and make no provider-capability claim. RTD remains
-isolated research with no account, position, P/L, buying-power, order, or
-Momentum Hunter provider authority.
+BID/ASK and MARK changed throughout the true 20:00-04:00 ET overnight period.
+LAST remained present but static, and VOLUME did not provide reliable continuous
+true-overnight trade-volume authority. RTD is therefore a proven
+`OVERNIGHT_QUOTE_AWARENESS` research capability, not an overnight candle,
+historical-backfill, last-trade, or volume authority. It has no Momentum Hunter
+provider, account, position, Paper, Shadow, broker, or order authority. Preserve
+the original and hardened RTD branches pushed and unmerged as research-harness
+and experiment-provenance evidence. Their older ancestry is not a clean
+fast-forward onto current canonical; any future reusable-harness integration
+requires a separate current-head reconciliation and qualification task.
 
 ### Current Runtime And Strategy Truth
 
@@ -153,8 +159,9 @@ Momentum Hunter provider authority.
 - Schwab remains authoritative for its proven premarket, regular-session, and
   after-hours quote/candle roles and is proven unavailable for fresh
   20:00-04:00 ET Trader API data. Alpaca Basic/Finviz retain only their already
-  adjudicated overnight/context roles and limitations. thinkorswim has no
-  Momentum Hunter provider authority while the RTD experiment is incomplete.
+  adjudicated overnight/context roles and limitations. thinkorswim RTD has the
+  terminal narrow quote-awareness research result above and no Momentum Hunter
+  production-provider authority.
 - Official Shadow v1/v2/v3 evidence remains preserved at `0 / 30`; v3 is
   unarmed. FakeBroker and prior Paper evidence remain immutable and do not
   imply current trade authority.
@@ -190,9 +197,12 @@ Momentum Hunter provider authority.
 
 ### Immediate Next
 
-Arm and observe the isolated time-gated RTD campaign. After the RTD evidence is
-preserved, `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` is the next implementation
-task; `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` remains upcoming behind it.
+`ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` is the exact next implementation task.
+The Monday pipeline, catalyst authority repair, and terminal RTD gates have
+passed. `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` follows it and can own the
+new-symbol history-admission, current-plus-historical composition, material-
+evidence reevaluation, and successor-setup production boundary by reusing
+existing candle and Continuous contracts; no new prerequisite is required.
 The authoritative ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
@@ -218,6 +228,10 @@ The authoritative ordered sequence is maintained only in `Next / Queue` below.
   Schwab refresh and a live read-only continuous canary.
 - Overnight campaign provenance and evidence-isolation reconciliation now
   separate campaign nonmutation from authorized external production changes.
+- `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` physically proves unattended true-
+  overnight BID/ASK/MARK visibility for a fixed five-symbol hot set while
+  rejecting broader last-trade, volume, candle, backfill, and provider-authority
+  claims.
 - `ARGUS-TRADE-REPLAY-001` and `ARGUS-EXIT-POLICY-001` were added as gated
   Phase 13R research without changing the prospective baseline.
 
@@ -228,29 +242,33 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001`: collect the
-   true-overnight checkpoints, and adjudicate official RTD capability without
-   changing provider authority.
+1. No implementation task is active. The post-RTD reconciliation is
+   documentation-only and must close before the next implementation begins.
 
 ### 2. Ready / Next
 
-1. Close the RTD experiment truthfully as useful, limited, unavailable, or
-   incomplete; preserve every failed attempt and reconcile its feature branch
-   onto current canonical without rebasing or absorbing unrelated changes.
-2. Implement and physically qualify `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` now
+1. Implement and physically qualify `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` now
    that the catalyst repair and V1 promotion gate are complete.
-3. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` as the bounded producer
+2. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` as the bounded producer
    required by the already-defined continuous lifecycle/successor contracts.
+3. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
+   research identity after the producer can supply the complete bounded cycle;
+   this grants no Paper or order authority.
 4. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch only after the producer passes;
-   installation, Paper preflight, and one-entry arming remain separate gates.
+   first prove the disabled installation. Paper preflight and one-entry arming
+   remain separate later gates.
 
 ### 3. Parallel Research
 
 1. `ARGUS-TRADE-REPLAY-001` failure-boundary and candidate inventory may proceed
-   under event-level positive admission; no historical candidate becomes a
-   trade merely because it was surfaced.
-2. Integrated specialist and denominator research may continue only under their
+   under event-level positive admission, including the separately labeled BMNR
+   August 24 case study; no historical candidate becomes a trade merely because
+   it was surfaced.
+2. `ARGUS-CATALYST-MEMORY-001` may begin bounded Phase 13R architecture and
+   hypothesis work under RESEARCH-GOV without score, runtime, or provider
+   authority and without delaying the Ready / Next sequence.
+3. Integrated specialist and denominator research may continue only under their
    dormant/read-only contracts and existing activation gates.
 
 ### 4. Blocked
@@ -265,10 +283,12 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 5. Deferred / Later
 
-- `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` may refine V1 to an authoritative
-  dependency-closure and relevant-distribution contract only after the Monday
-  catalyst-score authority defect is integrated, promoted through V1, and
-  physically validated.
+- `ARGUS-COMMAND-CENTER-001` is a deferred question-first operator read-model/UI
+  milestone. It follows the Continuous producer and the relevant historical,
+  catalyst, and decision-read interfaces; no WPF work is authorized now.
+- Multi-resolution 1-minute/hourly/Daily cutoffs remain an unfrozen design
+  concept until source availability, cost, usefulness, and existing contracts
+  are audited. No compaction or threshold policy is authorized by this record.
 - `ARGUS-EXIT-POLICY-002`, ARBITER-001, BEAR-001, broader specialist influence,
   and Phase 14 unattended live execution remain future work and gain no
   authority from roadmap presence.
@@ -2477,8 +2497,15 @@ activation requires a separately named current task and prospective identity.
   It must exclude account, position, P/L, and order fields; perform no login/UI
   scraping or trade action; preserve interactive-session and provenance limits;
   and grant no general thinkorswim automation or Momentum Hunter provider
-  authority. `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` remains governed by its own
-  field, timing, safety, and acceptance evidence.
+  authority. `ARGUS-THINKORSWIM-OVERNIGHT-RTD-001` is terminal at hardened
+  source `9f73e9196a75069bcde464af5ab9df7f584c7ad0` as
+  `TOS_RTD_OVERNIGHT_QUOTES_ONLY / TOS_RTD_HOT_SET_USEFUL`: BID/ASK/MARK are
+  fresh through true overnight, LAST is present but static, and VOLUME is not
+  reliable continuous true-overnight trade-volume evidence. This proves only a
+  five-symbol/75-cell interactive-session quote-awareness research capability;
+  it does not prove candles, historical backfill, broad capacity, production
+  suitability, or provider authority. Preserve the pushed experiment branches
+  unmerged unless a later current-head reusable-harness task is authorized.
 
 #### Standing Authorization And Branch Discipline
 
@@ -2807,8 +2834,9 @@ blocked and gains no authority from Paper evidence.
 
 #### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001 - Continuous Prospective TradePlan Producer
 
-- Lifecycle: `READY`. This is the exact next implementation task after the
-  active catalyst and RTD gates close.
+- Lifecycle: `READY / SECOND`. Begin after
+  `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003`; the catalyst and RTD gates are
+  terminal and no additional prerequisite is required.
 - Wire the already-defined prospective lifecycle and successor-setup semantics
   into production composition so a legitimate same-session opportunity can
   produce one immutable continuous TradePlan input. Do not invent or loosen a
@@ -2818,6 +2846,18 @@ blocked and gains no authority from Paper evidence.
   missed-entry immutability, successor setup identity, current evidence
   authority, denominator accounting, restart idempotency, and read-only
   Continuous Runtime operation.
+- This milestone owns orchestration and admission, not a second candle provider
+  or store. Reuse the canonical R032B/R032C historical-backfill, correction,
+  persistence, and chart-history contracts plus the existing Continuous
+  universe/readiness/composition lifecycle. Start bounded historical backfill
+  and current observation concurrently for a new symbol, compose them under
+  explicit source/resolution identity, and evaluate when the setup-specific
+  evidence contract is satisfied.
+- Reevaluate on material new evidence such as a completed bar, changed RVOL,
+  spread/liquidity, catalyst state, regime state, or successor structure. An
+  earlier decision remains immutable; a later valid opportunity requires a new
+  prospective setup and TradePlan identity. Do not require five newly observed
+  bars merely because a symbol is new.
 - Acceptance requires deterministic synthetic and replay proof, current-head
   integration, full bounded regressions, write-once evidence, no broker/account/
   order capability, and proof that a valid producer output can be consumed by
@@ -2838,6 +2878,21 @@ blocked and gains no authority from Paper evidence.
 - A later chart verification must prove that selecting a newly discovered
   symbol shows meaningful backfilled history rather than beginning at discovery
   time. No WPF work is authorized by this recorded requirement.
+
+#### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
+
+- Lifecycle: `DEFERRED / UI_READ_MODEL`. No implementation or visual acceptance
+  work is authorized by this placement record.
+- Reuse the existing WPF chart, candidate story, TradePlan, history/activity,
+  monitoring, specialist, and evidence-lineage surfaces. Do not create a second
+  decision authority or market-history model.
+- The eventual read model must answer: what matters now; why a symbol is
+  interesting; whether Momentum Hunter would trade it now and why not; what
+  changed since the prior evaluation; what historical context and prior beliefs
+  exist; what happened afterward; whether a limitation is policy or bad/missing
+  evidence; and which open positions require attention.
+- Begin only after the Continuous producer and required history/catalyst/decision
+  interfaces are stable enough to avoid a UI-owned interpretation layer.
 
 #### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
 
@@ -3064,7 +3119,9 @@ Intended specialist architecture:
 
 - Status: `CANONICAL_INTEGRATED / ACTIVATION_PENDING`; producer wiring remains
   dormant and must use a new immutable activation identity.
-- Begin only after the frozen Aug. 17 evidence is terminal and preserved.
+- The Aug. 17 evidence gate is terminal and preserved. Begin only after
+  `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` can supply the complete bounded
+  continuous cycle required by this contract.
 - Feed the denominator from the complete bounded source population, including
   rows that do not survive scanner/report admission, rather than treating a
   surviving briefing subset as the original population.
@@ -3166,6 +3223,14 @@ Intended specialist architecture:
   rounding, transaction-cost assumptions, and write-once output identity.
   Historical backfill into the prospective STAT-DATA or SETUP-002 samples is
   prohibited.
+- Preserve BMNR from the August 24 opening as one bounded future case study only
+  after event-level admission succeeds. Its original
+  `DO_NOT_TRADE_MISSED_ENTRY` decision is immutable. Separately label any
+  hypothetical immediate/chase entry, subsequent MFE/MAE and frozen stop/target
+  chronology, and any legitimate later pullback/reclaim, continuation, or other
+  successor setup. Determine the earliest prospectively knowable successor
+  state without using the later high or other future knowledge to manufacture
+  an entry.
 - Acceptance requires a complete failure-boundary report, an immutable
   candidate denominator with explicit unavailable/provider-bound/system-failed
   rows, deterministic duplicate-safe replay, independently verifiable input
@@ -3334,6 +3399,31 @@ Intended specialist architecture:
   influence, and any execution authority require separately authorized gates.
 - Research whether management produces more incremental edge than another
   entry filter; do not change current TradePlans under this task.
+
+#### ARGUS-CATALYST-MEMORY-001 - Event Identity, Decay, And Dynamic Catalyst State
+
+- Lifecycle: `PROPOSED / PHASE_13R / RESEARCH_ONLY`. No implementation,
+  activation, scoring influence, provider authority, or execution authority is
+  granted by this placement.
+- Extend the existing catalyst, CONTINUOUS-003, Specialist Contract, and
+  relationship-authority architecture. Treat the event as the durable object:
+  headlines may be a new event, update, restatement/duplicate, confirmation,
+  contradiction, or unresolved relationship. Ambiguity remains explicit, and
+  duplicate coverage cannot stack unlimited points.
+- Preserve multiple independent events per security, event revisions, first-
+  known time, authority, age, immediate momentum influence, persistent company
+  context, and current effective catalyst state. Any event-family decay curve,
+  stacking cap, persistence horizon, or market-reaction adjustment is a
+  RESEARCH-GOV hypothesis requiring calibrated, holdout, and prospective
+  evidence; no numeric decay policy is frozen here.
+- Feed longitudinal event identity and material-change triggers to
+  `ARGUS-EVENT-SHOCK-001` and later Continuous reevaluation. Event Shock remains
+  responsible for expected-versus-actual reaction and news/price disagreement.
+  Catalyst Memory must not weaken the rule that only a positively established
+  candidate/event relationship may obtain scoring authority.
+- Preserve a future Command Center read model that can explain current catalyst
+  state, age/decay, duplicates, contradictions, market-reaction adjustments, and
+  exactly what changed since the prior evaluation.
 
 #### ARGUS-EVENT-SHOCK-001 - Unscheduled Event And Reaction Intelligence
 
