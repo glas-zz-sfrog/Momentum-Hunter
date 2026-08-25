@@ -25,7 +25,9 @@ from momentum_hunter.opening_runtime_identity import (
     OpeningRuntimeReleaseStore,
     RuntimeIdentityContext,
     build_release_record,
+    build_release_record_v2,
     build_runtime_identity,
+    build_runtime_identity_v2,
     current_git_identity,
     verify_execution_gate,
 )
@@ -41,6 +43,22 @@ DEFAULT_SERVICE_HOST = (
     / "MomentumHunter.AutomationService.exe"
 )
 MINIMUM_SUPERVISOR_FRESHNESS_SECONDS = 30.0
+DEFAULT_PROMOTION_POLICY = "v2"
+PROMOTION_POLICIES = ("v1", "v2")
+
+
+def _candidate_identity(
+    context: RuntimeIdentityContext,
+    policy: str,
+) -> dict[str, object]:
+    if policy == "v2":
+        return build_runtime_identity_v2(context)
+    if policy == "v1":
+        return build_runtime_identity(context)
+    raise OpeningRuntimeIdentityError(
+        "PROMOTION_POLICY_UNSUPPORTED",
+        f"Opening runtime promotion policy is unsupported: {policy}",
+    )
 
 
 def _context(manifest: AutomationManifest) -> RuntimeIdentityContext:
@@ -144,11 +162,15 @@ def _origin_master(repository_root: Path) -> str:
     return value
 
 
-def plan(manifest_path: Path) -> dict[str, object]:
+def plan(
+    manifest_path: Path,
+    *,
+    policy: str = DEFAULT_PROMOTION_POLICY,
+) -> dict[str, object]:
     manifest = parse_manifest(manifest_path)
     context = _context(manifest)
     head, status = current_git_identity(context.repository_root)
-    identity = build_runtime_identity(context)
+    identity = _candidate_identity(context, policy)
     store = OpeningRuntimeReleaseStore(context.release_root)
     try:
         active, _, _ = store.verify_channel(DEFAULT_CHANNEL)
@@ -173,6 +195,7 @@ def plan(manifest_path: Path) -> dict[str, object]:
     )
     return {
         "status": "PLAN_ONLY",
+        "candidatePolicy": policy,
         "currentGitSha": head,
         "originMasterSha": _origin_master(context.repository_root),
         "worktreeClean": not bool(status),
@@ -229,6 +252,7 @@ def promote(
     *,
     qualification_evidence: list[str],
     confirmation: str,
+    policy: str = DEFAULT_PROMOTION_POLICY,
 ) -> dict[str, object]:
     if confirmation != PROMOTION_CONFIRMATION:
         raise OpeningRuntimeIdentityError(
@@ -257,7 +281,13 @@ def promote(
         if exc.code not in {"RELEASE_POINTER_MISSING", "PROMOTION_RECEIPT_MISSING"}:
             raise
         predecessor = ""
-    record = build_release_record(
+    record_builder = build_release_record_v2 if policy == "v2" else build_release_record
+    if policy not in PROMOTION_POLICIES:
+        raise OpeningRuntimeIdentityError(
+            "PROMOTION_POLICY_UNSUPPORTED",
+            f"Opening runtime promotion policy is unsupported: {policy}",
+        )
+    record = record_builder(
         context,
         source_git_sha=head,
         qualification_evidence=qualification_evidence,
@@ -298,6 +328,7 @@ def promote(
     )
     return {
         "status": "PROMOTED" if changed else "ALREADY_ACTIVE",
+        "promotionPolicy": policy,
         "releaseId": release["releaseId"],
         "releaseFingerprint": release["releaseFingerprint"],
         "runtimeFingerprint": release["approvedRuntimeFingerprint"],
@@ -470,10 +501,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirmation", default="")
     parser.add_argument("--service-host", type=Path, default=DEFAULT_SERVICE_HOST)
     parser.add_argument("--release-root", type=Path, default=DEFAULT_RELEASE_ROOT)
+    parser.add_argument(
+        "--policy",
+        choices=PROMOTION_POLICIES,
+        default=DEFAULT_PROMOTION_POLICY,
+    )
     args = parser.parse_args(argv)
     try:
         if args.command == "plan":
-            result = plan(args.manifest)
+            result = plan(args.manifest, policy=args.policy)
         elif args.command in {"status", "verify"}:
             result = status(args.manifest)
         elif args.command == "promote":
@@ -481,6 +517,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.manifest,
                 qualification_evidence=args.qualification_evidence,
                 confirmation=args.confirmation,
+                policy=args.policy,
             )
         else:
             state_path = args.state

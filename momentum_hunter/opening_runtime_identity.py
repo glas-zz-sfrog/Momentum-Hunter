@@ -16,12 +16,26 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Callable, Mapping, Sequence
 
+from momentum_hunter.opening_runtime_boundary import (
+    BOUNDARY_POLICY_VERSION,
+    BOUNDARY_SCHEMA,
+    ENTRY_FILES,
+    ENTRY_MODULES,
+    EXPLICIT_DISTRIBUTIONS,
+    EXPLICIT_RUNTIME_FILES,
+    OpeningRuntimeBoundaryError,
+    require_authoritative_boundary,
+)
+
 
 SURFACE_SCHEMA = "OpeningRuntimeSurfaceV1"
 RELEASE_SCHEMA = "OpeningRuntimeReleaseV1"
 PROMOTION_SCHEMA = "OpeningRuntimePromotionV1"
 POINTER_SCHEMA = "OpeningRuntimeChannelV1"
 PROMOTION_POLICY_VERSION = "opening-runtime-promotion-v1"
+SURFACE_SCHEMA_V2 = "OpeningRuntimeSurfaceV2"
+RELEASE_SCHEMA_V2 = "OpeningRuntimeReleaseV2"
+PROMOTION_POLICY_VERSION_V2 = "opening-runtime-promotion-v2"
 DEFAULT_CHANNEL = "opening-capture"
 DEFAULT_RELEASE_ROOT = (
     Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
@@ -405,6 +419,291 @@ def probe_runtime_environment(
     return payload
 
 
+def _build_runtime_surface_v2(repository_root: Path) -> dict[str, object]:
+    root = repository_root.absolute()
+    _require_regular_path(root, directory=True)
+    try:
+        inventory = require_authoritative_boundary(root)
+    except OpeningRuntimeBoundaryError as exc:
+        raise OpeningRuntimeIdentityError(exc.code, str(exc), details=exc.details) from exc
+    components: list[dict[str, object]] = []
+    for relative in inventory.dependency_closure_files:
+        path = root / relative
+        _require_tree_without_reparse(root, path)
+        if relative.startswith("momentum_hunter/"):
+            component_class = "PYTHON_DEPENDENCY_CLOSURE"
+            reason = "Reachable from an authoritative opening entry module."
+        elif relative == "tools/capture_job.py":
+            component_class = "OPENING_ORCHESTRATOR"
+            reason = "Direct Python entry point invoked by the opening runner."
+        elif relative == "tools/run_capture_job.ps1":
+            component_class = "OPENING_LAUNCHER"
+            reason = "PowerShell launcher, retry, and terminal-result behavior."
+        else:
+            component_class = "DEPENDENCY_CONTRACT"
+            reason = "Explicit non-imported opening runtime input."
+        components.append(
+            {
+                "path": relative,
+                "componentClass": component_class,
+                "sha256": file_sha256(path),
+                "size": path.stat().st_size,
+                "reasonIncluded": reason,
+            }
+        )
+    closure_evidence: dict[str, object] = {
+        "schemaVersion": BOUNDARY_SCHEMA,
+        "policyVersion": BOUNDARY_POLICY_VERSION,
+        "entryModules": list(ENTRY_MODULES),
+        "entryFiles": list(ENTRY_FILES),
+        "explicitRuntimeFiles": list(EXPLICIT_RUNTIME_FILES),
+        "packagePythonCount": inventory.package_python_count,
+        "reachablePackageCount": inventory.reachable_package_count,
+        "excludedPackageCount": inventory.excluded_package_count,
+        "dependencyClosureFiles": list(inventory.dependency_closure_files),
+        "externalImportRoots": list(inventory.external_import_roots),
+        "explicitDistributions": [
+            {
+                "name": name,
+                "reason": str(EXPLICIT_DISTRIBUTIONS[name]["reason"]),
+                "source": str(EXPLICIT_DISTRIBUTIONS[name]["source"]),
+            }
+            for name in inventory.explicit_distributions
+        ],
+        "outsideSurfaceImports": [],
+        "dynamicImportSites": [],
+        "subprocessSites": [
+            {
+                "path": item.path,
+                "line": item.line,
+                "operation": item.operation,
+            }
+            for item in inventory.subprocess_sites
+        ],
+    }
+    closure_evidence["dependencyClosureFingerprint"] = payload_fingerprint(
+        closure_evidence,
+        "dependencyClosureFingerprint",
+    )
+    payload: dict[str, object] = {
+        "schemaVersion": SURFACE_SCHEMA_V2,
+        "inclusionPolicy": BOUNDARY_POLICY_VERSION,
+        "components": components,
+        "dependencyClosureEvidence": closure_evidence,
+    }
+    payload["runtimeSurfaceFingerprint"] = payload_fingerprint(
+        payload,
+        "runtimeSurfaceFingerprint",
+    )
+    return payload
+
+
+def _relevant_distribution_probe_script(
+    external_roots: Sequence[str],
+    explicit_distributions: Sequence[str],
+) -> str:
+    roots_json = json.dumps(sorted(set(external_roots)))
+    explicit_json = json.dumps(sorted(set(explicit_distributions)))
+    return f"""
+import hashlib
+import importlib.metadata as metadata
+import json
+import re
+
+roots = json.loads({roots_json!r})
+explicit = json.loads({explicit_json!r})
+
+def normalize(value):
+    return re.sub(r"[-_.]+", "-", value).lower()
+
+package_map = metadata.packages_distributions()
+available = {{}}
+for distribution in metadata.distributions():
+    display_name = distribution.metadata.get("Name") or ""
+    if display_name:
+        available[normalize(display_name)] = distribution
+
+selected = {{}}
+queue = []
+for root in roots:
+    providers = sorted({{normalize(item) for item in package_map.get(root, [])}})
+    if len(providers) != 1:
+        raise RuntimeError("UNRESOLVED_IMPORT_ROOT:" + root + ":" + ",".join(providers))
+    queue.append((providers[0], "import-root:" + root))
+for name in explicit:
+    queue.append((normalize(name), "explicit-runtime-contract:" + normalize(name)))
+
+while queue:
+    name, reason = queue.pop(0)
+    distribution = available.get(name)
+    if distribution is None:
+        raise RuntimeError("REQUIRED_DISTRIBUTION_MISSING:" + name)
+    state = selected.setdefault(name, {{"reasons": set(), "requiredBy": set()}})
+    state["reasons"].add(reason)
+    if state.get("expanded"):
+        continue
+    state["expanded"] = True
+    for requirement in distribution.requires or []:
+        marker = requirement.partition(";")[2]
+        if marker and re.search(r"\\bextra\\b", marker, re.IGNORECASE):
+            continue
+        match = re.match(r"^\\s*([A-Za-z0-9_.-]+)", requirement)
+        if match is None:
+            raise RuntimeError("UNPARSEABLE_REQUIREMENT:" + name)
+        dependency = normalize(match.group(1))
+        child = selected.setdefault(dependency, {{"reasons": set(), "requiredBy": set()}})
+        child["requiredBy"].add(name)
+        queue.append((dependency, "transitive-dependency:" + name))
+
+records = []
+for name in sorted(selected):
+    distribution = available[name]
+    files = []
+    for item in distribution.files or []:
+        logical = str(item).replace("\\\\", "/")
+        if "__pycache__" in logical or logical.endswith((".pyc", ".pyo")):
+            continue
+        path = distribution.locate_file(item)
+        if not path.is_file():
+            raise RuntimeError("DISTRIBUTION_FILE_MISSING:" + name + ":" + logical)
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        files.append((logical, path.stat().st_size, digest))
+    if not files:
+        raise RuntimeError("DISTRIBUTION_FILES_UNAVAILABLE:" + name)
+    encoded = json.dumps(files, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    records.append({{
+        "name": name,
+        "displayName": distribution.metadata.get("Name") or name,
+        "version": distribution.version,
+        "fileCount": len(files),
+        "fileFingerprint": hashlib.sha256(encoded).hexdigest(),
+        "selectionReasons": sorted(selected[name]["reasons"]),
+        "requiredBy": sorted(selected[name]["requiredBy"]),
+    }})
+print(json.dumps({{"relevantDistributions": records}}, sort_keys=True))
+"""
+
+
+def probe_runtime_environment_v2(
+    context: RuntimeIdentityContext,
+    *,
+    runtime_surface: Mapping[str, object] | None = None,
+    command_runner: CommandRunner = _run_command,
+) -> dict[str, object]:
+    for executable in (
+        context.python_executable,
+        context.powershell_executable,
+        context.service_host_executable,
+    ):
+        _require_regular_path(executable, directory=False)
+    requirements_path = context.repository_root / "requirements.txt"
+    _require_regular_path(requirements_path, directory=False)
+    surface = dict(runtime_surface or _build_runtime_surface_v2(context.repository_root))
+    evidence = surface.get("dependencyClosureEvidence")
+    if not isinstance(evidence, dict):
+        raise OpeningRuntimeIdentityError(
+            "DEPENDENCY_CLOSURE_EVIDENCE_INVALID",
+            "V2 runtime surface is missing dependency-closure evidence.",
+        )
+    external_roots = evidence.get("externalImportRoots")
+    explicit = evidence.get("explicitDistributions")
+    if not isinstance(external_roots, list) or not isinstance(explicit, list):
+        raise OpeningRuntimeIdentityError(
+            "DEPENDENCY_CLOSURE_EVIDENCE_INVALID",
+            "Dependency roots or explicit distributions are malformed.",
+        )
+    explicit_names = [
+        str(item.get("name", "")) for item in explicit if isinstance(item, dict)
+    ]
+    package_output = command_runner(
+        (
+            str(context.python_executable),
+            "-B",
+            "-c",
+            _relevant_distribution_probe_script(
+                [str(item) for item in external_roots],
+                explicit_names,
+            ),
+        )
+    )
+    try:
+        distribution_payload = json.loads(package_output)
+    except json.JSONDecodeError as exc:
+        raise OpeningRuntimeIdentityError(
+            "DEPENDENCY_PROBE_INVALID",
+            "Relevant dependency identity probe returned malformed output.",
+        ) from exc
+    distributions = distribution_payload.get("relevantDistributions")
+    if not isinstance(distributions, list) or not distributions:
+        raise OpeningRuntimeIdentityError(
+            "DEPENDENCY_PROVENANCE_INCOMPLETE",
+            "Relevant dependency provenance is incomplete.",
+        )
+    for item in distributions:
+        if (
+            not isinstance(item, dict)
+            or not str(item.get("name", ""))
+            or not str(item.get("version", ""))
+            or not SHA256_PATTERN.fullmatch(str(item.get("fileFingerprint", "")))
+            or not isinstance(item.get("fileCount"), int)
+            or int(item["fileCount"]) <= 0
+        ):
+            raise OpeningRuntimeIdentityError(
+                "DEPENDENCY_PROVENANCE_INCOMPLETE",
+                "A relevant dependency identity is incomplete.",
+            )
+    timezone_identity = (
+        command_runner(("tzutil.exe", "/g"))
+        if os.name == "nt"
+        else os.environ.get("TZ", "")
+    )
+    payload: dict[str, object] = {
+        "schemaVersion": "OpeningRuntimeEnvironmentV2",
+        "python": {
+            "path": str(context.python_executable.absolute()),
+            "sha256": file_sha256(context.python_executable),
+            "version": command_runner((str(context.python_executable), "--version")),
+        },
+        "powershell": {
+            "path": str(context.powershell_executable.absolute()),
+            "sha256": file_sha256(context.powershell_executable),
+            "version": command_runner(
+                (
+                    str(context.powershell_executable),
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "$PSVersionTable.PSVersion.ToString()",
+                )
+            ),
+        },
+        "serviceHost": {
+            "path": str(context.service_host_executable.absolute()),
+            "sha256": file_sha256(context.service_host_executable),
+        },
+        "requirementsSha256": file_sha256(requirements_path),
+        "declaredRequirements": _requirement_names(requirements_path),
+        "importRoots": sorted(str(item) for item in external_roots),
+        "explicitDistributionContracts": sorted(explicit_names),
+        "relevantDistributions": sorted(
+            distributions,
+            key=lambda item: str(item.get("name", "")),
+        ),
+        "platform": {
+            "system": platform.system(),
+            "release": platform.release(),
+            "version": platform.version(),
+            "machine": platform.machine(),
+            "timezone": timezone_identity,
+        },
+    }
+    payload["environmentFingerprint"] = payload_fingerprint(
+        payload,
+        "environmentFingerprint",
+    )
+    return payload
+
+
 def build_runtime_identity(
     context: RuntimeIdentityContext,
     *,
@@ -426,6 +725,88 @@ def build_runtime_identity(
         "configurationFingerprint": configuration["configurationFingerprint"],
         "environmentFingerprint": environment_fingerprint,
         "promotionPolicyVersion": PROMOTION_POLICY_VERSION,
+    }
+    return {
+        "runtimeSurface": surface,
+        "configuration": configuration,
+        "environment": environment_payload,
+        "approvedRuntimeFingerprint": hashlib.sha256(
+            canonical_json_bytes(aggregate)
+        ).hexdigest(),
+    }
+
+
+def build_runtime_identity_v2(
+    context: RuntimeIdentityContext,
+    *,
+    environment: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    surface = _build_runtime_surface_v2(context.repository_root)
+    configuration = _load_runtime_configuration(context)
+    environment_payload = dict(
+        environment
+        or probe_runtime_environment_v2(context, runtime_surface=surface)
+    )
+    environment_fingerprint = str(
+        environment_payload.get("environmentFingerprint", "")
+    )
+    if (
+        environment_payload.get("schemaVersion") != "OpeningRuntimeEnvironmentV2"
+        or not SHA256_PATTERN.fullmatch(environment_fingerprint)
+        or environment_fingerprint
+        != payload_fingerprint(environment_payload, "environmentFingerprint")
+    ):
+        raise OpeningRuntimeIdentityError(
+            "ENVIRONMENT_IDENTITY_INVALID",
+            "V2 environment identity is incomplete or contradictory.",
+        )
+    relevant = environment_payload.get("relevantDistributions")
+    if not isinstance(relevant, list) or not relevant:
+        raise OpeningRuntimeIdentityError(
+            "DEPENDENCY_PROVENANCE_INCOMPLETE",
+            "V2 environment identity has no relevant distribution evidence.",
+        )
+    for item in relevant:
+        if (
+            not isinstance(item, dict)
+            or not str(item.get("name", ""))
+            or not str(item.get("version", ""))
+            or not SHA256_PATTERN.fullmatch(str(item.get("fileFingerprint", "")))
+            or not isinstance(item.get("selectionReasons"), list)
+        ):
+            raise OpeningRuntimeIdentityError(
+                "DEPENDENCY_PROVENANCE_INCOMPLETE",
+                "A V2 relevant dependency identity is incomplete.",
+            )
+    closure = surface["dependencyClosureEvidence"]
+    roots = closure["externalImportRoots"]
+    explicit_names = sorted(
+        str(item["name"]) for item in closure["explicitDistributions"]
+    )
+    reasons = {
+        str(reason)
+        for item in relevant
+        if isinstance(item, dict) and isinstance(item.get("selectionReasons"), list)
+        for reason in item["selectionReasons"]
+    }
+    if (
+        environment_payload.get("importRoots") != roots
+        or environment_payload.get("explicitDistributionContracts")
+        != explicit_names
+        or not {f"import-root:{root}" for root in roots}.issubset(reasons)
+        or not {
+            f"explicit-runtime-contract:{name}" for name in explicit_names
+        }.issubset(reasons)
+    ):
+        raise OpeningRuntimeIdentityError(
+            "DEPENDENCY_PROVENANCE_INCOMPLETE",
+            "V2 environment identity does not cover every closure dependency seed.",
+        )
+    aggregate = {
+        "runtimeSurfaceFingerprint": surface["runtimeSurfaceFingerprint"],
+        "configurationFingerprint": configuration["configurationFingerprint"],
+        "environmentFingerprint": environment_fingerprint,
+        "promotionPolicyVersion": PROMOTION_POLICY_VERSION_V2,
     }
     return {
         "runtimeSurface": surface,
@@ -508,6 +889,211 @@ def build_release_record(
         "releaseFingerprint",
     )
     return record
+
+
+def build_release_record_v2(
+    context: RuntimeIdentityContext,
+    *,
+    source_git_sha: str,
+    qualification_evidence: Sequence[str],
+    predecessor_release_id: str = "",
+    created_at: datetime | None = None,
+    environment: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    if not GIT_SHA_PATTERN.fullmatch(source_git_sha):
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_SOURCE_GIT_INVALID",
+            "Release source Git identity must be a full SHA.",
+        )
+    qualifications = sorted({str(item).strip() for item in qualification_evidence})
+    if not qualifications or any(not item for item in qualifications):
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_QUALIFICATION_MISSING",
+            "An approved release requires qualification evidence references.",
+        )
+    identity = build_runtime_identity_v2(context, environment=environment)
+    approved = str(identity["approvedRuntimeFingerprint"])
+    release_id = f"OPENING-RUNTIME-{approved[:20].upper()}"
+    surface = identity["runtimeSurface"]
+    record: dict[str, object] = {
+        "schemaVersion": RELEASE_SCHEMA_V2,
+        "releaseId": release_id,
+        "createdAt": (created_at or datetime.now().astimezone()).isoformat(),
+        "sourceGitSha": source_git_sha,
+        "runtimeSurfaceVersion": SURFACE_SCHEMA_V2,
+        "runtimeSurfaceFingerprint": surface["runtimeSurfaceFingerprint"],
+        "configurationFingerprint": identity["configuration"][
+            "configurationFingerprint"
+        ],
+        "environmentFingerprint": identity["environment"][
+            "environmentFingerprint"
+        ],
+        "approvedRuntimeFingerprint": approved,
+        "runtimeComponents": surface["components"],
+        "runtimeSurfaceIdentity": surface,
+        "dependencyClosureEvidence": surface["dependencyClosureEvidence"],
+        "configurationIdentity": identity["configuration"],
+        "environmentIdentity": identity["environment"],
+        "qualificationEvidence": qualifications,
+        "promotionPolicyVersion": PROMOTION_POLICY_VERSION_V2,
+        "predecessorReleaseId": predecessor_release_id,
+        "authority": {
+            "openingCapture": True,
+            "paper": False,
+            "shadow": False,
+            "brokerOrders": False,
+            "orderTransmission": "UNAVAILABLE",
+        },
+    }
+    record["releaseFingerprint"] = payload_fingerprint(
+        record,
+        "releaseFingerprint",
+    )
+    return record
+
+
+def _validate_v2_release_identity(payload: Mapping[str, object]) -> None:
+    surface = payload.get("runtimeSurfaceIdentity")
+    closure = payload.get("dependencyClosureEvidence")
+    configuration = payload.get("configurationIdentity")
+    environment = payload.get("environmentIdentity")
+    components = payload.get("runtimeComponents")
+    if (
+        not isinstance(surface, dict)
+        or not isinstance(closure, dict)
+        or not isinstance(configuration, dict)
+        or not isinstance(environment, dict)
+        or not isinstance(components, list)
+    ):
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_STRUCTURE_INVALID",
+            "V2 release identity evidence is incomplete.",
+        )
+    if (
+        surface.get("schemaVersion") != SURFACE_SCHEMA_V2
+        or surface.get("inclusionPolicy") != BOUNDARY_POLICY_VERSION
+        or surface.get("components") != components
+        or surface.get("dependencyClosureEvidence") != closure
+        or surface.get("runtimeSurfaceFingerprint")
+        != payload_fingerprint(surface, "runtimeSurfaceFingerprint")
+        or payload.get("runtimeSurfaceFingerprint")
+        != surface.get("runtimeSurfaceFingerprint")
+    ):
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_SURFACE_INVALID",
+            "V2 runtime surface evidence is contradictory.",
+        )
+    if (
+        closure.get("schemaVersion") != BOUNDARY_SCHEMA
+        or closure.get("policyVersion") != BOUNDARY_POLICY_VERSION
+        or closure.get("entryModules") != list(ENTRY_MODULES)
+        or closure.get("entryFiles") != list(ENTRY_FILES)
+        or closure.get("explicitRuntimeFiles") != list(EXPLICIT_RUNTIME_FILES)
+        or closure.get("outsideSurfaceImports") != []
+        or closure.get("dynamicImportSites") != []
+        or closure.get("dependencyClosureFingerprint")
+        != payload_fingerprint(closure, "dependencyClosureFingerprint")
+    ):
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_CLOSURE_INVALID",
+            "V2 dependency-closure evidence is incomplete or contradictory.",
+        )
+    paths = [
+        str(item.get("path", "")) for item in components if isinstance(item, dict)
+    ]
+    closure_paths = closure.get("dependencyClosureFiles")
+    counts = (
+        closure.get("packagePythonCount"),
+        closure.get("reachablePackageCount"),
+        closure.get("excludedPackageCount"),
+    )
+    if (
+        len(paths) != len(components)
+        or len(paths) != len(set(paths))
+        or not isinstance(closure_paths, list)
+        or paths != closure_paths
+        or not all(isinstance(item, int) and item >= 0 for item in counts)
+        or int(counts[1]) + int(counts[2]) != int(counts[0])
+    ):
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_CLOSURE_INVALID",
+            "V2 dependency-closure inventory does not reconcile.",
+        )
+    if (
+        configuration.get("configurationFingerprint")
+        != payload_fingerprint(configuration, "configurationFingerprint")
+        or payload.get("configurationFingerprint")
+        != configuration.get("configurationFingerprint")
+        or environment.get("schemaVersion") != "OpeningRuntimeEnvironmentV2"
+        or environment.get("environmentFingerprint")
+        != payload_fingerprint(environment, "environmentFingerprint")
+        or payload.get("environmentFingerprint")
+        != environment.get("environmentFingerprint")
+    ):
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_ENVIRONMENT_INVALID",
+            "V2 configuration or environment evidence is contradictory.",
+        )
+    roots = closure.get("externalImportRoots")
+    explicit = closure.get("explicitDistributions")
+    relevant = environment.get("relevantDistributions")
+    if (
+        not isinstance(roots, list)
+        or environment.get("importRoots") != roots
+        or not isinstance(explicit, list)
+        or not isinstance(relevant, list)
+        or not relevant
+    ):
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_ENVIRONMENT_INVALID",
+            "V2 relevant-distribution evidence does not match the closure.",
+        )
+    explicit_names = sorted(
+        str(item.get("name", "")) for item in explicit if isinstance(item, dict)
+    )
+    if environment.get("explicitDistributionContracts") != explicit_names:
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_ENVIRONMENT_INVALID",
+            "V2 explicit-distribution evidence does not match the closure.",
+        )
+    reasons: set[str] = set()
+    names: list[str] = []
+    for item in relevant:
+        if (
+            not isinstance(item, dict)
+            or not str(item.get("name", ""))
+            or not str(item.get("version", ""))
+            or not SHA256_PATTERN.fullmatch(str(item.get("fileFingerprint", "")))
+            or not isinstance(item.get("selectionReasons"), list)
+        ):
+            raise OpeningRuntimeIdentityError(
+                "RELEASE_V2_ENVIRONMENT_INVALID",
+                "A V2 relevant-distribution record is invalid.",
+            )
+        names.append(str(item["name"]))
+        reasons.update(str(reason) for reason in item["selectionReasons"])
+    required_reasons = {
+        *(f"import-root:{root}" for root in roots),
+        *(f"explicit-runtime-contract:{name}" for name in explicit_names),
+    }
+    if names != sorted(set(names)) or not required_reasons.issubset(reasons):
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_ENVIRONMENT_INVALID",
+            "V2 dependency provenance does not cover every required seed.",
+        )
+    aggregate = {
+        "runtimeSurfaceFingerprint": payload["runtimeSurfaceFingerprint"],
+        "configurationFingerprint": payload["configurationFingerprint"],
+        "environmentFingerprint": payload["environmentFingerprint"],
+        "promotionPolicyVersion": PROMOTION_POLICY_VERSION_V2,
+    }
+    if payload.get("approvedRuntimeFingerprint") != hashlib.sha256(
+        canonical_json_bytes(aggregate)
+    ).hexdigest():
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_AGGREGATE_INVALID",
+            "V2 approved runtime fingerprint does not verify.",
+        )
 
 
 class OpeningRuntimeReleaseStore:
@@ -636,7 +1222,8 @@ class OpeningRuntimeReleaseStore:
     def verify_release(self, release_id: str) -> dict[str, object]:
         path = self.release_path(release_id)
         payload = self._read_json(path, "RELEASE_RECORD_MISSING")
-        if payload.get("schemaVersion") != RELEASE_SCHEMA:
+        schema = payload.get("schemaVersion")
+        if schema not in {RELEASE_SCHEMA, RELEASE_SCHEMA_V2}:
             raise OpeningRuntimeIdentityError(
                 "RELEASE_SCHEMA_UNSUPPORTED",
                 "Approved runtime release schema is unsupported.",
@@ -655,7 +1242,12 @@ class OpeningRuntimeReleaseStore:
                 "RELEASE_FINGERPRINT_MISMATCH",
                 "Approved runtime release fingerprint does not verify.",
             )
-        if payload.get("promotionPolicyVersion") != PROMOTION_POLICY_VERSION:
+        expected_policy = (
+            PROMOTION_POLICY_VERSION_V2
+            if schema == RELEASE_SCHEMA_V2
+            else PROMOTION_POLICY_VERSION
+        )
+        if payload.get("promotionPolicyVersion") != expected_policy:
             raise OpeningRuntimeIdentityError(
                 "RELEASE_POLICY_UNSUPPORTED",
                 "Approved runtime promotion policy is unsupported.",
@@ -722,6 +1314,13 @@ class OpeningRuntimeReleaseStore:
                 "RELEASE_AUTHORITY_INVALID",
                 "Approved runtime release carries unexpected authority.",
             )
+        if schema == RELEASE_SCHEMA_V2:
+            if payload.get("runtimeSurfaceVersion") != SURFACE_SCHEMA_V2:
+                raise OpeningRuntimeIdentityError(
+                    "RELEASE_V2_SURFACE_INVALID",
+                    "V2 release names an unsupported runtime surface.",
+                )
+            _validate_v2_release_identity(payload)
         return payload
 
     def _promotion_files(self) -> list[Path]:
@@ -790,6 +1389,8 @@ class OpeningRuntimeReleaseStore:
                 != historical_release.get("releaseFingerprint")
                 or receipt.get("releaseSourceGitSha")
                 != historical_release.get("sourceGitSha")
+                or receipt.get("promotionPolicyVersion")
+                != historical_release.get("promotionPolicyVersion")
             ):
                 raise OpeningRuntimeIdentityError(
                     "PROMOTION_RELEASE_CHAIN_INVALID",
@@ -899,7 +1500,7 @@ class OpeningRuntimeReleaseStore:
             "promotedAt": (promoted_at or datetime.now().astimezone()).isoformat(),
             "releaseSourceGitSha": release["sourceGitSha"],
             "currentGitShaAtPromotion": current_git_sha,
-            "promotionPolicyVersion": PROMOTION_POLICY_VERSION,
+            "promotionPolicyVersion": release["promotionPolicyVersion"],
         }
         receipt["receiptFingerprint"] = payload_fingerprint(
             receipt,
@@ -946,7 +1547,11 @@ def verify_execution_gate(
     release, _, _ = OpeningRuntimeReleaseStore(context.release_root).verify_channel(
         channel
     )
-    current = build_runtime_identity(context, environment=environment)
+    current = (
+        build_runtime_identity_v2(context, environment=environment)
+        if release.get("schemaVersion") == RELEASE_SCHEMA_V2
+        else build_runtime_identity(context, environment=environment)
+    )
     current_git_sha, worktree_status = git_identity or current_git_identity(
         context.repository_root
     )

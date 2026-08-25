@@ -1,24 +1,16 @@
 from __future__ import annotations
 
-"""Offline audit of the approved opening runtime dependency boundary.
+"""Authoritative static dependency boundary for the opening runtime."""
 
-This module is deliberately outside the production ``momentum_hunter`` package.
-It does not define execution authority; it measures the current V1 surface and
-models a possible dependency-closure refinement for review and tests.
-"""
-
-import argparse
 import ast
-import hashlib
-import json
-import re
-import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Mapping
 
 
+BOUNDARY_SCHEMA = "OpeningRuntimeDependencyClosureV2"
+BOUNDARY_POLICY_VERSION = "opening-runtime-dependency-closure-v2"
 PACKAGE_ROOT = "momentum_hunter"
 ENTRY_MODULES = ("momentum_hunter.automation_supervisor",)
 ENTRY_FILES = ("tools/capture_job.py",)
@@ -27,12 +19,16 @@ EXPLICIT_RUNTIME_FILES = (
     "tools/run_capture_job.ps1",
     "requirements.txt",
 )
-CURRENT_RUNTIME_PATTERNS = (
-    re.compile(r"^momentum_hunter/.+\.py$"),
-    re.compile(r"^tools/capture_job\.py$"),
-    re.compile(r"^tools/run_capture_job\.ps1$"),
-    re.compile(r"^requirements\.txt$"),
-)
+EXPLICIT_DISTRIBUTIONS = {
+    "lxml": {
+        "reason": "Finviz BeautifulSoup calls select the lxml parser by literal name.",
+        "source": "momentum_hunter/providers.py",
+    },
+    "tzdata": {
+        "reason": "Windows zoneinfo resolution requires the packaged IANA database.",
+        "source": "momentum_hunter/time_utils.py",
+    },
+}
 IGNORED_WALK_PARTS = frozenset(
     {".git", ".venv", "__pycache__", "bin", "obj", "node_modules"}
 )
@@ -47,10 +43,28 @@ DYNAMIC_IMPORT_CALLS = frozenset(
         "runpy.run_path",
     }
 )
+SUBPROCESS_CALLS = frozenset(
+    {
+        "subprocess.run",
+        "subprocess.Popen",
+        "subprocess.call",
+        "subprocess.check_call",
+        "subprocess.check_output",
+    }
+)
 
 
-class BoundaryAuditError(RuntimeError):
-    pass
+class OpeningRuntimeBoundaryError(RuntimeError):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        details: Mapping[str, object] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.details = dict(details or {})
 
 
 @dataclass(frozen=True)
@@ -78,9 +92,13 @@ class BoundaryInventory:
     excluded_package_files: tuple[str, ...]
     dependency_closure_files: tuple[str, ...]
     external_import_roots: tuple[str, ...]
+    explicit_distributions: tuple[str, ...]
     outside_surface_imports: tuple[ImportEscape, ...]
     dynamic_import_sites: tuple[SourceSite, ...]
     subprocess_sites: tuple[SourceSite, ...]
+
+    def to_evidence(self) -> dict[str, object]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -106,27 +124,34 @@ def _module_name(root: Path, path: Path) -> str | None:
     return ".".join(parts) if parts else None
 
 
-def _python_module_index(root: Path) -> dict[str, Path]:
+def _package_module_index(root: Path) -> dict[str, Path]:
+    package = root / PACKAGE_ROOT
+    if not package.is_dir():
+        raise OpeningRuntimeBoundaryError(
+            "OPENING_PACKAGE_ROOT_MISSING",
+            f"Package root is missing: {package}",
+        )
     index: dict[str, Path] = {}
-    for path in root.rglob("*.py"):
-        relative_parts = path.relative_to(root).parts
-        if any(part in IGNORED_WALK_PARTS for part in relative_parts):
-            continue
+    for path in package.rglob("*.py"):
         module = _module_name(root, path)
         if module:
             index[module] = path
     return index
 
 
-def _package_module_index(root: Path) -> dict[str, Path]:
-    package = root / PACKAGE_ROOT
-    if not package.is_dir():
-        raise BoundaryAuditError(f"Package root is missing: {package}")
-    return {
-        module: path
-        for module, path in _python_module_index(root).items()
-        if module == PACKAGE_ROOT or module.startswith(f"{PACKAGE_ROOT}.")
-    }
+def _resolve_local_module(root: Path, module_name: str) -> Path | None:
+    parts = module_name.split(".")
+    if not parts or any(not part.isidentifier() for part in parts):
+        return None
+    if any(part in IGNORED_WALK_PARTS for part in parts):
+        return None
+    module_path = root.joinpath(*parts).with_suffix(".py")
+    if module_path.is_file():
+        return module_path
+    package_path = root.joinpath(*parts) / "__init__.py"
+    if package_path.is_file():
+        return package_path
+    return None
 
 
 def _attribute_name(node: ast.expr) -> str:
@@ -149,9 +174,7 @@ def _absolute_from_module(
         return imported_module
     current_parts = current_module.split(".")
     package_parts = (
-        current_parts
-        if current_path.name == "__init__.py"
-        else current_parts[:-1]
+        current_parts if current_path.name == "__init__.py" else current_parts[:-1]
     )
     keep = len(package_parts) - (level - 1)
     if keep < 0:
@@ -191,7 +214,10 @@ def _scan_imports(
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except (OSError, UnicodeDecodeError, SyntaxError) as exc:
-        raise BoundaryAuditError(f"Cannot parse Python source: {path}") from exc
+        raise OpeningRuntimeBoundaryError(
+            "OPENING_DEPENDENCY_SOURCE_INVALID",
+            f"Cannot parse opening dependency source: {path}",
+        ) from exc
     package_targets: set[str] = set()
     imported_names: list[tuple[str, int]] = []
     external_roots: set[str] = set()
@@ -226,9 +252,7 @@ def _scan_imports(
                 )
                 for alias in aliases
             )
-            if absolute == PACKAGE_ROOT or absolute.startswith(
-                f"{PACKAGE_ROOT}."
-            ):
+            if absolute == PACKAGE_ROOT or absolute.startswith(f"{PACKAGE_ROOT}."):
                 package_targets.update(
                     _existing_module_targets(absolute, aliases, package_index)
                 )
@@ -240,13 +264,7 @@ def _scan_imports(
                 dynamic_sites.append(
                     SourceSite(relative_path, node.lineno, operation)
                 )
-            if operation in {
-                "subprocess.run",
-                "subprocess.Popen",
-                "subprocess.call",
-                "subprocess.check_call",
-                "subprocess.check_output",
-            }:
+            if operation in SUBPROCESS_CALLS:
                 subprocess_sites.append(
                     SourceSite(relative_path, node.lineno, operation)
                 )
@@ -259,25 +277,9 @@ def _scan_imports(
     )
 
 
-def _current_surface_paths(root: Path) -> set[str]:
-    paths = {
-        _relative(path, root)
-        for path in (root / PACKAGE_ROOT).rglob("*.py")
-        if path.is_file()
-    }
-    for relative in EXPLICIT_RUNTIME_FILES:
-        path = root / relative
-        if not path.is_file():
-            raise BoundaryAuditError(f"Explicit runtime file is missing: {relative}")
-        paths.add(relative)
-    return paths
-
-
 def analyze_opening_boundary(repository_root: Path) -> BoundaryInventory:
     root = repository_root.resolve()
     package_index = _package_module_index(root)
-    all_index = _python_module_index(root)
-    current_surface = _current_surface_paths(root)
     reachable: set[str] = set()
     queue = list(ENTRY_MODULES)
     external_roots: set[str] = set()
@@ -287,6 +289,11 @@ def analyze_opening_boundary(repository_root: Path) -> BoundaryInventory:
 
     for relative in ENTRY_FILES:
         path = root / relative
+        if not path.is_file():
+            raise OpeningRuntimeBoundaryError(
+                "OPENING_ENTRY_FILE_MISSING",
+                f"Opening entry file is missing: {relative}",
+            )
         scan = _scan_imports(
             root=root,
             path=path,
@@ -307,7 +314,10 @@ def analyze_opening_boundary(repository_root: Path) -> BoundaryInventory:
             continue
         path = package_index.get(module)
         if path is None:
-            continue
+            raise OpeningRuntimeBoundaryError(
+                "OPENING_ENTRY_MODULE_MISSING",
+                f"Opening entry module cannot be resolved: {module}",
+            )
         reachable.add(module)
         scan = _scan_imports(
             root=root,
@@ -326,13 +336,23 @@ def analyze_opening_boundary(repository_root: Path) -> BoundaryInventory:
 
     reachable_paths = {_relative(package_index[module], root) for module in reachable}
     dependency_closure = reachable_paths | set(EXPLICIT_RUNTIME_FILES)
+    for relative in EXPLICIT_RUNTIME_FILES:
+        if not (root / relative).is_file():
+            raise OpeningRuntimeBoundaryError(
+                "OPENING_EXPLICIT_FILE_MISSING",
+                f"Explicit opening runtime file is missing: {relative}",
+            )
     escapes: dict[tuple[str, int, str], ImportEscape] = {}
     for importer, line, imported_name in imported_sites:
         candidates = [imported_name]
         while candidates[-1] and "." in candidates[-1]:
             candidates.append(candidates[-1].rsplit(".", 1)[0])
         resolved = next(
-            (all_index[name] for name in candidates if name in all_index),
+            (
+                local
+                for name in candidates
+                if (local := _resolve_local_module(root, name)) is not None
+            ),
             None,
         )
         if resolved is None:
@@ -351,171 +371,47 @@ def analyze_opening_boundary(repository_root: Path) -> BoundaryInventory:
     all_package_paths = {_relative(path, root) for path in package_index.values()}
     return BoundaryInventory(
         package_python_count=len(all_package_paths),
-        current_surface_file_count=len(current_surface),
+        current_surface_file_count=len(all_package_paths) + len(EXPLICIT_RUNTIME_FILES),
         reachable_package_count=len(reachable_paths),
         excluded_package_count=len(all_package_paths - reachable_paths),
         reachable_package_files=tuple(sorted(reachable_paths)),
         excluded_package_files=tuple(sorted(all_package_paths - reachable_paths)),
         dependency_closure_files=tuple(sorted(dependency_closure)),
         external_import_roots=tuple(
-            sorted(root_name for root_name in external_roots if root_name not in sys.stdlib_module_names)
+            sorted(
+                name for name in external_roots if name not in sys.stdlib_module_names
+            )
         ),
+        explicit_distributions=tuple(sorted(EXPLICIT_DISTRIBUTIONS)),
         outside_surface_imports=tuple(escapes[key] for key in sorted(escapes)),
         dynamic_import_sites=tuple(
             sorted(dynamic_sites, key=lambda item: (item.path, item.line, item.operation))
         ),
         subprocess_sites=tuple(
-            sorted(subprocess_sites, key=lambda item: (item.path, item.line, item.operation))
+            sorted(
+                subprocess_sites,
+                key=lambda item: (item.path, item.line, item.operation),
+            )
         ),
     )
 
 
-# The audit and production promotion path intentionally share one analyzer.
-# Names are rebound here to preserve the established audit CLI and test API.
-from momentum_hunter.opening_runtime_boundary import (  # noqa: E402
-    BoundaryInventory as AuthoritativeBoundaryInventory,
-)
-from momentum_hunter.opening_runtime_boundary import (  # noqa: E402
-    analyze_opening_boundary as authoritative_analyze_opening_boundary,
-)
-
-BoundaryInventory = AuthoritativeBoundaryInventory
-analyze_opening_boundary = authoritative_analyze_opening_boundary
-
-
-def dependency_closure_fingerprint(repository_root: Path) -> str:
-    root = repository_root.resolve()
-    inventory = analyze_opening_boundary(root)
+def require_authoritative_boundary(repository_root: Path) -> BoundaryInventory:
+    inventory = analyze_opening_boundary(repository_root)
     if inventory.outside_surface_imports:
-        raise BoundaryAuditError(
-            "Dependency closure contains a local import outside the proposed surface."
+        raise OpeningRuntimeBoundaryError(
+            "OPENING_DEPENDENCY_IMPORT_ESCAPE",
+            "Opening dependency closure contains a local import outside the approved roots.",
+            details={
+                "imports": [asdict(item) for item in inventory.outside_surface_imports]
+            },
         )
     if inventory.dynamic_import_sites:
-        raise BoundaryAuditError(
-            "Dependency closure contains dynamic loading that requires explicit classification."
+        raise OpeningRuntimeBoundaryError(
+            "OPENING_DYNAMIC_LOADING_UNCLASSIFIED",
+            "Opening dependency closure contains unclassified dynamic loading.",
+            details={
+                "sites": [asdict(item) for item in inventory.dynamic_import_sites]
+            },
         )
-    components = []
-    for relative in inventory.dependency_closure_files:
-        path = root / relative
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        components.append(
-            {"path": relative, "sha256": digest, "size": path.stat().st_size}
-        )
-    payload = json.dumps(
-        components,
-        ensure_ascii=True,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-
-def _is_current_runtime_path(path: str) -> bool:
-    normalized = PurePosixPath(path).as_posix()
-    return any(pattern.fullmatch(normalized) for pattern in CURRENT_RUNTIME_PATTERNS)
-
-
-def _path_class(path: str, dependency_paths: frozenset[str]) -> str:
-    normalized = PurePosixPath(path).as_posix()
-    if normalized in dependency_paths:
-        return "OPENING_DEPENDENCY"
-    if normalized.startswith("momentum_hunter/") and normalized.endswith(".py"):
-        return "RESEARCH_OR_NONOPENING_PACKAGE"
-    if normalized.startswith("src/MomentumHunter.Desktop.Wpf/") or normalized.startswith(
-        "src/MomentumHunter.Presentation/"
-    ):
-        return "WPF_PRESENTATION"
-    if normalized.startswith("src/MomentumHunter.AutomationService/"):
-        return "SERVICE_SOURCE_REQUIRES_PROMOTION_IF_INSTALLED"
-    if normalized.startswith("docs/") or normalized.lower().endswith(".md"):
-        return "DOCUMENTATION_GOVERNANCE"
-    if normalized.startswith("tests/"):
-        return "TEST_ONLY"
-    if normalized.startswith("tools/"):
-        return "OFFLINE_OR_ADMIN_TOOL"
-    return "OTHER_OR_UNKNOWN"
-
-
-def recent_commit_analysis(repository_root: Path, count: int = 20) -> dict[str, object]:
-    root = repository_root.resolve()
-    inventory = analyze_opening_boundary(root)
-    dependency_paths = frozenset(inventory.dependency_closure_files)
-    log = subprocess.run(
-        ["git", "log", f"-{count}", "--format=%H%x09%s"],
-        cwd=root,
-        text=True,
-        capture_output=True,
-        check=True,
-    ).stdout.splitlines()
-    commits = []
-    for line in log:
-        commit, _, subject = line.partition("\t")
-        names = subprocess.run(
-            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit],
-            cwd=root,
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.splitlines()
-        classes = sorted({_path_class(path, dependency_paths) for path in names})
-        current_requires = any(_is_current_runtime_path(path) for path in names)
-        closure_requires = any(PurePosixPath(path).as_posix() in dependency_paths for path in names)
-        commits.append(
-            {
-                "commit": commit,
-                "subject": subject,
-                "changedPaths": names,
-                "classes": classes,
-                "currentV1PromotionRequired": current_requires,
-                "dependencyClosurePromotionRequired": closure_requires,
-            }
-        )
-    return {
-        "commitCount": len(commits),
-        "currentV1PromotionRequiredCount": sum(
-            bool(item["currentV1PromotionRequired"]) for item in commits
-        ),
-        "dependencyClosurePromotionRequiredCount": sum(
-            bool(item["dependencyClosurePromotionRequired"]) for item in commits
-        ),
-        "gitOnlyUnderCurrentV1Count": sum(
-            not bool(item["currentV1PromotionRequired"]) for item in commits
-        ),
-        "commits": commits,
-    }
-
-
-def _json_default(value: object) -> object:
-    if hasattr(value, "__dataclass_fields__"):
-        return asdict(value)
-    raise TypeError(f"Cannot serialize {type(value).__name__}")
-
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--repository-root", type=Path, default=Path.cwd())
-    parser.add_argument("--recent-commits", type=int, default=20)
-    return parser
-
-
-def main() -> int:
-    args = _parser().parse_args()
-    inventory = analyze_opening_boundary(args.repository_root)
-    payload = {
-        "schemaVersion": "OpeningRuntimeBoundaryAuditV1",
-        "authority": "OFFLINE_NONAUTHORITATIVE_AUDIT",
-        "inventory": asdict(inventory),
-        "prototypeDependencyClosureFingerprint": dependency_closure_fingerprint(
-            args.repository_root
-        ),
-        "recentCommitAnalysis": recent_commit_analysis(
-            args.repository_root,
-            count=args.recent_commits,
-        ),
-    }
-    print(json.dumps(payload, indent=2, sort_keys=True, default=_json_default))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    return inventory
