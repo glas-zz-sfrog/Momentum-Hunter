@@ -63,6 +63,23 @@ Schwab quote evidence, and complete TradePlan proved the full installed opening
 pipeline. The terminal `DO_NOT_TRADE_MISSED_ENTRY` result is legitimate and
 unchanged.
 
+`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` is
+`IMPLEMENTED_PENDING_MERGE` at qualified implementation
+`aeea192896a8203113807fb03a657fa4f6218774`. It reuses the canonical
+R032B/R032C backfill, minute/Daily stores, time-normalized RVOL, Continuous
+universe/lifecycle/composition, and DATA-004 contracts to produce immutable
+same-session research TradePlans from arbitrary valid startup times. Cold-
+symbol backfill, one coherent historical/current completed-bar chronology,
+material reevaluation, missed-plan immutability, distinct successor plans, and
+restart idempotency are proven. Full discovery ran 2,752 tests with
+`OK (skipped=1)`. Continuous
+Paper consumes the producer contract without semantic changes but remains
+unmerged, uninstalled, and unarmed. Live Schwab evidence cannot yet positively
+classify security subtype/leverage, so real candidates fail closed with
+`AUTHORITATIVE_SUBTYPE_AND_LEVERAGE_CLASSIFICATION_UNAVAILABLE`. No account,
+position, broker, Paper, Shadow, order, service, scheduler, installed runtime,
+or opening-runtime authority changed.
+
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
 `d1a6e14ae3bec1a565a2eb07b47a3b1491356b16` moves the existing catalyst
@@ -207,9 +224,10 @@ requires a separate current-head reconciliation and qualification task.
 ### Current Blocking Gates
 
 - `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` is branch-only and correctly blocked
-  on `CONTINUOUS_TRADEPLAN_PRODUCER_UNAVAILABLE`. It remains unmerged,
-  uninstalled, and unarmed until `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` is
-  separately implemented and proven without changing setup semantics.
+  from activation. The producer contract is now implemented and proven on its
+  task branch; Paper remains unmerged, uninstalled, and unarmed pending
+  producer integration, current-head branch reconciliation, complete
+  requalification, and disabled-install proof.
 - Broad historical replay/statistical claims require corporate-action-safe,
   positively admitted history. `ARGUS-RESEARCH-DATA-002` supplies contracts but
   current broad datasets retain unknown basis and survivorship limitations.
@@ -221,16 +239,23 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` is the exact next implementation
-task. The Monday pipeline, catalyst authority repair, terminal RTD gates, and
-authoritative opening dependency closure have passed. The producer can own the
-new-symbol history-admission, current-plus-historical composition, material-
-evidence reevaluation, and successor-setup production boundary by reusing
-existing candle and Continuous contracts; no new prerequisite is required.
-The authoritative ordered sequence is maintained only in `Next / Queue` below.
+Complete the controlled fast-forward of
+`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001`. Then wire and activate
+`ARGUS-STAT-DATA-002` prospectively under a new immutable research identity.
+After that research denominator is collecting, reconcile and fully requalify
+the branch-only Continuous Paper implementation and prove it installs disabled.
+Paper arming remains a separate later gate. The authoritative ordered sequence
+is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
 
+- `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` proves cold-symbol bounded history
+  admission, arbitrary same-session startup, non-opening-specific readiness,
+  coherent candle composition, material reevaluation, immutable missed plans,
+  explicit successor plans, restart idempotency, and downstream Continuous
+  Paper contract compatibility. It adds no execution authority and records the
+  missing authoritative instrument-subtype/leverage classification as a
+  fail-closed gap.
 - `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` activates the authoritative V2
   promotion boundary: 96 reachable package modules plus three explicit files,
   10 relevant distributions, exact loaded-byte/configuration checks, fail-
@@ -273,17 +298,16 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No implementation task is active. Identity-003 is terminal, integrated,
-   pushed, and reconciled into the authoritative Roadmap.
+1. `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` is implementation-complete and in
+   controlled integration closeout only. No further product behavior is being
+   added.
 
 ### 2. Ready / Next
 
-1. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` as the bounded producer
-   required by the already-defined continuous lifecycle/successor contracts.
-2. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
+1. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
    research identity after the producer can supply the complete bounded cycle;
    this grants no Paper or order authority.
-3. Reconcile and fully requalify the existing
+2. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch only after the producer passes;
    first prove the disabled installation. Paper preflight and one-entry arming
    remain separate later gates.
@@ -304,8 +328,9 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 1. `ARGUS-EXIT-POLICY-001`: blocked from comparative evaluation until an
    admitted fixed-entry replay population and preregistration exist.
-2. `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001`: blocked on the TradePlan producer,
-   then canonical reconciliation and disabled-install proof.
+2. `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001`: producer compatibility is proven;
+   activation remains blocked on canonical reconciliation, complete
+   requalification, and disabled-install proof.
 3. R034: blocked on explicit destructive approval.
 4. Continuous/live order authority: blocked on separate Paper, safety,
    account/broker, prospective-evidence, and Steven decision gates.
@@ -2863,9 +2888,10 @@ blocked and gains no authority from Paper evidence.
 
 #### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001 - Continuous Prospective TradePlan Producer
 
-- Lifecycle: `READY / NEXT`. `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003`, catalyst,
-  Monday opening, and RTD gates are terminal; no additional prerequisite is
-  required.
+- Lifecycle: `IMPLEMENTED_PENDING_MERGE`. Qualified implementation
+  `aeea192896a8203113807fb03a657fa4f6218774` is on
+  `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` from synchronized canonical
+  `3b4bb97b07fd661258d353f3bfc01a9623bf81e4`.
 - Wire the already-defined prospective lifecycle and successor-setup semantics
   into production composition so a legitimate same-session opportunity can
   produce one immutable continuous TradePlan input. Do not invent or loosen a
@@ -2907,6 +2933,17 @@ blocked and gains no authority from Paper evidence.
 - A later chart verification must prove that selecting a newly discovered
   symbol shows meaningful backfilled history rather than beginning at discovery
   time. No WPF work is authorized by this recorded requirement.
+- Acceptance proof is complete: 41 direct/adjacent producer-runtime tests, 366
+  focused lifecycle/backfill/candle/TradePlan tests and 17 branch-only
+  Continuous Paper contract tests pass; full discovery ran 2,752 tests with
+  `OK (skipped=1)`. Compileall, diff,
+  secret, protected-path, opening-closure, runtime-match, and installed-state
+  nonmutation checks pass. The changed product files are outside the
+  authoritative opening closure, so no opening promotion or repin is required.
+- Instrument admission remains fail closed for real candidates because the live
+  Schwab evidence does not authoritatively distinguish common stock, ordinary
+  ETF, leveraged/inverse ETP, ETN, and unknown subtype. Synthetic authoritative
+  admission/rejection behavior is proven; ticker/name inference is prohibited.
 
 #### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
 
@@ -2928,10 +2965,11 @@ blocked and gains no authority from Paper evidence.
 - Lifecycle: `BLOCKED`. Branch
   `codex/ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` contains a proven downstream
   implementation, but it is not canonical, installed, or armed.
-- Gate: `CONTINUOUS_TRADEPLAN_PRODUCER_UNAVAILABLE`. After the producer is
-  proven, reconcile the branch onto current canonical without rebase/force,
-  repeat complete Hard Chew, install disabled, prove the exact Paper-only
-  environment read-only, and treat one-entry arming as a separate gate.
+- Gate: `CANONICAL_RECONCILIATION_AND_DISABLED_INSTALL_PROOF_REQUIRED`. The
+  producer contract is now consumable without semantic changes. Reconcile the
+  branch onto current canonical without rebase/force, repeat complete Hard
+  Chew, install disabled, prove the exact Paper-only environment read-only, and
+  treat one-entry arming as a separate gate.
 - Current authority remains `CONTINUOUS_PAPER_INSTALLED = NO`,
   `ENTRY_AUTHORITY_DISABLED`, no Continuous Runtime account/position/order
   reads, and no Alpaca Live or real-order capability.

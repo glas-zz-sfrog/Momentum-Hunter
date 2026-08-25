@@ -2,6 +2,30 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001 - 2026-08-25
+
+`codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` started from clean synchronized
+canonical `3b4bb97b07fd661258d353f3bfc01a9623bf81e4`. Qualified implementation
+`aeea192896a8203113807fb03a657fa4f6218774` adds the bounded research-only
+Continuous TradePlan producer and exact writer payload while reusing the
+canonical R032B/R032C history path, candle stores, RVOL, Continuous lifecycle,
+composition, and DATA-004 contracts.
+
+Cold-symbol backfill, arbitrary 12:17 ET startup, one-current-bar Continuous
+readiness, stale/tampered/missing-history failure, coherent candle chronology,
+material reevaluation, immutable missed plans, explicit successor plans, and
+restart idempotency are proven. The branch-only Continuous Paper contract
+consumes the record without semantic changes. Real candidates remain fail
+closed because authoritative subtype/leverage metadata is unavailable.
+
+Forty-one direct/adjacent tests, 366 focused tests, and 17 branch-only Paper
+tests pass; full discovery ran 2,752 tests with `OK (skipped=1)`. Compileall,
+diff, secret, protected-path,
+opening-closure, approved-runtime-match, and installed-state nonmutation checks
+pass. Classification is `IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY`. No
+account, position, broker, Paper, Shadow, order, service, scheduler, installed
+runtime, opening promotion, repin, or historical-evidence mutation occurred.
+
 ## ARGUS-CATALYST-SCORE-AUTHORITY-001 - 2026-08-24
 
 `codex/ARGUS-CATALYST-SCORE-AUTHORITY-001` started from clean synchronized

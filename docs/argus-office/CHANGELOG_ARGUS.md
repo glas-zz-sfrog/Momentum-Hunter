@@ -1,5 +1,22 @@
 # Argus Changelog
 
+- Implemented the bounded research-only Continuous TradePlan producer by
+  reusing canonical Schwab backfill/stores, RVOL, candidate lifecycle,
+  composition, and DATA-004 rather than creating competing data or setup paths.
+- Proved cold-symbol and arbitrary same-session admission, one coherent
+  completed-bar chronology, no generic five-new-bar delay, material
+  reevaluation, immutable missed decisions, explicit successor plans, and
+  restart-safe idempotency.
+- Preserved the exact full producer packet through the existing writer and
+  proved branch-only Continuous Paper contract consumption while retaining
+  `RESEARCH_ONLY`, no execution authority, and unavailable orders.
+- Recorded the authoritative subtype/leverage metadata gap and fail-closed real
+  candidate eligibility. Forty-one direct/adjacent, 366 focused, and 17 Paper
+  tests pass; full discovery ran 2,752 tests with `OK (skipped=1)`. Opening
+  runtime, services, schedules, historical
+  evidence, Paper, Shadow, brokers, accounts, positions, and orders were not
+  changed.
+
 - Enforced the existing catalyst relationship-authority contract at the point
   where score points are assigned, so unrelated, ambiguous, unresolved, and
   keyword-only headlines remain visible but contribute zero scoring authority.
