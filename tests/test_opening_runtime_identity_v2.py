@@ -11,7 +11,6 @@ from momentum_hunter.opening_runtime_boundary import (
     analyze_opening_boundary,
 )
 from momentum_hunter.opening_runtime_identity import (
-    LOADED_RUNTIME_IDENTITY_MODULE_SHA256,
     OpeningRuntimeIdentityError,
     OpeningRuntimeReleaseStore,
     RuntimeIdentityContext,
@@ -295,8 +294,12 @@ class OpeningRuntimeIdentityV2Tests(unittest.TestCase):
     def test_v1_release_remains_verifiable_as_rollback(self) -> None:
         v1_environment = {
             "schemaVersion": "OpeningRuntimeEnvironmentV1",
-            "environmentFingerprint": "a" * 64,
+            "serviceHost": {"sha256": file_sha256(self.service)},
         }
+        v1_environment["environmentFingerprint"] = payload_fingerprint(
+            v1_environment,
+            "environmentFingerprint",
+        )
         record = build_release_record(
             self.context,
             source_git_sha=HEAD,
@@ -309,10 +312,16 @@ class OpeningRuntimeIdentityV2Tests(unittest.TestCase):
         )
         self.assertTrue(changed)
         self.assertEqual("OpeningRuntimeReleaseV1", release["schemaVersion"])
-        self.assertEqual(
-            LOADED_RUNTIME_IDENTITY_MODULE_SHA256,
-            LOADED_RUNTIME_IDENTITY_MODULE_SHA256,
+        supervisor, identity_gate, service = self.loaded_hashes(record)
+        result = verify_execution_gate(
+            self.context,
+            loaded_supervisor_sha256=supervisor,
+            loaded_identity_module_sha256=identity_gate,
+            loaded_service_host_sha256=service,
+            environment=v1_environment,
+            git_identity=(HEAD, ""),
         )
+        self.assertTrue(result.runtime_match)
 
 
 if __name__ == "__main__":

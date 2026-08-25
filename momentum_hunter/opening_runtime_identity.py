@@ -1463,7 +1463,11 @@ class OpeningRuntimeReleaseStore:
                 )
         else:
             self._write_once(release_path, record)
-            release = self.verify_release(release_id)
+            try:
+                release = self.verify_release(release_id)
+            except Exception:
+                release_path.unlink(missing_ok=True)
+                raise
         try:
             active_release, pointer, _ = self.verify_channel(channel)
         except OpeningRuntimeIdentityError as exc:
