@@ -27,6 +27,11 @@ START_REBOOT = (
 VERIFY_REBOOT = (
     REPOSITORY_ROOT / "tools" / "verify_automation_reboot_canary.ps1"
 )
+UPDATE_RUNTIME_IDENTITY = (
+    REPOSITORY_ROOT
+    / "tools"
+    / "update_automation_service_runtime_identity.ps1"
+)
 EXAMPLE = REPOSITORY_ROOT / "config" / "automation-service.example.json"
 
 
@@ -408,6 +413,34 @@ class AutomationServiceInstallTests(unittest.TestCase):
             "shadow_opening",
             {job["kind"] for job in payload["jobs"]},
         )
+
+    def test_runtime_identity_update_requires_fresh_exact_service_readback(
+        self,
+    ) -> None:
+        source = UPDATE_RUNTIME_IDENTITY.read_text(encoding="utf-8")
+
+        self.assertIn("$restartThreshold = [DateTimeOffset]::Now", source)
+        self.assertIn("$loadedHost -ne $expectedHost", source)
+        self.assertIn("$loadedSupervisor -ne $expectedSupervisor", source)
+        self.assertIn("$loadedGate -ne $expectedGate", source)
+        self.assertIn("-not $postRestartHeartbeat", source)
+        self.assertNotIn(
+            '$loadedSupervisor -notmatch "^[0-9a-f]{64}$"',
+            source,
+        )
+        self.assertNotIn(
+            '$loadedGate -notmatch "^[0-9a-f]{64}$"',
+            source,
+        )
+
+        catch_start = source.index("catch {\n    $originalFailure")
+        catch_source = source[catch_start:]
+        stop_index = catch_source.index("Stop-Service -Name $serviceName -Force")
+        restore_index = catch_source.index(
+            "Copy-Item -LiteralPath $backupManifest"
+        )
+        self.assertLess(stop_index, restore_index)
+        self.assertIn("throw $originalFailure", catch_source)
 
 
 if __name__ == "__main__":

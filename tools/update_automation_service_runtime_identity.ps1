@@ -145,6 +145,14 @@ try {
         throw "Updated Automation manifest did not pass structural validation."
     }
     Move-Item -LiteralPath $temporaryManifest -Destination $manifestPath -Force
+    $expectedHost = (Get-FileSha256 $serviceExecutable).ToLowerInvariant()
+    $expectedSupervisor = (
+        Get-FileSha256 (Join-Path $projectPath "momentum_hunter\automation_supervisor.py")
+    ).ToLowerInvariant()
+    $expectedGate = (
+        Get-FileSha256 (Join-Path $projectPath "momentum_hunter\opening_runtime_identity.py")
+    ).ToLowerInvariant()
+    $restartThreshold = [DateTimeOffset]::Now
     Start-Service -Name $serviceName
 
     $deadline = (Get-Date).AddSeconds(30)
@@ -155,20 +163,30 @@ try {
         $loadedHost = [string]$updatedState.loaded_service_host_sha256
         $loadedSupervisor = [string]$updatedState.loaded_supervisor_sha256
         $loadedGate = [string]$updatedState.loaded_runtime_identity_module_sha256
+        $heartbeat = [DateTimeOffset]::MinValue
+        $heartbeatParsed = [DateTimeOffset]::TryParse(
+            [string]$updatedState.last_heartbeat_at,
+            [ref]$heartbeat
+        )
+        $postRestartHeartbeat = (
+            $heartbeatParsed -and $heartbeat -ge $restartThreshold
+        )
     } while (
         (Get-Date) -lt $deadline -and
         (
             $service.State -ne "Running" -or
-            $loadedHost -notmatch "^[0-9a-f]{64}$" -or
-            $loadedSupervisor -notmatch "^[0-9a-f]{64}$" -or
-            $loadedGate -notmatch "^[0-9a-f]{64}$"
+            $loadedHost -ne $expectedHost -or
+            $loadedSupervisor -ne $expectedSupervisor -or
+            $loadedGate -ne $expectedGate -or
+            -not $postRestartHeartbeat
         )
     )
     if (
         $service.State -ne "Running" -or
-        $loadedHost -ne (Get-FileSha256 $serviceExecutable).ToLowerInvariant() -or
-        $loadedSupervisor -notmatch "^[0-9a-f]{64}$" -or
-        $loadedGate -notmatch "^[0-9a-f]{64}$"
+        $loadedHost -ne $expectedHost -or
+        $loadedSupervisor -ne $expectedSupervisor -or
+        $loadedGate -ne $expectedGate -or
+        -not $postRestartHeartbeat
     ) {
         throw "Updated Automation Service did not report complete loaded identity."
     }
@@ -191,7 +209,12 @@ try {
     } | ConvertTo-Json -Depth 5
 }
 catch {
+    $originalFailure = $_
     try {
+        $rollbackService = Get-CimInstance Win32_Service -Filter "Name='$serviceName'"
+        if ($rollbackService -and $rollbackService.State -ne "Stopped") {
+            Stop-Service -Name $serviceName -Force
+        }
         if (Test-Path -LiteralPath $backupManifest -PathType Leaf) {
             Copy-Item -LiteralPath $backupManifest -Destination $manifestPath -Force
         }
@@ -202,7 +225,7 @@ catch {
     }
     catch {
     }
-    throw
+    throw $originalFailure
 }
 finally {
     Remove-Item -LiteralPath $temporaryPublish -Recurse -Force -ErrorAction SilentlyContinue
