@@ -2,6 +2,35 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B - 2026-08-26
+
+`codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B` preserves product repair
+`01f0c2ece0370db86a9c982a9926cdf8f37fd63b` and is pushed through packaging
+closeout `ebbf9da5b8d6dbc83311adbc2cd393390d499b77`. It adds a post-acquisition
+decision cutoff with exact evidence `knownAt` binding, preview-only natural
+setup evaluation, atomic lifecycle/setup/breakout/Producer publication,
+historical-context prospective-floor enforcement, structured failure evidence,
+checkpoint/backfill accounting, and restart rollback/exactly-once tests.
+
+Focused and broad Continuous verification passes. Full discovery ran 2,779
+tests with two preserved isolated-worktree `.venv` layout failures; both exact
+tests then pass under the approved environment, classified
+`PASS_WITH_ENVIRONMENT_SUPPLEMENT`. The 1,800-second real-provider canary
+preserves 172 completed-bar events, 47 readiness completions, four ready
+members, seven successful symbol backfills, and one restart, but zero
+composition cycles and zero TradePlans. Natural-path acceptance therefore
+failed and no merge is authorized.
+
+The sanitized self-contained V2 second-eye ZIP has 626 files, 625 manifest
+entries, zero secret findings, staged and extracted 161-test passes, and SHA-256
+`A4609AA3562D5705D88DF13498F7EBAEAB7E6A615910B4445887625B60EE371B`.
+The prior failed packaging staging root and the original Producer-001A failed
+canary/ZIP remain unchanged. Classification is
+`IMPLEMENTED_PENDING_MERGE / PROVIDER_CANARY_FAILED_ACCEPTANCE /
+SECOND_EYE_PACKET_READY`. No production runtime, service, scheduler, manifest,
+opening, provider role, Paper, Shadow, broker, account, position, or order state
+changed. Independent second-eye adjudication is the only next gate.
+
 ## ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A - 2026-08-26
 
 `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` started from clean synchronized

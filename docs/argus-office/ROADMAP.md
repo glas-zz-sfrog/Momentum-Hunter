@@ -88,9 +88,31 @@ Continuous modules remain outside the 96-module authoritative opening closure,
 the approved opening release remains matched, and service/scheduler/manifest,
 Paper, Shadow, broker, account, order, and historical capture state remain
 unchanged. The predecessor's original closeout and independent limitation
-adjudication remain immutable historical evidence. A separate real provider-
-backed research-only forensic canary is now the next acceptance gate; no such
-canary or Continuous Paper authority is claimed here.
+adjudication remain immutable historical evidence.
+
+`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B` is
+`IMPLEMENTED_PENDING_MERGE / PROVIDER_CANARY_FAILED_ACCEPTANCE /
+SECOND_EYE_PACKET_READY`. Product repair commit
+`01f0c2ece0370db86a9c982a9926cdf8f37fd63b` freezes the decision cutoff only
+after provider acquisition, binds every input `knownAt` to that cutoff, makes
+natural setup composition preview-only until one atomic lifecycle/setup/
+breakout/Producer publication succeeds, prevents historical backfill from
+becoming new prospective events, and records exact failure/accounting evidence.
+The pushed task branch packages the evidence through `ebbf9da5b8d6dbc83311adbc2cd393390d499b77`.
+
+The fresh 1,800-second real-provider canary preserved six discovery cycles,
+172 exact completed-bar events, 47 readiness completions, four ready members,
+21 backfill attempts with seven successful symbol ledgers, one physical
+restart, and zero writer errors. It also preserved the decisive failure: zero
+composition cycles, zero lifecycle/setup transitions, and zero TradePlans or
+truthful no-plan records. The natural Continuous path is therefore not
+accepted. The immutable second-eye V2 ZIP is self-contained, secret-scan clean,
+and independently reruns 161 tests from extracted contents; it is SHA-256
+`A4609AA3562D5705D88DF13498F7EBAEAB7E6A615910B4445887625B60EE371B`.
+The original failed Producer-001A canary/ZIP remain unchanged. No rollback,
+merge, install, deployment, Paper, Shadow, account, position, broker, or order
+action occurred. Independent second-eye adjudication is the next and only
+Producer gate; do not repair or rerun before it.
 
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
@@ -248,7 +270,8 @@ requires a separate current-head reconciliation and qualification task.
   from activation. Producer/Paper schema compatibility is proven, but the
   qualified Producer-001A branch now originates natural lifecycle, successor,
   and completed-bar reevaluation evidence. Paper remains unmerged, uninstalled,
-  and unarmed pending provider-backed research-only physical acceptance,
+  and unarmed pending successful provider-backed natural-path acceptance after
+  Producer-001B second-eye adjudication,
   authoritative instrument
   classification, current-head reconciliation, complete requalification, and
   disabled-install proof.
@@ -263,12 +286,12 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Run Producer-001A's separate real provider-backed research-only forensic
-canary. After that canary passes, activate
-`ARGUS-STAT-DATA-002` prospectively. Authoritative instrument subtype/leverage
-classification remains a pre-Paper gate. Paper reconciliation, disabled
-installation, read-only preflight, and one-entry arming remain separate later
-gates. The authoritative ordered sequence is maintained only in `Next / Queue`
+Independently adjudicate the preserved Producer-001B failed canary from the
+self-contained second-eye V2 ZIP. Do not repair or rerun the natural path until
+that review identifies the first missing transition and approves a bounded
+successor scope. `ARGUS-STAT-DATA-002` and Continuous Paper remain held.
+Authoritative instrument subtype/leverage classification remains a pre-Paper
+gate. The authoritative ordered sequence is maintained only in `Next / Queue`
 below.
 
 ### Recent Material Completions
@@ -338,21 +361,24 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No implementation task is active. Producer-001A is canonical and qualified;
-   no provider-backed canary is active.
+1. Producer-001B is pushed and `IMPLEMENTED_PENDING_MERGE`; its real-provider
+   canary is terminal failed acceptance and its self-contained second-eye packet
+   is ready. No repair, rerun, merge, install, or activation is active.
 
 ### 2. Ready / Next
 
-1. Run a separate real provider-backed, research-only exact-path Continuous
-   canary. It must prove real discovery through truthful plan/no-plan,
-   reevaluation, and bounded restart behavior without account, Paper, Shadow,
-   broker, or order capability.
-2. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
-   research identity only after Producer-001A and its physical canary pass.
-3. Close authoritative instrument subtype/leverage classification before any
+1. Perform independent second-eye adjudication of the preserved Producer-001B
+   failed canary and its V2 ZIP. Identify the exact first missing transition;
+   preserve all original evidence and do not repair during adjudication.
+2. Only after adjudication, authorize a bounded successor repair and fresh
+   provider-backed canary if the evidence supports it. Acceptance still requires
+   real discovery through truthful plan/no-plan, reevaluation, and restart.
+3. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
+   research identity only after the natural path passes physical acceptance.
+4. Close authoritative instrument subtype/leverage classification before any
    Continuous Paper arming; unknown and leveraged/inverse products remain
    execution-ineligible meanwhile.
-4. Reconcile and fully requalify the existing
+5. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch, then separately prove disabled
    installation, read-only Paper preflight, and one-entry arming. No gate
    automatically advances to live execution.
@@ -374,10 +400,11 @@ next-action language preserved elsewhere cannot supersede this queue.
 1. `ARGUS-EXIT-POLICY-001`: blocked from comparative evaluation until an
    admitted fixed-entry replay population and preregistration exist.
 2. `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001`: producer compatibility is proven;
-   activation remains blocked on Producer-001A, physical exact-path acceptance,
-   authoritative instrument classification, canonical reconciliation, complete
-   requalification, and disabled-install proof.
-3. `ARGUS-STAT-DATA-002`: `HELD` until Producer-001A and its physical canary can
+   activation remains blocked on Producer-001B second-eye adjudication,
+   successful physical exact-path acceptance, authoritative instrument
+   classification, canonical reconciliation, complete requalification, and
+   disabled-install proof.
+3. `ARGUS-STAT-DATA-002`: `HELD` until the natural path and its physical canary can
    supply a truthful full stream rather than denominator-heavy incomplete
    `SETUP_PENDING` states.
 4. R034: blocked on explicit destructive approval.
@@ -3067,6 +3094,37 @@ blocked and gains no authority from Paper evidence.
 - Safety boundary: no account, position, broker, Paper, Shadow, order, WPF, or
   live execution authority. Acceptance requires deterministic tests plus a
   separately gated real provider-backed research-only canary after integration.
+
+#### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B - Chronology, Atomicity, And Forensic Repair
+
+- Lifecycle: `IMPLEMENTED_PENDING_MERGE / PROVIDER_CANARY_FAILED_ACCEPTANCE /
+  SECOND_EYE_PACKET_READY`. Product implementation is frozen at
+  `01f0c2ece0370db86a9c982a9926cdf8f37fd63b`; the pushed task branch packages
+  the preserved evidence through `ebbf9da5b8d6dbc83311adbc2cd393390d499b77`.
+- Readiness exposes the final post-acquisition decision cutoff and evidence
+  `knownAt` values. Composition is previewed against temporary state and only
+  publishes lifecycle, setup, breakout, and Producer records after the complete
+  evaluation succeeds. Historical context cannot cross the prospective floor.
+  Exact exceptions and checkpoint/backfill accounting distinguish attempts,
+  successes, events, and commits. Restart tests prove no phantom state after a
+  failed publication and one later successful commit.
+- Hard Chew includes 65 final focused tests, 195 broad Continuous tests,
+  compileall, protected-path/capability/secret checks, and 2,779 discovered
+  Python tests. The monolithic run preserves two isolated-worktree `.venv`
+  layout failures; the exact two tests pass 2/2 with the approved environment,
+  so verification is `PASS_WITH_ENVIRONMENT_SUPPLEMENT`, not an unqualified
+  monolithic pass.
+- The fresh provider canary proves real Finviz discovery, Schwab backfill, 172
+  exact completed-bar events, bounded restart, and nontransmission, but fails
+  the core natural path with zero composition cycles and zero Producer plans.
+  The self-contained 625-entry V2 packet passes secret scan, manifest
+  verification, and 161/161 staged plus extracted reruns. ZIP:
+  `C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-CONTINUOUS-PRODUCER-001B-FORENSIC-CANARY-20260826-REGULAR-01F0C2E-SECOND-EYE-V2.zip`;
+  SHA-256
+  `A4609AA3562D5705D88DF13498F7EBAEAB7E6A615910B4445887625B60EE371B`.
+- Stop gate: independent second-eye adjudication only. No product repair,
+  provider rerun, merge, deployment, STAT-DATA-002 activation, Paper, Shadow,
+  broker, account, position, or order work is authorized until that review.
 
 #### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
 
