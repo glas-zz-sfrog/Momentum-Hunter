@@ -273,12 +273,7 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Complete the installed Automation Service refresh and approved-release
-promotion for `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A`; implementation,
-integration, full Hard Chew, and isolated physical runtime match are complete,
-but two canceled UAC prompts left the installed gate and active release on their
-prior bytes. Then implement
-`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` to complete the natural lifecycle,
+Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` to complete the natural lifecycle,
 successor-setup, completed-bar reevaluation, and restart-reconstruction path.
 After a separate real provider-backed research-only canary passes, activate
 `ARGUS-STAT-DATA-002` prospectively. Authoritative instrument subtype/leverage
@@ -289,6 +284,13 @@ below.
 
 ### Recent Material Completions
 
+- `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` retains total/excluded package
+  counts as reconciled diagnostics while removing only those two declared
+  fields from V2 closure/surface identity. Unreachable module add/remove is
+  identity-stable while reachable add/change remains identity-changing. Full
+  discovery passes 2,755 tests; isolated and installed physical runtime match
+  pass. Release `OPENING-RUNTIME-D220AEA03F465DEA3B6A` is active with 13 future
+  openings, zero Shadow/Paper jobs, and unavailable order transmission.
 - `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` safely merges a valid lower-level,
   research-only Producer and proves deterministic contract composition,
   immutable producer-store behavior, one-current-bar readiness, and downstream
@@ -341,34 +343,25 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` is
-   `INTEGRATED / INSTALLED_PROMOTION_PENDING_UAC`. Canonical and origin contain
-   the qualified correction at `cb8a6ff`; 2,755 tests, compileall, PowerShell
-   parsing, exact mutation proofs, and isolated physical runtime match pass.
-   The installed Automation Service and active release remain on their prior
-   bytes because two UAC prompts were canceled before elevation. The next
-   opening therefore remains fail-closed until the one bounded service refresh,
-   V2 promotion, and installed runtime-match verification complete.
+1. No implementation task is active. Identity-003A is integrated, installed,
+   promoted, and physically matched. Producer-001A is the next bounded task.
 
 ### 2. Ready / Next
 
-1. Finish the bounded `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` installed
-   service refresh, V2 release promotion, and exact physical runtime-match
-   readback. Do not begin Producer-001A before this terminal gate.
-2. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` from then-current clean
+1. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` from then-current clean
    canonical: naturally produce lifecycle/successor evidence, dispatch completed
    canonical bars, preserve research visibility while instrument authority is
    unavailable, and reconstruct the full path safely after restart.
-3. Run a separate real provider-backed, research-only exact-path Continuous
+2. Run a separate real provider-backed, research-only exact-path Continuous
    canary. It must prove real discovery through truthful plan/no-plan,
    reevaluation, and bounded restart behavior without account, Paper, Shadow,
    broker, or order capability.
-4. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
+3. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
    research identity only after Producer-001A and its physical canary pass.
-5. Close authoritative instrument subtype/leverage classification before any
+4. Close authoritative instrument subtype/leverage classification before any
    Continuous Paper arming; unknown and leveraged/inverse products remain
    execution-ineligible meanwhile.
-6. Reconcile and fully requalify the existing
+5. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch, then separately prove disabled
    installation, read-only Paper preflight, and one-entry arming. No gate
    automatically advances to live execution.

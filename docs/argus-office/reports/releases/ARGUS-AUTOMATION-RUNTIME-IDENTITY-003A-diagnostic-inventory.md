@@ -2,7 +2,7 @@
 
 ## Current Status
 
-`INTEGRATED / INSTALLED_PROMOTION_PENDING_UAC`
+`COMPLETE / APPROVED_RUNTIME_ACTIVE`
 
 Starting canonical: `6d5b15d0fff8f5fe48d56a5c82e2fc4b86cc94d0`
 
@@ -46,6 +46,20 @@ policy.
   import, dynamic loading, loaded-byte drift, and post-promotion tamper tests
   retain their prior fail-closed behavior.
 
+The exact disposable unreachable-add comparison records:
+
+- baseline inventory `210 total / 96 reachable / 114 excluded`;
+- added inventory `211 total / 96 reachable / 115 excluded`;
+- legacy closure fingerprint changes from `321f5a5a...` to `e3296070...`;
+- legacy surface fingerprint changes from `e7f726cc...` to `130303eb...`;
+- corrected closure remains `96885a4e...`;
+- corrected surface remains `f0137a05...`;
+- approved runtime remains `f26f8c7b...` through add and remove.
+
+The independent reachable-module mutation changes approved runtime from
+`08912c8f...` to `bdd7a442...`; changing that reachable module again advances
+it to `eb423235...`.
+
 ## Hard Chew
 
 - Focused V2 identity suite: 10/10 pass.
@@ -79,22 +93,50 @@ Evidence root:
 
 ## Installed Gate
 
-The non-mutating updater plan passed on clean synchronized `cb8a6ff` with zero
-running jobs, unchanged manifest
-`F293CE95F143BB8853E83F88D83F6ACED62A891CA88AFDE8780B95AB023EB862`,
-and one changed opening component: `opening_runtime_identity.py`.
+The rollback-protected updater completed from clean synchronized `317c456` with
+zero running jobs. Exact loaded-byte readback matches:
 
-Two visible UAC launches were canceled before elevation. No updater mutation
-occurred. The Automation Service remains Running/Automatic on its prior loaded
-gate, and the active release remains
-`OPENING-RUNTIME-EC11418BBC35F5285CA8`. Because canonical now contains the new
-reachable gate bytes, opening execution correctly remains fail-closed until
-the rollback-protected service refresh, V2 promotion, and installed status
-verification complete.
+- Automation Service host:
+  `D71660B49BC4EFD51F36AC0A7C53333BE844057FCC6EF4C3982CF1005F0F7558`;
+- supervisor:
+  `f9097fc9523e0873a756340397bda4e544b3573c7599693eda9927b1baf3cefd`;
+- runtime identity gate:
+  `9bbe2285ac6130b6df605ac4c85170d2986706e409193ab593f7339edf5afdb2`.
+
+The manifest's JSON meaning is byte-for-byte-equivalent after canonical JSON
+normalization to the updater backup. Its serialization hash changed from
+`F293CE95F143BB8853E83F88D83F6ACED62A891CA88AFDE8780B95AB023EB862`
+to `AFC55EC289E46E02DF96C2FC0B4DD501DEEC763FC94B82DBB2065B25F942700`.
+
+Production V2 promotion created:
+
+- release `OPENING-RUNTIME-D220AEA03F465DEA3B6A`;
+- runtime fingerprint
+  `d220aea03f465dea3b6ab970a417e08ec40b4649982d9a356336aafb93c67429`;
+- release fingerprint
+  `3947881e4c0c70108b536aad0cb27738b4d89d14a3993ded16c95ddf05ce944e`;
+- closure fingerprint
+  `96885a4e27c2f44e5763043be64c5536ca73709e951c052d4817248b0daef892`;
+- environment fingerprint
+  `597cf9d341952cf148da685f60d558efd038599af030465fa18ff5ca176db2b8`.
+
+Installed status is `APPROVED_RUNTIME_MATCH`; an immediate plan is idempotent
+with zero changed components. Automation, Continuous Runtime, and Continuous
+Writer are Running/Automatic. Thirteen future openings remain; zero Shadow and
+zero Paper jobs are enabled; order transmission is unavailable.
+
+## Final Classifications
+
+- `DEPENDENCY_CLOSURE_AUTHORITATIVE = YES`.
+- `ENVIRONMENT_BOUNDARY_NARROWED = YES`.
+- `FAIL_CLOSED_EQUIVALENCE_PRESERVED = YES`.
+- `UNNECESSARY_PROMOTION_REDUCTION_PROVEN = YES`.
+- `PHYSICAL_PROMOTION_RUNTIME_MATCH_PROVEN = YES`.
+- `V1_ROLLBACK_PRESERVED = YES`.
+- `CONTINUOUS_TRADEPLAN_PRODUCER_001A_READY_NEXT = YES`.
 
 ## Next Gate
 
-Complete the single elevated Automation Service refresh, promote the exact V2
-candidate, verify `APPROVED_RUNTIME_MATCH`, and record final installed hashes.
-Producer-001A is technically ready behind this gate but must not begin before
-the installed closeout is terminal.
+Begin `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` from the then-current clean
+synchronized canonical baseline. Do not infer any Paper, Shadow, broker,
+account, position, or order authority from this identity closeout.
