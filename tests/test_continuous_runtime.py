@@ -114,6 +114,7 @@ class SyntheticMarketData:
         if request.symbol in self.exception_symbols:
             raise RuntimeError("synthetic readiness exception")
         failed = request.symbol in self.fail_symbols
+        chronology = (("syntheticReadiness", request.requested_at),)
         return ReadinessResult(
             request_id=("wrong-request" if request.symbol in self.mismatch_symbols else request.request_id),
             symbol=("WRONG" if request.symbol in self.mismatch_symbols else request.symbol),
@@ -121,6 +122,8 @@ class SyntheticMarketData:
             fingerprint=fp((request.request_id, failed)),
             ready=not failed,
             failure_reason="SYNTHETIC_DATA_FAILURE" if failed else None,
+            decision_cutoff=request.requested_at,
+            evidence_known_at=chronology,
         )
 
 
@@ -454,6 +457,76 @@ class ContinuousRuntimeTests(unittest.TestCase):
         self.assertEqual("ADAPTER_IDENTITY_MISMATCH", failures["BADREADY"])
         self.assertEqual("ADAPTER_IDENTITY_MISMATCH", failures["BADCOMPOSE"])
         self.assertIn("GOOD", self.fixture.denominator.calls)
+
+    def test_composition_failure_preserves_exact_exception_and_chronology(self) -> None:
+        self.start()
+        self.fixture.composer.fail_symbols.add("FAIL")
+        event = self.fixture.event("FAIL")
+        self.fixture.runtime.submit_event(event, self.fixture.clock.now())
+        self.fixture.runtime.tick(self.fixture.clock.now())
+
+        failure = next(
+            item
+            for item in self.fixture.runtime.symbol_failures
+            if item.symbol == "FAIL"
+        )
+        self.assertEqual("COMPOSITION", failure.stage)
+        self.assertEqual("RuntimeError", failure.exception_class)
+        self.assertEqual("RuntimeError", failure.diagnostic_code)
+        self.assertEqual("synthetic composition exception", failure.message)
+        self.assertEqual(event.occurred_at, failure.request_cutoff)
+        self.assertEqual(
+            (("syntheticReadiness", event.occurred_at),),
+            failure.evidence_known_at,
+        )
+        checkpoint = self.fixture.store.load(self.fixture.config.runtime_identity)
+        persisted = next(
+            item for item in checkpoint["symbol_failures"] if item["symbol"] == "FAIL"
+        )
+        self.assertEqual("RuntimeError", persisted["exception_class"])
+        self.assertEqual(
+            [["syntheticReadiness", event.occurred_at]],
+            persisted["evidence_known_at"],
+        )
+
+    def test_nonready_result_preserves_cutoff_and_chronology(self) -> None:
+        self.start()
+        self.fixture.market.fail_symbols.add("NOTREADY")
+        event = self.fixture.event("NOTREADY")
+        self.fixture.runtime.submit_event(event, self.fixture.clock.now())
+        self.fixture.runtime.tick(self.fixture.clock.now())
+
+        failure = next(
+            item
+            for item in self.fixture.runtime.symbol_failures
+            if item.symbol == "NOTREADY"
+        )
+        self.assertEqual("READINESS", failure.stage)
+        self.assertEqual("DATA_FAILURE", failure.diagnostic_code)
+        self.assertEqual("SYNTHETIC_DATA_FAILURE", failure.message)
+        self.assertEqual(event.occurred_at, failure.request_cutoff)
+        self.assertEqual(
+            (("syntheticReadiness", event.occurred_at),),
+            failure.evidence_known_at,
+        )
+
+    def test_completed_bar_event_accounting_is_persisted_in_checkpoint(self) -> None:
+        self.start()
+        event = self.fixture.event("AAA", suffix="accounting")
+        self.fixture.runtime.submit_event(event, self.fixture.clock.now())
+        health = self.fixture.runtime.tick(self.fixture.clock.now())
+
+        self.assertEqual(1, health.completed_bar_events)
+        checkpoint = self.fixture.store.load(self.fixture.config.runtime_identity)
+        self.assertEqual(1, checkpoint["counters"]["completed_bar_events"])
+        self.assertEqual(
+            [event.event_id],
+            [
+                item["event_id"]
+                for item in checkpoint["event_records"]
+                if item["trigger"] == CANONICAL_BAR_COMPLETED
+            ],
+        )
 
     def test_denominator_incomplete_is_visible_without_stopping_runtime(self) -> None:
         self.start()

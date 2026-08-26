@@ -340,6 +340,7 @@ def detect_sequential_breakout_events(
     *,
     originating_evidence_family: str,
     policy: SequentialBreakoutPolicy | None = None,
+    minimum_event_timestamp: datetime | str | None = None,
 ) -> tuple[SequentialBreakoutEvent, ...]:
     """Detect one symbol/session sequence using only prior and current bars."""
 
@@ -363,6 +364,11 @@ def detect_sequential_breakout_events(
     segment_start = 0
     impulse_emitted = False
     opening_trigger = opening_range_trigger(observations, policy)
+    event_floor = (
+        aware_datetime(aware_text(minimum_event_timestamp, "Minimum event timestamp"))
+        if minimum_event_timestamp is not None
+        else None
+    )
 
     def emit(
         *,
@@ -376,7 +382,12 @@ def detect_sequential_breakout_events(
         trigger_price: float | None = None,
         prior_range_value: float | None = None,
         relative_volume: float | None = None,
-    ) -> SequentialBreakoutEvent:
+    ) -> SequentialBreakoutEvent | None:
+        if (
+            event_floor is not None
+            and aware_datetime(observation.provider_timestamp) < event_floor
+        ):
+            return None
         previous_event_id = events[-1].event_id if events else ""
         event = SequentialBreakoutEvent(
             event_index=len(events) + 1,
@@ -448,6 +459,12 @@ def detect_sequential_breakout_events(
                 active = None
                 impulse_emitted = False
                 continue
+
+        if (
+            event_floor is not None
+            and aware_datetime(current.provider_timestamp) < event_floor
+        ):
+            continue
 
         prior_range = baseline_range(
             observations, index, segment_start, policy.range_baseline_bars

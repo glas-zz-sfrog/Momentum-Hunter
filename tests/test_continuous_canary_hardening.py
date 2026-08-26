@@ -120,6 +120,7 @@ class DeferredThenReadyMarket:
     def evaluate(self, request):
         self.requests.append(request)
         deferred = request.trigger != REGULAR_SESSION_ROLLOVER
+        chronology = (("syntheticReadiness", request.requested_at),)
         return ReadinessResult(
             request_id=request.request_id,
             symbol=request.symbol,
@@ -127,6 +128,8 @@ class DeferredThenReadyMarket:
             fingerprint=fp((request.request_id, request.requested_at, deferred)),
             ready=not deferred,
             deferred=deferred,
+            decision_cutoff=(request.requested_at if not deferred else None),
+            evidence_known_at=(chronology if not deferred else ()),
         )
 
 

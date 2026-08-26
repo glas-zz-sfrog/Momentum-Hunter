@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from momentum_hunter.broad_discovery import (
     DiscoveryQueryIdentity,
@@ -268,12 +269,31 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
     def _request(self, cutoff: datetime, *, generation: int) -> CompositionRequest:
         material = fingerprint(("material", generation))
         self.state.material_event_fingerprints["AAA"] = material
+        self.state.material_event_known_at["AAA"] = cutoff.isoformat()
+        chronology = self._known_at(cutoff)
         return CompositionRequest(
             request_id=f"natural-request-{generation}",
             symbol="AAA",
             trigger=CANONICAL_BAR_COMPLETED,
             requested_at=cutoff.isoformat(),
             readiness_fingerprint=fingerprint(("readiness", generation)),
+            decision_cutoff=cutoff.isoformat(),
+            evidence_known_at=chronology,
+        )
+
+    def _known_at(self, cutoff: datetime) -> tuple[tuple[str, str], ...]:
+        context = self.state.historical_contexts["AAA"]
+        current = self.state.current_market_evidence["AAA"]
+        instrument = self.state.instrument_admissions["AAA"]
+        canonical = self.state.readiness_inputs["AAA"].canonical_evidence
+        return (
+            ("universeMember", self.member.first_observed_at),
+            ("historicalContext", context.evidence_cutoff),
+            ("canonicalMinute", canonical.receipt_timestamp),
+            ("currentMarket", current.receipt_timestamp),
+            ("instrumentAdmission", instrument.observed_at),
+            ("rvolAssessment", cutoff.isoformat()),
+            ("materialEvent", cutoff.isoformat()),
         )
 
     def test_natural_runtime_owns_missed_entry_and_distinct_pullback_successor(self) -> None:
@@ -445,6 +465,7 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         self.assertFalse(
             [item for item in payload["naturalSteps"] if item["eventId"]]
         )
+        self.assertEqual((), source.natural_setup.breakouts.load().events)
         lifecycle = source.natural_setup.lifecycle.snapshots()[
             source.natural_setup.lifecycle.store.load().events[0].opportunity_id
         ]
@@ -488,6 +509,101 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         emitted = events.poll(at(11, 23))
         self.assertEqual(1, len(emitted))
         self.assertEqual(at(11, 23).isoformat(), emitted[0].occurred_at)
+
+    def test_failed_composition_is_atomic_and_later_success_commits_once(self) -> None:
+        cutoff = at(11, 21)
+        source = LiveCompositionSource(self.state)
+        self._prepare(cutoff, generation=1)
+        request = self._request(cutoff, generation=1)
+        paths = source.natural_setup._authoritative_paths()
+        before = {
+            key: (path.read_bytes() if path.exists() else None)
+            for key, path in paths.items()
+        }
+        original = source.producer.evaluate.__func__
+        calls = 0
+
+        def fail_after_one(producer, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("synthetic staged producer failure")
+            return original(producer, **kwargs)
+
+        with patch(
+            "momentum_hunter.continuous_live_qualification."
+            "ContinuousTradePlanProducer.evaluate",
+            new=fail_after_one,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "staged producer failure"):
+                source.compose(request)
+
+        self.assertGreaterEqual(calls, 2)
+        self.assertEqual(
+            before,
+            {
+                key: (path.read_bytes() if path.exists() else None)
+                for key, path in paths.items()
+            },
+        )
+        restarted = LiveCompositionSource(self.state)
+        self.assertEqual((), restarted.producer_store.load())
+        self.assertEqual((), restarted.natural_setup.lifecycle.store.load().events)
+        self.assertEqual((), restarted.natural_setup.breakouts.load().events)
+
+        result = restarted.compose(request)
+        self.assertIsNotNone(result.plan_id)
+        committed = {key: path.read_bytes() for key, path in paths.items()}
+        record_count = len(restarted.producer_store.load())
+        lifecycle_count = len(restarted.natural_setup.lifecycle.store.load().events)
+        breakout_count = len(restarted.natural_setup.breakouts.load().events)
+
+        replay = restarted.compose(request)
+        self.assertEqual(result.cycle_id, replay.cycle_id)
+        self.assertEqual(
+            committed,
+            {key: path.read_bytes() for key, path in paths.items()},
+        )
+        self.assertEqual(record_count, len(restarted.producer_store.load()))
+        self.assertEqual(
+            lifecycle_count,
+            len(restarted.natural_setup.lifecycle.store.load().events),
+        )
+        self.assertEqual(
+            breakout_count,
+            len(restarted.natural_setup.breakouts.load().events),
+        )
+
+    def test_publication_failure_rolls_back_all_authoritative_ledgers(self) -> None:
+        cutoff = at(11, 21)
+        source = LiveCompositionSource(self.state)
+        self._prepare(cutoff, generation=1)
+        request = self._request(cutoff, generation=1)
+        target = source.natural_setup.breakouts.path
+        from momentum_hunter import continuous_natural_setup as natural_module
+
+        original_replace = natural_module._replace_exact
+        failed = False
+
+        def fail_one_target(path, payload):
+            nonlocal failed
+            if Path(path) == target and not failed:
+                failed = True
+                raise OSError("synthetic publication failure")
+            return original_replace(path, payload)
+
+        with patch.object(natural_module, "_replace_exact", new=fail_one_target):
+            with self.assertRaisesRegex(
+                Exception, "authoritative state was restored"
+            ):
+                source.compose(request)
+
+        self.assertTrue(failed)
+        self.assertEqual((), source.producer_store.load())
+        self.assertEqual((), source.natural_setup.lifecycle.store.load().events)
+        self.assertEqual((), source.natural_setup.breakouts.load().events)
+        recovered = LiveCompositionSource(self.state)
+        self.assertIsNotNone(recovered.compose(request).cycle_id)
 
     def test_fresh_process_restores_universe_and_preserves_predecessor_chain(self) -> None:
         first_cutoff = at(11, 21)
@@ -604,12 +720,15 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
                 test._prepare(cutoff, generation=1)
                 source = fingerprint(("runtime-readiness", request.request_id))
                 test.state.material_event_fingerprints[request.symbol] = source
+                test.state.material_event_known_at[request.symbol] = cutoff.isoformat()
                 return ReadinessResult(
                     request_id=request.request_id,
                     symbol=request.symbol,
                     status="READY",
                     fingerprint=source,
                     ready=True,
+                    decision_cutoff=cutoff.isoformat(),
+                    evidence_known_at=test._known_at(cutoff),
                 )
 
         class Events:

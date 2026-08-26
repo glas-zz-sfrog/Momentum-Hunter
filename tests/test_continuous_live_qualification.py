@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import tempfile
 import unittest
 from datetime import datetime
@@ -12,6 +13,7 @@ from momentum_hunter.continuous_live_qualification import (
     LiveMaterialEvents,
     LiveQualificationError,
     QualificationState,
+    _backfill_accounting,
     validate_qualification_root,
 )
 from momentum_hunter.continuous_runtime import DATA_RECOVERED
@@ -84,6 +86,43 @@ class ContinuousLiveQualificationTests(unittest.TestCase):
             self.assertEqual(DATA_RECOVERED, emitted[0].trigger)
             self.assertEqual("AAA", emitted[0].symbol)
             self.assertEqual((), events.poll(now))
+
+    def test_backfill_accounting_distinguishes_attempts_from_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "backfill.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "records": {
+                            "AAA": {
+                                "symbol": "AAA",
+                                "status": "COMPLETE",
+                                "attemptCount": 2,
+                                "requestedAt": "2026-08-18T10:00:00-04:00",
+                                "startedAt": "2026-08-18T10:00:01-04:00",
+                                "completedAt": "2026-08-18T10:00:02-04:00",
+                            },
+                            "BBB": {
+                                "symbol": "BBB",
+                                "status": "FAILED",
+                                "attemptCount": 1,
+                                "requestedAt": "2026-08-18T10:01:00-04:00",
+                                "startedAt": "2026-08-18T10:01:01-04:00",
+                                "completedAt": "2026-08-18T10:01:02-04:00",
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            accounting = _backfill_accounting(path)
+
+        self.assertEqual(3, accounting["attempts"])
+        self.assertEqual(1, accounting["successful"])
+        self.assertEqual(1, accounting["failed"])
+        self.assertEqual(0, accounting["active"])
 
     def test_module_has_no_order_or_broker_capability(self) -> None:
         source = (

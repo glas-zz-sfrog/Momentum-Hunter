@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Mapping, Protocol
+from typing import Callable, Mapping, Protocol
 
 from momentum_hunter.automatic_candle_backfill import (
     ACTIVE_STATES,
@@ -82,6 +82,23 @@ _MAX_STATE_BYTES = 64 * 1024 * 1024
 
 class ContinuousTradePlanProducerError(ValueError):
     """Raised when producer evidence is incomplete, contradictory, or tampered."""
+
+
+class ContinuousEvidenceChronologyError(ContinuousTradePlanProducerError):
+    """Preserves the exact cutoff and known-at packet for chronology failures."""
+
+    def __init__(
+        self,
+        diagnostic_code: str,
+        message: str,
+        *,
+        request_cutoff: str,
+        evidence_known_at: tuple[tuple[str, str], ...],
+    ) -> None:
+        super().__init__(message)
+        self.diagnostic_code = diagnostic_code
+        self.request_cutoff = request_cutoff
+        self.evidence_known_at = evidence_known_at
 
 
 class CurrentEvidenceLoader(Protocol):
@@ -154,6 +171,8 @@ class HistoryAdmissionResult:
     current_market_evidence: CurrentMarketEvidence
     backfill_evidence: Mapping[str, object] | None
     current_collection_started_before_backfill_admission: bool
+    decision_cutoff: str
+    evidence_known_at: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -367,6 +386,7 @@ class ContinuousHistoryAdmissionCoordinator:
         member: HotUniverseMember,
         cutoff: datetime,
         current_evidence_loader: CurrentEvidenceLoader,
+        decision_cutoff_provider: Callable[[], datetime] | None = None,
     ) -> HistoryAdmissionResult:
         evaluated = _aware(cutoff)
         with ThreadPoolExecutor(max_workers=1, thread_name_prefix="MHCurrentEvidence") as pool:
@@ -409,12 +429,77 @@ class ContinuousHistoryAdmissionCoordinator:
                     context = _refingerprint_context(context)
             current = current_future.result()
         validate_current_market_evidence(current, expected_symbol=member.symbol)
+        if decision_cutoff_provider is None:
+            decision_cutoff = max(
+                evaluated,
+                _parse_timestamp(current.receipt_timestamp),
+            )
+        else:
+            decision_cutoff = _aware(decision_cutoff_provider())
+        current_known_at = (("currentMarket", current.receipt_timestamp),)
+        if _parse_timestamp(current.receipt_timestamp) > decision_cutoff:
+            raise ContinuousEvidenceChronologyError(
+                "CURRENT_MARKET_AFTER_DECISION_CUTOFF",
+                "Current market evidence arrived after the final decision cutoff.",
+                request_cutoff=decision_cutoff.isoformat(),
+                evidence_known_at=current_known_at,
+            )
+        context, canonical = inspect_historical_context(
+            minute_store_root=self.minute_store_root,
+            daily_store_root=self.daily_store_root,
+            symbol=member.symbol,
+            session_date=member.session_date,
+            cutoff=decision_cutoff,
+            policy=self.policy,
+        )
+        if context.status != HISTORY_READY and backfill_evidence is not None:
+            status = str(backfill_evidence.get("status", "FAILED"))
+            if status in ACTIVE_STATES:
+                context = replace(
+                    context,
+                    status=HISTORY_BACKFILL_PENDING,
+                    backfill_status=status,
+                    fingerprint="",
+                )
+                context = _refingerprint_context(context)
+            elif status == "FAILED":
+                context = replace(
+                    context,
+                    status=HISTORY_FAILED,
+                    backfill_status=status,
+                    blockers=tuple(
+                        dict.fromkeys(
+                            (*context.blockers, "BOUNDED_BACKFILL_FAILED")
+                        )
+                    ),
+                    fingerprint="",
+                )
+                context = _refingerprint_context(context)
+        evidence_known_at = (
+            ("historicalContext", context.evidence_cutoff),
+            ("currentMarket", current.receipt_timestamp),
+            *(
+                (("canonicalMinute", canonical.receipt_timestamp),)
+                if canonical is not None
+                else ()
+            ),
+        )
+        for label, known_at in evidence_known_at:
+            if _parse_timestamp(known_at) > decision_cutoff:
+                raise ContinuousEvidenceChronologyError(
+                    "EVIDENCE_AFTER_DECISION_CUTOFF",
+                    f"{label} became known after the final decision cutoff.",
+                    request_cutoff=decision_cutoff.isoformat(),
+                    evidence_known_at=evidence_known_at,
+                )
         return HistoryAdmissionResult(
             context=context,
             canonical_evidence=canonical,
             current_market_evidence=current,
             backfill_evidence=backfill_evidence,
             current_collection_started_before_backfill_admission=True,
+            decision_cutoff=decision_cutoff.isoformat(),
+            evidence_known_at=evidence_known_at,
         )
 
 
@@ -1258,6 +1343,7 @@ __all__ = [
     "PRODUCER_VERSION",
     "RESEARCH_ONLY",
     "UNKNOWN_INSTRUMENT",
+    "ContinuousEvidenceChronologyError",
     "ContinuousHistoryAdmissionCoordinator",
     "ContinuousProducerEvaluation",
     "ContinuousProducerRecord",

@@ -134,6 +134,21 @@ class LiveSchwabAuthFailure(LiveQualificationError):
         self.diagnostic_code = diagnostic_code
 
 
+class LiveCompositionEvidenceError(LiveQualificationError):
+    def __init__(
+        self,
+        diagnostic_code: str,
+        message: str,
+        *,
+        request_cutoff: str,
+        evidence_known_at: tuple[tuple[str, str], ...],
+    ) -> None:
+        super().__init__(message)
+        self.diagnostic_code = diagnostic_code
+        self.request_cutoff = request_cutoff
+        self.evidence_known_at = evidence_known_at
+
+
 def _canonical_bytes(value: object) -> bytes:
     return (
         json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -153,6 +168,56 @@ def _aware_now() -> datetime:
 
 def _parse_timestamp(value: str) -> datetime:
     return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
+def _backfill_accounting(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {
+            "ledgerPresent": False,
+            "symbolsRepresented": 0,
+            "attempts": 0,
+            "successful": 0,
+            "failed": 0,
+            "active": 0,
+        }
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise LiveQualificationError(
+            "Continuous backfill ledger is unreadable."
+        ) from exc
+    records = payload.get("records") if isinstance(payload, Mapping) else None
+    if not isinstance(records, Mapping):
+        raise LiveQualificationError(
+            "Continuous backfill ledger omitted its records."
+        )
+    values = tuple(
+        item for item in records.values() if isinstance(item, Mapping)
+    )
+    if len(values) != len(records):
+        raise LiveQualificationError(
+            "Continuous backfill ledger contains an invalid record."
+        )
+    statuses = tuple(str(item.get("status", "")).upper() for item in values)
+    return {
+        "ledgerPresent": True,
+        "symbolsRepresented": len(values),
+        "attempts": sum(int(item.get("attemptCount", 0)) for item in values),
+        "successful": sum(item in {"COMPLETE", "PARTIAL"} for item in statuses),
+        "failed": sum(item == "FAILED" for item in statuses),
+        "active": sum(item in ACTIVE_STATES for item in statuses),
+        "records": [
+            {
+                "symbol": str(item.get("symbol", "")),
+                "status": str(item.get("status", "")),
+                "attemptCount": int(item.get("attemptCount", 0)),
+                "requestedAt": item.get("requestedAt"),
+                "startedAt": item.get("startedAt"),
+                "completedAt": item.get("completedAt"),
+            }
+            for item in values
+        ],
+    }
 
 
 def validate_qualification_root(
@@ -254,6 +319,7 @@ class QualificationState:
     current_market_evidence: dict[str, CurrentMarketEvidence] = field(default_factory=dict)
     instrument_admissions: dict[str, InstrumentAdmissionEvidence] = field(default_factory=dict)
     material_event_fingerprints: dict[str, str] = field(default_factory=dict)
+    material_event_known_at: dict[str, str] = field(default_factory=dict)
     cycles: dict[str, ContinuousCompositionCycle] = field(default_factory=dict)
     denominator_results: dict[str, ContinuousDenominatorResult] = field(
         default_factory=dict
@@ -656,6 +722,7 @@ class LiveMarketDataSource:
             )
         evaluated = _aware_now()
         self.state.material_event_fingerprints[request.symbol] = request.source_fingerprint
+        self.state.material_event_known_at[request.symbol] = request.requested_at
         eastern = evaluated.astimezone(EASTERN_TZ)
         if (
             eastern.date().isoformat() == member.session_date
@@ -691,14 +758,18 @@ class LiveMarketDataSource:
             member=member,
             cutoff=evaluated,
             current_evidence_loader=self._load_current_market_evidence,
+            decision_cutoff_provider=_aware_now,
         )
+        decision_cutoff = _parse_timestamp(admission.decision_cutoff)
         evidence = admission.canonical_evidence
         self.state.historical_contexts[request.symbol] = admission.context
         self.state.current_market_evidence[request.symbol] = (
             admission.current_market_evidence
         )
         self.state.instrument_admissions[request.symbol] = (
-            unavailable_instrument_admission(request.symbol, observed_at=evaluated)
+            unavailable_instrument_admission(
+                request.symbol, observed_at=decision_cutoff
+            )
         )
         self._preserve_admission(
             symbol=request.symbol,
@@ -708,12 +779,12 @@ class LiveMarketDataSource:
         )
         rvol = load_time_normalized_rvol_evidence(
             (request.symbol,),
-            as_of=evaluated,
+            as_of=decision_cutoff,
             store_root=self.minute_root,
         )[request.symbol]
         exact_request = build_readiness_request(
             member,
-            requested_at=evaluated,
+            requested_at=decision_cutoff,
             policy=self.composition_policy,
             source_reason=request.trigger,
         )
@@ -721,7 +792,7 @@ class LiveMarketDataSource:
             exact_request,
             evidence=evidence,
             rvol_evidence=rvol,
-            evaluated_at=evaluated,
+            evaluated_at=decision_cutoff,
             policy=self.composition_policy,
         )
         self.state.metrics.candle_readiness_successes += 1
@@ -735,15 +806,45 @@ class LiveMarketDataSource:
         ready = assessment.status == READY
         if ready:
             self.state.metrics.canonical_ready_symbols.add(request.symbol)
+        evidence_known_at = tuple(
+            dict.fromkeys(
+                (
+                    ("universeMember", member.first_observed_at),
+                    *admission.evidence_known_at,
+                    (
+                        "instrumentAdmission",
+                        self.state.instrument_admissions[
+                            request.symbol
+                        ].observed_at,
+                    ),
+                    ("rvolAssessment", assessment.evaluated_at),
+                    (
+                        "materialEvent",
+                        self.state.material_event_known_at[request.symbol],
+                    ),
+                )
+            )
+        )
+        readiness_fingerprint = _fingerprint(
+            "continuous-live-readiness-result-v2",
+            {
+                "assessmentFingerprint": assessment.fingerprint,
+                "decisionCutoff": decision_cutoff.isoformat(),
+                "evidenceKnownAt": evidence_known_at,
+                "sourceFingerprint": request.source_fingerprint,
+            },
+        )
         return ReadinessResult(
             request_id=request.request_id,
             symbol=request.symbol,
             status=assessment.status,
-            fingerprint=assessment.fingerprint,
+            fingerprint=readiness_fingerprint,
             ready=ready,
             failure_reason=(
                 None if ready else ";".join(assessment.blocker_reasons)
             ),
+            decision_cutoff=decision_cutoff.isoformat(),
+            evidence_known_at=evidence_known_at,
         )
 
 
@@ -784,7 +885,8 @@ class LiveCompositionSource:
     def compose(self, request: CompositionRequest) -> CompositionResult:
         if self.state.universe is None:
             raise LiveQualificationError("Composition has no hot-universe state.")
-        cutoff = _parse_timestamp(request.requested_at)
+        cutoff_text = str(request.decision_cutoff or request.requested_at)
+        cutoff = _parse_timestamp(cutoff_text)
         member_input = self.state.readiness_inputs.get(request.symbol)
         history_context = self.state.historical_contexts.get(request.symbol)
         current_market = self.state.current_market_evidence.get(request.symbol)
@@ -806,54 +908,113 @@ class LiveCompositionSource:
         material_source = self.state.material_event_fingerprints.get(
             request.symbol, request.readiness_fingerprint
         )
+        actual_known_at = tuple(
+            dict.fromkeys(
+                (
+                    ("universeMember", universe_member.first_observed_at),
+                    ("historicalContext", history_context.evidence_cutoff),
+                    *(
+                        (("canonicalMinute", member_input.canonical_evidence.receipt_timestamp),)
+                        if member_input.canonical_evidence is not None
+                        else ()
+                    ),
+                    ("currentMarket", current_market.receipt_timestamp),
+                    ("instrumentAdmission", instrument.observed_at),
+                    ("rvolAssessment", cutoff_text),
+                    (
+                        "materialEvent",
+                        self.state.material_event_known_at.get(
+                            request.symbol, request.requested_at
+                        ),
+                    ),
+                )
+            )
+        )
+        request_known_at = tuple(request.evidence_known_at)
+        if dict(request_known_at) != dict(actual_known_at):
+            raise LiveCompositionEvidenceError(
+                "COMPOSITION_KNOWN_AT_IDENTITY_MISMATCH",
+                "Composition evidence chronology changed after readiness.",
+                request_cutoff=cutoff_text,
+                evidence_known_at=actual_known_at,
+            )
+        for label, known_at in actual_known_at:
+            if _parse_timestamp(known_at) > cutoff:
+                raise LiveCompositionEvidenceError(
+                    "COMPOSITION_EVIDENCE_AFTER_DECISION_CUTOFF",
+                    f"{label} became known after the decision cutoff.",
+                    request_cutoff=cutoff_text,
+                    evidence_known_at=actual_known_at,
+                )
+
         evaluations = []
         lifecycle_transitions = 0
         latest_setup_id: str | None = None
         latest_plan_id: str | None = None
-        for _ in range(128):
-            step = self.natural_setup.next_step(
-                member=universe_member,
-                base_input=member_input,
-                cutoff=cutoff,
-                readiness_fingerprint=request.readiness_fingerprint,
-                request_material_fingerprint=material_source,
+        with self.natural_setup.preview() as preview:
+            staged_producer = ContinuousTradePlanProducer(
+                store=preview.producer_store,
+                configuration_fingerprint=self.producer.configuration_fingerprint,
+                policy=self.policy,
             )
-            evaluation = self.producer.evaluate(
-                universe_state=self.state.universe.state,
-                member_input=step.member_input,
-                history_context=history_context,
-                current_market_evidence=current_market,
-                instrument_admission=instrument,
-                evidence_cutoff=cutoff,
-                trigger=request.trigger,
-                material_evidence_fingerprints=step.material_fingerprints,
-            )
-            if evaluation.cycle is None or evaluation.member_result is None:
-                raise LiveQualificationError(
-                    "Producer did not return a reconstructable composition cycle."
+            for _ in range(128):
+                step = preview.coordinator.next_step(
+                    member=universe_member,
+                    base_input=member_input,
+                    cutoff=cutoff,
+                    readiness_fingerprint=request.readiness_fingerprint,
+                    request_material_fingerprint=material_source,
                 )
-            lifecycle_transitions += self.natural_setup.commit(
-                step=step,
-                evaluation=evaluation,
-            )
-            evaluations.append((step, evaluation))
+                evaluation = staged_producer.evaluate(
+                    universe_state=self.state.universe.state,
+                    member_input=step.member_input,
+                    history_context=history_context,
+                    current_market_evidence=current_market,
+                    instrument_admission=instrument,
+                    evidence_cutoff=cutoff,
+                    trigger=request.trigger,
+                    material_evidence_fingerprints=step.material_fingerprints,
+                )
+                if evaluation.cycle is None or evaluation.member_result is None:
+                    raise LiveQualificationError(
+                        "Producer did not return a reconstructable composition cycle."
+                    )
+                lifecycle_transitions += preview.coordinator.commit(
+                    step=step,
+                    evaluation=evaluation,
+                )
+                evaluations.append((step, evaluation))
+                member = evaluation.member_result
+                if member.intraday_plan is not None:
+                    latest_plan_id = member.intraday_plan.plan_id
+                if member.lifecycle_proposal is not None:
+                    latest_setup_id = member.lifecycle_proposal.setup_id
+                if not step.event_id:
+                    break
+            else:
+                raise LiveQualificationError(
+                    "Natural setup event processing exceeded its bounded cycle limit."
+                )
+            preview.commit()
+
+        for _, evaluation in evaluations:
             cycle = evaluation.cycle
+            if cycle is None or evaluation.member_result is None:
+                raise LiveQualificationError(
+                    "Committed composition omitted its reconstructable cycle."
+                )
             self.state.cycles[cycle.cycle_id] = cycle
             self.state.metrics.composition_cycles.add(cycle.cycle_id)
             member = evaluation.member_result
             if member.intraday_plan is not None:
-                latest_plan_id = member.intraday_plan.plan_id
-                self.state.metrics.research_plans.add(latest_plan_id)
-            if member.lifecycle_proposal is not None:
-                latest_setup_id = member.lifecycle_proposal.setup_id
-                if member.lifecycle_proposal.create_new_setup:
-                    self.state.metrics.successor_setups.add(latest_setup_id)
-            if not step.event_id:
-                break
-        else:
-            raise LiveQualificationError(
-                "Natural setup event processing exceeded its bounded cycle limit."
-            )
+                self.state.metrics.research_plans.add(member.intraday_plan.plan_id)
+            if (
+                member.lifecycle_proposal is not None
+                and member.lifecycle_proposal.create_new_setup
+            ):
+                self.state.metrics.successor_setups.add(
+                    member.lifecycle_proposal.setup_id
+                )
         final_step, final_evaluation = evaluations[-1]
         cycle = final_evaluation.cycle
         evidence_payload = {
@@ -876,6 +1037,11 @@ class LiveCompositionSource:
             ],
             "finalCycleId": cycle.cycle_id,
             "finalCycleFingerprint": cycle.fingerprint,
+            "decisionCutoff": cutoff.isoformat(),
+            "evidenceKnownAt": [
+                {"evidence": name, "knownAt": value}
+                for name, value in actual_known_at
+            ],
             "knownAt": cutoff.isoformat(),
             "authority": AUTHORITY,
             "executionAuthority": EXECUTION_AUTHORITY,
@@ -1171,6 +1337,16 @@ def run_live_qualification(
             )
         final_now = _aware_now()
         health = runtime.shutdown(final_now)
+        checkpoint = checkpoints.load(config.runtime_identity)
+        runtime_bar_events = tuple(
+            item
+            for item in checkpoint.get("event_records", [])
+            if isinstance(item, Mapping)
+            and item.get("trigger") == CANONICAL_BAR_COMPLETED
+        )
+        backfill_accounting = _backfill_accounting(
+            root / "state" / "continuous-history-backfill.json"
+        )
         evidence = read_evidence_snapshot(
             topology,
             reader_role=OFFLINE_REVIEW,
@@ -1217,6 +1393,9 @@ def run_live_qualification(
             "canonicalSchwabReadySymbols": sorted(
                 metrics.canonical_ready_symbols
             ),
+            "completedBarEvents": len(runtime_bar_events),
+            "completedBarEventRecords": runtime_bar_events,
+            "backfillAccounting": backfill_accounting,
             "compositionCycles": len(metrics.composition_cycles),
             "denominatorCycles": len(state.denominator_results),
             "researchOnlyTradePlans": len(metrics.research_plans),

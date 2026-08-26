@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
+import tempfile
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -50,6 +54,7 @@ from momentum_hunter.intraday_trade_plan import (
     RECLAIM,
     IntradayPlanEvidence,
 )
+from momentum_hunter.path_transaction import PathTransactionLease
 from momentum_hunter.schwab_candle_contract import EASTERN_TZ
 from momentum_hunter.schwab_candle_store import SchwabCandleStore
 from momentum_hunter.sequential_breakout_research import (
@@ -59,6 +64,7 @@ from momentum_hunter.sequential_breakout_research import (
     EXHAUSTION_RISK,
     FAILED_BREAKOUT,
     IMPULSE_DETECTED,
+    HISTORICAL_REPLAY,
     PROSPECTIVE,
     PULLBACK_FORMING,
     RECLAIM_CONFIRMED,
@@ -76,6 +82,8 @@ SOURCE_IDENTITY = "CONTINUOUS_SEQUENTIAL_COMPLETED_CANONICAL_BAR"
 LEVEL_KIND = "SEQUENTIAL_TRIGGER_AND_PRIOR_COMPLETED_BAR_RANGE"
 UNKNOWN_EVENT = "NO_NATURAL_SETUP_TRANSITION"
 MAX_MATERIAL_EXTENSIONS = 1_024
+_COMPOSITION_JOURNAL = ".continuous-natural-composition-journal.json"
+_COMPOSITION_TRANSACTION_PREFIX = ".continuous-natural-composition-transaction-"
 
 
 class ContinuousNaturalSetupError(ValueError):
@@ -135,6 +143,12 @@ class ContinuousNaturalSetupCoordinator:
             self.root / "sequential-breakout.json",
             policy=self.breakout_policy,
         )
+        self._recover_interrupted_composition()
+
+    def preview(self) -> "NaturalCompositionPreview":
+        """Stage all natural/Producer mutations outside authoritative state."""
+
+        return NaturalCompositionPreview(self)
 
     def completed_bar_events(
         self,
@@ -153,9 +167,7 @@ class ContinuousNaturalSetupCoordinator:
                 continue
             observations = self._observations(member, cutoff=cutoff)
             for observation in observations:
-                if _parse_timestamp(observation.provider_timestamp) < self._prospective_floor(
-                    member
-                ):
+                if observation.observation_mode != PROSPECTIVE:
                     continue
                 if observation.fingerprint in known:
                     continue
@@ -253,15 +265,16 @@ class ContinuousNaturalSetupCoordinator:
                 request_material_fingerprint,
                 event_type=DATA_UNAVAILABLE,
             )
+        prospective_floor = self._prospective_floor(member)
         detected = detect_sequential_breakout_events(
             observations,
             originating_evidence_family=ORIGINATING_EVIDENCE_FAMILY,
             policy=self.breakout_policy,
+            minimum_event_timestamp=prospective_floor,
         )
         self.breakouts.append(detected)
         processed = self._processed_event_fingerprints(member.member_id)
         prior_records = self._member_records(member.member_id)
-        prospective_floor = self._prospective_floor(member)
         pending = [
             event
             for event in detected
@@ -280,6 +293,7 @@ class ContinuousNaturalSetupCoordinator:
         unprocessed_bars = tuple(
             item.fingerprint
             for item in observations
+            if item.observation_mode == PROSPECTIVE
             if item.fingerprint not in self._processed_material_fingerprints(member.member_id)
         )
         if not unprocessed_bars and prior_records:
@@ -631,7 +645,12 @@ class ContinuousNaturalSetupCoordinator:
                 observation_from_canonical_bar(
                     bar,
                     receipt_timestamp=receipt,
-                    observation_mode=PROSPECTIVE,
+                    observation_mode=(
+                        PROSPECTIVE
+                        if _parse_timestamp(bar.timestamp)
+                        >= self._prospective_floor(member)
+                        else HISTORICAL_REPLAY
+                    ),
                 )
             )
         return tuple(observations)
@@ -681,7 +700,219 @@ class ContinuousNaturalSetupCoordinator:
 
     def _prospective_floor(self, member: HotUniverseMember) -> datetime:
         member_observed = _parse_timestamp(member.first_observed_at)
-        return max(member_observed, self.runtime_started_at) - timedelta(seconds=60)
+        if self._member_records(member.member_id):
+            return member_observed
+        return max(member_observed, self.runtime_started_at)
+
+    def _authoritative_paths(self) -> dict[str, Path]:
+        return {
+            "candidateLifecycle": self.lifecycle.store.path,
+            "sequentialBreakout": self.breakouts.path,
+            "producer": self.producer_store.path,
+        }
+
+    def _recover_interrupted_composition(self) -> None:
+        journal = self.producer_store.path.parent / _COMPOSITION_JOURNAL
+        if not journal.exists():
+            return
+        try:
+            payload = json.loads(journal.read_text(encoding="ascii"))
+            transaction_name = str(payload.get("transactionDirectory", ""))
+            entries = payload.get("targets")
+            if (
+                not transaction_name.startswith(_COMPOSITION_TRANSACTION_PREFIX)
+                or Path(transaction_name).name != transaction_name
+                or not isinstance(entries, Mapping)
+                or set(entries) != set(self._authoritative_paths())
+            ):
+                raise ContinuousNaturalSetupError(
+                    "Interrupted composition journal is invalid."
+                )
+            transaction_root = journal.parent / transaction_name
+            for key, target in self._authoritative_paths().items():
+                entry = entries.get(key)
+                if not isinstance(entry, Mapping):
+                    raise ContinuousNaturalSetupError(
+                        "Interrupted composition journal target is invalid."
+                    )
+                existed = bool(entry.get("originalExists"))
+                backup_name = str(entry.get("backupFile", ""))
+                if Path(backup_name).name != backup_name:
+                    raise ContinuousNaturalSetupError(
+                        "Interrupted composition backup identity is invalid."
+                    )
+                original = (
+                    (transaction_root / backup_name).read_bytes()
+                    if existed
+                    else None
+                )
+                _replace_exact(target, original)
+            journal.unlink(missing_ok=True)
+            shutil.rmtree(transaction_root, ignore_errors=True)
+        except ContinuousNaturalSetupError:
+            raise
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ContinuousNaturalSetupError(
+                "Interrupted composition could not be rolled back safely."
+            ) from exc
+
+    def _commit_preview(self, preview: "NaturalCompositionPreview") -> None:
+        authoritative = self._authoritative_paths()
+        staged = preview.staged_paths
+        lease = PathTransactionLease(
+            self.producer_store.path.parent / ".continuous-natural-composition"
+        )
+        with lease.transaction():
+            for key, target in authoritative.items():
+                if _optional_bytes(target) != preview.original_payloads[key]:
+                    raise ContinuousNaturalSetupError(
+                        "Authoritative composition state changed during preview."
+                    )
+            transaction_id = uuid.uuid4().hex
+            transaction_root = (
+                self.producer_store.path.parent
+                / f"{_COMPOSITION_TRANSACTION_PREFIX}{transaction_id}"
+            )
+            transaction_root.mkdir(parents=True, exist_ok=False)
+            journal = self.producer_store.path.parent / _COMPOSITION_JOURNAL
+            target_entries: dict[str, object] = {}
+            cleanup_transaction = True
+            try:
+                for index, key in enumerate(authoritative):
+                    original = preview.original_payloads[key]
+                    staged_payload = _optional_bytes(staged[key])
+                    backup_name = f"original-{index}.bin"
+                    staged_name = f"staged-{index}.bin"
+                    if original is not None:
+                        _replace_exact(transaction_root / backup_name, original)
+                    if staged_payload is not None:
+                        _replace_exact(transaction_root / staged_name, staged_payload)
+                    target_entries[key] = {
+                        "originalExists": original is not None,
+                        "originalSha256": _optional_sha256(original),
+                        "stagedExists": staged_payload is not None,
+                        "stagedSha256": _optional_sha256(staged_payload),
+                        "backupFile": backup_name,
+                        "stagedFile": staged_name,
+                    }
+                _replace_exact(
+                    journal,
+                    _canonical_bytes(
+                        {
+                            "schemaVersion": 1,
+                            "transactionId": transaction_id,
+                            "transactionDirectory": transaction_root.name,
+                            "targets": target_entries,
+                        }
+                    ),
+                )
+                for key, target in authoritative.items():
+                    _replace_exact(target, _optional_bytes(staged[key]))
+                self.lifecycle.store.load()
+                self.breakouts.load()
+                self.producer_store.load()
+            except Exception as exc:
+                rollback_error: Exception | None = None
+                try:
+                    for key, target in authoritative.items():
+                        _replace_exact(target, preview.original_payloads[key])
+                except Exception as rollback_exc:  # pragma: no cover - catastrophic I/O.
+                    rollback_error = rollback_exc
+                if rollback_error is not None:
+                    cleanup_transaction = False
+                    raise ContinuousNaturalSetupError(
+                        "Composition publication and rollback both failed."
+                    ) from rollback_error
+                raise ContinuousNaturalSetupError(
+                    "Composition publication failed and authoritative state was restored."
+                ) from exc
+            finally:
+                if cleanup_transaction:
+                    journal.unlink(missing_ok=True)
+                    shutil.rmtree(transaction_root, ignore_errors=True)
+
+
+class NaturalCompositionPreview:
+    """Disposable state clone that publishes only after full evaluation succeeds."""
+
+    def __init__(self, owner: ContinuousNaturalSetupCoordinator) -> None:
+        self.owner = owner
+        self._temporary = tempfile.TemporaryDirectory(
+            prefix="MomentumHunter-Continuous-Composition-Preview-"
+        )
+        root = Path(self._temporary.name)
+        natural_root = root / "natural"
+        producer_store = ContinuousTradePlanProducerStore(root / "producer.json")
+        self.original_payloads = {
+            key: _optional_bytes(path)
+            for key, path in owner._authoritative_paths().items()
+        }
+        staged_targets = {
+            "candidateLifecycle": natural_root / "candidate-lifecycle.json",
+            "sequentialBreakout": natural_root / "sequential-breakout.json",
+            "producer": producer_store.path,
+        }
+        for key, payload in self.original_payloads.items():
+            _replace_exact(staged_targets[key], payload)
+        self.coordinator = ContinuousNaturalSetupCoordinator(
+            root=natural_root,
+            minute_store_root=owner.minute_store_root,
+            producer_store=producer_store,
+            runtime_started_at=owner.runtime_started_at,
+        )
+        self.producer_store = producer_store
+        self.staged_paths = staged_targets
+        self.committed = False
+
+    def __enter__(self) -> "NaturalCompositionPreview":
+        return self
+
+    def commit(self) -> None:
+        if self.committed:
+            raise ContinuousNaturalSetupError(
+                "Natural composition preview was already committed."
+            )
+        self.owner._commit_preview(self)
+        self.committed = True
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self._temporary.cleanup()
+
+
+def _optional_bytes(path: Path) -> bytes | None:
+    return path.read_bytes() if path.exists() else None
+
+
+def _optional_sha256(payload: bytes | None) -> str | None:
+    return hashlib.sha256(payload).hexdigest() if payload is not None else None
+
+
+def _canonical_bytes(value: object) -> bytes:
+    return (
+        json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+        + "\n"
+    ).encode("ascii")
+
+
+def _replace_exact(path: Path, payload: bytes | None) -> None:
+    if payload is None:
+        path.unlink(missing_ok=True)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with temporary.open("xb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _intraday_plan_from_wire(payload: Mapping[str, object]) -> IntradayPlanEvidence:
@@ -746,6 +977,7 @@ __all__ = [
     "CompletedBarMaterialEvent",
     "ContinuousNaturalSetupCoordinator",
     "ContinuousNaturalSetupError",
+    "NaturalCompositionPreview",
     "NaturalCompositionStep",
     "NATURAL_SETUP_PROFILE",
 ]

@@ -429,6 +429,77 @@ class ContinuousTradePlanProducerTests(unittest.TestCase):
         )
         self.assertIsNotNone(evaluated.member_result.intraday_plan)
 
+    def test_final_decision_cutoff_is_frozen_after_current_provider_receipt(self) -> None:
+        requested = at(11, 22)
+        received = at(11, 22, 5)
+        final_cutoff = at(11, 22, 6)
+        self.seed_history()
+        backfill = AutomaticCandleBackfillCoordinator(
+            state_path=self.root / "backfill-state.json",
+            minute_store_root=self.minute_root,
+            daily_store_root=self.daily_root,
+            run_backfill=lambda symbols: {"status": "COMPLETE", "symbols": []},
+            utc_clock=lambda: requested,
+        )
+        admission = ContinuousHistoryAdmissionCoordinator(
+            minute_store_root=self.minute_root,
+            daily_store_root=self.daily_root,
+            backfill=backfill,
+            policy=self.policy,
+        )
+
+        result = admission.admit(
+            member=self.member,
+            cutoff=requested,
+            current_evidence_loader=lambda symbol, cutoff: self.current(received),
+            decision_cutoff_provider=lambda: final_cutoff,
+        )
+
+        self.assertEqual(final_cutoff.isoformat(), result.decision_cutoff)
+        chronology = dict(result.evidence_known_at)
+        self.assertEqual(received.isoformat(), chronology["currentMarket"])
+        self.assertLessEqual(
+            max(datetime.fromisoformat(value) for value in chronology.values()),
+            final_cutoff,
+        )
+        self.assertEqual(final_cutoff.isoformat(), result.context.evidence_cutoff)
+
+    def test_chronology_failure_preserves_cutoff_and_known_at(self) -> None:
+        requested = at(11, 22)
+        final_cutoff = at(11, 22, 5)
+        received = at(11, 22, 6)
+        self.seed_history()
+        admission = ContinuousHistoryAdmissionCoordinator(
+            minute_store_root=self.minute_root,
+            daily_store_root=self.daily_root,
+            backfill=AutomaticCandleBackfillCoordinator(
+                state_path=self.root / "backfill-state.json",
+                minute_store_root=self.minute_root,
+                daily_store_root=self.daily_root,
+                run_backfill=lambda symbols: {"status": "COMPLETE", "symbols": []},
+                utc_clock=lambda: requested,
+            ),
+            policy=self.policy,
+        )
+
+        with self.assertRaises(ContinuousTradePlanProducerError) as caught:
+            admission.admit(
+                member=self.member,
+                cutoff=requested,
+                current_evidence_loader=lambda symbol, cutoff: self.current(received),
+                decision_cutoff_provider=lambda: final_cutoff,
+            )
+
+        error = caught.exception
+        self.assertEqual(
+            "CURRENT_MARKET_AFTER_DECISION_CUTOFF", error.diagnostic_code
+        )
+        self.assertEqual(final_cutoff.isoformat(), error.request_cutoff)
+        self.assertEqual(
+            (("currentMarket", received.isoformat()),),
+            error.evidence_known_at,
+        )
+
     def test_arbitrary_midday_start_uses_backfilled_context_immediately(self) -> None:
         cutoff = at(12, 17)
         self.seed_history(latest=at(12, 16))

@@ -366,6 +366,8 @@ class ReadinessResult:
     ready: bool
     failure_reason: str | None = None
     deferred: bool = False
+    decision_cutoff: str | None = None
+    evidence_known_at: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         _require_fingerprint(self.fingerprint, "Readiness fingerprint")
@@ -377,6 +379,35 @@ class ReadinessResult:
             )
         if self.deferred and self.status != PREMARKET_DEFERRED:
             raise ContinuousRuntimeError("Deferred readiness status is inconsistent.")
+        if self.evidence_known_at and not self.decision_cutoff:
+            raise ContinuousRuntimeError(
+                "Readiness known-at chronology omitted its decision cutoff."
+            )
+        if self.ready and not self.decision_cutoff:
+            raise ContinuousRuntimeError(
+                "Ready evidence omitted its post-acquisition decision cutoff."
+            )
+        if self.ready and not self.evidence_known_at:
+            raise ContinuousRuntimeError(
+                "Ready evidence omitted its known-at chronology."
+            )
+        if self.decision_cutoff:
+            cutoff = _parse_timestamp(
+                self.decision_cutoff, "Readiness decision cutoff"
+            )
+            names: set[str] = set()
+            for name, value in self.evidence_known_at:
+                normalized = str(name).strip()
+                if not normalized or normalized in names:
+                    raise ContinuousRuntimeError(
+                        "Readiness known-at labels are missing or duplicated."
+                    )
+                names.add(normalized)
+                known = _parse_timestamp(value, f"Readiness {normalized} known-at")
+                if known > cutoff:
+                    raise ContinuousRuntimeError(
+                        "Readiness evidence became known after its decision cutoff."
+                    )
 
 
 @dataclass(frozen=True)
@@ -386,6 +417,31 @@ class CompositionRequest:
     trigger: str
     requested_at: str
     readiness_fingerprint: str
+    decision_cutoff: str | None = None
+    evidence_known_at: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        requested = _parse_timestamp(self.requested_at, "Composition request timestamp")
+        cutoff = _parse_timestamp(
+            self.decision_cutoff or self.requested_at,
+            "Composition decision cutoff",
+        )
+        if requested != cutoff:
+            raise ContinuousRuntimeError(
+                "Composition request timestamp differs from its decision cutoff."
+            )
+        names: set[str] = set()
+        for name, value in self.evidence_known_at:
+            normalized = str(name).strip()
+            if not normalized or normalized in names:
+                raise ContinuousRuntimeError(
+                    "Composition known-at labels are missing or duplicated."
+                )
+            names.add(normalized)
+            if _parse_timestamp(value, f"Composition {normalized} known-at") > cutoff:
+                raise ContinuousRuntimeError(
+                    "Composition evidence became known after its decision cutoff."
+                )
 
 
 @dataclass(frozen=True)
@@ -835,6 +891,11 @@ class SymbolFailure:
     reason: str
     observed_at: str
     source_fingerprint: str
+    exception_class: str = ""
+    diagnostic_code: str = ""
+    message: str = ""
+    request_cutoff: str = ""
+    evidence_known_at: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -861,6 +922,7 @@ class RuntimeHealth:
     readiness_deferred: int
     ready_members: int
     readiness_failures: int
+    completed_bar_events: int
     composition_cycles: int
     lifecycle_transitions: int
     setups_created: int
@@ -1050,6 +1112,7 @@ class ContinuousOpportunityRuntime:
                 "readiness_deferred",
                 "ready_members",
                 "readiness_failures",
+                "completed_bar_events",
                 "composition_cycles",
                 "lifecycle_transitions",
                 "setups_created",
@@ -1072,6 +1135,7 @@ class ContinuousOpportunityRuntime:
         )
         self._symbol_failures: OrderedDict[str, SymbolFailure] = OrderedDict()
         self._seen_events: OrderedDict[str, str] = OrderedDict()
+        self._event_records: OrderedDict[str, RuntimeTriggerEvent] = OrderedDict()
         self._intents: OrderedDict[int, EvidenceWriteIntent] = OrderedDict()
         self._last_intent_id: str | None = None
         self._sequence = 0
@@ -1134,6 +1198,13 @@ class ContinuousOpportunityRuntime:
                 raise ContinuousRuntimeError("Conflicting duplicate runtime event.")
             return COALESCED_DUPLICATE
         self._remember_event(event.event_id, event_fingerprint)
+        self._event_records[event.event_id] = event
+        self._event_records.move_to_end(event.event_id)
+        self._trim_ordered(
+            self._event_records, self.config.processed_event_capacity
+        )
+        if event.trigger == CANONICAL_BAR_COMPLETED:
+            self._counters["completed_bar_events"] += 1
         if event.trigger == HEARTBEAT_REEVALUATION:
             return self._enqueue(
                 HEALTH_QUEUE,
@@ -1411,9 +1482,28 @@ class ContinuousOpportunityRuntime:
         for item in payload.get("backpressure", []):
             runtime._backpressure.append(BackpressureDecision(**item))
         runtime._symbol_failures = OrderedDict(
-            (item["symbol"], SymbolFailure(**item)) for item in payload.get("symbol_failures", [])
+            (
+                item["symbol"],
+                SymbolFailure(
+                    **{
+                        **item,
+                        "evidence_known_at": tuple(
+                            tuple(value)
+                            for value in item.get("evidence_known_at", ())
+                        ),
+                    }
+                ),
+            )
+            for item in payload.get("symbol_failures", [])
         )
         runtime._seen_events = OrderedDict(payload.get("seen_events", []))
+        runtime._event_records = OrderedDict(
+            (
+                str(item["event_id"]),
+                RuntimeTriggerEvent(**item),
+            )
+            for item in payload.get("event_records", [])
+        )
         runtime._intents = OrderedDict(
             (int(item["sequence"]), EvidenceWriteIntent(**item))
             for item in payload.get("intents", [])
@@ -2056,7 +2146,14 @@ class ContinuousOpportunityRuntime:
         try:
             result = self.market_data_source.evaluate(request)
         except Exception as exc:
-            self._record_symbol_failure(request.symbol, "READINESS", type(exc).__name__, now, work.fingerprint)
+            self._record_symbol_exception(
+                request.symbol,
+                "READINESS",
+                exc,
+                now,
+                work.fingerprint,
+                request_cutoff=request.requested_at,
+            )
             self._counters["readiness_failures"] += 1
             self._counters["readiness_completed"] += 1
             self.last_readiness_completed_at = now
@@ -2108,6 +2205,10 @@ class ContinuousOpportunityRuntime:
                 result.failure_reason or result.status,
                 now,
                 result.fingerprint,
+                diagnostic_code=result.status,
+                message=result.failure_reason or result.status,
+                request_cutoff=result.decision_cutoff or request.requested_at,
+                evidence_known_at=result.evidence_known_at,
             )
             self._counters["readiness_failures"] += 1
             return
@@ -2115,20 +2216,30 @@ class ContinuousOpportunityRuntime:
         self._deferred_readiness.pop(request.symbol, None)
         composition_id = _fingerprint(
             "continuous-composition-request-v1",
-            {"readiness": result.fingerprint, "trigger": request.trigger},
+            {
+                "readiness": result.fingerprint,
+                "trigger": request.trigger,
+                "decisionCutoff": result.decision_cutoff,
+                "evidenceKnownAt": result.evidence_known_at,
+            },
         )
+        decision_cutoff = str(result.decision_cutoff)
         self._enqueue(
             COMPOSITION_QUEUE,
             build_work(
                 kind="COMPOSITION",
                 key=request.symbol,
-                requested_at=_timestamp(now),
+                requested_at=decision_cutoff,
                 priority=work.priority,
                 payload={
                     "request_id": composition_id,
                     "symbol": request.symbol,
                     "trigger": request.trigger,
                     "readiness_fingerprint": result.fingerprint,
+                    "decision_cutoff": decision_cutoff,
+                    "evidence_known_at": [
+                        list(item) for item in result.evidence_known_at
+                    ],
                 },
             ),
             now,
@@ -2142,11 +2253,27 @@ class ContinuousOpportunityRuntime:
             trigger=str(payload["trigger"]),
             requested_at=work.requested_at,
             readiness_fingerprint=str(payload["readiness_fingerprint"]),
+            decision_cutoff=str(
+                payload.get("decision_cutoff") or work.requested_at
+            ),
+            evidence_known_at=tuple(
+                tuple(str(part) for part in item)
+                for item in payload.get("evidence_known_at", ())
+                if isinstance(item, (list, tuple)) and len(item) == 2
+            ),
         )
         try:
             result = self.composition_source.compose(request)
         except Exception as exc:
-            self._record_symbol_failure(request.symbol, "COMPOSITION", type(exc).__name__, now, work.fingerprint)
+            self._record_symbol_exception(
+                request.symbol,
+                "COMPOSITION",
+                exc,
+                now,
+                work.fingerprint,
+                request_cutoff=(request.decision_cutoff or request.requested_at),
+                evidence_known_at=request.evidence_known_at,
+            )
             return
         if result.request_id != request.request_id or result.symbol != request.symbol:
             self._record_symbol_failure(
@@ -2504,6 +2631,12 @@ class ContinuousOpportunityRuntime:
         reason: str,
         now: datetime,
         source_fingerprint: str,
+        *,
+        exception_class: str = "",
+        diagnostic_code: str = "",
+        message: str = "",
+        request_cutoff: str = "",
+        evidence_known_at: tuple[tuple[str, str], ...] = (),
     ) -> None:
         self._symbol_failures[symbol] = SymbolFailure(
             symbol=symbol,
@@ -2511,9 +2644,51 @@ class ContinuousOpportunityRuntime:
             reason=reason,
             observed_at=_timestamp(now),
             source_fingerprint=source_fingerprint,
+            exception_class=exception_class,
+            diagnostic_code=diagnostic_code,
+            message=message,
+            request_cutoff=request_cutoff,
+            evidence_known_at=evidence_known_at,
         )
         self._symbol_failures.move_to_end(symbol)
         self._trim_ordered(self._symbol_failures, self.config.maximum_tracked_symbols)
+
+    def _record_symbol_exception(
+        self,
+        symbol: str,
+        stage: str,
+        exc: BaseException,
+        now: datetime,
+        source_fingerprint: str,
+        *,
+        request_cutoff: str,
+        evidence_known_at: tuple[tuple[str, str], ...] = (),
+    ) -> None:
+        diagnostic = str(
+            getattr(exc, "diagnostic_code", "") or type(exc).__name__
+        )
+        exception_known_at = getattr(exc, "evidence_known_at", None)
+        chronology = (
+            tuple(exception_known_at)
+            if isinstance(exception_known_at, (list, tuple))
+            else evidence_known_at
+        )
+        self._record_symbol_failure(
+            symbol,
+            stage,
+            diagnostic,
+            now,
+            source_fingerprint,
+            exception_class=type(exc).__name__,
+            diagnostic_code=diagnostic,
+            message=str(exc),
+            request_cutoff=str(
+                getattr(exc, "request_cutoff", "") or request_cutoff
+            ),
+            evidence_known_at=tuple(
+                (str(name), str(value)) for name, value in chronology
+            ),
+        )
 
     def _record_system_failure(
         self, stage: str, reason: str, now: datetime, source_fingerprint: str
@@ -2679,6 +2854,7 @@ class ContinuousOpportunityRuntime:
             "backpressure": [asdict(item) for item in self._backpressure],
             "symbol_failures": [asdict(item) for item in self._symbol_failures.values()],
             "seen_events": list(self._seen_events.items()),
+            "event_records": [asdict(item) for item in self._event_records.values()],
             "intents": [asdict(item) for item in self._intents.values()],
             "sequence": self._sequence,
             "last_intent_id": self._last_intent_id,
