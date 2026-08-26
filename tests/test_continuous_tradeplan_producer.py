@@ -525,7 +525,7 @@ class ContinuousTradePlanProducerTests(unittest.TestCase):
                 trigger="SETUP_STATE_CHANGED",
             )
 
-    def test_missing_instrument_authority_withholds_paper_consumable_plan(self) -> None:
+    def test_missing_instrument_authority_preserves_research_plan_but_blocks_execution(self) -> None:
         cutoff = at(11, 22)
         self.seed_history()
         context, canonical = self.context(cutoff)
@@ -544,9 +544,9 @@ class ContinuousTradePlanProducerTests(unittest.TestCase):
             evidence_cutoff=cutoff,
             trigger="CANONICAL_BAR_COMPLETED",
         )
-        self.assertIsNone(result.member_result.intraday_plan)
+        self.assertIsNotNone(result.member_result.intraday_plan)
         self.assertFalse(result.record.execution_eligible)
-        self.assertIn("INSTRUMENT_CLASSIFICATION_NOT_AUTHORITATIVE", result.record.blockers)
+        self.assertIn("INSTRUMENT_CLASSIFICATION_UNAVAILABLE", result.record.blockers)
         self.assertEqual(
             "AUTHORITATIVE_SUBTYPE_AND_LEVERAGE_CLASSIFICATION_UNAVAILABLE",
             INSTRUMENT_ADMISSION_GAP,

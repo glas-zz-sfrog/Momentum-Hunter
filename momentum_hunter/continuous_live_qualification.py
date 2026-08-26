@@ -37,6 +37,9 @@ from momentum_hunter.continuous_denominator import (
     ContinuousDenominatorResult,
     produce_continuous_denominator,
 )
+from momentum_hunter.continuous_natural_setup import (
+    ContinuousNaturalSetupCoordinator,
+)
 from momentum_hunter.continuous_evidence_writer import (
     OFFLINE_REVIEW,
     AuthenticatedEvidenceWriterClient,
@@ -46,6 +49,7 @@ from momentum_hunter.continuous_evidence_writer import (
     read_evidence_snapshot,
 )
 from momentum_hunter.continuous_runtime import (
+    CANONICAL_BAR_COMPLETED,
     DATA_RECOVERED,
     READINESS_CHANGED,
     CompositionRequest,
@@ -77,10 +81,16 @@ from momentum_hunter.continuous_tradeplan_producer import (
     unavailable_instrument_admission,
 )
 from momentum_hunter.hot_universe import (
+    DUPLICATE,
+    EXPIRED,
     HOT,
+    PROTECTED,
+    PROVIDER_BOUND,
     TRACKED,
+    WARM,
     HotUniversePolicy,
     HotUniverseResult,
+    HotUniverseSummary,
     HotUniverseStore,
 )
 from momentum_hunter.models import INSTITUTIONAL_MOMENTUM
@@ -243,6 +253,7 @@ class QualificationState:
     historical_contexts: dict[str, HistoricalContextEvidence] = field(default_factory=dict)
     current_market_evidence: dict[str, CurrentMarketEvidence] = field(default_factory=dict)
     instrument_admissions: dict[str, InstrumentAdmissionEvidence] = field(default_factory=dict)
+    material_event_fingerprints: dict[str, str] = field(default_factory=dict)
     cycles: dict[str, ContinuousCompositionCycle] = field(default_factory=dict)
     denominator_results: dict[str, ContinuousDenominatorResult] = field(
         default_factory=dict
@@ -274,6 +285,65 @@ class LiveDiscoverySource:
             state.root / "state" / "hot-universe.json",
             allow_persistent=state.allow_persistent,
         )
+        self._restore_current_generation()
+
+    def _restore_current_generation(self) -> None:
+        restored = self.store.load()
+        session_date = self.state.launch_at.astimezone(EASTERN_TZ).date().isoformat()
+        if restored.current_session_date != session_date or not restored.snapshot_receipts:
+            return
+        receipt = restored.snapshot_receipts[-1]
+        path = (
+            self.state.root
+            / "source-evidence"
+            / "finviz"
+            / f"{receipt.snapshot_id}.json"
+        )
+        try:
+            snapshot_payload = json.loads(path.read_text(encoding="ascii"))
+            snapshot = DiscoverySnapshot.from_dict(snapshot_payload)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            raise LiveQualificationError(
+                "Persisted hot-universe generation omitted its trusted discovery snapshot."
+            ) from exc
+        if (
+            snapshot.snapshot_id != receipt.snapshot_id
+            or snapshot.fingerprint != receipt.snapshot_fingerprint
+        ):
+            raise LiveQualificationError(
+                "Persisted hot-universe and discovery identities conflict."
+            )
+        tracked = tuple(
+            item for item in restored.members if item.current_state == TRACKED
+        )
+        summary = HotUniverseSummary(
+            total_members=len(restored.members),
+            protected=sum(item.current_tier == PROTECTED for item in tracked),
+            hot=sum(item.current_tier == HOT for item in tracked),
+            warm=sum(item.current_tier == WARM for item in tracked),
+            provider_bound=sum(
+                item.current_tier == PROVIDER_BOUND for item in tracked
+            ),
+            expired_this_session=sum(
+                item.current_tier == EXPIRED for item in restored.members
+            ),
+            admitted_this_pulse=0,
+            rediscovered_this_pulse=0,
+            rejected_observations_this_pulse=0,
+            source_absent_observations_this_pulse=0,
+            discovery_failures_this_pulse=0,
+            promotions_this_pulse=0,
+            demotions_this_pulse=0,
+            expirations_this_pulse=0,
+        )
+        self.state.snapshot = snapshot
+        self.state.universe = HotUniverseResult(
+            status=DUPLICATE,
+            state=restored,
+            transitions=(),
+            summary=summary,
+        )
+        self.state.refreshed_snapshot_id = snapshot.snapshot_id
 
     def discover(self, request: DiscoveryRequest) -> DiscoveryPulse:
         predecessor_state = self.store.load()
@@ -585,6 +655,7 @@ class LiveMarketDataSource:
                 "Readiness symbol is absent from the current universe."
             )
         evaluated = _aware_now()
+        self.state.material_event_fingerprints[request.symbol] = request.source_fingerprint
         eastern = evaluated.astimezone(EASTERN_TZ)
         if (
             eastern.date().isoformat() == member.session_date
@@ -682,6 +753,7 @@ class LiveCompositionSource:
         state: QualificationState,
         *,
         configuration_fingerprint: str | None = None,
+        natural_setup: ContinuousNaturalSetupCoordinator | None = None,
     ) -> None:
         self.state = state
         self.policy = ContinuousCompositionPolicy(
@@ -694,18 +766,25 @@ class LiveCompositionSource:
                 {"root": str(state.root.resolve(strict=False))},
             )
         )
+        self.producer_store = ContinuousTradePlanProducerStore(
+            state.root / "state" / "continuous-tradeplan-producer.json"
+        )
         self.producer = ContinuousTradePlanProducer(
-            store=ContinuousTradePlanProducerStore(
-                state.root / "state" / "continuous-tradeplan-producer.json"
-            ),
+            store=self.producer_store,
             configuration_fingerprint=resolved_configuration,
             policy=self.policy,
+        )
+        self.natural_setup = natural_setup or ContinuousNaturalSetupCoordinator(
+            root=state.root / "state" / "continuous-natural-setup",
+            minute_store_root=state.root / "market-data" / "minute",
+            producer_store=self.producer_store,
+            runtime_started_at=state.launch_at,
         )
 
     def compose(self, request: CompositionRequest) -> CompositionResult:
         if self.state.universe is None:
             raise LiveQualificationError("Composition has no hot-universe state.")
-        cutoff = _aware_now()
+        cutoff = _parse_timestamp(request.requested_at)
         member_input = self.state.readiness_inputs.get(request.symbol)
         history_context = self.state.historical_contexts.get(request.symbol)
         current_market = self.state.current_market_evidence.get(request.symbol)
@@ -719,45 +798,101 @@ class LiveCompositionSource:
             raise LiveQualificationError(
                 "Composition omitted producer readiness or admission evidence."
             )
-        evaluation = self.producer.evaluate(
-            universe_state=self.state.universe.state,
-            member_input=member_input,
-            history_context=history_context,
-            current_market_evidence=current_market,
-            instrument_admission=instrument,
-            evidence_cutoff=cutoff,
-            trigger=request.trigger,
+        universe_member = next(
+            item
+            for item in self.state.universe.state.members
+            if item.member_id == member_input.universe_member_id
         )
-        if evaluation.cycle is None or evaluation.member_result is None:
+        material_source = self.state.material_event_fingerprints.get(
+            request.symbol, request.readiness_fingerprint
+        )
+        evaluations = []
+        lifecycle_transitions = 0
+        latest_setup_id: str | None = None
+        latest_plan_id: str | None = None
+        for _ in range(128):
+            step = self.natural_setup.next_step(
+                member=universe_member,
+                base_input=member_input,
+                cutoff=cutoff,
+                readiness_fingerprint=request.readiness_fingerprint,
+                request_material_fingerprint=material_source,
+            )
+            evaluation = self.producer.evaluate(
+                universe_state=self.state.universe.state,
+                member_input=step.member_input,
+                history_context=history_context,
+                current_market_evidence=current_market,
+                instrument_admission=instrument,
+                evidence_cutoff=cutoff,
+                trigger=request.trigger,
+                material_evidence_fingerprints=step.material_fingerprints,
+            )
+            if evaluation.cycle is None or evaluation.member_result is None:
+                raise LiveQualificationError(
+                    "Producer did not return a reconstructable composition cycle."
+                )
+            lifecycle_transitions += self.natural_setup.commit(
+                step=step,
+                evaluation=evaluation,
+            )
+            evaluations.append((step, evaluation))
+            cycle = evaluation.cycle
+            self.state.cycles[cycle.cycle_id] = cycle
+            self.state.metrics.composition_cycles.add(cycle.cycle_id)
+            member = evaluation.member_result
+            if member.intraday_plan is not None:
+                latest_plan_id = member.intraday_plan.plan_id
+                self.state.metrics.research_plans.add(latest_plan_id)
+            if member.lifecycle_proposal is not None:
+                latest_setup_id = member.lifecycle_proposal.setup_id
+                if member.lifecycle_proposal.create_new_setup:
+                    self.state.metrics.successor_setups.add(latest_setup_id)
+            if not step.event_id:
+                break
+        else:
             raise LiveQualificationError(
-                "Producer did not return a reconstructable composition cycle."
+                "Natural setup event processing exceeded its bounded cycle limit."
             )
-        cycle = evaluation.cycle
-        self.state.cycles[cycle.cycle_id] = cycle
-        self.state.metrics.composition_cycles.add(cycle.cycle_id)
-        member = evaluation.member_result
-        if member.intraday_plan is not None:
-            self.state.metrics.research_plans.add(member.intraday_plan.plan_id)
-        if (
-            member.lifecycle_proposal is not None
-            and member.lifecycle_proposal.create_new_setup
-        ):
-            self.state.metrics.successor_setups.add(
-                member.lifecycle_proposal.setup_id
-            )
+        final_step, final_evaluation = evaluations[-1]
+        cycle = final_evaluation.cycle
+        evidence_payload = {
+            "schemaVersion": 1,
+            "profile": "continuous-natural-composition-chain-v1",
+            "payloadType": "CONTINUOUS_NATURAL_COMPOSITION_CHAIN",
+            "request": asdict(request),
+            "naturalSteps": [
+                {
+                    "eventId": step.event_id,
+                    "eventType": step.event_type,
+                    "eventFingerprint": step.event_fingerprint,
+                    "materialFingerprints": list(step.material_fingerprints),
+                    "producerRecord": json.loads(evaluation.record.payload_json),
+                    "producerRecordId": evaluation.record.record_id,
+                    "producerRecordFingerprint": evaluation.record.fingerprint,
+                    "duplicate": evaluation.duplicate,
+                }
+                for step, evaluation in evaluations
+            ],
+            "finalCycleId": cycle.cycle_id,
+            "finalCycleFingerprint": cycle.fingerprint,
+            "knownAt": cutoff.isoformat(),
+            "authority": AUTHORITY,
+            "executionAuthority": EXECUTION_AUTHORITY,
+            "orderCapability": ORDER_CAPABILITY,
+            "accountValuesRequested": False,
+            "positionsRequested": False,
+            "ordersRequested": False,
+        }
         return CompositionResult(
             request_id=request.request_id,
             symbol=request.symbol,
             cycle_id=cycle.cycle_id,
             fingerprint=cycle.fingerprint,
-            lifecycle_transitions=int(member.lifecycle_proposal is not None),
-            setup_id=(
-                member.lifecycle_proposal.setup_id
-                if member.lifecycle_proposal
-                else None
-            ),
-            plan_id=(member.intraday_plan.plan_id if member.intraday_plan else None),
-            evidence_payload_json=evaluation.record.payload_json,
+            lifecycle_transitions=lifecycle_transitions,
+            setup_id=latest_setup_id,
+            plan_id=latest_plan_id,
+            evidence_payload_json=_canonical_bytes(evidence_payload).decode("ascii"),
         )
 
 
@@ -795,21 +930,38 @@ class NoEvents:
 
 
 class LiveMaterialEvents:
-    """Turn one terminal asynchronous history load into one bounded reevaluation."""
+    """Dispatch history recovery and newly completed canonical-bar evidence."""
 
     def __init__(
         self,
         state: QualificationState,
         backfill: AutomaticCandleBackfillCoordinator,
+        natural_setup: ContinuousNaturalSetupCoordinator | None = None,
     ) -> None:
         self.state = state
         self.backfill = backfill
+        producer_store = ContinuousTradePlanProducerStore(
+            state.root / "state" / "continuous-tradeplan-producer.json"
+        )
+        self.natural_setup = natural_setup or ContinuousNaturalSetupCoordinator(
+            root=state.root / "state" / "continuous-natural-setup",
+            minute_store_root=state.root / "market-data" / "minute",
+            producer_store=producer_store,
+            runtime_started_at=state.launch_at,
+        )
         self._last_status: dict[str, str] = {}
         self._emitted: set[str] = set()
 
     def poll(self, now: datetime) -> tuple[RuntimeTriggerEvent, ...]:
         observed = now if now.tzinfo is not None and now.utcoffset() is not None else _aware_now()
         events: list[RuntimeTriggerEvent] = []
+        if self.state.universe is not None:
+            for member in self.state.universe.state.members:
+                if member.current_state == TRACKED and member.current_tier == HOT:
+                    self.backfill.request(
+                        member.symbol,
+                        reason="CONTINUOUS_COMPLETED_CANONICAL_BAR_REFRESH",
+                    )
         for symbol, context in sorted(self.state.historical_contexts.items()):
             evidence = self.backfill.status(symbol)
             if evidence is None:
@@ -842,6 +994,24 @@ class LiveMaterialEvents:
                     symbol=symbol,
                     source_fingerprint=source,
                     priority=80,
+                )
+            )
+        universe_state = self.state.universe.state if self.state.universe else None
+        for material in self.natural_setup.completed_bar_events(
+            universe_state=universe_state,
+            cutoff=observed,
+        ):
+            if material.event_id in self._emitted:
+                continue
+            self._emitted.add(material.event_id)
+            events.append(
+                RuntimeTriggerEvent(
+                    event_id=material.event_id,
+                    trigger=CANONICAL_BAR_COMPLETED,
+                    occurred_at=material.receipt_timestamp,
+                    symbol=material.symbol,
+                    source_fingerprint=material.source_fingerprint,
+                    priority=90,
                 )
             )
         return tuple(events)
@@ -886,7 +1056,11 @@ def run_live_qualification(
     )
     composition = LiveCompositionSource(state)
     denominator = LiveDenominatorSource(state)
-    events = LiveMaterialEvents(state, market.backfill)
+    events = LiveMaterialEvents(
+        state,
+        market.backfill,
+        natural_setup=composition.natural_setup,
+    )
     runtime_id = (
         f"aug17-live-qualification-{launch_at.strftime('%Y%m%d%H%M%S')}"
     )

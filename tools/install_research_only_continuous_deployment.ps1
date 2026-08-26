@@ -85,6 +85,7 @@ function Get-RuntimeBuildHash {
         "momentum_hunter\continuous_production.py",
         "momentum_hunter\continuous_runtime.py",
         "momentum_hunter\continuous_live_qualification.py",
+        "momentum_hunter\continuous_natural_setup.py",
         "momentum_hunter\continuous_evidence_writer.py",
         "momentum_hunter\event_runtime_writer_ipc.py",
         "momentum_hunter\windows_writer_storage.py"

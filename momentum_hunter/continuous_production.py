@@ -889,7 +889,11 @@ def run_runtime(config_path: Path) -> int:
         configuration_fingerprint=str(config["configurationFingerprint"]),
     )
     denominator = LiveDenominatorSource(state)
-    events = LiveMaterialEvents(state, market.backfill)
+    events = LiveMaterialEvents(
+        state,
+        market.backfill,
+        natural_setup=composition.natural_setup,
+    )
     checkpoints = RuntimeCheckpointStore(runtime_root / "checkpoint", allow_persistent=True)
     checkpoint_path = checkpoints.path_for(str(config["runtimeIdentity"]))
     if checkpoint_path.exists():

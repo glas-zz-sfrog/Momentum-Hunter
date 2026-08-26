@@ -117,7 +117,7 @@ class InstrumentAdmissionEvidence:
     @property
     def blocker(self) -> str:
         if not self.authoritative or self.instrument_class == UNKNOWN_INSTRUMENT:
-            return "INSTRUMENT_CLASSIFICATION_NOT_AUTHORITATIVE"
+            return "INSTRUMENT_CLASSIFICATION_UNAVAILABLE"
         if self.instrument_class in {LEVERAGED_ETP, INVERSE_ETP, ETN}:
             return f"INSTRUMENT_CLASS_BLOCKED:{self.instrument_class}"
         return ""
@@ -530,7 +530,12 @@ class ContinuousTradePlanProducer:
         )
         admitted_input = member_input
         instrument_blocker = instrument_admission.blocker
-        if instrument_blocker and member_input.successor_setup is not None:
+        if (
+            instrument_blocker
+            and instrument_admission.authoritative
+            and instrument_admission.instrument_class != UNKNOWN_INSTRUMENT
+            and member_input.successor_setup is not None
+        ):
             admitted_input = replace(member_input, successor_setup=None)
         existing = self.store.latest_material(member.member_id, material_fingerprint)
         if existing is not None:

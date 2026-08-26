@@ -478,7 +478,7 @@ class SequentialBreakoutResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(SequentialBreakoutError, "must be positive"):
             SequentialBreakoutStore(self.path, policy=invalid)
 
-    def test_module_has_no_network_broker_or_runtime_activation_import(self) -> None:
+    def test_module_has_no_network_broker_and_only_approved_research_consumers(self) -> None:
         root = Path(__file__).resolve().parents[1]
         module_path = root / "momentum_hunter" / "sequential_breakout_research.py"
         tree = ast.parse(module_path.read_text(encoding="utf-8"))
@@ -532,7 +532,10 @@ class SequentialBreakoutResearchTests(unittest.TestCase):
                     importers.append(path.relative_to(root).as_posix())
         self.assertEqual(
             importers,
-            ["momentum_hunter/sequential_breakout_outcomes.py"],
+            [
+                "momentum_hunter/continuous_natural_setup.py",
+                "momentum_hunter/sequential_breakout_outcomes.py",
+            ],
         )
 
 

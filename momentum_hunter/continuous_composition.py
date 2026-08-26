@@ -20,6 +20,7 @@ from momentum_hunter.candidate_lifecycle import (
     BREAKOUT_FORMING,
     DATA_STALE,
     ENTRY_MISSED,
+    EXHAUSTION_RISK,
     FAILED_BREAKOUT,
     INVALIDATED,
     LEGAL_TRANSITIONS,
@@ -563,6 +564,9 @@ def _compose_member(
         if proposal.next_state == ENTRY_MISSED:
             plan = _transition_existing_plan(item.existing_plan, PLAN_MISSED_ENTRY, cutoff)
             return _member_result(member, MISSED_ENTRY_RECORDED, request=request, assessment=assessment, proposal=proposal, plan=plan)
+        if proposal.next_state in {FAILED_BREAKOUT, INVALIDATED, EXHAUSTION_RISK}:
+            plan = _transition_existing_plan(item.existing_plan, "INVALIDATED", cutoff)
+            return _member_result(member, SUCCESSOR_SETUP_CREATED, request=request, assessment=assessment, proposal=proposal, plan=plan)
         return _member_result(member, SUCCESSOR_SETUP_CREATED, request=request, assessment=assessment, proposal=proposal)
     if item.successor_setup is None:
         return _member_result(member, NO_LIFECYCLE_CHANGE, request=request, assessment=assessment)
@@ -623,8 +627,15 @@ def _proposal_from_transition(
     assessment: ContinuousReadinessAssessment,
     cutoff: datetime,
 ) -> LifecycleTransitionProposal:
-    if transition.next_state != ENTRY_MISSED:
-        raise ContinuousCompositionError("Composition only accepts explicit missed-entry lifecycle observations.")
+    if transition.next_state not in {
+        ENTRY_MISSED,
+        FAILED_BREAKOUT,
+        INVALIDATED,
+        EXHAUSTION_RISK,
+    }:
+        raise ContinuousCompositionError(
+            "Composition accepts only explicit terminal or exhaustion lifecycle observations."
+        )
     if transition.next_state not in LEGAL_TRANSITIONS.get(lifecycle.current_state, frozenset()):
         raise ContinuousCompositionError("Lifecycle observation was not a legal existing lifecycle transition.")
     setup_id, family, sequence, predecessor = resolve_setup_identity(

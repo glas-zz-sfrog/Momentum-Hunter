@@ -83,6 +83,14 @@ class ContinuousDeploymentInstallerTests(unittest.TestCase):
             script,
         )
 
+    def test_natural_setup_owner_is_bound_into_runtime_build_identity(self):
+        script = self._script()
+
+        self.assertIn(
+            '"momentum_hunter\\continuous_natural_setup.py"',
+            script,
+        )
+
     def test_existing_runtime_service_accepts_reentered_windows_credential(self):
         script = self._script()
 
