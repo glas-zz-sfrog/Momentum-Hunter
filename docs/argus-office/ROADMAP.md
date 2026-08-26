@@ -273,10 +273,11 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Implement `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` as a narrow correction so
-diagnostic total/excluded package inventory cannot change opening identity when
-the authoritative closure, components, imports, configuration, environment,
-and loaded bytes are unchanged. Then implement
+Complete the installed Automation Service refresh and approved-release
+promotion for `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A`; implementation,
+integration, full Hard Chew, and isolated physical runtime match are complete,
+but two canceled UAC prompts left the installed gate and active release on their
+prior bytes. Then implement
 `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` to complete the natural lifecycle,
 successor-setup, completed-bar reevaluation, and restart-reconstruction path.
 After a separate real provider-backed research-only canary passes, activate
@@ -340,16 +341,20 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No implementation task is active. Producer-001 is merged and preserved as a
-   valid lower-level research capability; its natural runtime path is explicitly
-   incomplete under the later second-eye adjudication.
+1. `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` is
+   `INTEGRATED / INSTALLED_PROMOTION_PENDING_UAC`. Canonical and origin contain
+   the qualified correction at `cb8a6ff`; 2,755 tests, compileall, PowerShell
+   parsing, exact mutation proofs, and isolated physical runtime match pass.
+   The installed Automation Service and active release remain on their prior
+   bytes because two UAC prompts were canceled before elevation. The next
+   opening therefore remains fail-closed until the one bounded service refresh,
+   V2 promotion, and installed runtime-match verification complete.
 
 ### 2. Ready / Next
 
-1. `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` is `PLANNED / READY_NEXT`. Correct
-   the Identity-003 closure-fingerprint overbinding while retaining fail-closed
-   authority over reachable components and imports and excluding only purely
-   diagnostic total/excluded package inventory from promotion identity.
+1. Finish the bounded `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` installed
+   service refresh, V2 release promotion, and exact physical runtime-match
+   readback. Do not begin Producer-001A before this terminal gate.
 2. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` from then-current clean
    canonical: naturally produce lifecycle/successor evidence, dispatch completed
    canonical bars, preserve research visibility while instrument authority is
