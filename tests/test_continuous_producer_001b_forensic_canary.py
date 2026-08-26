@@ -91,9 +91,12 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
         with self.assertRaises(self.tool.ForensicCanaryError):
             self.tool._validate_runtime_root(CANONICAL_ROOT / "canary", require_new=False)
 
-    def test_external_root_rejects_canonical_and_accepts_new_bundle_child(self) -> None:
+    def test_external_root_rejects_parent_and_accepts_new_bundle_child(self) -> None:
         with self.assertRaises(self.tool.ForensicCanaryError):
-            self.tool._validate_external_root(CANONICAL_ROOT, require_new=False)
+            self.tool._validate_external_root(
+                self.tool.EXTERNAL_PARENT,
+                require_new=False,
+            )
         candidate = self.tool.EXTERNAL_PARENT / "UNIT-TEST-FORENSIC-CANARY-NOT-CREATED"
         self.assertEqual(
             candidate.resolve(strict=False),

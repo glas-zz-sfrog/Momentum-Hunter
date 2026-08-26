@@ -2005,6 +2005,7 @@ def _render_package_index(
             "- `evidence/`: immutable canary observations, verification transcripts, manifests, timeline, and classifications.",
             "- `source/momentum_hunter/`: complete canonical local package, sanitized only where the local account-binding identity appeared.",
             "- `source/tests/`: complete canonical tests plus the canary wrapper tests.",
+            "- `source/tools/capture_job.py`: local source dependency read by the packaged hot-universe boundary test.",
             "- `source/tools/run_continuous_producer_001b_forensic_canary.py`: exact canary wrapper.",
             "- `references/`: binding standard, Roadmap snapshot, Producer-001B charters, and the prior Producer-001A release record.",
             "- `PACKAGE-SANITIZATION-LEDGER.json`: every source substitution and original/sanitized hashes.",
@@ -2032,14 +2033,52 @@ def _render_package_index(
     return "\n".join(lines)
 
 
+def _next_package_identity(root: Path) -> tuple[Path, Path, Path, int]:
+    for attempt in range(1, 100):
+        suffix = "" if attempt == 1 else f"-V{attempt}"
+        package_root = root.parent / f"{root.name}-SECOND-EYE{suffix}"
+        zip_path = root.parent / f"{root.name}-SECOND-EYE{suffix}.zip"
+        extracted_root = root.parent / (
+            f"{root.name}-SECOND-EYE{suffix}-EXTRACTED-VERIFY"
+        )
+        if not any(path.exists() for path in (package_root, zip_path, extracted_root)):
+            return package_root, zip_path, extracted_root, attempt
+    raise ForensicCanaryError("No unused second-eye packaging identity remains.")
+
+
+def _prior_package_attempts(root: Path) -> list[dict[str, object]]:
+    attempts = []
+    prefix = f"{root.name}-SECOND-EYE"
+    for path in sorted(root.parent.glob(f"{prefix}*")):
+        if not path.is_dir() or "-EXTRACTED-VERIFY" in path.name:
+            continue
+        rerun_path = path / "FOCUSED-RERUN-PREZIP.json"
+        item: dict[str, object] = {
+            "path": str(path),
+            "preserved": True,
+            "preZipFocusedRerun": "NOT_PRESENT",
+        }
+        if rerun_path.is_file():
+            rerun = json.loads(rerun_path.read_text(encoding="ascii"))
+            item["preZipFocusedRerun"] = {
+                "status": rerun.get("status"),
+                "returnCode": rerun.get("returnCode"),
+                "elapsedSeconds": rerun.get("elapsedSeconds"),
+                "sha256": _sha256(rerun_path),
+            }
+        attempts.append(item)
+    return attempts
+
+
 def _package(args: argparse.Namespace) -> int:
     root = _validate_external_root(args.evidence_root, require_new=False)
     manifest_path = root / "forensic-manifest.json"
     if not manifest_path.is_file():
         raise ForensicCanaryError("Forensic packet must be sealed before packaging.")
-    package_root = root.parent / f"{root.name}-SECOND-EYE"
-    if package_root.exists():
-        raise ForensicCanaryError("Second-eye staging root already exists.")
+    prior_package_attempts = _prior_package_attempts(root)
+    package_root, zip_path, extracted_root, package_attempt = (
+        _next_package_identity(root)
+    )
     evidence_destination = package_root / "evidence"
     shutil.copytree(root, evidence_destination)
     source_destination = package_root / "source"
@@ -2066,6 +2105,10 @@ def _package(args: argparse.Namespace) -> int:
     )
     shutil.copy2(CANONICAL_ROOT / "requirements.txt", source_destination / "requirements.txt")
     (source_destination / "tools").mkdir(parents=True)
+    shutil.copy2(
+        CANONICAL_ROOT / "tools" / "capture_job.py",
+        source_destination / "tools" / "capture_job.py",
+    )
     shutil.copy2(Path(__file__).resolve(), source_destination / "tools" / Path(__file__).name)
     shutil.copy2(
         Path(__file__).resolve().parents[1]
@@ -2151,6 +2194,15 @@ def _package(args: argparse.Namespace) -> int:
             "files": substitutions,
         },
     )
+    _write_once(
+        package_root / "PACKAGING-RECONCILIATION.json",
+        {
+            "packageAttempt": package_attempt,
+            "priorAttempts": prior_package_attempts,
+            "priorAttemptsPreserved": True,
+            "campaignEvidenceMutated": False,
+        },
+    )
     prezip_rerun = _run_package_tests(source_destination)
     _write_once(package_root / "FOCUSED-RERUN-PREZIP.json", _sanitize(prezip_rerun))
     if prezip_rerun["status"] != "PASS":
@@ -2182,16 +2234,10 @@ def _package(args: argparse.Namespace) -> int:
         "manifestFingerprint": _manifest_fingerprint(package_files),
     }
     _write_once(package_root / "PACKAGE-MANIFEST.json", package_manifest)
-    zip_path = root.parent / f"{root.name}-SECOND-EYE.zip"
-    if zip_path.exists():
-        raise ForensicCanaryError("Second-eye ZIP already exists.")
     with zipfile.ZipFile(zip_path, "x", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(package_root.rglob("*")):
             if path.is_file():
                 archive.write(path, path.relative_to(package_root).as_posix())
-    extracted_root = root.parent / f"{root.name}-SECOND-EYE-EXTRACTED-VERIFY"
-    if extracted_root.exists():
-        raise ForensicCanaryError("Extracted ZIP verification root already exists.")
     with zipfile.ZipFile(zip_path, "r") as archive:
         archive.extractall(extracted_root)
     extracted_manifest = _verify_extracted_manifest(extracted_root)
