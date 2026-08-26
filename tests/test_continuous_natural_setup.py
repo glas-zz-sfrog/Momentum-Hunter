@@ -5,9 +5,10 @@ import hashlib
 import json
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from momentum_hunter.broad_discovery import (
     DiscoveryQueryIdentity,
@@ -383,6 +384,37 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         self.assertEqual(PULLBACK_FORMING, lifecycle.current_state)
         self.assertNotEqual(proposal["setup_id"], proposal["predecessor_setup_id"])
 
+    def test_live_composition_accepts_equivalent_offset_chronology(self) -> None:
+        cutoff = at(11, 21)
+        source = LiveCompositionSource(self.state)
+        self._prepare(cutoff, generation=1)
+        base = self._request(cutoff, generation=1)
+        central = ZoneInfo("America/Chicago")
+        request = CompositionRequest(
+            request_id=base.request_id,
+            symbol=base.symbol,
+            trigger=base.trigger,
+            requested_at=cutoff.astimezone(central).isoformat(),
+            readiness_fingerprint=base.readiness_fingerprint,
+            decision_cutoff=cutoff.astimezone(timezone.utc).isoformat(),
+            evidence_known_at=tuple(
+                (
+                    name,
+                    datetime.fromisoformat(value).astimezone(timezone.utc).isoformat(),
+                )
+                for name, value in base.evidence_known_at
+            ),
+        )
+
+        result = source.compose(request)
+
+        self.assertEqual(base.request_id, result.request_id)
+        payload = json.loads(result.evidence_payload_json)
+        self.assertEqual(
+            "2026-08-17T15:21:00.000000Z",
+            payload["decisionCutoff"],
+        )
+
     def test_completed_bar_dispatch_and_restart_are_idempotent(self) -> None:
         cutoff = at(11, 21)
         source = LiveCompositionSource(self.state)
@@ -422,7 +454,10 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         emitted = events.poll(at(11, 22))
         self.assertEqual(1, len(emitted))
         self.assertEqual(CANONICAL_BAR_COMPLETED, emitted[0].trigger)
-        self.assertEqual(at(11, 22).isoformat(), emitted[0].occurred_at)
+        self.assertEqual(
+            at(11, 22).astimezone(timezone.utc).isoformat(),
+            emitted[0].occurred_at,
+        )
 
         restarted = LiveCompositionSource(self.state)
         duplicate = restarted.compose(request)
@@ -432,6 +467,73 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
             restarted.natural_setup.lifecycle.store.load().events[0].opportunity_id
         )
         self.assertEqual(ENTRY_MISSED, lifecycle.current_state)
+
+    def test_completed_bar_dispatch_suppresses_provisional_and_a_b_a_reassertion(self) -> None:
+        class Backfill:
+            def request(self, symbol: str, *, reason: str):
+                return {"symbol": symbol, "status": "COMPLETE", "reason": reason}
+
+            def status(self, symbol: str):
+                return None
+
+        source = LiveCompositionSource(self.state)
+        events = LiveMaterialEvents(
+            self.state,
+            Backfill(),
+            natural_setup=source.natural_setup,
+        )
+        original = SchwabMinuteCandle(
+            symbol="AAA",
+            timestamp=at(11, 21),
+            open=100.1,
+            high=100.15,
+            low=100.03,
+            close=100.05,
+            volume=100.0,
+            source=SCHWAB_PRICE_HISTORY_SOURCE,
+        )
+        corrected = SchwabMinuteCandle(
+            symbol="AAA",
+            timestamp=at(11, 21),
+            open=100.1,
+            high=100.17,
+            low=100.03,
+            close=100.07,
+            volume=105.0,
+            source=SCHWAB_PRICE_HISTORY_SOURCE,
+        )
+        store = SchwabCandleStore(self.minute_root)
+        store.append_history((original,), received_at=at(11, 22))
+        first = events.poll(at(11, 22))
+        store.append_history((corrected,), received_at=at(11, 22, 10))
+        correction = events.poll(at(11, 22, 10))
+        store.append_history((original,), received_at=at(11, 22, 20))
+        reassertion = events.poll(at(11, 22, 20))
+
+        first_terminal = tuple(
+            item
+            for item in first
+            if item.occurred_at
+            == at(11, 22).astimezone(timezone.utc).isoformat()
+        )
+        self.assertEqual(1, len(first_terminal))
+        self.assertEqual(1, len(correction))
+        self.assertNotEqual(first_terminal[0].event_id, correction[0].event_id)
+        self.assertEqual((), reassertion)
+
+        provisional = SchwabMinuteCandle(
+            symbol="AAA",
+            timestamp=at(11, 23),
+            open=100.0,
+            high=100.1,
+            low=99.9,
+            close=100.0,
+            volume=50.0,
+            source=SCHWAB_PRICE_HISTORY_SOURCE,
+        )
+        store.append_history((provisional,), received_at=at(11, 23, 30))
+        self.assertEqual((), events.poll(at(11, 23, 30)))
+        self.assertEqual((), events.poll(at(11, 25)))
 
     def test_late_process_start_does_not_replay_earlier_intraday_setups(self) -> None:
         flat_bars = []
@@ -508,7 +610,10 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         self.assertEqual((), events.poll(at(11, 22)))
         emitted = events.poll(at(11, 23))
         self.assertEqual(1, len(emitted))
-        self.assertEqual(at(11, 23).isoformat(), emitted[0].occurred_at)
+        self.assertEqual(
+            at(11, 23).astimezone(timezone.utc).isoformat(),
+            emitted[0].occurred_at,
+        )
 
     def test_failed_composition_is_atomic_and_later_success_commits_once(self) -> None:
         cutoff = at(11, 21)
@@ -535,10 +640,18 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
             "ContinuousTradePlanProducer.evaluate",
             new=fail_after_one,
         ):
-            with self.assertRaisesRegex(RuntimeError, "staged producer failure"):
+            with self.assertRaisesRegex(
+                RuntimeError, "staged producer failure"
+            ) as failure:
                 source.compose(request)
 
         self.assertGreaterEqual(calls, 2)
+        self.assertTrue(failure.exception.staging_began)
+        self.assertFalse(failure.exception.authoritative_state_changed)
+        self.assertEqual(
+            failure.exception.predecessor_lifecycle_identity,
+            failure.exception.current_lifecycle_identity,
+        )
         self.assertEqual(
             before,
             {
@@ -604,6 +717,40 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         self.assertEqual((), source.natural_setup.breakouts.load().events)
         recovered = LiveCompositionSource(self.state)
         self.assertIsNotNone(recovered.compose(request).cycle_id)
+
+    def test_evidence_serialization_failure_precedes_authoritative_commit(self) -> None:
+        cutoff = at(11, 21)
+        source = LiveCompositionSource(self.state)
+        self._prepare(cutoff, generation=1)
+        request = self._request(cutoff, generation=1)
+        paths = source.natural_setup._authoritative_paths()
+        before = {
+            key: (path.read_bytes() if path.exists() else None)
+            for key, path in paths.items()
+        }
+
+        with patch(
+            "momentum_hunter.continuous_live_qualification._canonical_bytes",
+            side_effect=RuntimeError("synthetic evidence serialization failure"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "evidence serialization failure"
+            ) as failure:
+                source.compose(request)
+
+        self.assertTrue(failure.exception.staging_began)
+        self.assertFalse(failure.exception.authoritative_state_changed)
+        self.assertEqual(
+            failure.exception.predecessor_lifecycle_identity,
+            failure.exception.current_lifecycle_identity,
+        )
+        self.assertEqual(
+            before,
+            {
+                key: (path.read_bytes() if path.exists() else None)
+                for key, path in paths.items()
+            },
+        )
 
     def test_fresh_process_restores_universe_and_preserves_predecessor_chain(self) -> None:
         first_cutoff = at(11, 21)

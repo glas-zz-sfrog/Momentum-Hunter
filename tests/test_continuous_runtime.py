@@ -10,6 +10,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from momentum_hunter.continuous_attempt_ledger import (
+    ATTEMPT_FAILED,
+    ATTEMPT_STARTED,
+    ATTEMPT_SUCCEEDED,
+)
 from momentum_hunter.continuous_runtime import (
     CANONICAL_BAR_COMPLETED,
     COALESCED_DUPLICATE,
@@ -56,6 +61,7 @@ from momentum_hunter.continuous_runtime import (
     build_work,
     measure_runtime_operation,
 )
+from momentum_hunter.continuous_time_identity import canonical_instant
 
 
 ET = ZoneInfo("America/New_York")
@@ -142,6 +148,7 @@ class SyntheticComposer:
         self.calls: list[str] = []
         self.fail_symbols: set[str] = set()
         self.mismatch_symbols: set[str] = set()
+        self.no_plan_symbols: set[str] = set()
         self.evidence_payload_json: str | None = None
 
     def compose(self, request: CompositionRequest) -> CompositionResult:
@@ -156,7 +163,11 @@ class SyntheticComposer:
             fingerprint=identity,
             lifecycle_transitions=1,
             setup_id=f"setup-{request.symbol}",
-            plan_id=f"plan-{request.symbol}",
+            plan_id=(
+                None
+                if request.symbol in self.no_plan_symbols
+                else f"plan-{request.symbol}"
+            ),
             evidence_payload_json=self.evidence_payload_json,
         )
 
@@ -474,19 +485,176 @@ class ContinuousRuntimeTests(unittest.TestCase):
         self.assertEqual("RuntimeError", failure.exception_class)
         self.assertEqual("RuntimeError", failure.diagnostic_code)
         self.assertEqual("synthetic composition exception", failure.message)
-        self.assertEqual(event.occurred_at, failure.request_cutoff)
+        self.assertEqual(canonical_instant(event.occurred_at), failure.request_cutoff)
         self.assertEqual(
-            (("syntheticReadiness", event.occurred_at),),
+            (("syntheticReadiness", canonical_instant(event.occurred_at)),),
             failure.evidence_known_at,
         )
+        failed_attempt = next(
+            item
+            for item in self.fixture.runtime.attempt_history
+            if item.event_id == failure.attempt_event_id
+        )
+        self.assertEqual(ATTEMPT_FAILED, failed_attempt.event_type)
+        self.assertEqual("COMPOSITION", failed_attempt.stage)
+        self.assertEqual("RuntimeError", failed_attempt.exception_class)
+        self.assertFalse(failed_attempt.authoritative_state_changed)
         checkpoint = self.fixture.store.load(self.fixture.config.runtime_identity)
         persisted = next(
             item for item in checkpoint["symbol_failures"] if item["symbol"] == "FAIL"
         )
         self.assertEqual("RuntimeError", persisted["exception_class"])
         self.assertEqual(
-            [["syntheticReadiness", event.occurred_at]],
+            [["syntheticReadiness", canonical_instant(event.occurred_at)]],
             persisted["evidence_known_at"],
+        )
+
+    def test_attempt_chronology_survives_restart_and_later_success(self) -> None:
+        self.start()
+        self.fixture.composer.fail_symbols.add("AAA")
+        self.fixture.runtime.submit_event(
+            self.fixture.event("AAA", suffix="failed"), self.fixture.clock.now()
+        )
+        self.fixture.runtime.tick(self.fixture.clock.now())
+        before = self.fixture.runtime.attempt_history
+        before_health = self.fixture.runtime.health(self.fixture.clock.now())
+        failed = tuple(
+            item
+            for item in before
+            if item.stage == "COMPOSITION" and item.event_type == ATTEMPT_FAILED
+        )
+        self.assertEqual(1, len(failed))
+
+        self.fixture.composer.fail_symbols.clear()
+        self.fixture.clock.advance(31)
+        restored = ContinuousOpportunityRuntime.restore(
+            config=self.fixture.config,
+            runtime_instance_id="runtime-instance-2",
+            now=self.fixture.clock.now(),
+            discovery_source=self.fixture.discovery,
+            market_data_source=self.fixture.market,
+            event_source=self.fixture.events,
+            composition_source=self.fixture.composer,
+            denominator_source=self.fixture.denominator,
+            writer=self.fixture.writer,
+            lease_registry=self.fixture.leases,
+            checkpoint_store=self.fixture.store,
+        )
+        self.assertEqual(before, restored.attempt_history)
+        restored.submit_event(
+            self.fixture.event("AAA", suffix="success"), self.fixture.clock.now()
+        )
+        health = restored.tick(self.fixture.clock.now())
+        history = restored.attempt_history
+        composition_starts = tuple(
+            item
+            for item in history
+            if item.stage == "COMPOSITION"
+            and item.symbol == "AAA"
+            and item.event_type == ATTEMPT_STARTED
+        )
+        composition_successes = tuple(
+            item
+            for item in history
+            if item.stage == "COMPOSITION"
+            and item.symbol == "AAA"
+            and item.event_type == ATTEMPT_SUCCEEDED
+        )
+        self.assertEqual(2, len(composition_starts))
+        self.assertEqual(1, len(composition_successes))
+        self.assertEqual(1, health.composition_attempts_failed)
+        self.assertEqual(before_health.composition_cycles + 1, health.composition_cycles)
+        self.assertEqual(
+            before_health.trade_plans_committed + 1,
+            health.trade_plans_committed,
+        )
+        self.assertEqual(failed[0], next(item for item in history if item == failed[0]))
+
+    def test_later_readiness_failure_does_not_erase_composition_failure(self) -> None:
+        self.start()
+        self.fixture.composer.fail_symbols.add("AAA")
+        self.fixture.runtime.submit_event(
+            self.fixture.event("AAA", suffix="composition"),
+            self.fixture.clock.now(),
+        )
+        self.fixture.runtime.tick(self.fixture.clock.now())
+        composition_failure = next(
+            item
+            for item in self.fixture.runtime.attempt_history
+            if item.symbol == "AAA"
+            and item.stage == "COMPOSITION"
+            and item.event_type == ATTEMPT_FAILED
+        )
+
+        self.fixture.composer.fail_symbols.clear()
+        self.fixture.market.fail_symbols.add("AAA")
+        self.fixture.runtime.submit_event(
+            self.fixture.event("AAA", suffix="readiness"),
+            self.fixture.clock.now(),
+        )
+        self.fixture.runtime.tick(self.fixture.clock.now())
+
+        failures = tuple(
+            item
+            for item in self.fixture.runtime.attempt_history
+            if item.symbol == "AAA" and item.event_type == ATTEMPT_FAILED
+        )
+        self.assertIn(composition_failure, failures)
+        self.assertEqual(
+            {"READINESS", "COMPOSITION"},
+            {item.stage for item in failures},
+        )
+        latest = next(
+            item
+            for item in self.fixture.runtime.symbol_failures
+            if item.symbol == "AAA"
+        )
+        self.assertEqual("READINESS", latest.stage)
+        self.assertEqual(failures[-1].event_id, latest.attempt_event_id)
+
+    def test_truthful_ready_and_composition_stage_counters(self) -> None:
+        self.start()
+        self.fixture.runtime.tick(self.fixture.clock.now())
+        baseline = self.fixture.runtime.health(self.fixture.clock.now())
+
+        self.fixture.runtime.submit_event(
+            self.fixture.event("ZZZ", suffix="first"), self.fixture.clock.now()
+        )
+        first = self.fixture.runtime.tick(self.fixture.clock.now())
+        self.fixture.runtime.submit_event(
+            self.fixture.event("ZZZ", suffix="second"), self.fixture.clock.now()
+        )
+        second = self.fixture.runtime.tick(self.fixture.clock.now())
+
+        self.assertEqual(baseline.unique_ready_symbols + 1, first.unique_ready_symbols)
+        self.assertEqual(first.unique_ready_symbols, second.unique_ready_symbols)
+        self.assertEqual(
+            first.repeated_ready_assessments + 1,
+            second.repeated_ready_assessments,
+        )
+        self.assertEqual(
+            baseline.readiness_assessments + 2,
+            second.readiness_assessments,
+        )
+        self.assertEqual(
+            baseline.composition_attempts_started + 2,
+            second.composition_attempts_started,
+        )
+
+        self.fixture.composer.no_plan_symbols.add("NOPLAN")
+        before_results = second
+        for symbol in ("NOPLAN", "PLAN"):
+            self.fixture.runtime.submit_event(
+                self.fixture.event(symbol, suffix="result"), self.fixture.clock.now()
+            )
+        results = self.fixture.runtime.tick(self.fixture.clock.now())
+        self.assertEqual(
+            before_results.no_plan_records_committed + 1,
+            results.no_plan_records_committed,
+        )
+        self.assertEqual(
+            before_results.trade_plans_committed + 1,
+            results.trade_plans_committed,
         )
 
     def test_nonready_result_preserves_cutoff_and_chronology(self) -> None:

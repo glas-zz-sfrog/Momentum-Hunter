@@ -11,6 +11,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Protocol
 
+from momentum_hunter.continuous_attempt_ledger import (
+    ATTEMPT_FAILED,
+    ATTEMPT_STARTED,
+    ATTEMPT_SUCCEEDED,
+    AttemptEvent,
+    ContinuousAttemptLedger,
+)
+from momentum_hunter.continuous_time_identity import (
+    canonical_instant,
+    canonical_known_at,
+)
+
 
 CONTRACT_VERSION = 1
 RUNTIME_PROFILE = "independent-continuous-opportunity-runtime-v1"
@@ -368,6 +380,7 @@ class ReadinessResult:
     deferred: bool = False
     decision_cutoff: str | None = None
     evidence_known_at: tuple[tuple[str, str], ...] = ()
+    opportunity_id: str = ""
 
     def __post_init__(self) -> None:
         _require_fingerprint(self.fingerprint, "Readiness fingerprint")
@@ -419,6 +432,9 @@ class CompositionRequest:
     readiness_fingerprint: str
     decision_cutoff: str | None = None
     evidence_known_at: tuple[tuple[str, str], ...] = ()
+    opportunity_id: str = ""
+    original_decision_cutoff: str = ""
+    original_evidence_known_at: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         requested = _parse_timestamp(self.requested_at, "Composition request timestamp")
@@ -442,6 +458,18 @@ class CompositionRequest:
                 raise ContinuousRuntimeError(
                     "Composition evidence became known after its decision cutoff."
                 )
+        if self.original_decision_cutoff and canonical_instant(
+            self.original_decision_cutoff, "Original composition decision cutoff"
+        ) != canonical_instant(cutoff, "Composition decision cutoff"):
+            raise ContinuousRuntimeError(
+                "Original composition cutoff differs from its canonical instant."
+            )
+        if self.original_evidence_known_at and canonical_known_at(
+            self.original_evidence_known_at
+        ) != canonical_known_at(self.evidence_known_at):
+            raise ContinuousRuntimeError(
+                "Original composition chronology differs from its canonical identity."
+            )
 
 
 @dataclass(frozen=True)
@@ -896,6 +924,8 @@ class SymbolFailure:
     message: str = ""
     request_cutoff: str = ""
     evidence_known_at: tuple[tuple[str, str], ...] = ()
+    attempt_id: str = ""
+    attempt_event_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -918,12 +948,23 @@ class RuntimeHealth:
     provider_bound_symbols: int
     provider_bound_denominator_cycles: int
     readiness_requests: int
+    readiness_attempts_started: int
     readiness_completed: int
+    readiness_assessments: int
     readiness_deferred: int
     ready_members: int
+    unique_ready_symbols: int
+    repeated_ready_assessments: int
     readiness_failures: int
     completed_bar_events: int
+    material_events_accepted: int
+    composition_requests_queued: int
+    composition_attempts_started: int
+    composition_attempts_failed: int
     composition_cycles: int
+    no_plan_records_committed: int
+    trade_plans_committed: int
+    duplicate_idempotent_suppressions: int
     lifecycle_transitions: int
     setups_created: int
     plans_created: int
@@ -1108,12 +1149,23 @@ class ContinuousOpportunityRuntime:
                 "provider_bound_symbols",
                 "provider_bound_denominator_cycles",
                 "readiness_requests",
+                "readiness_attempts_started",
                 "readiness_completed",
+                "readiness_assessments",
                 "readiness_deferred",
                 "ready_members",
+                "unique_ready_symbols",
+                "repeated_ready_assessments",
                 "readiness_failures",
                 "completed_bar_events",
+                "material_events_accepted",
+                "composition_requests_queued",
+                "composition_attempts_started",
+                "composition_attempts_failed",
                 "composition_cycles",
+                "no_plan_records_committed",
+                "trade_plans_committed",
+                "duplicate_idempotent_suppressions",
                 "lifecycle_transitions",
                 "setups_created",
                 "plans_created",
@@ -1133,7 +1185,17 @@ class ContinuousOpportunityRuntime:
         self._backpressure: deque[BackpressureDecision] = deque(
             maxlen=config.diagnostic_capacity
         )
+        attempt_root = (
+            checkpoint_store.root
+            / f"{checkpoint_store.path_for(config.runtime_identity).stem}-attempts"
+        )
+        self._attempt_ledger = ContinuousAttemptLedger(
+            attempt_root,
+            runtime_identity=config.runtime_identity,
+            configuration_fingerprint=config.fingerprint,
+        )
         self._symbol_failures: OrderedDict[str, SymbolFailure] = OrderedDict()
+        self._ready_symbols: set[str] = set()
         self._seen_events: OrderedDict[str, str] = OrderedDict()
         self._event_records: OrderedDict[str, RuntimeTriggerEvent] = OrderedDict()
         self._intents: OrderedDict[int, EvidenceWriteIntent] = OrderedDict()
@@ -1196,6 +1258,7 @@ class ContinuousOpportunityRuntime:
             if previous != event_fingerprint:
                 self._degrade("EVENT_IDENTITY_CONFLICT")
                 raise ContinuousRuntimeError("Conflicting duplicate runtime event.")
+            self._counters["duplicate_idempotent_suppressions"] += 1
             return COALESCED_DUPLICATE
         self._remember_event(event.event_id, event_fingerprint)
         self._event_records[event.event_id] = event
@@ -1217,6 +1280,7 @@ class ContinuousOpportunityRuntime:
                 ),
                 now,
             )
+        self._counters["material_events_accepted"] += 1
         symbol = (event.symbol or "").strip().upper()
         return self._enqueue_readiness(
             symbol=symbol,
@@ -1416,6 +1480,20 @@ class ContinuousOpportunityRuntime:
             lease_registry=lease_registry,
             checkpoint_store=checkpoint_store,
         )
+        anchored_attempt_count = int(payload.get("attempt_ledger_count", 0))
+        anchored_attempt_head = payload.get("attempt_ledger_head")
+        if anchored_attempt_count > len(runtime.attempt_history):
+            raise RuntimeCheckpointError(
+                "Attempt ledger is shorter than the checkpoint anchor."
+            )
+        if anchored_attempt_count:
+            if (
+                runtime.attempt_history[anchored_attempt_count - 1].event_id
+                != anchored_attempt_head
+            ):
+                raise RuntimeCheckpointError(
+                    "Attempt ledger checkpoint anchor is invalid."
+                )
         runtime.lease, stale = lease_registry.acquire(
             config.runtime_identity,
             runtime_instance_id,
@@ -1478,6 +1556,35 @@ class ContinuousOpportunityRuntime:
         for key, value in dict(payload["counters"]).items():
             if key in runtime._counters:
                 runtime._counters[key] = int(value)
+        attempt_events = runtime.attempt_history
+        readiness_starts = tuple(
+            item
+            for item in attempt_events
+            if item.stage == "READINESS" and item.event_type == ATTEMPT_STARTED
+        )
+        readiness_terminals = tuple(
+            item
+            for item in attempt_events
+            if item.stage == "READINESS"
+            and item.event_type in {ATTEMPT_SUCCEEDED, ATTEMPT_FAILED}
+        )
+        composition_starts = tuple(
+            item
+            for item in attempt_events
+            if item.stage == "COMPOSITION" and item.event_type == ATTEMPT_STARTED
+        )
+        composition_failures = tuple(
+            item
+            for item in attempt_events
+            if item.stage == "COMPOSITION" and item.event_type == ATTEMPT_FAILED
+        )
+        runtime._counters["readiness_attempts_started"] = len(readiness_starts)
+        runtime._counters["readiness_completed"] = len(readiness_terminals)
+        runtime._counters["readiness_assessments"] = sum(
+            1 for item in readiness_terminals if not item.exception_class
+        )
+        runtime._counters["composition_attempts_started"] = len(composition_starts)
+        runtime._counters["composition_attempts_failed"] = len(composition_failures)
         runtime._counters["restart_count"] += 1
         for item in payload.get("backpressure", []):
             runtime._backpressure.append(BackpressureDecision(**item))
@@ -1496,6 +1603,32 @@ class ContinuousOpportunityRuntime:
             )
             for item in payload.get("symbol_failures", [])
         )
+        for item in attempt_events:
+            if item.event_type != ATTEMPT_FAILED:
+                continue
+            runtime._symbol_failures[item.symbol] = SymbolFailure(
+                symbol=item.symbol,
+                stage=item.stage,
+                reason=item.diagnostic_code or item.exception_class or "ATTEMPT_FAILED",
+                observed_at=item.observed_at,
+                source_fingerprint=item.source_fingerprint,
+                exception_class=item.exception_class,
+                diagnostic_code=item.diagnostic_code,
+                message=item.message,
+                request_cutoff=item.canonical_request_cutoff,
+                evidence_known_at=item.canonical_evidence_known_at,
+                attempt_id=item.attempt_id,
+                attempt_event_id=item.event_id,
+            )
+            runtime._symbol_failures.move_to_end(item.symbol)
+        runtime._trim_ordered(
+            runtime._symbol_failures, config.maximum_tracked_symbols
+        )
+        runtime._ready_symbols = {
+            str(symbol).strip().upper()
+            for symbol in payload.get("ready_symbols", ())
+            if str(symbol).strip()
+        }
         runtime._seen_events = OrderedDict(payload.get("seen_events", []))
         runtime._event_records = OrderedDict(
             (
@@ -1849,6 +1982,10 @@ class ContinuousOpportunityRuntime:
         return tuple(self._symbol_failures.values())
 
     @property
+    def attempt_history(self) -> tuple[AttemptEvent, ...]:
+        return self._attempt_ledger.events
+
+    @property
     def evidence_intents(self) -> tuple[EvidenceWriteIntent, ...]:
         return tuple(self._intents.values())
 
@@ -2143,9 +2280,43 @@ class ContinuousOpportunityRuntime:
             source_fingerprint=str(payload["source_fingerprint"]),
         )
         self._counters["readiness_requests"] += 1
+        attempt = self._attempt_ledger.begin(
+            runtime_instance_id=self.runtime_instance_id,
+            stage="READINESS",
+            symbol=request.symbol,
+            opportunity_id="",
+            request_id=request.request_id,
+            observed_at=_timestamp(now),
+            request_cutoff=request.requested_at,
+            evidence_known_at=(),
+            source_fingerprint=work.fingerprint,
+            staging_began=False,
+        )
+        self._counters["readiness_attempts_started"] += 1
         try:
             result = self.market_data_source.evaluate(request)
         except Exception as exc:
+            terminal_attempt = self._attempt_ledger.finish(
+                attempt,
+                runtime_instance_id=self.runtime_instance_id,
+                event_type=ATTEMPT_FAILED,
+                observed_at=_timestamp(now),
+                diagnostic_code=str(
+                    getattr(exc, "diagnostic_code", "") or type(exc).__name__
+                ),
+                exception_class=type(exc).__name__,
+                message=str(exc),
+                request_cutoff=str(
+                    getattr(exc, "request_cutoff", "") or request.requested_at
+                ),
+                evidence_known_at=tuple(
+                    (str(name), str(value))
+                    for name, value in (
+                        getattr(exc, "evidence_known_at", ()) or ()
+                    )
+                ),
+                authoritative_state_changed=False,
+            )
             self._record_symbol_exception(
                 request.symbol,
                 "READINESS",
@@ -2153,6 +2324,7 @@ class ContinuousOpportunityRuntime:
                 now,
                 work.fingerprint,
                 request_cutoff=request.requested_at,
+                attempt_event=terminal_attempt,
             )
             self._counters["readiness_failures"] += 1
             self._counters["readiness_completed"] += 1
@@ -2160,19 +2332,44 @@ class ContinuousOpportunityRuntime:
             self._mark_forward_progress(now)
             return
         self._counters["readiness_completed"] += 1
+        self._counters["readiness_assessments"] += 1
         self.last_readiness_completed_at = now
         self._mark_forward_progress(now)
         if result.request_id != request.request_id or result.symbol != request.symbol:
+            terminal_attempt = self._attempt_ledger.finish(
+                attempt,
+                runtime_instance_id=self.runtime_instance_id,
+                event_type=ATTEMPT_FAILED,
+                observed_at=_timestamp(now),
+                diagnostic_code="ADAPTER_IDENTITY_MISMATCH",
+                message="Readiness adapter returned a conflicting request identity.",
+                opportunity_id=result.opportunity_id,
+                request_cutoff=result.decision_cutoff or request.requested_at,
+                evidence_known_at=result.evidence_known_at,
+                authoritative_state_changed=False,
+            )
             self._record_symbol_failure(
                 request.symbol,
                 "READINESS",
                 "ADAPTER_IDENTITY_MISMATCH",
                 now,
                 result.fingerprint,
+                attempt_event=terminal_attempt,
             )
             self._counters["readiness_failures"] += 1
             return
         if result.deferred:
+            self._attempt_ledger.finish(
+                attempt,
+                runtime_instance_id=self.runtime_instance_id,
+                event_type=ATTEMPT_SUCCEEDED,
+                observed_at=_timestamp(now),
+                diagnostic_code=result.status,
+                opportunity_id=result.opportunity_id,
+                request_cutoff=result.decision_cutoff or request.requested_at,
+                evidence_known_at=result.evidence_known_at,
+                authoritative_state_changed=False,
+            )
             self._deferred_readiness[request.symbol] = work
             self._deferred_readiness.move_to_end(request.symbol)
             self._trim_ordered(
@@ -2199,6 +2396,18 @@ class ContinuousOpportunityRuntime:
             )
             return
         if not result.ready:
+            terminal_attempt = self._attempt_ledger.finish(
+                attempt,
+                runtime_instance_id=self.runtime_instance_id,
+                event_type=ATTEMPT_FAILED,
+                observed_at=_timestamp(now),
+                diagnostic_code=result.status,
+                message=result.failure_reason or result.status,
+                opportunity_id=result.opportunity_id,
+                request_cutoff=result.decision_cutoff or request.requested_at,
+                evidence_known_at=result.evidence_known_at,
+                authoritative_state_changed=False,
+            )
             self._record_symbol_failure(
                 request.symbol,
                 "READINESS",
@@ -2209,41 +2418,70 @@ class ContinuousOpportunityRuntime:
                 message=result.failure_reason or result.status,
                 request_cutoff=result.decision_cutoff or request.requested_at,
                 evidence_known_at=result.evidence_known_at,
+                attempt_event=terminal_attempt,
             )
             self._counters["readiness_failures"] += 1
             return
+        self._attempt_ledger.finish(
+            attempt,
+            runtime_instance_id=self.runtime_instance_id,
+            event_type=ATTEMPT_SUCCEEDED,
+            observed_at=_timestamp(now),
+            diagnostic_code=result.status,
+            opportunity_id=result.opportunity_id,
+            request_cutoff=result.decision_cutoff or request.requested_at,
+            evidence_known_at=result.evidence_known_at,
+            authoritative_state_changed=False,
+        )
         self._counters["ready_members"] += 1
+        if request.symbol in self._ready_symbols:
+            self._counters["repeated_ready_assessments"] += 1
+        else:
+            self._ready_symbols.add(request.symbol)
+            self._counters["unique_ready_symbols"] = len(self._ready_symbols)
         self._deferred_readiness.pop(request.symbol, None)
+        canonical_cutoff = canonical_instant(
+            str(result.decision_cutoff), "Readiness decision cutoff"
+        )
+        canonical_chronology = canonical_known_at(result.evidence_known_at)
         composition_id = _fingerprint(
             "continuous-composition-request-v1",
             {
                 "readiness": result.fingerprint,
                 "trigger": request.trigger,
-                "decisionCutoff": result.decision_cutoff,
-                "evidenceKnownAt": result.evidence_known_at,
+                "decisionCutoff": canonical_cutoff,
+                "evidenceKnownAt": canonical_chronology,
             },
         )
-        decision_cutoff = str(result.decision_cutoff)
-        self._enqueue(
+        enqueue_decision = self._enqueue(
             COMPOSITION_QUEUE,
             build_work(
                 kind="COMPOSITION",
                 key=request.symbol,
-                requested_at=decision_cutoff,
+                requested_at=canonical_cutoff,
                 priority=work.priority,
                 payload={
                     "request_id": composition_id,
                     "symbol": request.symbol,
                     "trigger": request.trigger,
                     "readiness_fingerprint": result.fingerprint,
-                    "decision_cutoff": decision_cutoff,
+                    "decision_cutoff": canonical_cutoff,
+                    "original_decision_cutoff": result.decision_cutoff,
                     "evidence_known_at": [
+                        list(item) for item in canonical_chronology
+                    ],
+                    "original_evidence_known_at": [
                         list(item) for item in result.evidence_known_at
                     ],
+                    "opportunity_id": result.opportunity_id,
                 },
             ),
             now,
         )
+        if enqueue_decision in {ENQUEUED, REPLACED_OBSOLETE}:
+            self._counters["composition_requests_queued"] += 1
+        elif enqueue_decision == COALESCED_DUPLICATE:
+            self._counters["duplicate_idempotent_suppressions"] += 1
 
     def _process_composition(self, work: QueuedWork, now: datetime) -> None:
         payload = work.payload
@@ -2261,10 +2499,69 @@ class ContinuousOpportunityRuntime:
                 for item in payload.get("evidence_known_at", ())
                 if isinstance(item, (list, tuple)) and len(item) == 2
             ),
+            opportunity_id=str(payload.get("opportunity_id") or ""),
+            original_decision_cutoff=str(
+                payload.get("original_decision_cutoff") or ""
+            ),
+            original_evidence_known_at=tuple(
+                tuple(str(part) for part in item)
+                for item in payload.get("original_evidence_known_at", ())
+                if isinstance(item, (list, tuple)) and len(item) == 2
+            ),
         )
+        attempt = self._attempt_ledger.begin(
+            runtime_instance_id=self.runtime_instance_id,
+            stage="COMPOSITION",
+            symbol=request.symbol,
+            opportunity_id=request.opportunity_id,
+            request_id=request.request_id,
+            observed_at=_timestamp(now),
+            request_cutoff=request.original_decision_cutoff or request.requested_at,
+            evidence_known_at=(
+                request.original_evidence_known_at or request.evidence_known_at
+            ),
+            source_fingerprint=work.fingerprint,
+            staging_began=False,
+        )
+        self._counters["composition_attempts_started"] += 1
         try:
             result = self.composition_source.compose(request)
         except Exception as exc:
+            terminal_attempt = self._attempt_ledger.finish(
+                attempt,
+                runtime_instance_id=self.runtime_instance_id,
+                event_type=ATTEMPT_FAILED,
+                observed_at=_timestamp(now),
+                diagnostic_code=str(
+                    getattr(exc, "diagnostic_code", "") or type(exc).__name__
+                ),
+                exception_class=type(exc).__name__,
+                message=str(exc),
+                request_cutoff=str(
+                    getattr(exc, "request_cutoff", "")
+                    or request.original_decision_cutoff
+                    or request.requested_at
+                ),
+                evidence_known_at=tuple(
+                    (str(name), str(value))
+                    for name, value in (
+                        getattr(exc, "evidence_known_at", None)
+                        or request.original_evidence_known_at
+                        or request.evidence_known_at
+                    )
+                ),
+                predecessor_lifecycle_identity=str(
+                    getattr(exc, "predecessor_lifecycle_identity", "")
+                ),
+                current_lifecycle_identity=str(
+                    getattr(exc, "current_lifecycle_identity", "")
+                ),
+                staging_began=bool(getattr(exc, "staging_began", False)),
+                authoritative_state_changed=bool(
+                    getattr(exc, "authoritative_state_changed", False)
+                ),
+            )
+            self._counters["composition_attempts_failed"] += 1
             self._record_symbol_exception(
                 request.symbol,
                 "COMPOSITION",
@@ -2273,15 +2570,27 @@ class ContinuousOpportunityRuntime:
                 work.fingerprint,
                 request_cutoff=(request.decision_cutoff or request.requested_at),
                 evidence_known_at=request.evidence_known_at,
+                attempt_event=terminal_attempt,
             )
             return
         if result.request_id != request.request_id or result.symbol != request.symbol:
+            terminal_attempt = self._attempt_ledger.finish(
+                attempt,
+                runtime_instance_id=self.runtime_instance_id,
+                event_type=ATTEMPT_FAILED,
+                observed_at=_timestamp(now),
+                diagnostic_code="ADAPTER_IDENTITY_MISMATCH",
+                message="Composition adapter returned a conflicting request identity.",
+                authoritative_state_changed=False,
+            )
+            self._counters["composition_attempts_failed"] += 1
             self._record_symbol_failure(
                 request.symbol,
                 "COMPOSITION",
                 "ADAPTER_IDENTITY_MISMATCH",
                 now,
                 result.fingerprint,
+                attempt_event=terminal_attempt,
             )
             return
         prior_cycle = self._terminal_cycle_ids.get(result.cycle_id)
@@ -2289,10 +2598,31 @@ class ContinuousOpportunityRuntime:
             if prior_cycle != result.fingerprint:
                 self._degrade("COMPOSITION_CYCLE_CONFLICT")
                 raise ContinuousRuntimeError("Composition cycle identity changed fingerprint.")
+            self._attempt_ledger.finish(
+                attempt,
+                runtime_instance_id=self.runtime_instance_id,
+                event_type=ATTEMPT_SUCCEEDED,
+                observed_at=_timestamp(now),
+                diagnostic_code="IDEMPOTENT_DUPLICATE",
+                authoritative_state_changed=False,
+            )
+            self._counters["duplicate_idempotent_suppressions"] += 1
             return
+        self._attempt_ledger.finish(
+            attempt,
+            runtime_instance_id=self.runtime_instance_id,
+            event_type=ATTEMPT_SUCCEEDED,
+            observed_at=_timestamp(now),
+            diagnostic_code="COMPOSITION_ACCEPTED",
+            authoritative_state_changed=True,
+        )
         self._terminal_cycle_ids[result.cycle_id] = result.fingerprint
         self._trim_ordered(self._terminal_cycle_ids, self.config.processed_event_capacity)
         self._counters["composition_cycles"] += 1
+        if result.plan_id:
+            self._counters["trade_plans_committed"] += 1
+        else:
+            self._counters["no_plan_records_committed"] += 1
         self._counters["lifecycle_transitions"] += result.lifecycle_transitions
         if result.setup_id:
             is_new_setup = result.setup_id not in self._setup_identities
@@ -2637,6 +2967,7 @@ class ContinuousOpportunityRuntime:
         message: str = "",
         request_cutoff: str = "",
         evidence_known_at: tuple[tuple[str, str], ...] = (),
+        attempt_event: AttemptEvent | None = None,
     ) -> None:
         self._symbol_failures[symbol] = SymbolFailure(
             symbol=symbol,
@@ -2649,6 +2980,8 @@ class ContinuousOpportunityRuntime:
             message=message,
             request_cutoff=request_cutoff,
             evidence_known_at=evidence_known_at,
+            attempt_id=(attempt_event.attempt_id if attempt_event else ""),
+            attempt_event_id=(attempt_event.event_id if attempt_event else ""),
         )
         self._symbol_failures.move_to_end(symbol)
         self._trim_ordered(self._symbol_failures, self.config.maximum_tracked_symbols)
@@ -2663,6 +2996,7 @@ class ContinuousOpportunityRuntime:
         *,
         request_cutoff: str,
         evidence_known_at: tuple[tuple[str, str], ...] = (),
+        attempt_event: AttemptEvent | None = None,
     ) -> None:
         diagnostic = str(
             getattr(exc, "diagnostic_code", "") or type(exc).__name__
@@ -2688,6 +3022,7 @@ class ContinuousOpportunityRuntime:
             evidence_known_at=tuple(
                 (str(name), str(value)) for name, value in chronology
             ),
+            attempt_event=attempt_event,
         )
 
     def _record_system_failure(
@@ -2853,6 +3188,11 @@ class ContinuousOpportunityRuntime:
             "queues": {name: queue.snapshot() for name, queue in self._queues.items()},
             "backpressure": [asdict(item) for item in self._backpressure],
             "symbol_failures": [asdict(item) for item in self._symbol_failures.values()],
+            "ready_symbols": sorted(self._ready_symbols),
+            "attempt_ledger_count": len(self.attempt_history),
+            "attempt_ledger_head": (
+                self.attempt_history[-1].event_id if self.attempt_history else None
+            ),
             "seen_events": list(self._seen_events.items()),
             "event_records": [asdict(item) for item in self._event_records.values()],
             "intents": [asdict(item) for item in self._intents.values()],

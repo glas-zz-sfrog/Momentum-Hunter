@@ -69,6 +69,11 @@ from momentum_hunter.continuous_runtime import (
     RuntimeCheckpointStore,
     RuntimeTriggerEvent,
 )
+from momentum_hunter.continuous_time_identity import (
+    canonical_instant,
+    canonical_known_at,
+    parse_instant,
+)
 from momentum_hunter.continuous_tradeplan_producer import (
     HISTORY_BACKFILL_PENDING,
     ContinuousHistoryAdmissionCoordinator,
@@ -167,7 +172,7 @@ def _aware_now() -> datetime:
 
 
 def _parse_timestamp(value: str) -> datetime:
-    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return parse_instant(value)
 
 
 def _backfill_accounting(path: Path) -> dict[str, object]:
@@ -753,6 +758,7 @@ class LiveMarketDataSource:
                 ready=False,
                 failure_reason=None,
                 deferred=True,
+                opportunity_id=member.member_id,
             )
         admission = self.history_admission.admit(
             member=member,
@@ -829,8 +835,8 @@ class LiveMarketDataSource:
             "continuous-live-readiness-result-v2",
             {
                 "assessmentFingerprint": assessment.fingerprint,
-                "decisionCutoff": decision_cutoff.isoformat(),
-                "evidenceKnownAt": evidence_known_at,
+                "decisionCutoff": canonical_instant(decision_cutoff),
+                "evidenceKnownAt": canonical_known_at(evidence_known_at),
                 "sourceFingerprint": request.source_fingerprint,
             },
         )
@@ -845,6 +851,7 @@ class LiveMarketDataSource:
             ),
             decision_cutoff=decision_cutoff.isoformat(),
             evidence_known_at=evidence_known_at,
+            opportunity_id=member.member_id,
         )
 
 
@@ -930,12 +937,13 @@ class LiveCompositionSource:
                 )
             )
         )
-        request_known_at = tuple(request.evidence_known_at)
-        if dict(request_known_at) != dict(actual_known_at):
+        request_known_at = canonical_known_at(request.evidence_known_at)
+        actual_known_at_identity = canonical_known_at(actual_known_at)
+        if request_known_at != actual_known_at_identity:
             raise LiveCompositionEvidenceError(
                 "COMPOSITION_KNOWN_AT_IDENTITY_MISMATCH",
                 "Composition evidence chronology changed after readiness.",
-                request_cutoff=cutoff_text,
+                request_cutoff=canonical_instant(cutoff),
                 evidence_known_at=actual_known_at,
             )
         for label, known_at in actual_known_at:
@@ -995,16 +1003,68 @@ class LiveCompositionSource:
                 raise LiveQualificationError(
                     "Natural setup event processing exceeded its bounded cycle limit."
                 )
+            _, final_evaluation = evaluations[-1]
+            cycle = final_evaluation.cycle
+            evidence_payload = {
+                "schemaVersion": 1,
+                "profile": "continuous-natural-composition-chain-v1",
+                "payloadType": "CONTINUOUS_NATURAL_COMPOSITION_CHAIN",
+                "request": asdict(request),
+                "naturalSteps": [
+                    {
+                        "eventId": step.event_id,
+                        "eventType": step.event_type,
+                        "eventFingerprint": step.event_fingerprint,
+                        "materialFingerprints": list(step.material_fingerprints),
+                        "producerRecord": json.loads(evaluation.record.payload_json),
+                        "producerRecordId": evaluation.record.record_id,
+                        "producerRecordFingerprint": evaluation.record.fingerprint,
+                        "duplicate": evaluation.duplicate,
+                    }
+                    for step, evaluation in evaluations
+                ],
+                "finalCycleId": cycle.cycle_id,
+                "finalCycleFingerprint": cycle.fingerprint,
+                "decisionCutoff": canonical_instant(cutoff),
+                "originalDecisionCutoff": cutoff_text,
+                "evidenceKnownAt": [
+                    {"evidence": name, "knownAt": value}
+                    for name, value in actual_known_at
+                ],
+                "canonicalEvidenceKnownAt": [
+                    {"evidence": name, "knownAt": value}
+                    for name, value in actual_known_at_identity
+                ],
+                "knownAt": canonical_instant(cutoff),
+                "authority": AUTHORITY,
+                "executionAuthority": EXECUTION_AUTHORITY,
+                "orderCapability": ORDER_CAPABILITY,
+                "accountValuesRequested": False,
+                "positionsRequested": False,
+                "ordersRequested": False,
+            }
+            result = CompositionResult(
+                request_id=request.request_id,
+                symbol=request.symbol,
+                cycle_id=cycle.cycle_id,
+                fingerprint=cycle.fingerprint,
+                lifecycle_transitions=lifecycle_transitions,
+                setup_id=latest_setup_id,
+                plan_id=latest_plan_id,
+                evidence_payload_json=_canonical_bytes(evidence_payload).decode(
+                    "ascii"
+                ),
+            )
             preview.commit()
 
         for _, evaluation in evaluations:
-            cycle = evaluation.cycle
-            if cycle is None or evaluation.member_result is None:
+            committed_cycle = evaluation.cycle
+            if committed_cycle is None or evaluation.member_result is None:
                 raise LiveQualificationError(
                     "Committed composition omitted its reconstructable cycle."
                 )
-            self.state.cycles[cycle.cycle_id] = cycle
-            self.state.metrics.composition_cycles.add(cycle.cycle_id)
+            self.state.cycles[committed_cycle.cycle_id] = committed_cycle
+            self.state.metrics.composition_cycles.add(committed_cycle.cycle_id)
             member = evaluation.member_result
             if member.intraday_plan is not None:
                 self.state.metrics.research_plans.add(member.intraday_plan.plan_id)
@@ -1015,51 +1075,7 @@ class LiveCompositionSource:
                 self.state.metrics.successor_setups.add(
                     member.lifecycle_proposal.setup_id
                 )
-        final_step, final_evaluation = evaluations[-1]
-        cycle = final_evaluation.cycle
-        evidence_payload = {
-            "schemaVersion": 1,
-            "profile": "continuous-natural-composition-chain-v1",
-            "payloadType": "CONTINUOUS_NATURAL_COMPOSITION_CHAIN",
-            "request": asdict(request),
-            "naturalSteps": [
-                {
-                    "eventId": step.event_id,
-                    "eventType": step.event_type,
-                    "eventFingerprint": step.event_fingerprint,
-                    "materialFingerprints": list(step.material_fingerprints),
-                    "producerRecord": json.loads(evaluation.record.payload_json),
-                    "producerRecordId": evaluation.record.record_id,
-                    "producerRecordFingerprint": evaluation.record.fingerprint,
-                    "duplicate": evaluation.duplicate,
-                }
-                for step, evaluation in evaluations
-            ],
-            "finalCycleId": cycle.cycle_id,
-            "finalCycleFingerprint": cycle.fingerprint,
-            "decisionCutoff": cutoff.isoformat(),
-            "evidenceKnownAt": [
-                {"evidence": name, "knownAt": value}
-                for name, value in actual_known_at
-            ],
-            "knownAt": cutoff.isoformat(),
-            "authority": AUTHORITY,
-            "executionAuthority": EXECUTION_AUTHORITY,
-            "orderCapability": ORDER_CAPABILITY,
-            "accountValuesRequested": False,
-            "positionsRequested": False,
-            "ordersRequested": False,
-        }
-        return CompositionResult(
-            request_id=request.request_id,
-            symbol=request.symbol,
-            cycle_id=cycle.cycle_id,
-            fingerprint=cycle.fingerprint,
-            lifecycle_transitions=lifecycle_transitions,
-            setup_id=latest_setup_id,
-            plan_id=latest_plan_id,
-            evidence_payload_json=_canonical_bytes(evidence_payload).decode("ascii"),
-        )
+        return result
 
 
 class LiveDenominatorSource:

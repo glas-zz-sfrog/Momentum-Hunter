@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -42,6 +44,156 @@ class CanonicalMinuteBar:
     source: str
     state: str
     session_date: str
+
+
+@dataclass(frozen=True)
+class CompletedCanonicalMinuteVersion:
+    bar: CanonicalMinuteBar
+    first_received_at: str
+    original_first_received_at: str
+    bar_end: str
+    version_id: str
+    semantic_identity: str
+
+
+@dataclass(frozen=True)
+class CanonicalMinuteFinalitySnapshot:
+    versions: tuple[CompletedCanonicalMinuteVersion, ...]
+    observed_version_count: int
+    provisional_version_count: int
+    completed_version_count: int
+
+
+def load_canonical_minute_finality_as_of(
+    *,
+    cutoff: datetime,
+    store_root: Path = SCHWAB_CANDLE_STORE_ROOT,
+    windows_by_symbol: Mapping[str, tuple[datetime, datetime]] | None = None,
+    symbols: tuple[str, ...] | list[str] | None = None,
+) -> CanonicalMinuteFinalitySnapshot:
+    """Select price-history versions actually complete and known by ``cutoff``."""
+
+    evaluated = _aware(cutoff)
+    store = SchwabCandleStore(store_root)
+    paths = _partition_requests(
+        store,
+        windows_by_symbol=windows_by_symbol,
+        symbols=symbols,
+    )
+    if len(paths) > MAX_READ_PARTITIONS:
+        raise CanonicalCandleEvidenceError(
+            "Canonical candle read exceeded the bounded partition limit."
+        )
+    selected: dict[tuple[str, str], CompletedCanonicalMinuteVersion] = {}
+    observed_versions = 0
+    provisional_versions = 0
+    completed_versions = 0
+    for symbol, session_date, path in paths:
+        if not path.exists():
+            continue
+        try:
+            partition = store.load_partition(symbol, session_date)
+        except SchwabCandleStoreError as exc:
+            raise CanonicalCandleEvidenceError(
+                f"Canonical Schwab candle partition failed validation: {path}"
+            ) from exc
+        for item in partition.get("bars", []):
+            if not isinstance(item, Mapping):
+                raise CanonicalCandleEvidenceError(
+                    "Canonical Schwab candle partition contained an invalid bar."
+                )
+            eligible: list[tuple[datetime, str, Mapping[object, object]]] = []
+            versions = item.get("historyVersions")
+            if not isinstance(versions, list):
+                raise CanonicalCandleEvidenceError(
+                    "Canonical Schwab candle history versions were invalid."
+                )
+            for version in versions:
+                if not isinstance(version, Mapping):
+                    raise CanonicalCandleEvidenceError(
+                        "Canonical Schwab candle history version was invalid."
+                    )
+                original_received = str(version.get("firstReceivedAt", ""))
+                received = _aware_datetime(original_received)
+                if received > evaluated:
+                    continue
+                candle = version.get("candle")
+                if not isinstance(candle, Mapping):
+                    raise CanonicalCandleEvidenceError(
+                        "Canonical Schwab candle history version omitted its candle."
+                    )
+                observed_versions += 1
+                bar_start = _aware_datetime(str(candle.get("timestamp", "")))
+                if received < bar_start + timedelta(minutes=1):
+                    provisional_versions += 1
+                    continue
+                completed_versions += 1
+                eligible.append(
+                    (received, str(version.get("versionId", "")), candle)
+                )
+            if not eligible:
+                continue
+            received, version_id, candle = max(
+                eligible, key=lambda value: (value[0], value[1])
+            )
+            state = _state_as_of(
+                item,
+                canonical_candle=candle,
+                cutoff=evaluated,
+            )
+            bar = _canonical_bar(
+                candle,
+                expected_symbol=symbol,
+                expected_session_date=session_date,
+                state=state,
+            )
+            semantic_identity = hashlib.sha256(
+                json.dumps(
+                    {
+                        "symbol": bar.symbol,
+                        "timestamp": bar.timestamp,
+                        "open": bar.open,
+                        "high": bar.high,
+                        "low": bar.low,
+                        "close": bar.close,
+                        "volume": bar.volume,
+                        "source": bar.source,
+                        "sessionDate": bar.session_date,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                ).encode("ascii")
+            ).hexdigest()
+            identity = (bar.symbol, bar.timestamp)
+            selected[identity] = CompletedCanonicalMinuteVersion(
+                bar=bar,
+                first_received_at=received.isoformat(),
+                original_first_received_at=str(
+                    next(
+                        version.get("firstReceivedAt", "")
+                        for version in versions
+                        if isinstance(version, Mapping)
+                        and str(version.get("versionId", "")) == version_id
+                    )
+                ),
+                bar_end=(
+                    _aware_datetime(bar.timestamp) + timedelta(minutes=1)
+                ).isoformat(),
+                version_id=version_id,
+                semantic_identity=semantic_identity,
+            )
+    return CanonicalMinuteFinalitySnapshot(
+        versions=tuple(
+            sorted(
+                selected.values(),
+                key=lambda value: (value.bar.timestamp, value.bar.symbol),
+            )
+        ),
+        observed_version_count=observed_versions,
+        provisional_version_count=provisional_versions,
+        completed_version_count=completed_versions,
+    )
 
 
 def load_canonical_minute_bars(
@@ -229,6 +381,42 @@ def _canonical_bar(
         state=state,
         session_date=session_date,
     )
+
+
+def _state_as_of(
+    item: Mapping[object, object],
+    *,
+    canonical_candle: Mapping[object, object],
+    cutoff: datetime,
+) -> str:
+    stream_versions = item.get("streamVersions")
+    if not isinstance(stream_versions, list):
+        raise CanonicalCandleEvidenceError(
+            "Canonical Schwab candle stream versions were invalid."
+        )
+    observed = []
+    for version in stream_versions:
+        if not isinstance(version, Mapping):
+            raise CanonicalCandleEvidenceError(
+                "Canonical Schwab candle stream version was invalid."
+            )
+        received = _aware_datetime(str(version.get("firstReceivedAt", "")))
+        candle = version.get("candle")
+        if received <= cutoff and isinstance(candle, Mapping):
+            observed.append((received, str(version.get("versionId", "")), candle))
+    if not observed:
+        return "HISTORY_ONLY_GAP_FILL"
+    stream = max(observed, key=lambda value: (value[0], value[1]))[2]
+    equal = all(
+        math.isclose(
+            _finite_number(stream.get(field), field),
+            _finite_number(canonical_candle.get(field), field),
+            rel_tol=1e-12,
+            abs_tol=1e-12,
+        )
+        for field in ("open", "high", "low", "close", "volume")
+    )
+    return "RECONCILED" if equal else "CORRECTED"
 
 
 def _aware(value: datetime) -> datetime:

@@ -14,7 +14,7 @@ import shutil
 import tempfile
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Mapping
 
@@ -41,6 +41,10 @@ from momentum_hunter.continuous_composition import (
     LifecycleTransitionInput,
     SuccessorSetupEvidence,
 )
+from momentum_hunter.canonical_candle_evidence import (
+    CanonicalMinuteFinalitySnapshot,
+    load_canonical_minute_finality_as_of,
+)
 from momentum_hunter.continuous_tradeplan_producer import (
     ContinuousProducerEvaluation,
     ContinuousProducerRecord,
@@ -56,7 +60,6 @@ from momentum_hunter.intraday_trade_plan import (
 )
 from momentum_hunter.path_transaction import PathTransactionLease
 from momentum_hunter.schwab_candle_contract import EASTERN_TZ
-from momentum_hunter.schwab_candle_store import SchwabCandleStore
 from momentum_hunter.sequential_breakout_research import (
     BREAKOUT_CONFIRMED,
     DATA_UNAVAILABLE,
@@ -169,16 +172,17 @@ class ContinuousNaturalSetupCoordinator:
             for observation in observations:
                 if observation.observation_mode != PROSPECTIVE:
                     continue
-                if observation.fingerprint in known:
+                if observation.source_evidence_fingerprint in known:
                     continue
-                payload = {
+                identity_payload = {
                     "symbol": member.symbol,
                     "providerTimestamp": observation.provider_timestamp,
-                    "receiptTimestamp": observation.receipt_timestamp,
-                    "barFingerprint": observation.fingerprint,
+                    "barFingerprint": observation.source_evidence_fingerprint,
                     "sourceEvidenceFingerprint": observation.source_evidence_fingerprint,
                 }
-                fingerprint = _fingerprint("continuous-completed-bar-material-v1", payload)
+                fingerprint = _fingerprint(
+                    "continuous-completed-bar-material-v2", identity_payload
+                )
                 events.append(
                     CompletedBarMaterialEvent(
                         event_id=f"continuous-completed-bar-{fingerprint[:24]}",
@@ -186,7 +190,7 @@ class ContinuousNaturalSetupCoordinator:
                         provider_timestamp=observation.provider_timestamp,
                         receipt_timestamp=observation.receipt_timestamp,
                         source_fingerprint=fingerprint,
-                        bar_fingerprint=observation.fingerprint,
+                        bar_fingerprint=observation.source_evidence_fingerprint,
                     )
                 )
         return tuple(
@@ -291,10 +295,11 @@ class ContinuousNaturalSetupCoordinator:
                 request_material_fingerprint=request_material_fingerprint,
             )
         unprocessed_bars = tuple(
-            item.fingerprint
+            item.source_evidence_fingerprint
             for item in observations
             if item.observation_mode == PROSPECTIVE
-            if item.fingerprint not in self._processed_material_fingerprints(member.member_id)
+            if item.source_evidence_fingerprint
+            not in self._processed_material_fingerprints(member.member_id)
         )
         if not unprocessed_bars and prior_records:
             latest_payload = json.loads(prior_records[-1].payload_json)
@@ -617,34 +622,22 @@ class ContinuousNaturalSetupCoordinator:
         )
 
     def _observations(self, member: HotUniverseMember, *, cutoff: datetime):
-        from momentum_hunter.canonical_candle_evidence import load_canonical_minute_bars
-
-        completed_cutoff = cutoff - timedelta(seconds=60)
-        bars = tuple(
+        snapshot = self._finality_snapshot(member, cutoff=cutoff)
+        versions = tuple(
             item
-            for item in load_canonical_minute_bars(
-                store_root=self.minute_store_root, symbols=(member.symbol,)
-            ).get(member.symbol, [])
-            if item.session_date == member.session_date
-            and _parse_timestamp(item.timestamp) <= completed_cutoff
+            for item in snapshot.versions
+            if item.bar.session_date == member.session_date
             and datetime.strptime("09:30", "%H:%M").time()
-            <= _parse_timestamp(item.timestamp).astimezone(EASTERN_TZ).time()
+            <= _parse_timestamp(item.bar.timestamp).astimezone(EASTERN_TZ).time()
             < datetime.strptime("16:00", "%H:%M").time()
         )
-        receipts = self._history_receipts(member)
         observations = []
-        for bar in bars:
-            receipt = receipts.get(bar.timestamp)
-            if receipt is None:
-                raise ContinuousNaturalSetupError(
-                    "Canonical completed bar omitted price-history receipt identity."
-                )
-            if receipt > cutoff:
-                continue
+        for version in versions:
+            bar = version.bar
             observations.append(
                 observation_from_canonical_bar(
                     bar,
-                    receipt_timestamp=receipt,
+                    receipt_timestamp=version.first_received_at,
                     observation_mode=(
                         PROSPECTIVE
                         if _parse_timestamp(bar.timestamp)
@@ -655,22 +648,14 @@ class ContinuousNaturalSetupCoordinator:
             )
         return tuple(observations)
 
-    def _history_receipts(self, member: HotUniverseMember) -> dict[str, datetime]:
-        partition = SchwabCandleStore(self.minute_store_root).load_partition(
-            member.symbol, member.session_date
+    def _finality_snapshot(
+        self, member: HotUniverseMember, *, cutoff: datetime
+    ) -> CanonicalMinuteFinalitySnapshot:
+        return load_canonical_minute_finality_as_of(
+            cutoff=cutoff,
+            store_root=self.minute_store_root,
+            symbols=(member.symbol,),
         )
-        receipts: dict[str, datetime] = {}
-        for raw in partition.get("bars", []):
-            if not isinstance(raw, Mapping):
-                continue
-            timestamp = str(raw.get("timestamp", ""))
-            versions = raw.get("historyVersions")
-            if not timestamp or not isinstance(versions, list) or not versions:
-                continue
-            latest = versions[-1]
-            if isinstance(latest, Mapping) and latest.get("firstReceivedAt"):
-                receipts[timestamp] = _parse_timestamp(str(latest["firstReceivedAt"]))
-        return receipts
 
     def _member_records(self, member_id: str) -> tuple[ContinuousProducerRecord, ...]:
         return tuple(
@@ -847,6 +832,13 @@ class NaturalCompositionPreview:
             key: _optional_bytes(path)
             for key, path in owner._authoritative_paths().items()
         }
+        self.original_state_identity = _fingerprint(
+            "continuous-natural-authoritative-state-v1",
+            {
+                key: _optional_sha256(payload)
+                for key, payload in self.original_payloads.items()
+            },
+        )
         staged_targets = {
             "candidateLifecycle": natural_root / "candidate-lifecycle.json",
             "sequentialBreakout": natural_root / "sequential-breakout.json",
@@ -876,6 +868,29 @@ class NaturalCompositionPreview:
         self.committed = True
 
     def __exit__(self, exc_type, exc, traceback) -> None:
+        if exc is not None:
+            setattr(exc, "staging_began", True)
+            setattr(exc, "authoritative_state_changed", self.committed)
+            setattr(
+                exc,
+                "predecessor_lifecycle_identity",
+                self.original_state_identity,
+            )
+            current = {
+                key: _optional_bytes(path)
+                for key, path in self.owner._authoritative_paths().items()
+            }
+            setattr(
+                exc,
+                "current_lifecycle_identity",
+                _fingerprint(
+                    "continuous-natural-authoritative-state-v1",
+                    {
+                        key: _optional_sha256(payload)
+                        for key, payload in current.items()
+                    },
+                ),
+            )
         self._temporary.cleanup()
 
 

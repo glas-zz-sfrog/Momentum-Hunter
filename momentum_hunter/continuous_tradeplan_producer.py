@@ -23,8 +23,7 @@ from momentum_hunter.automatic_candle_backfill import (
     AutomaticCandleBackfillCoordinator,
 )
 from momentum_hunter.canonical_candle_evidence import (
-    CanonicalMinuteBar,
-    load_canonical_minute_bars,
+    load_canonical_minute_finality_as_of,
 )
 from momentum_hunter.continuous_composition import (
     CanonicalEvidenceInput,
@@ -792,13 +791,17 @@ def inspect_historical_context(
     completed_cutoff = evaluated - timedelta(
         seconds=policy.minimum_completed_bar_lag_seconds
     )
-    all_bars = tuple(
-        item
-        for item in load_canonical_minute_bars(
-            store_root=Path(minute_store_root), symbols=(symbol,)
-        ).get(symbol, [])
-        if _parse_timestamp(item.timestamp) <= completed_cutoff
+    finality = load_canonical_minute_finality_as_of(
+        cutoff=evaluated,
+        store_root=Path(minute_store_root),
+        symbols=(symbol,),
     )
+    selected_versions = tuple(
+        item
+        for item in finality.versions
+        if _parse_timestamp(item.bar.timestamp) <= completed_cutoff
+    )
+    all_bars = tuple(item.bar for item in selected_versions)
     current = tuple(
         item
         for item in all_bars
@@ -816,10 +819,14 @@ def inspect_historical_context(
         and str(item.get("sessionDate", "")) < session_date
         and isinstance(item.get("canonicalCandle"), Mapping)
     )
-    minute_receipt = _latest_minute_receipt(
-        minute_store_root=Path(minute_store_root),
-        symbol=symbol,
-        bars=current,
+    current_timestamps = {item.timestamp for item in current}
+    minute_receipt = max(
+        (
+            _parse_timestamp(item.first_received_at)
+            for item in selected_versions
+            if item.bar.timestamp in current_timestamps
+        ),
+        default=None,
     )
     minute_payload = [asdict(item) for item in all_bars]
     daily_identity_payload = [
@@ -837,7 +844,7 @@ def inspect_historical_context(
             "minuteEvidenceFingerprint": minute_fingerprint,
             "dailyEvidenceFingerprint": daily_fingerprint,
             "canonicalOutcomeStatesOnly": True,
-            "provisionalBars": 0,
+            "provisionalBars": finality.provisional_version_count,
         }
     )
     sessions = {item.session_date for item in all_bars}
@@ -880,7 +887,7 @@ def inspect_historical_context(
         "content_fingerprint": content_fingerprint,
         "status": status,
         "blockers": tuple(blockers),
-        "provisional_bar_count": 0,
+        "provisional_bar_count": finality.provisional_version_count,
         "backfill_status": "NOT_REQUESTED",
     }
     context_fingerprint = _fingerprint(context_core)
@@ -1205,33 +1212,6 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         raise ContinuousTradePlanProducerError(
             "Execution-eligible producer record is incomplete or blocked."
         )
-
-
-def _latest_minute_receipt(
-    *, minute_store_root: Path, symbol: str, bars: tuple[CanonicalMinuteBar, ...]
-) -> datetime | None:
-    if not bars:
-        return None
-    wanted = {item.timestamp for item in bars}
-    store = SchwabCandleStore(minute_store_root)
-    receipts: list[datetime] = []
-    for session_date in sorted({item.session_date for item in bars}):
-        partition = store.load_partition(symbol, session_date)
-        for raw in partition.get("bars", []):
-            if not isinstance(raw, Mapping):
-                continue
-            candle = raw.get("canonicalCandle")
-            timestamp = str(candle.get("timestamp", "")) if isinstance(candle, Mapping) else ""
-            normalized = _parse_timestamp(timestamp).astimezone(timezone.utc).isoformat() if timestamp else ""
-            if normalized not in wanted:
-                continue
-            versions = raw.get("historyVersions")
-            if not isinstance(versions, list) or not versions:
-                raise ContinuousTradePlanProducerError(
-                    "Canonical minute bar omitted price-history receipt identity."
-                )
-            receipts.append(_parse_timestamp(str(versions[-1].get("firstReceivedAt", ""))))
-    return max(receipts) if receipts else None
 
 
 def _refingerprint_context(context: HistoricalContextEvidence) -> HistoricalContextEvidence:
