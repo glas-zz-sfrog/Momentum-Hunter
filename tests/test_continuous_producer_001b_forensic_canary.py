@@ -166,6 +166,95 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
         self.assertEqual(1, result["successful"])
         self.assertEqual(1, result["failed"])
 
+    def test_completed_bar_analyzer_reconstructs_valid_and_premature_versions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            partition = (
+                root
+                / "runtime-artifacts"
+                / "market-data"
+                / "minute"
+                / "2026-08-26"
+                / "AAA.json"
+            )
+            partition.parent.mkdir(parents=True)
+
+            def candle(timestamp: str, close: float):
+                return {
+                    "symbol": "AAA",
+                    "timestamp": timestamp,
+                    "sessionDate": "2026-08-26",
+                    "open": 100.0,
+                    "high": 101.0,
+                    "low": 99.0,
+                    "close": close,
+                    "volume": 500.0,
+                    "source": "schwab-trader-api-price-history",
+                    "ohlcvComplete": True,
+                }
+
+            early = candle("2026-08-26T14:30:00+00:00", 100.0)
+            valid = candle("2026-08-26T14:31:00+00:00", 100.5)
+            partition.write_text(
+                json.dumps(
+                    {
+                        "bars": [
+                            {
+                                "historyVersions": [
+                                    {
+                                        "versionId": "early",
+                                        "firstReceivedAt": "2026-08-26T14:30:30+00:00",
+                                        "candle": early,
+                                    }
+                                ]
+                            },
+                            {
+                                "historyVersions": [
+                                    {
+                                        "versionId": "valid",
+                                        "firstReceivedAt": "2026-08-26T14:32:00+00:00",
+                                        "candle": valid,
+                                    }
+                                ]
+                            },
+                        ]
+                    }
+                ),
+                encoding="ascii",
+            )
+
+            def event_for(value, occurred_at):
+                semantic = self.tool._canonical_bar_semantic_identity(value)
+                provider_timestamp = value["timestamp"]
+                source = self.tool._fingerprint(
+                    "continuous-completed-bar-material-v2",
+                    {
+                        "symbol": "AAA",
+                        "providerTimestamp": provider_timestamp,
+                        "barFingerprint": semantic,
+                        "sourceEvidenceFingerprint": semantic,
+                    },
+                )
+                return {
+                    "event_id": f"continuous-completed-bar-{source[:24]}",
+                    "trigger": "CANONICAL_BAR_COMPLETED",
+                    "occurred_at": occurred_at,
+                    "symbol": "AAA",
+                    "source_fingerprint": source,
+                }
+
+            result = self.tool._completed_bar_finality_accounting(
+                root,
+                (
+                    event_for(early, "2026-08-26T14:30:30+00:00"),
+                    event_for(valid, "2026-08-26T14:32:00+00:00"),
+                ),
+            )
+
+        self.assertEqual(1, result["prematureCompletedEventCount"])
+        self.assertEqual(1, result["validCompletedEventCount"])
+        self.assertEqual(0, result["unmatchedEventCount"])
+
 
 if __name__ == "__main__":
     unittest.main()

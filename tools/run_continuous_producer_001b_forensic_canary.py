@@ -1,4 +1,4 @@
-"""Provider-backed, research-only forensic canary for Producer-001B.
+"""Provider-backed, research-only forensic canary for Producer-001C.
 
 This task-only launcher imports Momentum Hunter from an explicitly pinned clean
 canonical checkout. It never imports broker, account-snapshot, Paper, Shadow,
@@ -20,15 +20,15 @@ import sys
 import time
 import zipfile
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePath
 from typing import Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 
-EXPECTED_CANONICAL_SHA = "01f0c2ece0370db86a9c982a9926cdf8f37fd63b"
+EXPECTED_CANONICAL_SHA = "4690dbf193355bc7a39c6c74e531344ea8a37875"
 EXPECTED_PRODUCTION_SHA = "82460b3313b86c34dff4ffb737d2c04bf02e3ace"
-EXPECTED_TASK_BRANCH = "codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B"
+EXPECTED_TASK_BRANCH = "codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001C"
 EXPECTED_FORENSIC_STANDARD_SHA256 = (
     "8B3A7F161BA393DACCED20C92B6B544C3893D201A97F76B370980DA884940303"
 )
@@ -36,6 +36,20 @@ FORENSIC_STANDARD_PATH = Path(
     r"C:\Users\steve\OneDrive\Documents\ArgusReviewBundles"
     r"\ARGUS-CONTINUOUS-PRODUCER-001A-FORENSIC-EVIDENCE-STANDARD"
     r"\ARGUS-DIRECTIVE-PRODUCER-001A-FORENSIC-EVIDENCE-STANDARD.md"
+)
+FAILED_001A_ZIP = Path(
+    r"C:\Users\steve\OneDrive\Documents\ArgusReviewBundles"
+    r"\ARGUS-CONTINUOUS-PRODUCER-001A-FORENSIC-CANARY-20260826-REGULAR-72E35B7-SECOND-EYE.zip"
+)
+FAILED_001A_ZIP_SHA256 = (
+    "E74B675DD24CA3E0EDFE0203F76197CAB35D1FA074E4FF322621DFDBC7F00345"
+)
+FAILED_001B_ZIP = Path(
+    r"C:\Users\steve\OneDrive\Documents\ArgusReviewBundles"
+    r"\ARGUS-CONTINUOUS-PRODUCER-001B-FORENSIC-CANARY-20260826-REGULAR-01F0C2E-SECOND-EYE-V2.zip"
+)
+FAILED_001B_ZIP_SHA256 = (
+    "A4609AA3562D5705D88DF13498F7EBAEAB7E6A615910B4445887625B60EE371B"
 )
 EXTERNAL_PARENT = Path(
     r"C:\Users\steve\OneDrive\Documents\ArgusReviewBundles"
@@ -45,7 +59,7 @@ EASTERN = ZoneInfo("America/New_York")
 ACCOUNT_ENV = "MH_CANARY_EXPECTED_ACCOUNT_ENDING"
 CANONICAL_ENV = "MH_CANARY_CANONICAL_ROOT"
 PRODUCTION_ENV = "MH_CANARY_PRODUCTION_ROOT"
-CANARY_PROFILE = "producer-001b-provider-forensic-canary-v1"
+CANARY_PROFILE = "producer-001c-provider-forensic-canary-v1"
 AUTHORITY = "RESEARCH_ONLY"
 EXECUTION_AUTHORITY = "NONE"
 ORDER_CAPABILITY = "UNAVAILABLE"
@@ -77,6 +91,12 @@ from momentum_hunter.continuous_evidence_writer import (  # noqa: E402
     build_continuous_writer_topology_v2,
     create_ephemeral_writer_capability,
     read_evidence_snapshot,
+)
+from momentum_hunter.continuous_attempt_ledger import (  # noqa: E402
+    ATTEMPT_FAILED,
+    ATTEMPT_STARTED,
+    ATTEMPT_SUCCEEDED,
+    ContinuousAttemptLedger,
 )
 from momentum_hunter.continuous_live_qualification import (  # noqa: E402
     LiveCompositionSource,
@@ -290,6 +310,28 @@ def _validate_standard() -> dict[str, object]:
     }
 
 
+def _validate_failed_evidence() -> dict[str, object]:
+    items = []
+    for task, path, expected in (
+        ("PRODUCER_001A", FAILED_001A_ZIP, FAILED_001A_ZIP_SHA256),
+        ("PRODUCER_001B", FAILED_001B_ZIP, FAILED_001B_ZIP_SHA256),
+    ):
+        if not path.is_file():
+            raise ForensicCanaryError(f"Preserved {task} ZIP is missing.")
+        observed = _sha256(path)
+        if observed != expected:
+            raise ForensicCanaryError(f"Preserved {task} ZIP hash differs.")
+        items.append(
+            {
+                "task": task,
+                "path": str(path),
+                "sha256": observed,
+                "status": "VERIFIED_UNCHANGED",
+            }
+        )
+    return {"status": "PASS", "items": items}
+
+
 def _validate_external_root(root: Path, *, require_new: bool) -> Path:
     resolved = root.expanduser().resolve(strict=False)
     try:
@@ -372,7 +414,7 @@ def _owner_identity(owner: object) -> dict[str, object]:
         "sourceSha256": _sha256(source_path),
         "firstLine": first_line,
         "sourceFingerprint": _fingerprint(
-            "producer-001b-owner-source-v1", "".join(lines)
+            "producer-001c-owner-source-v1", "".join(lines)
         ),
     }
 
@@ -535,7 +577,7 @@ def _ownership_map() -> dict[str, object]:
     wrapper_scan = _wrapper_authority_scan()
     result = {
         "schemaVersion": 1,
-        "profile": "producer-001b-forensic-canonical-ownership-map-v1",
+        "profile": "producer-001c-forensic-canonical-ownership-map-v1",
         "canonicalSourceSha": EXPECTED_CANONICAL_SHA,
         "status": wrapper_scan["status"],
         "stages": [
@@ -575,7 +617,7 @@ def _ownership_map() -> dict[str, object]:
         },
     }
     result["fingerprint"] = _fingerprint(
-        "producer-001b-forensic-ownership-map-v1", result
+        "producer-001c-forensic-ownership-map-v1", result
     )
     return result
 
@@ -601,7 +643,7 @@ def _file_manifest(
 
 
 def _manifest_fingerprint(items: Iterable[Mapping[str, object]]) -> str:
-    return _fingerprint("producer-001b-forensic-file-manifest-v1", list(items))
+    return _fingerprint("producer-001c-forensic-file-manifest-v1", list(items))
 
 
 def _selected_production_hashes() -> dict[str, object]:
@@ -696,7 +738,7 @@ def _production_baseline(label: str) -> dict[str, object]:
         "orderCapability": ORDER_CAPABILITY,
     }
     result["fingerprint"] = _fingerprint(
-        "producer-001b-forensic-production-baseline-v1", result
+        "producer-001c-forensic-production-baseline-v1", result
     )
     return result
 
@@ -728,10 +770,10 @@ def _runtime_config(campaign: Mapping[str, object]) -> ContinuousRuntimeConfig:
 def _topology(campaign: Mapping[str, object], config: ContinuousRuntimeConfig):
     return build_continuous_writer_topology_v2(
         root_path=Path(str(campaign["runtimeRoot"])) / "writer",
-        evidence_program_id="producer-001b-forensic-canary",
+        evidence_program_id="producer-001c-forensic-canary",
         configuration_fingerprint=config.fingerprint,
         runtime_build_hash=_fingerprint(
-            "producer-001b-canonical-runtime-build-v1",
+            "producer-001c-canonical-runtime-build-v1",
             str(campaign["canonicalSourceSha"]),
         ),
     )
@@ -824,6 +866,12 @@ def _state_snapshot(
         "runtimeCompletedBarCounter": int(
             checkpoint.get("counters", {}).get("completed_bar_events", 0)
         ),
+        "attemptLedgerCount": len(runtime.attempt_history),
+        "attemptLedgerHead": (
+            runtime.attempt_history[-1].event_id
+            if runtime.attempt_history
+            else None
+        ),
         "backfillAccounting": backfill_accounting,
         "immutableFileManifest": _file_manifest(runtime_root, include=immutable_files),
         "accountValuesRequested": False,
@@ -835,7 +883,7 @@ def _state_snapshot(
         snapshot["immutableFileManifest"]
     )
     snapshot["fingerprint"] = _fingerprint(
-        "producer-001b-forensic-phase-state-v1", snapshot
+        "producer-001c-forensic-phase-state-v1", snapshot
     )
     return snapshot
 
@@ -980,7 +1028,7 @@ def _run_phase(campaign_path: Path, phase: int) -> int:
             "orderCapability": ORDER_CAPABILITY,
         }
         receipt["fingerprint"] = _fingerprint(
-            "producer-001b-forensic-phase-receipt-v1", receipt
+            "producer-001c-forensic-phase-receipt-v1", receipt
         )
         _write_once(evidence_root / f"phase-{phase}-state.json", _sanitize(snapshot))
         _write_once(evidence_root / f"phase-{phase}-receipt.json", receipt)
@@ -1087,6 +1135,7 @@ def _run_campaign(args: argparse.Namespace) -> int:
     canonical = _validate_canonical()
     task_source = _validate_task_source()
     standard = _validate_standard()
+    failed_evidence = _validate_failed_evidence()
     ownership = _ownership_map()
     if ownership["status"] != "PASS":
         raise ForensicCanaryError(
@@ -1104,8 +1153,8 @@ def _run_campaign(args: argparse.Namespace) -> int:
     runtime_root.mkdir(parents=True)
     started = datetime.now().astimezone()
     attempt_id = evidence_root.name.lower().replace("_", "-")
-    runtime_identity = f"producer-001b-forensic-{started.strftime('%Y%m%d')}"
-    runtime_instance = f"producer-001b-forensic-{_fingerprint('attempt', attempt_id)[:24]}"
+    runtime_identity = f"producer-001c-forensic-{started.strftime('%Y%m%d')}"
+    runtime_instance = f"producer-001c-forensic-{_fingerprint('attempt', attempt_id)[:24]}"
     first_duration = args.duration_seconds // 2
     second_duration = args.duration_seconds - first_duration
     campaign = {
@@ -1135,9 +1184,12 @@ def _run_campaign(args: argparse.Namespace) -> int:
         "orderCapability": ORDER_CAPABILITY,
     }
     campaign["configurationFingerprint"] = _fingerprint(
-        "producer-001b-forensic-campaign-config-v1", campaign
+        "producer-001c-forensic-campaign-config-v1", campaign
     )
     _write_once(evidence_root / "forensic-standard-verification.json", standard)
+    _write_once(
+        evidence_root / "failed-evidence-preservation.json", failed_evidence
+    )
     _write_once(evidence_root / "canonical-ownership-map.json", ownership)
     _write_once(evidence_root / "production-baseline-before.json", _production_baseline("BEFORE"))
     campaign_path = evidence_root / "campaign-config.json"
@@ -1228,6 +1280,138 @@ def _producer_steps(records: Iterable[Mapping[str, object]]) -> list[dict[str, o
     return steps
 
 
+def _attempt_events(
+    evidence_root: Path,
+    *,
+    runtime_identity: str,
+    configuration_fingerprint: str,
+) -> list[dict[str, object]]:
+    root = (
+        evidence_root
+        / "runtime-artifacts"
+        / "checkpoint"
+        / f"{runtime_identity}-attempts"
+    )
+    ledger = ContinuousAttemptLedger(
+        root,
+        runtime_identity=runtime_identity,
+        configuration_fingerprint=configuration_fingerprint,
+    )
+    return [asdict(item) for item in ledger.events]
+
+
+def _canonical_bar_semantic_identity(candle: Mapping[str, object]) -> str:
+    timestamp = _parse_timestamp(str(candle.get("timestamp", "")))
+    payload = {
+        "symbol": str(candle.get("symbol", "")).strip().upper(),
+        "timestamp": timestamp.astimezone(timezone.utc).isoformat(),
+        "open": float(candle["open"]),
+        "high": float(candle["high"]),
+        "low": float(candle["low"]),
+        "close": float(candle["close"]),
+        "volume": float(candle["volume"]),
+        "source": str(candle.get("source", "")),
+        "sessionDate": str(candle.get("sessionDate", "")),
+    }
+    return hashlib.sha256(
+        json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("ascii")
+    ).hexdigest()
+
+
+def _completed_bar_finality_accounting(
+    evidence_root: Path,
+    completed_bar_events: Iterable[Mapping[str, object]],
+) -> dict[str, object]:
+    completed_bar_events = list(completed_bar_events)
+    minute_root = evidence_root / "runtime-artifacts" / "market-data" / "minute"
+    versions: list[dict[str, object]] = []
+    for path in sorted(minute_root.glob("*/*.json")):
+        partition = json.loads(path.read_text(encoding="ascii"))
+        for raw_bar in partition.get("bars", []):
+            if not isinstance(raw_bar, Mapping):
+                continue
+            for version in raw_bar.get("historyVersions", []):
+                if not isinstance(version, Mapping):
+                    continue
+                candle = version.get("candle")
+                if not isinstance(candle, Mapping):
+                    continue
+                semantic = _canonical_bar_semantic_identity(candle)
+                provider_timestamp = _parse_timestamp(
+                    str(candle.get("timestamp", ""))
+                ).astimezone(timezone.utc).isoformat()
+                identity_payload = {
+                    "symbol": str(candle.get("symbol", "")).strip().upper(),
+                    "providerTimestamp": provider_timestamp,
+                    "barFingerprint": semantic,
+                    "sourceEvidenceFingerprint": semantic,
+                }
+                material_fingerprint = _fingerprint(
+                    "continuous-completed-bar-material-v2", identity_payload
+                )
+                received = _parse_timestamp(str(version.get("firstReceivedAt", "")))
+                bar_end = _parse_timestamp(provider_timestamp) + timedelta(minutes=1)
+                versions.append(
+                    {
+                        "eventId": (
+                            f"continuous-completed-bar-{material_fingerprint[:24]}"
+                        ),
+                        "sourceFingerprint": material_fingerprint,
+                        "symbol": identity_payload["symbol"],
+                        "providerTimestamp": provider_timestamp,
+                        "firstReceivedAt": received.isoformat(),
+                        "barEnd": bar_end.isoformat(),
+                        "validCompleted": received >= bar_end,
+                        "versionId": version.get("versionId"),
+                        "semanticIdentity": semantic,
+                        "partition": path.relative_to(evidence_root).as_posix(),
+                    }
+                )
+    valid_events = []
+    premature_events = []
+    unmatched_events = []
+    for event in completed_bar_events:
+        event_id = str(event.get("event_id", ""))
+        occurred = _parse_timestamp(str(event.get("occurred_at", "")))
+        matches = [
+            item
+            for item in versions
+            if item["eventId"] == event_id
+            and _parse_timestamp(str(item["firstReceivedAt"])) == occurred
+        ]
+        if len(matches) != 1:
+            unmatched_events.append(
+                {"event": dict(event), "candidateVersionCount": len(matches)}
+            )
+            continue
+        detail = {"event": dict(event), "version": matches[0]}
+        if matches[0]["validCompleted"]:
+            valid_events.append(detail)
+        else:
+            premature_events.append(detail)
+    return {
+        "observedHistoryVersionCount": len(versions),
+        "provisionalHistoryVersionCount": sum(
+            1 for item in versions if not item["validCompleted"]
+        ),
+        "semanticallyCompletedHistoryVersionCount": sum(
+            1 for item in versions if item["validCompleted"]
+        ),
+        "dispatchedEventCount": len(completed_bar_events),
+        "validCompletedEventCount": len(valid_events),
+        "prematureCompletedEventCount": len(premature_events),
+        "unmatchedEventCount": len(unmatched_events),
+        "validEvents": valid_events,
+        "prematureEvents": premature_events,
+        "unmatchedEvents": unmatched_events,
+    }
+
+
 def _analyze(evidence_root: Path) -> dict[str, object]:
     campaign = json.loads(
         (evidence_root / "campaign-config.json").read_text(encoding="ascii")
@@ -1239,6 +1423,11 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         / f"{campaign['runtimeIdentity']}.json"
     )
     checkpoint = json.loads(checkpoint_path.read_text(encoding="ascii"))
+    physical_atomicity = json.loads(
+        (evidence_root / "physical-atomicity-proof.json").read_text(
+            encoding="ascii"
+        )
+    )
     completed_bar_events = [
         dict(item)
         for item in checkpoint.get("event_records", [])
@@ -1247,6 +1436,29 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
     ]
     completed_bar_counter = int(
         checkpoint.get("counters", {}).get("completed_bar_events", 0)
+    )
+    attempt_events = _attempt_events(
+        evidence_root,
+        runtime_identity=str(campaign["runtimeIdentity"]),
+        configuration_fingerprint=str(checkpoint["config_fingerprint"]),
+    )
+    attempt_starts = [
+        item for item in attempt_events if item["event_type"] == ATTEMPT_STARTED
+    ]
+    attempt_failures = [
+        item for item in attempt_events if item["event_type"] == ATTEMPT_FAILED
+    ]
+    attempt_successes = [
+        item for item in attempt_events if item["event_type"] == ATTEMPT_SUCCEEDED
+    ]
+    composition_attempts = [
+        item for item in attempt_starts if item["stage"] == "COMPOSITION"
+    ]
+    composition_failures = [
+        item for item in attempt_failures if item["stage"] == "COMPOSITION"
+    ]
+    finality = _completed_bar_finality_accounting(
+        evidence_root, completed_bar_events
     )
     backfill_accounting = _backfill_accounting(
         evidence_root
@@ -1383,6 +1595,31 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         phase2_records.get(key) == value for key, value in phase1_records.items()
     )
     duplicate_ids = len(phase2_records) != len(phase2.get("producerRecords", []))
+    phase1_health = phase1.get("runtimeHealth", {})
+    phase2_health = phase2.get("runtimeHealth", {})
+    phase1_compositions = int(phase1_health.get("composition_cycles", 0) or 0)
+    phase2_compositions = int(phase2_health.get("composition_cycles", 0) or 0)
+    accepted_before_restart = phase1_compositions > 0
+    post_restart_composition = phase2_compositions > phase1_compositions
+    attempt_restart_continuity = (
+        int(phase2.get("attemptLedgerCount", 0))
+        >= int(phase1.get("attemptLedgerCount", 0))
+        and (
+            not phase1.get("attemptLedgerHead")
+            or any(
+                item["event_id"] == phase1.get("attemptLedgerHead")
+                for item in attempt_events
+            )
+        )
+    )
+    attempt_process_ids = sorted(
+        {
+            int(item["process_id"])
+            for item in attempt_events
+            if int(item.get("process_id", 0)) > 0
+        }
+    )
+    attempt_physical_restart = len(attempt_process_ids) >= 2
     backfill_rows = 0
     for item in admissions:
         backfill = item.get("backfill") or {}
@@ -1398,7 +1635,93 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
     launch = _parse_timestamp(str(campaign["campaignStartedAt"]))
     no_five_bar_wait = bool(earliest and (earliest - launch).total_seconds() < 300)
     has_qualified = qualifying > 0
+    first_observed = {
+        str(item.get("symbol", "")): _parse_timestamp(
+            str(item.get("first_observed_at"))
+        )
+        for phase in (phase1, phase2)
+        for item in (phase.get("hotUniverse") or {}).get("members", [])
+        if item.get("symbol") and item.get("first_observed_at")
+    }
+    prospective_floor_preserved = all(
+        event.get("symbol") in first_observed
+        and _parse_timestamp(str(event.get("provider_timestamp")))
+        >= first_observed[str(event.get("symbol"))]
+        for event in completed_bar_events
+    )
+    truthful_counters = (
+        completed_bar_counter == len(completed_bar_events)
+        and int(phase2_health.get("composition_attempts_started", -1))
+        == len(composition_attempts)
+        and int(phase2_health.get("composition_attempts_failed", -1))
+        == len(composition_failures)
+        and int(phase2_health.get("composition_cycles", -1))
+        == len(compositions)
+        and int(phase2_health.get("unique_ready_symbols", -1))
+        <= int(phase2_health.get("ready_members", -1))
+    )
+    atomic_proof = physical_atomicity.get("proof", {})
+    atomicity_passed = (
+        physical_atomicity.get("classification")
+        == "ATOMIC_COMPOSITION_PHYSICAL_PROOF_PASSED"
+    )
+    exact_failure_diagnostics = atomicity_passed and any(
+        item.get("event_type") == ATTEMPT_FAILED
+        and item.get("exception_class") == "RuntimeError"
+        and item.get("diagnostic_code") == "RuntimeError"
+        and item.get("message") == "producer-001c physical staged failure"
+        and item.get("canonical_request_cutoff")
+        and item.get("canonical_evidence_known_at")
+        for item in physical_atomicity.get("attemptEvents", [])
+    )
     classifications = {
+        "CANONICAL_TIME_IDENTITY_REPAIRED": "YES" if compositions and anti_hindsight else "NO",
+        "EQUIVALENT_OFFSET_INSTANTS_ACCEPTED": "YES" if compositions and anti_hindsight else "NO",
+        "DISTINCT_INSTANTS_REJECTED": "YES_OFFLINE_PROOF",
+        "ANTI_HINDSIGHT_GATE_PRESERVED": "YES" if compositions and anti_hindsight else "NO",
+        "COMPLETED_BAR_FINALITY_REPAIRED": (
+            "YES"
+            if finality["prematureCompletedEventCount"] == 0
+            and finality["unmatchedEventCount"] == 0
+            and finality["validCompletedEventCount"] > 0
+            else "NO"
+        ),
+        "PREMATURE_COMPLETED_BAR_EVENTS": finality["prematureCompletedEventCount"],
+        "VALID_COMPLETED_BAR_EVENTS": finality["validCompletedEventCount"],
+        "APPEND_ONLY_FAILURE_CHRONOLOGY": (
+            "YES"
+            if len(attempt_events) == int(checkpoint.get("attempt_ledger_count", -1))
+            and (
+                not attempt_events
+                or attempt_events[-1]["event_id"]
+                == checkpoint.get("attempt_ledger_head")
+            )
+            else "NO"
+        ),
+        "EXACT_COMPOSITION_FAILURE_DIAGNOSTICS": (
+            "YES" if exact_failure_diagnostics else "NO"
+        ),
+        "TRUTHFUL_STAGE_COUNTERS": "YES" if truthful_counters else "NO",
+        "ATOMIC_FAILED_COMPOSITION_NONMUTATION": (
+            "YES"
+            if atomicity_passed
+            and atomic_proof.get("failureWasByteIdentical") is True
+            and atomic_proof.get("failureCheckpointProjectionWasIdentical")
+            is True
+            and atomic_proof.get("restartRecoveredNoPhantomState") is True
+            and atomic_proof.get("failureChangedAuthoritativeState") is False
+            else "NO"
+        ),
+        "VALID_COMPOSITION_SINGLE_COMMIT": (
+            "YES"
+            if atomicity_passed
+            and atomic_proof.get("validCompositionCommittedOnce") is True
+            and atomic_proof.get("duplicateReplayWasIdempotent") is True
+            else "NO"
+        ),
+        "PROSPECTIVE_FLOOR_INTEGRITY": (
+            "YES" if completed_bar_events and prospective_floor_preserved else "NO"
+        ),
         "REAL_PROVIDER_DISCOVERY_PROVEN": "YES" if len(discoveries) >= 2 and pages >= 2 else "NO",
         "NATURAL_HOT_UNIVERSE_ADMISSION_PROVEN": (
             "YES" if hot_transitions and has_qualified else "NO_QUALIFIED_CANDIDATE" if not has_qualified else "NO"
@@ -1415,10 +1738,13 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "HISTORICAL_CONTEXT_FORENSICALLY_RECONSTRUCTABLE": (
             "YES" if compositions and history_reconstructable else "NO"
         ),
-        "REAL_COMPLETED_BAR_EVENT_PROVEN": (
+        "REAL_COMPLETED_BAR_DISPATCH_PROVEN": (
             "YES"
             if completed_bar_events
             and completed_bar_counter == len(completed_bar_events)
+            and finality["validCompletedEventCount"] == len(completed_bar_events)
+            and finality["prematureCompletedEventCount"] == 0
+            and finality["unmatchedEventCount"] == 0
             else "NO"
         ),
         "NATURAL_MATERIAL_REEVALUATION_PROVEN": (
@@ -1429,12 +1755,26 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         ),
         "NATURAL_SUCCESSOR_SETUP_OBSERVED": "YES" if successors else "NO",
         "NO_ARBITRARY_FIVE_BAR_WAIT_PHYSICALLY_PROVEN": "YES" if no_five_bar_wait else "NO",
-        "RESTART_RECONSTRUCTION_PHYSICALLY_PROVEN": (
-            "YES" if restart_continuity and not duplicate_ids else "NO"
+        "END_TO_END_PRODUCER_RESTART_PROVEN": (
+            "YES"
+            if restart_continuity
+            and attempt_restart_continuity
+            and attempt_physical_restart
+            and accepted_before_restart
+            and post_restart_composition
+            and not duplicate_ids
+            else "NO"
         ),
-        "ANTI_HINDSIGHT_CHRONOLOGY_PROVEN": (
-            "YES" if compositions and anti_hindsight else "NO"
+        "ACCEPTED_COMPOSITION_CYCLE_PROVEN": (
+            "YES" if phase2_compositions > 0 and compositions else "NO"
         ),
+        "NATURAL_NO_PLAN_OR_TRADEPLAN_COMMITTED": (
+            "YES" if phase2_records and (plans or no_plans) else "NO"
+        ),
+        "FAILED_001A_AND_001B_EVIDENCE_PRESERVED": "YES",
+        "SECOND_EYE_ZIP_SELF_CONTAINED": "PENDING",
+        "READY_FOR_SECOND_EYE_REVIEW": "NO",
+        "MERGE_AUTHORIZED": "NO",
         "UNKNOWN_INSTRUMENT_EXECUTION_ELIGIBILITY": "BLOCKED" if instrument_blocked else "ANOMALY",
         "PAPER_OR_EXECUTION_AUTHORITY_USED": "NO",
     }
@@ -1443,7 +1783,10 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "admissions": admissions,
         "compositionRecords": compositions,
         "completedBarEvents": completed_bar_events,
+        "completedBarFinality": finality,
         "completedBarReevaluations": completed_bar_reevaluations,
+        "attemptEvents": attempt_events,
+        "physicalAtomicityProof": physical_atomicity,
         "backfillAccounting": backfill_accounting,
         "tradePlans": plans,
         "truthfulNoPlans": no_plans,
@@ -1467,21 +1810,36 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "schwabBackfillSuccesses": int(backfill_accounting["successful"]),
         "schwabBackfillFailures": int(backfill_accounting["failed"]),
         "compositionCount": len(compositions),
+        "acceptedCompositionCycleCount": phase2_compositions,
+        "compositionAttemptCount": len(composition_attempts),
+        "compositionAttemptFailureCount": len(composition_failures),
+        "attemptEventCount": len(attempt_events),
+        "attemptStartCount": len(attempt_starts),
+        "attemptSuccessCount": len(attempt_successes),
+        "attemptFailureCount": len(attempt_failures),
         "completedBarEventCount": len(completed_bar_events),
         "completedBarEventCounter": completed_bar_counter,
         "completedBarEventAccountingMatches": (
             completed_bar_counter == len(completed_bar_events)
         ),
         "completedBarReevaluationCount": len(completed_bar_reevaluations),
+        "completedBarFinality": finality,
         "tradePlanCount": len(plans),
         "truthfulNoPlanCount": len(no_plans),
         "successorSetupCount": len(successors),
         "physicalRestart": process_restart,
         "restartContinuity": restart_continuity,
+        "attemptRestartContinuity": attempt_restart_continuity,
+        "attemptPhysicalProcessRestart": attempt_physical_restart,
+        "attemptProcessIds": attempt_process_ids,
+        "acceptedCompositionBeforeRestart": accepted_before_restart,
+        "postRestartCompositionCycle": post_restart_composition,
         "duplicateProducerIdentity": duplicate_ids,
+        "truthfulCounters": truthful_counters,
+        "prospectiveFloorPreserved": prospective_floor_preserved,
         "classifications": classifications,
         "timelineFingerprint": _fingerprint(
-            "producer-001b-forensic-timeline-v1", timeline
+            "producer-001c-forensic-timeline-v1", timeline
         ),
         "authority": AUTHORITY,
         "executionAuthority": EXECUTION_AUTHORITY,
@@ -1491,7 +1849,7 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "orderCapability": ORDER_CAPABILITY,
     }
     result["fingerprint"] = _fingerprint(
-        "producer-001b-forensic-analysis-v1", result
+        "producer-001c-forensic-analysis-v1", result
     )
     return {"analysis": result, "timeline": timeline}
 
@@ -1521,6 +1879,8 @@ def _seal(args: argparse.Namespace) -> int:
     required = (
         "campaign-config.json",
         "canonical-ownership-map.json",
+        "failed-evidence-preservation.json",
+        "physical-atomicity-proof.json",
         "phase-1-state.json",
         "phase-1-receipt.json",
         "phase-2-state.json",
@@ -1531,6 +1891,12 @@ def _seal(args: argparse.Namespace) -> int:
     missing = [name for name in required if not (root / name).is_file()]
     if missing:
         raise ForensicCanaryError(f"Canary evidence is incomplete: {missing}")
+    preserved_now = _validate_failed_evidence()
+    preserved_before = json.loads(
+        (root / "failed-evidence-preservation.json").read_text(encoding="ascii")
+    )
+    if preserved_now != preserved_before:
+        raise ForensicCanaryError("Failed Producer evidence changed during canary.")
     after = _production_baseline("AFTER")
     _write_once(root / "production-baseline-after.json", after)
     before = json.loads(
@@ -1762,6 +2128,10 @@ def _verify(args: argparse.Namespace) -> int:
         raise ForensicCanaryError("Verification evidence already exists.")
     python = sys.executable
     focused_modules = (
+        "tests.test_continuous_attempt_ledger",
+        "tests.test_continuous_time_identity",
+        "tests.test_continuous_candle_finality",
+        "tests.test_continuous_producer_001c_atomicity_proof",
         "tests.test_continuous_producer_001b_forensic_canary",
         "tests.test_continuous_live_qualification",
         "tests.test_continuous_canary_hardening",
@@ -1797,6 +2167,7 @@ def _verify(args: argparse.Namespace) -> int:
                 "compileall",
                 "-q",
                 "momentum_hunter",
+                "tools/run_continuous_producer_001c_atomicity_proof.py",
                 "tools/run_continuous_producer_001b_forensic_canary.py",
             ),
             600,
@@ -1902,6 +2273,10 @@ def _copy_package_tree(
 
 def _package_focus_modules() -> tuple[str, ...]:
     return (
+        "tests.test_continuous_attempt_ledger",
+        "tests.test_continuous_time_identity",
+        "tests.test_continuous_candle_finality",
+        "tests.test_continuous_producer_001c_atomicity_proof",
         "tests.test_continuous_producer_001b_forensic_canary",
         "tests.test_continuous_live_qualification",
         "tests.test_continuous_canary_hardening",
@@ -1975,7 +2350,7 @@ def _render_package_index(
 ) -> str:
     stages = ownership.get("stages", [])
     lines = [
-        "# Producer-001B Forensic Canary Second-Eye Packet",
+        "# Producer-001C Forensic Canary Second-Eye Packet",
         "",
         f"Canonical source: `{EXPECTED_CANONICAL_SHA}`",
         f"Evidence: `evidence/{root.name}`",
@@ -2006,8 +2381,9 @@ def _render_package_index(
             "- `source/momentum_hunter/`: complete canonical local package, sanitized only where the local account-binding identity appeared.",
             "- `source/tests/`: complete canonical tests plus the canary wrapper tests.",
             "- `source/tools/capture_job.py`: local source dependency read by the packaged hot-universe boundary test.",
+            "- `source/tools/run_continuous_producer_001c_atomicity_proof.py`: deterministic disposable physical atomicity proof using production runtime/composition classes.",
             "- `source/tools/run_continuous_producer_001b_forensic_canary.py`: exact canary wrapper.",
-            "- `references/`: binding standard, Roadmap snapshot, Producer-001B charters, and the prior Producer-001A release record.",
+            "- `references/`: binding standard, Roadmap snapshot, Producer-001B/001C charters, canary charter, and the prior Producer-001A release record.",
             "- `PACKAGE-SANITIZATION-LEDGER.json`: every source substitution and original/sanitized hashes.",
             "- `PACKAGE-MANIFEST.json`: per-file hashes for archive verification.",
             "",
@@ -2109,6 +2485,14 @@ def _package(args: argparse.Namespace) -> int:
         CANONICAL_ROOT / "tools" / "capture_job.py",
         source_destination / "tools" / "capture_job.py",
     )
+    shutil.copy2(
+        CANONICAL_ROOT
+        / "tools"
+        / "run_continuous_producer_001c_atomicity_proof.py",
+        source_destination
+        / "tools"
+        / "run_continuous_producer_001c_atomicity_proof.py",
+    )
     shutil.copy2(Path(__file__).resolve(), source_destination / "tools" / Path(__file__).name)
     shutil.copy2(
         Path(__file__).resolve().parents[1]
@@ -2140,12 +2524,28 @@ def _package(args: argparse.Namespace) -> int:
         references / "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B.md",
     )
     shutil.copy2(
+        CANONICAL_ROOT
+        / "docs"
+        / "argus-office"
+        / "goal-charters"
+        / "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001C.md",
+        references / "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001C.md",
+    )
+    shutil.copy2(
         Path(__file__).resolve().parents[1]
         / "docs"
         / "argus-office"
         / "goal-charters"
         / "ARGUS-CONTINUOUS-PRODUCER-001B-FORENSIC-CANARY.md",
         references / "ARGUS-CONTINUOUS-PRODUCER-001B-FORENSIC-CANARY.md",
+    )
+    shutil.copy2(
+        Path(__file__).resolve().parents[1]
+        / "docs"
+        / "argus-office"
+        / "goal-charters"
+        / "ARGUS-CONTINUOUS-PRODUCER-001C-FORENSIC-CANARY.md",
+        references / "ARGUS-CONTINUOUS-PRODUCER-001C-FORENSIC-CANARY.md",
     )
     shutil.copy2(FORENSIC_STANDARD_PATH, references / FORENSIC_STANDARD_PATH.name)
     ownership = json.loads(
@@ -2228,7 +2628,7 @@ def _package(args: argparse.Namespace) -> int:
     package_files = _file_manifest(package_root)
     package_manifest = {
         "schemaVersion": 1,
-        "profile": "producer-001b-second-eye-package-v1",
+        "profile": "producer-001c-second-eye-package-v1",
         "files": package_files,
         "fileCount": len(package_files),
         "manifestFingerprint": _manifest_fingerprint(package_files),
@@ -2327,6 +2727,7 @@ def _preflight() -> int:
         "canaryTaskSource": _validate_task_source(),
         "productionCanonical": _validate_production(),
         "forensicStandard": _validate_standard(),
+        "failedEvidence": _validate_failed_evidence(),
         "capabilityScan": _static_capability_scan(),
         "canonicalOwnershipMap": ownership,
         "services": _service_snapshot(),
@@ -2348,7 +2749,7 @@ def _preflight() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run or verify the Producer-001B provider forensic canary."
+        description="Run or verify the Producer-001C provider forensic canary."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("preflight")
