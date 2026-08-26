@@ -64,8 +64,9 @@ pipeline. The terminal `DO_NOT_TRADE_MISSED_ENTRY` result is legitimate and
 unchanged.
 
 `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` is
-`IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY` at qualified implementation
-`74da179e76ab714bc3a650a0162e523d461ccef5`. The natural `run_runtime()` path
+`COMPLETE / CANONICAL / RESEARCH_ONLY` at implementation
+`74da179e76ab714bc3a650a0162e523d461ccef5`, fast-forwarded through
+`c9e447dd445f83e2c539cd80126564bae737faea`. The natural `run_runtime()` path
 now owns candidate lifecycle, completed-canonical-bar material dispatch,
 sequential setup transitions, immutable missed-entry/predecessor chronology,
 successor evidence, and DATA-004 TradePlan/no-plan production without caller
@@ -247,8 +248,8 @@ requires a separate current-head reconciliation and qualification task.
   from activation. Producer/Paper schema compatibility is proven, but the
   qualified Producer-001A branch now originates natural lifecycle, successor,
   and completed-bar reevaluation evidence. Paper remains unmerged, uninstalled,
-  and unarmed pending Producer-001A integration, provider-backed research-only
-  physical acceptance, authoritative instrument
+  and unarmed pending provider-backed research-only physical acceptance,
+  authoritative instrument
   classification, current-head reconciliation, complete requalification, and
   disabled-install proof.
 - Broad historical replay/statistical claims require corporate-action-safe,
@@ -262,9 +263,8 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Cleanly fast-forward the qualified Producer-001A branch, then run its separate
-real provider-backed research-only forensic canary. After that canary passes,
-activate
+Run Producer-001A's separate real provider-backed research-only forensic
+canary. After that canary passes, activate
 `ARGUS-STAT-DATA-002` prospectively. Authoritative instrument subtype/leverage
 classification remains a pre-Paper gate. Paper reconciliation, disabled
 installation, read-only preflight, and one-entry arming remain separate later
@@ -338,23 +338,21 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` is qualified on its task branch
-   and pending clean fast-forward integration. No provider canary is active.
+1. No implementation task is active. Producer-001A is canonical and qualified;
+   no provider-backed canary is active.
 
 ### 2. Ready / Next
 
-1. Cleanly fast-forward the qualified Producer-001A implementation and closeout
-   after merge-safety and post-merge verification pass.
-2. Run a separate real provider-backed, research-only exact-path Continuous
+1. Run a separate real provider-backed, research-only exact-path Continuous
    canary. It must prove real discovery through truthful plan/no-plan,
    reevaluation, and bounded restart behavior without account, Paper, Shadow,
    broker, or order capability.
-3. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
+2. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
    research identity only after Producer-001A and its physical canary pass.
-4. Close authoritative instrument subtype/leverage classification before any
+3. Close authoritative instrument subtype/leverage classification before any
    Continuous Paper arming; unknown and leveraged/inverse products remain
    execution-ineligible meanwhile.
-5. Reconcile and fully requalify the existing
+4. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch, then separately prove disabled
    installation, read-only Paper preflight, and one-entry arming. No gate
    automatically advances to live execution.
@@ -3027,9 +3025,10 @@ blocked and gains no authority from Paper evidence.
 
 #### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A - Natural Runtime Path Completion
 
-- Lifecycle: `IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY` at implementation
-  `74da179e76ab714bc3a650a0162e523d461ccef5`. Provider-backed physical
-  acceptance remains a separate next gate.
+- Lifecycle: `COMPLETE / CANONICAL / RESEARCH_ONLY` at implementation
+  `74da179e76ab714bc3a650a0162e523d461ccef5`, fast-forwarded through
+  `c9e447dd445f83e2c539cd80126564bae737faea`. Provider-backed physical acceptance
+  remains a separate next gate.
 - Wire the existing candidate-lifecycle and setup contracts into actual
   production composition for every admitted hot-universe member. Naturally
   produce pending, missed-entry, pullback, reclaim, continuation, successor,

@@ -2,6 +2,28 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A - 2026-08-26
+
+`codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` started from clean synchronized
+canonical `2a53881fdfc103db10c06216fee84d2de6ea5003`. Qualified implementation
+`74da179e76ab714bc3a650a0162e523d461ccef5` adds the natural research-only
+lifecycle/setup owner, completed-canonical-bar event dispatch, sequential
+successor evidence, full producer composition chain, restart reconstruction,
+and research-visible/execution-blocked unknown-instrument behavior. Branch
+closeout `c9e447dd445f83e2c539cd80126564bae737faea` was pushed and strictly
+fast-forwarded into canonical.
+
+Focused, adjacent, soak, and full discovery pass; the full run is 2,763 tests in
+2,250.266 seconds with one expected Windows skip. Post-merge runtime,
+deployment, and opening-identity verification passes 77/77. Compileall,
+PowerShell parse, diff, secret, forbidden-capability, opening-closure, and
+historical-integrity checks pass. The 96-module opening closure excludes every
+changed Continuous module, so no opening promotion is required. Services,
+scheduler, manifest, installed Continuous SHA, Paper, Shadow, provider authority,
+accounts, positions, orders, and historical capture bytes remain unchanged.
+Classification is `COMPLETE / CANONICAL / RESEARCH_ONLY`; a separate real
+provider-backed forensic canary is next.
+
 ## ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001 - 2026-08-25
 
 `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` started from clean synchronized

@@ -7,12 +7,13 @@ Date: 2026-08-26
 - Branch: `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A`
 - Base: `2a53881fdfc103db10c06216fee84d2de6ea5003`
 - Qualified implementation: `74da179e76ab714bc3a650a0162e523d461ccef5`
+- Branch closeout and canonical fast-forward: `c9e447dd445f83e2c539cd80126564bae737faea`
 - Forensic standard SHA-256:
   `8B3A7F161BA393DACCED20C92B6B544C3893D201A97F76B370980DA884940303`
 - Authority: `RESEARCH_ONLY`
 - Execution authority: `NONE`
 - Order capability: `UNAVAILABLE`
-- Status at branch closeout: `IMPLEMENTED_PENDING_MERGE`
+- Status: `COMPLETE / CANONICAL / RESEARCH_ONLY`
 
 ## Result
 
@@ -99,6 +100,8 @@ not manufacture a market setup.
 - Continuous runtime/canary/soak suites: 33 passed in 136.868 seconds.
 - Full Python discovery: 2,763 tests in 2,250.266 seconds,
   `OK (skipped=1)`.
+- Post-merge runtime/deployment/opening-identity suite: 77 passed in
+  200.628 seconds.
 - Compileall: passed.
 - PowerShell installer parse: passed.
 - `git diff --check`: passed.
@@ -157,7 +160,6 @@ No .NET source changed, so .NET testing was not required.
 
 ## Next
 
-Cleanly fast-forward the qualified branch into canonical after branch closeout,
-then run the separately authorized real provider-backed research-only forensic
+Run the separately authorized real provider-backed research-only forensic
 canary. Do not activate STAT-DATA-002, implement instrument classification, or
-reconcile/arm Continuous Paper in this task.
+reconcile/arm Continuous Paper until their stated gates are satisfied.
