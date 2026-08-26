@@ -1,4 +1,4 @@
-# Goal Charter: ARGUS-CONTINUOUS-PRODUCER-001A-FORENSIC-CANARY
+# Goal Charter: ARGUS-CONTINUOUS-PRODUCER-001B-FORENSIC-CANARY
 
 ## User-Visible Goal
 
@@ -9,25 +9,29 @@ isolated restart.
 
 ## Operator Pain
 
-Producer-001A is canonical and synthetically proven, but a reviewer cannot yet
-reconstruct a provider-backed natural decision from immutable physical evidence.
-That blocks the prospective denominator and every later Continuous Paper gate.
+The preserved Producer-001A canary failed before completed-bar composition.
+Producer-001B repairs chronology, atomic publication, prospective floors, and
+forensic accounting at immutable product source
+`01f0c2ece0370db86a9c982a9926cdf8f37fd63b`; a reviewer still needs a fresh
+provider-backed natural decision packet before the path can be accepted.
 
 ## Scope
 
-- Run the unchanged canonical Continuous discovery, readiness, composition,
+- Run the frozen Producer-001B Continuous discovery, readiness, composition,
   lifecycle, material-event, TradePlan, denominator, and restart classes.
 - Contact only Finviz discovery and Schwab market-data/history endpoints.
 - Use a new external write-once evidence root and disposable runtime stores.
 - Preserve provider chronology, hot-universe admission, history admission and
   use, canonical bars, material reevaluation, lifecycle/setup records,
   TradePlan/no-plan records, restart continuity, and anti-hindsight evidence.
+- Count completed-bar events from the runtime checkpoint and backfill attempts
+  and successes from the actual backfill ledger.
 - Produce a manifest-rooted forensic packet and sanitized self-contained
   second-eye ZIP.
 
 ## Non-Goals
 
-- No product-semantic repair, installed Continuous deployment, production-store
+- No further product-semantic repair, installed Continuous deployment, production-store
   write, scheduler/service change, opening mutation, RTD mutation, or strategy
   change.
 - No account, balance, position, Paper, Shadow, preview, broker, order, or money
@@ -56,7 +60,7 @@ That blocks the prospective denominator and every later Continuous Paper gate.
    duplicates, rewrites, future evidence, or invented successors.
 5. Unknown instrument execution remains blocked and all Paper/order authority
    remains unavailable.
-6. Canonical Git, installed services/runtime, scheduler/manifest, opening
+6. Product-source Git, canonical Git, installed services/runtime, scheduler/manifest, opening
    evidence, production Continuous state, Paper, Shadow, RTD, and broker state
    remain unchanged.
 7. The external packet is write-once, hash-manifested, secret-sanitized, and

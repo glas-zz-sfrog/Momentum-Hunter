@@ -1,4 +1,4 @@
-"""Provider-backed, research-only forensic canary for Producer-001A.
+"""Provider-backed, research-only forensic canary for Producer-001B.
 
 This task-only launcher imports Momentum Hunter from an explicitly pinned clean
 canonical checkout. It never imports broker, account-snapshot, Paper, Shadow,
@@ -26,7 +26,9 @@ from typing import Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 
-EXPECTED_CANONICAL_SHA = "82460b3313b86c34dff4ffb737d2c04bf02e3ace"
+EXPECTED_CANONICAL_SHA = "01f0c2ece0370db86a9c982a9926cdf8f37fd63b"
+EXPECTED_PRODUCTION_SHA = "82460b3313b86c34dff4ffb737d2c04bf02e3ace"
+EXPECTED_TASK_BRANCH = "codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B"
 EXPECTED_FORENSIC_STANDARD_SHA256 = (
     "8B3A7F161BA393DACCED20C92B6B544C3893D201A97F76B370980DA884940303"
 )
@@ -42,7 +44,8 @@ CENTRAL = ZoneInfo("America/Chicago")
 EASTERN = ZoneInfo("America/New_York")
 ACCOUNT_ENV = "MH_CANARY_EXPECTED_ACCOUNT_ENDING"
 CANONICAL_ENV = "MH_CANARY_CANONICAL_ROOT"
-CANARY_PROFILE = "producer-001a-provider-forensic-canary-v1"
+PRODUCTION_ENV = "MH_CANARY_PRODUCTION_ROOT"
+CANARY_PROFILE = "producer-001b-provider-forensic-canary-v1"
 AUTHORITY = "RESEARCH_ONLY"
 EXECUTION_AUTHORITY = "NONE"
 ORDER_CAPABILITY = "UNAVAILABLE"
@@ -59,6 +62,12 @@ def _required_canonical_root() -> Path:
 
 
 CANONICAL_ROOT = _required_canonical_root()
+PRODUCTION_ROOT = Path(
+    os.environ.get(
+        PRODUCTION_ENV,
+        r"C:\Users\steve\OneDrive\Documents\Investing",
+    )
+).expanduser().resolve(strict=True)
 sys.path.insert(0, str(CANONICAL_ROOT))
 
 from momentum_hunter.continuous_evidence_writer import (  # noqa: E402
@@ -81,6 +90,7 @@ from momentum_hunter.continuous_natural_setup import (  # noqa: E402
     ContinuousNaturalSetupCoordinator,
 )
 from momentum_hunter.continuous_runtime import (  # noqa: E402
+    CANONICAL_BAR_COMPLETED,
     ContinuousOpportunityRuntime,
     ContinuousRuntimeConfig,
     LogicalRuntimeLeaseRegistry,
@@ -167,6 +177,48 @@ def _parse_timestamp(value: str) -> datetime:
     return parsed
 
 
+def _backfill_accounting(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {
+            "ledgerPresent": False,
+            "symbolsRepresented": 0,
+            "attempts": 0,
+            "successful": 0,
+            "failed": 0,
+            "active": 0,
+            "records": [],
+        }
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    records = payload.get("records") if isinstance(payload, Mapping) else None
+    if not isinstance(records, Mapping):
+        raise ForensicCanaryError("Backfill ledger omitted its records.")
+    values = tuple(
+        value for value in records.values() if isinstance(value, Mapping)
+    )
+    if len(values) != len(records):
+        raise ForensicCanaryError("Backfill ledger contains an invalid record.")
+    statuses = tuple(str(value.get("status", "")).upper() for value in values)
+    return {
+        "ledgerPresent": True,
+        "symbolsRepresented": len(values),
+        "attempts": sum(int(value.get("attemptCount", 0)) for value in values),
+        "successful": sum(status in {"COMPLETE", "PARTIAL"} for status in statuses),
+        "failed": sum(status == "FAILED" for status in statuses),
+        "active": sum(status in {"QUEUED", "IN_PROGRESS"} for status in statuses),
+        "records": [
+            {
+                "symbol": str(value.get("symbol", "")),
+                "status": str(value.get("status", "")),
+                "attemptCount": int(value.get("attemptCount", 0)),
+                "requestedAt": value.get("requestedAt"),
+                "startedAt": value.get("startedAt"),
+                "completedAt": value.get("completedAt"),
+            }
+            for value in values
+        ],
+    }
+
+
 def _git(root: Path, *arguments: str) -> str:
     completed = subprocess.run(
         ("git", *arguments),
@@ -190,15 +242,38 @@ def _git_identity(root: Path) -> dict[str, object]:
 
 def _validate_canonical() -> dict[str, object]:
     identity = _git_identity(CANONICAL_ROOT)
-    if identity["head"] != EXPECTED_CANONICAL_SHA:
+    expected = _git(CANONICAL_ROOT, "rev-parse", EXPECTED_CANONICAL_SHA)
+    if identity["head"] != expected:
         raise ForensicCanaryError("Canonical HEAD differs from the approved canary source.")
-    if identity["originMaster"] != EXPECTED_CANONICAL_SHA:
-        raise ForensicCanaryError("origin/master differs from the approved canary source.")
-    if identity["branch"] != "master" or identity["status"]:
-        raise ForensicCanaryError("Canonical checkout is not clean master.")
+    if identity["status"]:
+        raise ForensicCanaryError("Approved canary source checkout is not clean.")
     imported = Path(sys.modules["momentum_hunter.continuous_runtime"].__file__).resolve()
     if CANONICAL_ROOT not in imported.parents:
         raise ForensicCanaryError("Runtime modules were not imported from canonical.")
+    identity["classification"] = "PINNED_IMMUTABLE_PRODUCT_SOURCE"
+    return identity
+
+
+def _validate_production() -> dict[str, object]:
+    identity = _git_identity(PRODUCTION_ROOT)
+    if identity["head"] != EXPECTED_PRODUCTION_SHA:
+        raise ForensicCanaryError("Production canonical HEAD changed during canary work.")
+    if identity["originMaster"] != EXPECTED_PRODUCTION_SHA:
+        raise ForensicCanaryError("Production origin/master changed during canary work.")
+    if identity["branch"] != "master" or identity["status"]:
+        raise ForensicCanaryError("Production canonical checkout is not clean master.")
+    identity["classification"] = "UNMODIFIED_PRODUCTION_CANONICAL"
+    return identity
+
+
+def _validate_task_source(expected_head: str | None = None) -> dict[str, object]:
+    root = Path(__file__).resolve().parents[1]
+    identity = _git_identity(root)
+    if identity["branch"] != EXPECTED_TASK_BRANCH or identity["status"]:
+        raise ForensicCanaryError("Canary task source is not the clean approved branch.")
+    if expected_head is not None and identity["head"] != expected_head:
+        raise ForensicCanaryError("Canary task source changed during the campaign.")
+    identity["classification"] = "FROZEN_OBSERVATIONAL_WRAPPER_SOURCE"
     return identity
 
 
@@ -297,7 +372,7 @@ def _owner_identity(owner: object) -> dict[str, object]:
         "sourceSha256": _sha256(source_path),
         "firstLine": first_line,
         "sourceFingerprint": _fingerprint(
-            "producer-001a-owner-source-v1", "".join(lines)
+            "producer-001b-owner-source-v1", "".join(lines)
         ),
     }
 
@@ -427,14 +502,19 @@ def _ownership_map() -> dict[str, object]:
             "Coordinates canonical lifecycle/setup production and TradePlan or truthful no-plan evaluation.",
         ),
         (
-            "LIFECYCLE_SETUP_CREATION",
+            "PREVIEW_LIFECYCLE_SETUP_CREATION",
             ContinuousNaturalSetupCoordinator.next_step,
-            "Selects the next natural lifecycle/setup step from persisted canonical evidence.",
+            "Selects the next natural lifecycle/setup step only inside disposable preview state.",
         ),
         (
-            "LIFECYCLE_SETUP_COMMIT",
+            "PREVIEW_LIFECYCLE_SETUP_MUTATION",
             ContinuousNaturalSetupCoordinator.commit,
-            "Commits only the canonical producer result and lifecycle transition.",
+            "Applies validated Producer results only to the disposable preview clone.",
+        ),
+        (
+            "ATOMIC_AUTHORITATIVE_COMPOSITION_PUBLICATION",
+            ContinuousNaturalSetupCoordinator._commit_preview,
+            "Publishes lifecycle, breakout, and Producer stores together after the full preview validates.",
         ),
         (
             "TRADEPLAN_OR_NO_PLAN_PRODUCTION",
@@ -455,7 +535,7 @@ def _ownership_map() -> dict[str, object]:
     wrapper_scan = _wrapper_authority_scan()
     result = {
         "schemaVersion": 1,
-        "profile": "producer-001a-forensic-canonical-ownership-map-v1",
+        "profile": "producer-001b-forensic-canonical-ownership-map-v1",
         "canonicalSourceSha": EXPECTED_CANONICAL_SHA,
         "status": wrapper_scan["status"],
         "stages": [
@@ -495,7 +575,7 @@ def _ownership_map() -> dict[str, object]:
         },
     }
     result["fingerprint"] = _fingerprint(
-        "producer-001a-forensic-ownership-map-v1", result
+        "producer-001b-forensic-ownership-map-v1", result
     )
     return result
 
@@ -521,7 +601,7 @@ def _file_manifest(
 
 
 def _manifest_fingerprint(items: Iterable[Mapping[str, object]]) -> str:
-    return _fingerprint("producer-001a-forensic-file-manifest-v1", list(items))
+    return _fingerprint("producer-001b-forensic-file-manifest-v1", list(items))
 
 
 def _selected_production_hashes() -> dict[str, object]:
@@ -535,7 +615,7 @@ def _selected_production_hashes() -> dict[str, object]:
         / "MomentumHunter"
         / "Automation"
         / "continuous-deployment.json",
-        "openingCaptureManifest": CANONICAL_ROOT
+        "openingCaptureManifest": PRODUCTION_ROOT
         / "MomentumHunterData"
         / "data"
         / "integrity"
@@ -602,7 +682,9 @@ def _production_baseline(label: str) -> dict[str, object]:
         "profile": CANARY_PROFILE,
         "label": label,
         "observedAt": datetime.now().astimezone().isoformat(),
-        "canonicalGit": _validate_canonical(),
+        "sourceGit": _validate_canonical(),
+        "canaryTaskGit": _validate_task_source(),
+        "canonicalGit": _validate_production(),
         "services": _service_snapshot(),
         "selectedProductionHashes": _selected_production_hashes(),
         "manifestSafety": _manifest_safety_summary(),
@@ -614,7 +696,7 @@ def _production_baseline(label: str) -> dict[str, object]:
         "orderCapability": ORDER_CAPABILITY,
     }
     result["fingerprint"] = _fingerprint(
-        "producer-001a-forensic-production-baseline-v1", result
+        "producer-001b-forensic-production-baseline-v1", result
     )
     return result
 
@@ -646,10 +728,10 @@ def _runtime_config(campaign: Mapping[str, object]) -> ContinuousRuntimeConfig:
 def _topology(campaign: Mapping[str, object], config: ContinuousRuntimeConfig):
     return build_continuous_writer_topology_v2(
         root_path=Path(str(campaign["runtimeRoot"])) / "writer",
-        evidence_program_id="producer-001a-forensic-canary",
+        evidence_program_id="producer-001b-forensic-canary",
         configuration_fingerprint=config.fingerprint,
         runtime_build_hash=_fingerprint(
-            "producer-001a-canonical-runtime-build-v1",
+            "producer-001b-canonical-runtime-build-v1",
             str(campaign["canonicalSourceSha"]),
         ),
     )
@@ -677,6 +759,18 @@ def _state_snapshot(
         for path in parent.rglob("*")
         if path.is_file() and not path.name.endswith(".lock")
     ]
+    checkpoint = RuntimeCheckpointStore(runtime_root / "checkpoint").load(
+        runtime.config.runtime_identity
+    )
+    completed_bar_events = tuple(
+        item
+        for item in checkpoint.get("event_records", [])
+        if isinstance(item, Mapping)
+        and item.get("trigger") == CANONICAL_BAR_COMPLETED
+    )
+    backfill_accounting = _backfill_accounting(
+        runtime_root / "state" / "continuous-history-backfill.json"
+    )
     snapshot = {
         "schemaVersion": 1,
         "profile": CANARY_PROFILE,
@@ -725,6 +819,12 @@ def _state_snapshot(
             for item in producer
         ],
         "qualificationMetrics": _sanitize(asdict(state.metrics)),
+        "runtimeCompletedBarEvents": completed_bar_events,
+        "runtimeCompletedBarEventCount": len(completed_bar_events),
+        "runtimeCompletedBarCounter": int(
+            checkpoint.get("counters", {}).get("completed_bar_events", 0)
+        ),
+        "backfillAccounting": backfill_accounting,
         "immutableFileManifest": _file_manifest(runtime_root, include=immutable_files),
         "accountValuesRequested": False,
         "positionsRequested": False,
@@ -735,7 +835,7 @@ def _state_snapshot(
         snapshot["immutableFileManifest"]
     )
     snapshot["fingerprint"] = _fingerprint(
-        "producer-001a-forensic-phase-state-v1", snapshot
+        "producer-001b-forensic-phase-state-v1", snapshot
     )
     return snapshot
 
@@ -744,6 +844,9 @@ def _run_phase(campaign_path: Path, phase: int) -> int:
     process_started = datetime.now().astimezone().isoformat()
     campaign = json.loads(campaign_path.read_text(encoding="ascii"))
     canonical = _validate_canonical()
+    task_source = _validate_task_source(
+        str(campaign.get("canaryTaskGit", {}).get("head", ""))
+    )
     if campaign.get("canonicalSourceSha") != canonical["head"]:
         raise ForensicCanaryError("Campaign canonical source identity changed.")
     runtime_root = _validate_runtime_root(
@@ -867,6 +970,7 @@ def _run_phase(campaign_path: Path, phase: int) -> int:
             "runtimeHealth": asdict(health),
             "stateSnapshotFingerprint": snapshot["fingerprint"],
             "canonicalSource": canonical,
+            "canaryTaskSource": task_source,
             "importedModuleRoots": _imported_runtime_roots(),
             "authority": AUTHORITY,
             "executionAuthority": EXECUTION_AUTHORITY,
@@ -876,7 +980,7 @@ def _run_phase(campaign_path: Path, phase: int) -> int:
             "orderCapability": ORDER_CAPABILITY,
         }
         receipt["fingerprint"] = _fingerprint(
-            "producer-001a-forensic-phase-receipt-v1", receipt
+            "producer-001b-forensic-phase-receipt-v1", receipt
         )
         _write_once(evidence_root / f"phase-{phase}-state.json", _sanitize(snapshot))
         _write_once(evidence_root / f"phase-{phase}-receipt.json", receipt)
@@ -981,6 +1085,7 @@ def _run_subprocess(
 
 def _run_campaign(args: argparse.Namespace) -> int:
     canonical = _validate_canonical()
+    task_source = _validate_task_source()
     standard = _validate_standard()
     ownership = _ownership_map()
     if ownership["status"] != "PASS":
@@ -999,8 +1104,8 @@ def _run_campaign(args: argparse.Namespace) -> int:
     runtime_root.mkdir(parents=True)
     started = datetime.now().astimezone()
     attempt_id = evidence_root.name.lower().replace("_", "-")
-    runtime_identity = f"producer-001a-forensic-{started.strftime('%Y%m%d')}"
-    runtime_instance = f"producer-001a-forensic-{_fingerprint('attempt', attempt_id)[:24]}"
+    runtime_identity = f"producer-001b-forensic-{started.strftime('%Y%m%d')}"
+    runtime_instance = f"producer-001b-forensic-{_fingerprint('attempt', attempt_id)[:24]}"
     first_duration = args.duration_seconds // 2
     second_duration = args.duration_seconds - first_duration
     campaign = {
@@ -1009,6 +1114,7 @@ def _run_campaign(args: argparse.Namespace) -> int:
         "campaignId": attempt_id,
         "campaignStartedAt": started.isoformat(),
         "canonicalSourceSha": canonical["head"],
+        "canaryTaskGit": task_source,
         "canonicalRoot": str(CANONICAL_ROOT),
         "canaryTool": str(Path(__file__).resolve()),
         "canaryToolSha256": _sha256(Path(__file__).resolve()),
@@ -1029,7 +1135,7 @@ def _run_campaign(args: argparse.Namespace) -> int:
         "orderCapability": ORDER_CAPABILITY,
     }
     campaign["configurationFingerprint"] = _fingerprint(
-        "producer-001a-forensic-campaign-config-v1", campaign
+        "producer-001b-forensic-campaign-config-v1", campaign
     )
     _write_once(evidence_root / "forensic-standard-verification.json", standard)
     _write_once(evidence_root / "canonical-ownership-map.json", ownership)
@@ -1123,6 +1229,31 @@ def _producer_steps(records: Iterable[Mapping[str, object]]) -> list[dict[str, o
 
 
 def _analyze(evidence_root: Path) -> dict[str, object]:
+    campaign = json.loads(
+        (evidence_root / "campaign-config.json").read_text(encoding="ascii")
+    )
+    checkpoint_path = (
+        evidence_root
+        / "runtime-artifacts"
+        / "checkpoint"
+        / f"{campaign['runtimeIdentity']}.json"
+    )
+    checkpoint = json.loads(checkpoint_path.read_text(encoding="ascii"))
+    completed_bar_events = [
+        dict(item)
+        for item in checkpoint.get("event_records", [])
+        if isinstance(item, Mapping)
+        and item.get("trigger") == CANONICAL_BAR_COMPLETED
+    ]
+    completed_bar_counter = int(
+        checkpoint.get("counters", {}).get("completed_bar_events", 0)
+    )
+    backfill_accounting = _backfill_accounting(
+        evidence_root
+        / "runtime-artifacts"
+        / "state"
+        / "continuous-history-backfill.json"
+    )
     records = _record_payloads(evidence_root)
     discoveries = [
         item for item in records if item.get("evidenceType") == "DISCOVERY_CYCLE"
@@ -1157,7 +1288,7 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         )
     )
     admissions = [json.loads(path.read_text(encoding="ascii")) for path in admission_files]
-    completed = []
+    completed_bar_reevaluations = []
     plans = []
     no_plans = []
     successors = []
@@ -1168,6 +1299,30 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         payload = record["payload"]
         request = payload.get("request", {})
         known_at = _parse_timestamp(str(payload.get("knownAt")))
+        decision_cutoff = _parse_timestamp(
+            str(payload.get("decisionCutoff") or payload.get("knownAt"))
+        )
+        if known_at != decision_cutoff:
+            anti_hindsight = False
+        for chronology in payload.get("evidenceKnownAt", []):
+            if (
+                not isinstance(chronology, Mapping)
+                or not chronology.get("evidence")
+                or not chronology.get("knownAt")
+                or _parse_timestamp(str(chronology["knownAt"])) > decision_cutoff
+            ):
+                anti_hindsight = False
+        if request.get("trigger") == CANONICAL_BAR_COMPLETED:
+            completed_bar_reevaluations.append(
+                {
+                    "symbol": request.get("symbol"),
+                    "requestId": request.get("request_id"),
+                    "knownAt": payload.get("knownAt"),
+                    "decisionCutoff": payload.get("decisionCutoff"),
+                    "evidenceKnownAt": payload.get("evidenceKnownAt", []),
+                    "naturalStepCount": len(payload.get("naturalSteps", [])),
+                }
+            )
         for step in payload.get("naturalSteps", []):
             producer = step.get("producerRecord", {})
             history = producer.get("historicalContext", {})
@@ -1207,19 +1362,6 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
             proposal = member.get("lifecycle_proposal") or {}
             if proposal.get("create_new_setup") and proposal.get("predecessor_setup_id"):
                 successors.append(proposal)
-            if request.get("trigger") == "CANONICAL_BAR_COMPLETED" and step.get("eventId"):
-                completed.append(
-                    {
-                        "symbol": current.get("symbol"),
-                        "eventId": step.get("eventId"),
-                        "eventType": step.get("eventType"),
-                        "eventFingerprint": step.get("eventFingerprint"),
-                        "knownAt": payload.get("knownAt"),
-                        "historyLatestCompletedMinute": history.get(
-                            "latest_completed_minute"
-                        ),
-                    }
-                )
     phase1 = json.loads((evidence_root / "phase-1-state.json").read_text(encoding="ascii"))
     phase2 = json.loads((evidence_root / "phase-2-state.json").read_text(encoding="ascii"))
     process_restart = (
@@ -1253,7 +1395,6 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
             _parse_timestamp(str(item["payload"].get("knownAt")))
             for item in compositions
         )
-    campaign = json.loads((evidence_root / "campaign-config.json").read_text(encoding="ascii"))
     launch = _parse_timestamp(str(campaign["campaignStartedAt"]))
     no_five_bar_wait = bool(earliest and (earliest - launch).total_seconds() < 300)
     has_qualified = qualifying > 0
@@ -1263,13 +1404,26 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
             "YES" if hot_transitions and has_qualified else "NO_QUALIFIED_CANDIDATE" if not has_qualified else "NO"
         ),
         "REAL_SCHWAB_BACKFILL_PROVEN": (
-            "YES" if backfill_rows > 0 else "NOT_REQUIRED_EXISTING_HISTORY" if admissions else "NO"
+            "YES"
+            if int(backfill_accounting["successful"]) > 0
+            else "NOT_REQUIRED_EXISTING_HISTORY"
+            if admissions and int(backfill_accounting["attempts"]) == 0
+            else "ATTEMPTED_NOT_SUCCESSFUL"
+            if int(backfill_accounting["attempts"]) > 0
+            else "NO"
         ),
         "HISTORICAL_CONTEXT_FORENSICALLY_RECONSTRUCTABLE": (
             "YES" if compositions and history_reconstructable else "NO"
         ),
-        "REAL_COMPLETED_BAR_EVENT_PROVEN": "YES" if completed else "NO",
-        "NATURAL_MATERIAL_REEVALUATION_PROVEN": "YES" if completed else "NO",
+        "REAL_COMPLETED_BAR_EVENT_PROVEN": (
+            "YES"
+            if completed_bar_events
+            and completed_bar_counter == len(completed_bar_events)
+            else "NO"
+        ),
+        "NATURAL_MATERIAL_REEVALUATION_PROVEN": (
+            "YES" if completed_bar_reevaluations else "NO"
+        ),
         "NATURAL_RUNTIME_TRADEPLAN_OBSERVED": (
             "YES" if plans else "MARKET_DID_NOT_JUSTIFY_PLAN" if compositions else "NO"
         ),
@@ -1288,7 +1442,9 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "discoveryRecords": discoveries,
         "admissions": admissions,
         "compositionRecords": compositions,
-        "completedBarEvents": completed,
+        "completedBarEvents": completed_bar_events,
+        "completedBarReevaluations": completed_bar_reevaluations,
+        "backfillAccounting": backfill_accounting,
         "tradePlans": plans,
         "truthfulNoPlans": no_plans,
         "successorSetups": successors,
@@ -1307,8 +1463,16 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "hotUniverseTransitionCount": len(hot_transitions),
         "schwabAdmissionCount": len(admissions),
         "schwabBackfillRows": backfill_rows,
+        "schwabBackfillAttempts": int(backfill_accounting["attempts"]),
+        "schwabBackfillSuccesses": int(backfill_accounting["successful"]),
+        "schwabBackfillFailures": int(backfill_accounting["failed"]),
         "compositionCount": len(compositions),
-        "completedBarEventCount": len(completed),
+        "completedBarEventCount": len(completed_bar_events),
+        "completedBarEventCounter": completed_bar_counter,
+        "completedBarEventAccountingMatches": (
+            completed_bar_counter == len(completed_bar_events)
+        ),
+        "completedBarReevaluationCount": len(completed_bar_reevaluations),
         "tradePlanCount": len(plans),
         "truthfulNoPlanCount": len(no_plans),
         "successorSetupCount": len(successors),
@@ -1317,7 +1481,7 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "duplicateProducerIdentity": duplicate_ids,
         "classifications": classifications,
         "timelineFingerprint": _fingerprint(
-            "producer-001a-forensic-timeline-v1", timeline
+            "producer-001b-forensic-timeline-v1", timeline
         ),
         "authority": AUTHORITY,
         "executionAuthority": EXECUTION_AUTHORITY,
@@ -1327,7 +1491,7 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "orderCapability": ORDER_CAPABILITY,
     }
     result["fingerprint"] = _fingerprint(
-        "producer-001a-forensic-analysis-v1", result
+        "producer-001b-forensic-analysis-v1", result
     )
     return {"analysis": result, "timeline": timeline}
 
@@ -1336,12 +1500,16 @@ def _compare_baselines(before: Mapping[str, object], after: Mapping[str, object]
     stable_keys = ("services", "selectedProductionHashes", "manifestSafety")
     comparisons = {key: before.get(key) == after.get(key) for key in stable_keys}
     return {
+        "sourceGitStable": before.get("sourceGit") == after.get("sourceGit"),
+        "canaryTaskGitStable": before.get("canaryTaskGit") == after.get("canaryTaskGit"),
         "canonicalGitStable": before.get("canonicalGit") == after.get("canonicalGit"),
         "servicesStable": comparisons["services"],
         "selectedProductionHashesStable": comparisons["selectedProductionHashes"],
         "manifestSafetyStable": comparisons["manifestSafety"],
         "productionMutationByCanary": False,
         "comparisonPassed": all(comparisons.values())
+        and before.get("sourceGit") == after.get("sourceGit")
+        and before.get("canaryTaskGit") == after.get("canaryTaskGit")
         and before.get("canonicalGit") == after.get("canonicalGit"),
     }
 
@@ -1501,7 +1669,7 @@ def _verify(args: argparse.Namespace) -> int:
         raise ForensicCanaryError("Verification evidence already exists.")
     python = sys.executable
     focused_modules = (
-        "tests.test_continuous_producer_forensic_canary",
+        "tests.test_continuous_producer_001b_forensic_canary",
         "tests.test_continuous_live_qualification",
         "tests.test_continuous_canary_hardening",
         "tests.test_continuous_natural_setup",
@@ -1536,7 +1704,7 @@ def _verify(args: argparse.Namespace) -> int:
                 "compileall",
                 "-q",
                 "momentum_hunter",
-                "tools/run_continuous_producer_forensic_canary.py",
+                "tools/run_continuous_producer_001b_forensic_canary.py",
             ),
             600,
         ),
@@ -1641,7 +1809,7 @@ def _copy_package_tree(
 
 def _package_focus_modules() -> tuple[str, ...]:
     return (
-        "tests.test_continuous_producer_forensic_canary",
+        "tests.test_continuous_producer_001b_forensic_canary",
         "tests.test_continuous_live_qualification",
         "tests.test_continuous_canary_hardening",
         "tests.test_continuous_natural_setup",
@@ -1714,7 +1882,7 @@ def _render_package_index(
 ) -> str:
     stages = ownership.get("stages", [])
     lines = [
-        "# Producer-001A Forensic Canary Second-Eye Packet",
+        "# Producer-001B Forensic Canary Second-Eye Packet",
         "",
         f"Canonical source: `{EXPECTED_CANONICAL_SHA}`",
         f"Evidence: `evidence/{root.name}`",
@@ -1744,8 +1912,8 @@ def _render_package_index(
             "- `evidence/`: immutable canary observations, verification transcripts, manifests, timeline, and classifications.",
             "- `source/momentum_hunter/`: complete canonical local package, sanitized only where the local account-binding identity appeared.",
             "- `source/tests/`: complete canonical tests plus the canary wrapper tests.",
-            "- `source/tools/run_continuous_producer_forensic_canary.py`: exact canary wrapper.",
-            "- `references/`: binding standard, Roadmap snapshot, and Producer-001A release record.",
+            "- `source/tools/run_continuous_producer_001b_forensic_canary.py`: exact canary wrapper.",
+            "- `references/`: binding standard, Roadmap snapshot, Producer-001B charters, and the prior Producer-001A release record.",
             "- `PACKAGE-SANITIZATION-LEDGER.json`: every source substitution and original/sanitized hashes.",
             "- `PACKAGE-MANIFEST.json`: per-file hashes for archive verification.",
             "",
@@ -1809,23 +1977,39 @@ def _package(args: argparse.Namespace) -> int:
     shutil.copy2(
         Path(__file__).resolve().parents[1]
         / "tests"
-        / "test_continuous_producer_forensic_canary.py",
-        source_destination / "tests" / "test_continuous_producer_forensic_canary.py",
+        / "test_continuous_producer_001b_forensic_canary.py",
+        source_destination / "tests" / "test_continuous_producer_001b_forensic_canary.py",
     )
     references = package_root / "references"
     references.mkdir(parents=True)
     shutil.copy2(
-        CANONICAL_ROOT / "docs" / "argus-office" / "ROADMAP.md",
+        PRODUCTION_ROOT / "docs" / "argus-office" / "ROADMAP.md",
         references / "ROADMAP.md",
     )
     shutil.copy2(
-        CANONICAL_ROOT
+        PRODUCTION_ROOT
         / "docs"
         / "argus-office"
         / "reports"
         / "releases"
         / "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A.md",
         references / "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A.md",
+    )
+    shutil.copy2(
+        CANONICAL_ROOT
+        / "docs"
+        / "argus-office"
+        / "goal-charters"
+        / "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B.md",
+        references / "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B.md",
+    )
+    shutil.copy2(
+        Path(__file__).resolve().parents[1]
+        / "docs"
+        / "argus-office"
+        / "goal-charters"
+        / "ARGUS-CONTINUOUS-PRODUCER-001B-FORENSIC-CANARY.md",
+        references / "ARGUS-CONTINUOUS-PRODUCER-001B-FORENSIC-CANARY.md",
     )
     shutil.copy2(FORENSIC_STANDARD_PATH, references / FORENSIC_STANDARD_PATH.name)
     ownership = json.loads(
@@ -1899,7 +2083,7 @@ def _package(args: argparse.Namespace) -> int:
     package_files = _file_manifest(package_root)
     package_manifest = {
         "schemaVersion": 1,
-        "profile": "producer-001a-second-eye-package-v1",
+        "profile": "producer-001b-second-eye-package-v1",
         "files": package_files,
         "fileCount": len(package_files),
         "manifestFingerprint": _manifest_fingerprint(package_files),
@@ -2000,7 +2184,9 @@ def _static_capability_scan() -> dict[str, object]:
 def _preflight() -> int:
     ownership = _ownership_map()
     result = {
-        "canonical": _validate_canonical(),
+        "approvedProductSource": _validate_canonical(),
+        "canaryTaskSource": _validate_task_source(),
+        "productionCanonical": _validate_production(),
         "forensicStandard": _validate_standard(),
         "capabilityScan": _static_capability_scan(),
         "canonicalOwnershipMap": ownership,
@@ -2023,7 +2209,7 @@ def _preflight() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run or verify the Producer-001A provider forensic canary."
+        description="Run or verify the Producer-001B provider forensic canary."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("preflight")

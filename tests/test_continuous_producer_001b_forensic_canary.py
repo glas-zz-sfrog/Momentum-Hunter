@@ -13,19 +13,19 @@ from pathlib import Path
 CANONICAL_ROOT = Path(
     os.environ.get(
         "MH_CANARY_CANONICAL_ROOT",
-        r"C:\Users\steve\OneDrive\Documents\Investing",
+        str(Path(__file__).resolve().parents[1]),
     )
 )
 TOOL_PATH = (
     Path(__file__).resolve().parents[1]
     / "tools"
-    / "run_continuous_producer_forensic_canary.py"
+    / "run_continuous_producer_001b_forensic_canary.py"
 )
 
 
 def _load_tool():
     os.environ["MH_CANARY_CANONICAL_ROOT"] = str(CANONICAL_ROOT)
-    name = "producer_001a_forensic_canary_tool"
+    name = "producer_001b_forensic_canary_tool"
     spec = importlib.util.spec_from_file_location(name, TOOL_PATH)
     if spec is None or spec.loader is None:
         raise AssertionError("Forensic canary tool could not be loaded.")
@@ -62,6 +62,7 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
         self.assertIn("COMPLETED_BAR_MATERIAL_EVENT_DISPATCH", stages)
         self.assertIn("TRADEPLAN_OR_NO_PLAN_PRODUCTION", stages)
         self.assertIn("RESTART_RECONSTRUCTION", stages)
+        self.assertIn("ATOMIC_AUTHORITATIVE_COMPOSITION_PUBLICATION", stages)
         for item in stages.values():
             self.assertEqual("CANONICAL_PRODUCTION_CLASS", item["ownership"])
             self.assertTrue(item["owner"]["sourcePath"].startswith("momentum_hunter/"))
@@ -116,6 +117,35 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
 
         self.assertEqual("PASS", result["status"])
         self.assertEqual([], result["findings"])
+
+    def test_backfill_accounting_separates_attempts_from_success(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "backfill.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "records": {
+                            "AAA": {
+                                "symbol": "AAA",
+                                "status": "COMPLETE",
+                                "attemptCount": 2,
+                            },
+                            "BBB": {
+                                "symbol": "BBB",
+                                "status": "FAILED",
+                                "attemptCount": 1,
+                            },
+                        }
+                    }
+                ),
+                encoding="ascii",
+            )
+
+            result = self.tool._backfill_accounting(path)
+
+        self.assertEqual(3, result["attempts"])
+        self.assertEqual(1, result["successful"])
+        self.assertEqual(1, result["failed"])
 
 
 if __name__ == "__main__":
