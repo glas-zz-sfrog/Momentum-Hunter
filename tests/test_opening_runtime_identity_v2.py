@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import shutil
 import tempfile
@@ -17,6 +18,7 @@ from momentum_hunter.opening_runtime_identity import (
     build_release_record,
     build_release_record_v2,
     build_runtime_identity_v2,
+    canonical_json_bytes,
     file_sha256,
     payload_fingerprint,
     probe_runtime_environment_v2,
@@ -161,6 +163,40 @@ class OpeningRuntimeIdentityV2Tests(unittest.TestCase):
             environment=self.environment,
         )
 
+    def legacy_v2_release(self) -> dict[str, object]:
+        record = copy.deepcopy(self.release())
+        closure = record["dependencyClosureEvidence"]
+        surface = record["runtimeSurfaceIdentity"]
+        surface_closure = surface["dependencyClosureEvidence"]
+        for item in (closure, surface_closure):
+            item.pop("identityInputVersion", None)
+            item.pop("nonAuthoritativeFields", None)
+            item["dependencyClosureFingerprint"] = payload_fingerprint(
+                item,
+                "dependencyClosureFingerprint",
+            )
+        surface["runtimeSurfaceFingerprint"] = payload_fingerprint(
+            surface,
+            "runtimeSurfaceFingerprint",
+        )
+        record["runtimeSurfaceFingerprint"] = surface[
+            "runtimeSurfaceFingerprint"
+        ]
+        aggregate = {
+            "runtimeSurfaceFingerprint": record["runtimeSurfaceFingerprint"],
+            "configurationFingerprint": record["configurationFingerprint"],
+            "environmentFingerprint": record["environmentFingerprint"],
+            "promotionPolicyVersion": record["promotionPolicyVersion"],
+        }
+        approved = hashlib.sha256(canonical_json_bytes(aggregate)).hexdigest()
+        record["approvedRuntimeFingerprint"] = approved
+        record["releaseId"] = f"OPENING-RUNTIME-{approved[:20].upper()}"
+        record["releaseFingerprint"] = payload_fingerprint(
+            record,
+            "releaseFingerprint",
+        )
+        return record
+
     @staticmethod
     def loaded_hashes(record: dict[str, object]) -> tuple[str, str, str]:
         components = {
@@ -224,6 +260,87 @@ class OpeningRuntimeIdentityV2Tests(unittest.TestCase):
             baseline,
             self.identity(copy.deepcopy(self.environment))["approvedRuntimeFingerprint"],
         )
+
+    def test_unreachable_package_inventory_add_and_remove_do_not_change_identity(
+        self,
+    ) -> None:
+        baseline = self.identity()
+        baseline_closure = baseline["runtimeSurface"]["dependencyClosureEvidence"]
+        module = self.root / "momentum_hunter/identity_003a_unreachable.py"
+        module.write_text("VALUE = 1\n", encoding="utf-8")
+
+        added = self.identity()
+        added_closure = added["runtimeSurface"]["dependencyClosureEvidence"]
+        self.assertEqual(
+            baseline["approvedRuntimeFingerprint"],
+            added["approvedRuntimeFingerprint"],
+        )
+        self.assertEqual(
+            baseline["runtimeSurface"]["runtimeSurfaceFingerprint"],
+            added["runtimeSurface"]["runtimeSurfaceFingerprint"],
+        )
+        self.assertEqual(
+            baseline_closure["dependencyClosureFingerprint"],
+            added_closure["dependencyClosureFingerprint"],
+        )
+        self.assertEqual(
+            int(baseline_closure["packagePythonCount"]) + 1,
+            added_closure["packagePythonCount"],
+        )
+        self.assertEqual(
+            int(baseline_closure["excludedPackageCount"]) + 1,
+            added_closure["excludedPackageCount"],
+        )
+        self.assertEqual(
+            baseline_closure["reachablePackageCount"],
+            added_closure["reachablePackageCount"],
+        )
+        self.assertEqual(
+            ["excludedPackageCount", "packagePythonCount"],
+            baseline_closure["nonAuthoritativeFields"],
+        )
+        self.assertNotEqual(
+            payload_fingerprint(
+                baseline_closure,
+                "dependencyClosureFingerprint",
+            ),
+            payload_fingerprint(
+                added_closure,
+                "dependencyClosureFingerprint",
+            ),
+        )
+        self.assertNotEqual(
+            payload_fingerprint(
+                baseline["runtimeSurface"],
+                "runtimeSurfaceFingerprint",
+            ),
+            payload_fingerprint(
+                added["runtimeSurface"],
+                "runtimeSurfaceFingerprint",
+            ),
+        )
+
+        module.unlink()
+        removed = self.identity()
+        self.assertEqual(
+            baseline["approvedRuntimeFingerprint"],
+            removed["approvedRuntimeFingerprint"],
+        )
+
+    def test_new_and_changed_reachable_module_change_identity(self) -> None:
+        baseline = self.identity()["approvedRuntimeFingerprint"]
+        module = self.root / "momentum_hunter/identity_003a_reachable.py"
+        module.write_text("VALUE = 1\n", encoding="utf-8")
+        self.mutate(
+            self.root / "momentum_hunter/providers.py",
+            "\nfrom momentum_hunter import identity_003a_reachable\n",
+        )
+        added = self.identity()["approvedRuntimeFingerprint"]
+        self.assertNotEqual(baseline, added)
+
+        self.mutate(module)
+        changed = self.identity()["approvedRuntimeFingerprint"]
+        self.assertNotEqual(added, changed)
 
     def test_new_reachable_import_expands_closure(self) -> None:
         before = analyze_opening_boundary(self.root)
@@ -332,6 +449,19 @@ class OpeningRuntimeIdentityV2Tests(unittest.TestCase):
             git_identity=(HEAD, ""),
         )
         self.assertTrue(result.runtime_match)
+
+    def test_legacy_v2_release_remains_verifiable(self) -> None:
+        record = self.legacy_v2_release()
+        release, _, changed = OpeningRuntimeReleaseStore(
+            self.release_root
+        ).promote(record, current_git_sha=HEAD)
+
+        self.assertTrue(changed)
+        self.assertEqual(record["releaseId"], release["releaseId"])
+        self.assertNotIn(
+            "identityInputVersion",
+            release["dependencyClosureEvidence"],
+        )
 
     def test_mixed_v1_v2_chain_can_promote_v1_rollback(self) -> None:
         v1_environment: dict[str, object] = {

@@ -36,6 +36,13 @@ PROMOTION_POLICY_VERSION = "opening-runtime-promotion-v1"
 SURFACE_SCHEMA_V2 = "OpeningRuntimeSurfaceV2"
 RELEASE_SCHEMA_V2 = "OpeningRuntimeReleaseV2"
 PROMOTION_POLICY_VERSION_V2 = "opening-runtime-promotion-v2"
+DEPENDENCY_CLOSURE_IDENTITY_VERSION = (
+    "opening-runtime-authoritative-closure-v2.1"
+)
+DEPENDENCY_CLOSURE_NON_AUTHORITATIVE_FIELDS = (
+    "excludedPackageCount",
+    "packagePythonCount",
+)
 DEFAULT_CHANNEL = "opening-capture"
 DEFAULT_RELEASE_ROOT = (
     Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
@@ -137,6 +144,33 @@ def canonical_json_bytes(payload: object) -> bytes:
 def payload_fingerprint(payload: Mapping[str, object], field_name: str) -> str:
     material = dict(payload)
     material.pop(field_name, None)
+    return hashlib.sha256(canonical_json_bytes(material)).hexdigest()
+
+
+def _dependency_closure_fingerprint(payload: Mapping[str, object]) -> str:
+    if payload.get("identityInputVersion") != DEPENDENCY_CLOSURE_IDENTITY_VERSION:
+        return payload_fingerprint(payload, "dependencyClosureFingerprint")
+    material = dict(payload)
+    material.pop("dependencyClosureFingerprint", None)
+    for field in DEPENDENCY_CLOSURE_NON_AUTHORITATIVE_FIELDS:
+        material.pop(field, None)
+    return hashlib.sha256(canonical_json_bytes(material)).hexdigest()
+
+
+def _runtime_surface_fingerprint_v2(payload: Mapping[str, object]) -> str:
+    closure = payload.get("dependencyClosureEvidence")
+    if (
+        not isinstance(closure, dict)
+        or closure.get("identityInputVersion")
+        != DEPENDENCY_CLOSURE_IDENTITY_VERSION
+    ):
+        return payload_fingerprint(payload, "runtimeSurfaceFingerprint")
+    material = dict(payload)
+    material.pop("runtimeSurfaceFingerprint", None)
+    normalized_closure = dict(closure)
+    for field in DEPENDENCY_CLOSURE_NON_AUTHORITATIVE_FIELDS:
+        normalized_closure.pop(field, None)
+    material["dependencyClosureEvidence"] = normalized_closure
     return hashlib.sha256(canonical_json_bytes(material)).hexdigest()
 
 
@@ -454,6 +488,10 @@ def _build_runtime_surface_v2(repository_root: Path) -> dict[str, object]:
     closure_evidence: dict[str, object] = {
         "schemaVersion": BOUNDARY_SCHEMA,
         "policyVersion": BOUNDARY_POLICY_VERSION,
+        "identityInputVersion": DEPENDENCY_CLOSURE_IDENTITY_VERSION,
+        "nonAuthoritativeFields": list(
+            DEPENDENCY_CLOSURE_NON_AUTHORITATIVE_FIELDS
+        ),
         "entryModules": list(ENTRY_MODULES),
         "entryFiles": list(ENTRY_FILES),
         "explicitRuntimeFiles": list(EXPLICIT_RUNTIME_FILES),
@@ -481,9 +519,8 @@ def _build_runtime_surface_v2(repository_root: Path) -> dict[str, object]:
             for item in inventory.subprocess_sites
         ],
     }
-    closure_evidence["dependencyClosureFingerprint"] = payload_fingerprint(
-        closure_evidence,
-        "dependencyClosureFingerprint",
+    closure_evidence["dependencyClosureFingerprint"] = (
+        _dependency_closure_fingerprint(closure_evidence)
     )
     payload: dict[str, object] = {
         "schemaVersion": SURFACE_SCHEMA_V2,
@@ -491,10 +528,7 @@ def _build_runtime_surface_v2(repository_root: Path) -> dict[str, object]:
         "components": components,
         "dependencyClosureEvidence": closure_evidence,
     }
-    payload["runtimeSurfaceFingerprint"] = payload_fingerprint(
-        payload,
-        "runtimeSurfaceFingerprint",
-    )
+    payload["runtimeSurfaceFingerprint"] = _runtime_surface_fingerprint_v2(payload)
     return payload
 
 
@@ -997,13 +1031,30 @@ def _validate_v2_release_identity(payload: Mapping[str, object]) -> None:
             "RELEASE_V2_STRUCTURE_INVALID",
             "V2 release identity evidence is incomplete.",
         )
+    identity_input_version = closure.get("identityInputVersion")
+    if identity_input_version not in {
+        None,
+        DEPENDENCY_CLOSURE_IDENTITY_VERSION,
+    }:
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_CLOSURE_INVALID",
+            "V2 dependency-closure identity-input version is unsupported.",
+        )
+    if identity_input_version == DEPENDENCY_CLOSURE_IDENTITY_VERSION and (
+        closure.get("nonAuthoritativeFields")
+        != list(DEPENDENCY_CLOSURE_NON_AUTHORITATIVE_FIELDS)
+    ):
+        raise OpeningRuntimeIdentityError(
+            "RELEASE_V2_CLOSURE_INVALID",
+            "V2 dependency-closure diagnostic exclusions are contradictory.",
+        )
     if (
         surface.get("schemaVersion") != SURFACE_SCHEMA_V2
         or surface.get("inclusionPolicy") != BOUNDARY_POLICY_VERSION
         or surface.get("components") != components
         or surface.get("dependencyClosureEvidence") != closure
         or surface.get("runtimeSurfaceFingerprint")
-        != payload_fingerprint(surface, "runtimeSurfaceFingerprint")
+        != _runtime_surface_fingerprint_v2(surface)
         or payload.get("runtimeSurfaceFingerprint")
         != surface.get("runtimeSurfaceFingerprint")
     ):
@@ -1020,7 +1071,7 @@ def _validate_v2_release_identity(payload: Mapping[str, object]) -> None:
         or closure.get("outsideSurfaceImports") != []
         or closure.get("dynamicImportSites") != []
         or closure.get("dependencyClosureFingerprint")
-        != payload_fingerprint(closure, "dependencyClosureFingerprint")
+        != _dependency_closure_fingerprint(closure)
     ):
         raise OpeningRuntimeIdentityError(
             "RELEASE_V2_CLOSURE_INVALID",

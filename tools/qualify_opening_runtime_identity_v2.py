@@ -73,7 +73,7 @@ def qualify(
             context,
             source_git_sha=source_git_sha,
             qualification_evidence=[
-                "ARGUS-AUTOMATION-RUNTIME-IDENTITY-003:ISOLATED_PHYSICAL_PROOF"
+                "ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A:ISOLATED_PHYSICAL_PROOF"
             ],
         )
         release, pointer, changed = OpeningRuntimeReleaseStore(isolated_root).promote(
