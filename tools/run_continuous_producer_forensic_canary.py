@@ -1912,7 +1912,7 @@ def _package(args: argparse.Namespace) -> int:
         for path in sorted(package_root.rglob("*")):
             if path.is_file():
                 archive.write(path, path.relative_to(package_root).as_posix())
-    extracted_root = Path(os.environ["TEMP"]) / f"{root.name}-SECOND-EYE-VERIFY"
+    extracted_root = root.parent / f"{root.name}-SECOND-EYE-EXTRACTED-VERIFY"
     if extracted_root.exists():
         raise ForensicCanaryError("Extracted ZIP verification root already exists.")
     with zipfile.ZipFile(zip_path, "r") as archive:
