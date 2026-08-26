@@ -3063,6 +3063,17 @@ blocked and gains no authority from Paper evidence.
   Preserve one-current-completed-bar readiness and avoid an arbitrary five-new-
   bar wait. Leave room for later multi-resolution and catalyst-state events
   without implementing their unfrozen policies here.
+- Forensic physical evidence is a hard Producer-001A acceptance gate. Preserve
+  a manifest-rooted external/ignored packet that independently reconstructs
+  natural discovery, admission, backfill, history actually used, decision-cutoff
+  candle chronology, material trigger, lifecycle/setup transition, TradePlan or
+  truthful no-plan, anti-hindsight chronology, and restart continuity. Bulk
+  provider/candle/runtime packets do not belong in Git. A second-eye reviewer
+  must reconstruct the chronology without relying on Argus prose. The exact
+  standard is preserved read-only at
+  `C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-CONTINUOUS-PRODUCER-001A-FORENSIC-EVIDENCE-STANDARD\ARGUS-DIRECTIVE-PRODUCER-001A-FORENSIC-EVIDENCE-STANDARD.md`,
+  SHA-256
+  `8B3A7F161BA393DACCED20C92B6B544C3893D201A97F76B370980DA884940303`.
 - Safety boundary: no account, position, broker, Paper, Shadow, order, WPF, or
   live execution authority. Acceptance requires deterministic tests plus a
   separately gated real provider-backed research-only canary after integration.
