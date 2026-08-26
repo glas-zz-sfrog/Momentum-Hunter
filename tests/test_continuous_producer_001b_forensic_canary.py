@@ -104,13 +104,29 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "evidence.json").write_text(
-                '{"value":"9999"}', encoding="ascii"
+                '{"accountEnding":"9999"}', encoding="ascii"
             )
 
             result = self.tool._secret_scan(root, forbidden_value="9999")
 
         self.assertEqual("FAIL", result["status"])
-        self.assertEqual("BOUND_ENDING", result["findings"][0]["term"])
+        self.assertIn(
+            result["findings"][0]["term"],
+            {"UNREDACTED_SENSITIVE_JSON_VALUE", "BOUND_ENDING_CONTEXT"},
+        )
+
+    def test_secret_scan_ignores_binding_digits_inside_market_values_and_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "market.json").write_text(
+                '{"price":25.73,"volume":125731,"fingerprint":"abc2573def"}',
+                encoding="ascii",
+            )
+
+            result = self.tool._secret_scan(root, forbidden_value="2573")
+
+        self.assertEqual("PASS", result["status"])
+        self.assertEqual([], result["findings"])
 
     def test_capability_scan_has_no_broker_or_order_path(self) -> None:
         result = self.tool._static_capability_scan()
