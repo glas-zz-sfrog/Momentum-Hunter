@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 
 CANONICAL_ROOT = Path(
@@ -136,6 +138,136 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
 
         self.assertEqual("PASS", result["status"])
         self.assertEqual([], result["findings"])
+
+    def test_failed_provider_outcome_is_terminal_and_package_eligible(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in self.tool.CORE_FORENSIC_EVIDENCE:
+                (root / name).write_text("{}", encoding="ascii")
+            (root / self.tool.TERMINAL_FAILURE_MARKER).write_text(
+                json.dumps(
+                    {
+                        "status": "FAILED_PRESERVED",
+                        "failureClass": "RuntimeError",
+                        "detail": "provider phase failed",
+                    }
+                ),
+                encoding="ascii",
+            )
+
+            terminal = self.tool._terminal_evidence_state(root)
+            analyzed = self.tool._analyze_terminal(root, terminal)
+
+        self.assertEqual("FAILED_PRESERVED", terminal["terminalOutcome"])
+        self.assertFalse(terminal["acceptanceEvidenceComplete"])
+        self.assertIn("phase-1-state.json", terminal["missingAcceptanceEvidence"])
+        classifications = analyzed["analysis"]["classifications"]
+        self.assertEqual("FAILED", classifications["PROVIDER_CANARY_ACCEPTANCE"])
+        self.assertEqual(
+            "YES", classifications["TERMINAL_FAILURE_EVIDENCE_PRESERVED"]
+        )
+        self.assertEqual("NO", classifications["MERGE_AUTHORIZED"])
+
+    def test_terminal_runtime_artifacts_are_sanitized_after_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / "runtime"
+            evidence = root / "evidence"
+            runtime.mkdir()
+            evidence.mkdir()
+            (runtime / "state.json").write_text(
+                '{"accountEnding":"9999","safe":"preserved"}',
+                encoding="ascii",
+            )
+
+            result = self.tool._preserve_terminal_runtime_artifacts(
+                runtime,
+                evidence,
+            )
+            preserved = json.loads(
+                (evidence / "runtime-artifacts" / "state.json").read_text(
+                    encoding="ascii"
+                )
+            )
+
+        self.assertEqual("PRESERVED", result["status"])
+        self.assertEqual("[REDACTED]", preserved["accountEnding"])
+        self.assertEqual("preserved", preserved["safe"])
+
+    def test_failed_acceptance_does_not_block_review_ready_zip(self) -> None:
+        result = self.tool._package_review_classifications(
+            {
+                "PROVIDER_CANARY_ACCEPTANCE": "FAILED",
+                "ACCEPTED_COMPOSITION_CYCLE_PROVEN": "NO",
+            },
+            manifest_verified=True,
+            focused_rerun_passed=False,
+        )
+
+        self.assertEqual("FAILED", result["PROVIDER_CANARY_ACCEPTANCE"])
+        self.assertEqual("NO", result["ACCEPTED_COMPOSITION_CYCLE_PROVEN"])
+        self.assertEqual("NO", result["SECOND_EYE_ZIP_SELF_CONTAINED"])
+        self.assertEqual("YES", result["READY_FOR_SECOND_EYE_REVIEW"])
+
+    def test_failed_provider_outcome_can_be_sealed_without_phase_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = {
+                "sourceGit": "source",
+                "canaryTaskGit": "task",
+                "canonicalGit": "canonical",
+                "services": [],
+                "selectedProductionHashes": [],
+                "manifestSafety": {},
+            }
+            core = {
+                "campaign-config.json": {"runtimeIdentity": "failed-runtime"},
+                "canonical-ownership-map.json": {"status": "PASS"},
+                "failed-evidence-preservation.json": {},
+                "forensic-standard-verification.json": {"status": "PASS"},
+                "production-baseline-before.json": baseline,
+                self.tool.TERMINAL_FAILURE_MARKER: {
+                    "status": "FAILED_PRESERVED",
+                    "failureClass": "RuntimeError",
+                    "detail": "provider phase failed",
+                },
+            }
+            for name, payload in core.items():
+                (root / name).write_text(json.dumps(payload), encoding="ascii")
+
+            with (
+                mock.patch.object(
+                    self.tool,
+                    "_validate_external_root",
+                    return_value=root,
+                ),
+                mock.patch.object(
+                    self.tool,
+                    "_validate_failed_evidence",
+                    return_value={},
+                ),
+                mock.patch.object(
+                    self.tool,
+                    "_production_baseline",
+                    return_value=baseline,
+                ),
+            ):
+                result = self.tool._seal(SimpleNamespace(evidence_root=root))
+
+            analysis = json.loads(
+                (root / "forensic-analysis.json").read_text(encoding="ascii")
+            )
+            inventory = json.loads(
+                (root / "terminal-evidence-inventory.json").read_text(
+                    encoding="ascii"
+                )
+            )
+
+        self.assertEqual(0, result)
+        self.assertEqual(
+            "FAILED", analysis["classifications"]["PROVIDER_CANARY_ACCEPTANCE"]
+        )
+        self.assertIn("phase-2-receipt.json", inventory["missingAcceptanceEvidence"])
 
     def test_backfill_accounting_separates_attempts_from_success(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -64,6 +64,25 @@ AUTHORITY = "RESEARCH_ONLY"
 EXECUTION_AUTHORITY = "NONE"
 ORDER_CAPABILITY = "UNAVAILABLE"
 
+TERMINAL_SUCCESS_MARKER = "campaign-observation-terminal.json"
+TERMINAL_FAILURE_MARKER = "campaign-failure.json"
+CORE_FORENSIC_EVIDENCE = (
+    "campaign-config.json",
+    "canonical-ownership-map.json",
+    "failed-evidence-preservation.json",
+    "forensic-standard-verification.json",
+    "production-baseline-before.json",
+)
+SUCCESS_ACCEPTANCE_EVIDENCE = (
+    "physical-atomicity-proof.json",
+    "phase-1-state.json",
+    "phase-1-receipt.json",
+    "phase-2-state.json",
+    "phase-2-receipt.json",
+    TERMINAL_SUCCESS_MARKER,
+    "verification-summary.json",
+)
+
 
 def _required_canonical_root() -> Path:
     value = os.environ.get(CANONICAL_ENV, "").strip()
@@ -1084,6 +1103,69 @@ def _copy_sanitized_tree(source: Path, destination: Path) -> None:
             target.write_bytes(data)
 
 
+def _preserve_terminal_runtime_artifacts(
+    runtime_root: Path,
+    evidence_root: Path,
+) -> dict[str, object]:
+    destination = evidence_root / "runtime-artifacts"
+    if destination.exists():
+        return {
+            "status": "ALREADY_PRESERVED",
+            "path": "runtime-artifacts",
+            "fileCount": sum(1 for path in destination.rglob("*") if path.is_file()),
+        }
+    if not runtime_root.exists():
+        return {
+            "status": "SOURCE_RUNTIME_ROOT_UNAVAILABLE",
+            "path": "runtime-artifacts",
+            "fileCount": 0,
+        }
+    try:
+        _copy_sanitized_tree(runtime_root, destination)
+    except Exception as exc:
+        return {
+            "status": "PRESERVATION_FAILED",
+            "path": "runtime-artifacts",
+            "fileCount": (
+                sum(1 for path in destination.rglob("*") if path.is_file())
+                if destination.exists()
+                else 0
+            ),
+            "failureClass": type(exc).__name__,
+            "detail": str(exc),
+        }
+    return {
+        "status": "PRESERVED",
+        "path": "runtime-artifacts",
+        "fileCount": sum(1 for path in destination.rglob("*") if path.is_file()),
+    }
+
+
+def _terminal_evidence_state(root: Path) -> dict[str, object]:
+    success = (root / TERMINAL_SUCCESS_MARKER).is_file()
+    failure = (root / TERMINAL_FAILURE_MARKER).is_file()
+    if success and failure:
+        raise ForensicCanaryError("Canary has contradictory terminal markers.")
+    if not success and not failure:
+        raise ForensicCanaryError("Provider canary has not reached a terminal outcome.")
+    missing_core = [name for name in CORE_FORENSIC_EVIDENCE if not (root / name).is_file()]
+    missing_acceptance = [
+        name for name in SUCCESS_ACCEPTANCE_EVIDENCE if not (root / name).is_file()
+    ]
+    return {
+        "terminalOutcome": "OBSERVATION_COMPLETED" if success else "FAILED_PRESERVED",
+        "terminalMarker": TERMINAL_SUCCESS_MARKER if success else TERMINAL_FAILURE_MARKER,
+        "acceptanceEvidenceComplete": success and not missing_acceptance,
+        "missingCoreEvidence": missing_core,
+        "missingAcceptanceEvidence": missing_acceptance,
+        "availableEvidence": sorted(
+            path.relative_to(root).as_posix()
+            for path in root.rglob("*")
+            if path.is_file()
+        ),
+    }
+
+
 def _run_subprocess(
     *,
     campaign_path: Path,
@@ -1207,9 +1289,16 @@ def _run_campaign(args: argparse.Namespace) -> int:
             evidence_root=evidence_root,
             timeout_seconds=second_duration + 360,
         )
-        _copy_sanitized_tree(runtime_root, evidence_root / "runtime-artifacts")
+        runtime_preservation = _preserve_terminal_runtime_artifacts(
+            runtime_root,
+            evidence_root,
+        )
+        if runtime_preservation["status"] != "PRESERVED":
+            raise ForensicCanaryError(
+                "Terminal runtime artifacts were not preserved after observation."
+            )
         _write_once(
-            evidence_root / "campaign-observation-terminal.json",
+            evidence_root / TERMINAL_SUCCESS_MARKER,
             {
                 "status": "OBSERVATION_TERMINAL_PENDING_HARD_CHEW_AND_SEAL",
                 "completedAt": datetime.now().astimezone().isoformat(),
@@ -1222,17 +1311,23 @@ def _run_campaign(args: argparse.Namespace) -> int:
                 "positionsRequested": False,
                 "ordersRequested": False,
                 "orderCapability": ORDER_CAPABILITY,
+                "runtimeArtifactPreservation": runtime_preservation,
             },
         )
         return 0
     except Exception as exc:
+        runtime_preservation = _preserve_terminal_runtime_artifacts(
+            runtime_root,
+            evidence_root,
+        )
         _write_once(
-            evidence_root / "campaign-failure.json",
+            evidence_root / TERMINAL_FAILURE_MARKER,
             {
                 "status": "FAILED_PRESERVED",
                 "failedAt": datetime.now().astimezone().isoformat(),
                 "failureClass": type(exc).__name__,
                 "detail": str(exc),
+                "runtimeArtifactPreservation": runtime_preservation,
                 "authority": AUTHORITY,
                 "orderCapability": ORDER_CAPABILITY,
             },
@@ -1854,6 +1949,237 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
     return {"analysis": result, "timeline": timeline}
 
 
+def _read_json_if_present(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    payload = json.loads(path.read_text(encoding="ascii"))
+    if not isinstance(payload, Mapping):
+        raise ForensicCanaryError(f"Expected JSON object evidence: {path}")
+    return dict(payload)
+
+
+def _analyze_terminal_failure(
+    evidence_root: Path,
+    terminal: Mapping[str, object],
+) -> dict[str, object]:
+    campaign = _read_json_if_present(evidence_root / "campaign-config.json")
+    failure = _read_json_if_present(evidence_root / TERMINAL_FAILURE_MARKER)
+    phase_states = [
+        state
+        for state in (
+            _read_json_if_present(evidence_root / "phase-1-state.json"),
+            _read_json_if_present(evidence_root / "phase-2-state.json"),
+        )
+        if state
+    ]
+    phase_receipts = [
+        receipt
+        for receipt in (
+            _read_json_if_present(evidence_root / "phase-1-receipt.json"),
+            _read_json_if_present(evidence_root / "phase-2-receipt.json"),
+        )
+        if receipt
+    ]
+    checkpoint_path = (
+        evidence_root
+        / "runtime-artifacts"
+        / "checkpoint"
+        / f"{campaign.get('runtimeIdentity', '')}.json"
+    )
+    checkpoint = _read_json_if_present(checkpoint_path)
+    completed_bar_events = [
+        dict(item)
+        for item in checkpoint.get("event_records", [])
+        if isinstance(item, Mapping)
+        and item.get("trigger") == CANONICAL_BAR_COMPLETED
+    ]
+    records = _record_payloads(evidence_root)
+    discoveries = [
+        item for item in records if item.get("evidenceType") == "DISCOVERY_CYCLE"
+    ]
+    compositions = [
+        item for item in records if item.get("evidenceType") == "COMPOSITION_CYCLE"
+    ]
+    attempt_events: list[dict[str, object]] = []
+    attempt_root = (
+        evidence_root
+        / "runtime-artifacts"
+        / "checkpoint"
+        / f"{campaign.get('runtimeIdentity', '')}-attempts"
+    )
+    config_fingerprint = str(checkpoint.get("config_fingerprint", ""))
+    if attempt_root.is_dir() and campaign.get("runtimeIdentity") and config_fingerprint:
+        attempt_events = _attempt_events(
+            evidence_root,
+            runtime_identity=str(campaign["runtimeIdentity"]),
+            configuration_fingerprint=config_fingerprint,
+        )
+    backfill = _backfill_accounting(
+        evidence_root
+        / "runtime-artifacts"
+        / "state"
+        / "continuous-history-backfill.json"
+    )
+    physical_atomicity = _read_json_if_present(
+        evidence_root / "physical-atomicity-proof.json"
+    )
+    verification = _read_json_if_present(evidence_root / "verification-summary.json")
+    phase_health = phase_states[-1].get("runtimeHealth", {}) if phase_states else {}
+    if not isinstance(phase_health, Mapping):
+        phase_health = {}
+    completed_bar_counter = int(
+        checkpoint.get("counters", {}).get("completed_bar_events", 0)
+        if isinstance(checkpoint.get("counters", {}), Mapping)
+        else 0
+    )
+    physical_atomicity_passed = (
+        physical_atomicity.get("classification")
+        == "ATOMIC_COMPOSITION_PHYSICAL_PROOF_PASSED"
+    )
+    classifications = {
+        "PROVIDER_CANARY_TERMINAL_OUTCOME": str(terminal["terminalOutcome"]),
+        "PROVIDER_CANARY_ACCEPTANCE": "FAILED",
+        "TERMINAL_FAILURE_EVIDENCE_PRESERVED": "YES",
+        "HARD_CHEW_VERIFICATION": str(
+            verification.get("status", "NOT_AVAILABLE")
+        ),
+        "CANONICAL_TIME_IDENTITY_REPAIRED": "NO",
+        "EQUIVALENT_OFFSET_INSTANTS_ACCEPTED": "NO",
+        "DISTINCT_INSTANTS_REJECTED": "YES_OFFLINE_PROOF",
+        "ANTI_HINDSIGHT_GATE_PRESERVED": "NO",
+        "COMPLETED_BAR_FINALITY_REPAIRED": "NO",
+        "PREMATURE_COMPLETED_BAR_EVENTS": "UNPROVEN",
+        "VALID_COMPLETED_BAR_EVENTS": len(completed_bar_events),
+        "APPEND_ONLY_FAILURE_CHRONOLOGY": "UNPROVEN",
+        "EXACT_COMPOSITION_FAILURE_DIAGNOSTICS": "UNPROVEN",
+        "TRUTHFUL_STAGE_COUNTERS": "UNPROVEN",
+        "ATOMIC_FAILED_COMPOSITION_NONMUTATION": (
+            "YES_OFFLINE_PROOF" if physical_atomicity_passed else "UNPROVEN"
+        ),
+        "VALID_COMPOSITION_SINGLE_COMMIT": (
+            "YES_OFFLINE_PROOF" if physical_atomicity_passed else "UNPROVEN"
+        ),
+        "PROSPECTIVE_FLOOR_INTEGRITY": "NO",
+        "REAL_PROVIDER_DISCOVERY_PROVEN": "NO",
+        "NATURAL_HOT_UNIVERSE_ADMISSION_PROVEN": "NO",
+        "REAL_SCHWAB_BACKFILL_PROVEN": "NO",
+        "HISTORICAL_CONTEXT_FORENSICALLY_RECONSTRUCTABLE": "NO",
+        "REAL_COMPLETED_BAR_DISPATCH_PROVEN": "NO",
+        "NATURAL_MATERIAL_REEVALUATION_PROVEN": "NO",
+        "NATURAL_RUNTIME_TRADEPLAN_OBSERVED": "NO",
+        "NATURAL_SUCCESSOR_SETUP_OBSERVED": "NO",
+        "NO_ARBITRARY_FIVE_BAR_WAIT_PHYSICALLY_PROVEN": "NO",
+        "END_TO_END_PRODUCER_RESTART_PROVEN": "NO",
+        "ACCEPTED_COMPOSITION_CYCLE_PROVEN": "NO",
+        "NATURAL_NO_PLAN_OR_TRADEPLAN_COMMITTED": "NO",
+        "FAILED_001A_AND_001B_EVIDENCE_PRESERVED": "YES",
+        "SECOND_EYE_ZIP_SELF_CONTAINED": "PENDING",
+        "READY_FOR_SECOND_EYE_REVIEW": "NO",
+        "MERGE_AUTHORIZED": "NO",
+        "UNKNOWN_INSTRUMENT_EXECUTION_ELIGIBILITY": "BLOCKED",
+        "PAPER_OR_EXECUTION_AUTHORITY_USED": "NO",
+    }
+    timeline = {
+        "terminalState": dict(terminal),
+        "failure": failure,
+        "phaseStates": phase_states,
+        "phaseReceipts": phase_receipts,
+        "discoveryRecords": discoveries,
+        "compositionRecords": compositions,
+        "completedBarEvents": completed_bar_events,
+        "attemptEvents": attempt_events,
+        "physicalAtomicityProof": physical_atomicity,
+        "backfillAccounting": backfill,
+    }
+    result = {
+        "schemaVersion": 1,
+        "profile": CANARY_PROFILE,
+        "analyzedAt": datetime.now().astimezone().isoformat(),
+        "terminalOutcome": terminal["terminalOutcome"],
+        "terminalFailure": failure,
+        "missingCoreEvidence": list(terminal["missingCoreEvidence"]),
+        "missingAcceptanceEvidence": list(terminal["missingAcceptanceEvidence"]),
+        "availableEvidenceCount": len(terminal["availableEvidence"]),
+        "providerDiscoveryRecordCount": len(discoveries),
+        "compositionCount": len(compositions),
+        "acceptedCompositionCycleCount": int(
+            phase_health.get("composition_cycles", 0) or 0
+        ),
+        "completedBarEventCount": len(completed_bar_events),
+        "completedBarEventCounter": completed_bar_counter,
+        "attemptEventCount": len(attempt_events),
+        "schwabBackfillAttempts": int(backfill["attempts"]),
+        "schwabBackfillSuccesses": int(backfill["successful"]),
+        "schwabBackfillFailures": int(backfill["failed"]),
+        "verificationStatus": verification.get("status", "NOT_AVAILABLE"),
+        "classifications": classifications,
+        "timelineFingerprint": _fingerprint(
+            "producer-001c-failed-forensic-timeline-v1", timeline
+        ),
+        "authority": AUTHORITY,
+        "executionAuthority": EXECUTION_AUTHORITY,
+        "accountValuesRequested": False,
+        "positionsRequested": False,
+        "ordersRequested": False,
+        "orderCapability": ORDER_CAPABILITY,
+    }
+    result["fingerprint"] = _fingerprint(
+        "producer-001c-failed-forensic-analysis-v1", result
+    )
+    return {"analysis": result, "timeline": timeline}
+
+
+def _analyze_terminal(
+    evidence_root: Path,
+    terminal: Mapping[str, object],
+) -> dict[str, object]:
+    if terminal["acceptanceEvidenceComplete"]:
+        analyzed = _analyze(evidence_root)
+        verification = _read_json_if_present(
+            evidence_root / "verification-summary.json"
+        )
+        analyzed["analysis"]["terminalOutcome"] = terminal["terminalOutcome"]
+        analyzed["analysis"]["classifications"][
+            "PROVIDER_CANARY_TERMINAL_OUTCOME"
+        ] = terminal["terminalOutcome"]
+        analyzed["analysis"]["classifications"][
+            "PROVIDER_CANARY_ACCEPTANCE"
+        ] = (
+            "PASSED"
+            if verification.get("status") == "PASS"
+            and all(
+                analyzed["analysis"]["classifications"].get(name) == "YES"
+                for name in (
+                    "CANONICAL_TIME_IDENTITY_REPAIRED",
+                    "ANTI_HINDSIGHT_GATE_PRESERVED",
+                    "COMPLETED_BAR_FINALITY_REPAIRED",
+                    "APPEND_ONLY_FAILURE_CHRONOLOGY",
+                    "TRUTHFUL_STAGE_COUNTERS",
+                    "ATOMIC_FAILED_COMPOSITION_NONMUTATION",
+                    "VALID_COMPOSITION_SINGLE_COMMIT",
+                    "PROSPECTIVE_FLOOR_INTEGRITY",
+                    "REAL_PROVIDER_DISCOVERY_PROVEN",
+                    "NATURAL_HOT_UNIVERSE_ADMISSION_PROVEN",
+                    "REAL_COMPLETED_BAR_DISPATCH_PROVEN",
+                    "NATURAL_MATERIAL_REEVALUATION_PROVEN",
+                    "END_TO_END_PRODUCER_RESTART_PROVEN",
+                    "ACCEPTED_COMPOSITION_CYCLE_PROVEN",
+                    "NATURAL_NO_PLAN_OR_TRADEPLAN_COMMITTED",
+                )
+            )
+            else "FAILED"
+        )
+        analyzed["analysis"]["classifications"]["HARD_CHEW_VERIFICATION"] = str(
+            verification.get("status", "NOT_AVAILABLE")
+        )
+        analyzed["analysis"].pop("fingerprint", None)
+        analyzed["analysis"]["fingerprint"] = _fingerprint(
+            "producer-001c-forensic-analysis-v1", analyzed["analysis"]
+        )
+        return analyzed
+    return _analyze_terminal_failure(evidence_root, terminal)
+
+
 def _compare_baselines(before: Mapping[str, object], after: Mapping[str, object]) -> dict[str, object]:
     stable_keys = ("services", "selectedProductionHashes", "manifestSafety")
     comparisons = {key: before.get(key) == after.get(key) for key in stable_keys}
@@ -1876,21 +2202,13 @@ def _seal(args: argparse.Namespace) -> int:
     root = _validate_external_root(args.evidence_root, require_new=False)
     if (root / "forensic-manifest.json").exists():
         raise ForensicCanaryError("Forensic packet is already sealed.")
-    required = (
-        "campaign-config.json",
-        "canonical-ownership-map.json",
-        "failed-evidence-preservation.json",
-        "physical-atomicity-proof.json",
-        "phase-1-state.json",
-        "phase-1-receipt.json",
-        "phase-2-state.json",
-        "phase-2-receipt.json",
-        "campaign-observation-terminal.json",
-        "verification-summary.json",
-    )
-    missing = [name for name in required if not (root / name).is_file()]
-    if missing:
-        raise ForensicCanaryError(f"Canary evidence is incomplete: {missing}")
+    terminal = _terminal_evidence_state(root)
+    if terminal["missingCoreEvidence"]:
+        raise ForensicCanaryError(
+            "Canary core provenance evidence is incomplete: "
+            f"{terminal['missingCoreEvidence']}"
+        )
+    _write_once(root / "terminal-evidence-inventory.json", terminal)
     preserved_now = _validate_failed_evidence()
     preserved_before = json.loads(
         (root / "failed-evidence-preservation.json").read_text(encoding="ascii")
@@ -1904,9 +2222,14 @@ def _seal(args: argparse.Namespace) -> int:
     )
     nonmutation = _compare_baselines(before, after)
     _write_once(root / "production-nonmutation.json", nonmutation)
-    analyzed = _analyze(root)
+    analyzed = _analyze_terminal(root, terminal)
     _write_once(root / "forensic-timeline.json", analyzed["timeline"])
     classifications = dict(analyzed["analysis"]["classifications"])
+    if not nonmutation["comparisonPassed"]:
+        classifications["PROVIDER_CANARY_ACCEPTANCE"] = "FAILED"
+    classifications["PRODUCTION_NONMUTATION"] = (
+        "YES" if nonmutation["comparisonPassed"] else "NO"
+    )
     classifications["FORENSIC_PACKET_COMPLETE"] = "YES"
     classifications["SECOND_EYE_ZIP_SELF_CONTAINED"] = "PENDING"
     classifications["READY_FOR_SECOND_EYE_REVIEW"] = "NO"
@@ -2122,8 +2445,7 @@ def _verification_command(
 
 def _verify(args: argparse.Namespace) -> int:
     root = _validate_external_root(args.evidence_root, require_new=False)
-    if not (root / "campaign-observation-terminal.json").is_file():
-        raise ForensicCanaryError("Terminal canary evidence is required before Hard Chew.")
+    _terminal_evidence_state(root)
     if (root / "verification-summary.json").exists():
         raise ForensicCanaryError("Verification evidence already exists.")
     python = sys.executable
@@ -2347,6 +2669,7 @@ def _render_package_index(
     root: Path,
     ownership: Mapping[str, object],
     focused_modules: Iterable[str],
+    terminal: Mapping[str, object],
 ) -> str:
     stages = ownership.get("stages", [])
     lines = [
@@ -2354,6 +2677,7 @@ def _render_package_index(
         "",
         f"Canonical source: `{EXPECTED_CANONICAL_SHA}`",
         f"Evidence: `evidence/{root.name}`",
+        f"Provider canary terminal outcome: `{terminal['terminalOutcome']}`.",
         "Authority: `RESEARCH_ONLY`; execution authority: `NONE`; order capability: `UNAVAILABLE`.",
         "",
         "## Canonical Ownership",
@@ -2403,6 +2727,9 @@ def _render_package_index(
             "- The market may truthfully produce no TradePlan or successor setup.",
             "- Market observations grant no Paper, Shadow, broker, account, position, or order authority.",
             "- Sanitized source uses synthetic `0000` where the local account-binding identity appeared; the ledger preserves original and sanitized file hashes without preserving that identity.",
+            "- Missing acceptance evidence is preserved in `evidence/"
+            + root.name
+            + "/terminal-evidence-inventory.json`; it is never synthesized or treated as a pass.",
             "",
         ]
     )
@@ -2446,8 +2773,26 @@ def _prior_package_attempts(root: Path) -> list[dict[str, object]]:
     return attempts
 
 
+def _package_review_classifications(
+    classifications: Mapping[str, object],
+    *,
+    manifest_verified: bool,
+    focused_rerun_passed: bool,
+) -> dict[str, object]:
+    result = dict(classifications)
+    result["FORENSIC_PACKET_COMPLETE"] = "YES"
+    result["SECOND_EYE_ZIP_SELF_CONTAINED"] = (
+        "YES" if manifest_verified and focused_rerun_passed else "NO"
+    )
+    result["READY_FOR_SECOND_EYE_REVIEW"] = (
+        "YES" if manifest_verified else "NO"
+    )
+    return result
+
+
 def _package(args: argparse.Namespace) -> int:
     root = _validate_external_root(args.evidence_root, require_new=False)
+    terminal = _terminal_evidence_state(root)
     manifest_path = root / "forensic-manifest.json"
     if not manifest_path.is_file():
         raise ForensicCanaryError("Forensic packet must be sealed before packaging.")
@@ -2554,6 +2899,8 @@ def _package(args: argparse.Namespace) -> int:
     focused_modules = _package_focus_modules()
     index = {
         "canonicalSourceSha": EXPECTED_CANONICAL_SHA,
+        "providerCanaryTerminalOutcome": terminal["terminalOutcome"],
+        "missingAcceptanceEvidence": terminal["missingAcceptanceEvidence"],
         "evidenceRoot": f"evidence/{root.name}",
         "source": "source/momentum_hunter",
         "tests": "source/tests",
@@ -2573,6 +2920,7 @@ def _package(args: argparse.Namespace) -> int:
             root=root,
             ownership=ownership,
             focused_modules=focused_modules,
+            terminal=terminal,
         ).encode("ascii"),
     )
     _write_once(
@@ -2580,6 +2928,7 @@ def _package(args: argparse.Namespace) -> int:
         (
             "# Read-Only Review Packet\n\n"
             f"Canonical source SHA: `{EXPECTED_CANONICAL_SHA}`.\n\n"
+            f"Provider canary terminal outcome: `{terminal['terminalOutcome']}`.\n\n"
             "This packet contains market-data-only forensic evidence. It grants no Paper, Shadow, broker, account, position, or order authority. The canary wrapper is observational; canonical production classes own every decision-authoritative input.\n"
         ).encode("ascii"),
     )
@@ -2605,8 +2954,6 @@ def _package(args: argparse.Namespace) -> int:
     )
     prezip_rerun = _run_package_tests(source_destination)
     _write_once(package_root / "FOCUSED-RERUN-PREZIP.json", _sanitize(prezip_rerun))
-    if prezip_rerun["status"] != "PASS":
-        raise ForensicCanaryError("Second-eye staged focused rerun failed.")
     package_scan = _secret_scan(package_root, forbidden_value=forbidden_value)
     _write_once(package_root / "secret-scan.json", package_scan)
     if package_scan["status"] != "PASS":
@@ -2614,7 +2961,9 @@ def _package(args: argparse.Namespace) -> int:
     analysis = json.loads((root / "forensic-analysis.json").read_text(encoding="ascii"))
     final_classifications = dict(analysis["classifications"])
     final_classifications["FORENSIC_PACKET_COMPLETE"] = "YES"
-    final_classifications["SECOND_EYE_ZIP_SELF_CONTAINED"] = "YES"
+    final_classifications["SECOND_EYE_ZIP_SELF_CONTAINED"] = (
+        "PENDING_EXTRACTED_ZIP_VERIFICATION"
+    )
     final_classifications["READY_FOR_SECOND_EYE_REVIEW"] = "YES"
     _write_once(
         package_root / "FINAL-CLASSIFICATIONS.json",
@@ -2646,6 +2995,12 @@ def _package(args: argparse.Namespace) -> int:
         extracted_manifest["status"] == "PASS"
         and extracted_rerun["status"] == "PASS"
     )
+    review_ready = extracted_manifest["status"] == "PASS"
+    verified_classifications = _package_review_classifications(
+        final_classifications,
+        manifest_verified=review_ready,
+        focused_rerun_passed=extracted_rerun["status"] == "PASS",
+    )
     result = {
         "zipPath": str(zip_path),
         "zipSha256": _sha256(zip_path),
@@ -2661,11 +3016,7 @@ def _package(args: argparse.Namespace) -> int:
         },
         "extractedZipFocusedRerun": _sanitize(extracted_rerun),
         "selfContainedRerun": "PASS" if self_contained else "FAIL",
-        "classifications": {
-            **final_classifications,
-            "SECOND_EYE_ZIP_SELF_CONTAINED": "YES" if self_contained else "NO",
-            "READY_FOR_SECOND_EYE_REVIEW": "YES" if self_contained else "NO",
-        },
+        "classifications": verified_classifications,
     }
     _write_once(root / "second-eye-package.json", result)
     closeout_items = _file_manifest(root)
@@ -2678,9 +3029,7 @@ def _package(args: argparse.Namespace) -> int:
             "manifestFingerprint": _manifest_fingerprint(closeout_items),
         },
     )
-    if not self_contained:
-        raise ForensicCanaryError("Extracted second-eye ZIP rerun failed.")
-    return 0
+    return 0 if review_ready else 1
 
 
 def _static_capability_scan() -> dict[str, object]:

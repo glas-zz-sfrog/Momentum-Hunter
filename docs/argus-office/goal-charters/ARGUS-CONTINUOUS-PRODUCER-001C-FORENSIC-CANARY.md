@@ -31,8 +31,16 @@ independent review.
   atomicity, nonmutation, and secret scans pass.
 - The extracted ZIP verifies its manifest and reruns the focused suite from
   packaged source.
+- Every terminal provider outcome requires a sanitized second-eye ZIP. A
+  no-candidate/no-ready market, provider failure, phase failure, failed
+  acceptance gate, or failed focused verification remains failed evidence but
+  does not suppress packaging.
+- Missing acceptance artifacts are inventoried exactly. They are not
+  synthesized, backfilled, or converted into passing evidence.
 
 ## Hard Stop
 
 No merge, deployment, Paper reconciliation, STAT-DATA-002 work, or execution
-authority is authorized. Stop after the second-eye ZIP is ready.
+authority is authorized. Stop after the second-eye ZIP is produced and its
+manifest, sanitization, and extracted focused-verification results are reported,
+regardless of whether provider acceptance passed or failed.
