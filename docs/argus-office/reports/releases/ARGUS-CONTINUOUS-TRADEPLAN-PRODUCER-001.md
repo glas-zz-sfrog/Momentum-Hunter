@@ -129,3 +129,70 @@ and activate `ARGUS-STAT-DATA-002` under a new immutable research identity.
 After that, reconcile and requalify the existing Continuous Paper branch and
 prove a disabled installation. Do not arm Paper as part of either
 reconciliation.
+
+## Subsequent Independent Adjudication - 2026-08-25
+
+This section records later authority without rewriting the original closeout.
+Independent review bundle
+`ARGUS-CONTINUOUS-PRODUCER-SECOND-EYE-BUNDLE-001-6DBD9E3.zip`, SHA-256
+`D9AC7784B1595188661692E57995B482B1E3A826C3BB5C41E400F2B8D77D5EB5`,
+confirmed that the merged Producer is a valid, fail-closed lower-level research
+capability and that canonical source contains real recurring discovery,
+hot-universe ownership, new-symbol handoff, and bounded history plumbing.
+
+The review also established that the natural `run_runtime()` path does not
+originate the lifecycle transition, successor setup, predecessor-plan, or
+recurring completed-bar material-event evidence required to emit or reevaluate
+a Continuous TradePlan. Existing cold-symbol, completed-bar, successor, and
+restart proofs rely on deterministic synthetic injection or independently
+tested lower-level persistence/runtime contracts. They do not constitute a live
+canonical discovery-to-TradePlan, production reevaluation, or end-to-end
+restart proof.
+
+Current authoritative classification:
+
+`MERGED / LOWER_LEVEL_PRODUCER_VALID / NATURAL_RUNTIME_PATH_INCOMPLETE / RESEARCH_ONLY`
+
+`RECURRING_DISCOVERY_SOURCE_PATH_PRESENT = YES`
+
+`LIVE_CANONICAL_RECURRING_DISCOVERY_TO_TRADEPLAN_PROOF = NO`
+
+`HISTORICAL_CONTEXT_ADMISSION_PROVEN = YES`
+
+`HISTORICAL_CONTEXT_IDENTITY_PROVEN = YES`
+
+`RVOL_BASELINE_USE_PROVEN = YES`
+
+`HISTORICAL_PRICE_STRUCTURE_DECISION_USE = PARTIAL`
+
+`MATERIAL_REEVALUATION_LOWER_LEVEL = YES`
+
+`COMPLETED_BAR_EVENT_SOURCE_PRODUCTION = NO`
+
+`NATURAL_SUCCESSOR_SETUP_PRODUCTION = NO`
+
+`PRODUCER_STORE_IDEMPOTENCY = YES`
+
+`GENERIC_RUNTIME_RESTORE = YES`
+
+`END_TO_END_CONTINUOUS_PRODUCER_RESTART = NO`
+
+`PRODUCTION_INSTRUMENT_CLASSIFICATION = NO`
+
+`UNKNOWN_INSTRUMENT_RESEARCH_PLAN_VISIBILITY = CURRENTLY_BLOCKED`
+
+`CONTINUOUS_PAPER_CONTRACT_CONSUMABLE = YES`
+
+`CONTINUOUS_PAPER_ACTIVATION_READY = NO`
+
+`SECOND_EYE_BUNDLE_INTEGRITY = PASS`
+
+`SECOND_EYE_BUNDLE_SELF_CONTAINED_EXECUTION = FAIL_MISSING_DEPENDENCY`
+
+The missing bundle dependency includes at least `momentum_hunter/config.py`.
+This reproducibility finding does not alter the code adjudication. No rollback
+is requested. `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` remains next;
+`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` owns natural runtime completion and a
+later separate provider-backed research-only canary. `ARGUS-STAT-DATA-002` is
+held behind those gates, and Continuous Paper remains unmerged, uninstalled,
+and unarmed.

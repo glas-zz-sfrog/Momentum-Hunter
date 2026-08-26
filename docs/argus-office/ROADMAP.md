@@ -64,29 +64,37 @@ pipeline. The terminal `DO_NOT_TRADE_MISSED_ENTRY` result is legitimate and
 unchanged.
 
 `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` is
-`COMPLETE / CANONICAL / RESEARCH_ONLY` at qualified implementation
-`aeea192896a8203113807fb03a657fa4f6218774`. It reuses the canonical
-R032B/R032C backfill, minute/Daily stores, time-normalized RVOL, Continuous
-universe/lifecycle/composition, and DATA-004 contracts to produce immutable
-same-session research TradePlans from arbitrary valid startup times. Cold-
-symbol backfill, one coherent historical/current completed-bar chronology,
-material reevaluation, missed-plan immutability, distinct successor plans, and
-restart idempotency are proven. Full discovery ran 2,752 tests with
-`OK (skipped=1)`. Continuous
-Paper consumes the producer contract without semantic changes but remains
-unmerged, uninstalled, and unarmed. Live Schwab evidence cannot yet positively
-classify security subtype/leverage, so real candidates fail closed with
-`AUTHORITATIVE_SUBTYPE_AND_LEVERAGE_CLASSIFICATION_UNAVAILABLE`. No account,
-position, broker, Paper, Shadow, order, service, scheduler, or installed
-Continuous runtime changed. The pushed branch was cleanly fast-forwarded
-through `1068265`; the post-merge canonical producer/runtime suite passed
-41/41. The merge changed zero opening component bytes, but Identity-003 still
-binds total/excluded package-file counts, so adding the unreachable producer
-module changed the V2 closure fingerprint. The clean qualified tree was
-promoted without service restart or job repin as
-`OPENING-RUNTIME-EC11418BBC35F5285CA8`; live verification is
-`APPROVED_RUNTIME_MATCH`. This unnecessary-promotion overbinding is recorded as
-the next narrow reliability correction.
+`MERGED / LOWER_LEVEL_PRODUCER_VALID / NATURAL_RUNTIME_PATH_INCOMPLETE /
+RESEARCH_ONLY` at implementation
+`aeea192896a8203113807fb03a657fa4f6218774`. Independent second-eye
+adjudication preserves the safe, fail-closed merge while narrowing its original
+closeout claims. Canonical source contains real recurring Finviz discovery,
+persistent hot-universe ownership, new-symbol readiness handoff, and bounded
+Schwab history plumbing. The Producer can consume canonical candle/RVOL,
+lifecycle, setup, predecessor, and successor contracts and can persist
+deterministic immutable research plans when callers provide those inputs.
+
+The natural `run_runtime()` path does not yet originate the lifecycle,
+lifecycle-transition, successor-setup, predecessor-plan, and completed-bar
+material-event evidence needed to emit or reevaluate a Continuous TradePlan.
+Cold-symbol, completed-bar, successor-plan, and restart acceptance proofs used
+deterministic synthetic injection and lower-level stores; they are not a live
+canonical discovery-to-TradePlan proof. Historical admission, identity, depth,
+and minute-volume RVOL baseline use are proven, while historical price-
+structure decision use is partial and multi-resolution context is not
+implemented. Live instrument subtype/leverage authority is unavailable, which
+currently blocks both execution eligibility and natural research-plan
+visibility. Continuous Paper schema compatibility is proven, but activation is
+not ready.
+
+The original closeout and verification history remain immutable. The later
+adjudication is authoritative for current capability. The review bundle
+`ARGUS-CONTINUOUS-PRODUCER-SECOND-EYE-BUNDLE-001-6DBD9E3.zip`, SHA-256
+`D9AC7784B1595188661692E57995B482B1E3A826C3BB5C41E400F2B8D77D5EB5`, passed
+integrity and sanitization but was not self-contained for test execution because
+at least `momentum_hunter/config.py` was absent. No rollback is required.
+Identity-003A remains the immediate narrow reliability correction; natural
+runtime completion is recorded separately as Producer-001A.
 
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
@@ -241,10 +249,13 @@ requires a separate current-head reconciliation and qualification task.
 ### Current Blocking Gates
 
 - `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` is branch-only and correctly blocked
-  from activation. The producer contract is now implemented and proven on its
-  task branch; Paper remains unmerged, uninstalled, and unarmed pending
-  producer integration, current-head branch reconciliation, complete
-  requalification, and disabled-install proof.
+  from activation. Producer/Paper schema compatibility is proven, but the
+  natural Continuous runtime cannot yet originate complete lifecycle,
+  successor, completed-bar reevaluation, and instrument-admission evidence.
+  Paper remains unmerged, uninstalled, and unarmed pending Producer-001A,
+  provider-backed research-only physical acceptance, authoritative instrument
+  classification, current-head reconciliation, complete requalification, and
+  disabled-install proof.
 - Broad historical replay/statistical claims require corporate-action-safe,
   positively admitted history. `ARGUS-RESEARCH-DATA-002` supplies contracts but
   current broad datasets retain unknown basis and survivorship limitations.
@@ -259,24 +270,28 @@ requires a separate current-head reconciliation and qualification task.
 Implement `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` as a narrow correction so
 diagnostic total/excluded package inventory cannot change opening identity when
 the authoritative closure, components, imports, configuration, environment,
-and loaded bytes are unchanged. Then wire and activate `ARGUS-STAT-DATA-002`
-prospectively under a new immutable research identity. After that research
-denominator is collecting, reconcile and fully requalify the branch-only
-Continuous Paper implementation and prove it installs disabled. Paper arming
-remains a separate later gate. The authoritative ordered sequence is maintained
-only in `Next / Queue` below.
+and loaded bytes are unchanged. Then implement
+`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` to complete the natural lifecycle,
+successor-setup, completed-bar reevaluation, and restart-reconstruction path.
+After a separate real provider-backed research-only canary passes, activate
+`ARGUS-STAT-DATA-002` prospectively. Authoritative instrument subtype/leverage
+classification remains a pre-Paper gate. Paper reconciliation, disabled
+installation, read-only preflight, and one-entry arming remain separate later
+gates. The authoritative ordered sequence is maintained only in `Next / Queue`
+below.
 
 ### Recent Material Completions
 
-- `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` proves cold-symbol bounded history
-  admission, arbitrary same-session startup, non-opening-specific readiness,
-  coherent candle composition, material reevaluation, immutable missed plans,
-  explicit successor plans, restart idempotency, and downstream Continuous
-  Paper contract compatibility. It adds no execution authority and records the
-  missing authoritative instrument-subtype/leverage classification as a
-  fail-closed gap. Its merge also physically exposed the remaining V2
-  diagnostic-inventory overbinding; the clean tree was safely promoted and the
-  narrow correction is now queued explicitly.
+- `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` safely merges a valid lower-level,
+  research-only Producer and proves deterministic contract composition,
+  immutable producer-store behavior, one-current-bar readiness, and downstream
+  Continuous Paper schema compatibility. Independent second-eye adjudication
+  later established that natural lifecycle/successor production, completed-bar
+  event dispatch, and end-to-end restart reconstruction are not implemented in
+  the production path; historical price-structure use is partial and live
+  instrument classification is unavailable. The original closeout remains
+  historical, the merged fail-closed infrastructure remains preserved, and
+  Producer-001A owns the bounded natural-runtime completion.
 - `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003` activates the authoritative V2
   promotion boundary: 96 reachable package modules plus three explicit files,
   10 relevant distributions, exact loaded-byte/configuration checks, fail-
@@ -319,22 +334,33 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No implementation task is active. The Continuous TradePlan producer is
-   terminal, integrated, pushed on its task branch, and reconciled here.
+1. No implementation task is active. Producer-001 is merged and preserved as a
+   valid lower-level research capability; its natural runtime path is explicitly
+   incomplete under the later second-eye adjudication.
 
 ### 2. Ready / Next
 
-1. Correct the Identity-003 closure-fingerprint overbinding under
-   `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A`: retain fail-closed authority over
-   reachable components and imports while excluding purely diagnostic
-   total/excluded package inventory from promotion identity.
-2. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
-   research identity after the producer can supply the complete bounded cycle;
-   this grants no Paper or order authority.
-3. Reconcile and fully requalify the existing
-   `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch only after the producer passes;
-   first prove the disabled installation. Paper preflight and one-entry arming
-   remain separate later gates.
+1. `ARGUS-AUTOMATION-RUNTIME-IDENTITY-003A` is `PLANNED / READY_NEXT`. Correct
+   the Identity-003 closure-fingerprint overbinding while retaining fail-closed
+   authority over reachable components and imports and excluding only purely
+   diagnostic total/excluded package inventory from promotion identity.
+2. Implement `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` from then-current clean
+   canonical: naturally produce lifecycle/successor evidence, dispatch completed
+   canonical bars, preserve research visibility while instrument authority is
+   unavailable, and reconstruct the full path safely after restart.
+3. Run a separate real provider-backed, research-only exact-path Continuous
+   canary. It must prove real discovery through truthful plan/no-plan,
+   reevaluation, and bounded restart behavior without account, Paper, Shadow,
+   broker, or order capability.
+4. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
+   research identity only after Producer-001A and its physical canary pass.
+5. Close authoritative instrument subtype/leverage classification before any
+   Continuous Paper arming; unknown and leveraged/inverse products remain
+   execution-ineligible meanwhile.
+6. Reconcile and fully requalify the existing
+   `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch, then separately prove disabled
+   installation, read-only Paper preflight, and one-entry arming. No gate
+   automatically advances to live execution.
 
 ### 3. Parallel Research
 
@@ -353,10 +379,14 @@ next-action language preserved elsewhere cannot supersede this queue.
 1. `ARGUS-EXIT-POLICY-001`: blocked from comparative evaluation until an
    admitted fixed-entry replay population and preregistration exist.
 2. `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001`: producer compatibility is proven;
-   activation remains blocked on canonical reconciliation, complete
+   activation remains blocked on Producer-001A, physical exact-path acceptance,
+   authoritative instrument classification, canonical reconciliation, complete
    requalification, and disabled-install proof.
-3. R034: blocked on explicit destructive approval.
-4. Continuous/live order authority: blocked on separate Paper, safety,
+3. `ARGUS-STAT-DATA-002`: `HELD` until Producer-001A and its physical canary can
+   supply a truthful full stream rather than denominator-heavy incomplete
+   `SETUP_PENDING` states.
+4. R034: blocked on explicit destructive approval.
+5. Continuous/live order authority: blocked on separate Paper, safety,
    account/broker, prospective-evidence, and Steven decision gates.
 
 ### 5. Deferred / Later
@@ -2912,7 +2942,8 @@ blocked and gains no authority from Paper evidence.
 
 #### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001 - Continuous Prospective TradePlan Producer
 
-- Lifecycle: `COMPLETE / CANONICAL / RESEARCH_ONLY`. Qualified implementation
+- Lifecycle: `MERGED / LOWER_LEVEL_PRODUCER_VALID /
+  NATURAL_RUNTIME_PATH_INCOMPLETE / RESEARCH_ONLY`. Qualified implementation
   `aeea192896a8203113807fb03a657fa4f6218774` is on
   `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` from synchronized canonical
   `3b4bb97b07fd661258d353f3bfc01a9623bf81e4`; the pushed branch was cleanly
@@ -2974,6 +3005,61 @@ blocked and gains no authority from Paper evidence.
   Schwab evidence does not authoritatively distinguish common stock, ordinary
   ETF, leveraged/inverse ETP, ETN, and unknown subtype. Synthetic authoritative
   admission/rejection behavior is proven; ticker/name inference is prohibited.
+- Subsequent independent review is authoritative over the original broad
+  completion interpretation. It confirms recurring production discovery and
+  lower-level Producer validity, while finding that live composition supplies
+  candle/RVOL evidence but does not naturally originate lifecycle transition,
+  successor setup, predecessor-plan, or recurring completed-bar material-event
+  evidence. The original synthetic/replay proofs remain valid for their lower-
+  level contracts; they are not live discovery-to-TradePlan, production
+  reevaluation, or end-to-end restart proof.
+- Corrected current classifications are
+  `HISTORICAL_CONTEXT_ADMISSION_PROVEN = YES`,
+  `HISTORICAL_CONTEXT_IDENTITY_PROVEN = YES`,
+  `RVOL_BASELINE_USE_PROVEN = YES`,
+  `HISTORICAL_PRICE_STRUCTURE_DECISION_USE = PARTIAL`,
+  `SUCCESSOR_CONTRACT_PROVEN = YES`,
+  `NATURAL_SUCCESSOR_SETUP_PRODUCTION = NO`,
+  `PRODUCER_STORE_IDEMPOTENCY = YES`,
+  `GENERIC_RUNTIME_RESTORE = YES`, and
+  `END_TO_END_CONTINUOUS_PRODUCER_RESTART = NO`.
+- The second-eye bundle passed hash/integrity/sanitization verification but is
+  `SELF_CONTAINED_EXECUTION = FAIL_MISSING_DEPENDENCY`; at least
+  `momentum_hunter/config.py` was omitted. Future review bundles must include the
+  recursive sanitized local-import closure needed to rerun claimed tests.
+
+#### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A - Natural Runtime Path Completion
+
+- Lifecycle: `PLANNED / NEXT_AFTER_IDENTITY-003A / RESEARCH_ONLY`. Do not begin
+  before Identity-003A is terminal and governance identifies then-current clean
+  canonical.
+- Wire the existing candidate-lifecycle and setup contracts into actual
+  production composition for every admitted hot-universe member. Naturally
+  produce pending, missed-entry, pullback, reclaim, continuation, successor,
+  and predecessor-linked evidence without inventing a second setup engine or
+  relying on test-injected lifecycle objects.
+- Wire each newly completed canonical bar into bounded material-event
+  reevaluation so changed evidence can create a truthful lifecycle/setup result
+  and, where warranted, a new immutable TradePlan. Preserve the earlier decision
+  and setup identity; no hindsight rewrite is permitted.
+- Preserve research-plan visibility when instrument subtype/leverage authority
+  is unavailable where the existing contracts can do so safely, while marking
+  the plan `EXECUTION_INELIGIBLE_INSTRUMENT_CLASSIFICATION_UNAVAILABLE` and
+  retaining fail-closed Paper/execution eligibility. Do not authorize leveraged
+  or inverse products or infer subtype from ticker/name text.
+- Persist or deterministically reconstruct readiness, historical context,
+  current market evidence, instrument admission, composition cycle, denominator
+  linkage, lifecycle, successor, and predecessor state. Restart must not
+  duplicate a plan, reset a missed entry, lose chronology, fabricate history,
+  or create a hindsight setup.
+- Keep history truth explicit: admission, identity, depth, and RVOL baseline use
+  are distinct from price-structure features actually derived from history.
+  Preserve one-current-completed-bar readiness and avoid an arbitrary five-new-
+  bar wait. Leave room for later multi-resolution and catalyst-state events
+  without implementing their unfrozen policies here.
+- Safety boundary: no account, position, broker, Paper, Shadow, order, WPF, or
+  live execution authority. Acceptance requires deterministic tests plus a
+  separately gated real provider-backed research-only canary after integration.
 
 #### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
 
@@ -2995,11 +3081,14 @@ blocked and gains no authority from Paper evidence.
 - Lifecycle: `BLOCKED`. Branch
   `codex/ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` contains a proven downstream
   implementation, but it is not canonical, installed, or armed.
-- Gate: `CANONICAL_RECONCILIATION_AND_DISABLED_INSTALL_PROOF_REQUIRED`. The
-  producer contract is now consumable without semantic changes. Reconcile the
-  branch onto current canonical without rebase/force, repeat complete Hard
-  Chew, install disabled, prove the exact Paper-only environment read-only, and
-  treat one-entry arming as a separate gate.
+- Gate: `NATURAL_RUNTIME_AND_INSTRUMENT_AUTHORITY_REQUIRED`. The producer
+  contract is schema-consumable without semantic changes, but Continuous Paper
+  is not ready. First complete Producer-001A, pass its physical provider-backed
+  research-only canary, and close authoritative instrument subtype/leverage
+  classification. Then reconcile the branch onto current canonical without
+  rebase/force, repeat complete Hard Chew, install disabled, prove the exact
+  Paper-only environment read-only, and treat one-entry arming as a separate
+  gate.
 - Current authority remains `CONTINUOUS_PAPER_INSTALLED = NO`,
   `ENTRY_AUTHORITY_DISABLED`, no Continuous Runtime account/position/order
   reads, and no Alpaca Live or real-order capability.
@@ -3214,11 +3303,13 @@ Intended specialist architecture:
 
 #### ARGUS-STAT-DATA-002 - Prospective Producer Wiring And Activation
 
-- Status: `CANONICAL_INTEGRATED / ACTIVATION_PENDING`; producer wiring remains
+- Status: `CANONICAL_INTEGRATED / ACTIVATION_HELD`; producer wiring remains
   dormant and must use a new immutable activation identity.
-- The Aug. 17 evidence gate is terminal and preserved. Begin only after
-  `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001` can supply the complete bounded
-  continuous cycle required by this contract.
+- The Aug. 17 evidence gate is terminal and preserved. Do not begin activation
+  until `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` and its separate real
+  provider-backed research-only canary prove the complete bounded Continuous
+  cycle required by this contract. Avoid a denominator dominated by incomplete
+  `SETUP_PENDING` states.
 - Feed the denominator from the complete bounded source population, including
   rows that do not survive scanner/report admission, rather than treating a
   surviving briefing subset as the original population.
