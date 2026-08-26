@@ -95,6 +95,12 @@ integrity and sanitization but was not self-contained for test execution because
 at least `momentum_hunter/config.py` was absent. No rollback is required.
 Identity-003A remains the immediate narrow reliability correction; natural
 runtime completion is recorded separately as Producer-001A.
+The docs-only adjudication content is commit
+`c04ba8f7e09c7623743bdac69b333733f6fc0fbb` on
+`codex/ARGUS-CONTINUOUS-PRODUCER-SECOND-EYE-ADJUDICATION-001`. Its verified
+fast-forward reconciliation changes governance only: no source/runtime,
+release, service, scheduler, provider, Paper, Shadow, broker, account, or order
+behavior changes, and no opening promotion or job repin is required.
 
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
