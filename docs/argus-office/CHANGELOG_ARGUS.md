@@ -351,6 +351,17 @@
   unchanged and inactive.
 
 ## Unreleased
+- Implemented the isolated read-only WPF Command Center on branch commit
+  `84cb161`: Live Universe, selected-ticker chart/market story,
+  Decision/Why/Evidence, and visible What Changed reuse the existing pane and
+  docking identities. Opportunity and evidence stay separate; stable history
+  is amber and cannot replace the current decision; missing Target 2, setup,
+  and complete chronology remain explicit. Six exact-size visual proofs,
+  287/287 .NET tests, and a zero-warning Release build pass. Producer-001C,
+  opening runtime, installed services/bytes, scheduler, providers, Paper,
+  Shadow, broker/order capability, and startup pointers are unchanged. Status
+  is pending Steven visual acceptance and post-canary merge authorization; no
+  merge or install occurred.
 - Added the branch-local Phase 13R common specialist opinion contract. Frozen
   records now bind specialist/version, exact opportunity/setup/TradePlan
   target, policy, timestamps, evidence hashes, evaluation state, feature

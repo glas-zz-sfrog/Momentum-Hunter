@@ -55,6 +55,27 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+The 2026-08-26 direct task record supersedes the older Producer-001A-next
+wording below for current execution order. The frozen provider-backed gate is
+now `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001C` on clean pushed commit
+`b7f6df51e9f6e08056c58b419c870f116096179c`, with detached product commit
+`4690dbf193355bc7a39c6c74e531344ea8a37875`, preflight at approximately 08:28
+Central on August 27, regular-session observation at approximately 08:32, and
+the mandatory terminal second-eye ZIP still required. Its scheduler, evidence
+root, product source, acceptance criteria, and runtime state remain frozen.
+
+`ARGUS-GUI-COMMAND-CENTER-001` is isolated parallel WPF work and is now
+`IMPLEMENTED_PENDING_STEVEN_VISUAL_ACCEPTANCE_AND_POST_CANARY_MERGE` on
+`codex/ARGUS-GUI-COMMAND-CENTER-001`. Implementation/proof commit
+`84cb161393fbadeb00b6faa17502176a4c9f16de` is based directly on synchronized
+canonical `82460b3313b86c34dff4ffb737d2c04bf02e3ace`. Independent Hard Chew
+passes 287/287 .NET tests, a zero-warning Release build, protected/capability
+audits, six exact-dimension visual proofs, and complete physical nonmutation
+reconciliation. No merge, install, startup-pointer, service, scheduler,
+runtime, provider, Paper, Shadow, broker, account, position, or order change is
+authorized or present. Steven's numbered visual review in the Verification
+Queue remains the only current GUI acceptance action.
+
 Monday August 24 is terminal as `OPENING_EVIDENCE_PASS_WITH_FINDINGS` with
 `AUTOMATION_RUNTIME_PASS`, `PIPELINE_COMPLETE`, `EXECUTION_EVIDENCE_READY`,
 and `CANDIDATES_NO_EXECUTION_READY_PLAN_BY_POLICY`. BMNR was the sole qualified
@@ -3068,20 +3089,37 @@ blocked and gains no authority from Paper evidence.
   live execution authority. Acceptance requires deterministic tests plus a
   separately gated real provider-backed research-only canary after integration.
 
-#### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
+#### ARGUS-GUI-COMMAND-CENTER-001 - Question-First Operator Command Center
 
-- Lifecycle: `DEFERRED / UI_READ_MODEL`. No implementation or visual acceptance
-  work is authorized by this placement record.
-- Reuse the existing WPF chart, candidate story, TradePlan, history/activity,
-  monitoring, specialist, and evidence-lineage surfaces. Do not create a second
-  decision authority or market-history model.
-- The eventual read model must answer: what matters now; why a symbol is
-  interesting; whether Momentum Hunter would trade it now and why not; what
-  changed since the prior evaluation; what historical context and prior beliefs
-  exist; what happened afterward; whether a limitation is policy or bad/missing
-  evidence; and which open positions require attention.
-- Begin only after the Continuous producer and required history/catalyst/decision
-  interfaces are stable enough to avoid a UI-owned interpretation layer.
+- Lifecycle: `IMPLEMENTED_PENDING_STEVEN_VISUAL_ACCEPTANCE_AND_POST_CANARY_MERGE`.
+  The 2026-08-26 direct GUI authorization supersedes this section's prior
+  deferred placement without broadening any backend authority.
+- Implementation/proof commit
+  `84cb161393fbadeb00b6faa17502176a4c9f16de` reuses the existing Hunter,
+  PrimaryChart/CandleChart, TradePlan/Why/evidence, Activity, Diagnostics, and
+  Positions identities in a four-zone read-only Command Center. It adds no
+  `PaneKind`, contract, engine rule, provider call, or execution control.
+- The supplied 1672x941 operator screenshot is preserved as the visual-language
+  baseline: dark navy, compact tables, thin separators, and explicit state
+  accents. Unsupported Radar Map geometry, daily/rate/uptime/At Risk metrics,
+  live-market claims, confidence bars, and target ladders are retired rather
+  than mocked.
+- Opportunity and evidence are independently labeled. UI age uses `ObservedAt`
+  only for display, never rank/readiness; old values use an absolute `SEEN`
+  date. What Changed composes only existing Activity, stable Candidate Story,
+  and technical-research evidence and is explicitly `PARTIAL HISTORY`.
+- Stable history selection preserves the current answer while showing a
+  separate amber evidence context and read-only Return to Current navigation.
+  Frozen historical TradePlans/charts, Target 2, setup type, complete decision
+  deltas, and row candle summaries remain unavailable instead of reconstructed.
+- Independent proof passes 287/287 .NET tests, Release build with zero warnings
+  and errors, 21/21 allowed paths, zero protected/package/secret/prohibited-
+  control findings, and six inspected 1920x1080/1180x820 frames. Producer-001C,
+  the opening runtime, installed Continuous bytes, services, scheduler, startup
+  pointers, and capability boundary all match their pre-task baseline.
+- Do not merge or install until Producer-001C is terminal, its mandatory ZIP is
+  created, the frozen boundary is released, Steven passes the exact Verification
+  Queue checks, and a separate post-freeze merge/install action is authorized.
 
 #### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
 
