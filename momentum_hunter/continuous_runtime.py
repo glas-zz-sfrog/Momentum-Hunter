@@ -125,7 +125,7 @@ PIPELINE_FORWARD_PROGRESS = "FORWARD_PROGRESS"
 PIPELINE_STALLED = "STALLED"
 FAILED_FORWARD_PROGRESS = "FAILED_FORWARD_PROGRESS"
 
-CHECKPOINT_SCHEMA_VERSION = 2
+CHECKPOINT_SCHEMA_VERSION = 3
 
 PROCESS_ALIVE = "PROCESS_ALIVE"
 DISCOVERY_STALE = "DISCOVERY_STALE"
@@ -349,15 +349,27 @@ class RuntimeTriggerEvent:
     symbol: str | None = None
     source_fingerprint: str | None = None
     priority: int = 50
+    provider_timestamp: str | None = None
 
     def __post_init__(self) -> None:
         if self.trigger not in EVENT_TRIGGERS:
             raise ContinuousRuntimeError("Runtime trigger is unsupported.")
         _parse_timestamp(self.occurred_at, "Event timestamp")
+        if self.provider_timestamp is not None:
+            _parse_timestamp(self.provider_timestamp, "Event provider timestamp")
         if self.source_fingerprint is not None:
             _require_fingerprint(self.source_fingerprint, "Event source fingerprint")
         if self.trigger != HEARTBEAT_REEVALUATION and not (self.symbol or "").strip():
             raise ContinuousRuntimeError("Symbol event omitted its symbol.")
+
+
+def _runtime_event_payload(event: RuntimeTriggerEvent) -> dict[str, object]:
+    """Preserve legacy event fingerprints when the provider clock was absent."""
+
+    payload = asdict(event)
+    if payload.get("provider_timestamp") is None:
+        payload.pop("provider_timestamp", None)
+    return payload
 
 
 @dataclass(frozen=True)
@@ -1244,6 +1256,10 @@ class ContinuousOpportunityRuntime:
         return self.health(now)
 
     def submit_event(self, event: RuntimeTriggerEvent, now: datetime) -> str:
+        if event.trigger == CANONICAL_BAR_COMPLETED and not event.provider_timestamp:
+            raise ContinuousRuntimeError(
+                "New completed-bar events require an authoritative provider timestamp."
+            )
         if not self._accepting_work or self.process_state in {DRAINING, STOPPED, FAILED}:
             return self._record_backpressure(
                 HEALTH_QUEUE,
@@ -1252,7 +1268,9 @@ class ContinuousOpportunityRuntime:
                 now,
                 event.source_fingerprint or _fingerprint("event", asdict(event)),
             )
-        event_fingerprint = _fingerprint("continuous-runtime-event-v1", asdict(event))
+        event_fingerprint = _fingerprint(
+            "continuous-runtime-event-v1", _runtime_event_payload(event)
+        )
         previous = self._seen_events.get(event.event_id)
         if previous is not None:
             if previous != event_fingerprint:
@@ -1464,7 +1482,7 @@ class ContinuousOpportunityRuntime:
         if payload.get("contract_version") != CONTRACT_VERSION:
             raise RuntimeCheckpointError("Checkpoint contract version is incompatible.")
         checkpoint_schema = int(payload.get("checkpoint_schema_version", 1))
-        if checkpoint_schema not in {1, CHECKPOINT_SCHEMA_VERSION}:
+        if checkpoint_schema not in {1, 2, CHECKPOINT_SCHEMA_VERSION}:
             raise RuntimeCheckpointError("Checkpoint schema version is incompatible.")
         if payload.get("config_fingerprint") != config.fingerprint:
             raise RuntimeCheckpointError("Checkpoint configuration identity changed.")
@@ -3291,6 +3309,7 @@ def measure_runtime_operation(
                     occurred_at=_timestamp(now),
                     symbol=symbol,
                     source_fingerprint=source,
+                    provider_timestamp=_timestamp(now),
                 ),
                 now,
             )

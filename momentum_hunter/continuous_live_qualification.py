@@ -1194,6 +1194,7 @@ class LiveMaterialEvents:
                     symbol=material.symbol,
                     source_fingerprint=material.source_fingerprint,
                     priority=90,
+                    provider_timestamp=material.provider_timestamp,
                 )
             )
         return tuple(events)

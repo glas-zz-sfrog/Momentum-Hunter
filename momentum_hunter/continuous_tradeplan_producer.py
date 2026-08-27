@@ -40,9 +40,9 @@ from momentum_hunter.schwab_candle_store import SchwabCandleStore
 from momentum_hunter.schwab_daily_candle_store import SchwabDailyCandleStore
 
 
-PRODUCER_SCHEMA_VERSION = 1
+PRODUCER_SCHEMA_VERSION = 2
 PRODUCER_PROFILE = "continuous-prospective-tradeplan-producer-v1"
-PRODUCER_VERSION = "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001-v1"
+PRODUCER_VERSION = "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001D-v1"
 RESEARCH_ONLY = "RESEARCH_ONLY"
 EXECUTION_AUTHORITY_NONE = "NONE"
 ORDER_CAPABILITY_UNAVAILABLE = "UNAVAILABLE"
@@ -158,9 +158,16 @@ class HistoricalContextEvidence:
     content_fingerprint: str
     status: str
     blockers: tuple[str, ...]
-    provisional_bar_count: int
+    observed_provisional_version_count: int
+    admitted_provisional_bar_count: int
     backfill_status: str
     fingerprint: str
+
+    @property
+    def provisional_bar_count(self) -> int:
+        """Backward-compatible diagnostic alias; never decision-authoritative."""
+
+        return self.observed_provisional_version_count
 
 
 @dataclass(frozen=True)
@@ -844,7 +851,6 @@ def inspect_historical_context(
             "minuteEvidenceFingerprint": minute_fingerprint,
             "dailyEvidenceFingerprint": daily_fingerprint,
             "canonicalOutcomeStatesOnly": True,
-            "provisionalBars": finality.provisional_version_count,
         }
     )
     sessions = {item.session_date for item in all_bars}
@@ -887,10 +893,13 @@ def inspect_historical_context(
         "content_fingerprint": content_fingerprint,
         "status": status,
         "blockers": tuple(blockers),
-        "provisional_bar_count": finality.provisional_version_count,
+        "observed_provisional_version_count": finality.provisional_version_count,
+        "admitted_provisional_bar_count": 0,
         "backfill_status": "NOT_REQUESTED",
     }
-    context_fingerprint = _fingerprint(context_core)
+    context_fingerprint = _fingerprint(
+        _historical_context_identity_payload(context_core)
+    )
     context = HistoricalContextEvidence(
         context_id=f"continuous-history-{context_fingerprint[:24]}",
         fingerprint=context_fingerprint,
@@ -1064,7 +1073,10 @@ def validate_instrument_admission(
 def validate_historical_context(
     context: HistoricalContextEvidence, *, expected_member: HotUniverseMember | None = None
 ) -> None:
-    if context.status not in HISTORY_STATES or context.provisional_bar_count != 0:
+    if (
+        context.status not in HISTORY_STATES
+        or context.admitted_provisional_bar_count != 0
+    ):
         raise ContinuousTradePlanProducerError(
             "Historical context state or provisional-bar boundary is invalid."
         )
@@ -1081,6 +1093,8 @@ def validate_historical_context(
         context.minute_session_count,
         context.current_session_bar_count,
         context.daily_bar_count,
+        context.observed_provisional_version_count,
+        context.admitted_provisional_bar_count,
     ):
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             raise ContinuousTradePlanProducerError(
@@ -1093,13 +1107,7 @@ def validate_historical_context(
         (context.fingerprint, "Historical context fingerprint"),
     ):
         _require_fingerprint(value, label)
-    expected = _fingerprint(
-        {
-            key: value
-            for key, value in asdict(context).items()
-            if key not in {"context_id", "fingerprint"}
-        }
-    )
+    expected = _fingerprint(_historical_context_identity_payload(asdict(context)))
     if context.fingerprint != expected or context.context_id != f"continuous-history-{expected[:24]}":
         raise ContinuousTradePlanProducerError(
             "Historical context fingerprint or identity did not verify."
@@ -1215,17 +1223,31 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
 
 
 def _refingerprint_context(context: HistoricalContextEvidence) -> HistoricalContextEvidence:
-    core = {
-        key: value
-        for key, value in asdict(context).items()
-        if key not in {"context_id", "fingerprint"}
-    }
-    fingerprint = _fingerprint(core)
+    fingerprint = _fingerprint(
+        _historical_context_identity_payload(asdict(context))
+    )
     return replace(
         context,
         context_id=f"continuous-history-{fingerprint[:24]}",
         fingerprint=fingerprint,
     )
+
+
+def _historical_context_identity_payload(
+    context: Mapping[str, object],
+) -> dict[str, object]:
+    """Return only decision-authoritative historical-context identity inputs."""
+
+    return {
+        key: value
+        for key, value in context.items()
+        if key
+        not in {
+            "context_id",
+            "fingerprint",
+            "observed_provisional_version_count",
+        }
+    }
 
 
 def _nested_fingerprint(value: object | None) -> str:

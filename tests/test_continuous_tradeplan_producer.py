@@ -710,6 +710,82 @@ class ContinuousTradePlanProducerTests(unittest.TestCase):
         timestamps = tuple(item.timestamp for item in canonical2.bars)
         self.assertEqual(len(timestamps), len(set(timestamps)))
 
+    def test_discarded_provisional_inventory_is_diagnostic_only(self) -> None:
+        self.seed_history()
+        cutoff = at(11, 22, 30)
+        before, canonical_before = self.context(cutoff)
+        producer = self.producer()
+        first = producer.evaluate(
+            universe_state=self.state,
+            member_input=self.member_input(canonical_before, cutoff=cutoff),
+            history_context=before,
+            current_market_evidence=self.current(cutoff),
+            instrument_admission=self.instrument(),
+            evidence_cutoff=cutoff,
+            trigger="CANONICAL_BAR_COMPLETED",
+        )
+        SchwabCandleStore(self.minute_root).append_history(
+            (self.minute_candle(at(11, 22), 11),),
+            received_at=cutoff,
+        )
+
+        after, canonical_after = self.context(cutoff)
+        repeated = producer.evaluate(
+            universe_state=self.state,
+            member_input=self.member_input(canonical_after, cutoff=cutoff),
+            history_context=after,
+            current_market_evidence=self.current(cutoff),
+            instrument_admission=self.instrument(),
+            evidence_cutoff=cutoff,
+            trigger="CANONICAL_BAR_COMPLETED",
+        )
+
+        self.assertEqual(0, before.observed_provisional_version_count)
+        self.assertEqual(1, after.observed_provisional_version_count)
+        self.assertEqual(0, after.admitted_provisional_bar_count)
+        self.assertEqual(before.content_fingerprint, after.content_fingerprint)
+        self.assertEqual(before.fingerprint, after.fingerprint)
+        self.assertEqual(before.context_id, after.context_id)
+        self.assertTrue(repeated.duplicate)
+        self.assertEqual(first.record, repeated.record)
+
+    def test_completed_transition_changes_identity_after_provisional_was_discarded(self) -> None:
+        self.seed_history()
+        store = SchwabCandleStore(self.minute_root)
+        store.append_history(
+            (self.minute_candle(at(11, 22), 11),),
+            received_at=at(11, 22, 30),
+        )
+        before, _ = self.context(at(11, 23))
+        corrected = replace(self.minute_candle(at(11, 22), 11), close=112.0)
+        store.append_history((corrected,), received_at=at(11, 23))
+
+        after, canonical = self.context(at(11, 23))
+
+        self.assertEqual(1, before.observed_provisional_version_count)
+        self.assertEqual(0, before.admitted_provisional_bar_count)
+        self.assertEqual(1, after.observed_provisional_version_count)
+        self.assertEqual(0, after.admitted_provisional_bar_count)
+        self.assertNotEqual(before.fingerprint, after.fingerprint)
+        self.assertNotEqual(before.content_fingerprint, after.content_fingerprint)
+        self.assertEqual(112.0, canonical.bars[-1].close)
+
+    def test_different_completed_values_remain_identity_distinct(self) -> None:
+        self.seed_history()
+        cutoff = at(11, 22, 1)
+        first, _ = self.context(cutoff)
+        store = SchwabCandleStore(self.minute_root)
+        changed = replace(self.minute_candle(at(11, 21), 10), close=110.75)
+        store.append_history((changed,), received_at=cutoff)
+
+        second, _ = self.context(cutoff)
+
+        self.assertNotEqual(first.fingerprint, second.fingerprint)
+        self.assertNotEqual(
+            first.minute_evidence_fingerprint,
+            second.minute_evidence_fingerprint,
+        )
+
     def test_missed_plan_remains_immutable_and_successor_is_distinct(self) -> None:
         cutoff = at(11, 22)
         self.seed_history()

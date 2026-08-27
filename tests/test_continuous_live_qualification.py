@@ -4,7 +4,7 @@ import ast
 import json
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -16,7 +16,7 @@ from momentum_hunter.continuous_live_qualification import (
     _backfill_accounting,
     validate_qualification_root,
 )
-from momentum_hunter.continuous_runtime import DATA_RECOVERED
+from momentum_hunter.continuous_runtime import CANONICAL_BAR_COMPLETED, DATA_RECOVERED
 from momentum_hunter.continuous_tradeplan_producer import HISTORY_BACKFILL_PENDING
 from momentum_hunter.opportunity_denominator import (
     LIVE_READ_ONLY_QUALIFICATION,
@@ -123,6 +123,45 @@ class ContinuousLiveQualificationTests(unittest.TestCase):
         self.assertEqual(1, accounting["successful"])
         self.assertEqual(1, accounting["failed"])
         self.assertEqual(0, accounting["active"])
+
+    def test_completed_bar_conversion_preserves_provider_and_receipt_clocks(self) -> None:
+        class Backfill:
+            def status(self, symbol: str):
+                return None
+
+        class NaturalSetup:
+            def completed_bar_events(self, *, universe_state, cutoff):
+                return (
+                    SimpleNamespace(
+                        event_id="completed-bar-aaa",
+                        symbol="AAA",
+                        provider_timestamp=(cutoff - timedelta(minutes=1)).isoformat(),
+                        receipt_timestamp=cutoff.isoformat(),
+                        source_fingerprint="a" * 64,
+                    ),
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            now = datetime(
+                2026, 8, 18, 10, 5, tzinfo=ZoneInfo("America/New_York")
+            )
+            state = QualificationState(root=Path(temporary), launch_at=now)
+            state.universe = SimpleNamespace(state=SimpleNamespace(members=()))
+            events = LiveMaterialEvents(
+                state,
+                Backfill(),
+                natural_setup=NaturalSetup(),
+            )
+
+            emitted = events.poll(now)
+
+        self.assertEqual(1, len(emitted))
+        self.assertEqual(CANONICAL_BAR_COMPLETED, emitted[0].trigger)
+        self.assertEqual(now.isoformat(), emitted[0].occurred_at)
+        self.assertEqual(
+            (now - timedelta(minutes=1)).isoformat(),
+            emitted[0].provider_timestamp,
+        )
 
     def test_module_has_no_order_or_broker_capability(self) -> None:
         source = (

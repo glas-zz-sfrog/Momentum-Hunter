@@ -270,6 +270,7 @@ class RuntimeFixture:
             symbol=symbol,
             source_fingerprint=source,
             priority=priority,
+            provider_timestamp=(now - timedelta(minutes=1)).isoformat(),
         )
 
 
@@ -695,6 +696,57 @@ class ContinuousRuntimeTests(unittest.TestCase):
                 if item["trigger"] == CANONICAL_BAR_COMPLETED
             ],
         )
+        completed = next(
+            item
+            for item in checkpoint["event_records"]
+            if item["trigger"] == CANONICAL_BAR_COMPLETED
+        )
+        self.assertEqual(event.provider_timestamp, completed["provider_timestamp"])
+
+    def test_legacy_checkpoint_event_without_provider_time_restores_as_unknown(self) -> None:
+        self.start()
+        event = self.fixture.event("AAA", suffix="legacy-clock")
+        self.fixture.runtime.submit_event(event, self.fixture.clock.now())
+        self.fixture.runtime.tick(self.fixture.clock.now())
+        checkpoint = self.fixture.store.load(self.fixture.config.runtime_identity)
+        checkpoint.pop("checkpoint_fingerprint", None)
+        checkpoint["checkpoint_schema_version"] = 2
+        for item in checkpoint["event_records"]:
+            item.pop("provider_timestamp", None)
+        self.fixture.store.save(self.fixture.config.runtime_identity, checkpoint)
+
+        self.fixture.clock.advance(31)
+        restored = ContinuousOpportunityRuntime.restore(
+            config=self.fixture.config,
+            runtime_instance_id="runtime-instance-legacy-clock",
+            now=self.fixture.clock.now(),
+            discovery_source=self.fixture.discovery,
+            market_data_source=self.fixture.market,
+            event_source=self.fixture.events,
+            composition_source=self.fixture.composer,
+            denominator_source=self.fixture.denominator,
+            writer=self.fixture.writer,
+            lease_registry=self.fixture.leases,
+            checkpoint_store=self.fixture.store,
+        )
+
+        restored_event = next(
+            item for item in restored._event_records.values() if item.event_id == event.event_id
+        )
+        self.assertIsNone(restored_event.provider_timestamp)
+
+    def test_new_completed_bar_event_without_provider_time_fails_closed(self) -> None:
+        self.start()
+        event = replace(
+            self.fixture.event("AAA", suffix="missing-provider-clock"),
+            provider_timestamp=None,
+        )
+
+        with self.assertRaisesRegex(
+            ContinuousRuntimeError,
+            "require an authoritative provider timestamp",
+        ):
+            self.fixture.runtime.submit_event(event, self.fixture.clock.now())
 
     def test_denominator_incomplete_is_visible_without_stopping_runtime(self) -> None:
         self.start()
