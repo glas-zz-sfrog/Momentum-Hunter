@@ -16,7 +16,9 @@ param(
 
     [string]$ProjectRoot = "",
 
-    [string]$DependencyRoot = ""
+    [string]$DependencyRoot = "",
+
+    [string]$PythonExe = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,7 +42,11 @@ if (-not [string]::IsNullOrWhiteSpace($CandidateReportPath)) {
     $CandidateReportPath = (Resolve-Path -LiteralPath $CandidateReportPath).Path
 }
 
-$python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$python = if ([string]::IsNullOrWhiteSpace($PythonExe)) {
+    Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+} else {
+    (Resolve-Path -LiteralPath $PythonExe).Path
+}
 $observerModule = Join-Path $ProjectRoot "momentum_hunter\schwab_candle_observer.py"
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
     throw "The isolated project Python executable is unavailable."

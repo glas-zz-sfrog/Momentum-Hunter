@@ -133,6 +133,11 @@ from momentum_hunter.continuous_attempt_ledger import (  # noqa: E402
     ATTEMPT_SUCCEEDED,
     ContinuousAttemptLedger,
 )
+from momentum_hunter.canonical_candle_evidence import (  # noqa: E402
+    CanonicalMinuteBar,
+    _canonical_bar as production_canonical_bar,
+    _state_as_of as production_state_as_of,
+)
 from momentum_hunter.continuous_live_qualification import (  # noqa: E402
     LiveCompositionSource,
     LiveDenominatorSource,
@@ -143,6 +148,7 @@ from momentum_hunter.continuous_live_qualification import (  # noqa: E402
 )
 from momentum_hunter.continuous_natural_setup import (  # noqa: E402
     ContinuousNaturalSetupCoordinator,
+    _fingerprint as production_natural_fingerprint,
 )
 from momentum_hunter.continuous_runtime import (  # noqa: E402
     CANONICAL_BAR_COMPLETED,
@@ -159,6 +165,10 @@ from momentum_hunter.continuous_tradeplan_producer import (  # noqa: E402
 )
 from momentum_hunter.hot_universe import HotUniverseStore  # noqa: E402
 from momentum_hunter.providers import FinvizProvider  # noqa: E402
+from momentum_hunter.sequential_breakout_research import (  # noqa: E402
+    PROSPECTIVE,
+    observation_from_canonical_bar,
+)
 
 
 class ForensicCanaryError(RuntimeError):
@@ -1435,27 +1445,49 @@ def _attempt_events(
     return [asdict(item) for item in ledger.events]
 
 
-def _canonical_bar_semantic_identity(candle: Mapping[str, object]) -> str:
-    timestamp = _parse_timestamp(str(candle.get("timestamp", "")))
-    payload = {
-        "symbol": str(candle.get("symbol", "")).strip().upper(),
-        "timestamp": timestamp.astimezone(timezone.utc).isoformat(),
-        "open": float(candle["open"]),
-        "high": float(candle["high"]),
-        "low": float(candle["low"]),
-        "close": float(candle["close"]),
-        "volume": float(candle["volume"]),
-        "source": str(candle.get("source", "")),
-        "sessionDate": str(candle.get("sessionDate", "")),
+def _production_completed_bar_identity(
+    *,
+    raw_bar: Mapping[str, object],
+    candle: Mapping[str, object],
+    version: Mapping[str, object],
+) -> dict[str, object]:
+    """Rebuild one material event through the production identity functions."""
+
+    received = _parse_timestamp(str(version.get("firstReceivedAt", "")))
+    state = production_state_as_of(
+        raw_bar,
+        canonical_candle=candle,
+        cutoff=received,
+    )
+    bar: CanonicalMinuteBar = production_canonical_bar(
+        candle,
+        expected_symbol=str(candle.get("symbol", "")).strip().upper(),
+        expected_session_date=str(candle.get("sessionDate", "")),
+        state=state,
+    )
+    observation = observation_from_canonical_bar(
+        bar,
+        receipt_timestamp=str(version.get("firstReceivedAt", "")),
+        observation_mode=PROSPECTIVE,
+    )
+    identity_payload = {
+        "symbol": observation.symbol,
+        "providerTimestamp": observation.provider_timestamp,
+        "barFingerprint": observation.source_evidence_fingerprint,
+        "sourceEvidenceFingerprint": observation.source_evidence_fingerprint,
     }
-    return hashlib.sha256(
-        json.dumps(
-            payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-        ).encode("ascii")
-    ).hexdigest()
+    material_fingerprint = production_natural_fingerprint(
+        "continuous-completed-bar-material-v2", identity_payload
+    )
+    return {
+        "eventId": f"continuous-completed-bar-{material_fingerprint[:24]}",
+        "sourceFingerprint": material_fingerprint,
+        "symbol": observation.symbol,
+        "providerTimestamp": observation.provider_timestamp,
+        "firstReceivedAt": observation.receipt_timestamp,
+        "semanticIdentity": observation.source_evidence_fingerprint,
+        "sourceState": observation.source_state,
+    }
 
 
 def _completed_bar_finality_accounting(
@@ -1476,34 +1508,22 @@ def _completed_bar_finality_accounting(
                 candle = version.get("candle")
                 if not isinstance(candle, Mapping):
                     continue
-                semantic = _canonical_bar_semantic_identity(candle)
-                provider_timestamp = _parse_timestamp(
-                    str(candle.get("timestamp", ""))
-                ).astimezone(timezone.utc).isoformat()
-                identity_payload = {
-                    "symbol": str(candle.get("symbol", "")).strip().upper(),
-                    "providerTimestamp": provider_timestamp,
-                    "barFingerprint": semantic,
-                    "sourceEvidenceFingerprint": semantic,
-                }
-                material_fingerprint = _fingerprint(
-                    "continuous-completed-bar-material-v2", identity_payload
+                identity = _production_completed_bar_identity(
+                    raw_bar=raw_bar,
+                    candle=candle,
+                    version=version,
                 )
                 received = _parse_timestamp(str(version.get("firstReceivedAt", "")))
-                bar_end = _parse_timestamp(provider_timestamp) + timedelta(minutes=1)
+                bar_end = _parse_timestamp(
+                    str(identity["providerTimestamp"])
+                ) + timedelta(minutes=1)
                 versions.append(
                     {
-                        "eventId": (
-                            f"continuous-completed-bar-{material_fingerprint[:24]}"
-                        ),
-                        "sourceFingerprint": material_fingerprint,
-                        "symbol": identity_payload["symbol"],
-                        "providerTimestamp": provider_timestamp,
+                        **identity,
                         "firstReceivedAt": received.isoformat(),
                         "barEnd": bar_end.isoformat(),
                         "validCompleted": received >= bar_end,
                         "versionId": version.get("versionId"),
-                        "semanticIdentity": semantic,
                         "partition": path.relative_to(evidence_root).as_posix(),
                     }
                 )
@@ -1528,6 +1548,9 @@ def _completed_bar_finality_accounting(
             item
             for item in versions
             if item["eventId"] == event_id
+            and item["sourceFingerprint"]
+            == str(event.get("source_fingerprint", ""))
+            and item["symbol"] == str(event.get("symbol", "")).strip().upper()
             and _parse_timestamp(str(item["firstReceivedAt"])) == occurred
             and _parse_timestamp(str(item["providerTimestamp"])) == provider
         ]
@@ -1557,6 +1580,83 @@ def _completed_bar_finality_accounting(
         "prematureEvents": premature_events,
         "unmatchedEvents": unmatched_events,
     }
+
+
+def _producer_cycle_member(producer: Mapping[str, object]) -> dict[str, object]:
+    current = producer.get("currentMarketEvidence")
+    cycle = producer.get("compositionCycle")
+    if not isinstance(current, Mapping) or not isinstance(cycle, Mapping):
+        raise ForensicCanaryError(
+            "Producer record omitted current-market or composition identity."
+        )
+    symbol = str(current.get("symbol", "")).strip().upper()
+    members = cycle.get("member_results")
+    if not symbol or not isinstance(members, list):
+        raise ForensicCanaryError(
+            "Producer record cannot resolve its authoritative composition member."
+        )
+    matches = [
+        dict(item)
+        for item in members
+        if isinstance(item, Mapping)
+        and str(item.get("symbol", "")).strip().upper() == symbol
+    ]
+    if len(matches) != 1:
+        raise ForensicCanaryError(
+            f"Producer symbol {symbol} resolved to {len(matches)} composition members."
+        )
+    return matches[0]
+
+
+def _account_producer_tradeplan(
+    *,
+    producer: Mapping[str, object],
+    step: Mapping[str, object],
+    plans_by_id: dict[str, dict[str, object]],
+    plan_occurrences: list[dict[str, object]],
+    no_plans: list[dict[str, object]],
+) -> dict[str, object]:
+    member = _producer_cycle_member(producer)
+    current = producer.get("currentMarketEvidence", {})
+    cycle = producer.get("compositionCycle", {})
+    plan = member.get("intraday_plan")
+    if not plan:
+        no_plans.append(
+            {
+                "symbol": current.get("symbol"),
+                "eventType": step.get("eventType"),
+                "blockers": producer.get("blockers", []),
+                "disposition": member.get("disposition"),
+            }
+        )
+        return member
+    if not isinstance(plan, Mapping):
+        raise ForensicCanaryError("Producer member TradePlan payload was not an object.")
+    normalized_plan = dict(plan)
+    plan_id = str(normalized_plan.get("plan_id", "")).strip()
+    plan_symbol = str(normalized_plan.get("symbol", "")).strip().upper()
+    producer_symbol = str(current.get("symbol", "")).strip().upper()
+    if not plan_id or plan_symbol != producer_symbol:
+        raise ForensicCanaryError(
+            "Producer member TradePlan identity contradicted its symbol."
+        )
+    prior = plans_by_id.get(plan_id)
+    if prior is not None and str(prior.get("symbol", "")).strip().upper() != plan_symbol:
+        raise ForensicCanaryError(
+            "One TradePlan identity was associated with multiple symbols."
+        )
+    plans_by_id.setdefault(plan_id, normalized_plan)
+    plan_occurrences.append(
+        {
+            "planId": plan_id,
+            "symbol": plan_symbol,
+            "eventType": step.get("eventType"),
+            "compositionCycleId": cycle.get("cycle_id"),
+            "producerRecordId": step.get("producerRecordId"),
+            "plan": normalized_plan,
+        }
+    )
+    return member
 
 
 def _stage_accounting(
@@ -1796,7 +1896,8 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
     )
     admissions = [json.loads(path.read_text(encoding="ascii")) for path in admission_files]
     completed_bar_reevaluations = []
-    plans = []
+    plan_occurrences: list[dict[str, object]] = []
+    plans_by_id: dict[str, dict[str, object]] = {}
     no_plans = []
     successors = []
     anti_hindsight = True
@@ -1836,9 +1937,13 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
             current = producer.get("currentMarketEvidence", {})
             instrument = producer.get("instrumentAdmission", {})
             cycle = producer.get("compositionCycle", {})
-            members = cycle.get("member_results", [])
-            member = members[0] if members else {}
-            plan = member.get("intraday_plan")
+            member = _account_producer_tradeplan(
+                producer=producer,
+                step=step,
+                plans_by_id=plans_by_id,
+                plan_occurrences=plan_occurrences,
+                no_plans=no_plans,
+            )
             cutoff_values = [
                 history.get("evidence_cutoff"),
                 current.get("receipt_timestamp"),
@@ -1853,22 +1958,15 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
                 and history.get("minute_evidence_fingerprint")
             )
             instrument_blocked = instrument_blocked and (
-                instrument.get("execution_eligible") is False
+                producer.get("executionEligible") is False
+                and instrument.get("instrument_class") == "UNKNOWN"
+                and "INSTRUMENT_CLASSIFICATION_UNAVAILABLE"
+                in producer.get("blockers", [])
             )
-            if plan:
-                plans.append(plan)
-            else:
-                no_plans.append(
-                    {
-                        "symbol": current.get("symbol"),
-                        "eventType": step.get("eventType"),
-                        "blockers": producer.get("blockers", []),
-                        "disposition": member.get("disposition"),
-                    }
-                )
             proposal = member.get("lifecycle_proposal") or {}
             if proposal.get("create_new_setup") and proposal.get("predecessor_setup_id"):
                 successors.append(proposal)
+    plans = list(plans_by_id.values())
     phase1 = json.loads((evidence_root / "phase-1-state.json").read_text(encoding="ascii"))
     phase2 = json.loads((evidence_root / "phase-2-state.json").read_text(encoding="ascii"))
     phase1_receipt = json.loads(
@@ -2119,6 +2217,7 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "stageAccounting": stages,
         "backfillAccounting": backfill_accounting,
         "tradePlans": plans,
+        "tradePlanOccurrences": plan_occurrences,
         "truthfulNoPlans": no_plans,
         "successorSetups": successors,
     }
@@ -2155,6 +2254,7 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "completedBarReevaluationCount": len(completed_bar_reevaluations),
         "completedBarFinality": finality,
         "tradePlanCount": len(plans),
+        "tradePlanOccurrenceCount": len(plan_occurrences),
         "truthfulNoPlanCount": len(no_plans),
         "successorSetupCount": len(successors),
         "physicalRestart": process_restart,

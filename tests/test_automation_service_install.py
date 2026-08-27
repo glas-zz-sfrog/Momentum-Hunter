@@ -117,6 +117,8 @@ class AutomationServiceInstallTests(unittest.TestCase):
                 "Bypass",
                 "-File",
                 str(INSTALLER),
+                "-PythonExe",
+                sys.executable,
                 "-PlanOnly",
             ],
             check=False,

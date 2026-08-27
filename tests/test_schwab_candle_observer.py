@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -1278,6 +1279,8 @@ class SchwabCandleObserverTests(unittest.TestCase):
                     "CRWV",
                     "-ProjectRoot",
                     str(root),
+                    "-PythonExe",
+                    sys.executable,
                 ],
                 cwd=unrelated_directory,
                 capture_output=True,

@@ -324,7 +324,7 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
                     "low": 99.0,
                     "close": close,
                     "volume": 500.0,
-                    "source": "schwab-trader-api-price-history",
+                    "source": "schwab_marketdata_v1_pricehistory:v1",
                     "ohlcvComplete": True,
                 }
 
@@ -335,6 +335,7 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
                     {
                         "bars": [
                             {
+                                "streamVersions": [],
                                 "historyVersions": [
                                     {
                                         "versionId": "early",
@@ -344,6 +345,7 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
                                 ]
                             },
                             {
+                                "streamVersions": [],
                                 "historyVersions": [
                                     {
                                         "versionId": "valid",
@@ -358,25 +360,26 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
                 encoding="ascii",
             )
 
-            def event_for(value, occurred_at):
-                semantic = self.tool._canonical_bar_semantic_identity(value)
-                provider_timestamp = value["timestamp"]
-                source = self.tool._fingerprint(
-                    "continuous-completed-bar-material-v2",
-                    {
-                        "symbol": "AAA",
-                        "providerTimestamp": provider_timestamp,
-                        "barFingerprint": semantic,
-                        "sourceEvidenceFingerprint": semantic,
-                    },
+            def event_for(value, occurred_at, *, provider_timestamp=None):
+                raw_bar = {"streamVersions": []}
+                version = {
+                    "versionId": "test",
+                    "firstReceivedAt": occurred_at,
+                    "candle": value,
+                }
+                identity = self.tool._production_completed_bar_identity(
+                    raw_bar=raw_bar,
+                    candle=value,
+                    version=version,
                 )
                 return {
-                    "event_id": f"continuous-completed-bar-{source[:24]}",
+                    "event_id": identity["eventId"],
                     "trigger": "CANONICAL_BAR_COMPLETED",
                     "occurred_at": occurred_at,
-                    "provider_timestamp": provider_timestamp,
+                    "provider_timestamp": provider_timestamp
+                    or identity["providerTimestamp"],
                     "symbol": "AAA",
-                    "source_fingerprint": source,
+                    "source_fingerprint": identity["sourceFingerprint"],
                 }
 
             result = self.tool._completed_bar_finality_accounting(
@@ -390,6 +393,171 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
         self.assertEqual(1, result["prematureCompletedEventCount"])
         self.assertEqual(1, result["validCompletedEventCount"])
         self.assertEqual(0, result["unmatchedEventCount"])
+
+    def test_completed_bar_analyzer_accepts_equivalent_timezone_representation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            partition = root / "runtime-artifacts" / "market-data" / "minute" / "2026-08-26" / "AAA.json"
+            partition.parent.mkdir(parents=True)
+            candle = {
+                "symbol": "AAA",
+                "timestamp": "2026-08-26T09:31:00-05:00",
+                "sessionDate": "2026-08-26",
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.5,
+                "volume": 500.0,
+                "source": "schwab_marketdata_v1_pricehistory:v1",
+                "ohlcvComplete": True,
+            }
+            version = {
+                "versionId": "valid",
+                "firstReceivedAt": "2026-08-26T09:32:00-05:00",
+                "candle": candle,
+            }
+            raw_bar = {"streamVersions": [], "historyVersions": [version]}
+            partition.write_text(json.dumps({"bars": [raw_bar]}), encoding="ascii")
+            identity = self.tool._production_completed_bar_identity(
+                raw_bar=raw_bar,
+                candle=candle,
+                version=version,
+            )
+            event = {
+                "event_id": identity["eventId"],
+                "source_fingerprint": identity["sourceFingerprint"],
+                "trigger": "CANONICAL_BAR_COMPLETED",
+                "occurred_at": "2026-08-26T14:32:00+00:00",
+                "provider_timestamp": "2026-08-26T14:31:00+00:00",
+                "symbol": "AAA",
+            }
+
+            result = self.tool._completed_bar_finality_accounting(root, (event,))
+
+        self.assertEqual(1, result["validCompletedEventCount"])
+        self.assertEqual(0, result["unmatchedEventCount"])
+
+    def test_completed_bar_identity_is_strict_and_malformed_input_fails(self) -> None:
+        candle = {
+            "symbol": "AAA",
+            "timestamp": "2026-08-26T14:31:00+00:00",
+            "sessionDate": "2026-08-26",
+            "open": 100.0,
+            "high": 101.0,
+            "low": 99.0,
+            "close": 100.5,
+            "volume": 500.0,
+            "source": "schwab_marketdata_v1_pricehistory:v1",
+            "ohlcvComplete": True,
+        }
+        version = {
+            "versionId": "valid",
+            "firstReceivedAt": "2026-08-26T14:32:00+00:00",
+            "candle": candle,
+        }
+        raw_bar = {"streamVersions": [], "historyVersions": [version]}
+        original = self.tool._production_completed_bar_identity(
+            raw_bar=raw_bar, candle=candle, version=version
+        )
+        changed = dict(candle, close=100.6)
+        changed_identity = self.tool._production_completed_bar_identity(
+            raw_bar=raw_bar, candle=changed, version=dict(version, candle=changed)
+        )
+        later = dict(candle, timestamp="2026-08-26T14:32:00+00:00")
+        later_identity = self.tool._production_completed_bar_identity(
+            raw_bar=raw_bar, candle=later, version=dict(version, candle=later)
+        )
+        other_symbol = dict(candle, symbol="BBB")
+        symbol_identity = self.tool._production_completed_bar_identity(
+            raw_bar=raw_bar,
+            candle=other_symbol,
+            version=dict(version, candle=other_symbol),
+        )
+
+        self.assertNotEqual(original["eventId"], changed_identity["eventId"])
+        self.assertNotEqual(original["eventId"], later_identity["eventId"])
+        self.assertNotEqual(original["eventId"], symbol_identity["eventId"])
+        with self.assertRaises(Exception):
+            self.tool._production_completed_bar_identity(
+                raw_bar=raw_bar,
+                candle=dict(candle, timestamp="not-a-time"),
+                version=version,
+            )
+
+    def test_tradeplan_accounting_matches_producer_symbol_and_deduplicates(self) -> None:
+        def member(symbol, plan=None, disposition="NO_LIFECYCLE_CHANGE"):
+            return {
+                "symbol": symbol,
+                "intraday_plan": plan,
+                "disposition": disposition,
+                "lifecycle_proposal": None,
+            }
+
+        plan = {"plan_id": "plan-b", "symbol": "BBB", "fingerprint": "f" * 64}
+        producer = {
+            "currentMarketEvidence": {"symbol": "BBB"},
+            "compositionCycle": {
+                "cycle_id": "cycle-1",
+                "member_results": [member("AAA"), member("BBB", plan)],
+            },
+            "blockers": [],
+        }
+        plans = {}
+        occurrences = []
+        no_plans = []
+        step = {"eventType": "BREAKOUT_CONFIRMED", "producerRecordId": "record-1"}
+
+        matched = self.tool._account_producer_tradeplan(
+            producer=producer,
+            step=step,
+            plans_by_id=plans,
+            plan_occurrences=occurrences,
+            no_plans=no_plans,
+        )
+        self.tool._account_producer_tradeplan(
+            producer=producer,
+            step=step,
+            plans_by_id=plans,
+            plan_occurrences=occurrences,
+            no_plans=no_plans,
+        )
+
+        self.assertEqual("BBB", matched["symbol"])
+        self.assertEqual(["plan-b"], list(plans))
+        self.assertEqual(2, len(occurrences))
+        self.assertEqual([], no_plans)
+
+    def test_tradeplan_accounting_preserves_legitimate_no_plan(self) -> None:
+        producer = {
+            "currentMarketEvidence": {"symbol": "MSTR"},
+            "compositionCycle": {
+                "cycle_id": "cycle-2",
+                "member_results": [
+                    {"symbol": "AAA", "intraday_plan": {"plan_id": "a", "symbol": "AAA"}},
+                    {
+                        "symbol": "MSTR",
+                        "intraday_plan": None,
+                        "disposition": "NO_LIFECYCLE_CHANGE",
+                    },
+                ],
+            },
+            "blockers": ["INSTRUMENT_CLASSIFICATION_UNAVAILABLE"],
+        }
+        plans = {}
+        occurrences = []
+        no_plans = []
+
+        self.tool._account_producer_tradeplan(
+            producer=producer,
+            step={"eventType": "IMPULSE_DETECTED"},
+            plans_by_id=plans,
+            plan_occurrences=occurrences,
+            no_plans=no_plans,
+        )
+
+        self.assertEqual({}, plans)
+        self.assertEqual([], occurrences)
+        self.assertEqual("MSTR", no_plans[0]["symbol"])
 
     def test_completed_bar_analyzer_preserves_missing_provider_clock_as_uncertain(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
