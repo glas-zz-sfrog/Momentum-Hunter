@@ -2,6 +2,34 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E - 2026-08-27
+
+`codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E` is stacked from exact reviewed
+001D head `fba8781d40228868657b23ac0cc02d42f3b10e64`. Core forensic analyzer and
+approved-environment repair is
+`989f7109a6f46afb4834e438a02fdaf4c39ff1ad`; packaging completeness and
+context-aware sanitation hardening are preserved through
+`74efea1a5d58aac75886f9c53ce910dc96a02ad4`. The branch is pushed and remains
+unmerged.
+
+Immutable 001D reanalysis reproduces 259 of 259 exact completed-bar events,
+zero unmatched or premature events, four unique natural TradePlans across five
+persistence occurrences, prospective-floor integrity, restart continuity, and
+atomic failed-composition nonmutation. Final focused tests pass 65/65. Full
+approved-environment discovery completes 2,830 tests with one expected Windows
+skip using the canonical Python 3.12.6 environment while loading the isolated
+worktree and requiring no local `.venv`. No `momentum_hunter` Product runtime
+file changed from reviewed 001D.
+
+The self-contained V4 second-eye ZIP has 459 files and 458 manifest entries;
+pre-ZIP and extracted tests/replays, manifest verification, and secret scan all
+pass. Its SHA-256 is
+`DAB6F1159893EFAD8F80669A8FCF7759B4473AD1E8252F27261634E3DBC9C831`.
+Classification is `IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PACKET_READY /
+FORENSIC_TOOLING_ONLY`. Independent review is the only next gate. No provider
+canary, install, deployment, Paper, Shadow, broker, account, position, or order
+authority was used.
+
 ## ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B - 2026-08-26
 
 `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B` preserves product repair

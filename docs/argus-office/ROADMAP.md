@@ -90,29 +90,41 @@ Paper, Shadow, broker, account, order, and historical capture state remain
 unchanged. The predecessor's original closeout and independent limitation
 adjudication remain immutable historical evidence.
 
-`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B` is
-`IMPLEMENTED_PENDING_MERGE / PROVIDER_CANARY_FAILED_ACCEPTANCE /
-SECOND_EYE_PACKET_READY`. Product repair commit
-`01f0c2ece0370db86a9c982a9926cdf8f37fd63b` freezes the decision cutoff only
-after provider acquisition, binds every input `knownAt` to that cutoff, makes
-natural setup composition preview-only until one atomic lifecycle/setup/
-breakout/Producer publication succeeds, prevents historical backfill from
-becoming new prospective events, and records exact failure/accounting evidence.
-The pushed task branch packages the evidence through `ebbf9da5b8d6dbc83311adbc2cd393390d499b77`.
+`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001D` is
+`PRODUCT_RUNTIME_ACCEPTED_BY_INDEPENDENT_ADJUDICATION /
+IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY`. The reviewed task head is
+`fba8781d40228868657b23ac0cc02d42f3b10e64` and its Product commit is
+`1fa914f01b1fa44880885cd0f88e846e7e52313d`. Immutable provider evidence proves
+real discovery, Schwab backfill, natural readiness, accepted composition, 259
+of 259 exact completed-bar events, zero premature/unmatched/floor violations,
+four unique natural TradePlans across five persistence occurrences, restart
+continuity, and failed-composition atomicity. The prior analyzer's zero-plan and
+zero-completed-bar conclusions were forensic join/accounting defects, not
+Product runtime failures. Unknown instrument classification remains a separate
+execution blocker.
 
-The fresh 1,800-second real-provider canary preserved six discovery cycles,
-172 exact completed-bar events, 47 readiness completions, four ready members,
-21 backfill attempts with seven successful symbol ledgers, one physical
-restart, and zero writer errors. It also preserved the decisive failure: zero
-composition cycles, zero lifecycle/setup transitions, and zero TradePlans or
-truthful no-plan records. The natural Continuous path is therefore not
-accepted. The immutable second-eye V2 ZIP is self-contained, secret-scan clean,
-and independently reruns 161 tests from extracted contents; it is SHA-256
-`A4609AA3562D5705D88DF13498F7EBAEAB7E6A615910B4445887625B60EE371B`.
-The original failed Producer-001A canary/ZIP remain unchanged. No rollback,
-merge, install, deployment, Paper, Shadow, account, position, broker, or order
-action occurred. Independent second-eye adjudication is the next and only
-Producer gate; do not repair or rerun before it.
+`ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E` is
+`IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PACKET_READY / FORENSIC_TOOLING_ONLY`.
+Analyzer repair commit `989f7109a6f46afb4834e438a02fdaf4c39ff1ad`
+reuses the production canonical completed-bar identity contract, resolves the
+Producer member by exact symbol, separates unique TradePlans from persistence
+occurrences, and adds an approved-environment worktree runner. Packaging and
+context-aware sanitation hardening are preserved through
+`74efea1a5d58aac75886f9c53ce910dc96a02ad4`. The immutable 001D replay now
+reports 259 exact matches, zero unmatched/premature events, and four unique
+plans for CRM, NVDA, and two BMNR setup identities. Final focused tests pass
+65/65; full approved-environment discovery completes all 2,830 tests with one
+expected Windows skip while loading the isolated worktree and requiring no
+local `.venv`. Compileall, PowerShell parse, protected-path diff, capability/
+ownership scan, secret scan, and canonical nonmutation checks pass. Product
+runtime files are byte-unchanged from the reviewed 001D head.
+
+The sanitized self-contained V4 second-eye packet has 459 files and 458
+manifest entries. Pre-ZIP and extracted-ZIP focused tests/replays, manifest
+verification, and secret scanning all pass. ZIP SHA-256 is
+`DAB6F1159893EFAD8F80669A8FCF7759B4473AD1E8252F27261634E3DBC9C831`.
+No provider call, merge, install, deployment, Paper, Shadow, account, position,
+broker, or order action occurred under 001E.
 
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
@@ -286,10 +298,11 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Independently adjudicate the preserved Producer-001B failed canary from the
-self-contained second-eye V2 ZIP. Do not repair or rerun the natural path until
-that review identifies the first missing transition and approves a bounded
-successor scope. `ARGUS-STAT-DATA-002` and Continuous Paper remain held.
+Independently review the Producer-001E repaired analyzer and immutable 001D
+reanalysis from the self-contained V4 packet. Do not merge 001D or 001E until
+that review confirms analyzer parity, TradePlan accounting, environment
+invocation, and package reproducibility. No new provider canary is required.
+`ARGUS-STAT-DATA-002` and Continuous Paper remain held.
 Authoritative instrument subtype/leverage classification remains a pre-Paper
 gate. The authoritative ordered sequence is maintained only in `Next / Queue`
 below.
@@ -361,18 +374,19 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. Producer-001B is pushed and `IMPLEMENTED_PENDING_MERGE`; its real-provider
-   canary is terminal failed acceptance and its self-contained second-eye packet
-   is ready. No repair, rerun, merge, install, or activation is active.
+1. Producer-001D Product runtime is independently accepted but unmerged.
+   Producer-001E is `IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PACKET_READY` and
+   repairs only forensic tooling and approved-environment invocation. No new
+   provider run, merge, install, or activation is active.
 
 ### 2. Ready / Next
 
-1. Perform independent second-eye adjudication of the preserved Producer-001B
-   failed canary and its V2 ZIP. Identify the exact first missing transition;
-   preserve all original evidence and do not repair during adjudication.
-2. Only after adjudication, authorize a bounded successor repair and fresh
-   provider-backed canary if the evidence supports it. Acceptance still requires
-   real discovery through truthful plan/no-plan, reevaluation, and restart.
+1. Perform independent second-eye review of the Producer-001E V4 packet and
+   reproduce its 259/259 completed-bar reconciliation, four unique plans, and
+   approved-environment Hard Chew. Preserve all original 001D evidence.
+2. Only after that review, authorize controlled reconciliation/integration of
+   the accepted 001D Product runtime and 001E forensic tooling. A new live
+   provider canary is not required unless review finds contradictory evidence.
 3. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
    research identity only after the natural path passes physical acceptance.
 4. Close authoritative instrument subtype/leverage classification before any
@@ -3125,6 +3139,49 @@ blocked and gains no authority from Paper evidence.
 - Stop gate: independent second-eye adjudication only. No product repair,
   provider rerun, merge, deployment, STAT-DATA-002 activation, Paper, Shadow,
   broker, account, position, or order work is authorized until that review.
+
+#### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001D - Admitted Finality And Natural Composition
+
+- Lifecycle: `PRODUCT_RUNTIME_ACCEPTED_BY_INDEPENDENT_ADJUDICATION /
+  IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY`. Reviewed task head
+  `fba8781d40228868657b23ac0cc02d42f3b10e64` contains Product commit
+  `1fa914f01b1fa44880885cd0f88e846e7e52313d`.
+- Immutable real-provider evidence proves discovery, Schwab backfill, readiness,
+  accepted composition, 259 exact completed-bar events, four unique natural
+  TradePlans across five persisted occurrences, restart continuity, prospective
+  floor integrity, and failed-composition atomicity. The prior zero counts were
+  forensic analyzer defects. The preserved 001D ZIP remains unchanged at
+  SHA-256 `C47AA2A22BED37F213C77BF61BCB93224829C3FC81BA557B26D1C7AA2E2D2FBB`.
+- Product runtime acceptance does not authorize merge, deployment, Paper,
+  Shadow, brokerage, orders, or unknown-instrument execution.
+
+#### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E - Forensic Analyzer Contract Repair
+
+- Lifecycle: `IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PACKET_READY /
+  FORENSIC_TOOLING_ONLY`. Core analyzer/environment repair is
+  `989f7109a6f46afb4834e438a02fdaf4c39ff1ad`; package completeness and
+  context-aware sanitation are preserved through
+  `74efea1a5d58aac75886f9c53ce910dc96a02ad4`.
+- The analyzer consumes the production completed-bar identity builders, joins
+  Producer members by exact symbol, counts four unique plan identities and five
+  persistence occurrences, and preserves legitimate no-plan records. Immutable
+  replay returns 259/259 exact events with zero unmatched, premature, or
+  prospective-floor violations.
+- The approved canonical Python 3.12.6 environment fingerprint is
+  `791197DEDD392BD3D5FA0D6FB051F395562E336ABF995FC9FBD633FAC28760C8`.
+  Focused tests pass 65/65 and full discovery completes 2,830 tests with one
+  expected Windows skip while loading the isolated worktree without a local
+  `.venv`. Compile, PowerShell parse, capability/ownership, secret, protected-
+  path, and canonical nonmutation checks pass; no Product runtime file changed.
+- Self-contained V4 ZIP:
+  `C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-CONTINUOUS-PRODUCER-001E-FORENSIC-REPAIR-SECOND-EYE-V4.zip`;
+  SHA-256
+  `DAB6F1159893EFAD8F80669A8FCF7759B4473AD1E8252F27261634E3DBC9C831`.
+  It contains 459 files and 458 manifest entries; pre-ZIP and extracted tests/
+  replays, manifest verification, and secret scan pass.
+- Stop gate: independent second-eye review only. No live canary, merge,
+  deployment, STAT-DATA-002, Continuous Paper, Shadow, broker, account,
+  position, or order action is authorized by this closeout.
 
 #### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
 
