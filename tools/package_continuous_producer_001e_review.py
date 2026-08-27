@@ -245,7 +245,10 @@ def main(argv: list[str] | None = None) -> int:
         "repaired-forensic-analysis.json",
         "repaired-forensic-timeline.json",
         "approved-environment.json",
+        "focused-approved-environment-tests.json",
         "full-approved-environment-discovery.json",
+        "capability-ownership-scan.json",
+        "hard-chew-source-binding.json",
     ):
         shutil.copy2(replay_root / name, package_root / "results" / name)
     for name in (
