@@ -364,18 +364,22 @@ public sealed partial class ShellViewModel : ObservableObject
         _candidateStoryWorkspaceClient = candidateStoryWorkspaceClient;
         _researchMaturityWorkspaceClient = researchMaturityWorkspaceClient;
         SetRegistry(WorkspaceFactory.Create(WorkspaceKind.Live));
+        IsActivityOpen = Registry.Panes.FirstOrDefault(pane => pane.Kind == PaneKind.Activity)?.IsVisible == true;
         if (_layoutStore is not null)
         {
             _layoutAutosave = new LayoutAutosaveCoordinator(_layoutStore, CreateAutomaticLayoutSnapshot);
         }
 
         Candidates = [];
+        AttentionRows = [];
         Activity = [];
+        WhatChangedRows = [];
         Activity.CollectionChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(ActivityRows));
             OnPropertyChanged(nameof(ActivityLabel));
             OnPropertyChanged(nameof(ActivityCountLabel));
+            RefreshWhatChangedRows();
         };
         Candles = [];
         OpenPositions = [];
@@ -390,6 +394,7 @@ public sealed partial class ShellViewModel : ObservableObject
         Candidates.CollectionChanged += (_, _) =>
         {
             RefreshCommandPaletteResults();
+            RefreshAttentionRows();
             OnPropertyChanged(nameof(CommandPaletteScopeLabel));
         };
         RefreshCommandPaletteResults();
@@ -417,7 +422,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public ObservableCollection<CandidateSnapshot> Candidates { get; }
 
+    public ObservableCollection<CommandCenterAttentionRowView> AttentionRows { get; }
+
     public ObservableCollection<ActivityEvent> Activity { get; }
+
+    public ObservableCollection<CommandCenterTimelineItemView> WhatChangedRows { get; }
 
     public IReadOnlyList<ActivityEventView> ActivityRows =>
         Activity.Select(ActivityEventView.From).ToArray();
@@ -444,6 +453,12 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty]
     private CandidateSnapshot? _selectedCandidate;
+
+    [ObservableProperty]
+    private CommandCenterAttentionRowView? _selectedAttentionRow;
+
+    [ObservableProperty]
+    private CommandCenterTimelineItemView? _selectedTimelineItem;
 
     [ObservableProperty]
     private string _selectedSymbol = "NVDA";
@@ -652,7 +667,35 @@ public sealed partial class ShellViewModel : ObservableObject
         _ => "Review only. No broker or order actions are available.",
     };
 
-    public string ActivityLabel => Activity.Count == 0 ? "Activity" : $"Activity {Activity.Count}";
+    public string ActivityLabel => WhatChangedRows.Count == 0
+        ? "What Changed"
+        : $"What Changed {WhatChangedRows.Count}";
+
+    public string UniverseCountLabel => AttentionRows.Count == 1
+        ? "1 source-ordered candidate"
+        : $"{AttentionRows.Count} source-ordered candidates";
+
+    public CommandCenterDecisionView CurrentDecision =>
+        CommandCenterDecisionView.From(SelectedCandidate, TradePlan, PrimaryChart);
+
+    public CommandCenterMarketStoryView CurrentMarketStory =>
+        CommandCenterMarketStoryView.From(SelectedCandidate, PrimaryChart);
+
+    public CommandCenterTimelineSelectionView TimelineSelection =>
+        CommandCenterTimelineSelectionView.From(SelectedTimelineItem, SelectedSymbol);
+
+    public CommandCenterHistoricalDecisionContextView HistoricalDecisionContext =>
+        CommandCenterHistoricalDecisionContextView.From(SelectedTimelineItem);
+
+    public CommandCenterHealthView CommandCenterHealth =>
+        CommandCenterHealthView.From(Diagnostics);
+
+    public string WhatChangedCountLabel => WhatChangedRows.Count == 1
+        ? "1 traceable row"
+        : $"{WhatChangedRows.Count} traceable rows";
+
+    public string WhatChangedLimitationLabel =>
+        "PARTIAL HISTORY — complete reevaluation chronology unavailable in current read model";
 
     public bool HasCommandPaletteResults => CommandPaletteResults.Count > 0;
 
@@ -1291,8 +1334,11 @@ public sealed partial class ShellViewModel : ObservableObject
                 }
                 break;
             case CommandPaletteAction.ToggleActivity:
-                ToggleActivity();
-                StatusMessage = IsActivityOpen ? "Opened workstation activity." : "Hid workstation activity.";
+                if (!IsActivityOpen)
+                {
+                    ToggleActivity();
+                }
+                StatusMessage = "Opened What Changed / Decision Timeline.";
                 break;
             case CommandPaletteAction.ViewDiagnostics:
             {
@@ -1501,7 +1547,44 @@ public sealed partial class ShellViewModel : ObservableObject
 
     partial void OnCommandQueryChanged(string value) => RefreshCommandPaletteResults();
 
-    partial void OnHealthChanged(SystemHealthSnapshot? value) => OnPropertyChanged(nameof(Diagnostics));
+    partial void OnHealthChanged(SystemHealthSnapshot? value)
+    {
+        OnPropertyChanged(nameof(Diagnostics));
+        OnPropertyChanged(nameof(CommandCenterHealth));
+    }
+
+    partial void OnSelectedCandidateChanged(CandidateSnapshot? value)
+    {
+        SelectedAttentionRow = value is null
+            ? null
+            : AttentionRows.FirstOrDefault(row => ReferenceEquals(row.Candidate, value)
+                || string.Equals(row.Symbol, value.Symbol, StringComparison.OrdinalIgnoreCase));
+        RaiseCommandCenterProperties();
+    }
+
+    partial void OnSelectedSymbolChanged(string value)
+    {
+        RefreshWhatChangedRows();
+        OnPropertyChanged(nameof(TimelineSelection));
+    }
+
+    partial void OnSelectedTimelineItemChanged(CommandCenterTimelineItemView? value)
+    {
+        OnPropertyChanged(nameof(TimelineSelection));
+        OnPropertyChanged(nameof(HistoricalDecisionContext));
+    }
+
+    partial void OnTradePlanChanged(TradePlanSnapshot? value) =>
+        OnPropertyChanged(nameof(CurrentDecision));
+
+    partial void OnPrimaryChartChanged(ChartPaneViewModel? value)
+    {
+        OnPropertyChanged(nameof(CurrentDecision));
+        OnPropertyChanged(nameof(CurrentMarketStory));
+    }
+
+    [RelayCommand]
+    private void ReturnToCurrent() => SelectedTimelineItem = null;
 
     partial void OnReplaySessionChanged(ReplaySnapshot? value) => OnPropertyChanged(nameof(ReplayContext));
 
@@ -1528,6 +1611,7 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(CandidateStoryRows));
         OnPropertyChanged(nameof(HasCandidateStoryPoints));
         OnPropertyChanged(nameof(CandidateStoryEmptyLabel));
+        RefreshWhatChangedRows();
     }
 
     private void SetRegistry(PaneRegistry registry)
@@ -1568,6 +1652,59 @@ public sealed partial class ShellViewModel : ObservableObject
         SelectedCommandPaletteItem = CommandPaletteResults.FirstOrDefault();
         OnPropertyChanged(nameof(HasCommandPaletteResults));
         OnPropertyChanged(nameof(CommandPaletteEmptyText));
+    }
+
+    private void RefreshAttentionRows()
+    {
+        var selectedSymbol = SelectedCandidate?.Symbol;
+        AttentionRows.Clear();
+        foreach (var row in CommandCenterAttentionRowView.ProjectSourceOrder(Candidates, DateTimeOffset.UtcNow))
+        {
+            AttentionRows.Add(row);
+        }
+
+        SelectedAttentionRow = string.IsNullOrWhiteSpace(selectedSymbol)
+            ? null
+            : AttentionRows.FirstOrDefault(row =>
+                string.Equals(row.Symbol, selectedSymbol, StringComparison.OrdinalIgnoreCase));
+        OnPropertyChanged(nameof(UniverseCountLabel));
+        OnPropertyChanged(nameof(CurrentDecision));
+        OnPropertyChanged(nameof(CurrentMarketStory));
+    }
+
+    private void RefreshWhatChangedRows()
+    {
+        var selectedIdentity = SelectedTimelineItem?.Identity;
+        WhatChangedRows.Clear();
+        foreach (var row in CommandCenterTimelineItemView.Compose(
+                     Activity,
+                     CandidateStory,
+                     TechnicalResearch,
+                     SelectedSymbol))
+        {
+            WhatChangedRows.Add(row);
+        }
+
+        SelectedTimelineItem = string.IsNullOrWhiteSpace(selectedIdentity)
+            ? null
+            : WhatChangedRows.FirstOrDefault(row =>
+                string.Equals(row.Identity, selectedIdentity, StringComparison.Ordinal));
+        OnPropertyChanged(nameof(ActivityLabel));
+        OnPropertyChanged(nameof(WhatChangedCountLabel));
+        OnPropertyChanged(nameof(TimelineSelection));
+        OnPropertyChanged(nameof(HistoricalDecisionContext));
+    }
+
+    private void RaiseCommandCenterProperties()
+    {
+        OnPropertyChanged(nameof(UniverseCountLabel));
+        OnPropertyChanged(nameof(CurrentDecision));
+        OnPropertyChanged(nameof(CurrentMarketStory));
+        OnPropertyChanged(nameof(CommandCenterHealth));
+        OnPropertyChanged(nameof(WhatChangedCountLabel));
+        OnPropertyChanged(nameof(WhatChangedLimitationLabel));
+        OnPropertyChanged(nameof(TimelineSelection));
+        OnPropertyChanged(nameof(HistoricalDecisionContext));
     }
 
     private WorkspaceLayoutSnapshot CreateAutomaticLayoutSnapshot() => CreateLayoutSnapshot(isNamedLayout: false, name: null);
@@ -1998,6 +2135,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void RaisePresentationProperties()
     {
+        RaiseCommandCenterProperties();
         OnPropertyChanged(nameof(Registry));
         OnPropertyChanged(nameof(Environment));
         OnPropertyChanged(nameof(EnvironmentLabel));
@@ -2561,6 +2699,7 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(HasTechnicalResearchStudies));
         OnPropertyChanged(nameof(TechnicalResearchEventsEmptyLabel));
         OnPropertyChanged(nameof(TechnicalResearchStudiesEmptyLabel));
+        RefreshWhatChangedRows();
     }
 
     private async Task RefreshTechnicalResearchAsync(

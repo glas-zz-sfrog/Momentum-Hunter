@@ -108,6 +108,7 @@ public partial class MainWindow : Window, IWorkstationPresentation
     {
         if (sender is Button { Tag: string tag } && Enum.TryParse<WorkspaceKind>(tag, out var workspace))
         {
+            ApplicationMenuPopup.IsOpen = false;
             await _viewModel.ChangeWorkspaceAsync(workspace);
             PruneDetachedChartContent();
             if (HasCompleteStaticDockLayout())
@@ -135,7 +136,8 @@ public partial class MainWindow : Window, IWorkstationPresentation
 
     private async void CandidateGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (e.AddedItems.OfType<CandidateSnapshot>().FirstOrDefault() is { } candidate && candidate != _viewModel.SelectedCandidate)
+        if (e.AddedItems.OfType<CommandCenterAttentionRowView>().FirstOrDefault()?.Candidate is { } candidate
+            && candidate != _viewModel.SelectedCandidate)
         {
             await _viewModel.SelectCandidateAsync(candidate);
         }
@@ -148,22 +150,6 @@ public partial class MainWindow : Window, IWorkstationPresentation
         {
             await _viewModel.SelectShadowTradeAsync(trade);
         }
-    }
-
-    private async void CandidateScoreButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: CandidateSnapshot candidate })
-        {
-            CandidateGrid.SelectedItem = candidate;
-            if (candidate != _viewModel.SelectedCandidate)
-            {
-                await _viewModel.SelectCandidateAsync(candidate);
-            }
-
-            _viewModel.TradePlanTabIndex = 1;
-        }
-
-        e.Handled = true;
     }
 
     private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)

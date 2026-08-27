@@ -10,10 +10,10 @@ public static class WorkspaceFactory
         switch (workspace)
         {
             case WorkspaceKind.Live:
-                registry.Create(PaneKind.Hunter, "Hunter", LinkGroup.A, DockRegion.Left, symbol, interval);
-                registry.Create(PaneKind.Chart, "Chart", LinkGroup.A, DockRegion.Center, symbol, interval);
-                registry.Create(PaneKind.TradePlan, "Trade Plan", LinkGroup.A, DockRegion.Right, symbol, interval);
-                registry.Create(PaneKind.Activity, "Activity", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
+                registry.Create(PaneKind.Hunter, "Live Universe", LinkGroup.A, DockRegion.Left, symbol, interval);
+                registry.Create(PaneKind.Chart, "Focus Candidate / Market Story", LinkGroup.A, DockRegion.Center, symbol, interval);
+                registry.Create(PaneKind.TradePlan, "Decision / Why / Evidence", LinkGroup.A, DockRegion.Right, symbol, interval);
+                registry.Create(PaneKind.Activity, "What Changed / Decision Timeline", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval);
                 registry.Create(PaneKind.Research, "Research", LinkGroup.A, DockRegion.Bottom, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.Watchlist, "Watchlist", LinkGroup.Unlinked, DockRegion.Left, symbol, interval).IsVisible = false;
                 registry.Create(PaneKind.DailyWorkflow, "Daily Workflow", LinkGroup.Unlinked, DockRegion.Bottom, symbol, interval).IsVisible = false;
@@ -60,6 +60,11 @@ public static class WorkspaceFactory
             var existing = registry.Panes.FirstOrDefault(pane => pane.Kind == defaultPane.Kind);
             if (existing is not null)
             {
+                if (workspace == WorkspaceKind.Live
+                    && IsLegacyLiveTitle(existing.Kind, existing.Title))
+                {
+                    existing.Title = defaultPane.Title;
+                }
                 if (existing.Kind == PaneKind.ShadowReview
                     && string.Equals(existing.Title, "Shadow Review", StringComparison.Ordinal))
                 {
@@ -79,4 +84,13 @@ public static class WorkspaceFactory
             restored.IsVisible = defaultPane.IsVisible;
         }
     }
+
+    private static bool IsLegacyLiveTitle(PaneKind kind, string title) => kind switch
+    {
+        PaneKind.Hunter => string.Equals(title, "Hunter", StringComparison.Ordinal),
+        PaneKind.Chart => string.Equals(title, "Chart", StringComparison.Ordinal),
+        PaneKind.TradePlan => string.Equals(title, "Trade Plan", StringComparison.Ordinal),
+        PaneKind.Activity => string.Equals(title, "Activity", StringComparison.Ordinal),
+        _ => false,
+    };
 }

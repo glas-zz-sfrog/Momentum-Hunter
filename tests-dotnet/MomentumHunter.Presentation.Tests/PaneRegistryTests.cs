@@ -76,7 +76,7 @@ public sealed class PaneRegistryTests
     }
 
     [Theory]
-    [InlineData(WorkspaceKind.Live, "Hunter", PaneKind.Activity, false)]
+    [InlineData(WorkspaceKind.Live, "Live Universe", PaneKind.Activity, true)]
     [InlineData(WorkspaceKind.Replay, "Replay Timeline", PaneKind.ReplayEvents, false)]
     [InlineData(WorkspaceKind.Review, "Outcome Explorer", PaneKind.ReviewOutcomes, false)]
     public void WorkspaceFactoryCreatesExpectedDefaultPanes(WorkspaceKind workspace, string hunterTitle, PaneKind lowerPaneKind, bool lowerPaneVisible)

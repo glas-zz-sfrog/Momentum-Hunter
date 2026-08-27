@@ -424,9 +424,12 @@ public sealed class ChartReadabilityTests
         var badge = Assert.Single(document
             .Descendants()
             .Where(element =>
-                element.Name.LocalName == "TextBlock" &&
-                (string?)element.Attribute("Text") == "{Binding OperatorBadge}"));
-        Assert.Equal("{Binding OperatorState}", (string?)badge.Attribute("ToolTip"));
+                element.Name.LocalName == "Border" &&
+                (string?)element.Attribute("ToolTip") == "{Binding EvidenceDetail}"));
+        Assert.Contains(
+            badge.Descendants(),
+            element => element.Name.LocalName == "Run"
+                && (string?)element.Attribute("Text") == "{Binding EvidenceLabel}");
     }
 
     [Theory]

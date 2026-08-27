@@ -90,8 +90,8 @@
                TargetType="{x:Type Button}"
                BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Height" Value="30" />
-            <Setter Property="Padding" Value="8,3" />
-            <Setter Property="Margin" Value="2,0" />
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="Margin" Value="1,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
         </Style>
@@ -131,7 +131,7 @@
             </Style.Triggers>
         </Style>
         <Style x:Key="WindowCaptionButtonStyle" TargetType="{x:Type Button}">
-            <Setter Property="Width" Value="46" />
+            <Setter Property="Width" Value="42" />
             <Setter Property="Height" Value="48" />
             <Setter Property="Margin" Value="0" />
             <Setter Property="Padding" Value="0" />
@@ -212,21 +212,18 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="46" />
-                    <ColumnDefinition Width="46" />
-                    <ColumnDefinition Width="46" />
+                    <ColumnDefinition Width="42" />
+                    <ColumnDefinition Width="42" />
+                    <ColumnDefinition Width="42" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="MOMENTUM HUNTER"
-                               FontSize="15"
+                    <TextBlock Text="MH | CC"
+                               FontSize="14"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
-                               Margin="0,0,8,0" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="Current" Tag="Live" Style="{StaticResource TopBarButtonStyle}" Click="WorkspaceButton_Click" />
-                    <Button Content="Replay" Tag="Replay" Style="{StaticResource TopBarButtonStyle}" Click="WorkspaceButton_Click" />
-                    <Button Content="Review" Tag="Review" Style="{StaticResource TopBarButtonStyle}" Click="WorkspaceButton_Click" />
+                               Margin="0,0,8,0"
+                               ToolTip="Momentum Hunter Command Center"
+                               AutomationProperties.Name="Momentum Hunter Command Center" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="1m" Tag="1m" Style="{StaticResource TopBarButtonStyle}" Click="IntervalButton_Click" />
@@ -244,6 +241,11 @@
                         Click="OpenCommandPaletteButton_Click">
                     <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="{StaticResource TextPrimary}" />
                 </Button>
+                <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="6,0">
+                    <Border MinWidth="118" Background="#1A2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="3" Padding="7,3">
+                        <TextBlock Text="READ-ONLY RESEARCH" FontSize="10" FontWeight="SemiBold" />
+                    </Border>
+                </StackPanel>
                 <StackPanel Grid.Column="5"
                             Orientation="Horizontal"
                             VerticalAlignment="Center"
@@ -282,7 +284,8 @@
                         Click="ActivityButton_Click" />
                 <Button x:Name="HealthButton"
                         Grid.Column="9"
-                        Content="Health"
+                        Content="{Binding CommandCenterHealth.StatusLabel}"
+                        ToolTip="{Binding CommandCenterHealth.Summary}"
                         Style="{StaticResource TopBarButtonStyle}"
                         Command="{Binding ToggleHealthCommand}" />
                 <Button x:Name="ApplicationMenuButton"
@@ -327,8 +330,8 @@
             <avalon:LayoutRoot>
                 <avalon:LayoutPanel Orientation="Vertical">
                     <avalon:LayoutPanel Orientation="Horizontal">
-                        <avalon:LayoutAnchorablePane DockWidth="310">
-                            <avalon:LayoutAnchorable x:Name="HunterAnchor" ContentId="pane-hunter" Title="Hunter" CanClose="True" CanFloat="True">
+                        <avalon:LayoutAnchorablePane DockWidth="270" DockMinWidth="236">
+                            <avalon:LayoutAnchorable x:Name="HunterAnchor" ContentId="pane-hunter" Title="Live Universe" CanClose="True" CanFloat="True">
                                 <Border Background="{StaticResource PanelBackground}" Padding="10">
                                     <Grid>
                                         <Grid.RowDefinitions>
@@ -336,12 +339,21 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="1*" />
                                         </Grid.RowDefinitions>
-                                        <TextBlock Text="{Binding WorkspaceTitle}" FontWeight="SemiBold" FontSize="15" />
-                                        <TextBlock Grid.Row="1" Text="{Binding WorkspaceNarrative}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,10" />
+                                        <DockPanel>
+                                            <TextBlock Text="LIVE UNIVERSE" FontWeight="SemiBold" FontSize="15" />
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding UniverseCountLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" HorizontalAlignment="Right" />
+                                        </DockPanel>
+                                        <TextBlock Grid.Row="1"
+                                                   Text="Source order preserved  |  UI age from ObservedAt"
+                                                   ToolTip="Not discovery time. NEW 0–30m | RECENT 30m–2h | EARLIER 2h+; display only and never an input to rank or readiness."
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   FontSize="10"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,4,0,8" />
                                         <ListBox x:Name="CandidateGrid"
                                                  Grid.Row="2"
-                                                 ItemsSource="{Binding Candidates}"
-                                                 SelectedItem="{Binding SelectedCandidate, Mode=OneWay}"
+                                                 ItemsSource="{Binding AttentionRows}"
+                                                 SelectedItem="{Binding SelectedAttentionRow, Mode=OneWay}"
                                                  SelectionChanged="CandidateGrid_SelectionChanged"
                                                  Background="#17212B"
                                                  Foreground="{StaticResource TextPrimary}"
@@ -352,34 +364,51 @@
                                                  VirtualizingPanel.VirtualizationMode="Recycling">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Grid Margin="5,5,5,4">
+                                                    <Grid Margin="6,5,6,5" MinHeight="76">
                                                         <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
                                                             <RowDefinition Height="Auto" />
                                                             <RowDefinition Height="Auto" />
                                                         </Grid.RowDefinitions>
                                                         <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="40" />
-                                                            <ColumnDefinition Width="58" />
-                                                            <ColumnDefinition Width="78" />
+                                                            <ColumnDefinition Width="28" />
+                                                            <ColumnDefinition Width="Auto" MinWidth="52" />
                                                             <ColumnDefinition Width="*" />
                                                         </Grid.ColumnDefinitions>
-                                                        <Button Grid.Row="0" Grid.Column="0" Content="{Binding Score}" Tag="{Binding}" Click="CandidateScoreButton_Click" Padding="2" />
+                                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Rank, StringFormat=# {0}}" Foreground="{StaticResource TextMuted}" FontSize="10" VerticalAlignment="Center" />
                                                         <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Symbol}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                                        <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding LastPrice, StringFormat={}{0:C2}}" VerticalAlignment="Center" />
-                                                        <TextBlock Grid.Row="0" Grid.Column="3" Text="{Binding ChangePercent, StringFormat={}{0:+0.0;-0.0;0.0}%}" Foreground="{StaticResource Teal}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Margin="2,4,4,0" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis">
-                                                            <Run Text="{Binding RelativeVolume, StringFormat=RVOL {0:N1}x}" />
-                                                            <Run Text=" | " />
-                                                            <Run Text="{Binding FloatOrLiquidity}" />
-                                                            <Run Text=" | " />
-                                                            <Run Text="{Binding Catalyst}" />
-                                                        </TextBlock>
-                                                        <Border Grid.Row="1" Grid.Column="3" Background="#263846" CornerRadius="3" Padding="5,2" Margin="4,4,0,0" HorizontalAlignment="Right">
-                                                            <TextBlock Text="{Binding OperatorBadge}"
-                                                                       Foreground="{StaticResource Teal}"
+                                                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding PriceLabel}" FontSize="11" />
+                                                            <TextBlock Text="{Binding ChangeLabel}" Foreground="{StaticResource Teal}" FontSize="11" Margin="7,0,0,0" />
+                                                        </StackPanel>
+                                                        <Grid Grid.Row="1" Grid.ColumnSpan="3" Margin="0,5,0,0">
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="1*" /><ColumnDefinition Width="1*" /></Grid.ColumnDefinitions>
+                                                            <Border Background="#102A22" BorderBrush="#315A55" BorderThickness="1" CornerRadius="2" Padding="5,2" Margin="0,0,3,0">
+                                                                <TextBlock FontSize="9" TextWrapping="Wrap"><Run Text="OPPORTUNITY  " Foreground="{StaticResource TextMuted}" /><Run Text="{Binding OpportunityLabel}" /></TextBlock>
+                                                            </Border>
+                                                            <Border Grid.Column="1" Background="#142535" BorderBrush="#315A55" BorderThickness="1" CornerRadius="2" Padding="5,2" Margin="3,0,0,0" ToolTip="{Binding EvidenceDetail}">
+                                                                <TextBlock FontSize="9" TextWrapping="Wrap"><Run Text="EVIDENCE  " Foreground="{StaticResource TextMuted}" /><Run Text="{Binding EvidenceLabel}" /></TextBlock>
+                                                            </Border>
+                                                        </Grid>
+                                                        <Grid Grid.Row="2" Grid.ColumnSpan="3" Margin="0,4,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="1*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{Binding ContextLabel}"
+                                                                       ToolTip="{Binding ContextLabel}"
+                                                                       Foreground="{StaticResource TextMuted}"
                                                                        FontSize="10"
-                                                                       ToolTip="{Binding OperatorState}" />
-                                                        </Border>
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Margin="0,0,7,0" />
+                                                            <TextBlock Grid.Column="1"
+                                                                       Text="{Binding AgeLabel}"
+                                                                       ToolTip="{Binding AgeDetail}"
+                                                                       Foreground="{StaticResource Amber}"
+                                                                       FontSize="9"
+                                                                       HorizontalAlignment="Right"
+                                                                       VerticalAlignment="Center" />
+                                                        </Grid>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ListBox.ItemTemplate>
@@ -390,7 +419,7 @@
                         </avalon:LayoutAnchorablePane>
 
                         <avalon:LayoutDocumentPane x:Name="ChartDocumentPane">
-                            <avalon:LayoutDocument x:Name="PrimaryChartDocument" ContentId="pane-primary-chart" Title="Chart" CanClose="False" CanFloat="True">
+                            <avalon:LayoutDocument x:Name="PrimaryChartDocument" ContentId="pane-primary-chart" Title="Focus Candidate / Market Story" CanClose="False" CanFloat="True">
                                 <Border Background="{StaticResource PanelBackground}" Padding="12">
                                     <Grid>
                                         <Grid.RowDefinitions>
@@ -400,8 +429,12 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <DockPanel>
-                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                                                 <Border Padding="7,3" Margin="4,0" Background="#263846" CornerRadius="3">
                                                     <TextBlock Text="{Binding PrimaryChartLinkLabel}" Foreground="{StaticResource Teal}" FontSize="11" />
                                                 </Border>
@@ -409,15 +442,34 @@
                                                 <Button Content="Pin" Command="{Binding TogglePrimaryChartPinCommand}" />
                                                 <Button Content="New Chart" Click="NewChartButton_Click" />
                                             </StackPanel>
-                                            <StackPanel Margin="0,0,12,0">
-                                                <TextBlock Text="{Binding PrimaryChart.Pane.Symbol}" FontSize="20" FontWeight="SemiBold" />
+                                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding CurrentMarketStory.Symbol}" FontSize="20" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding CurrentMarketStory.Company}" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="10,5,0,0" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding CurrentMarketStory.PriceAndChangeLabel}"
+                                                           Foreground="{StaticResource Teal}"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,2,0,2"
+                                                           ToolTip="{Binding CurrentMarketStory.PriceAndChangeLabel}" />
+                                                <TextBlock Text="{Binding CurrentMarketStory.WhyNow}"
+                                                           Foreground="{StaticResource TextPrimary}"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"
+                                                           ToolTip="{Binding CurrentMarketStory.WhyNow}" />
+                                                <TextBlock Text="{Binding CurrentMarketStory.HistoryContextLabel}"
+                                                           Foreground="{StaticResource TextMuted}"
+                                                           FontSize="10"
+                                                           TextWrapping="Wrap"
+                                                           ToolTip="{Binding CurrentMarketStory.HistoryContextLabel}" />
                                                 <TextBlock Text="{Binding ChartSourceLabel}"
                                                            Foreground="{StaticResource TextMuted}"
-                                                           FontSize="11"
+                                                           FontSize="10"
                                                            TextWrapping="Wrap"
                                                            ToolTip="{Binding ChartSourceLabel}" />
                                             </StackPanel>
-                                        </DockPanel>
+                                        </Grid>
                                         <Border Grid.Row="1"
                                                 Margin="0,8,0,0"
                                                 Padding="8,6"
@@ -523,7 +575,7 @@
                                             </DockPanel>
                                         </Border>
                                         <TextBlock Grid.Row="4"
-                                                   Text="Research display only  |  Linked panes update only within their selected link group"
+                                                   Text="{Binding CurrentMarketStory.SourceAndIntervalLabel, StringFormat=Existing stored history only  |  {0}  |  no WPF aggregation/backfill}"
                                                    Foreground="{StaticResource TextMuted}"
                                                    FontSize="11"
                                                    TextWrapping="Wrap" />
@@ -532,8 +584,8 @@
                             </avalon:LayoutDocument>
                         </avalon:LayoutDocumentPane>
 
-                        <avalon:LayoutAnchorablePane DockWidth="340">
-                            <avalon:LayoutAnchorable x:Name="TradePlanAnchor" ContentId="pane-trade-plan" Title="Trade Plan" CanClose="True" CanFloat="True">
+                        <avalon:LayoutAnchorablePane DockWidth="360" DockMinWidth="312">
+                            <avalon:LayoutAnchorable x:Name="TradePlanAnchor" ContentId="pane-trade-plan" Title="Decision / Why / Evidence" CanClose="True" CanFloat="True">
                                 <Border Background="{StaticResource PanelBackground}" Padding="12">
                                     <Grid>
                                         <Grid.RowDefinitions>
@@ -543,8 +595,8 @@
                                         </Grid.RowDefinitions>
                                         <DockPanel>
                                             <StackPanel DockPanel.Dock="Left">
-                                                <TextBlock Text="Trade Plan" FontSize="16" FontWeight="SemiBold" />
-                                                <TextBlock Text="{Binding TradePlanSymbolLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                                                <TextBlock Text="DECISION / WHY / EVIDENCE" FontSize="16" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding CurrentDecision.Symbol}" Foreground="{StaticResource TextMuted}" FontSize="10" />
                                             </StackPanel>
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                                 <Border Padding="7,3" Margin="0,0,4,0" Background="#263846" CornerRadius="3">
@@ -553,16 +605,60 @@
                                                 <Button Content="Pin" Command="{Binding TogglePrimaryTradePlanPinCommand}" />
                                             </StackPanel>
                                         </DockPanel>
-                                        <TextBlock Grid.Row="1" Text="{Binding PlanningStatus}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,10,0,2" />
-                                        <TabControl Grid.Row="2" Margin="0,12,0,0" Background="#17212B" Foreground="{StaticResource TextPrimary}" SelectedIndex="{Binding TradePlanTabIndex}">
+                                        <StackPanel Grid.Row="1">
+                                            <Border Margin="0,8,0,0" Padding="9" Background="#0F1D29" BorderBrush="{StaticResource Teal}" BorderThickness="1,2,1,1">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding CurrentDecision.ContextLabel}" Foreground="{StaticResource Teal}" FontSize="10" FontWeight="SemiBold" />
+                                                    <WrapPanel Margin="0,6,0,0">
+                                                        <Border Background="#102A22" BorderBrush="#315A55" BorderThickness="1" CornerRadius="2" Padding="6,3" Margin="0,0,6,4">
+                                                            <TextBlock FontSize="10"><Run Text="OPPORTUNITY  " Foreground="{StaticResource TextMuted}" /><Run Text="{Binding CurrentDecision.StatePair.OpportunityLabel}" FontWeight="SemiBold" /></TextBlock>
+                                                        </Border>
+                                                        <Border Background="#142535" BorderBrush="#315A55" BorderThickness="1" CornerRadius="2" Padding="6,3" Margin="0,0,0,4" ToolTip="{Binding CurrentDecision.StatePair.EvidenceDetail}">
+                                                            <TextBlock FontSize="10"><Run Text="EVIDENCE  " Foreground="{StaticResource TextMuted}" /><Run Text="{Binding CurrentDecision.StatePair.EvidenceLabel}" FontWeight="SemiBold" /></TextBlock>
+                                                        </Border>
+                                                    </WrapPanel>
+                                                    <TextBlock Text="{Binding CurrentDecision.Answer}" FontSize="20" FontWeight="SemiBold" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding CurrentDecision.DecisiveReason}" FontSize="12" TextWrapping="Wrap" MaxHeight="42" ToolTip="{Binding CurrentDecision.DecisiveReason}" />
+                                                    <TextBlock Text="{Binding CurrentDecision.Blocker, StringFormat=BLOCKER / REASON  {0}}" Foreground="{StaticResource Amber}" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,0" />
+                                                    <UniformGrid Columns="3" Margin="0,8,0,0">
+                                                        <StackPanel Margin="0,0,5,3"><TextBlock Text="ENTRY" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding CurrentDecision.EntryLabel}" FontSize="12" /></StackPanel>
+                                                        <StackPanel Margin="0,0,5,3"><TextBlock Text="STOP" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding CurrentDecision.StopLabel}" FontSize="12" /></StackPanel>
+                                                        <StackPanel Margin="0,0,0,3"><TextBlock Text="TARGET 1" Foreground="{StaticResource TextMuted}" FontSize="9" /><TextBlock Text="{Binding CurrentDecision.Target1Label}" FontSize="12" /></StackPanel>
+                                                    </UniformGrid>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Margin="0,7,0,0" Padding="8" Background="#302B1D" BorderBrush="{StaticResource Amber}" BorderThickness="1,2,1,1">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HistoricalDecisionContext.IsVisible}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Left" Text="HISTORICAL EVIDENCE" Foreground="{StaticResource Amber}" FontSize="10" FontWeight="SemiBold" />
+                                                        <Button DockPanel.Dock="Right" Content="Return to Current" Command="{Binding ReturnToCurrentCommand}" ToolTip="Read-only navigation; clears only the selected timeline evidence." Padding="7,2" />
+                                                    </DockPanel>
+                                                    <TextBlock Text="{Binding HistoricalDecisionContext.CapturedAtLabel, StringFormat=Captured: {0}}" FontSize="10" Margin="0,4,0,0" />
+                                                    <TextBlock Text="{Binding HistoricalDecisionContext.SourceLabel, StringFormat=Source: {0}}" Foreground="{StaticResource Teal}" FontSize="10" />
+                                                    <TextBlock Text="{Binding HistoricalDecisionContext.IdentityLabel, StringFormat=Identity: {0}}" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" ToolTip="{Binding HistoricalDecisionContext.IdentityLabel}" />
+                                                    <TextBlock Text="{Binding HistoricalDecisionContext.Limitation}" Foreground="{StaticResource Amber}" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                        <TabControl Grid.Row="2" Margin="0,8,0,0" Background="#17212B" Foreground="{StaticResource TextPrimary}" SelectedIndex="{Binding TradePlanTabIndex}">
                                             <TabItem Header="Plan">
                                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                                     <StackPanel Margin="8">
                                                         <UniformGrid Columns="2" Margin="0,0,0,12">
                                                             <StackPanel Margin="0,0,6,8"><TextBlock Text="Entry" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.EntryDisplay}" FontSize="16" /></StackPanel>
                                                             <StackPanel Margin="0,0,6,8"><TextBlock Text="Stop" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.StopDisplay}" FontSize="16" /></StackPanel>
-                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Target" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.TargetDisplay}" FontSize="16" /></StackPanel>
-                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Reward/Risk" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding TradePlan.RewardToRiskDisplay}" FontSize="16" /></StackPanel>
+                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Target 2" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding CurrentDecision.Target2Label}" FontSize="12" TextWrapping="Wrap" /></StackPanel>
+                                                            <StackPanel Margin="0,0,6,8"><TextBlock Text="Setup type" Foreground="{StaticResource TextMuted}" FontSize="11" /><TextBlock Text="{Binding CurrentDecision.SetupTypeLabel}" FontSize="12" TextWrapping="Wrap" /></StackPanel>
                                                         </UniformGrid>
                                                         <TextBlock Text="Readiness Gate" FontWeight="SemiBold" Margin="0,0,0,6" />
                                                         <ItemsControl ItemsSource="{Binding TradePlan.Checks}">
@@ -578,7 +674,9 @@
                                                             </ItemsControl.ItemTemplate>
                                                         </ItemsControl>
                                                         <TextBlock Text="{Binding TradePlan.RiskDecision.Summary}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,10,0,0" />
-                                                        <Button Content="{Binding PrimaryActionLabel}" IsEnabled="{Binding CanRunPrimaryAction}" Click="TradePlanActionButton_Click" Margin="0,14,0,0" HorizontalAlignment="Stretch" />
+                                                        <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" Padding="8" Margin="0,12,0,0">
+                                                            <TextBlock Text="Informational evidence. No simulation or order controls in the Command Center." Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" />
+                                                        </Border>
                                                     </StackPanel>
                                                 </ScrollViewer>
                                             </TabItem>
@@ -586,6 +684,10 @@
                                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                                     <StackPanel Margin="12">
                                                         <TextBlock Text="{Binding CandidateEvidenceSymbolLabel}" FontSize="16" FontWeight="SemiBold" />
+                                                        <TextBlock Text="WHY NOW?" Foreground="{StaticResource Teal}" FontSize="10" FontWeight="SemiBold" Margin="0,10,0,2" />
+                                                        <TextBlock Text="{Binding CurrentDecision.WhyNow}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="WHY TRADE / WHY NOT?" Foreground="{StaticResource Teal}" FontSize="10" FontWeight="SemiBold" Margin="0,10,0,2" />
+                                                        <TextBlock Text="{Binding CurrentDecision.WhyTradeOrNot}" TextWrapping="Wrap" />
                                                         <TextBlock Text="Persisted catalyst" Foreground="{StaticResource Teal}" FontSize="11" Margin="0,12,0,3" />
                                                         <TextBlock Text="{Binding CandidateCatalystHeadline}" TextWrapping="Wrap" FontSize="13" />
                                                         <TextBlock Text="{Binding CandidateCatalystSourceLabel}" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,5,0,0" />
@@ -1086,59 +1188,84 @@
                         </avalon:LayoutAnchorable>
                     </avalon:LayoutAnchorablePane>
 
-                    <avalon:LayoutAnchorablePane DockHeight="180" DockMinHeight="90">
-                        <avalon:LayoutAnchorable x:Name="ActivityAnchor" ContentId="pane-activity" Title="Activity" CanClose="True" CanFloat="True">
+                    <avalon:LayoutAnchorablePane DockHeight="210" DockMinHeight="160">
+                        <avalon:LayoutAnchorable x:Name="ActivityAnchor" ContentId="pane-activity" Title="What Changed / Decision Timeline" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}" Padding="10">
                                 <Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="1*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
-                                    <ListBox ItemsSource="{Binding ActivityRows}" Background="#17212B" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource PanelBorder}" HorizontalContentAlignment="Stretch">
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="1*" /></Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="2*" MinWidth="480" /><ColumnDefinition Width="1*" MinWidth="280" /></Grid.ColumnDefinitions>
+                                    <DockPanel Grid.ColumnSpan="2" Margin="0,0,0,6">
+                                        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                                            <TextBlock Text="WHAT CHANGED" FontSize="15" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding SelectedSymbol}" Foreground="{StaticResource Teal}" FontWeight="SemiBold" Margin="10,1,0,0" />
+                                            <TextBlock Text="{Binding WhatChangedCountLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="10,3,0,0" />
+                                        </StackPanel>
+                                        <TextBlock DockPanel.Dock="Right" Text="{Binding WhatChangedLimitationLabel}" Foreground="{StaticResource Amber}" FontSize="10" HorizontalAlignment="Right" />
+                                    </DockPanel>
+                                    <ListBox Grid.Row="1"
+                                             ItemsSource="{Binding WhatChangedRows}"
+                                             SelectedItem="{Binding SelectedTimelineItem, Mode=TwoWay}"
+                                             Background="#17212B"
+                                             Foreground="{StaticResource TextPrimary}"
+                                             BorderBrush="{StaticResource PanelBorder}"
+                                             HorizontalContentAlignment="Stretch"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
-                                                <Border BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,0,1" Padding="7,6">
+                                                <Border Padding="7,4">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="Transparent" />
+                                                            <Setter Property="BorderBrush" Value="{StaticResource PanelBorder}" />
+                                                            <Setter Property="BorderThickness" Value="0,0,0,1" />
+                                                            <Style.Triggers>
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding HasStableHistoricalIdentity}" Value="True" />
+                                                                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}" Value="True" />
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Background" Value="#3A3524" />
+                                                                    <Setter Property="BorderBrush" Value="{StaticResource Amber}" />
+                                                                    <Setter Property="BorderThickness" Value="1" />
+                                                                </MultiDataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
                                                     <Grid>
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto" />
-                                                            <RowDefinition Height="Auto" />
-                                                        </Grid.RowDefinitions>
+                                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="150" />
-                                                            <ColumnDefinition Width="90" />
+                                                            <ColumnDefinition Width="130" />
                                                             <ColumnDefinition Width="1*" />
                                                             <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
                                                         <TextBlock Grid.Column="0" Text="{Binding TimestampLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" />
-                                                        <TextBlock Grid.Column="1" Text="{Binding CategoryLabel}" Foreground="{StaticResource Teal}" FontSize="10" FontWeight="SemiBold" />
-                                                        <TextBlock Grid.Column="2" Text="{Binding ScopeLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock Grid.Column="3" Text="{Binding StateLabel}" Margin="10,0,0,0" FontSize="10" FontWeight="SemiBold">
-                                                            <TextBlock.Style>
-                                                                <Style TargetType="TextBlock">
-                                                                    <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding StateLabel}" Value="HEALTHY">
-                                                                            <Setter Property="Foreground" Value="{StaticResource Teal}" />
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding StateLabel}" Value="DEGRADED">
-                                                                            <Setter Property="Foreground" Value="{StaticResource Amber}" />
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding StateLabel}" Value="UNAVAILABLE">
-                                                                            <Setter Property="Foreground" Value="#F2868D" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </TextBlock.Style>
-                                                        </TextBlock>
-                                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Text="{Binding Message}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding SourceKind}" Foreground="{StaticResource Teal}" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding Symbol}" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="3" Text="{Binding ContextLabel}" Foreground="{StaticResource Amber}" Margin="10,0,0,0" FontSize="10" FontWeight="SemiBold" />
+                                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Detail}" Margin="0,2,0,0" />
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>
                                     </ListBox>
-                                    <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                                        <TextBlock Text="{Binding ActivityCountLabel}" FontSize="16" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding ActivitySourceLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                        <TextBlock Text="Newest source event appears first. Displaying this stream does not create, reorder, or persist events." Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,4,0,0" />
-                                        <Button Content="Diagnostics" Click="DiagnosticsButton_Click" Margin="0,12,0,0" HorizontalAlignment="Left" />
-                                    </StackPanel>
+                                    <Border Grid.Row="1" Grid.Column="1" Margin="10,0,0,0" Padding="9" Background="#0F1D29" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="1*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                            <TextBlock Text="{Binding TimelineSelection.ContextLabel}" Foreground="{StaticResource Amber}" FontSize="10" FontWeight="SemiBold" />
+                                            <TextBlock Grid.Row="1" Text="{Binding TimelineSelection.Title}" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                            <TextBlock Grid.Row="2" Text="{Binding TimelineSelection.TimestampLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,2,0,0" />
+                                            <DockPanel Grid.Row="3" Margin="0,2,0,0">
+                                                <TextBlock DockPanel.Dock="Left" Text="{Binding TimelineSelection.SourceLabel}" Foreground="{StaticResource Teal}" FontSize="10" FontWeight="SemiBold" Margin="0,0,8,0" />
+                                                <TextBlock Text="{Binding TimelineSelection.IdentityLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" ToolTip="{Binding TimelineSelection.IdentityLabel}" />
+                                            </DockPanel>
+                                            <TextBlock Grid.Row="4" Text="{Binding TimelineSelection.Detail}" TextWrapping="Wrap" FontSize="11" Margin="0,5,0,0" />
+                                            <StackPanel Grid.Row="5">
+                                                <TextBlock Text="{Binding TimelineSelection.Limitation}" Foreground="{StaticResource TextMuted}" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                                <Button Content="Diagnostics" Click="DiagnosticsButton_Click" Margin="0,6,0,0" HorizontalAlignment="Left" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
                                 </Grid>
                             </Border>
                         </avalon:LayoutAnchorable>
@@ -1808,7 +1935,7 @@
                                 </StackPanel>
                             </Border>
                         </avalon:LayoutAnchorable>
-                        <avalon:LayoutAnchorable x:Name="PositionsAnchor" ContentId="pane-positions" Title="Positions" CanClose="True" CanFloat="True">
+                        <avalon:LayoutAnchorable x:Name="PositionsAnchor" ContentId="pane-positions" Title="Positions — Read-Only" CanClose="True" CanFloat="True">
                             <Border Background="{StaticResource PanelBackground}">
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -1830,7 +1957,7 @@
                                                        FontWeight="SemiBold" />
                                         </Border>
                                         <StackPanel>
-                                            <TextBlock Text="Open Positions" FontSize="16" FontWeight="SemiBold" />
+                                            <TextBlock Text="POSITIONS — READ-ONLY" FontSize="16" FontWeight="SemiBold" />
                                             <TextBlock Text="{Binding PositionsSummary}"
                                                        Foreground="{StaticResource TextMuted}"
                                                        FontSize="11"
@@ -2546,8 +2673,8 @@
 
         <Border Grid.Row="2" Background="#121C24" BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,1,0,0" Padding="16,5">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Left" Text="{Binding WorkspaceNarrative}" Foreground="{StaticResource TextMuted}" FontSize="10" />
-                <TextBlock DockPanel.Dock="Right" Text="{Binding BackgroundStatusDetail}" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                <TextBlock DockPanel.Dock="Left" Text="READ-ONLY RESEARCH  |  Research evidence only — no broker/order capability in this Command Center" Foreground="{StaticResource TextMuted}" FontSize="10" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding CommandCenterHealth.CheckedAtLabel}" Foreground="{StaticResource TextMuted}" FontSize="10" />
             </DockPanel>
         </Border>
 
@@ -2620,10 +2747,16 @@
         <Popup x:Name="ApplicationMenuPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=ApplicationMenuButton}" StaysOpen="False" AllowsTransparency="True" DataContext="{Binding DataContext, ElementName=Root}">
             <Border Width="300" Padding="12" Background="#1B2731" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="4">
                 <StackPanel>
-                    <TextBlock Text="Background Collection" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="System Status / Navigation" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="Workspace — read-only navigation" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,8,0,4" />
+                    <UniformGrid Columns="3">
+                        <Button Content="Current" Tag="Live" Click="WorkspaceButton_Click" Margin="0,0,4,0" />
+                        <Button Content="Replay" Tag="Replay" Click="WorkspaceButton_Click" Margin="2,0" />
+                        <Button Content="Review" Tag="Review" Click="WorkspaceButton_Click" Margin="4,0,0,0" />
+                    </UniformGrid>
+                    <Separator Margin="3,10" />
                     <TextBlock Text="{Binding BackgroundStatusDetail}" Foreground="{StaticResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,10" />
-                    <Button Content="{Binding MonitoringToggleLabel}" Click="PauseOrResumeButton_Click" HorizontalAlignment="Stretch" />
-                    <Button Content="Run Scan Now" Click="RunScanNowButton_Click" HorizontalAlignment="Stretch" Margin="3,5,3,0" />
+                    <TextBlock Text="READ-ONLY STATUS — controls are not exposed in the Command Center." Foreground="{StaticResource Teal}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,5" />
                     <Button Content="View System Status" Click="ViewSystemStatusButton_Click" HorizontalAlignment="Stretch" Margin="3,5,3,0" />
                     <Separator Margin="3,10" />
                     <Button Content="Exit Momentum Hunter" Click="ExitApplicationButton_Click" HorizontalAlignment="Stretch" Margin="3,0" />

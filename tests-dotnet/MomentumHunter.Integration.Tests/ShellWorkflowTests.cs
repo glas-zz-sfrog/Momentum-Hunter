@@ -136,13 +136,13 @@ public sealed class ShellWorkflowTests
     }
 
     [Fact]
-    public async Task ActivityHandleShowsTheCurrentUnreadCountWithoutExpandingThePane()
+    public async Task WhatChangedHandleShowsTheCurrentCountAndDefaultVisiblePane()
     {
         var viewModel = new ShellViewModel(new MockEngineClient());
         await viewModel.InitializeAsync();
 
-        Assert.Equal("Activity 3", viewModel.ActivityLabel);
-        Assert.False(viewModel.IsActivityOpen);
+        Assert.Equal("What Changed 2", viewModel.ActivityLabel);
+        Assert.True(viewModel.IsActivityOpen);
     }
 
     [Fact]
