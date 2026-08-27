@@ -67,20 +67,20 @@ root, product source, acceptance criteria, and runtime state remain frozen.
 Steven rejected the `ARGUS-GUI-COMMAND-CENTER-001` macro information
 architecture. Its clean, pushed branch at `aa5bddb` remains preserved evidence;
 implementation/proof `84cb161` was never merged or installed.
-`ARGUS-GUI-COMMAND-CENTER-001A` is the active visual correction on
-`codex/ARGUS-GUI-COMMAND-CENTER-001A-VISUAL-FIDELITY`, based exactly on rejected
-GUI governance gate `4bf397b`. It is design-proof-only: the authoritative
-1672x941 reference is preserved byte-for-byte, and the proposed 1920x1080
-Command Center restores Radar, summary hierarchy, simultaneous Accepted and
-Rejected with equal mini-chart context, What Changed, read-only Positions, and
-compact System Context. No production GUI, test, project/package, engine,
-runtime, provider, service, scheduler, configuration, Paper, Shadow, broker,
-account, position, or order source is modified. The only next GUI action is
-Steven's exact visual decision. Independent second-eye passes all ten directive
-checks after narrowing unsupported connectivity wording to exact data-health
-semantics; all 12 changed paths are authorized documentation/design artifacts,
-with zero prohibited-path or secret findings. Implementation, merge, and
-installation remain unauthorized.
+Steven accepted the `ARGUS-GUI-COMMAND-CENTER-001A` 1920x1080 macro layout
+with two required pre-implementation changes: unambiguous lifecycle wording and
+primary-row microcharts. Its clean, pushed commit `e148895` remains the accepted
+visual baseline. `ARGUS-GUI-COMMAND-CENTER-001B` is the active design proof on
+`codex/ARGUS-GUI-COMMAND-CENTER-001B-SEMANTIC-MICROCHART-PROOF`, based exactly
+on `e148895`. It selects `CROSS_LIFECYCLE_RANKED_CANDIDATES`, renames the center
+surface `RANKED CANDIDATES`, and adds ten reference-matched 2-day/15-minute
+example microcharts without changing any other macro region. Independent
+decoded-pixel comparison proves zero changes outside the center board and two
+proof-disclosure regions; Accepted/Rejected are pixel-identical to 001A. No
+production GUI, test, project/package, engine, runtime, provider, service,
+scheduler, configuration, Paper, Shadow, broker, account, position, or order
+source is modified. The only next GUI action is Steven's 001B visual decision;
+implementation, merge, and installation remain unauthorized.
 
 Monday August 24 is terminal as `OPENING_EVIDENCE_PASS_WITH_FINDINGS` with
 `AUTOMATION_RUNTIME_PASS`, `PIPELINE_COMPLETE`, `EXECUTION_EVIDENCE_READY`,
@@ -3095,16 +3095,22 @@ blocked and gains no authority from Paper evidence.
   live execution authority. Acceptance requires deterministic tests plus a
   separately gated real provider-backed research-only canary after integration.
 
-#### ARGUS-GUI-COMMAND-CENTER-001 / 001A - Command Center Visual Correction
+#### ARGUS-GUI-COMMAND-CENTER-001 / 001A / 001B - Command Center Visual Correction
 
 - `ARGUS-GUI-COMMAND-CENTER-001` lifecycle:
   `STEVEN_VISUAL_FAIL / PRESERVED_UNMERGED_EVIDENCE`. Its four-zone,
   chart-centered implementation remains isolated and backed up; it must not be
   rewritten, continued, merged, or installed.
 - `ARGUS-GUI-COMMAND-CENTER-001A` lifecycle:
+  `STEVEN_VISUAL_PASS_WITH_CHANGES / ACCEPTED_MACRO_BASELINE`. Commit `e148895`
+  freezes the accepted macro information architecture. Lifecycle terminology
+  and primary candidate microcharts are resolved in 001B before any production
+  implementation may be proposed.
+- `ARGUS-GUI-COMMAND-CENTER-001B` lifecycle:
   `DESIGN_PROOF_COMPLETE_PENDING_STEVEN_VISUAL_DECISION`. It starts from exact
-  gate `4bf397b` and changes documentation/design evidence only. Production GUI
-  implementation is not authorized.
+  accepted baseline `e148895`, uses `RANKED CANDIDATES` for a cross-lifecycle
+  board, and changes only the center board plus proof disclosures. Production
+  GUI implementation remains unauthorized.
 - Implementation/proof commit
   `84cb161393fbadeb00b6faa17502176a4c9f16de` reuses the existing Hunter,
   PrimaryChart/CandleChart, TradePlan/Why/evidence, Activity, Diagnostics, and
@@ -3123,6 +3129,14 @@ blocked and gains no authority from Paper evidence.
   `3D74462C4EEA730248D6D5CD3C0CA2442B8AF71F7F3B4A0661D5412C3182EADB`.
   Independent original-detail review passes all ten directive checks and the
   12/12 design/documentation path boundary.
+- 001B final proof SHA-256 is
+  `22BB20149EE3D5A3A2A73336AFA34E806DEE6B14E8D5C6F3DE94F73EB6235FDA`.
+  It adds exactly ten aligned `148 x 32` unframed microcharts matching Steven's
+  supplemental graph reference. Independent pixel comparison finds `39,854`
+  changed pixels, all in the center board or two proof-disclosure regions, and
+  zero elsewhere. Inline charts and UI freshness remain human context only and
+  never feed machine ranking, score, admission, readiness, risk, timing, or
+  execution.
 - Opportunity and evidence are independently labeled. UI age uses `ObservedAt`
   only for display, never rank/readiness; old values use an absolute `SEEN`
   date. What Changed composes only existing Activity, stable Candidate Story,
@@ -3136,7 +3150,7 @@ blocked and gains no authority from Paper evidence.
   control findings, and six inspected 1920x1080/1180x820 frames. Producer-001C,
   the opening runtime, installed Continuous bytes, services, scheduler, startup
   pointers, and capability boundary all match their pre-task baseline.
-- Stop after Steven's 001A design review. A visual pass authorizes neither
+- Stop after Steven's 001B design review. A visual pass authorizes neither
   implementation nor integration. Production source may change only after a
   separate explicit authorization; merge/install remain separately gated.
 

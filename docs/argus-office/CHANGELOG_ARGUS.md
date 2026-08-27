@@ -1,5 +1,22 @@
 # Argus Changelog
 
+- Recorded Steven's 001A decision as `PASS_WITH_CHANGES`: the macro Command
+  Center hierarchy is accepted, while lifecycle terminology and primary-row
+  microcharts required one more design proof before implementation.
+- Selected `CROSS_LIFECYCLE_RANKED_CANDIDATES` and renamed the center surface
+  `RANKED CANDIDATES`, preserving separate Radar, Accepted, and Rejected
+  lifecycle populations without allowing board visibility to rewrite state.
+- Preserved Steven's exact 1112x655 graph reference and added ten aligned,
+  unframed 2-day/15-minute example microcharts to the primary board. Six rise,
+  three show mixed/caution action, and one fades; each uses irregular
+  market-like movement rather than decorative repeated zigzags.
+- Independent decoded-pixel comparison proves the accepted macro layout is
+  unchanged outside the center board and two proof-disclosure regions; the
+  Accepted/Rejected region is pixel-identical to 001A.
+- Charts and freshness remain human context only. No production GUI, test,
+  project/package, engine, strategy, runtime, provider, service, scheduler,
+  configuration, Paper, Shadow, broker, account, position, order, merge, or
+  installation change occurred.
 - Recorded Steven's visual rejection of the chart-centered
   `ARGUS-GUI-COMMAND-CENTER-001` layout and preserved its unmerged branch as
   evidence rather than rewriting it.

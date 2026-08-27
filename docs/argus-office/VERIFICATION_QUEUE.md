@@ -31,7 +31,8 @@ create a rubber-stamp Steven item.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
-| ARGUS-GUI-COMMAND-CENTER-001A visual-fidelity design proof | `READY_FOR_STEVEN_VISUAL_REVIEW`; exact reference, native 1920x1080 proposal, side-by-side comparison, region map, truth/dependency map, second-eye visual inspection, design-only path audit, and frozen-boundary equality pass | `MANUAL_PENDING`; use 001A checks 1-10 below | `DESIGN_PROOF_ONLY`; no production implementation, merge, or install authorized | Decide whether the proposal restores the reference's situational-awareness hierarchy while remaining truthful and read-only. |
+| ARGUS-GUI-COMMAND-CENTER-001B semantic/microchart design proof | `READY_FOR_STEVEN_VISUAL_REVIEW`; exact supplied graph reference, native 1920x1080 proposal, ten verified microcharts, zero unintended macro-layout pixel changes, semantic decision, source-boundary audit, and frozen-identity pass | `MANUAL_PENDING`; use 001B checks 1-6 below | `DESIGN_PROOF_ONLY`; no production implementation, merge, or install authorized | Confirm `RANKED CANDIDATES` resolves the lifecycle ambiguity and the ten primary-row graphs match the supplied visual intent without altering the accepted macro layout. |
+| ARGUS-GUI-COMMAND-CENTER-001A visual-fidelity design proof | `AUTOMATED_PASS`; exact reference, native 1920x1080 proposal, side-by-side comparison, region/truth maps, and second-eye audit | `MANUAL_PASS_WITH_CHANGES`; macro layout accepted, lifecycle wording and primary-row microcharts moved to 001B | `ACCEPTED_DESIGN_BASELINE` at pushed `e148895`; no production implementation, merge, or install | No macro-layout re-review. Use 001B only for the narrow required semantics and graph treatment. |
 | ARGUS-GUI-COMMAND-CENTER-001 isolated read-only Command Center | `AUTOMATED_PASS`; implementation/proof `84cb161`, full solution 287/287, zero-warning Release build, six exact-dimension proofs, and frozen-runtime equality pass | `MANUAL_FAIL`; macro information architecture rejected by Steven | `PRESERVED_UNMERGED_EVIDENCE`; original branch backed up at `aa5bddb`, no merge/install | No further review of the chart-centered proposal. Directive 001A supersedes its visual/layout decisions where they conflict. |
 | ARGUS-R033 live Schwab chart integration | `AUTOMATED_PASS`; 31 focused combined tests, all 1,203 Python tests, all 250 .NET tests, and a zero-warning Release build pass. The isolated R032B proof populated 39,165 minute versions and 1,260 Daily bars; the combined reader returns 180 Daily plus 180 intraday display bars for all five proof symbols and rejects legacy/tampered Daily input. | `MANUAL_PASS`; Steven accepted the dense 1180x820 and 1920x1080 chart on 2026-08-06 | `COMBINED_VERIFIED_PENDING_MASTER_INTEGRATION` on `codex/ARGUS-R032B-R033-candle-integration` | No further Steven check is required for this release. Git Steward must fast-forward, back up, repin the 26 remaining opening jobs, and verify the canonical data load. |
 | Monday 2026-08-03 opening-capture readiness | `AUTOMATED_PASS`: opening fail-closed behavior, clock-task hardening, installation, independent live verification, and transient state-receipt lock recovery all pass. Evidence proves SYSTEM principal, exact `w32tm` action, startup delay `PT2M`, daily 08:15/08:25 triggers, wake enabled, no late-start catch-up, five two-minute retries, task result `0`, synchronized NIST time, Running/Automatic service, fresh heartbeat, Healthy Engine Host, 30 pending opening jobs, zero Shadow jobs, and transmission `UNAVAILABLE`. ARGUS-SERVICE-007 passed compileall, 26 focused tests, 74 affected tests, all 1,019 Python tests, a real Windows lock proof, and an installed twelve-lock stress with no process restart or Application error. | `NO_STEVEN_ACTION`; the required UAC interaction passed. Leave the computer powered on and plugged in through 08:40 Central Monday. | `COMPLETE_AND_BACKED_UP` through clock commits `30c25e5`/`3821490` and receipt-lock repair `252cdc7`; installed proof passed at 02:31 Central on 2026-08-01. | No product or visual check remains. Sunday 19:00 is a read-only preflight; Monday 08:35 is the capture and 08:50 is the terminal evidence audit. Observers must not launch, retry, repair, or fabricate evidence. |
@@ -64,7 +65,42 @@ create a rubber-stamp Steven item.
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted visual baseline; subsequent nonvisual roadmap work follows standing delegation |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | Destructive decision not yet due | Future market-data cutover task | Interrupt Steven immediately before deleting the exact legacy paths/rows; visual cutover proof remains manual |
 
-## ARGUS-GUI-COMMAND-CENTER-001A - Visual-Fidelity Design Proof
+## ARGUS-GUI-COMMAND-CENTER-001B - Semantic And Microchart Design Proof
+
+Branch: `codex/ARGUS-GUI-COMMAND-CENTER-001B-SEMANTIC-MICROCHART-PROOF`
+
+Base: accepted 001A commit `e14889571617129d31862e3f03f73cfc25b09ab6`
+
+Automated/second-eye result: `READY_FOR_STEVEN_VISUAL_REVIEW`
+
+Steven status: `MANUAL_PENDING`
+
+Open at 100% original pixels:
+
+`docs/argus-office/reports/releases/ARGUS-GUI-COMMAND-CENTER-001B/ARGUS-GUI-COMMAND-CENTER-001B-proposed-1920x1080.png`
+
+1. Confirm the accepted 001A macro layout is unchanged: same header, summary
+   strip, Radar map, Accepted/Rejected panels, What Changed, Positions, and
+   System Context; no dominant CandleChart.
+2. Confirm the center title is `RANKED CANDIDATES`, the disclosure says
+   `CROSS-LIFECYCLE VIEW - POPULATIONS REMAIN DISTINCT`, and RADAR/ACCEPTED/
+   REJECTED row states do not imply every board row remains in Radar.
+3. Confirm all ten primary rows contain equal-size compact price-history graphs
+   resembling the supplied reference: thin, unframed, no axes/fill/markers,
+   irregular price movement, and distinct climbing/mixed/fading shapes.
+4. Confirm the graphs read as `2D - 15m PRICE HISTORY`, remain legible without
+   crowding the row, and the existing Accepted/Rejected mini-chart treatment is
+   unchanged and visually equivalent.
+5. Confirm the local disclosure states inline charts are example human context
+   only with no effect on rank/score/readiness, and the global footer still
+   separates user-attention freshness from trading/strategy age.
+6. Confirm the proof remains visibly example data and read-only, with no trade,
+   order, lifecycle, provider, service, simulation, or execution control.
+
+A pass approves only the 001B visual/semantic proof. It does not authorize
+production implementation, merge, or installation.
+
+## ARGUS-GUI-COMMAND-CENTER-001A - Accepted Macro Visual Baseline
 
 Branch: `codex/ARGUS-GUI-COMMAND-CENTER-001A-VISUAL-FIDELITY`
 
@@ -72,7 +108,8 @@ Base: `4bf397b2c410760f31af317a27c66e00b87fabe7`
 
 Automated/second-eye result: `READY_FOR_STEVEN_VISUAL_REVIEW`
 
-Steven status: `MANUAL_PENDING`
+Steven status: `MANUAL_PASS_WITH_CHANGES`; the macro layout is accepted and the
+two required narrow corrections are represented by 001B.
 
 Review these two files at 100% original pixels:
 
