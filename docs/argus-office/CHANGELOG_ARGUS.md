@@ -1,5 +1,17 @@
 # Argus Changelog
 
+- Recorded Steven's 2026-08-27 `PASS` for the exact 001B 1920x1080 proposal,
+  SHA-256
+  `22BB20149EE3D5A3A2A73336AFA34E806DEE6B14E8D5C6F3DE94F73EB6235FDA`,
+  as the accepted production visual baseline.
+- Froze the accepted 001A macro hierarchy, cross-lifecycle ranked-candidate
+  semantics, distinct Radar/Accepted/Rejected populations, ten primary
+  2-trading-day/15-minute microcharts, and equivalent Accepted/Rejected
+  mini-chart context. Charts, chart color, and user-attention freshness remain
+  strictly presentation-only and have no lifecycle or trading authority.
+- This acceptance records visual requirements only. It authorizes no production
+  implementation, merge, installation, provider activity, runtime mutation, or
+  trading-logic change.
 - Recorded Steven's 001A decision as `PASS_WITH_CHANGES`: the macro Command
   Center hierarchy is accepted, while lifecycle terminology and primary-row
   microcharts required one more design proof before implementation.

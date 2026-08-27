@@ -67,20 +67,22 @@ root, product source, acceptance criteria, and runtime state remain frozen.
 Steven rejected the `ARGUS-GUI-COMMAND-CENTER-001` macro information
 architecture. Its clean, pushed branch at `aa5bddb` remains preserved evidence;
 implementation/proof `84cb161` was never merged or installed.
-Steven accepted the `ARGUS-GUI-COMMAND-CENTER-001A` 1920x1080 macro layout
-with two required pre-implementation changes: unambiguous lifecycle wording and
-primary-row microcharts. Its clean, pushed commit `e148895` remains the accepted
-visual baseline. `ARGUS-GUI-COMMAND-CENTER-001B` is the active design proof on
-`codex/ARGUS-GUI-COMMAND-CENTER-001B-SEMANTIC-MICROCHART-PROOF`, based exactly
-on `e148895`. It selects `CROSS_LIFECYCLE_RANKED_CANDIDATES`, renames the center
-surface `RANKED CANDIDATES`, and adds ten reference-matched 2-day/15-minute
-example microcharts without changing any other macro region. Independent
-decoded-pixel comparison proves zero changes outside the center board and two
-proof-disclosure regions; Accepted/Rejected are pixel-identical to 001A. No
-production GUI, test, project/package, engine, runtime, provider, service,
-scheduler, configuration, Paper, Shadow, broker, account, position, or order
-source is modified. The only next GUI action is Steven's 001B visual decision;
-implementation, merge, and installation remain unauthorized.
+Steven accepted the `ARGUS-GUI-COMMAND-CENTER-001B` 1920x1080 proposal as the
+production visual baseline on 2026-08-27. The accepted proposal SHA-256 is
+`22BB20149EE3D5A3A2A73336AFA34E806DEE6B14E8D5C6F3DE94F73EB6235FDA` on
+clean, pushed design-proof commit
+`2d9c4af5f40ec55be2627a194b09ca69f1879b5f` in branch
+`codex/ARGUS-GUI-COMMAND-CENTER-001B-SEMANTIC-MICROCHART-PROOF`, built exactly
+from accepted 001A baseline `e148895`. It freezes the 001A macro hierarchy,
+`CROSS_LIFECYCLE_RANKED_CANDIDATES`, distinct Radar/Accepted/Rejected lifecycle
+populations, ten primary 2-trading-day/15-minute microcharts, and equivalent
+Accepted/Rejected mini-chart context. Charts, chart color, and `NEW` / `RECENT`
+/ `SEEN` freshness are human presentation only and may never influence ranking,
+scoring, admission, readiness, risk, entry, exit, execution, or lifecycle/
+trading authority. No production GUI, test, project/package, engine, runtime,
+provider, service, scheduler, configuration, Paper, Shadow, broker, account,
+position, or order source is modified. This visual pass authorizes no production
+implementation, merge, or installation; each remains separately gated.
 
 Monday August 24 is terminal as `OPENING_EVIDENCE_PASS_WITH_FINDINGS` with
 `AUTOMATION_RUNTIME_PASS`, `PIPELINE_COMPLETE`, `EXECUTION_EVIDENCE_READY`,
@@ -3107,10 +3109,11 @@ blocked and gains no authority from Paper evidence.
   and primary candidate microcharts are resolved in 001B before any production
   implementation may be proposed.
 - `ARGUS-GUI-COMMAND-CENTER-001B` lifecycle:
-  `DESIGN_PROOF_COMPLETE_PENDING_STEVEN_VISUAL_DECISION`. It starts from exact
-  accepted baseline `e148895`, uses `RANKED CANDIDATES` for a cross-lifecycle
-  board, and changes only the center board plus proof disclosures. Production
-  GUI implementation remains unauthorized.
+  `STEVEN_VISUAL_PASS / ACCEPTED_PRODUCTION_VISUAL_BASELINE`. Steven accepted
+  the exact 1920x1080 proof on 2026-08-27. It starts from accepted baseline
+  `e148895`, uses `RANKED CANDIDATES` for a cross-lifecycle board, and changes
+  only the center board plus proof disclosures. Production GUI implementation,
+  merge, and installation remain unauthorized.
 - Implementation/proof commit
   `84cb161393fbadeb00b6faa17502176a4c9f16de` reuses the existing Hunter,
   PrimaryChart/CandleChart, TradePlan/Why/evidence, Activity, Diagnostics, and
@@ -3150,9 +3153,11 @@ blocked and gains no authority from Paper evidence.
   control findings, and six inspected 1920x1080/1180x820 frames. Producer-001C,
   the opening runtime, installed Continuous bytes, services, scheduler, startup
   pointers, and capability boundary all match their pre-task baseline.
-- Stop after Steven's 001B design review. A visual pass authorizes neither
-  implementation nor integration. Production source may change only after a
-  separate explicit authorization; merge/install remain separately gated.
+- Steven's 001B design review is terminal `PASS`; no GUI manual verification
+  remains. Preserve the exact accepted proposal hash and frozen requirements.
+  This visual pass authorizes neither implementation nor integration.
+  Production source may change only after a separate explicit authorization;
+  merge/install remain separately gated.
 
 #### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
 

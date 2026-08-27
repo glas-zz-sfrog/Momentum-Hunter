@@ -31,7 +31,7 @@ create a rubber-stamp Steven item.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
-| ARGUS-GUI-COMMAND-CENTER-001B semantic/microchart design proof | `READY_FOR_STEVEN_VISUAL_REVIEW`; exact supplied graph reference, native 1920x1080 proposal, ten verified microcharts, zero unintended macro-layout pixel changes, semantic decision, source-boundary audit, and frozen-identity pass | `MANUAL_PENDING`; use 001B checks 1-6 below | `DESIGN_PROOF_ONLY`; no production implementation, merge, or install authorized | Confirm `RANKED CANDIDATES` resolves the lifecycle ambiguity and the ten primary-row graphs match the supplied visual intent without altering the accepted macro layout. |
+| ARGUS-GUI-COMMAND-CENTER-001B semantic/microchart design proof | `AUTOMATED_PASS`; exact supplied graph reference, native 1920x1080 proposal, ten verified microcharts, zero unintended macro-layout pixel changes, semantic decision, source-boundary audit, and frozen-identity pass | `MANUAL_PASS`; Steven accepted the exact proposal on 2026-08-27 | `ACCEPTED_PRODUCTION_VISUAL_BASELINE` at proposal SHA-256 `22BB2014...6235FDA`; no production implementation, merge, or install authorized | No visual action remains. Preserve the 001B frozen requirements and exact proposal hash. |
 | ARGUS-GUI-COMMAND-CENTER-001A visual-fidelity design proof | `AUTOMATED_PASS`; exact reference, native 1920x1080 proposal, side-by-side comparison, region/truth maps, and second-eye audit | `MANUAL_PASS_WITH_CHANGES`; macro layout accepted, lifecycle wording and primary-row microcharts moved to 001B | `ACCEPTED_DESIGN_BASELINE` at pushed `e148895`; no production implementation, merge, or install | No macro-layout re-review. Use 001B only for the narrow required semantics and graph treatment. |
 | ARGUS-GUI-COMMAND-CENTER-001 isolated read-only Command Center | `AUTOMATED_PASS`; implementation/proof `84cb161`, full solution 287/287, zero-warning Release build, six exact-dimension proofs, and frozen-runtime equality pass | `MANUAL_FAIL`; macro information architecture rejected by Steven | `PRESERVED_UNMERGED_EVIDENCE`; original branch backed up at `aa5bddb`, no merge/install | No further review of the chart-centered proposal. Directive 001A supersedes its visual/layout decisions where they conflict. |
 | ARGUS-R033 live Schwab chart integration | `AUTOMATED_PASS`; 31 focused combined tests, all 1,203 Python tests, all 250 .NET tests, and a zero-warning Release build pass. The isolated R032B proof populated 39,165 minute versions and 1,260 Daily bars; the combined reader returns 180 Daily plus 180 intraday display bars for all five proof symbols and rejects legacy/tampered Daily input. | `MANUAL_PASS`; Steven accepted the dense 1180x820 and 1920x1080 chart on 2026-08-06 | `COMBINED_VERIFIED_PENDING_MASTER_INTEGRATION` on `codex/ARGUS-R032B-R033-candle-integration` | No further Steven check is required for this release. Git Steward must fast-forward, back up, repin the 26 remaining opening jobs, and verify the canonical data load. |
@@ -73,7 +73,11 @@ Base: accepted 001A commit `e14889571617129d31862e3f03f73cfc25b09ab6`
 
 Automated/second-eye result: `READY_FOR_STEVEN_VISUAL_REVIEW`
 
-Steven status: `MANUAL_PENDING`
+Steven status: `MANUAL_PASS` on 2026-08-27
+
+Accepted production visual baseline SHA-256:
+
+`22BB20149EE3D5A3A2A73336AFA34E806DEE6B14E8D5C6F3DE94F73EB6235FDA`
 
 Open at 100% original pixels:
 
@@ -97,8 +101,9 @@ Open at 100% original pixels:
 6. Confirm the proof remains visibly example data and read-only, with no trade,
    order, lifecycle, provider, service, simulation, or execution control.
 
-A pass approves only the 001B visual/semantic proof. It does not authorize
-production implementation, merge, or installation.
+Checks 1-6 passed. No further Steven visual action remains. This pass approves
+only the 001B visual/semantic baseline; it does not authorize production
+implementation, merge, or installation.
 
 ## ARGUS-GUI-COMMAND-CENTER-001A - Accepted Macro Visual Baseline
 

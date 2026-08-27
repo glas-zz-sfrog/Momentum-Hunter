@@ -2,14 +2,16 @@
 
 ## Status
 
-`DESIGN_PROOF_COMPLETE_PENDING_STEVEN_VISUAL_DECISION`
+`STEVEN_VISUAL_PASS / ACCEPTED_PRODUCTION_VISUAL_BASELINE`
 
 - Branch: `codex/ARGUS-GUI-COMMAND-CENTER-001B-SEMANTIC-MICROCHART-PROOF`
 - Exact base: accepted 001A commit
   `e14889571617129d31862e3f03f73cfc25b09ab6`
 - Production implementation: not authorized or performed
 - Merge/install: not authorized or performed
-- Steven 001B status: `MANUAL_PENDING`
+- Steven 001B status: `MANUAL_PASS` on 2026-08-27
+- Accepted production visual baseline SHA-256:
+  `22BB20149EE3D5A3A2A73336AFA34E806DEE6B14E8D5C6F3DE94F73EB6235FDA`
 
 ## Chosen Lifecycle Interpretation
 
@@ -93,8 +95,8 @@ trading action occurred.
 
 ```text
 001A_MACRO_LAYOUT = ACCEPTED
-SEMANTIC_CORRECTION_REQUIRED = YES
-INLINE_CANDIDATE_MICROCHARTS_REQUIRED = YES
+SEMANTIC_CORRECTION_REQUIRED = YES / RESOLVED_IN_ACCEPTED_PROOF
+INLINE_CANDIDATE_MICROCHARTS_REQUIRED = YES / PRESENT_IN_ACCEPTED_PROOF
 USER_FRESHNESS_PRESENTATION_ONLY = YES
 TRADING_LOGIC_CHANGE_AUTHORIZED = NO
 PRODUCTION_IMPLEMENTATION_AUTHORIZED = NO
@@ -102,8 +104,10 @@ MERGE_AUTHORIZED = NO
 INSTALL_AUTHORIZED = NO
 
 ARGUS_GUI_COMMAND_CENTER_001B_DESIGN_PROOF_COMPLETE = YES
-STEVEN_VISUAL_ACCEPTANCE = PENDING
+STEVEN_VISUAL_ACCEPTANCE = PASS
+ACCEPTED_PRODUCTION_VISUAL_BASELINE = YES
 ```
 
-Stop after presenting this proof. A pass does not authorize production
-implementation, merge, or installation.
+Steven's visual decision is terminal `PASS`. Preserve the exact proof hash and
+frozen requirements. This pass does not authorize production implementation,
+merge, or installation.
