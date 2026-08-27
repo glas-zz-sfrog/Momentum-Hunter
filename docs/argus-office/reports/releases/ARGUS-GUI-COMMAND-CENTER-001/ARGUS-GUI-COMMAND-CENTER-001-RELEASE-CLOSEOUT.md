@@ -8,8 +8,11 @@
 - Canonical base: `82460b3313b86c34dff4ffb737d2c04bf02e3ace`
 - Implementation/proof commit:
   `84cb161393fbadeb00b6faa17502176a4c9f16de`
+- Governance/visual-gate commit:
+  `4bf397b2c410760f31af317a27c66e00b87fabe7`
 - Merge/install: not performed and not authorized.
-- Branch backup push: pending the governance closeout commit.
+- Branch backup push: complete by normal non-force push; upstream is configured
+  and synchronized through this closeout.
 - Steven visual status: `MANUAL_PENDING`.
 
 ## Scope And Files

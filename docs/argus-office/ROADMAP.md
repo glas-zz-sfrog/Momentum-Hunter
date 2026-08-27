@@ -68,7 +68,9 @@ root, product source, acceptance criteria, and runtime state remain frozen.
 `IMPLEMENTED_PENDING_STEVEN_VISUAL_ACCEPTANCE_AND_POST_CANARY_MERGE` on
 `codex/ARGUS-GUI-COMMAND-CENTER-001`. Implementation/proof commit
 `84cb161393fbadeb00b6faa17502176a4c9f16de` is based directly on synchronized
-canonical `82460b3313b86c34dff4ffb737d2c04bf02e3ace`. Independent Hard Chew
+canonical `82460b3313b86c34dff4ffb737d2c04bf02e3ace`; governance/visual-gate
+commit `4bf397b2c410760f31af317a27c66e00b87fabe7` and this closeout are backed up
+to the configured branch upstream by normal non-force push. Independent Hard Chew
 passes 287/287 .NET tests, a zero-warning Release build, protected/capability
 audits, six exact-dimension visual proofs, and complete physical nonmutation
 reconciliation. No merge, install, startup-pointer, service, scheduler,
