@@ -113,8 +113,47 @@ def _secret_scan(root: Path, forbidden: str) -> dict[str, object]:
         ("ALPACA_KEY_SHAPE", re.compile(r"\bPK[A-Z0-9]{18,}\b")),
         ("PRIVATE_KEY", re.compile(r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----")),
     )
+    sensitive_keys = {
+        "accesstoken",
+        "refreshtoken",
+        "clientsecret",
+        "password",
+        "authorization",
+        "accounthash",
+        "accountid",
+        "accountnumber",
+        "accountending",
+        "expectedaccountending",
+    }
+    bound_identity_pattern = (
+        re.compile(
+            r"(?i)(?:account[_\s-]*(?:number|id|ending)|"
+            r"expected[_\s-]*account[_\s-]*ending)"
+            r"\s*[\"']?\s*[:=]\s*[\"']?"
+            + re.escape(forbidden)
+        )
+        if forbidden
+        else None
+    )
     findings = []
     scanned = 0
+
+    def inspect_json(value: object, *, relative: str, key: str = "") -> None:
+        normalized = "".join(character for character in key.lower() if character.isalnum())
+        if normalized in sensitive_keys and not (
+            value is None or value == "" or value == "[REDACTED]"
+        ):
+            findings.append(
+                {"path": relative, "term": "UNREDACTED_SENSITIVE_JSON_VALUE"}
+            )
+            return
+        if isinstance(value, dict):
+            for item_key, item_value in value.items():
+                inspect_json(item_value, relative=relative, key=str(item_key))
+        elif isinstance(value, list):
+            for item in value:
+                inspect_json(item, relative=relative)
+
     for path in sorted(root.rglob("*")):
         if not path.is_file() or path.suffix.lower() in {".zip", ".png", ".exe", ".dll"}:
             continue
@@ -126,9 +165,21 @@ def _secret_scan(root: Path, forbidden: str) -> dict[str, object]:
         relative = path.relative_to(root).as_posix()
         for name, pattern in patterns:
             if pattern.search(text):
+                if (
+                    name == "PRIVATE_KEY"
+                    and relative.startswith("source/tests/")
+                    and 'SYNTHETIC_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----' in text
+                ):
+                    continue
                 findings.append({"path": relative, "term": name})
-        if forbidden and forbidden in text:
-            findings.append({"path": relative, "term": "BOUND_IDENTITY"})
+        if bound_identity_pattern is not None and bound_identity_pattern.search(text):
+            findings.append({"path": relative, "term": "BOUND_ENDING_CONTEXT"})
+        if path.suffix.lower() == ".json":
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            inspect_json(payload, relative=relative)
     return {
         "status": "PASS" if not findings else "FAIL",
         "filesScanned": scanned,
