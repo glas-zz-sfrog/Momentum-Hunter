@@ -91,8 +91,7 @@ unchanged. The predecessor's original closeout and independent limitation
 adjudication remain immutable historical evidence.
 
 `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001D` is
-`PRODUCT_RUNTIME_ACCEPTED_BY_INDEPENDENT_ADJUDICATION /
-IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY`. The reviewed task head is
+`COMPLETE / CANONICAL / RESEARCH_ONLY`. The reviewed task head is
 `fba8781d40228868657b23ac0cc02d42f3b10e64` and its Product commit is
 `1fa914f01b1fa44880885cd0f88e846e7e52313d`. Immutable provider evidence proves
 real discovery, Schwab backfill, natural readiness, accepted composition, 259
@@ -104,7 +103,7 @@ Product runtime failures. Unknown instrument classification remains a separate
 execution blocker.
 
 `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E` is
-`IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PACKET_READY / FORENSIC_TOOLING_ONLY`.
+`COMPLETE / CANONICAL / FORENSIC_TOOLING_ONLY`.
 Analyzer repair commit `989f7109a6f46afb4834e438a02fdaf4c39ff1ad`
 reuses the production canonical completed-bar identity contract, resolves the
 Producer member by exact symbol, separates unique TradePlans from persistence
@@ -125,6 +124,21 @@ verification, and secret scanning all pass. ZIP SHA-256 is
 `DAB6F1159893EFAD8F80669A8FCF7759B4473AD1E8252F27261634E3DBC9C831`.
 No provider call, merge, install, deployment, Paper, Shadow, account, position,
 broker, or order action occurred under 001E.
+
+`ARGUS-CONTINUOUS-PRODUCER-001F` is `COMPLETE / CANONICAL_INTEGRATED /
+DEPLOYMENT_HELD`. Canonical fast-forwarded without conflicts from
+`82460b3313b86c34dff4ffb737d2c04bf02e3ace` through the exact 17-commit accepted
+lineage to `9967935b93659ac496d263fecfc364a73da6d2b3`; no merge commit, cherry-pick,
+rebase, squash, or executable resolution occurred. Canonical Product bytes are
+identical to accepted 001D Product commit `1fa914f`, and canonical Product,
+test, and tooling bytes are identical to V4-tested `74efea1`. Post-integration
+focused verification passes 125/125 and full approved-environment discovery
+passes all 2,830 tests with one expected Windows skip. Compileall, PowerShell
+parse, diff, capability/ownership, protected-path, and context-adjudicated
+secret checks pass. Installed service definitions and automation/Continuous
+manifest hashes remain byte-identical to the pre-merge baseline; no deployment,
+GUI, provider, Paper, Shadow, broker, account, position, or order action
+occurred. Unknown instruments remain execution-blocked.
 
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
@@ -298,10 +312,10 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Independently review the Producer-001E repaired analyzer and immutable 001D
-reanalysis from the self-contained V4 packet. Do not merge 001D or 001E until
-that review confirms analyzer parity, TradePlan accounting, environment
-invocation, and package reproducibility. No new provider canary is required.
+Review the Producer-001F canonical integration closeout. Do not begin another
+Producer task, deployment, `ARGUS-STAT-DATA-002`, instrument-classification
+implementation, or Continuous Paper work without a separate directive. No new
+provider canary or second-eye ZIP is required for the accepted lineage.
 `ARGUS-STAT-DATA-002` and Continuous Paper remain held.
 Authoritative instrument subtype/leverage classification remains a pre-Paper
 gate. The authoritative ordered sequence is maintained only in `Next / Queue`
@@ -374,19 +388,17 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. Producer-001D Product runtime is independently accepted but unmerged.
-   Producer-001E is `IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PACKET_READY` and
-   repairs only forensic tooling and approved-environment invocation. No new
-   provider run, merge, install, or activation is active.
+1. Producer-001F canonical integration is terminal and awaiting closeout
+   review. Producer-001D Product runtime and Producer-001E forensic tooling are
+   canonical, research-only, and not deployed. No new provider run, install,
+   activation, or downstream implementation is active.
 
 ### 2. Ready / Next
 
-1. Perform independent second-eye review of the Producer-001E V4 packet and
-   reproduce its 259/259 completed-bar reconciliation, four unique plans, and
-   approved-environment Hard Chew. Preserve all original 001D evidence.
-2. Only after that review, authorize controlled reconciliation/integration of
-   the accepted 001D Product runtime and 001E forensic tooling. A new live
-   provider canary is not required unless review finds contradictory evidence.
+1. Review the Producer-001F integration evidence and canonical closeout. A
+   separate directive must choose the next Roadmap gate; no task is inferred.
+2. Preserve the accepted V4 packet and original 001D evidence. A new live
+   provider canary or second-eye package is not required for this integration.
 3. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
    research identity only after the natural path passes physical acceptance.
 4. Close authoritative instrument subtype/leverage classification before any
@@ -3142,8 +3154,7 @@ blocked and gains no authority from Paper evidence.
 
 #### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001D - Admitted Finality And Natural Composition
 
-- Lifecycle: `PRODUCT_RUNTIME_ACCEPTED_BY_INDEPENDENT_ADJUDICATION /
-  IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY`. Reviewed task head
+- Lifecycle: `COMPLETE / CANONICAL / RESEARCH_ONLY`. Reviewed task head
   `fba8781d40228868657b23ac0cc02d42f3b10e64` contains Product commit
   `1fa914f01b1fa44880885cd0f88e846e7e52313d`.
 - Immutable real-provider evidence proves discovery, Schwab backfill, readiness,
@@ -3152,13 +3163,12 @@ blocked and gains no authority from Paper evidence.
   floor integrity, and failed-composition atomicity. The prior zero counts were
   forensic analyzer defects. The preserved 001D ZIP remains unchanged at
   SHA-256 `C47AA2A22BED37F213C77BF61BCB93224829C3FC81BA557B26D1C7AA2E2D2FBB`.
-- Product runtime acceptance does not authorize merge, deployment, Paper,
+- Product runtime acceptance and canonical integration do not authorize deployment, Paper,
   Shadow, brokerage, orders, or unknown-instrument execution.
 
 #### ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E - Forensic Analyzer Contract Repair
 
-- Lifecycle: `IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PACKET_READY /
-  FORENSIC_TOOLING_ONLY`. Core analyzer/environment repair is
+- Lifecycle: `COMPLETE / CANONICAL / FORENSIC_TOOLING_ONLY`. Core analyzer/environment repair is
   `989f7109a6f46afb4834e438a02fdaf4c39ff1ad`; package completeness and
   context-aware sanitation are preserved through
   `74efea1a5d58aac75886f9c53ce910dc96a02ad4`.
@@ -3179,9 +3189,30 @@ blocked and gains no authority from Paper evidence.
   `DAB6F1159893EFAD8F80669A8FCF7759B4473AD1E8252F27261634E3DBC9C831`.
   It contains 459 files and 458 manifest entries; pre-ZIP and extracted tests/
   replays, manifest verification, and secret scan pass.
-- Stop gate: independent second-eye review only. No live canary, merge,
-  deployment, STAT-DATA-002, Continuous Paper, Shadow, broker, account,
-  position, or order action is authorized by this closeout.
+- Integration is complete under Producer-001F. No live canary, deployment,
+  STAT-DATA-002, Continuous Paper, Shadow, broker, account, position, or order
+  action is authorized by this closeout.
+
+#### ARGUS-CONTINUOUS-PRODUCER-001F - Accepted Lineage Integration And Canonical Verification
+
+- Lifecycle: `COMPLETE / CANONICAL_INTEGRATED / DEPLOYMENT_HELD`. Canonical
+  fast-forwarded from `82460b3313b86c34dff4ffb737d2c04bf02e3ace` through the
+  exact 17-commit accepted lineage to
+  `9967935b93659ac496d263fecfc364a73da6d2b3` with zero unrelated commits,
+  conflicts, merge commits, rebases, squashes, or executable resolutions.
+- Canonical Product bytes equal accepted 001D Product commit
+  `1fa914f01b1fa44880885cd0f88e846e7e52313d`; Product, test, and tooling bytes
+  equal V4-tested commit `74efea1a5d58aac75886f9c53ce910dc96a02ad4`.
+- Focused post-integration tests pass 125/125. Full approved-environment
+  discovery passes 2,830/2,830 with one expected Windows skip. Compileall,
+  PowerShell parse, diff, capability/ownership, protected-path, and
+  context-adjudicated secret checks pass.
+- Service definitions and automation/Continuous manifests remain unchanged.
+  No deployment, GUI, provider, Paper, Shadow, broker, account, position, or
+  order action occurred. Unknown instruments remain execution-blocked. No new
+  second-eye ZIP is required.
+- Stop gate: review this integration closeout. Do not infer or begin the next
+  Roadmap task without a separate directive.
 
 #### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
 

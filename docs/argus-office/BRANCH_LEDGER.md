@@ -2,6 +2,30 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-CONTINUOUS-PRODUCER-001F - 2026-08-27
+
+Canonical `master` fast-forwarded without conflicts from
+`82460b3313b86c34dff4ffb737d2c04bf02e3ace` through the exact accepted
+17-commit Producer repair lineage to
+`9967935b93659ac496d263fecfc364a73da6d2b3`. No merge commit, cherry-pick,
+rebase, squash, or executable conflict resolution occurred, and no unrelated
+commit was introduced.
+
+Canonical Product bytes are identical to accepted 001D Product commit
+`1fa914f01b1fa44880885cd0f88e846e7e52313d`; canonical Product, test, and
+tooling bytes are identical to V4-tested commit
+`74efea1a5d58aac75886f9c53ce910dc96a02ad4`. Post-integration focused
+verification passes 125/125 and full approved-environment discovery passes all
+2,830 tests with one expected Windows skip. Compileall, PowerShell parse,
+diff, capability/ownership, protected-path, and context-adjudicated secret
+checks pass.
+
+Installed service definitions and automation/Continuous manifest hashes remain
+byte-identical to the pre-merge baseline. No deployment, provider, GUI, Paper,
+Shadow, broker, account, position, or order action occurred. Unknown instruments
+remain execution-blocked. Classification is `COMPLETE / CANONICAL_INTEGRATED /
+DEPLOYMENT_HELD`; no new second-eye ZIP is required.
+
 ## ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E - 2026-08-27
 
 `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E` is stacked from exact reviewed
@@ -9,8 +33,9 @@ The Roadmap is the current-status authority. This ledger records branch evidence
 approved-environment repair is
 `989f7109a6f46afb4834e438a02fdaf4c39ff1ad`; packaging completeness and
 context-aware sanitation hardening are preserved through
-`74efea1a5d58aac75886f9c53ce910dc96a02ad4`. The branch is pushed and remains
-unmerged.
+`74efea1a5d58aac75886f9c53ce910dc96a02ad4`. The branch is pushed and its exact
+accepted cumulative lineage is integrated into canonical by
+`ARGUS-CONTINUOUS-PRODUCER-001F`.
 
 Immutable 001D reanalysis reproduces 259 of 259 exact completed-bar events,
 zero unmatched or premature events, four unique natural TradePlans across five
@@ -25,8 +50,7 @@ The self-contained V4 second-eye ZIP has 459 files and 458 manifest entries;
 pre-ZIP and extracted tests/replays, manifest verification, and secret scan all
 pass. Its SHA-256 is
 `DAB6F1159893EFAD8F80669A8FCF7759B4473AD1E8252F27261634E3DBC9C831`.
-Classification is `IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PACKET_READY /
-FORENSIC_TOOLING_ONLY`. Independent review is the only next gate. No provider
+Classification is `COMPLETE / CANONICAL / FORENSIC_TOOLING_ONLY`. No provider
 canary, install, deployment, Paper, Shadow, broker, account, position, or order
 authority was used.
 
