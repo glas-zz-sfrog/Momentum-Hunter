@@ -64,17 +64,23 @@ Central on August 27, regular-session observation at approximately 08:32, and
 the mandatory terminal second-eye ZIP still required. Its scheduler, evidence
 root, product source, acceptance criteria, and runtime state remain frozen.
 
-`ARGUS-GUI-COMMAND-CENTER-001` is isolated parallel WPF work and is now
-`IMPLEMENTED_PENDING_STEVEN_VISUAL_ACCEPTANCE_AND_POST_CANARY_MERGE` on
-`codex/ARGUS-GUI-COMMAND-CENTER-001`. Implementation/proof commit
-`84cb161393fbadeb00b6faa17502176a4c9f16de` is based directly on synchronized
-canonical `82460b3313b86c34dff4ffb737d2c04bf02e3ace`. Independent Hard Chew
-passes 287/287 .NET tests, a zero-warning Release build, protected/capability
-audits, six exact-dimension visual proofs, and complete physical nonmutation
-reconciliation. No merge, install, startup-pointer, service, scheduler,
-runtime, provider, Paper, Shadow, broker, account, position, or order change is
-authorized or present. Steven's numbered visual review in the Verification
-Queue remains the only current GUI acceptance action.
+Steven rejected the `ARGUS-GUI-COMMAND-CENTER-001` macro information
+architecture. Its clean, pushed branch at `aa5bddb` remains preserved evidence;
+implementation/proof `84cb161` was never merged or installed.
+`ARGUS-GUI-COMMAND-CENTER-001A` is the active visual correction on
+`codex/ARGUS-GUI-COMMAND-CENTER-001A-VISUAL-FIDELITY`, based exactly on rejected
+GUI governance gate `4bf397b`. It is design-proof-only: the authoritative
+1672x941 reference is preserved byte-for-byte, and the proposed 1920x1080
+Command Center restores Radar, summary hierarchy, simultaneous Accepted and
+Rejected with equal mini-chart context, What Changed, read-only Positions, and
+compact System Context. No production GUI, test, project/package, engine,
+runtime, provider, service, scheduler, configuration, Paper, Shadow, broker,
+account, position, or order source is modified. The only next GUI action is
+Steven's exact visual decision. Independent second-eye passes all ten directive
+checks after narrowing unsupported connectivity wording to exact data-health
+semantics; all 12 changed paths are authorized documentation/design artifacts,
+with zero prohibited-path or secret findings. Implementation, merge, and
+installation remain unauthorized.
 
 Monday August 24 is terminal as `OPENING_EVIDENCE_PASS_WITH_FINDINGS` with
 `AUTOMATION_RUNTIME_PASS`, `PIPELINE_COMPLETE`, `EXECUTION_EVIDENCE_READY`,
@@ -3089,21 +3095,34 @@ blocked and gains no authority from Paper evidence.
   live execution authority. Acceptance requires deterministic tests plus a
   separately gated real provider-backed research-only canary after integration.
 
-#### ARGUS-GUI-COMMAND-CENTER-001 - Question-First Operator Command Center
+#### ARGUS-GUI-COMMAND-CENTER-001 / 001A - Command Center Visual Correction
 
-- Lifecycle: `IMPLEMENTED_PENDING_STEVEN_VISUAL_ACCEPTANCE_AND_POST_CANARY_MERGE`.
-  The 2026-08-26 direct GUI authorization supersedes this section's prior
-  deferred placement without broadening any backend authority.
+- `ARGUS-GUI-COMMAND-CENTER-001` lifecycle:
+  `STEVEN_VISUAL_FAIL / PRESERVED_UNMERGED_EVIDENCE`. Its four-zone,
+  chart-centered implementation remains isolated and backed up; it must not be
+  rewritten, continued, merged, or installed.
+- `ARGUS-GUI-COMMAND-CENTER-001A` lifecycle:
+  `DESIGN_PROOF_COMPLETE_PENDING_STEVEN_VISUAL_DECISION`. It starts from exact
+  gate `4bf397b` and changes documentation/design evidence only. Production GUI
+  implementation is not authorized.
 - Implementation/proof commit
   `84cb161393fbadeb00b6faa17502176a4c9f16de` reuses the existing Hunter,
   PrimaryChart/CandleChart, TradePlan/Why/evidence, Activity, Diagnostics, and
   Positions identities in a four-zone read-only Command Center. It adds no
   `PaneKind`, contract, engine rule, provider call, or execution control.
-- The supplied 1672x941 operator screenshot is preserved as the visual-language
-  baseline: dark navy, compact tables, thin separators, and explicit state
-  accents. Unsupported Radar Map geometry, daily/rate/uptime/At Risk metrics,
-  live-market claims, confidence bars, and target ladders are retired rather
-  than mocked.
+- Directive 001A supersedes the earlier macro-layout interpretation. The exact
+  1672x941 screenshot, SHA-256
+  `50C59B61AC3C692A8182E820DCB8032A941A50F87FFFAEFBB5965C1C4E1C86D1`,
+  is authoritative for information architecture as well as visual language.
+  The new proof preserves the Radar region and summary slots while labeling
+  all unsupported population, geometry, disposition, mini-chart, transition,
+  and aggregate content as design/example data or a future dependency.
+- Final proposed proof SHA-256 is
+  `D5227F3F13BE556AE47C2BDCDB2E3C428BCCBD8FCA9E03D6FDDC0E7B5AF995C8`;
+  side-by-side SHA-256 is
+  `3D74462C4EEA730248D6D5CD3C0CA2442B8AF71F7F3B4A0661D5412C3182EADB`.
+  Independent original-detail review passes all ten directive checks and the
+  12/12 design/documentation path boundary.
 - Opportunity and evidence are independently labeled. UI age uses `ObservedAt`
   only for display, never rank/readiness; old values use an absolute `SEEN`
   date. What Changed composes only existing Activity, stable Candidate Story,
@@ -3117,9 +3136,9 @@ blocked and gains no authority from Paper evidence.
   control findings, and six inspected 1920x1080/1180x820 frames. Producer-001C,
   the opening runtime, installed Continuous bytes, services, scheduler, startup
   pointers, and capability boundary all match their pre-task baseline.
-- Do not merge or install until Producer-001C is terminal, its mandatory ZIP is
-  created, the frozen boundary is released, Steven passes the exact Verification
-  Queue checks, and a separate post-freeze merge/install action is authorized.
+- Stop after Steven's 001A design review. A visual pass authorizes neither
+  implementation nor integration. Production source may change only after a
+  separate explicit authorization; merge/install remain separately gated.
 
 #### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
 

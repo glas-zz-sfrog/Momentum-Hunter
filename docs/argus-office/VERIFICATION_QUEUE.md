@@ -31,7 +31,8 @@ create a rubber-stamp Steven item.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
-| ARGUS-GUI-COMMAND-CENTER-001 isolated read-only Command Center | `AUTOMATED_PASS`; implementation/proof `84cb161`, focused 77/77, Layout 6/6, full solution 287/287, zero-warning Release build, 21/21 allowed paths, zero protected/package/secret/prohibited-control findings, six distinct exact-dimension visual proofs, and complete frozen-runtime equality pass | `MANUAL_PENDING`; use checks 1-8 below | `IMPLEMENTED_PENDING_STEVEN_VISUAL_ACCEPTANCE_AND_POST_CANARY_MERGE`; branch only, no merge/install | Confirm the four-zone visual hierarchy, compact fit, separate opportunity/evidence states, immutable-history treatment, truthful health/Positions, read-only navigation, and absence of service/simulation/trading controls. |
+| ARGUS-GUI-COMMAND-CENTER-001A visual-fidelity design proof | `READY_FOR_STEVEN_VISUAL_REVIEW`; exact reference, native 1920x1080 proposal, side-by-side comparison, region map, truth/dependency map, second-eye visual inspection, design-only path audit, and frozen-boundary equality pass | `MANUAL_PENDING`; use 001A checks 1-10 below | `DESIGN_PROOF_ONLY`; no production implementation, merge, or install authorized | Decide whether the proposal restores the reference's situational-awareness hierarchy while remaining truthful and read-only. |
+| ARGUS-GUI-COMMAND-CENTER-001 isolated read-only Command Center | `AUTOMATED_PASS`; implementation/proof `84cb161`, full solution 287/287, zero-warning Release build, six exact-dimension proofs, and frozen-runtime equality pass | `MANUAL_FAIL`; macro information architecture rejected by Steven | `PRESERVED_UNMERGED_EVIDENCE`; original branch backed up at `aa5bddb`, no merge/install | No further review of the chart-centered proposal. Directive 001A supersedes its visual/layout decisions where they conflict. |
 | ARGUS-R033 live Schwab chart integration | `AUTOMATED_PASS`; 31 focused combined tests, all 1,203 Python tests, all 250 .NET tests, and a zero-warning Release build pass. The isolated R032B proof populated 39,165 minute versions and 1,260 Daily bars; the combined reader returns 180 Daily plus 180 intraday display bars for all five proof symbols and rejects legacy/tampered Daily input. | `MANUAL_PASS`; Steven accepted the dense 1180x820 and 1920x1080 chart on 2026-08-06 | `COMBINED_VERIFIED_PENDING_MASTER_INTEGRATION` on `codex/ARGUS-R032B-R033-candle-integration` | No further Steven check is required for this release. Git Steward must fast-forward, back up, repin the 26 remaining opening jobs, and verify the canonical data load. |
 | Monday 2026-08-03 opening-capture readiness | `AUTOMATED_PASS`: opening fail-closed behavior, clock-task hardening, installation, independent live verification, and transient state-receipt lock recovery all pass. Evidence proves SYSTEM principal, exact `w32tm` action, startup delay `PT2M`, daily 08:15/08:25 triggers, wake enabled, no late-start catch-up, five two-minute retries, task result `0`, synchronized NIST time, Running/Automatic service, fresh heartbeat, Healthy Engine Host, 30 pending opening jobs, zero Shadow jobs, and transmission `UNAVAILABLE`. ARGUS-SERVICE-007 passed compileall, 26 focused tests, 74 affected tests, all 1,019 Python tests, a real Windows lock proof, and an installed twelve-lock stress with no process restart or Application error. | `NO_STEVEN_ACTION`; the required UAC interaction passed. Leave the computer powered on and plugged in through 08:40 Central Monday. | `COMPLETE_AND_BACKED_UP` through clock commits `30c25e5`/`3821490` and receipt-lock repair `252cdc7`; installed proof passed at 02:31 Central on 2026-08-01. | No product or visual check remains. Sunday 19:00 is a read-only preflight; Monday 08:35 is the capture and 08:50 is the terminal evidence audit. Observers must not launch, retry, repair, or fabricate evidence. |
 | ARGUS-SERVICE-004/005 reboot-without-login canary | `AUTOMATED_PASS`; the final exact-time 2026-07-31 16:39 Central attempt proved a new kernel boot and service instance, Running/Automatic service, Session 0 execution with zero interactive sessions, completed runtime/Codex receipts, Healthy Engine Host, the unchanged sole `2573` individual cash binding, no position/order request, 30 preserved pending opening jobs, zero Shadow jobs, and transmission `UNAVAILABLE`. Earlier failed/invalid attempts remain preserved separately. | `NO_STEVEN_ACTION`; the reboot/sign-in-screen action is complete and no visual judgment remains. | Repairs through forced-restart commit `e24feed` are backed up; successful proof is archived and the operational gate is `PASS`. | No remaining manual check. The next evidence is the first ordinary 2026-08-03 opening-capture receipt and report; future service manifest job changes hot-reload without another restart. |
@@ -63,7 +64,70 @@ create a rubber-stamp Steven item.
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted visual baseline; subsequent nonvisual roadmap work follows standing delegation |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | Destructive decision not yet due | Future market-data cutover task | Interrupt Steven immediately before deleting the exact legacy paths/rows; visual cutover proof remains manual |
 
-## ARGUS-GUI-COMMAND-CENTER-001 - Isolated Read-Only Command Center
+## ARGUS-GUI-COMMAND-CENTER-001A - Visual-Fidelity Design Proof
+
+Branch: `codex/ARGUS-GUI-COMMAND-CENTER-001A-VISUAL-FIDELITY`
+
+Base: `4bf397b2c410760f31af317a27c66e00b87fabe7`
+
+Automated/second-eye result: `READY_FOR_STEVEN_VISUAL_REVIEW`
+
+Steven status: `MANUAL_PENDING`
+
+Review these two files at 100% original pixels:
+
+- `docs/argus-office/reports/releases/ARGUS-GUI-COMMAND-CENTER-001A/ARGUS-GUI-COMMAND-CENTER-001A-proposed-1920x1080.png`
+- `docs/argus-office/reports/releases/ARGUS-GUI-COMMAND-CENTER-001A/ARGUS-GUI-COMMAND-CENTER-001A-reference-vs-proposed.png`
+
+All populated values are visibly disclosed as design/example data. This is a
+layout decision only, not runtime, provider, position, strategy, or execution
+truth.
+
+1. Three-second test: without clicking, identify Radar, Accepted, Rejected,
+   Positions, and What Changed/Recent Events.
+2. Reference hierarchy: confirm the proposal looks like an evolved Hybrid
+   Analytics Console rather than the rejected chart-centered workstation.
+3. Accepted/Rejected parity: confirm both are simultaneously first-class and
+   both show comparable compact 2-day/15-minute example price context.
+4. Freshness: confirm `NEW`/`RECENT` read as human-attention cues and the footer
+   explicitly separates them from trading/strategy age.
+5. Chart dominance: confirm no large selected-symbol CandleChart dominates the
+   default global Command Center.
+6. Truthfulness: confirm `DESIGN PROOF - EXAMPLE DATA`, `PARTIAL HISTORY`,
+   unavailable Attention, and example/source labels prevent populated examples
+   from masquerading as current truth.
+7. Read-only authority: confirm `READ-ONLY RESEARCH - NO ORDER AUTHORITY` is
+   visible and there are no buy, sell, submit, replace, cancel, arm, approve,
+   lifecycle, or execution actions.
+8. Data wording: confirm the corrected proposal/proposed half says
+   `DATA HEALTHY`/`Data health`, never bare `LIVE`, `CONNECTED`, market-open,
+   scanner-live, or execution-ready. The authoritative reference half retains
+   its original historical wording and is not a proposal claim.
+9. Native visual quality: at 1920x1080 confirm no overlap, clipping, illegible
+   text, unnecessary dead space, excessive chrome, or chaotic density.
+10. Remote/phone scale: view the side-by-side at fit-to-screen and confirm the
+    global hierarchy remains unmistakable even though fine text requires zoom.
+
+Reply with only:
+
+```text
+STEVEN VISUAL DECISION:
+
+PASS
+```
+
+or:
+
+```text
+STEVEN VISUAL DECISION:
+
+FAIL - <specific element(s)>
+```
+
+A pass does not authorize implementation, merge, or installation. Those require
+a separate explicit task.
+
+## ARGUS-GUI-COMMAND-CENTER-001 - Rejected Preserved Evidence
 
 Branch: `codex/ARGUS-GUI-COMMAND-CENTER-001`
 
@@ -72,7 +136,7 @@ Implementation/proof commit:
 
 Automated result: `AUTOMATED_PASS`
 
-Steven status: `MANUAL_PENDING`
+Steven status: `MANUAL_FAIL`; superseded by the 001A visual-fidelity directive.
 
 Review the isolated PNGs under
 `docs/argus-office/reports/releases/ARGUS-GUI-COMMAND-CENTER-001/` at 100%

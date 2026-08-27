@@ -1,5 +1,23 @@
 # Argus Changelog
 
+- Recorded Steven's visual rejection of the chart-centered
+  `ARGUS-GUI-COMMAND-CENTER-001` layout and preserved its unmerged branch as
+  evidence rather than rewriting it.
+- Created the isolated 001A design-proof branch from exact gate `4bf397b` and
+  preserved the authoritative 1672x941 Hybrid Analytics Console byte-for-byte.
+- Produced a native 1920x1080 visual-fidelity proposal and readable
+  side-by-side comparison that restore Radar, the five-slot summary hierarchy,
+  simultaneous Accepted/Rejected with equal example mini-charts, What Changed,
+  read-only Positions, and compact System Context.
+- Labeled all populated proof values as design/example data and documented the
+  exact available, presentation-derivable, unavailable, and future-read-model
+  boundary. Independent second-eye review caught and removed unsupported
+  connectivity wording in favor of exact `DATA HEALTHY` semantics.
+- Modified no production GUI, test, project/package, engine, runtime, provider,
+  service, scheduler, configuration, Paper, Shadow, broker, account, position,
+  or order source. Implementation, merge, and installation remain unauthorized
+  pending Steven's separate visual decision and later explicit implementation
+  task.
 - Implemented the bounded research-only Continuous TradePlan producer by
   reusing canonical Schwab backfill/stores, RVOL, candidate lifecycle,
   composition, and DATA-004 rather than creating competing data or setup paths.
