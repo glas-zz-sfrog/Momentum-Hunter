@@ -1,4 +1,4 @@
-"""Provider-backed, research-only forensic canary for Producer-001C.
+"""Provider-backed, research-only forensic canary for Producer-001D.
 
 This task-only launcher imports Momentum Hunter from an explicitly pinned clean
 canonical checkout. It never imports broker, account-snapshot, Paper, Shadow,
@@ -26,9 +26,9 @@ from typing import Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 
-EXPECTED_CANONICAL_SHA = "4690dbf193355bc7a39c6c74e531344ea8a37875"
+EXPECTED_CANONICAL_SHA = "1fa914f01b1fa44880885cd0f88e846e7e52313d"
 EXPECTED_PRODUCTION_SHA = "82460b3313b86c34dff4ffb737d2c04bf02e3ace"
-EXPECTED_TASK_BRANCH = "codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001C"
+EXPECTED_TASK_BRANCH = "codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001D"
 EXPECTED_FORENSIC_STANDARD_SHA256 = (
     "8B3A7F161BA393DACCED20C92B6B544C3893D201A97F76B370980DA884940303"
 )
@@ -51,6 +51,21 @@ FAILED_001B_ZIP = Path(
 FAILED_001B_ZIP_SHA256 = (
     "A4609AA3562D5705D88DF13498F7EBAEAB7E6A615910B4445887625B60EE371B"
 )
+FAILED_001C_ZIP = Path(
+    r"C:\Users\steve\OneDrive\Documents\ArgusReviewBundles"
+    r"\ARGUS-CONTINUOUS-PRODUCER-001C-FORENSIC-CANARY-20260827-REGULAR-B7F6DF5-SECOND-EYE.zip"
+)
+FAILED_001C_ZIP_SHA256 = (
+    "40279C6B264BE9299215EF0367B5B3AB3DFE33F87AE3C17A2E180A09C7F337B7"
+)
+OFFLINE_REPLAY_PATH = Path(
+    r"C:\Users\steve\OneDrive\Documents\ArgusReviewBundles"
+    r"\ARGUS-CONTINUOUS-PRODUCER-001D-OFFLINE-20260827-111335"
+    r"\offline-exact-path-replay.json"
+)
+OFFLINE_REPLAY_SHA256 = (
+    "1F4FED2478A191CAB1965B2C3D3C02C7491E6750D87FB9C31EA9A35C23A94566"
+)
 EXTERNAL_PARENT = Path(
     r"C:\Users\steve\OneDrive\Documents\ArgusReviewBundles"
 )
@@ -59,7 +74,7 @@ EASTERN = ZoneInfo("America/New_York")
 ACCOUNT_ENV = "MH_CANARY_EXPECTED_ACCOUNT_ENDING"
 CANONICAL_ENV = "MH_CANARY_CANONICAL_ROOT"
 PRODUCTION_ENV = "MH_CANARY_PRODUCTION_ROOT"
-CANARY_PROFILE = "producer-001c-provider-forensic-canary-v1"
+CANARY_PROFILE = "producer-001d-provider-forensic-canary-v1"
 AUTHORITY = "RESEARCH_ONLY"
 EXECUTION_AUTHORITY = "NONE"
 ORDER_CAPABILITY = "UNAVAILABLE"
@@ -71,6 +86,7 @@ CORE_FORENSIC_EVIDENCE = (
     "canonical-ownership-map.json",
     "failed-evidence-preservation.json",
     "forensic-standard-verification.json",
+    "offline-exact-path-replay.json",
     "production-baseline-before.json",
 )
 SUCCESS_ACCEPTANCE_EVIDENCE = (
@@ -334,6 +350,7 @@ def _validate_failed_evidence() -> dict[str, object]:
     for task, path, expected in (
         ("PRODUCER_001A", FAILED_001A_ZIP, FAILED_001A_ZIP_SHA256),
         ("PRODUCER_001B", FAILED_001B_ZIP, FAILED_001B_ZIP_SHA256),
+        ("PRODUCER_001C", FAILED_001C_ZIP, FAILED_001C_ZIP_SHA256),
     ):
         if not path.is_file():
             raise ForensicCanaryError(f"Preserved {task} ZIP is missing.")
@@ -349,6 +366,24 @@ def _validate_failed_evidence() -> dict[str, object]:
             }
         )
     return {"status": "PASS", "items": items}
+
+
+def _validate_offline_replay() -> dict[str, object]:
+    if not OFFLINE_REPLAY_PATH.is_file():
+        raise ForensicCanaryError("Producer-001D offline replay evidence is missing.")
+    observed = _sha256(OFFLINE_REPLAY_PATH)
+    if observed != OFFLINE_REPLAY_SHA256:
+        raise ForensicCanaryError("Producer-001D offline replay evidence hash differs.")
+    payload = json.loads(OFFLINE_REPLAY_PATH.read_text(encoding="ascii"))
+    if payload.get("classification") != "OFFLINE_EXACT_PATH_REPLAY_PASSED":
+        raise ForensicCanaryError("Producer-001D offline replay did not pass.")
+    return {
+        "path": str(OFFLINE_REPLAY_PATH),
+        "sha256": observed,
+        "classification": payload["classification"],
+        "fingerprint": payload.get("fingerprint", ""),
+        "status": "VERIFIED",
+    }
 
 
 def _validate_external_root(root: Path, *, require_new: bool) -> Path:
@@ -433,7 +468,7 @@ def _owner_identity(owner: object) -> dict[str, object]:
         "sourceSha256": _sha256(source_path),
         "firstLine": first_line,
         "sourceFingerprint": _fingerprint(
-            "producer-001c-owner-source-v1", "".join(lines)
+            "producer-001d-owner-source-v1", "".join(lines)
         ),
     }
 
@@ -596,7 +631,7 @@ def _ownership_map() -> dict[str, object]:
     wrapper_scan = _wrapper_authority_scan()
     result = {
         "schemaVersion": 1,
-        "profile": "producer-001c-forensic-canonical-ownership-map-v1",
+        "profile": "producer-001d-forensic-canonical-ownership-map-v1",
         "canonicalSourceSha": EXPECTED_CANONICAL_SHA,
         "status": wrapper_scan["status"],
         "stages": [
@@ -636,7 +671,7 @@ def _ownership_map() -> dict[str, object]:
         },
     }
     result["fingerprint"] = _fingerprint(
-        "producer-001c-forensic-ownership-map-v1", result
+        "producer-001d-forensic-ownership-map-v1", result
     )
     return result
 
@@ -662,7 +697,7 @@ def _file_manifest(
 
 
 def _manifest_fingerprint(items: Iterable[Mapping[str, object]]) -> str:
-    return _fingerprint("producer-001c-forensic-file-manifest-v1", list(items))
+    return _fingerprint("producer-001d-forensic-file-manifest-v1", list(items))
 
 
 def _selected_production_hashes() -> dict[str, object]:
@@ -757,7 +792,7 @@ def _production_baseline(label: str) -> dict[str, object]:
         "orderCapability": ORDER_CAPABILITY,
     }
     result["fingerprint"] = _fingerprint(
-        "producer-001c-forensic-production-baseline-v1", result
+        "producer-001d-forensic-production-baseline-v1", result
     )
     return result
 
@@ -789,10 +824,10 @@ def _runtime_config(campaign: Mapping[str, object]) -> ContinuousRuntimeConfig:
 def _topology(campaign: Mapping[str, object], config: ContinuousRuntimeConfig):
     return build_continuous_writer_topology_v2(
         root_path=Path(str(campaign["runtimeRoot"])) / "writer",
-        evidence_program_id="producer-001c-forensic-canary",
+        evidence_program_id="producer-001d-forensic-canary",
         configuration_fingerprint=config.fingerprint,
         runtime_build_hash=_fingerprint(
-            "producer-001c-canonical-runtime-build-v1",
+            "producer-001d-canonical-runtime-build-v1",
             str(campaign["canonicalSourceSha"]),
         ),
     )
@@ -902,7 +937,7 @@ def _state_snapshot(
         snapshot["immutableFileManifest"]
     )
     snapshot["fingerprint"] = _fingerprint(
-        "producer-001c-forensic-phase-state-v1", snapshot
+        "producer-001d-forensic-phase-state-v1", snapshot
     )
     return snapshot
 
@@ -1047,7 +1082,7 @@ def _run_phase(campaign_path: Path, phase: int) -> int:
             "orderCapability": ORDER_CAPABILITY,
         }
         receipt["fingerprint"] = _fingerprint(
-            "producer-001c-forensic-phase-receipt-v1", receipt
+            "producer-001d-forensic-phase-receipt-v1", receipt
         )
         _write_once(evidence_root / f"phase-{phase}-state.json", _sanitize(snapshot))
         _write_once(evidence_root / f"phase-{phase}-receipt.json", receipt)
@@ -1218,6 +1253,7 @@ def _run_campaign(args: argparse.Namespace) -> int:
     task_source = _validate_task_source()
     standard = _validate_standard()
     failed_evidence = _validate_failed_evidence()
+    offline_replay = _validate_offline_replay()
     ownership = _ownership_map()
     if ownership["status"] != "PASS":
         raise ForensicCanaryError(
@@ -1235,8 +1271,8 @@ def _run_campaign(args: argparse.Namespace) -> int:
     runtime_root.mkdir(parents=True)
     started = datetime.now().astimezone()
     attempt_id = evidence_root.name.lower().replace("_", "-")
-    runtime_identity = f"producer-001c-forensic-{started.strftime('%Y%m%d')}"
-    runtime_instance = f"producer-001c-forensic-{_fingerprint('attempt', attempt_id)[:24]}"
+    runtime_identity = f"producer-001d-forensic-{started.strftime('%Y%m%d')}"
+    runtime_instance = f"producer-001d-forensic-{_fingerprint('attempt', attempt_id)[:24]}"
     first_duration = args.duration_seconds // 2
     second_duration = args.duration_seconds - first_duration
     campaign = {
@@ -1266,11 +1302,15 @@ def _run_campaign(args: argparse.Namespace) -> int:
         "orderCapability": ORDER_CAPABILITY,
     }
     campaign["configurationFingerprint"] = _fingerprint(
-        "producer-001c-forensic-campaign-config-v1", campaign
+        "producer-001d-forensic-campaign-config-v1", campaign
     )
     _write_once(evidence_root / "forensic-standard-verification.json", standard)
     _write_once(
         evidence_root / "failed-evidence-preservation.json", failed_evidence
+    )
+    _write_once(
+        evidence_root / "offline-exact-path-replay.json",
+        json.loads(OFFLINE_REPLAY_PATH.read_text(encoding="ascii")),
     )
     _write_once(evidence_root / "canonical-ownership-map.json", ownership)
     _write_once(evidence_root / "production-baseline-before.json", _production_baseline("BEFORE"))
@@ -1472,12 +1512,24 @@ def _completed_bar_finality_accounting(
     unmatched_events = []
     for event in completed_bar_events:
         event_id = str(event.get("event_id", ""))
+        event_provider_timestamp = event.get("provider_timestamp")
+        if not event_provider_timestamp:
+            unmatched_events.append(
+                {
+                    "event": dict(event),
+                    "candidateVersionCount": 0,
+                    "diagnosticCode": "MISSING_COMPLETED_BAR_PROVIDER_TIMESTAMP",
+                }
+            )
+            continue
         occurred = _parse_timestamp(str(event.get("occurred_at", "")))
+        provider = _parse_timestamp(str(event_provider_timestamp))
         matches = [
             item
             for item in versions
             if item["eventId"] == event_id
             and _parse_timestamp(str(item["firstReceivedAt"])) == occurred
+            and _parse_timestamp(str(item["providerTimestamp"])) == provider
         ]
         if len(matches) != 1:
             unmatched_events.append(
@@ -1504,6 +1556,154 @@ def _completed_bar_finality_accounting(
         "validEvents": valid_events,
         "prematureEvents": premature_events,
         "unmatchedEvents": unmatched_events,
+    }
+
+
+def _stage_accounting(
+    *,
+    discoveries: Iterable[Mapping[str, object]],
+    hot_transitions: Iterable[Mapping[str, object]],
+    backfill: Mapping[str, object],
+    finality: Mapping[str, object],
+    completed_bar_counter: int,
+    attempt_events: Iterable[Mapping[str, object]],
+    compositions: Iterable[Mapping[str, object]],
+    phase_states: Iterable[Mapping[str, object]],
+    phase_receipts: Iterable[Mapping[str, object]],
+    physical_atomicity: Mapping[str, object],
+) -> dict[str, object]:
+    """Classify every stage from its own evidence, never from terminal status."""
+
+    discoveries = list(discoveries)
+    hot_transitions = list(hot_transitions)
+    attempt_events = list(attempt_events)
+    compositions = list(compositions)
+    phase_states = list(phase_states)
+    phase_receipts = list(phase_receipts)
+    readiness_starts = [
+        item
+        for item in attempt_events
+        if item.get("stage") == "READINESS"
+        and item.get("event_type") == ATTEMPT_STARTED
+    ]
+    readiness_successes = [
+        item
+        for item in attempt_events
+        if item.get("stage") == "READINESS"
+        and item.get("event_type") == ATTEMPT_SUCCEEDED
+    ]
+    readiness_failures = [
+        item
+        for item in attempt_events
+        if item.get("stage") == "READINESS"
+        and item.get("event_type") == ATTEMPT_FAILED
+    ]
+    composition_starts = [
+        item
+        for item in attempt_events
+        if item.get("stage") == "COMPOSITION"
+        and item.get("event_type") == ATTEMPT_STARTED
+    ]
+    composition_successes = [
+        item
+        for item in attempt_events
+        if item.get("stage") == "COMPOSITION"
+        and item.get("event_type") == ATTEMPT_SUCCEEDED
+    ]
+    producer_steps = sum(
+        len(item.get("payload", {}).get("naturalSteps", []))
+        for item in compositions
+        if isinstance(item.get("payload"), Mapping)
+    )
+    restored = any(
+        receipt.get("restoredFromCheckpoint") is True for receipt in phase_receipts
+    )
+    process_ids = {
+        state.get("processId") for state in phase_states if state.get("processId")
+    }
+    completed_dispatch_pass = (
+        int(finality.get("dispatchedEventCount", 0)) > 0
+        and int(finality.get("validCompletedEventCount", 0))
+        == int(finality.get("dispatchedEventCount", 0))
+        and int(finality.get("prematureCompletedEventCount", 0)) == 0
+        and int(finality.get("unmatchedEventCount", 0)) == 0
+        and completed_bar_counter == int(finality.get("dispatchedEventCount", 0))
+    )
+
+    def stage(status: str, **evidence: object) -> dict[str, object]:
+        return {"status": status, "evidence": evidence}
+
+    return {
+        "discovery": stage(
+            "PASS" if discoveries else "NOT_PROVEN",
+            recordCount=len(discoveries),
+        ),
+        "hotUniverseAdmission": stage(
+            "PASS" if hot_transitions else "NOT_PROVEN",
+            transitionCount=len(hot_transitions),
+        ),
+        "schwabBackfill": stage(
+            "PASS"
+            if int(backfill.get("successful", 0)) > 0
+            else "ATTEMPTED_FAILED"
+            if int(backfill.get("attempts", 0)) > 0
+            else "NOT_PROVEN",
+            attempts=int(backfill.get("attempts", 0)),
+            successful=int(backfill.get("successful", 0)),
+            failed=int(backfill.get("failed", 0)),
+        ),
+        "candleVersions": stage(
+            "PASS"
+            if int(finality.get("observedHistoryVersionCount", 0)) > 0
+            else "NOT_PROVEN",
+            observed=int(finality.get("observedHistoryVersionCount", 0)),
+            provisional=int(finality.get("provisionalHistoryVersionCount", 0)),
+            completed=int(finality.get("semanticallyCompletedHistoryVersionCount", 0)),
+        ),
+        "completedBarDispatch": stage(
+            "PASS" if completed_dispatch_pass else "FAIL" if completed_bar_counter else "NOT_PROVEN",
+            counter=completed_bar_counter,
+            dispatched=int(finality.get("dispatchedEventCount", 0)),
+            valid=int(finality.get("validCompletedEventCount", 0)),
+            premature=int(finality.get("prematureCompletedEventCount", 0)),
+            unmatched=int(finality.get("unmatchedEventCount", 0)),
+        ),
+        "readiness": stage(
+            "PASS"
+            if readiness_successes
+            else "FAILED"
+            if readiness_failures
+            else "NOT_REACHED",
+            attempts=len(readiness_starts),
+            successful=len(readiness_successes),
+            failed=len(readiness_failures),
+        ),
+        "composition": stage(
+            "PASS"
+            if compositions and composition_successes
+            else "FAILED"
+            if composition_starts
+            else "NOT_REACHED",
+            attempts=len(composition_starts),
+            successful=len(composition_successes),
+            committedRecords=len(compositions),
+        ),
+        "producerPersistence": stage(
+            "PASS" if producer_steps else "NOT_REACHED",
+            naturalStepCount=producer_steps,
+        ),
+        "restart": stage(
+            "PASS" if restored and len(process_ids) >= 2 else "NOT_PROVEN",
+            restoredFromCheckpoint=restored,
+            processCount=len(process_ids),
+        ),
+        "atomicity": stage(
+            "PASS"
+            if physical_atomicity.get("classification")
+            == "ATOMIC_COMPOSITION_PHYSICAL_PROOF_PASSED"
+            else "NOT_PROVEN",
+            classification=physical_atomicity.get("classification", "UNAVAILABLE"),
+        ),
     }
 
 
@@ -1671,12 +1871,15 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
                 successors.append(proposal)
     phase1 = json.loads((evidence_root / "phase-1-state.json").read_text(encoding="ascii"))
     phase2 = json.loads((evidence_root / "phase-2-state.json").read_text(encoding="ascii"))
+    phase1_receipt = json.loads(
+        (evidence_root / "phase-1-receipt.json").read_text(encoding="ascii")
+    )
+    phase2_receipt = json.loads(
+        (evidence_root / "phase-2-receipt.json").read_text(encoding="ascii")
+    )
     process_restart = (
         phase1.get("processId") != phase2.get("processId")
-        and json.loads(
-            (evidence_root / "phase-2-receipt.json").read_text(encoding="ascii")
-        ).get("restoredFromCheckpoint")
-        is True
+        and phase2_receipt.get("restoredFromCheckpoint") is True
     )
     phase1_records = {
         item["recordId"]: item["fingerprint"]
@@ -1740,7 +1943,8 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
     }
     prospective_floor_preserved = all(
         event.get("symbol") in first_observed
-        and _parse_timestamp(str(event.get("provider_timestamp")))
+        and bool(event.get("provider_timestamp"))
+        and _parse_timestamp(str(event["provider_timestamp"]))
         >= first_observed[str(event.get("symbol"))]
         for event in completed_bar_events
     )
@@ -1769,6 +1973,23 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         and item.get("canonical_evidence_known_at")
         for item in physical_atomicity.get("attemptEvents", [])
     )
+    stages = _stage_accounting(
+        discoveries=discoveries,
+        hot_transitions=hot_transitions,
+        backfill=backfill_accounting,
+        finality=finality,
+        completed_bar_counter=completed_bar_counter,
+        attempt_events=attempt_events,
+        compositions=compositions,
+        phase_states=(phase1, phase2),
+        phase_receipts=(phase1_receipt, phase2_receipt),
+        physical_atomicity=physical_atomicity,
+    )
+    ready_assessments = sum(
+        1
+        for item in attempt_successes
+        if item.get("stage") == "READINESS"
+    )
     classifications = {
         "CANONICAL_TIME_IDENTITY_REPAIRED": "YES" if compositions and anti_hindsight else "NO",
         "EQUIVALENT_OFFSET_INSTANTS_ACCEPTED": "YES" if compositions and anti_hindsight else "NO",
@@ -1783,6 +2004,19 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         ),
         "PREMATURE_COMPLETED_BAR_EVENTS": finality["prematureCompletedEventCount"],
         "VALID_COMPLETED_BAR_EVENTS": finality["validCompletedEventCount"],
+        "PROVIDER_TIMESTAMP_PRESERVED": (
+            "YES"
+            if completed_bar_events
+            and all(item.get("provider_timestamp") for item in completed_bar_events)
+            else "NO"
+        ),
+        "RECEIPT_TIMESTAMP_PRESERVED": (
+            "YES"
+            if completed_bar_events
+            and all(item.get("occurred_at") for item in completed_bar_events)
+            else "NO"
+        ),
+        "NATURAL_READY_ASSESSMENT_PROVEN": "YES" if ready_assessments else "NO",
         "APPEND_ONLY_FAILURE_CHRONOLOGY": (
             "YES"
             if len(attempt_events) == int(checkpoint.get("attempt_ledger_count", -1))
@@ -1866,7 +2100,7 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "NATURAL_NO_PLAN_OR_TRADEPLAN_COMMITTED": (
             "YES" if phase2_records and (plans or no_plans) else "NO"
         ),
-        "FAILED_001A_AND_001B_EVIDENCE_PRESERVED": "YES",
+        "FAILED_001A_001B_001C_EVIDENCE_PRESERVED": "YES",
         "SECOND_EYE_ZIP_SELF_CONTAINED": "PENDING",
         "READY_FOR_SECOND_EYE_REVIEW": "NO",
         "MERGE_AUTHORIZED": "NO",
@@ -1882,6 +2116,7 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "completedBarReevaluations": completed_bar_reevaluations,
         "attemptEvents": attempt_events,
         "physicalAtomicityProof": physical_atomicity,
+        "stageAccounting": stages,
         "backfillAccounting": backfill_accounting,
         "tradePlans": plans,
         "truthfulNoPlans": no_plans,
@@ -1932,9 +2167,11 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "duplicateProducerIdentity": duplicate_ids,
         "truthfulCounters": truthful_counters,
         "prospectiveFloorPreserved": prospective_floor_preserved,
+        "naturalReadyAssessmentCount": ready_assessments,
+        "stageAccounting": stages,
         "classifications": classifications,
         "timelineFingerprint": _fingerprint(
-            "producer-001c-forensic-timeline-v1", timeline
+            "producer-001d-forensic-timeline-v1", timeline
         ),
         "authority": AUTHORITY,
         "executionAuthority": EXECUTION_AUTHORITY,
@@ -1944,7 +2181,7 @@ def _analyze(evidence_root: Path) -> dict[str, object]:
         "orderCapability": ORDER_CAPABILITY,
     }
     result["fingerprint"] = _fingerprint(
-        "producer-001c-forensic-analysis-v1", result
+        "producer-001d-forensic-analysis-v1", result
     )
     return {"analysis": result, "timeline": timeline}
 
@@ -1997,6 +2234,15 @@ def _analyze_terminal_failure(
     discoveries = [
         item for item in records if item.get("evidenceType") == "DISCOVERY_CYCLE"
     ]
+    hot_transitions: list[dict[str, object]] = []
+    for item in discoveries:
+        payload = item.get("payload", {})
+        source = payload.get("sourceEvidence", {}) if isinstance(payload, Mapping) else {}
+        universe = source.get("universe", {}) if isinstance(source, Mapping) else {}
+        transitions = universe.get("transitionDelta", []) if isinstance(universe, Mapping) else []
+        hot_transitions.extend(
+            dict(value) for value in transitions if isinstance(value, Mapping)
+        )
     compositions = [
         item for item in records if item.get("evidenceType") == "COMPOSITION_CYCLE"
     ]
@@ -2036,6 +2282,53 @@ def _analyze_terminal_failure(
         physical_atomicity.get("classification")
         == "ATOMIC_COMPOSITION_PHYSICAL_PROOF_PASSED"
     )
+    try:
+        finality = _completed_bar_finality_accounting(
+            evidence_root, completed_bar_events
+        )
+    except Exception as exc:  # retain all independently proven stages
+        finality = {
+            "observedHistoryVersionCount": 0,
+            "provisionalHistoryVersionCount": 0,
+            "semanticallyCompletedHistoryVersionCount": 0,
+            "dispatchedEventCount": len(completed_bar_events),
+            "validCompletedEventCount": 0,
+            "prematureCompletedEventCount": 0,
+            "unmatchedEventCount": len(completed_bar_events),
+            "validEvents": [],
+            "prematureEvents": [],
+            "unmatchedEvents": [],
+            "analysisFailure": {
+                "exceptionClass": type(exc).__name__,
+                "message": str(exc),
+            },
+        }
+    stages = _stage_accounting(
+        discoveries=discoveries,
+        hot_transitions=hot_transitions,
+        backfill=backfill,
+        finality=finality,
+        completed_bar_counter=completed_bar_counter,
+        attempt_events=attempt_events,
+        compositions=compositions,
+        phase_states=phase_states,
+        phase_receipts=phase_receipts,
+        physical_atomicity=physical_atomicity,
+    )
+    ready_assessments = sum(
+        1
+        for item in attempt_events
+        if item.get("stage") == "READINESS"
+        and item.get("event_type") == ATTEMPT_SUCCEEDED
+    )
+    append_only = (
+        len(attempt_events) == int(checkpoint.get("attempt_ledger_count", -1))
+        and (
+            not attempt_events
+            or attempt_events[-1].get("event_id")
+            == checkpoint.get("attempt_ledger_head")
+        )
+    )
     classifications = {
         "PROVIDER_CANARY_TERMINAL_OUTCOME": str(terminal["terminalOutcome"]),
         "PROVIDER_CANARY_ACCEPTANCE": "FAILED",
@@ -2047,12 +2340,30 @@ def _analyze_terminal_failure(
         "EQUIVALENT_OFFSET_INSTANTS_ACCEPTED": "NO",
         "DISTINCT_INSTANTS_REJECTED": "YES_OFFLINE_PROOF",
         "ANTI_HINDSIGHT_GATE_PRESERVED": "NO",
-        "COMPLETED_BAR_FINALITY_REPAIRED": "NO",
-        "PREMATURE_COMPLETED_BAR_EVENTS": "UNPROVEN",
-        "VALID_COMPLETED_BAR_EVENTS": len(completed_bar_events),
-        "APPEND_ONLY_FAILURE_CHRONOLOGY": "UNPROVEN",
+        "COMPLETED_BAR_FINALITY_REPAIRED": (
+            "YES"
+            if stages["completedBarDispatch"]["status"] == "PASS"
+            else "NO"
+        ),
+        "PREMATURE_COMPLETED_BAR_EVENTS": finality["prematureCompletedEventCount"],
+        "VALID_COMPLETED_BAR_EVENTS": finality["validCompletedEventCount"],
+        "PROVIDER_TIMESTAMP_PRESERVED": (
+            "YES"
+            if completed_bar_events
+            and all(item.get("provider_timestamp") for item in completed_bar_events)
+            else "NO"
+        ),
+        "RECEIPT_TIMESTAMP_PRESERVED": (
+            "YES"
+            if completed_bar_events
+            and all(item.get("occurred_at") for item in completed_bar_events)
+            else "NO"
+        ),
+        "APPEND_ONLY_FAILURE_CHRONOLOGY": "YES" if append_only else "NO",
         "EXACT_COMPOSITION_FAILURE_DIAGNOSTICS": "UNPROVEN",
-        "TRUTHFUL_STAGE_COUNTERS": "UNPROVEN",
+        "TRUTHFUL_STAGE_COUNTERS": (
+            "YES" if completed_bar_counter == len(completed_bar_events) else "NO"
+        ),
         "ATOMIC_FAILED_COMPOSITION_NONMUTATION": (
             "YES_OFFLINE_PROOF" if physical_atomicity_passed else "UNPROVEN"
         ),
@@ -2060,19 +2371,32 @@ def _analyze_terminal_failure(
             "YES_OFFLINE_PROOF" if physical_atomicity_passed else "UNPROVEN"
         ),
         "PROSPECTIVE_FLOOR_INTEGRITY": "NO",
-        "REAL_PROVIDER_DISCOVERY_PROVEN": "NO",
-        "NATURAL_HOT_UNIVERSE_ADMISSION_PROVEN": "NO",
-        "REAL_SCHWAB_BACKFILL_PROVEN": "NO",
+        "REAL_PROVIDER_DISCOVERY_PROVEN": (
+            "YES" if stages["discovery"]["status"] == "PASS" else "NO"
+        ),
+        "NATURAL_HOT_UNIVERSE_ADMISSION_PROVEN": (
+            "YES" if stages["hotUniverseAdmission"]["status"] == "PASS" else "NO"
+        ),
+        "REAL_SCHWAB_BACKFILL_PROVEN": (
+            "YES" if stages["schwabBackfill"]["status"] == "PASS" else "NO"
+        ),
         "HISTORICAL_CONTEXT_FORENSICALLY_RECONSTRUCTABLE": "NO",
-        "REAL_COMPLETED_BAR_DISPATCH_PROVEN": "NO",
+        "REAL_COMPLETED_BAR_DISPATCH_PROVEN": (
+            "YES" if stages["completedBarDispatch"]["status"] == "PASS" else "NO"
+        ),
+        "NATURAL_READY_ASSESSMENT_PROVEN": "YES" if ready_assessments else "NO",
         "NATURAL_MATERIAL_REEVALUATION_PROVEN": "NO",
         "NATURAL_RUNTIME_TRADEPLAN_OBSERVED": "NO",
         "NATURAL_SUCCESSOR_SETUP_OBSERVED": "NO",
         "NO_ARBITRARY_FIVE_BAR_WAIT_PHYSICALLY_PROVEN": "NO",
         "END_TO_END_PRODUCER_RESTART_PROVEN": "NO",
-        "ACCEPTED_COMPOSITION_CYCLE_PROVEN": "NO",
-        "NATURAL_NO_PLAN_OR_TRADEPLAN_COMMITTED": "NO",
-        "FAILED_001A_AND_001B_EVIDENCE_PRESERVED": "YES",
+        "ACCEPTED_COMPOSITION_CYCLE_PROVEN": (
+            "YES" if stages["composition"]["status"] == "PASS" else "NO"
+        ),
+        "NATURAL_NO_PLAN_OR_TRADEPLAN_COMMITTED": (
+            "YES" if stages["producerPersistence"]["status"] == "PASS" else "NO"
+        ),
+        "FAILED_001A_001B_001C_EVIDENCE_PRESERVED": "YES",
         "SECOND_EYE_ZIP_SELF_CONTAINED": "PENDING",
         "READY_FOR_SECOND_EYE_REVIEW": "NO",
         "MERGE_AUTHORIZED": "NO",
@@ -2090,6 +2414,8 @@ def _analyze_terminal_failure(
         "attemptEvents": attempt_events,
         "physicalAtomicityProof": physical_atomicity,
         "backfillAccounting": backfill,
+        "completedBarFinality": finality,
+        "stageAccounting": stages,
     }
     result = {
         "schemaVersion": 1,
@@ -2112,9 +2438,11 @@ def _analyze_terminal_failure(
         "schwabBackfillSuccesses": int(backfill["successful"]),
         "schwabBackfillFailures": int(backfill["failed"]),
         "verificationStatus": verification.get("status", "NOT_AVAILABLE"),
+        "naturalReadyAssessmentCount": ready_assessments,
+        "stageAccounting": stages,
         "classifications": classifications,
         "timelineFingerprint": _fingerprint(
-            "producer-001c-failed-forensic-timeline-v1", timeline
+            "producer-001d-failed-forensic-timeline-v1", timeline
         ),
         "authority": AUTHORITY,
         "executionAuthority": EXECUTION_AUTHORITY,
@@ -2124,7 +2452,7 @@ def _analyze_terminal_failure(
         "orderCapability": ORDER_CAPABILITY,
     }
     result["fingerprint"] = _fingerprint(
-        "producer-001c-failed-forensic-analysis-v1", result
+        "producer-001d-failed-forensic-analysis-v1", result
     )
     return {"analysis": result, "timeline": timeline}
 
@@ -2174,7 +2502,7 @@ def _analyze_terminal(
         )
         analyzed["analysis"].pop("fingerprint", None)
         analyzed["analysis"]["fingerprint"] = _fingerprint(
-            "producer-001c-forensic-analysis-v1", analyzed["analysis"]
+            "producer-001d-forensic-analysis-v1", analyzed["analysis"]
         )
         return analyzed
     return _analyze_terminal_failure(evidence_root, terminal)
@@ -2599,6 +2927,7 @@ def _package_focus_modules() -> tuple[str, ...]:
         "tests.test_continuous_time_identity",
         "tests.test_continuous_candle_finality",
         "tests.test_continuous_producer_001c_atomicity_proof",
+        "tests.test_continuous_producer_001d_offline_replay",
         "tests.test_continuous_producer_001b_forensic_canary",
         "tests.test_continuous_live_qualification",
         "tests.test_continuous_canary_hardening",
@@ -2673,7 +3002,7 @@ def _render_package_index(
 ) -> str:
     stages = ownership.get("stages", [])
     lines = [
-        "# Producer-001C Forensic Canary Second-Eye Packet",
+        "# Producer-001D Forensic Canary Second-Eye Packet",
         "",
         f"Canonical source: `{EXPECTED_CANONICAL_SHA}`",
         f"Evidence: `evidence/{root.name}`",
@@ -2706,8 +3035,9 @@ def _render_package_index(
             "- `source/tests/`: complete canonical tests plus the canary wrapper tests.",
             "- `source/tools/capture_job.py`: local source dependency read by the packaged hot-universe boundary test.",
             "- `source/tools/run_continuous_producer_001c_atomicity_proof.py`: deterministic disposable physical atomicity proof using production runtime/composition classes.",
+            "- `source/tools/run_continuous_producer_001d_offline_replay.py`: deterministic admitted-finality/readiness/natural-composition/restart proof.",
             "- `source/tools/run_continuous_producer_001b_forensic_canary.py`: exact canary wrapper.",
-            "- `references/`: binding standard, Roadmap snapshot, Producer-001B/001C charters, canary charter, and the prior Producer-001A release record.",
+            "- `references/`: binding standard, Roadmap snapshot, Producer-001B/001C/001D charters, canary charter, and the prior Producer-001A release record.",
             "- `PACKAGE-SANITIZATION-LEDGER.json`: every source substitution and original/sanitized hashes.",
             "- `PACKAGE-MANIFEST.json`: per-file hashes for archive verification.",
             "",
@@ -2838,6 +3168,14 @@ def _package(args: argparse.Namespace) -> int:
         / "tools"
         / "run_continuous_producer_001c_atomicity_proof.py",
     )
+    shutil.copy2(
+        CANONICAL_ROOT
+        / "tools"
+        / "run_continuous_producer_001d_offline_replay.py",
+        source_destination
+        / "tools"
+        / "run_continuous_producer_001d_offline_replay.py",
+    )
     shutil.copy2(Path(__file__).resolve(), source_destination / "tools" / Path(__file__).name)
     shutil.copy2(
         Path(__file__).resolve().parents[1]
@@ -2877,6 +3215,14 @@ def _package(args: argparse.Namespace) -> int:
         references / "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001C.md",
     )
     shutil.copy2(
+        CANONICAL_ROOT
+        / "docs"
+        / "argus-office"
+        / "goal-charters"
+        / "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001D.md",
+        references / "ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001D.md",
+    )
+    shutil.copy2(
         Path(__file__).resolve().parents[1]
         / "docs"
         / "argus-office"
@@ -2891,6 +3237,14 @@ def _package(args: argparse.Namespace) -> int:
         / "goal-charters"
         / "ARGUS-CONTINUOUS-PRODUCER-001C-FORENSIC-CANARY.md",
         references / "ARGUS-CONTINUOUS-PRODUCER-001C-FORENSIC-CANARY.md",
+    )
+    shutil.copy2(
+        Path(__file__).resolve().parents[1]
+        / "docs"
+        / "argus-office"
+        / "goal-charters"
+        / "ARGUS-CONTINUOUS-PRODUCER-001D-FORENSIC-CANARY.md",
+        references / "ARGUS-CONTINUOUS-PRODUCER-001D-FORENSIC-CANARY.md",
     )
     shutil.copy2(FORENSIC_STANDARD_PATH, references / FORENSIC_STANDARD_PATH.name)
     ownership = json.loads(
@@ -2977,7 +3331,7 @@ def _package(args: argparse.Namespace) -> int:
     package_files = _file_manifest(package_root)
     package_manifest = {
         "schemaVersion": 1,
-        "profile": "producer-001c-second-eye-package-v1",
+        "profile": "producer-001d-second-eye-package-v1",
         "files": package_files,
         "fileCount": len(package_files),
         "manifestFingerprint": _manifest_fingerprint(package_files),
@@ -3077,6 +3431,7 @@ def _preflight() -> int:
         "productionCanonical": _validate_production(),
         "forensicStandard": _validate_standard(),
         "failedEvidence": _validate_failed_evidence(),
+        "offlineExactPathReplay": _validate_offline_replay(),
         "capabilityScan": _static_capability_scan(),
         "canonicalOwnershipMap": ownership,
         "services": _service_snapshot(),
@@ -3098,7 +3453,7 @@ def _preflight() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run or verify the Producer-001C provider forensic canary."
+        description="Run or verify the Producer-001D provider forensic canary."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("preflight")

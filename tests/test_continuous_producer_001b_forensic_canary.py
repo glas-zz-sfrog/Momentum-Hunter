@@ -225,6 +225,9 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
                 "canonical-ownership-map.json": {"status": "PASS"},
                 "failed-evidence-preservation.json": {},
                 "forensic-standard-verification.json": {"status": "PASS"},
+                "offline-exact-path-replay.json": {
+                    "classification": "OFFLINE_EXACT_PATH_REPLAY_PASSED"
+                },
                 "production-baseline-before.json": baseline,
                 self.tool.TERMINAL_FAILURE_MARKER: {
                     "status": "FAILED_PRESERVED",
@@ -371,6 +374,7 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
                     "event_id": f"continuous-completed-bar-{source[:24]}",
                     "trigger": "CANONICAL_BAR_COMPLETED",
                     "occurred_at": occurred_at,
+                    "provider_timestamp": provider_timestamp,
                     "symbol": "AAA",
                     "source_fingerprint": source,
                 }
@@ -386,6 +390,64 @@ class ContinuousProducerForensicCanaryTests(unittest.TestCase):
         self.assertEqual(1, result["prematureCompletedEventCount"])
         self.assertEqual(1, result["validCompletedEventCount"])
         self.assertEqual(0, result["unmatchedEventCount"])
+
+    def test_completed_bar_analyzer_preserves_missing_provider_clock_as_uncertain(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.tool._completed_bar_finality_accounting(
+                Path(directory),
+                (
+                    {
+                        "event_id": "legacy-event",
+                        "trigger": "CANONICAL_BAR_COMPLETED",
+                        "occurred_at": "2026-08-26T14:32:00+00:00",
+                        "symbol": "AAA",
+                    },
+                ),
+            )
+
+        self.assertEqual(1, result["unmatchedEventCount"])
+        self.assertEqual(
+            "MISSING_COMPLETED_BAR_PROVIDER_TIMESTAMP",
+            result["unmatchedEvents"][0]["diagnosticCode"],
+        )
+
+    def test_stage_accounting_retains_upstream_pass_after_readiness_failure(self) -> None:
+        stages = self.tool._stage_accounting(
+            discoveries=({"payload": {}},),
+            hot_transitions=({"symbol": "AAA"},),
+            backfill={"attempts": 1, "successful": 1, "failed": 0},
+            finality={
+                "observedHistoryVersionCount": 2,
+                "provisionalHistoryVersionCount": 1,
+                "semanticallyCompletedHistoryVersionCount": 1,
+                "dispatchedEventCount": 1,
+                "validCompletedEventCount": 1,
+                "prematureCompletedEventCount": 0,
+                "unmatchedEventCount": 0,
+            },
+            completed_bar_counter=1,
+            attempt_events=(
+                {
+                    "stage": "READINESS",
+                    "event_type": self.tool.ATTEMPT_STARTED,
+                },
+                {
+                    "stage": "READINESS",
+                    "event_type": self.tool.ATTEMPT_FAILED,
+                },
+            ),
+            compositions=(),
+            phase_states=(),
+            phase_receipts=(),
+            physical_atomicity={},
+        )
+
+        self.assertEqual("PASS", stages["discovery"]["status"])
+        self.assertEqual("PASS", stages["hotUniverseAdmission"]["status"])
+        self.assertEqual("PASS", stages["schwabBackfill"]["status"])
+        self.assertEqual("PASS", stages["completedBarDispatch"]["status"])
+        self.assertEqual("FAILED", stages["readiness"]["status"])
+        self.assertEqual("NOT_REACHED", stages["composition"]["status"])
 
 
 if __name__ == "__main__":
