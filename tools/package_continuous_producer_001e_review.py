@@ -111,7 +111,10 @@ def _secret_scan(root: Path, forbidden: str) -> dict[str, object]:
     patterns = (
         ("BEARER_CREDENTIAL", re.compile(r"Bearer\s+[A-Za-z0-9._~-]{20,}")),
         ("ALPACA_KEY_SHAPE", re.compile(r"\bPK[A-Z0-9]{18,}\b")),
-        ("PRIVATE_KEY", re.compile(r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----")),
+        (
+            "PRIVATE_KEY",
+            re.compile(r"-----BEGIN " + r"(?:RSA |EC )?PRIVATE KEY-----"),
+        ),
     )
     sensitive_keys = {
         "accesstoken",
@@ -163,12 +166,15 @@ def _secret_scan(root: Path, forbidden: str) -> dict[str, object]:
             continue
         scanned += 1
         relative = path.relative_to(root).as_posix()
+        synthetic_fixture_marker = (
+            'SYNTHETIC_PRIVATE_KEY = """-----BEGIN ' + "PRIVATE KEY-----"
+        )
         for name, pattern in patterns:
             if pattern.search(text):
                 if (
                     name == "PRIVATE_KEY"
                     and relative.startswith("source/tests/")
-                    and 'SYNTHETIC_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----' in text
+                    and synthetic_fixture_marker in text
                 ):
                     continue
                 findings.append({"path": relative, "term": name})

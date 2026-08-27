@@ -164,6 +164,23 @@ class ApprovedEnvironmentHardChewTests(unittest.TestCase):
             self.assertEqual(scan["status"], "FAIL")
             self.assertIn("PRIVATE_KEY", {item["term"] for item in scan["findings"]})
 
+    def test_package_secret_scan_does_not_match_its_own_detector_source(self) -> None:
+        package_tool = _load_module(
+            "producer_001e_package_tool_self_scan",
+            REPOSITORY_ROOT / "tools" / "package_continuous_producer_001e_review.py",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            destination = root / "source" / "tools"
+            destination.mkdir(parents=True)
+            destination.joinpath("package_continuous_producer_001e_review.py").write_text(
+                (REPOSITORY_ROOT / "tools" / "package_continuous_producer_001e_review.py").read_text(
+                    encoding="ascii"
+                ),
+                encoding="ascii",
+            )
+            self.assertEqual(package_tool._secret_scan(root, "")["status"], "PASS")
+
 
 if __name__ == "__main__":
     unittest.main()
