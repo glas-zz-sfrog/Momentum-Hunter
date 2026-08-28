@@ -4,11 +4,18 @@ import ast
 import json
 import tempfile
 import unittest
+from contextlib import nullcontext
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 from zoneinfo import ZoneInfo
 
+import momentum_hunter.continuous_live_qualification as qualification
+from momentum_hunter.continuous_evidence_writer import (
+    DedicatedEvidenceWriter,
+    build_continuous_writer_topology_v2,
+)
 from momentum_hunter.continuous_live_qualification import (
     LiveMaterialEvents,
     LiveQualificationError,
@@ -16,7 +23,14 @@ from momentum_hunter.continuous_live_qualification import (
     _backfill_accounting,
     validate_qualification_root,
 )
-from momentum_hunter.continuous_runtime import CANONICAL_BAR_COMPLETED, DATA_RECOVERED
+from momentum_hunter.continuous_runtime import (
+    CANONICAL_BAR_COMPLETED,
+    DATA_RECOVERED,
+    ContinuousRuntimeConfig,
+    LogicalRuntimeLeaseRegistry,
+    QueueCapacities,
+    RuntimeCadence,
+)
 from momentum_hunter.continuous_tradeplan_producer import HISTORY_BACKFILL_PENDING
 from momentum_hunter.opportunity_denominator import (
     LIVE_READ_ONLY_QUALIFICATION,
@@ -25,6 +39,149 @@ from momentum_hunter.opportunity_denominator import (
 
 
 class ContinuousLiveQualificationTests(unittest.TestCase):
+    def resource_inputs(self, root: Path):
+        config = ContinuousRuntimeConfig(
+            runtime_identity="cleanup-test-runtime",
+            session_date="2026-08-28",
+            cadence=RuntimeCadence(
+                broad_discovery_seconds=300,
+                housekeeping_seconds=30,
+                discovery_stale_seconds=600,
+                composition_stale_seconds=180,
+            ),
+            queues=QueueCapacities(),
+            lease_ttl_seconds=30,
+            shutdown_timeout_seconds=2,
+        )
+        topology = build_continuous_writer_topology_v2(
+            root_path=root / "writer",
+            evidence_program_id="cleanup-test-program",
+            configuration_fingerprint=config.fingerprint,
+            runtime_build_hash="a" * 64,
+        )
+        return {
+            "root": root,
+            "topology": topology,
+            "runtime_id": "cleanup-test-instance",
+            "config": config,
+            "discovery": object(),
+            "market": object(),
+            "events": object(),
+            "composition": object(),
+            "denominator": object(),
+            "leases": LogicalRuntimeLeaseRegistry(),
+            "launch_at": datetime(
+                2026, 8, 28, 10, 0, tzinfo=ZoneInfo("America/New_York")
+            ),
+        }
+
+    def assert_physical_writer_released(self, topology) -> None:
+        reopened = DedicatedEvidenceWriter(topology)
+        reopened.close()
+
+    def test_resource_cleanup_covers_every_initialization_failure_stage(self) -> None:
+        cases = (
+            (
+                "after-capability-creation",
+                lambda: mock.patch.object(
+                    qualification,
+                    "DedicatedEvidenceWriter",
+                    side_effect=RuntimeError("after capability"),
+                ),
+                {},
+            ),
+            (
+                "after-writer-creation",
+                lambda: mock.patch.object(
+                    DedicatedEvidenceWriter,
+                    "activate_session",
+                    side_effect=RuntimeError("after writer"),
+                ),
+                {},
+            ),
+            (
+                "after-writer-activation",
+                lambda: mock.patch.object(
+                    qualification,
+                    "AuthenticatedEvidenceWriterClient",
+                    side_effect=RuntimeError("after activation"),
+                ),
+                {},
+            ),
+            (
+                "checkpoint-store-construction",
+                nullcontext,
+                {
+                    "checkpoint_store_factory": mock.Mock(
+                        side_effect=RuntimeError("checkpoint construction")
+                    )
+                },
+            ),
+            (
+                "runtime-construction",
+                nullcontext,
+                {
+                    "runtime_factory": mock.Mock(
+                        side_effect=RuntimeError("runtime construction")
+                    )
+                },
+            ),
+            (
+                "runtime-start",
+                lambda: mock.patch.object(
+                    qualification.ContinuousOpportunityRuntime,
+                    "start",
+                    side_effect=RuntimeError("runtime start"),
+                ),
+                {},
+            ),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            for name, patch_factory, overrides in cases:
+                with self.subTest(stage=name):
+                    root = parent / name
+                    root.mkdir()
+                    inputs = self.resource_inputs(root)
+                    with patch_factory():
+                        with self.assertRaises(RuntimeError):
+                            qualification._acquire_qualification_resources(
+                                **inputs,
+                                **overrides,
+                            )
+                    receipt = json.loads(
+                        (root / "resource-cleanup.json").read_text(encoding="ascii")
+                    )
+                    self.assertEqual("PASS", receipt["status"])
+                    self.assertTrue(receipt["capabilityClosed"])
+                    if receipt["writerReleaseRequired"]:
+                        self.assertTrue(receipt["writerClosed"])
+                    self.assert_physical_writer_released(inputs["topology"])
+
+    def test_resource_cleanup_covers_mid_runtime_and_normal_shutdown(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            for name, inject_failure in (("mid-runtime", True), ("normal", False)):
+                with self.subTest(stage=name):
+                    root = parent / name
+                    root.mkdir()
+                    inputs = self.resource_inputs(root)
+                    resources = qualification._acquire_qualification_resources(**inputs)
+                    try:
+                        if inject_failure:
+                            raise RuntimeError("mid runtime")
+                        resources.shutdown_current(inputs["launch_at"])
+                    except RuntimeError:
+                        pass
+                    finally:
+                        resources.close()
+                    receipt = qualification._resource_cleanup_receipt(resources.audit)
+                    self.assertEqual("PASS", receipt["status"])
+                    self.assertTrue(receipt["runtimeShutdownCompleted"])
+                    self.assertTrue(receipt["writerClosed"])
+                    self.assertTrue(receipt["capabilityClosed"])
+                    self.assert_physical_writer_released(inputs["topology"])
+
     def test_disposable_root_rejects_production_and_canonical_paths(self) -> None:
         canonical = Path("C:/Users/steve/OneDrive/Documents/Investing")
         with self.assertRaises(LiveQualificationError):

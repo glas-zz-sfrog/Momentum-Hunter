@@ -18,6 +18,25 @@ class StatData002CanaryTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
 
+    def write_resource_cleanup(self, runtime_root: Path) -> None:
+        receipt = canary._resource_cleanup_receipt(
+            {
+                "writerCreated": True,
+                "writerReleaseAttempted": True,
+                "writerClosed": True,
+                "capabilityCreated": True,
+                "capabilityReleaseAttempted": True,
+                "capabilityClosed": True,
+                "runtimeCreated": True,
+                "runtimeShutdownAttempted": True,
+                "runtimeShutdownCompleted": True,
+            }
+        )
+        canary._write_once(
+            runtime_root / "resource-cleanup.json",
+            receipt,
+        )
+
     def write_execution_inputs(self, evidence: Path) -> tuple[dict[str, str], dict[str, str]]:
         task_identity = {"head": "1" * 40, "branch": canary.TASK_BRANCH, "status": ""}
         production_identity = {"head": "2" * 40, "branch": "master", "status": ""}
@@ -112,6 +131,95 @@ class StatData002CanaryTests(unittest.TestCase):
                 with self.assertRaises(canary.StatDataCanaryError):
                     canary._assert_regular_session(observed)
 
+    def test_ephemeral_runtime_export_is_verified_and_never_runtime_authority(self) -> None:
+        runtime = canary._new_ephemeral_runtime_root()
+        self.addCleanup(lambda: runtime.exists() and __import__("shutil").rmtree(runtime))
+        artifact = runtime / "runtime-artifacts" / "checkpoint.json"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text('{"state":"STOPPED"}\n', encoding="ascii")
+        self.write_resource_cleanup(runtime)
+        evidence = self.root / "durable-evidence"
+        evidence.mkdir()
+
+        receipt = canary._export_ephemeral_runtime(
+            runtime_root=runtime,
+            evidence_root=evidence,
+        )
+
+        self.assertEqual("PASS", receipt["status"])
+        self.assertTrue(receipt["sourceRetired"])
+        self.assertFalse(runtime.exists())
+        self.assertFalse(receipt["runtimeAuthority"])
+        self.assertEqual(
+            receipt["sourceFingerprint"], receipt["destinationFingerprint"]
+        )
+        marker = json.loads(
+            (
+                evidence
+                / "natural-runtime-forensic"
+                / "FORENSIC_COPY_ONLY.json"
+            ).read_text(encoding="ascii")
+        )
+        self.assertEqual("FORENSIC_COPY_ONLY", marker["classification"])
+        self.assertFalse(marker["runtimeAuthority"])
+
+    def test_durable_runtime_root_remains_rejected(self) -> None:
+        self.assertFalse(
+            canary._runtime_root_is_ephemeral(
+                Path("C:/Users/steve/OneDrive/Documents/ArgusReviewBundles/runtime")
+            )
+        )
+        with self.assertRaises(canary.StatDataCanaryError):
+            canary._export_ephemeral_runtime(
+                runtime_root=Path(
+                    "C:/Users/steve/OneDrive/Documents/ArgusReviewBundles/runtime"
+                ),
+                evidence_root=self.root,
+            )
+
+    def test_export_refuses_missing_or_tampered_cleanup_evidence(self) -> None:
+        for name, tampered in (("missing", False), ("tampered", True)):
+            with self.subTest(name=name):
+                runtime = canary._new_ephemeral_runtime_root()
+                runtime.mkdir(parents=True)
+                (runtime / "state.json").write_text("{}\n", encoding="ascii")
+                if tampered:
+                    self.write_resource_cleanup(runtime)
+                    payload = json.loads(
+                        (runtime / "resource-cleanup.json").read_text(encoding="ascii")
+                    )
+                    payload["writerClosed"] = False
+                    (runtime / "resource-cleanup.json").write_text(
+                        json.dumps(payload), encoding="ascii"
+                    )
+                with self.assertRaises(canary.StatDataCanaryError):
+                    canary._export_ephemeral_runtime(
+                        runtime_root=runtime,
+                        evidence_root=self.root / f"evidence-{name}",
+                    )
+                self.assertTrue(runtime.exists())
+                __import__("shutil").rmtree(runtime)
+
+    def test_packaging_refuses_active_or_unexported_runtime(self) -> None:
+        evidence = self.root / "packaging-order"
+        canary._write_once(
+            evidence / "terminal-result.json",
+            {
+                "status": "FAIL",
+                "providerContactAttempted": True,
+                "forensicRuntimeExport": None,
+            },
+        )
+        with self.assertRaisesRegex(
+            canary.StatDataCanaryError,
+            "before verified runtime export",
+        ):
+            canary.package(
+                task_root=self.root,
+                evidence_root=evidence,
+                python_executable=Path(__file__),
+            )
+
     def test_activation_reload_failure_is_terminal_before_provider_contact(self) -> None:
         evidence = self.root / "reload-failure"
         self.write_execution_inputs(evidence)
@@ -196,8 +304,7 @@ class StatData002CanaryTests(unittest.TestCase):
 
         def provider_failure(**kwargs):
             source = (
-                evidence
-                / "natural-runtime"
+                kwargs["generation_root"]
                 / "runtime-artifacts"
                 / "source-evidence"
                 / "finviz"
@@ -205,6 +312,7 @@ class StatData002CanaryTests(unittest.TestCase):
             )
             source.parent.mkdir(parents=True)
             source.write_text('{"status":"RECEIVED"}\n', encoding="ascii")
+            self.write_resource_cleanup(kwargs["generation_root"])
             raise RuntimeError("provider runtime failed")
 
         with (
@@ -236,6 +344,8 @@ class StatData002CanaryTests(unittest.TestCase):
         self.assertTrue(result["providerContactAttempted"])
         self.assertTrue(result["providerContact"])
         self.assertEqual(1, len(result["providerContactEvidence"]))
+        self.assertEqual("PASS", result["forensicRuntimeExport"]["status"])
+        self.assertTrue(result["forensicRuntimeExport"]["sourceRetired"])
 
     def test_summary_failure_is_preserved_without_losing_terminal_record(self) -> None:
         evidence = self.root / "summary-failure"
@@ -243,6 +353,8 @@ class StatData002CanaryTests(unittest.TestCase):
 
         def provider_failure(**kwargs):
             (evidence / "prospective-denominator").mkdir()
+            kwargs["generation_root"].mkdir(parents=True)
+            self.write_resource_cleanup(kwargs["generation_root"])
             raise RuntimeError("provider runtime failed")
 
         with (

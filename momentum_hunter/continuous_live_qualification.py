@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import time
+from contextlib import ExitStack
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -160,6 +161,204 @@ class LiveCompositionEvidenceError(LiveQualificationError):
         self.diagnostic_code = diagnostic_code
         self.request_cutoff = request_cutoff
         self.evidence_known_at = evidence_known_at
+
+
+@dataclass
+class _QualificationResourceBundle:
+    stack: ExitStack
+    capability: object
+    writer: DedicatedEvidenceWriter
+    client: AuthenticatedEvidenceWriterClient
+    checkpoints: RuntimeCheckpointStore
+    runtime_holder: dict[str, object]
+    audit: dict[str, object]
+
+    @property
+    def runtime(self) -> ContinuousOpportunityRuntime:
+        runtime = self.runtime_holder.get("runtime")
+        if runtime is None:
+            raise LiveQualificationError("Qualification runtime resource is unavailable.")
+        return runtime  # type: ignore[return-value]
+
+    def replace_runtime(self, runtime: ContinuousOpportunityRuntime) -> None:
+        self.runtime_holder["runtime"] = runtime
+        self.runtime_holder["active"] = True
+
+    def shutdown_current(self, now: datetime):
+        self.audit["runtimeShutdownAttempted"] = True
+        try:
+            health = self.runtime.shutdown(now)
+        except Exception as exc:
+            self.audit["runtimeShutdownError"] = type(exc).__name__
+            raise
+        else:
+            self.audit["runtimeShutdownCompleted"] = True
+            return health
+        finally:
+            self.runtime_holder["active"] = False
+
+    def close(self) -> None:
+        self.stack.close()
+
+
+def _resource_cleanup_receipt(audit: Mapping[str, object]) -> dict[str, object]:
+    receipt = dict(audit)
+    writer_required = receipt.get("writerCreated") is True
+    capability_required = receipt.get("capabilityCreated") is True
+    runtime_required = receipt.get("runtimeCreated") is True
+    writer_released = not writer_required or (
+        receipt.get("writerReleaseAttempted") is True
+        and receipt.get("writerClosed") is True
+    )
+    capability_released = not capability_required or (
+        receipt.get("capabilityReleaseAttempted") is True
+        and receipt.get("capabilityClosed") is True
+    )
+    runtime_released = (
+        not runtime_required or receipt.get("runtimeShutdownAttempted") is True
+    )
+    receipt["writerReleaseRequired"] = writer_required
+    receipt["capabilityReleaseRequired"] = capability_required
+    receipt["runtimeShutdownRequired"] = runtime_required
+    receipt["writerReleaseSatisfied"] = writer_released
+    receipt["capabilityReleaseSatisfied"] = capability_released
+    receipt["runtimeShutdownSatisfied"] = runtime_released
+    receipt["status"] = (
+        "PASS"
+        if writer_released and capability_released and runtime_released
+        else "FAIL"
+    )
+    receipt["recordedAt"] = _aware_now().isoformat()
+    receipt["authority"] = AUTHORITY
+    receipt["executionAuthority"] = EXECUTION_AUTHORITY
+    receipt["fingerprint"] = _fingerprint(
+        "live-qualification-resource-cleanup-v1",
+        receipt,
+    )
+    return receipt
+
+
+def _acquire_qualification_resources(
+    *,
+    root: Path,
+    topology,
+    runtime_id: str,
+    config: ContinuousRuntimeConfig,
+    discovery,
+    market,
+    events,
+    composition,
+    denominator,
+    leases: LogicalRuntimeLeaseRegistry,
+    launch_at: datetime,
+    checkpoint_store_factory=RuntimeCheckpointStore,
+    runtime_factory=ContinuousOpportunityRuntime,
+) -> _QualificationResourceBundle:
+    audit: dict[str, object] = {
+        "capabilityCreated": False,
+        "capabilityReleaseAttempted": False,
+        "capabilityClosed": False,
+        "writerCreated": False,
+        "writerActivated": False,
+        "writerReleaseAttempted": False,
+        "writerClosed": False,
+        "checkpointStoreCreated": False,
+        "runtimeCreated": False,
+        "runtimeStartAttempted": False,
+        "runtimeStarted": False,
+        "runtimeShutdownAttempted": False,
+        "runtimeShutdownCompleted": False,
+    }
+    stack = ExitStack()
+    capability = create_ephemeral_writer_capability()
+    audit["capabilityCreated"] = True
+
+    def close_capability() -> None:
+        audit["capabilityReleaseAttempted"] = True
+        try:
+            capability.close()
+        finally:
+            audit["capabilityClosed"] = capability.closed
+
+    stack.callback(close_capability)
+    try:
+        writer = DedicatedEvidenceWriter(topology)
+        audit["writerCreated"] = True
+
+        def close_writer() -> None:
+            audit["writerReleaseAttempted"] = True
+            try:
+                writer.close()
+            finally:
+                audit["writerClosed"] = writer.closed
+
+        stack.callback(close_writer)
+        writer.activate_session(
+            capability=capability,
+            source_identity=runtime_id,
+        )
+        audit["writerActivated"] = True
+        client = AuthenticatedEvidenceWriterClient(
+            topology=topology,
+            capability=capability,
+            runtime_instance_id=runtime_id,
+            writer=writer,
+            maximum_ack_seconds=2.0,
+        )
+        checkpoints = checkpoint_store_factory(root / "checkpoint")
+        audit["checkpointStoreCreated"] = True
+        runtime = runtime_factory(
+            config=config,
+            runtime_instance_id=runtime_id,
+            discovery_source=discovery,
+            market_data_source=market,
+            event_source=events,
+            composition_source=composition,
+            denominator_source=denominator,
+            writer=client,
+            lease_registry=leases,
+            checkpoint_store=checkpoints,
+        )
+        audit["runtimeCreated"] = True
+        holder: dict[str, object] = {"runtime": runtime, "active": True}
+
+        def shutdown_runtime() -> None:
+            if holder.get("active") is not True:
+                return
+            audit["runtimeShutdownAttempted"] = True
+            try:
+                runtime_value = holder.get("runtime")
+                if runtime_value is not None:
+                    runtime_value.shutdown(_aware_now())
+                    audit["runtimeShutdownCompleted"] = True
+            except Exception as exc:
+                audit["runtimeShutdownError"] = type(exc).__name__
+            finally:
+                holder["active"] = False
+
+        stack.callback(shutdown_runtime)
+        bundle = _QualificationResourceBundle(
+            stack=stack,
+            capability=capability,
+            writer=writer,
+            client=client,
+            checkpoints=checkpoints,
+            runtime_holder=holder,
+            audit=audit,
+        )
+        audit["runtimeStartAttempted"] = True
+        runtime.start(launch_at)
+        audit["runtimeStarted"] = True
+        return bundle
+    except Exception:
+        try:
+            stack.close()
+        finally:
+            _write_once(
+                root / "resource-cleanup.json",
+                _canonical_bytes(_resource_cleanup_receipt(audit)),
+            )
+        raise
 
 
 def _canonical_bytes(value: object) -> bytes:
@@ -1334,34 +1533,23 @@ def run_live_qualification(
             _git_identity(worktree_root)["head"],
         ),
     )
-    capability = create_ephemeral_writer_capability()
-    writer = DedicatedEvidenceWriter(topology)
-    writer.activate_session(
-        capability=capability,
-        source_identity=runtime_id,
-    )
-    client = AuthenticatedEvidenceWriterClient(
-        topology=topology,
-        capability=capability,
-        runtime_instance_id=runtime_id,
-        writer=writer,
-        maximum_ack_seconds=2.0,
-    )
     leases = LogicalRuntimeLeaseRegistry()
-    checkpoints = RuntimeCheckpointStore(root / "checkpoint")
-    runtime = ContinuousOpportunityRuntime(
+    resources = _acquire_qualification_resources(
+        root=root,
+        topology=topology,
+        runtime_id=runtime_id,
         config=config,
-        runtime_instance_id=runtime_id,
-        discovery_source=discovery,
-        market_data_source=market,
-        event_source=events,
-        composition_source=composition,
-        denominator_source=denominator,
-        writer=client,
-        lease_registry=leases,
-        checkpoint_store=checkpoints,
+        discovery=discovery,
+        market=market,
+        events=events,
+        composition=composition,
+        denominator=denominator,
+        leases=leases,
+        launch_at=launch_at,
     )
-    runtime.start(launch_at)
+    runtime = resources.runtime
+    client = resources.client
+    checkpoints = resources.checkpoints
     restart_done = False
     started_monotonic = time.monotonic()
     deadline = started_monotonic + duration_seconds
@@ -1376,7 +1564,7 @@ def run_live_qualification(
                     topology,
                     reader_role=OFFLINE_REVIEW,
                 ).record_count
-                runtime.shutdown(now)
+                resources.shutdown_current(now)
                 runtime = ContinuousOpportunityRuntime.restore(
                     config=config,
                     runtime_instance_id=runtime_id,
@@ -1390,6 +1578,7 @@ def run_live_qualification(
                     lease_registry=leases,
                     checkpoint_store=checkpoints,
                 )
+                resources.replace_runtime(runtime)
                 restart_done = True
                 receipt = {
                     "restartedAt": _aware_now().isoformat(),
@@ -1410,7 +1599,7 @@ def run_live_qualification(
                 min(5.0, max(0.0, deadline - time.monotonic()))
             )
         final_now = _aware_now()
-        health = runtime.shutdown(final_now)
+        health = resources.shutdown_current(final_now)
         checkpoint = checkpoints.load(config.runtime_identity)
         runtime_bar_events = tuple(
             item
@@ -1520,8 +1709,13 @@ def run_live_qualification(
         )
         return summary
     finally:
-        writer.close()
-        capability.close()
+        try:
+            resources.close()
+        finally:
+            _write_once(
+                root / "resource-cleanup.json",
+                _canonical_bytes(_resource_cleanup_receipt(resources.audit)),
+            )
 
 
 def main(argv: list[str] | None = None) -> int:

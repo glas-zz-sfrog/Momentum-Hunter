@@ -10,14 +10,27 @@ import re
 import shutil
 import subprocess
 import tempfile
+import uuid
 import zipfile
 from dataclasses import asdict
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
-from momentum_hunter.continuous_live_qualification import run_live_qualification
+from momentum_hunter.continuous_evidence_writer import build_continuous_writer_topology_v2
+from momentum_hunter.continuous_live_qualification import (
+    _acquire_qualification_resources,
+    _resource_cleanup_receipt,
+    run_live_qualification,
+)
+from momentum_hunter.continuous_runtime import (
+    ContinuousOpportunityRuntime,
+    ContinuousRuntimeConfig,
+    LogicalRuntimeLeaseRegistry,
+    QueueCapacities,
+    RuntimeCadence,
+)
 from momentum_hunter.prospective_denominator import (
     ProspectiveDenominatorStore,
     build_activation_record,
@@ -25,7 +38,7 @@ from momentum_hunter.prospective_denominator import (
 )
 
 
-TASK_BRANCH = "codex/ARGUS-STAT-DATA-002A"
+TASK_BRANCH = "codex/ARGUS-STAT-DATA-002B"
 PRODUCTION_BASE = "23ee162373654e1db91af4c19f75bbc7887e3174"
 EASTERN = ZoneInfo("America/New_York")
 REGULAR_OPEN = time(9, 30)
@@ -71,6 +84,148 @@ def _write_once(path: Path, value: object) -> None:
         handle.write(content)
         handle.flush()
         os.fsync(handle.fileno())
+
+
+def _new_ephemeral_runtime_root() -> Path:
+    temporary_root = Path(tempfile.gettempdir()).resolve()
+    root = temporary_root / f"MomentumHunter-StatData002B-{uuid.uuid4().hex}"
+    if root.exists():
+        raise StatDataCanaryError("Ephemeral runtime root unexpectedly already exists.")
+    return root
+
+
+def _runtime_root_is_ephemeral(root: Path) -> bool:
+    try:
+        root.resolve().relative_to(Path(tempfile.gettempdir()).resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def _tree_identity(root: Path) -> list[dict[str, object]]:
+    return [
+        {
+            "path": path.relative_to(root).as_posix(),
+            "size": path.stat().st_size,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest().upper(),
+        }
+        for path in sorted(item for item in root.rglob("*") if item.is_file())
+    ]
+
+
+def _resource_release_proof(runtime_root: Path) -> dict[str, object]:
+    path = runtime_root / "resource-cleanup.json"
+    try:
+        receipt = json.loads(path.read_text(encoding="ascii"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise StatDataCanaryError(
+            "Runtime resource-cleanup evidence is unavailable."
+        ) from exc
+    fingerprint = receipt.get("fingerprint")
+    unsigned = dict(receipt)
+    unsigned.pop("fingerprint", None)
+    if fingerprint != _fingerprint(
+        "live-qualification-resource-cleanup-v1", unsigned
+    ):
+        raise StatDataCanaryError(
+            "Runtime resource-cleanup evidence fingerprint is invalid."
+        )
+    required = (
+        receipt.get("status") == "PASS"
+        and receipt.get("writerReleaseSatisfied") is True
+        and receipt.get("capabilityReleaseSatisfied") is True
+        and receipt.get("runtimeShutdownSatisfied") is True
+    )
+    if not required:
+        raise StatDataCanaryError(
+            "Runtime resources were not proven released before forensic export."
+        )
+    return receipt
+
+
+def _export_ephemeral_runtime(
+    *,
+    runtime_root: Path,
+    evidence_root: Path,
+    export_name: str = "natural-runtime-forensic",
+) -> dict[str, object]:
+    if not _runtime_root_is_ephemeral(runtime_root):
+        raise StatDataCanaryError("Runtime root is not beneath the canonical temp root.")
+    if not runtime_root.is_dir():
+        raise StatDataCanaryError("Ephemeral runtime root is unavailable for export.")
+    cleanup = _resource_release_proof(runtime_root)
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", export_name):
+        raise StatDataCanaryError("Forensic export name is invalid.")
+    export_root = evidence_root / export_name
+    payload_root = export_root / "payload"
+    if export_root.exists():
+        raise StatDataCanaryError("Durable runtime forensic export must be new.")
+    source_identity = _tree_identity(runtime_root)
+    export_root.mkdir(parents=True)
+    shutil.copytree(runtime_root, payload_root)
+    destination_identity = _tree_identity(payload_root)
+    source_fingerprint = _fingerprint("ephemeral-runtime-tree-v1", source_identity)
+    destination_fingerprint = _fingerprint(
+        "ephemeral-runtime-tree-v1", destination_identity
+    )
+    verified = source_identity == destination_identity
+    _write_once(
+        export_root / "source-manifest.json",
+        {
+            "root": str(runtime_root),
+            "files": source_identity,
+            "fingerprint": source_fingerprint,
+        },
+    )
+    _write_once(
+        export_root / "destination-manifest.json",
+        {
+            "root": "payload",
+            "files": destination_identity,
+            "fingerprint": destination_fingerprint,
+        },
+    )
+    marker = {
+        "classification": "FORENSIC_COPY_ONLY",
+        "runtimeAuthority": False,
+        "restoreOrResumeAuthorized": False,
+        "sourceRootWasTemporary": True,
+        "resourceCleanupStatus": cleanup.get("status"),
+    }
+    marker["fingerprint"] = _fingerprint("forensic-runtime-copy-v1", marker)
+    _write_once(export_root / "FORENSIC_COPY_ONLY.json", marker)
+    if not verified or source_fingerprint != destination_fingerprint:
+        raise StatDataCanaryError("Ephemeral runtime forensic export verification failed.")
+    retirement_error: str | None = None
+    try:
+        shutil.rmtree(runtime_root)
+    except OSError as exc:
+        retirement_error = type(exc).__name__
+    retired = not runtime_root.exists()
+    receipt: dict[str, object] = {
+        "status": "PASS" if retired else "FAIL",
+        "sourceRoot": str(runtime_root),
+        "destinationRoot": str(export_root),
+        "sourceFileCount": len(source_identity),
+        "destinationFileCount": len(destination_identity),
+        "sourceFingerprint": source_fingerprint,
+        "destinationFingerprint": destination_fingerprint,
+        "hashManifestVerified": verified,
+        "resourceCleanupStatus": cleanup.get("status"),
+        "writerClosed": cleanup.get("writerClosed"),
+        "capabilityClosed": cleanup.get("capabilityClosed"),
+        "runtimeShutdownSatisfied": cleanup.get("runtimeShutdownSatisfied"),
+        "forensicCopyOnly": True,
+        "runtimeAuthority": False,
+        "sourceRetired": retired,
+        "sourceRetirementError": retirement_error,
+        "exportedAt": datetime.now().astimezone().isoformat(),
+    }
+    receipt["fingerprint"] = _fingerprint(
+        "ephemeral-runtime-forensic-export-v1", receipt
+    )
+    _write_once(evidence_root / "ephemeral-runtime-export.json", receipt)
+    return receipt
 
 
 def _git(root: Path, *arguments: str) -> str:
@@ -123,7 +278,7 @@ def _configuration(
         )
     payload: dict[str, object] = {
         "schemaVersion": 1,
-        "task": "ARGUS-STAT-DATA-002A",
+        "task": "ARGUS-STAT-DATA-002B",
         "taskGit": task,
         "productionGit": production,
         "sessionDate": session_date,
@@ -205,6 +360,9 @@ def execute(
     failure_stage = "LOAD_CONFIGURATION"
     activation = None
     summary: dict[str, object] | None = None
+    runtime_root: Path | None = None
+    forensic_export: dict[str, object] | None = None
+    forensic_export_error: dict[str, str] | None = None
     try:
         configuration = json.loads(
             (evidence_root / "configuration.json").read_text(encoding="ascii")
@@ -224,15 +382,47 @@ def execute(
         regular_session_started = _assert_regular_session()
         failure_stage = "RUN_NATURAL_PROVIDER_PATH"
         provider_contact_attempted = True
-        summary = run_live_qualification(
-            generation_root=evidence_root / "natural-runtime",
-            canonical_root=task_root,
-            expected_account_ending=expected_account_ending,
-            duration_seconds=int(configuration["durationSeconds"]),
-            discovery_cadence_seconds=int(configuration["discoveryCadenceSeconds"]),
-            prospective_activation=activation,
-            prospective_root=evidence_root / "prospective-denominator",
-        )
+        runtime_root = _new_ephemeral_runtime_root()
+        provider_error: Exception | None = None
+        try:
+            summary = run_live_qualification(
+                generation_root=runtime_root,
+                canonical_root=task_root,
+                expected_account_ending=expected_account_ending,
+                duration_seconds=int(configuration["durationSeconds"]),
+                discovery_cadence_seconds=int(configuration["discoveryCadenceSeconds"]),
+                prospective_activation=activation,
+                prospective_root=evidence_root / "prospective-denominator",
+            )
+        except Exception as exc:
+            provider_error = exc
+        failure_stage = "EXPORT_EPHEMERAL_RUNTIME"
+        try:
+            forensic_export = _export_ephemeral_runtime(
+                runtime_root=runtime_root,
+                evidence_root=evidence_root,
+            )
+            if forensic_export.get("status") != "PASS":
+                forensic_export_error = {
+                    "exceptionClass": "StatDataCanaryError",
+                    "exceptionMessage": "Ephemeral runtime root could not be retired.",
+                }
+                if provider_error is None:
+                    raise StatDataCanaryError(
+                        "Ephemeral runtime root could not be retired."
+                    )
+        except Exception as exc:
+            forensic_export_error = {
+                "exceptionClass": type(exc).__name__,
+                "exceptionMessage": _sanitized_message(
+                    str(exc), expected_account_ending
+                ),
+            }
+            if provider_error is None:
+                raise
+        if provider_error is not None:
+            failure_stage = "RUN_NATURAL_PROVIDER_PATH"
+            raise provider_error
         terminal: dict[str, object] = {
             "status": "PASS" if summary.get("status") == "PASS" else "FAIL",
             "startedAt": started,
@@ -287,6 +477,12 @@ def execute(
             "providerContactAttempted": provider_contact_attempted,
             "providerContact": bool(provider_evidence),
             "providerContactEvidence": provider_evidence,
+            "ephemeralRuntimeRoot": str(runtime_root) if runtime_root else None,
+            "ephemeralRuntimeUnderTemp": (
+                _runtime_root_is_ephemeral(runtime_root) if runtime_root else None
+            ),
+            "forensicRuntimeExport": forensic_export,
+            "forensicRuntimeExportError": forensic_export_error,
             "prospectiveSummary": prospective_summary,
             "prospectiveSummaryError": prospective_summary_error,
             "authority": AUTHORITY,
@@ -303,7 +499,13 @@ def execute(
 
 
 def _provider_contact_evidence(evidence_root: Path) -> list[str]:
-    source_root = evidence_root / "natural-runtime" / "runtime-artifacts" / "source-evidence"
+    source_root = (
+        evidence_root
+        / "natural-runtime-forensic"
+        / "payload"
+        / "runtime-artifacts"
+        / "source-evidence"
+    )
     if not source_root.exists():
         return []
     return [
@@ -362,6 +564,22 @@ def package(
     evidence_root: Path,
     python_executable: Path,
 ) -> dict[str, object]:
+    terminal = json.loads(
+        (evidence_root / "terminal-result.json").read_text(encoding="ascii")
+    )
+    if terminal.get("providerContactAttempted") is True:
+        export = terminal.get("forensicRuntimeExport")
+        if not isinstance(export, dict) or (
+            export.get("hashManifestVerified") is not True
+            or export.get("resourceCleanupStatus") != "PASS"
+        ):
+            raise StatDataCanaryError(
+                "Packaging cannot begin before verified runtime export and release."
+            )
+        if export.get("writerClosed") is not True or export.get("capabilityClosed") is not True:
+            raise StatDataCanaryError(
+                "Packaging cannot begin while writer resources may remain active."
+            )
     stage = evidence_root.parent / f"{evidence_root.name}-SECOND-EYE-STAGE"
     zip_path = evidence_root.parent / f"{evidence_root.name}-SECOND-EYE.zip"
     if stage.exists() or zip_path.exists():
@@ -386,7 +604,7 @@ def package(
     docs_root = stage / "docs"
     docs_root.mkdir()
     for source in (
-        task_root / "docs" / "argus-office" / "goal-charters" / "ARGUS-STAT-DATA-002A.md",
+        task_root / "docs" / "argus-office" / "goal-charters" / "ARGUS-STAT-DATA-002B.md",
         task_root / "docs" / "research" / "stat-data-002-prospective-activation-v2.md",
     ):
         shutil.copy2(source, docs_root / source.name)
@@ -398,7 +616,7 @@ def package(
     if scan["status"] != "PASS":
         raise StatDataCanaryError("Sanitization failed; unsafe ZIP was not emitted.")
     index = (
-        "# ARGUS-STAT-DATA-002A Second-Eye Packet\n\n"
+        "# ARGUS-STAT-DATA-002B Second-Eye Packet\n\n"
         "- `evidence/`: immutable terminal canary evidence and denominator records.\n"
         "- `source/momentum_hunter/`: complete Python Product package for dependency closure.\n"
         "- `source/tests/`: focused tests plus required fixtures.\n"
@@ -570,6 +788,128 @@ def _assert_regular_session(now: datetime | None = None) -> str:
     return eastern.isoformat()
 
 
+def _offline_runtime_rehearsal(evidence_root: Path) -> dict[str, object]:
+    started = datetime.now().astimezone()
+    config = ContinuousRuntimeConfig(
+        runtime_identity="stat-data-002b-offline-runtime",
+        session_date=started.astimezone(EASTERN).date().isoformat(),
+        cadence=RuntimeCadence(
+            broad_discovery_seconds=300,
+            housekeeping_seconds=30,
+            discovery_stale_seconds=600,
+            composition_stale_seconds=180,
+        ),
+        queues=QueueCapacities(),
+        lease_ttl_seconds=30,
+        shutdown_timeout_seconds=2,
+    )
+    sources = {
+        "discovery": object(),
+        "market": object(),
+        "events": object(),
+        "composition": object(),
+        "denominator": object(),
+    }
+
+    runtime_root = _new_ephemeral_runtime_root()
+    runtime_root.mkdir(parents=True)
+    topology = build_continuous_writer_topology_v2(
+        root_path=runtime_root / "writer",
+        evidence_program_id="stat-data-002b-offline-rehearsal",
+        configuration_fingerprint=config.fingerprint,
+        runtime_build_hash="b" * 64,
+    )
+    leases = LogicalRuntimeLeaseRegistry()
+    resources = _acquire_qualification_resources(
+        root=runtime_root,
+        topology=topology,
+        runtime_id="stat-data-002b-offline-instance",
+        config=config,
+        leases=leases,
+        launch_at=started,
+        **sources,
+    )
+    try:
+        resources.shutdown_current(started + timedelta(seconds=1))
+        restored = ContinuousOpportunityRuntime.restore(
+            config=config,
+            runtime_instance_id="stat-data-002b-offline-instance",
+            now=started + timedelta(seconds=2),
+            discovery_source=sources["discovery"],
+            market_data_source=sources["market"],
+            event_source=sources["events"],
+            composition_source=sources["composition"],
+            denominator_source=sources["denominator"],
+            writer=resources.client,
+            lease_registry=leases,
+            checkpoint_store=resources.checkpoints,
+        )
+        resources.replace_runtime(restored)
+        resources.shutdown_current(started + timedelta(seconds=3))
+    finally:
+        resources.close()
+        _write_once(
+            runtime_root / "resource-cleanup.json",
+            _resource_cleanup_receipt(resources.audit),
+        )
+    successful_export = _export_ephemeral_runtime(
+        runtime_root=runtime_root,
+        evidence_root=evidence_root,
+        export_name="offline-runtime-forensic",
+    )
+
+    failure_root = _new_ephemeral_runtime_root()
+    failure_root.mkdir(parents=True)
+    failure_topology = build_continuous_writer_topology_v2(
+        root_path=failure_root / "writer",
+        evidence_program_id="stat-data-002b-offline-init-failure",
+        configuration_fingerprint=config.fingerprint,
+        runtime_build_hash="c" * 64,
+    )
+
+    def fail_checkpoint(_root: Path):
+        raise RuntimeError("injected checkpoint initialization failure")
+
+    failure_class = None
+    try:
+        _acquire_qualification_resources(
+            root=failure_root,
+            topology=failure_topology,
+            runtime_id="stat-data-002b-offline-failure-instance",
+            config=config,
+            leases=LogicalRuntimeLeaseRegistry(),
+            launch_at=started,
+            checkpoint_store_factory=fail_checkpoint,
+            **sources,
+        )
+    except RuntimeError as exc:
+        failure_class = type(exc).__name__
+    failure_export = _export_ephemeral_runtime(
+        runtime_root=failure_root,
+        evidence_root=evidence_root,
+        export_name="offline-init-failure-forensic",
+    )
+    result: dict[str, object] = {
+        "status": (
+            "PASS"
+            if successful_export["status"] == "PASS"
+            and failure_export["status"] == "PASS"
+            and failure_class == "RuntimeError"
+            else "FAIL"
+        ),
+        "runtimeCheckpointUnderTemp": True,
+        "restartRestoreExercised": True,
+        "normalResourceCleanup": successful_export,
+        "initializationFailureClass": failure_class,
+        "initializationFailureCleanup": failure_export,
+        "durableCheckpointAuthorityCreated": False,
+        "forensicCopiesUsedAsRuntimeAuthority": False,
+    }
+    result["fingerprint"] = _fingerprint("stat-data-002b-offline-rehearsal-v1", result)
+    _write_once(evidence_root / "offline-runtime-rehearsal.json", result)
+    return result
+
+
 def rehearse(
     *,
     task_root: Path,
@@ -594,6 +934,7 @@ def rehearse(
         evidence_root / "prospective-denominator",
         activation=activation,
     )
+    runtime_rehearsal = _offline_runtime_rehearsal(evidence_root)
     preserved_payload = json.loads(preserved_failed_activation.read_text(encoding="ascii"))[
         "payload"
     ]
@@ -631,6 +972,7 @@ def rehearse(
     status = (
         "PASS"
         if preserved_proof["status"] == "PASS"
+        and runtime_rehearsal["status"] == "PASS"
         and terminal["status"] == "FAIL"
         and terminal["failureStage"] == "VALIDATE_MARKET_DATA_IDENTITY"
         and terminal["providerContact"] is False
@@ -645,6 +987,7 @@ def rehearse(
         "terminal": terminal,
         "verification": verification,
         "preservedActivationReload": preserved_proof,
+        "runtimeRehearsal": runtime_rehearsal,
         "package": package_result,
     }
 
