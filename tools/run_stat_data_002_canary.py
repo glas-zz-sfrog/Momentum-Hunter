@@ -224,7 +224,12 @@ def _export_ephemeral_runtime(
     receipt["fingerprint"] = _fingerprint(
         "ephemeral-runtime-forensic-export-v1", receipt
     )
-    _write_once(evidence_root / "ephemeral-runtime-export.json", receipt)
+    receipt_name = (
+        "ephemeral-runtime-export.json"
+        if export_name == "natural-runtime-forensic"
+        else f"{export_name}-export.json"
+    )
+    _write_once(evidence_root / receipt_name, receipt)
     return receipt
 
 

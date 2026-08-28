@@ -163,6 +163,22 @@ class StatData002CanaryTests(unittest.TestCase):
         self.assertEqual("FORENSIC_COPY_ONLY", marker["classification"])
         self.assertFalse(marker["runtimeAuthority"])
 
+    def test_named_exports_use_distinct_write_once_receipts(self) -> None:
+        evidence = self.root / "named-exports"
+        evidence.mkdir()
+        for name in ("offline-runtime-forensic", "offline-init-failure-forensic"):
+            runtime = canary._new_ephemeral_runtime_root()
+            runtime.mkdir(parents=True)
+            (runtime / "state.json").write_text("{}\n", encoding="ascii")
+            self.write_resource_cleanup(runtime)
+            receipt = canary._export_ephemeral_runtime(
+                runtime_root=runtime,
+                evidence_root=evidence,
+                export_name=name,
+            )
+            self.assertEqual("PASS", receipt["status"])
+            self.assertTrue((evidence / f"{name}-export.json").is_file())
+
     def test_durable_runtime_root_remains_rejected(self) -> None:
         self.assertFalse(
             canary._runtime_root_is_ephemeral(
