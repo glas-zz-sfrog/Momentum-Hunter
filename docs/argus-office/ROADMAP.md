@@ -163,6 +163,31 @@ members, and zero outcomes. The failed evidence and sanitized second-eye ZIP
 are preserved for independent review. No rerun, repair, merge, deployment,
 Paper, Shadow, broker, account, position, or order authority is granted.
 
+`ARGUS-STAT-DATA-002A` is `LIVE_CANARY_FAILED /
+SECOND_EYE_REVIEW_REQUIRED / IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY` on
+branch `codex/ARGUS-STAT-DATA-002A` at implementation head
+`415a3e2e5432420bde2ffee9ada0a28c2e55c65f`. The repaired activation loader
+normalizes the exact JSON population array to the canonical tuple before
+strict validation while preserving order, membership, activation identity,
+and fingerprint. Every post-prepare failure now produces a truthful terminal
+record and continues to the mandatory package path. Two complete approved-
+environment discoveries pass 2,851 and final 2,852 tests with one expected
+Windows skip; the corrected offline exact-path rehearsal reports zero members,
+no provider contact, preserved failed-activation identity, clean sanitation,
+and passing pre-ZIP/extracted-ZIP verification.
+
+The single August 28 provider canary then failed before provider contact at the
+natural runtime boundary because the wrapper supplied a durable checkpoint
+root while the canonical runtime requires its checkpoint root to remain under
+the temporary directory. The failure is preserved as
+`RuntimeCheckpointError`; provider contact is false, natural prospective
+members remain zero, and the canary was not rerun. Its mandatory sanitized
+second-eye ZIP has 237 files, 236 manifest entries, passing pre-ZIP and
+extracted-ZIP verification, and SHA-256
+`6ADE90F1B88B6EB20D1CD005FCCBD592AA08557376A103E9F8AEC39FFC5B96FC`.
+No merge, deployment, Paper, Shadow, broker, account, position, or order action
+is authorized pending independent review.
+
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
 `d1a6e14ae3bec1a565a2eb07b47a3b1491356b16` moves the existing catalyst
@@ -335,7 +360,7 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Independently review the terminal failed `ARGUS-STAT-DATA-002` second-eye packet.
+Independently review the terminal failed `ARGUS-STAT-DATA-002A` second-eye packet.
 Do not repair or rerun the canary, merge, deploy, start instrument-classification
 implementation, or resume Continuous Paper until that review returns an
 explicit decision.
@@ -410,15 +435,16 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-STAT-DATA-002` is frozen after its first bounded regular-session
-   canary failed before provider contact at activation reload validation. The
-   sanitized terminal packet awaits independent second-eye review.
+1. `ARGUS-STAT-DATA-002A` is frozen after its single bounded regular-session
+   canary failed before provider contact at the natural runtime checkpoint-root
+   boundary. The sanitized terminal packet awaits independent second-eye review.
 
 ### 2. Ready / Next
 
-1. Review the `ARGUS-STAT-DATA-002` sanitized self-contained failed-canary ZIP;
+1. Review the `ARGUS-STAT-DATA-002A` sanitized self-contained failed-canary ZIP;
    do not repair or rerun before the review decision.
-2. Preserve the empty prospective sample and failed activation evidence exactly.
+2. Preserve both failed canaries, the empty prospective samples, and all failed
+   activation/terminal evidence exactly.
 3. Preserve the accepted Producer V4 packet and original 001D evidence.
 4. Close authoritative instrument subtype/leverage classification before any
    Continuous Paper arming; unknown and leveraged/inverse products remain
@@ -449,8 +475,9 @@ next-action language preserved elsewhere cannot supersede this queue.
    successful physical exact-path acceptance, authoritative instrument
    classification, canonical reconciliation, complete requalification, and
    disabled-install proof.
-3. `ARGUS-STAT-DATA-002`: merge and downstream activation are blocked until its
-   terminal natural provider canary is packaged and independently accepted.
+3. `ARGUS-STAT-DATA-002A`: merge and downstream activation are blocked until its
+   terminal failed canary packet is independently adjudicated and a separate
+   repair/rerun directive is authorized.
 4. R034: blocked on explicit destructive approval.
 5. Continuous/live order authority: blocked on separate Paper, safety,
    account/broker, prospective-evidence, and Steven decision gates.
@@ -3492,6 +3519,32 @@ Intended specialist architecture:
   verification at SHA-256
   `951F49D219E9842D286E10F09C5C28C51B267A5FD584929A58630E617E27508B`.
   Preserve it and stop for independent review; no repair or rerun is authorized.
+
+#### ARGUS-STAT-DATA-002A - JSON Round-Trip And Terminalization Repair
+
+- Status: `LIVE_CANARY_FAILED / SECOND_EYE_REVIEW_REQUIRED /
+  IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY` on branch
+  `codex/ARGUS-STAT-DATA-002A`; merge remains unauthorized.
+- Exact JSON arrays now normalize to the canonical population tuple before the
+  existing strict validator runs. Reorder, missing, extra, duplicate,
+  non-string, and malformed values still fail closed. The original failed
+  activation reloads with unchanged activation ID and fingerprint.
+- Every failure after preparation now records its exact stage, exception,
+  provider-attempt versus observed-contact state, and prospective accounting,
+  then follows the mandatory package path. Empty initialized stores report
+  explicit zero counts; summary failure is preserved without suppressing the
+  terminal record.
+- Focused verification passes 90/90; compileall, diff, secret, capability, and
+  protected-path checks pass. Final full approved-environment discovery passes
+  2,852/2,852 with one expected Windows skip. The corrected offline rehearsal
+  and its extracted self-contained packet both pass.
+- The one authorized live canary failed before provider contact because
+  `continuous_live_qualification` requires its checkpoint root under `%TEMP%`,
+  but the canary wrapper passed its durable evidence root. No natural members
+  or outcomes were created and no rerun occurred. The mandatory packet passes
+  sanitation, manifest, pre-ZIP, and extracted-ZIP verification at SHA-256
+  `6ADE90F1B88B6EB20D1CD005FCCBD592AA08557376A103E9F8AEC39FFC5B96FC`.
+  Preserve the failed run and stop for independent review.
 
 #### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
 
