@@ -39,6 +39,7 @@ from momentum_hunter.prospective_denominator import (
     HISTORICAL_CONTEXT_ONLY,
     HOT_UNIVERSE,
     NO_PLAN,
+    POPULATIONS,
     PROVIDER_BOUND,
     READY,
     SUCCESSOR_SETUP,
@@ -46,6 +47,7 @@ from momentum_hunter.prospective_denominator import (
     ProspectiveDenominatorError,
     ProspectiveDenominatorStore,
     build_activation_record,
+    load_activation_record,
 )
 from tests import test_continuous_composition as composition_fixture
 from tests.test_continuous_denominator import (
@@ -97,6 +99,59 @@ class ProspectiveDenominatorTests(unittest.TestCase):
             cutoff=composition_fixture.at(11, 21 + minute),
         )
         return active_result(snapshot, universe, cycle, self.activation)
+
+    def write_activation_envelope(
+        self,
+        path: Path,
+        *,
+        population_definitions: object = POPULATIONS,
+    ) -> None:
+        payload = asdict(self.activation)
+        payload["population_definitions"] = population_definitions
+        path.write_text(
+            json.dumps(
+                {
+                    "recordType": "STAT_DATA_002_ACTIVATION",
+                    "payload": payload,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="ascii",
+        )
+
+    def test_activation_json_round_trip_preserves_semantics_and_identity(self) -> None:
+        path = self.root / "activation.json"
+        self.write_activation_envelope(path)
+
+        loaded = load_activation_record(path)
+
+        self.assertEqual(self.activation, loaded)
+        self.assertIsInstance(loaded.population_definitions, tuple)
+        self.assertEqual(POPULATIONS, loaded.population_definitions)
+        self.assertEqual(self.activation.activation_id, loaded.activation_id)
+        self.assertEqual(self.activation.fingerprint, loaded.fingerprint)
+
+    def test_activation_population_json_drift_fails_closed(self) -> None:
+        invalid = {
+            "reordered": [POPULATIONS[1], POPULATIONS[0], *POPULATIONS[2:]],
+            "missing": list(POPULATIONS[:-1]),
+            "extra": [*POPULATIONS, "UNAPPROVED"],
+            "duplicate": [*POPULATIONS, POPULATIONS[-1]],
+            "non-string": [*POPULATIONS[:-1], 7],
+            "string-not-array": ",".join(POPULATIONS),
+            "mapping-not-array": {"values": list(POPULATIONS)},
+        }
+        for name, populations in invalid.items():
+            with self.subTest(name=name):
+                path = self.root / f"activation-{name}.json"
+                self.write_activation_envelope(
+                    path,
+                    population_definitions=populations,
+                )
+                with self.assertRaises(ProspectiveDenominatorError):
+                    load_activation_record(path)
 
     def planned_result(self):
         snapshot = paginated_snapshot(1, {1}, symbols={1: "AAA"})

@@ -373,6 +373,15 @@ def validate_activation(record: ProspectiveActivationRecord) -> None:
 
 def load_activation_record(path: Path) -> ProspectiveActivationRecord:
     payload = _load_envelope(path, "STAT_DATA_002_ACTIVATION")
+    populations = payload.get("population_definitions")
+    if not isinstance(populations, list) or not all(
+        isinstance(item, str) for item in populations
+    ):
+        raise ProspectiveDenominatorError(
+            "Activation population definitions are malformed."
+        )
+    payload = dict(payload)
+    payload["population_definitions"] = tuple(populations)
     try:
         record = ProspectiveActivationRecord(**payload)
     except TypeError as exc:

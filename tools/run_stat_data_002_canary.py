@@ -25,7 +25,7 @@ from momentum_hunter.prospective_denominator import (
 )
 
 
-TASK_BRANCH = "codex/ARGUS-STAT-DATA-002"
+TASK_BRANCH = "codex/ARGUS-STAT-DATA-002A"
 PRODUCTION_BASE = "23ee162373654e1db91af4c19f75bbc7887e3174"
 EASTERN = ZoneInfo("America/New_York")
 REGULAR_OPEN = time(9, 30)
@@ -123,7 +123,7 @@ def _configuration(
         )
     payload: dict[str, object] = {
         "schemaVersion": 1,
-        "task": "ARGUS-STAT-DATA-002",
+        "task": "ARGUS-STAT-DATA-002A",
         "taskGit": task,
         "productionGit": production,
         "sessionDate": session_date,
@@ -199,16 +199,30 @@ def execute(
     evidence_root: Path,
     expected_account_ending: str,
 ) -> dict[str, object]:
-    configuration = json.loads((evidence_root / "configuration.json").read_text(encoding="ascii"))
-    activation = load_activation_record(evidence_root / "activation.json")
-    if _git_identity(task_root) != configuration["taskGit"]:
-        raise StatDataCanaryError("Task source changed after activation.")
-    if _git_identity(production_root) != configuration["productionGit"]:
-        raise StatDataCanaryError("Canonical production changed after activation.")
-    if len(expected_account_ending) != 4 or not expected_account_ending.isdigit():
-        raise StatDataCanaryError("Expected market-data identity ending is invalid.")
-    started = _assert_regular_session()
+    started = datetime.now().astimezone().isoformat()
+    regular_session_started: str | None = None
+    provider_contact_attempted = False
+    failure_stage = "LOAD_CONFIGURATION"
+    summary: dict[str, object] | None = None
     try:
+        configuration = json.loads(
+            (evidence_root / "configuration.json").read_text(encoding="ascii")
+        )
+        failure_stage = "LOAD_ACTIVATION"
+        activation = load_activation_record(evidence_root / "activation.json")
+        failure_stage = "VERIFY_TASK_IDENTITY"
+        if _git_identity(task_root) != configuration["taskGit"]:
+            raise StatDataCanaryError("Task source changed after activation.")
+        failure_stage = "VERIFY_PRODUCTION_IDENTITY"
+        if _git_identity(production_root) != configuration["productionGit"]:
+            raise StatDataCanaryError("Canonical production changed after activation.")
+        failure_stage = "VALIDATE_MARKET_DATA_IDENTITY"
+        if len(expected_account_ending) != 4 or not expected_account_ending.isdigit():
+            raise StatDataCanaryError("Expected market-data identity ending is invalid.")
+        failure_stage = "ASSERT_MARKET_WINDOW"
+        regular_session_started = _assert_regular_session()
+        failure_stage = "RUN_NATURAL_PROVIDER_PATH"
+        provider_contact_attempted = True
         summary = run_live_qualification(
             generation_root=evidence_root / "natural-runtime",
             canonical_root=task_root,
@@ -221,8 +235,10 @@ def execute(
         terminal: dict[str, object] = {
             "status": "PASS" if summary.get("status") == "PASS" else "FAIL",
             "startedAt": started,
+            "regularSessionStartedAt": regular_session_started,
             "completedAt": datetime.now().astimezone().isoformat(),
             "qualificationSummary": summary,
+            "failureStage": None,
             "exceptionClass": None,
             "exceptionMessage": None,
         }
@@ -230,13 +246,25 @@ def execute(
         terminal = {
             "status": "FAIL",
             "startedAt": started,
+            "regularSessionStartedAt": regular_session_started,
             "completedAt": datetime.now().astimezone().isoformat(),
             "qualificationSummary": None,
+            "failureStage": failure_stage,
             "exceptionClass": type(exc).__name__,
             "exceptionMessage": _sanitized_message(str(exc), expected_account_ending),
         }
+    provider_evidence = _provider_contact_evidence(evidence_root)
+    prospective_summary = (
+        summary.get("prospectiveDenominator") if summary is not None else None
+    )
+    if prospective_summary is None and not (evidence_root / "prospective-denominator").exists():
+        prospective_summary = _zero_prospective_summary()
     terminal.update(
         {
+            "providerContactAttempted": provider_contact_attempted,
+            "providerContact": bool(provider_evidence),
+            "providerContactEvidence": provider_evidence,
+            "prospectiveSummary": prospective_summary,
             "authority": AUTHORITY,
             "executionAuthority": EXECUTION_AUTHORITY,
             "accountValuesRequested": False,
@@ -248,6 +276,27 @@ def execute(
     terminal["fingerprint"] = _fingerprint("stat-data-002-terminal-v1", terminal)
     _write_once(evidence_root / "terminal-result.json", terminal)
     return terminal
+
+
+def _provider_contact_evidence(evidence_root: Path) -> list[str]:
+    source_root = evidence_root / "natural-runtime" / "runtime-artifacts" / "source-evidence"
+    if not source_root.exists():
+        return []
+    return [
+        path.relative_to(evidence_root).as_posix()
+        for path in sorted(item for item in source_root.rglob("*") if item.is_file())
+    ]
+
+
+def _zero_prospective_summary() -> dict[str, object]:
+    return {
+        "prospective_observations_seen": 0,
+        "unique_prospective_members": 0,
+        "duplicate_observations_suppressed": 0,
+        "outcome_complete_members": 0,
+        "outcome_pending_members": 0,
+        "population_counts": {},
+    }
 
 
 def verify(evidence_root: Path) -> dict[str, object]:
@@ -313,7 +362,7 @@ def package(
     docs_root = stage / "docs"
     docs_root.mkdir()
     for source in (
-        task_root / "docs" / "argus-office" / "goal-charters" / "ARGUS-STAT-DATA-002.md",
+        task_root / "docs" / "argus-office" / "goal-charters" / "ARGUS-STAT-DATA-002A.md",
         task_root / "docs" / "research" / "stat-data-002-prospective-activation-v2.md",
     ):
         shutil.copy2(source, docs_root / source.name)
@@ -325,7 +374,7 @@ def package(
     if scan["status"] != "PASS":
         raise StatDataCanaryError("Sanitization failed; unsafe ZIP was not emitted.")
     index = (
-        "# ARGUS-STAT-DATA-002 Second-Eye Packet\n\n"
+        "# ARGUS-STAT-DATA-002A Second-Eye Packet\n\n"
         "- `evidence/`: immutable terminal canary evidence and denominator records.\n"
         "- `source/momentum_hunter/`: complete Python Product package for dependency closure.\n"
         "- `source/tests/`: focused tests plus required fixtures.\n"
@@ -462,7 +511,9 @@ def _secret_scan(root: Path) -> dict[str, object]:
 
 
 def _sanitized_message(message: str, expected_ending: str) -> str:
-    value = str(message).replace(expected_ending, "<REDACTED_ENDING>")
+    value = str(message)
+    if expected_ending:
+        value = value.replace(expected_ending, "<REDACTED_ENDING>")
     value = re.sub(r"\bPK[A-Z0-9]{18,}\b", "<REDACTED_KEY>", value)
     value = re.sub(
         r"\b(Bearer)\s+[A-Za-z0-9._~-]{16,}",
@@ -495,9 +546,91 @@ def _assert_regular_session(now: datetime | None = None) -> str:
     return eastern.isoformat()
 
 
+def rehearse(
+    *,
+    task_root: Path,
+    production_root: Path,
+    evidence_root: Path,
+    session_date: str,
+    duration_seconds: int,
+    discovery_cadence_seconds: int,
+    python_executable: Path,
+    preserved_failed_activation: Path,
+) -> dict[str, object]:
+    prepare(
+        task_root=task_root,
+        production_root=production_root,
+        evidence_root=evidence_root,
+        session_date=session_date,
+        duration_seconds=duration_seconds,
+        discovery_cadence_seconds=discovery_cadence_seconds,
+    )
+    activation = load_activation_record(evidence_root / "activation.json")
+    ProspectiveDenominatorStore(
+        evidence_root / "prospective-denominator",
+        activation=activation,
+    )
+    preserved_payload = json.loads(preserved_failed_activation.read_text(encoding="ascii"))[
+        "payload"
+    ]
+    preserved = load_activation_record(preserved_failed_activation)
+    preserved_proof = {
+        "status": "PASS",
+        "sourcePath": str(preserved_failed_activation),
+        "activationIdPreserved": preserved.activation_id
+        == preserved_payload["activation_id"],
+        "activationFingerprintPreserved": preserved.fingerprint
+        == preserved_payload["fingerprint"],
+        "populationDefinitionsCanonicalTuple": isinstance(
+            preserved.population_definitions, tuple
+        ),
+    }
+    if not all(
+        value is True
+        for key, value in preserved_proof.items()
+        if key not in {"status", "sourcePath"}
+    ):
+        preserved_proof["status"] = "FAIL"
+    _write_once(evidence_root / "preserved-activation-reload-proof.json", preserved_proof)
+    terminal = execute(
+        task_root=task_root,
+        production_root=production_root,
+        evidence_root=evidence_root,
+        expected_account_ending="",
+    )
+    verification = verify(evidence_root)
+    package_result = package(
+        task_root=task_root,
+        evidence_root=evidence_root,
+        python_executable=python_executable,
+    )
+    status = (
+        "PASS"
+        if preserved_proof["status"] == "PASS"
+        and terminal["status"] == "FAIL"
+        and terminal["failureStage"] == "VALIDATE_MARKET_DATA_IDENTITY"
+        and terminal["providerContact"] is False
+        and verification["status"] == "FAIL"
+        and package_result["status"] == "PASS"
+        else "FAIL"
+    )
+    return {
+        "status": status,
+        "activationId": activation.activation_id,
+        "activationFingerprint": activation.fingerprint,
+        "terminal": terminal,
+        "verification": verification,
+        "preservedActivationReload": preserved_proof,
+        "package": package_result,
+    }
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("prepare", "execute", "verify", "package", "run-all"))
+    parser.add_argument(
+        "action",
+        choices=("prepare", "execute", "verify", "package", "run-all", "rehearse"),
+    )
     parser.add_argument("--task-root", type=Path, required=True)
     parser.add_argument("--production-root", type=Path, required=True)
     parser.add_argument("--evidence-root", type=Path, required=True)
@@ -505,7 +638,25 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--duration-seconds", type=int, default=1800)
     parser.add_argument("--discovery-cadence-seconds", type=int, default=300)
     parser.add_argument("--python-executable", type=Path, required=True)
+    parser.add_argument("--preserved-failed-activation", type=Path)
     args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.action == "rehearse":
+        if not args.session_date or args.preserved_failed_activation is None:
+            raise SystemExit(
+                "--session-date and --preserved-failed-activation are required for rehearsal"
+            )
+        result = rehearse(
+            task_root=args.task_root,
+            production_root=args.production_root,
+            evidence_root=args.evidence_root,
+            session_date=args.session_date,
+            duration_seconds=args.duration_seconds,
+            discovery_cadence_seconds=args.discovery_cadence_seconds,
+            python_executable=args.python_executable,
+            preserved_failed_activation=args.preserved_failed_activation,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["status"] == "PASS" else 1
     ending = os.environ.get("MH_CANARY_EXPECTED_ACCOUNT_ENDING", "")
     terminal_result: dict[str, object] | None = None
     verification_result: dict[str, object] | None = None
