@@ -217,6 +217,32 @@ packet SHA-256 is
 No repair, rerun, merge, deployment, Paper, Shadow, account, position, broker,
 or order action is authorized before independent review.
 
+`ARGUS-STAT-DATA-002C` is `IMPLEMENTED_PENDING_LIVE_CANARY /
+SCHWAB_PREFLIGHT_PROVEN / RESEARCH_ONLY` on branch
+`codex/ARGUS-STAT-DATA-002C` at pushed implementation head
+`4001bfdd857b5104561aaf1c380e033c9d60aca4`. Provider-contact accounting now
+uses the hash-verified forensic export inventory at `payload/source-evidence`
+and distinguishes attempted paths, verified Finviz responses, successful Schwab
+quotes, and successful Schwab history independently. Replaying the immutable
+002B packet produces `providerContact=true`, six exact Finviz evidence files,
+and no successful Schwab market-data contact.
+
+The new live gate performs a separate disposable SPY-only Schwab preflight and
+creates no prospective activation unless auth, quote, HTTPS clock, and bounded
+history checks all pass within 15 minutes. The first attempt correctly preserved
+`SCHWAB_INTERACTIVE_REAUTH_REQUIRED`; the approved interactive flow then
+completed, and the fresh read-only proof passed with one real-time regular-
+session quote, validated HTTPS clock evidence, 9,757 minute rows, 46 daily rows,
+retired disposable stores, and no account values, balances, positions, Paper,
+Shadow, or orders. Full discovery passes 2,865 tests with one expected Windows
+skip. The offline exact-path/package rehearsal passes pre-ZIP and extracted
+103/103 tests, manifest and secret checks; its 250-file ZIP SHA-256 is
+`606DFE4E4619EFDD40B3CBCC759F065716496DC621FB8FC8ACE53DE715788DA3`.
+Insufficient Friday session time correctly prevented a shortened canary. One
+observer is active for Monday August 31 at 08:30 CT to rerun the fresh Schwab
+gate and, only if passing, start the authorized 30-minute natural canary. Merge,
+deployment, Continuous Paper, Shadow, and execution authority remain prohibited.
+
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
 `d1a6e14ae3bec1a565a2eb07b47a3b1491356b16` moves the existing catalyst
@@ -389,10 +415,13 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Independently review the terminal failed `ARGUS-STAT-DATA-002B` second-eye packet.
-Do not repair or rerun the canary, merge, deploy, start instrument-classification
-implementation, or resume Continuous Paper until that review returns an
-explicit decision.
+Preserve the pushed `ARGUS-STAT-DATA-002C` implementation and wait for its one-
+time Monday August 31 08:30 CT observer. The observer must rerun the fresh
+Schwab quote/history/clock preflight before prospective activation, run the
+30-minute natural canary only if every provider-readiness gate passes, package
+every terminal result, and stop for independent second-eye review. Do not merge,
+deploy, start instrument-classification implementation, or resume Continuous
+Paper meanwhile.
 Authoritative instrument subtype/leverage classification remains a pre-Paper
 gate. The authoritative ordered sequence is maintained only in `Next / Queue`
 below.
@@ -464,15 +493,17 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-STAT-DATA-002B` is frozen after its single bounded regular-session
-   canary proved the repaired runtime/resource boundary and real Finviz
-   discovery, then failed acceptance because Schwab required interactive
-   reauthentication. The sanitized terminal packet awaits independent review.
+1. `ARGUS-STAT-DATA-002C` is pushed at `4001bfd`, with truthful provider-contact
+   accounting, a physically passing Schwab read-only quote/history/clock
+   preflight, full Hard Chew, and a passing self-contained offline package. One
+   Monday 08:30 CT observer will rerun the fresh preflight and conditionally run
+   the final natural 30-minute canary.
 
 ### 2. Ready / Next
 
-1. Review the `ARGUS-STAT-DATA-002B` sanitized self-contained failed-canary ZIP;
-   do not repair or rerun before the review decision.
+1. Preserve the `ARGUS-STAT-DATA-002B` sanitized failed-canary ZIP and the 002C
+   repaired replay. Await Monday's terminal 002C second-eye package; no merge or
+   downstream activation is authorized before independent review.
 2. Preserve all prior failed canaries, the empty prospective samples, and all failed
    activation/terminal evidence exactly.
 3. Preserve the accepted Producer V4 packet and original 001D evidence.
@@ -505,9 +536,8 @@ next-action language preserved elsewhere cannot supersede this queue.
    successful physical exact-path acceptance, authoritative instrument
    classification, canonical reconciliation, complete requalification, and
    disabled-install proof.
-3. `ARGUS-STAT-DATA-002B`: merge and downstream activation are blocked until its
-   terminal failed canary packet is independently adjudicated and a separate
-   repair/rerun directive is authorized.
+3. `ARGUS-STAT-DATA-002C`: merge and downstream activation are blocked until its
+   one-time natural canary is terminal, packaged, and independently adjudicated.
 4. R034: blocked on explicit destructive approval.
 5. Continuous/live order authority: blocked on separate Paper, safety,
    account/broker, prospective-evidence, and Steven decision gates.
