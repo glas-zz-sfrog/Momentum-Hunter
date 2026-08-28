@@ -153,6 +153,7 @@ public static class PythonReadOnlyWorkspaceSnapshotMapper
     private static CommandCenterLifecycleEventSnapshot LifecycleEvent(JsonElement item) => new(
         String(item, "eventIdentity") ?? string.Empty,
         String(item, "sourceKind") ?? "UNAVAILABLE",
+        Integer(item, "sourceSequence"),
         String(item, "symbol") ?? string.Empty,
         NullableTimestamp(item, "occurredAt"),
         String(item, "previousState") ?? string.Empty,

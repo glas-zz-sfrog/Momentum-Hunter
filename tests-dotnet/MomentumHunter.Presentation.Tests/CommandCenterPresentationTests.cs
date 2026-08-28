@@ -130,6 +130,63 @@ public sealed class CommandCenterPresentationTests
     }
 
     [Fact]
+    public void LifecycleChronologyUsesSequenceOnlyWithinSameSourceKind()
+    {
+        var occurredAt = Now.AddMinutes(-2);
+        var events = new[]
+        {
+            LifecycleEvent("newest", "AAA", 1, "HOT_UNIVERSE", occurredAt.AddMinutes(1), "", ""),
+            LifecycleEvent("hot-low", "AAA", 1, "HOT_UNIVERSE", occurredAt, "ZZZ", "AAA"),
+            LifecycleEvent("candidate-low", "AAA", 2, "CANDIDATE_LIFECYCLE", occurredAt, "AAA", "ZZZ"),
+            LifecycleEvent("candidate-tie-b", "AAA", 5, "CANDIDATE_LIFECYCLE", occurredAt, "B", "A"),
+            LifecycleEvent("hot-high", "AAA", 7, "HOT_UNIVERSE", occurredAt, "STATE_2", "STATE_1"),
+            LifecycleEvent("candidate-tie-a", "AAA", 5, "CANDIDATE_LIFECYCLE", occurredAt, "A", "B"),
+            LifecycleEvent("candidate-high", "AAA", 9, "CANDIDATE_LIFECYCLE", occurredAt, "STATE_1", "STATE_2"),
+            LifecycleEvent("candidate-no-sequence", "AAA", null, "CANDIDATE_LIFECYCLE", occurredAt),
+        };
+        var expected = new[]
+        {
+            "newest",
+            "candidate-high",
+            "candidate-tie-a",
+            "candidate-tie-b",
+            "candidate-low",
+            "candidate-no-sequence",
+            "hot-high",
+            "hot-low",
+        };
+
+        Assert.Equal(expected, CommandCenterProjection.LifecycleEvents(events, 18).Select(item => item.EventIdentity));
+
+        var reshuffled = events
+            .Reverse()
+            .Select((item, index) => item with
+            {
+                PreviousState = $"IGNORED_{index}",
+                NextState = "ALSO_IGNORED",
+            })
+            .ToArray();
+        Assert.Equal(expected, CommandCenterProjection.LifecycleEvents(reshuffled, 18).Select(item => item.EventIdentity));
+
+        var unrelatedSources = new[]
+        {
+            LifecycleEvent("candidate", "AAA", 1, "CANDIDATE_LIFECYCLE", occurredAt),
+            LifecycleEvent("hot", "AAA", 999, "HOT_UNIVERSE", occurredAt),
+        };
+        var swappedUnrelatedSequences = new[]
+        {
+            unrelatedSources[0] with { SourceSequence = 999 },
+            unrelatedSources[1] with { SourceSequence = 1 },
+        };
+        Assert.Equal(
+            new[] { "candidate", "hot" },
+            CommandCenterProjection.LifecycleEvents(unrelatedSources, 18).Select(item => item.EventIdentity));
+        Assert.Equal(
+            new[] { "candidate", "hot" },
+            CommandCenterProjection.LifecycleEvents(swappedUnrelatedSequences, 18).Select(item => item.EventIdentity));
+    }
+
+    [Fact]
     public void CommandCenterBoundaryDoesNotReferenceCandidateFreshnessScore()
     {
         var root = FindRepositoryRoot();
@@ -223,13 +280,19 @@ public sealed class CommandCenterPresentationTests
 
     private static CommandCenterLifecycleEventSnapshot LifecycleEvent(
         string eventIdentity,
-        string symbol) => new(
+        string symbol,
+        int? sourceSequence = 1,
+        string sourceKind = "CANDIDATE_LIFECYCLE",
+        DateTimeOffset? occurredAt = null,
+        string previousState = "BREAKOUT_CONFIRMED",
+        string nextState = "EXECUTION_ELIGIBLE") => new(
         eventIdentity,
-        "CANDIDATE_LIFECYCLE",
+        sourceKind,
+        sourceSequence,
         symbol,
-        Now.AddMinutes(-2),
-        "BREAKOUT_CONFIRMED",
-        "EXECUTION_ELIGIBLE",
+        occurredAt ?? Now.AddMinutes(-2),
+        previousState,
+        nextState,
         "Exact lifecycle event.",
         "opportunity-1",
         null,

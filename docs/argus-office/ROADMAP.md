@@ -3198,25 +3198,27 @@ blocked and gains no authority from Paper evidence.
   Display freshness and persisted 2-session/15-minute microcharts are human
   context only and have no ranking, scoring, readiness, risk, entry, exit, or
   execution authority.
-- The final isolated real-WPF proof received schema v3 and showed session
-  `2026-08-27`, Radar `15`, and projection `PARTIAL`. Candidate Lifecycle and
-  ranked-report evidence were absent at the selected authoritative roots, so
-  Accepted, Rejected, ranked rows, and their charts remained explicitly
-  unavailable; no fallback data was created. Radar geometry remained
-  `NOT_YET_AUTHORIZED` with no inferred nodes.
-- Independent second-eye re-review passes after three narrow repairs: Hot
-  transition rows keep Radar membership and lifecycle opportunity identities
-  separate; repeated host-poll housekeeping is excluded from `What Changed`;
-  and a missing source score remains nullable and displays as unavailable.
-  Native proof `ARGUS-GUI-COMMAND-CENTER-001C-overall-1920x1080.png` is
-  `1920x1080`, SHA-256
-  `89C5B7BF1A2F2B9E21FCE77CB2F63E998DCD38C539BAE00A87481A9546041689`.
-  The accepted-vs-implementation comparison SHA-256 is
-  `E5C4731C9F9574CC40A580679097505168B8B7F73848E603C3D213CA217374A6`.
+- The final 001C-E isolated real-WPF proof reused the frozen authoritative
+  001C-D evidence set and showed session `2026-08-27`, Radar `19`, eight ranked
+  candidates, Accepted `0`, Rejected `1`, and projection `PARTIAL`. Truthful
+  stored charts were partial for NVDA, CRM, and rejected BMNR; unavailable
+  histories remained unavailable. No fallback or synthetic row was created,
+  and Radar geometry remained `NOT_YET_AUTHORIZED` with no inferred nodes.
+- Independent second-eye re-review passes after the two bounded 001C-E
+  repairs. Ranked Candidates now fits its native center-board width with all
+  required fields and freshness visible and no horizontal scrollbar. Exact
+  persisted source sequence now breaks same-timestamp ties only within the
+  same authoritative lifecycle source; BMNR is visibly ordered `18, 17, 16,
+  15` newest first. Native proof
+  `ARGUS-GUI-COMMAND-CENTER-001C-E-populated-1920x1080.png` is `1920x1080`,
+  SHA-256
+  `FC0F8A5944F1262078CDE2ADA5D0716E4617C9A1422D30923411F3EE54E8D4D2`.
+  The accepted-vs-runtime comparison SHA-256 is
+  `8884279FB796EED646413BFBA0823BB32B0411709361374250644610C3FC7420`.
 - Merge, installation, startup/Start Menu changes, and canonical workstation
   replacement remain unauthorized. Exact operator checks are in
-  `docs/argus-office/VERIFICATION_QUEUE.md`; populated-row microchart review
-  remains unavailable until authoritative current evidence produces rows.
+  `docs/argus-office/VERIFICATION_QUEUE.md`; populated-row and microchart
+  review is now available for Steven's final visual acceptance.
 
 #### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
 

@@ -553,6 +553,7 @@ public sealed record CommandCenterRankedCandidateSnapshot(
 public sealed record CommandCenterLifecycleEventSnapshot(
     string EventIdentity,
     string SourceKind,
+    int? SourceSequence,
     string Symbol,
     DateTimeOffset? OccurredAt,
     string PreviousState,

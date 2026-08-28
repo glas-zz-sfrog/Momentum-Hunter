@@ -46,6 +46,36 @@ ALERT_ROW_LIMIT = 50
 OUTCOME_ROW_LIMIT = 100
 
 
+def command_center_lifecycle_same_timestamp_sort_key(
+    item: dict[str, Any],
+) -> tuple[str, int, int, str]:
+    """Group by source before applying that source's independent sequence."""
+
+    source_sequence = integer_or_none(item.get("sourceSequence"))
+    return (
+        str(item.get("sourceKind") or ""),
+        0 if source_sequence is not None else 1,
+        -source_sequence if source_sequence is not None else 0,
+        str(item.get("eventIdentity") or ""),
+    )
+
+
+def order_command_center_lifecycle_events(
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Order newest first without comparing sequences from unrelated sources."""
+
+    same_timestamp_ordered = sorted(
+        events,
+        key=command_center_lifecycle_same_timestamp_sort_key,
+    )
+    return sorted(
+        same_timestamp_ordered,
+        key=lambda item: str(item.get("occurredAt") or ""),
+        reverse=True,
+    )
+
+
 @dataclass(frozen=True)
 class WorkstationReadModelPaths:
     data_dir: Path
@@ -494,6 +524,7 @@ def load_command_center_populations(
             {
                 "eventIdentity": event.event_id,
                 "sourceKind": "CANDIDATE_LIFECYCLE",
+                "sourceSequence": event.sequence,
                 "symbol": event.symbol,
                 "occurredAt": occurred_at,
                 "previousState": event.previous_state,
@@ -528,6 +559,7 @@ def load_command_center_populations(
             {
                 "eventIdentity": transition.transition_id,
                 "sourceKind": "HOT_UNIVERSE",
+                "sourceSequence": transition.sequence,
                 "symbol": transition.symbol,
                 "occurredAt": optional_timestamp_text(transition.recorded_at),
                 "previousState": transition.previous_state,
@@ -556,11 +588,7 @@ def load_command_center_populations(
         key=lambda item: (item["occurredAt"] or "", item["dispositionEventId"]),
         reverse=True,
     )
-    result["lifecycleEvents"] = sorted(
-        lifecycle_events,
-        key=lambda item: (item["occurredAt"] or "", item["eventIdentity"]),
-        reverse=True,
-    )
+    result["lifecycleEvents"] = order_command_center_lifecycle_events(lifecycle_events)
     result["latestStateChanges"] = latest_state_changes
     result["acceptedState"] = "AVAILABLE"
     result["rejectedState"] = "AVAILABLE"

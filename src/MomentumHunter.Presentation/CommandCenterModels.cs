@@ -219,6 +219,23 @@ public sealed record CommandCenterEventRowView(
 
 public static class CommandCenterProjection
 {
+    /// <summary>
+    /// Orders persisted events newest-first, grouping by source kind before using
+    /// that source's independent sequence so unrelated source sequences are never
+    /// compared as chronology authority.
+    /// </summary>
+    public static IReadOnlyList<CommandCenterEventRowView> LifecycleEvents(
+        IReadOnlyList<CommandCenterLifecycleEventSnapshot> events,
+        int limit) => events
+        .OrderByDescending(item => item.OccurredAt)
+        .ThenBy(item => item.SourceKind, StringComparer.Ordinal)
+        .ThenBy(item => item.SourceSequence is null ? 1 : 0)
+        .ThenByDescending(item => item.SourceSequence ?? int.MinValue)
+        .ThenBy(item => item.EventIdentity, StringComparer.Ordinal)
+        .Take(Math.Max(0, limit))
+        .Select(CommandCenterEventRowView.From)
+        .ToArray();
+
     public static IReadOnlyList<CommandCenterRankedRowView> Ranked(
         CommandCenterSnapshot snapshot,
         DateTimeOffset now) => snapshot.RankedCandidates

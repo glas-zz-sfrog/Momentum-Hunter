@@ -35,6 +35,7 @@ from momentum_hunter.workstation_read_models import (
     COMMAND_CENTER_POPULATION_CONTRACT_VERSION,
     WorkstationReadModelPaths,
     build_read_only_workspace_snapshot,
+    order_command_center_lifecycle_events,
     producer_setup_corroboration,
 )
 
@@ -101,6 +102,12 @@ class CommandCenterReadModelTests(unittest.TestCase):
                 hot_event["radarMemberIdentity"],
                 hot_event["derivedLifecycleOpportunityId"],
             )
+            self.assertIsInstance(hot_event["sourceSequence"], int)
+            accepted_event = next(
+                item for item in snapshot["lifecycleEvents"]
+                if item["eventIdentity"] == first_accepted.event_id
+            )
+            self.assertEqual(first_accepted.sequence, accepted_event["sourceSequence"])
             accepted = self.assert_single(snapshot["acceptedDispositions"])
             rejected = self.assert_single(snapshot["rejectedDispositions"])
             self.assertEqual(first_accepted.event_id, accepted["dispositionEventId"])
@@ -400,6 +407,86 @@ class CommandCenterReadModelTests(unittest.TestCase):
         self.assertEqual({(opportunity_id, "setup-1")}, valid)
         self.assertEqual([], valid_limitations)
         self.assertTrue(any("contradicts" in item for item in contradictory))
+
+    def test_lifecycle_chronology_uses_sequence_only_within_same_source(self) -> None:
+        occurred_at = "2026-08-17T15:00:00Z"
+
+        def event(
+            identity: str,
+            source_kind: str,
+            source_sequence: int | None,
+            previous_state: str,
+            next_state: str,
+            timestamp: str | None = None,
+        ) -> dict:
+            return {
+                "eventIdentity": identity,
+                "sourceKind": source_kind,
+                "sourceSequence": source_sequence,
+                "occurredAt": timestamp or occurred_at,
+                "previousState": previous_state,
+                "nextState": next_state,
+            }
+
+        events = [
+            event("newest", "HOT_UNIVERSE", 1, "", "", "2026-08-17T15:01:00Z"),
+            event("hot-low", "HOT_UNIVERSE", 1, "ZZZ", "AAA"),
+            event("candidate-low", "CANDIDATE_LIFECYCLE", 2, "AAA", "ZZZ"),
+            event("candidate-tie-b", "CANDIDATE_LIFECYCLE", 5, "B", "A"),
+            event("hot-high", "HOT_UNIVERSE", 7, "STATE_2", "STATE_1"),
+            event("candidate-tie-a", "CANDIDATE_LIFECYCLE", 5, "A", "B"),
+            event("candidate-high", "CANDIDATE_LIFECYCLE", 9, "STATE_1", "STATE_2"),
+            event("candidate-no-sequence", "CANDIDATE_LIFECYCLE", None, "", ""),
+        ]
+        expected = [
+            "newest",
+            "candidate-high",
+            "candidate-tie-a",
+            "candidate-tie-b",
+            "candidate-low",
+            "candidate-no-sequence",
+            "hot-high",
+            "hot-low",
+        ]
+
+        ordered = order_command_center_lifecycle_events(events)
+        reshuffled_with_different_state_text = [
+            {**item, "previousState": f"IGNORED_{index}", "nextState": "ALSO_IGNORED"}
+            for index, item in enumerate(reversed(events))
+        ]
+
+        self.assertEqual(expected, [item["eventIdentity"] for item in ordered])
+        self.assertEqual(
+            expected,
+            [
+                item["eventIdentity"]
+                for item in order_command_center_lifecycle_events(
+                    reshuffled_with_different_state_text
+                )
+            ],
+        )
+
+        unrelated_sources = [
+            event("candidate", "CANDIDATE_LIFECYCLE", 1, "", ""),
+            event("hot", "HOT_UNIVERSE", 999, "", ""),
+        ]
+        swapped_unrelated_sequences = [
+            {**unrelated_sources[0], "sourceSequence": 999},
+            {**unrelated_sources[1], "sourceSequence": 1},
+        ]
+        self.assertEqual(
+            ["candidate", "hot"],
+            [item["eventIdentity"] for item in order_command_center_lifecycle_events(unrelated_sources)],
+        )
+        self.assertEqual(
+            ["candidate", "hot"],
+            [
+                item["eventIdentity"]
+                for item in order_command_center_lifecycle_events(
+                    swapped_unrelated_sequences
+                )
+            ],
+        )
 
     @staticmethod
     def assert_single(values: list[dict]) -> dict:

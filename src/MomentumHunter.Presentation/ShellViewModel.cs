@@ -2697,11 +2697,8 @@ public sealed partial class ShellViewModel : ObservableObject
         var ranked = CommandCenterProjection.Ranked(snapshot, now);
         var accepted = CommandCenterProjection.Dispositions(snapshot.AcceptedDispositions, snapshot, now);
         var rejected = CommandCenterProjection.Dispositions(snapshot.RejectedDispositions, snapshot, now);
-        var lifecycleEvents = snapshot.LifecycleEvents
-            .Take(18)
-            .Select(CommandCenterEventRowView.From)
-            .ToArray();
-        var summaryCapacity = Math.Max(0, 18 - lifecycleEvents.Length);
+        var lifecycleEvents = CommandCenterProjection.LifecycleEvents(snapshot.LifecycleEvents, 18);
+        var summaryCapacity = Math.Max(0, 18 - lifecycleEvents.Count);
         var summaryEvents = Activity
             .Where(item => !IsCommandCenterHostHousekeeping(item))
             .OrderByDescending(item => item.Timestamp)

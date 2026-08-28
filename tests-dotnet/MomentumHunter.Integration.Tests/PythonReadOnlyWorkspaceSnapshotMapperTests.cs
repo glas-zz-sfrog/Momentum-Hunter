@@ -252,6 +252,7 @@ public sealed class PythonReadOnlyWorkspaceSnapshotMapperTests
                 "lifecycleEvents": [{
                   "eventIdentity": "hot-transition-1",
                   "sourceKind": "HOT_UNIVERSE",
+                  "sourceSequence": 7,
                   "symbol": "NVDA",
                   "occurredAt": "2026-08-17T14:35:00Z",
                   "previousState": "",
@@ -298,6 +299,7 @@ public sealed class PythonReadOnlyWorkspaceSnapshotMapperTests
         Assert.Null(commandCenter.RankedCandidates.Single(item => item.Symbol == "BAD").Score);
         Assert.Null(commandCenter.RankedCandidates.Single(item => item.Symbol == "MISS").Score);
         var hotTransition = Assert.Single(commandCenter.LifecycleEvents);
+        Assert.Equal(7, hotTransition.SourceSequence);
         Assert.Empty(hotTransition.OpportunityId);
         Assert.Equal("hot-member-NVDA-2026-08-17-g1", hotTransition.RadarMemberIdentity);
         Assert.Equal("opportunity-hash", hotTransition.DerivedLifecycleOpportunityId);
