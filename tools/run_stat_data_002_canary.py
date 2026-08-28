@@ -13,7 +13,7 @@ import tempfile
 import uuid
 import zipfile
 from dataclasses import asdict
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo
@@ -36,15 +36,31 @@ from momentum_hunter.prospective_denominator import (
     build_activation_record,
     load_activation_record,
 )
+from momentum_hunter.schwab_candle_backfill import (
+    CandleBackfillOptions,
+    SchwabHistoricalCandleBackfiller,
+    explicit_universe,
+)
+from momentum_hunter.schwab_candle_observer import (
+    SchwabMarketDataOnlyAccessGuard,
+)
+from momentum_hunter.schwab_candle_store import SchwabCandleStore
+from momentum_hunter.schwab_daily_candle_store import SchwabDailyCandleStore
+from momentum_hunter.schwab_market_data import (
+    SchwabMarketDataQuoteSource,
+    SchwabReadOnlyAccessTokenProvider,
+    build_regular_market_quote_proof,
+)
 
 
-TASK_BRANCH = "codex/ARGUS-STAT-DATA-002B"
+TASK_BRANCH = "codex/ARGUS-STAT-DATA-002C"
 PRODUCTION_BASE = "23ee162373654e1db91af4c19f75bbc7887e3174"
 EASTERN = ZoneInfo("America/New_York")
 REGULAR_OPEN = time(9, 30)
 REGULAR_CLOSE = time(16, 0)
 AUTHORITY = "RESEARCH_ONLY"
 EXECUTION_AUTHORITY = "NONE"
+SCHWAB_PREFLIGHT_MAX_AGE_SECONDS = 900
 FOCUSED_MODULES = (
     "tests.test_prospective_denominator",
     "tests.test_opportunity_denominator",
@@ -88,7 +104,7 @@ def _write_once(path: Path, value: object) -> None:
 
 def _new_ephemeral_runtime_root() -> Path:
     temporary_root = Path(tempfile.gettempdir()).resolve()
-    root = temporary_root / f"MomentumHunter-StatData002B-{uuid.uuid4().hex}"
+    root = temporary_root / f"MomentumHunter-StatData002C-{uuid.uuid4().hex}"
     if root.exists():
         raise StatDataCanaryError("Ephemeral runtime root unexpectedly already exists.")
     return root
@@ -260,6 +276,8 @@ def _configuration(
     session_date: str,
     duration_seconds: int,
     discovery_cadence_seconds: int,
+    schwab_preflight_fingerprint: str | None = None,
+    offline_rehearsal: bool = False,
 ) -> dict[str, object]:
     task = _git_identity(task_root)
     production = _git_identity(production_root)
@@ -283,7 +301,7 @@ def _configuration(
         )
     payload: dict[str, object] = {
         "schemaVersion": 1,
-        "task": "ARGUS-STAT-DATA-002B",
+        "task": "ARGUS-STAT-DATA-002C",
         "taskGit": task,
         "productionGit": production,
         "sessionDate": session_date,
@@ -297,6 +315,9 @@ def _configuration(
         "ordersRequested": False,
         "paperRequested": False,
         "shadowRequested": False,
+        "schwabPreflightRequired": schwab_preflight_fingerprint is not None,
+        "schwabPreflightFingerprint": schwab_preflight_fingerprint,
+        "offlineRehearsal": offline_rehearsal,
     }
     payload["fingerprint"] = _fingerprint("stat-data-002-canary-configuration-v1", payload)
     return payload
@@ -310,9 +331,20 @@ def prepare(
     session_date: str,
     duration_seconds: int,
     discovery_cadence_seconds: int,
+    schwab_preflight_proof: Path | None = None,
+    require_schwab_preflight: bool = True,
 ) -> dict[str, object]:
     if evidence_root.exists():
         raise StatDataCanaryError("Canary evidence root must be new.")
+    validated_preflight = (
+        _validate_schwab_preflight(
+            schwab_preflight_proof,
+            task_root=task_root,
+            production_root=production_root,
+        )
+        if require_schwab_preflight
+        else None
+    )
     configuration = _configuration(
         task_root=task_root,
         production_root=production_root,
@@ -320,6 +352,12 @@ def prepare(
         session_date=session_date,
         duration_seconds=duration_seconds,
         discovery_cadence_seconds=discovery_cadence_seconds,
+        schwab_preflight_fingerprint=(
+            str(validated_preflight["fingerprint"])
+            if validated_preflight is not None
+            else None
+        ),
+        offline_rehearsal=not require_schwab_preflight,
     )
     evidence_root.mkdir(parents=True)
     activated_at = datetime.now().astimezone().isoformat()
@@ -330,6 +368,11 @@ def prepare(
         configuration_fingerprint=str(configuration["fingerprint"]),
     )
     _write_once(evidence_root / "configuration.json", configuration)
+    if validated_preflight is not None:
+        _write_once(
+            evidence_root / "provider-preflight" / "schwab-readiness.json",
+            validated_preflight,
+        )
     _write_once(
         evidence_root / "activation.json",
         {
@@ -344,6 +387,9 @@ def prepare(
         "taskHead": configuration["taskGit"]["head"],
         "productionHead": configuration["productionGit"]["head"],
         "providerContact": False,
+        "schwabPreflight": (
+            "PASS" if validated_preflight is not None else "OFFLINE_REHEARSAL_NOT_REQUIRED"
+        ),
         "authority": AUTHORITY,
         "executionAuthority": EXECUTION_AUTHORITY,
     }
@@ -372,6 +418,30 @@ def execute(
         configuration = json.loads(
             (evidence_root / "configuration.json").read_text(encoding="ascii")
         )
+        failure_stage = "VERIFY_SCHWAB_PREFLIGHT"
+        if (
+            configuration.get("schwabPreflightRequired") is not True
+            and configuration.get("offlineRehearsal") is not True
+        ):
+            raise StatDataCanaryError(
+                "Live canary configuration omitted the required Schwab preflight."
+            )
+        if configuration.get("schwabPreflightRequired") is True:
+            preserved_preflight = json.loads(
+                (
+                    evidence_root
+                    / "provider-preflight"
+                    / "schwab-readiness.json"
+                ).read_text(encoding="ascii")
+            )
+            if (
+                preserved_preflight.get("fingerprint")
+                != configuration.get("schwabPreflightFingerprint")
+                or preserved_preflight.get("status") != "PASS"
+            ):
+                raise StatDataCanaryError(
+                    "Schwab provider readiness proof changed or is not passing."
+                )
         failure_stage = "LOAD_ACTIVATION"
         activation = load_activation_record(evidence_root / "activation.json")
         failure_stage = "VERIFY_TASK_IDENTITY"
@@ -449,7 +519,7 @@ def execute(
             "exceptionClass": type(exc).__name__,
             "exceptionMessage": _sanitized_message(str(exc), expected_account_ending),
         }
-    provider_evidence = _provider_contact_evidence(evidence_root)
+    provider_contact = _provider_contact_report(evidence_root, summary)
     prospective_summary = (
         summary.get("prospectiveDenominator") if summary is not None else None
     )
@@ -480,8 +550,9 @@ def execute(
     terminal.update(
         {
             "providerContactAttempted": provider_contact_attempted,
-            "providerContact": bool(provider_evidence),
-            "providerContactEvidence": provider_evidence,
+            "providerContact": provider_contact["providerContact"],
+            "providerContactEvidence": provider_contact["providerContactEvidence"],
+            "providerContactByProvider": provider_contact["providerContactByProvider"],
             "ephemeralRuntimeRoot": str(runtime_root) if runtime_root else None,
             "ephemeralRuntimeUnderTemp": (
                 _runtime_root_is_ephemeral(runtime_root) if runtime_root else None
@@ -503,20 +574,289 @@ def execute(
     return terminal
 
 
+def run_schwab_preflight(
+    *,
+    task_root: Path,
+    production_root: Path,
+    evidence_root: Path,
+    expected_account_ending: str,
+) -> dict[str, object]:
+    if evidence_root.exists():
+        raise StatDataCanaryError("Schwab preflight evidence root must be new.")
+    if len(expected_account_ending) != 4 or not expected_account_ending.isdigit():
+        raise StatDataCanaryError("Expected market-data identity ending is invalid.")
+    task = _git_identity(task_root)
+    production = _git_identity(production_root)
+    if task["branch"] != TASK_BRANCH or task["status"]:
+        raise StatDataCanaryError("Task branch identity is wrong or dirty.")
+    if _git(task_root, "rev-parse", f"origin/{TASK_BRANCH}") != task["head"]:
+        raise StatDataCanaryError("Task branch is not pushed at its exact head.")
+    if production != {
+        "head": PRODUCTION_BASE,
+        "branch": "master",
+        "status": "",
+    } or _git(production_root, "rev-parse", "origin/master") != PRODUCTION_BASE:
+        raise StatDataCanaryError("Canonical production baseline is wrong or dirty.")
+
+    evidence_root.mkdir(parents=True)
+    disposable = Path(tempfile.gettempdir()) / f"MomentumHunter-StatData002C-Preflight-{uuid.uuid4().hex}"
+    quote_proof: dict[str, object] | None = None
+    history_proof: dict[str, object] | None = None
+    diagnostic_code: str | None = None
+    exception_class: str | None = None
+    try:
+        token_provider = SchwabReadOnlyAccessTokenProvider()
+        access_guard = SchwabMarketDataOnlyAccessGuard(token_provider=token_provider)
+        access_guard.authorize(expected_account_ending)
+        quote_proof = build_regular_market_quote_proof(
+            SchwabMarketDataQuoteSource(token_provider=token_provider),
+            ("SPY",),
+            require_clock_proof=True,
+        )
+        backfill = SchwabHistoricalCandleBackfiller(
+            minute_store=SchwabCandleStore(disposable / "minute"),
+            daily_store=SchwabDailyCandleStore(disposable / "daily"),
+            access_guard=access_guard,
+            utc_clock=lambda: datetime.now(timezone.utc),
+        ).backfill(
+            explicit_universe(("SPY",)),
+            CandleBackfillOptions(
+                expected_account_ending=expected_account_ending,
+                minute_lookback_days=5,
+                daily_lookback_days=30,
+                history_attempts=1,
+            ),
+        )
+        minute_rows = sum(
+            int(item.get("minute", {}).get("rows", 0))
+            for item in backfill.get("symbols", [])
+        )
+        daily_rows = sum(
+            int(item.get("daily", {}).get("rows", 0))
+            for item in backfill.get("symbols", [])
+        )
+        history_proof = {
+            "status": (
+                "PASS"
+                if backfill.get("status") == "COMPLETE"
+                and minute_rows > 0
+                and daily_rows > 0
+                else "FAIL"
+            ),
+            "provider": "SCHWAB_PRICE_HISTORY",
+            "symbol": "SPY",
+            "minuteRows": minute_rows,
+            "dailyRows": daily_rows,
+            "resultFingerprint": backfill.get("resultFingerprint"),
+            "disposableStore": True,
+            "productionStoreWritten": False,
+        }
+    except Exception as exc:
+        diagnostic_code = _provider_failure_code(exc)
+        exception_class = type(exc).__name__
+    finally:
+        try:
+            if disposable.exists():
+                shutil.rmtree(disposable)
+        except OSError:
+            pass
+
+    quote_status = (
+        quote_proof.get("proofStatus") if isinstance(quote_proof, dict) else "FAIL"
+    )
+    history_status = (
+        history_proof.get("status") if isinstance(history_proof, dict) else "FAIL"
+    )
+    retired = not disposable.exists()
+    status = (
+        "PASS"
+        if quote_status == "PASS"
+        and history_status == "PASS"
+        and retired
+        and diagnostic_code is None
+        else "FAIL"
+    )
+    result: dict[str, object] = {
+        "schemaVersion": 1,
+        "task": "ARGUS-STAT-DATA-002C",
+        "status": status,
+        "observedAt": datetime.now(timezone.utc).isoformat(),
+        "taskGit": task,
+        "productionGit": production,
+        "symbol": "SPY",
+        "schwabAuthState": "READY" if status == "PASS" else "NOT_READY",
+        "schwabQuotePreflight": quote_status,
+        "schwabHistoryPreflight": history_status,
+        "schwabInteractiveReauthRequired": (
+            diagnostic_code == "SCHWAB_INTERACTIVE_REAUTH_REQUIRED"
+        ),
+        "diagnosticCode": diagnostic_code,
+        "exceptionClass": exception_class,
+        "quoteProof": quote_proof,
+        "historyProof": history_proof,
+        "providerContactAttempted": True,
+        "providerContact": quote_proof is not None or history_proof is not None,
+        "disposableStoresRetired": retired,
+        "authority": AUTHORITY,
+        "executionAuthority": EXECUTION_AUTHORITY,
+        "accountValuesRequested": False,
+        "balancesRequested": False,
+        "positionsRequested": False,
+        "paperRequested": False,
+        "shadowRequested": False,
+        "ordersRequested": False,
+        "orderTransmission": "UNAVAILABLE",
+        "credentialMaterialIncluded": False,
+    }
+    result["fingerprint"] = _fingerprint("stat-data-002c-schwab-preflight-v1", result)
+    _write_once(evidence_root / "schwab-preflight.json", result)
+    return result
+
+
+def _provider_failure_code(exc: BaseException) -> str:
+    current: BaseException | None = exc
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        diagnostic = getattr(current, "diagnostic_code", None)
+        if diagnostic == "SCHWAB_REAUTH_REQUIRED" or "ReauthorizationRequired" in type(current).__name__:
+            return "SCHWAB_INTERACTIVE_REAUTH_REQUIRED"
+        if isinstance(diagnostic, str) and diagnostic:
+            return diagnostic
+        visited.add(id(current))
+        current = current.__cause__ or current.__context__
+    return type(exc).__name__
+
+
+def _validate_schwab_preflight(
+    proof_path: Path | None,
+    *,
+    task_root: Path,
+    production_root: Path,
+) -> dict[str, object]:
+    if proof_path is None:
+        raise StatDataCanaryError("A passing Schwab provider preflight is required.")
+    try:
+        proof = json.loads(proof_path.read_text(encoding="ascii"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise StatDataCanaryError("Schwab provider preflight evidence is unavailable.") from exc
+    expected_fingerprint = proof.get("fingerprint")
+    unsigned = dict(proof)
+    unsigned.pop("fingerprint", None)
+    if expected_fingerprint != _fingerprint(
+        "stat-data-002c-schwab-preflight-v1", unsigned
+    ):
+        raise StatDataCanaryError("Schwab provider preflight fingerprint is invalid.")
+    observed_at = datetime.fromisoformat(str(proof.get("observedAt", "")))
+    age = (datetime.now(timezone.utc) - observed_at.astimezone(timezone.utc)).total_seconds()
+    if age < 0 or age > SCHWAB_PREFLIGHT_MAX_AGE_SECONDS:
+        raise StatDataCanaryError("Schwab provider preflight is outside the freshness window.")
+    required = (
+        proof.get("status") == "PASS"
+        and proof.get("schwabAuthState") == "READY"
+        and proof.get("schwabQuotePreflight") == "PASS"
+        and proof.get("schwabHistoryPreflight") == "PASS"
+        and proof.get("schwabInteractiveReauthRequired") is False
+        and proof.get("disposableStoresRetired") is True
+        and proof.get("accountValuesRequested") is False
+        and proof.get("positionsRequested") is False
+        and proof.get("ordersRequested") is False
+        and proof.get("executionAuthority") == EXECUTION_AUTHORITY
+        and proof.get("taskGit") == _git_identity(task_root)
+        and proof.get("productionGit") == _git_identity(production_root)
+    )
+    if not required:
+        raise StatDataCanaryError("Schwab provider preflight did not satisfy the live gate.")
+    return proof
+
+
+def _verified_export_files(evidence_root: Path) -> list[str]:
+    export_root = evidence_root / "natural-runtime-forensic"
+    payload_root = export_root / "payload"
+    manifest_path = export_root / "destination-manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return []
+    verified: list[str] = []
+    for item in manifest.get("files", []):
+        if not isinstance(item, dict):
+            continue
+        relative_text = str(item.get("path", ""))
+        relative = Path(relative_text)
+        path = payload_root / relative
+        if not path.is_file():
+            continue
+        if path.stat().st_size != int(item.get("size", -1)):
+            continue
+        if hashlib.sha256(path.read_bytes()).hexdigest().upper() != str(
+            item.get("sha256", "")
+        ):
+            continue
+        verified.append(path.relative_to(evidence_root).as_posix())
+    return sorted(verified)
+
+
 def _provider_contact_evidence(evidence_root: Path) -> list[str]:
-    source_root = (
+    return [
+        item
+        for item in _verified_export_files(evidence_root)
+        if "/source-evidence/" in f"/{item}"
+    ]
+
+
+def _provider_contact_report(
+    evidence_root: Path,
+    qualification_summary: dict[str, object] | None,
+) -> dict[str, object]:
+    evidence = _provider_contact_evidence(evidence_root)
+    verified_files = set(_verified_export_files(evidence_root))
+    finviz_evidence = [
+        item for item in evidence if "/source-evidence/finviz/" in f"/{item}"
+    ]
+    schwab_evidence = [
+        item for item in evidence if "/source-evidence/schwab/" in f"/{item}"
+    ]
+    summary = qualification_summary or {}
+    quote_symbols = int(summary.get("schwabQuoteSymbols", 0) or 0)
+    minute_rows = int(summary.get("schwabMinuteRows", 0) or 0)
+    daily_rows = int(summary.get("schwabDailyRows", 0) or 0)
+    summary_path = (
         evidence_root
         / "natural-runtime-forensic"
         / "payload"
-        / "runtime-artifacts"
-        / "source-evidence"
+        / "qualification-summary.json"
     )
-    if not source_root.exists():
-        return []
-    return [
-        path.relative_to(evidence_root).as_posix()
-        for path in sorted(item for item in source_root.rglob("*") if item.is_file())
-    ]
+    summary_identity = summary_path.relative_to(evidence_root).as_posix()
+    schwab_summary_evidence: list[str] = []
+    if summary_identity in verified_files and quote_symbols > 0:
+        schwab_summary_evidence.append(
+            summary_identity + "#schwabQuoteSymbols"
+        )
+    if summary_identity in verified_files and minute_rows + daily_rows > 0:
+        schwab_summary_evidence.append(
+            summary_identity + "#schwabMinuteRows,schwabDailyRows"
+        )
+    schwab_contact_evidence = sorted(
+        dict.fromkeys((*schwab_evidence, *schwab_summary_evidence))
+    )
+    all_evidence = sorted(dict.fromkeys((*evidence, *schwab_summary_evidence)))
+    providers = {
+        "finviz": {
+            "contact": bool(finviz_evidence),
+            "evidence": finviz_evidence,
+        },
+        "schwab": {
+            "contact": bool(schwab_contact_evidence),
+            "quoteData": quote_symbols > 0,
+            "historyData": minute_rows + daily_rows > 0,
+            "evidence": schwab_contact_evidence,
+        },
+    }
+    return {
+        "providerContact": any(item["contact"] for item in providers.values()),
+        "providerContactEvidence": all_evidence,
+        "providerContactByProvider": providers,
+    }
 
 
 def _zero_prospective_summary() -> dict[str, object]:
@@ -609,7 +949,7 @@ def package(
     docs_root = stage / "docs"
     docs_root.mkdir()
     for source in (
-        task_root / "docs" / "argus-office" / "goal-charters" / "ARGUS-STAT-DATA-002B.md",
+        task_root / "docs" / "argus-office" / "goal-charters" / "ARGUS-STAT-DATA-002C.md",
         task_root / "docs" / "research" / "stat-data-002-prospective-activation-v2.md",
     ):
         shutil.copy2(source, docs_root / source.name)
@@ -621,7 +961,7 @@ def package(
     if scan["status"] != "PASS":
         raise StatDataCanaryError("Sanitization failed; unsafe ZIP was not emitted.")
     index = (
-        "# ARGUS-STAT-DATA-002B Second-Eye Packet\n\n"
+        "# ARGUS-STAT-DATA-002C Second-Eye Packet\n\n"
         "- `evidence/`: immutable terminal canary evidence and denominator records.\n"
         "- `source/momentum_hunter/`: complete Python Product package for dependency closure.\n"
         "- `source/tests/`: focused tests plus required fixtures.\n"
@@ -796,7 +1136,7 @@ def _assert_regular_session(now: datetime | None = None) -> str:
 def _offline_runtime_rehearsal(evidence_root: Path) -> dict[str, object]:
     started = datetime.now().astimezone()
     config = ContinuousRuntimeConfig(
-        runtime_identity="stat-data-002b-offline-runtime",
+        runtime_identity="stat-data-002c-offline-runtime",
         session_date=started.astimezone(EASTERN).date().isoformat(),
         cadence=RuntimeCadence(
             broad_discovery_seconds=300,
@@ -820,7 +1160,7 @@ def _offline_runtime_rehearsal(evidence_root: Path) -> dict[str, object]:
     runtime_root.mkdir(parents=True)
     topology = build_continuous_writer_topology_v2(
         root_path=runtime_root / "writer",
-        evidence_program_id="stat-data-002b-offline-rehearsal",
+        evidence_program_id="stat-data-002c-offline-rehearsal",
         configuration_fingerprint=config.fingerprint,
         runtime_build_hash="b" * 64,
     )
@@ -828,7 +1168,7 @@ def _offline_runtime_rehearsal(evidence_root: Path) -> dict[str, object]:
     resources = _acquire_qualification_resources(
         root=runtime_root,
         topology=topology,
-        runtime_id="stat-data-002b-offline-instance",
+        runtime_id="stat-data-002c-offline-instance",
         config=config,
         leases=leases,
         launch_at=started,
@@ -838,7 +1178,7 @@ def _offline_runtime_rehearsal(evidence_root: Path) -> dict[str, object]:
         resources.shutdown_current(started + timedelta(seconds=1))
         restored = ContinuousOpportunityRuntime.restore(
             config=config,
-            runtime_instance_id="stat-data-002b-offline-instance",
+            runtime_instance_id="stat-data-002c-offline-instance",
             now=started + timedelta(seconds=2),
             discovery_source=sources["discovery"],
             market_data_source=sources["market"],
@@ -867,7 +1207,7 @@ def _offline_runtime_rehearsal(evidence_root: Path) -> dict[str, object]:
     failure_root.mkdir(parents=True)
     failure_topology = build_continuous_writer_topology_v2(
         root_path=failure_root / "writer",
-        evidence_program_id="stat-data-002b-offline-init-failure",
+        evidence_program_id="stat-data-002c-offline-init-failure",
         configuration_fingerprint=config.fingerprint,
         runtime_build_hash="c" * 64,
     )
@@ -880,7 +1220,7 @@ def _offline_runtime_rehearsal(evidence_root: Path) -> dict[str, object]:
         _acquire_qualification_resources(
             root=failure_root,
             topology=failure_topology,
-            runtime_id="stat-data-002b-offline-failure-instance",
+            runtime_id="stat-data-002c-offline-failure-instance",
             config=config,
             leases=LogicalRuntimeLeaseRegistry(),
             launch_at=started,
@@ -910,7 +1250,7 @@ def _offline_runtime_rehearsal(evidence_root: Path) -> dict[str, object]:
         "durableCheckpointAuthorityCreated": False,
         "forensicCopiesUsedAsRuntimeAuthority": False,
     }
-    result["fingerprint"] = _fingerprint("stat-data-002b-offline-rehearsal-v1", result)
+    result["fingerprint"] = _fingerprint("stat-data-002c-offline-rehearsal-v1", result)
     _write_once(evidence_root / "offline-runtime-rehearsal.json", result)
     return result
 
@@ -933,6 +1273,7 @@ def rehearse(
         session_date=session_date,
         duration_seconds=duration_seconds,
         discovery_cadence_seconds=discovery_cadence_seconds,
+        require_schwab_preflight=False,
     )
     activation = load_activation_record(evidence_root / "activation.json")
     ProspectiveDenominatorStore(
@@ -1001,7 +1342,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "action",
-        choices=("prepare", "execute", "verify", "package", "run-all", "rehearse"),
+        choices=(
+            "schwab-preflight",
+            "prepare",
+            "execute",
+            "verify",
+            "package",
+            "run-all",
+            "rehearse",
+        ),
     )
     parser.add_argument("--task-root", type=Path, required=True)
     parser.add_argument("--production-root", type=Path, required=True)
@@ -1011,7 +1360,18 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--discovery-cadence-seconds", type=int, default=300)
     parser.add_argument("--python-executable", type=Path, required=True)
     parser.add_argument("--preserved-failed-activation", type=Path)
+    parser.add_argument("--schwab-preflight-proof", type=Path)
     args = parser.parse_args(list(argv) if argv is not None else None)
+    ending = os.environ.get("MH_CANARY_EXPECTED_ACCOUNT_ENDING", "")
+    if args.action == "schwab-preflight":
+        result = run_schwab_preflight(
+            task_root=args.task_root,
+            production_root=args.production_root,
+            evidence_root=args.evidence_root,
+            expected_account_ending=ending,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["status"] == "PASS" else 1
     if args.action == "rehearse":
         if not args.session_date or args.preserved_failed_activation is None:
             raise SystemExit(
@@ -1029,7 +1389,6 @@ def main(argv: Iterable[str] | None = None) -> int:
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["status"] == "PASS" else 1
-    ending = os.environ.get("MH_CANARY_EXPECTED_ACCOUNT_ENDING", "")
     terminal_result: dict[str, object] | None = None
     verification_result: dict[str, object] | None = None
     verification_error: dict[str, object] | None = None
@@ -1044,6 +1403,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             session_date=args.session_date,
             duration_seconds=args.duration_seconds,
             discovery_cadence_seconds=args.discovery_cadence_seconds,
+            schwab_preflight_proof=args.schwab_preflight_proof,
         )
     if args.action in {"execute", "run-all"}:
         terminal_result = execute(

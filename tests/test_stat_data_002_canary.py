@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from dataclasses import asdict
@@ -53,6 +54,7 @@ class StatData002CanaryTests(unittest.TestCase):
                 "productionGit": production_identity,
                 "durationSeconds": 1800,
                 "discoveryCadenceSeconds": 300,
+                "offlineRehearsal": True,
             },
         )
         canary._write_once(
@@ -321,7 +323,6 @@ class StatData002CanaryTests(unittest.TestCase):
         def provider_failure(**kwargs):
             source = (
                 kwargs["generation_root"]
-                / "runtime-artifacts"
                 / "source-evidence"
                 / "finviz"
                 / "attempt.json"
@@ -360,8 +361,214 @@ class StatData002CanaryTests(unittest.TestCase):
         self.assertTrue(result["providerContactAttempted"])
         self.assertTrue(result["providerContact"])
         self.assertEqual(1, len(result["providerContactEvidence"]))
+        self.assertTrue(result["providerContactByProvider"]["finviz"]["contact"])
+        self.assertFalse(result["providerContactByProvider"]["schwab"]["contact"])
         self.assertEqual("PASS", result["forensicRuntimeExport"]["status"])
         self.assertTrue(result["forensicRuntimeExport"]["sourceRetired"])
+
+    def test_provider_contact_uses_verified_export_inventory_and_rejects_tamper(self) -> None:
+        evidence = self.root / "provider-inventory"
+        runtime = Path(tempfile.gettempdir()) / f"MomentumHunter-StatData002C-test-{id(self)}"
+        self.addCleanup(lambda: runtime.exists() and shutil.rmtree(runtime))
+        source = runtime / "source-evidence" / "finviz" / "snapshot.json"
+        source.parent.mkdir(parents=True)
+        source.write_text('{"status":"RECEIVED"}\n', encoding="ascii")
+        self.write_resource_cleanup(runtime)
+
+        canary._export_ephemeral_runtime(runtime_root=runtime, evidence_root=evidence)
+
+        report = canary._provider_contact_report(evidence, None)
+        self.assertTrue(report["providerContact"])
+        self.assertTrue(report["providerContactByProvider"]["finviz"]["contact"])
+        exported = (
+            evidence
+            / "natural-runtime-forensic"
+            / "payload"
+            / "source-evidence"
+            / "finviz"
+            / "snapshot.json"
+        )
+        exported.write_text('{"status":"TAMPERED"}\n', encoding="ascii")
+        self.assertFalse(canary._provider_contact_report(evidence, None)["providerContact"])
+
+    def test_attempt_without_preserved_provider_response_is_not_contact(self) -> None:
+        evidence = self.root / "provider-attempt-only"
+        runtime = Path(tempfile.gettempdir()) / f"MomentumHunter-StatData002C-empty-{id(self)}"
+        self.addCleanup(lambda: runtime.exists() and shutil.rmtree(runtime))
+        runtime.mkdir(parents=True)
+        self.write_resource_cleanup(runtime)
+        canary._export_ephemeral_runtime(runtime_root=runtime, evidence_root=evidence)
+
+        report = canary._provider_contact_report(evidence, None)
+        self.assertFalse(report["providerContact"])
+        self.assertEqual([], report["providerContactEvidence"])
+
+    def test_schwab_contact_requires_verified_success_evidence(self) -> None:
+        evidence = self.root / "schwab-contact"
+        runtime = Path(tempfile.gettempdir()) / f"MomentumHunter-StatData002C-schwab-{id(self)}"
+        self.addCleanup(lambda: runtime.exists() and shutil.rmtree(runtime))
+        runtime.mkdir(parents=True)
+        (runtime / "qualification-summary.json").write_text(
+            json.dumps(
+                {
+                    "schwabQuoteSymbols": 1,
+                    "schwabMinuteRows": 390,
+                    "schwabDailyRows": 30,
+                }
+            ),
+            encoding="ascii",
+        )
+        self.write_resource_cleanup(runtime)
+        canary._export_ephemeral_runtime(runtime_root=runtime, evidence_root=evidence)
+
+        report = canary._provider_contact_report(
+            evidence,
+            {
+                "schwabQuoteSymbols": 1,
+                "schwabMinuteRows": 390,
+                "schwabDailyRows": 30,
+            },
+        )
+
+        self.assertTrue(report["providerContactByProvider"]["schwab"]["contact"])
+        self.assertTrue(report["providerContactByProvider"]["schwab"]["quoteData"])
+        self.assertTrue(report["providerContactByProvider"]["schwab"]["historyData"])
+        self.assertEqual(2, len(report["providerContactByProvider"]["schwab"]["evidence"]))
+
+    def test_schwab_preflight_uses_read_only_quote_history_and_disposable_stores(self) -> None:
+        evidence = self.root / "schwab-preflight"
+        task_identity = {"head": "1" * 40, "branch": canary.TASK_BRANCH, "status": ""}
+        production_identity = {
+            "head": canary.PRODUCTION_BASE,
+            "branch": "master",
+            "status": "",
+        }
+        guard = mock.Mock()
+        backfiller = mock.Mock()
+        backfiller.backfill.return_value = {
+            "status": "COMPLETE",
+            "resultFingerprint": "a" * 64,
+            "symbols": [
+                {"minute": {"rows": 390}, "daily": {"rows": 30}}
+            ],
+        }
+        with (
+            mock.patch.object(
+                canary,
+                "_git_identity",
+                side_effect=(task_identity, production_identity),
+            ),
+            mock.patch.object(
+                canary,
+                "_git",
+                side_effect=(task_identity["head"], canary.PRODUCTION_BASE),
+            ),
+            mock.patch.object(canary, "SchwabReadOnlyAccessTokenProvider"),
+            mock.patch.object(
+                canary,
+                "SchwabMarketDataOnlyAccessGuard",
+                return_value=guard,
+            ),
+            mock.patch.object(canary, "SchwabMarketDataQuoteSource"),
+            mock.patch.object(
+                canary,
+                "build_regular_market_quote_proof",
+                return_value={
+                    "proofStatus": "PASS",
+                    "clockSkewProof": {"status": "PASS"},
+                    "accountDataIncluded": False,
+                    "orderTransmission": "UNAVAILABLE",
+                },
+            ),
+            mock.patch.object(
+                canary,
+                "SchwabHistoricalCandleBackfiller",
+                return_value=backfiller,
+            ),
+        ):
+            result = canary.run_schwab_preflight(
+                task_root=self.root,
+                production_root=self.root,
+                evidence_root=evidence,
+                expected_account_ending="1234",
+            )
+
+        self.assertEqual("PASS", result["status"])
+        self.assertEqual("READY", result["schwabAuthState"])
+        self.assertEqual("PASS", result["schwabQuotePreflight"])
+        self.assertEqual("PASS", result["schwabHistoryPreflight"])
+        self.assertFalse(result["accountValuesRequested"])
+        self.assertFalse(result["positionsRequested"])
+        self.assertFalse(result["ordersRequested"])
+        self.assertTrue(result["disposableStoresRetired"])
+        guard.authorize.assert_called_once_with("1234")
+        self.assertTrue((evidence / "schwab-preflight.json").is_file())
+
+    def test_failed_or_missing_schwab_preflight_creates_no_activation(self) -> None:
+        evidence = self.root / "blocked-canary"
+        with self.assertRaisesRegex(
+            canary.StatDataCanaryError,
+            "passing Schwab provider preflight",
+        ):
+            canary.prepare(
+                task_root=self.root,
+                production_root=self.root,
+                evidence_root=evidence,
+                session_date="2026-08-28",
+                duration_seconds=1800,
+                discovery_cadence_seconds=300,
+            )
+        self.assertFalse(evidence.exists())
+
+    def test_schwab_preflight_fingerprint_and_freshness_are_enforced(self) -> None:
+        proof_path = self.root / "proof.json"
+        task_identity = {"head": "1" * 40, "branch": canary.TASK_BRANCH, "status": ""}
+        production_identity = {
+            "head": canary.PRODUCTION_BASE,
+            "branch": "master",
+            "status": "",
+        }
+        proof = {
+            "status": "PASS",
+            "observedAt": datetime.now(ZoneInfo("UTC")).isoformat(),
+            "taskGit": task_identity,
+            "productionGit": production_identity,
+            "schwabAuthState": "READY",
+            "schwabQuotePreflight": "PASS",
+            "schwabHistoryPreflight": "PASS",
+            "schwabInteractiveReauthRequired": False,
+            "disposableStoresRetired": True,
+            "accountValuesRequested": False,
+            "positionsRequested": False,
+            "ordersRequested": False,
+            "executionAuthority": canary.EXECUTION_AUTHORITY,
+        }
+        proof["fingerprint"] = canary._fingerprint(
+            "stat-data-002c-schwab-preflight-v1",
+            proof,
+        )
+        canary._write_once(proof_path, proof)
+        with mock.patch.object(
+            canary,
+            "_git_identity",
+            side_effect=(task_identity, production_identity),
+        ):
+            loaded = canary._validate_schwab_preflight(
+                proof_path,
+                task_root=self.root,
+                production_root=self.root,
+            )
+        self.assertEqual(proof["fingerprint"], loaded["fingerprint"])
+
+        payload = json.loads(proof_path.read_text(encoding="ascii"))
+        payload["schwabHistoryPreflight"] = "FAIL"
+        proof_path.write_text(json.dumps(payload), encoding="ascii")
+        with self.assertRaisesRegex(canary.StatDataCanaryError, "fingerprint"):
+            canary._validate_schwab_preflight(
+                proof_path,
+                task_root=self.root,
+                production_root=self.root,
+            )
 
     def test_summary_failure_is_preserved_without_losing_terminal_record(self) -> None:
         evidence = self.root / "summary-failure"
