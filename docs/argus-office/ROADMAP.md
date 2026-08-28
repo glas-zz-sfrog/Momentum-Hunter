@@ -3185,18 +3185,38 @@ blocked and gains no authority from Paper evidence.
 
 #### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
 
-- Lifecycle: `DEFERRED / UI_READ_MODEL`. No implementation or visual acceptance
-  work is authorized by this placement record.
-- Reuse the existing WPF chart, candidate story, TradePlan, history/activity,
-  monitoring, specialist, and evidence-lineage surfaces. Do not create a second
-  decision authority or market-history model.
-- The eventual read model must answer: what matters now; why a symbol is
-  interesting; whether Momentum Hunter would trade it now and why not; what
-  changed since the prior evaluation; what historical context and prior beliefs
-  exist; what happened afterward; whether a limitation is policy or bad/missing
-  evidence; and which open positions require attention.
-- Begin only after the Continuous producer and required history/catalyst/decision
-  interfaces are stable enough to avoid a UI-owned interpretation layer.
+- Lifecycle: `IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PASS /
+  STEVEN_VISUAL_REVIEW_REQUIRED` on
+  `codex/ARGUS-GUI-COMMAND-CENTER-001C-PRODUCTION-INTEGRATION`. The accepted
+  001B macro hierarchy is implemented as the default read-only WPF Command
+  Center through bounded Engine Host schema-v3 projections. It is not merged,
+  installed, or active in the canonical workstation.
+- Frozen presentation semantics are source-owned: Radar is current-session
+  `TRACKED` Hot Universe membership; Accepted is the first
+  `EXECUTION_ELIGIBLE` transition per setup; Rejected is the first
+  `ENTRY_MISSED`, `FAILED_BREAKOUT`, or `INVALIDATED` transition per setup.
+  Display freshness and persisted 2-session/15-minute microcharts are human
+  context only and have no ranking, scoring, readiness, risk, entry, exit, or
+  execution authority.
+- The final isolated real-WPF proof received schema v3 and showed session
+  `2026-08-27`, Radar `15`, and projection `PARTIAL`. Candidate Lifecycle and
+  ranked-report evidence were absent at the selected authoritative roots, so
+  Accepted, Rejected, ranked rows, and their charts remained explicitly
+  unavailable; no fallback data was created. Radar geometry remained
+  `NOT_YET_AUTHORIZED` with no inferred nodes.
+- Independent second-eye re-review passes after three narrow repairs: Hot
+  transition rows keep Radar membership and lifecycle opportunity identities
+  separate; repeated host-poll housekeeping is excluded from `What Changed`;
+  and a missing source score remains nullable and displays as unavailable.
+  Native proof `ARGUS-GUI-COMMAND-CENTER-001C-overall-1920x1080.png` is
+  `1920x1080`, SHA-256
+  `89C5B7BF1A2F2B9E21FCE77CB2F63E998DCD38C539BAE00A87481A9546041689`.
+  The accepted-vs-implementation comparison SHA-256 is
+  `E5C4731C9F9574CC40A580679097505168B8B7F73848E603C3D213CA217374A6`.
+- Merge, installation, startup/Start Menu changes, and canonical workstation
+  replacement remain unauthorized. Exact operator checks are in
+  `docs/argus-office/VERIFICATION_QUEUE.md`; populated-row microchart review
+  remains unavailable until authoritative current evidence produces rows.
 
 #### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
 

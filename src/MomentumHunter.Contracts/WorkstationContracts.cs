@@ -97,6 +97,13 @@ public enum AlertEvidenceState
     Unavailable,
 }
 
+public enum CommandCenterEvidenceState
+{
+    Available,
+    Partial,
+    Unavailable,
+}
+
 public enum TechnicalResearchState
 {
     Available,
@@ -482,6 +489,115 @@ public sealed record SystemHealthSnapshot(
     IReadOnlyList<HealthComponentSnapshot> Components,
     DateTimeOffset CheckedAt);
 
+public sealed record CommandCenterSourceCoverage(
+    CommandCenterEvidenceState Radar,
+    CommandCenterEvidenceState Accepted,
+    CommandCenterEvidenceState Rejected,
+    CommandCenterEvidenceState RankedCandidates,
+    CommandCenterEvidenceState MiniCharts);
+
+public sealed record CommandCenterRadarMemberSnapshot(
+    string RadarPresentationIdentity,
+    int MembershipGeneration,
+    string DerivedLifecycleOpportunityId,
+    string Symbol,
+    string SessionDate,
+    DateTimeOffset? FirstSurfacedAt,
+    DateTimeOffset? LastObservedAt,
+    string CurrentState,
+    string CurrentTier,
+    string SourceSnapshotIdentity,
+    string DataLineage);
+
+public sealed record CommandCenterDispositionSnapshot(
+    string DispositionPresentationIdentity,
+    string DispositionEventId,
+    string Kind,
+    string OpportunityId,
+    string SetupId,
+    string SetupFamily,
+    int SetupSequence,
+    string Symbol,
+    string SessionDate,
+    string PreviousState,
+    string ReachedState,
+    DateTimeOffset? OccurredAt,
+    string Reason,
+    string SourceIdentity,
+    string EvidenceFingerprint,
+    string DataLineage);
+
+public sealed record CommandCenterRankedCandidateSnapshot(
+    string StableCandidateIdentity,
+    string Symbol,
+    string Company,
+    int SourceRank,
+    int? Score,
+    decimal? RelativeVolume,
+    decimal? LastPrice,
+    decimal? ChangePercent,
+    string CatalystSummary,
+    string? RadarMemberIdentity,
+    IReadOnlyList<string> AcceptedDispositionIds,
+    IReadOnlyList<string> RejectedDispositionIds,
+    string? RawMachineState,
+    DateTimeOffset? FirstSurfacedAt,
+    DateTimeOffset? StateChangedAt,
+    string DataLineage,
+    string SourceIdentity,
+    string MiniChartSymbolKey,
+    decimal? HypotheticalEntry,
+    decimal? HypotheticalStop,
+    decimal? HypotheticalTarget);
+
+public sealed record CommandCenterLifecycleEventSnapshot(
+    string EventIdentity,
+    string SourceKind,
+    string Symbol,
+    DateTimeOffset? OccurredAt,
+    string PreviousState,
+    string NextState,
+    string Reason,
+    string OpportunityId,
+    string? RadarMemberIdentity,
+    string? DerivedLifecycleOpportunityId,
+    string SetupId);
+
+public sealed record CommandCenterMiniChartPointSnapshot(
+    DateTimeOffset Timestamp,
+    decimal Close);
+
+public sealed record CommandCenterMiniChartSeriesSnapshot(
+    CommandCenterEvidenceState State,
+    string Symbol,
+    string Interval,
+    int RequestedSessionCount,
+    IReadOnlyList<string> SourceSessionDates,
+    IReadOnlyList<CommandCenterMiniChartPointSnapshot> Points,
+    string SourceLabel,
+    DateTimeOffset AsOf,
+    int GapCount,
+    int CorrectionCount,
+    IReadOnlyList<string> Findings,
+    string Limitation);
+
+public sealed record CommandCenterSnapshot(
+    DateTimeOffset ObservedAt,
+    string SessionDate,
+    CommandCenterEvidenceState ProjectionState,
+    CommandCenterSourceCoverage SourceCoverage,
+    IReadOnlyList<string> Limitations,
+    string PopulationContractVersion,
+    IReadOnlyDictionary<string, string> SourceIdentities,
+    IReadOnlyList<CommandCenterRadarMemberSnapshot> RadarMembers,
+    IReadOnlyList<CommandCenterDispositionSnapshot> AcceptedDispositions,
+    IReadOnlyList<CommandCenterDispositionSnapshot> RejectedDispositions,
+    IReadOnlyList<CommandCenterRankedCandidateSnapshot> RankedCandidates,
+    IReadOnlyList<CommandCenterLifecycleEventSnapshot> LifecycleEvents,
+    IReadOnlyDictionary<string, CommandCenterMiniChartSeriesSnapshot> MiniChartsBySymbol,
+    DateTimeOffset ReportObservedAt,
+    string RadarMapGeometryState);
+
 public sealed record ReadOnlyWorkspaceSnapshot(
     int SchemaVersion,
     DateTimeOffset ObservedAt,
@@ -491,7 +607,8 @@ public sealed record ReadOnlyWorkspaceSnapshot(
     SystemHealthSnapshot Health,
     AlertEvidenceSnapshot AlertEvidence,
     ReplaySnapshot Replay,
-    bool PlanningAvailable);
+    bool PlanningAvailable,
+    CommandCenterSnapshot? CommandCenter = null);
 
 public sealed record DailyWorkflowReviewCounts(
     int Total,

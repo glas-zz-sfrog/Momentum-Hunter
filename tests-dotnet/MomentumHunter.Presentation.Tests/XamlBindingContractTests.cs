@@ -36,6 +36,31 @@ public sealed partial class XamlBindingContractTests
     }
 
     [Fact]
+    public void CommandCenterBindingsResolveAgainstReadOnlyPresentationModels()
+    {
+        var root = FindRepositoryRoot();
+        var path = Path.Combine(
+            root,
+            "src",
+            "MomentumHunter.Desktop.Wpf",
+            "Controls",
+            "CommandCenterView.xaml");
+        var document = XDocument.Load(path, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
+        var failures = new List<string>();
+
+        Visit(
+            document.Root ?? throw new InvalidDataException("CommandCenterView.xaml has no root."),
+            typeof(ShellViewModel),
+            templateItemTypeHint: null,
+            failures);
+
+        Assert.True(
+            failures.Count == 0,
+            "Command Center XAML contains unresolved binding paths:\n"
+            + string.Join("\n", failures));
+    }
+
+    [Fact]
     public void BindingResolverRejectsRenamedRootAndNestedProperties()
     {
         Assert.False(TryResolvePath(typeof(ShellViewModel), "Candidatez", out _, out _));
@@ -84,6 +109,18 @@ public sealed partial class XamlBindingContractTests
         foreach (var child in element.Elements())
         {
             var localName = child.Name.LocalName;
+            var keyedTemplateType = localName == "DataTemplate"
+                ? child.Attribute(XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml"))?.Value switch
+                {
+                    "DispositionTemplate" => typeof(CommandCenterDispositionRowView),
+                    _ => null,
+                }
+                : null;
+            if (keyedTemplateType is not null)
+            {
+                Visit(child, keyedTemplateType, keyedTemplateType, failures);
+                continue;
+            }
             if (localName.EndsWith(".ItemTemplate", StringComparison.Ordinal))
             {
                 Visit(child, effectiveType, itemType, failures);

@@ -34,6 +34,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private ShadowReviewSnapshot? _shadowReviewSnapshot;
     private readonly SemaphoreSlim _chartRefreshLock = new(1, 1);
     private readonly SemaphoreSlim _shadowRefreshLock = new(1, 1);
+    private readonly SemaphoreSlim _commandCenterRefreshLock = new(1, 1);
     private long _candidateStoryRequestVersion;
 
     public ShellViewModel(IEngineClient engineClient)
@@ -338,6 +339,32 @@ public sealed partial class ShellViewModel : ObservableObject
     {
     }
 
+    public ShellViewModel(
+        IEngineClient engineClient,
+        IWorkspaceLayoutStore layoutStore,
+        IReadOnlyWorkspaceClient readOnlyWorkspaceClient,
+        ITechnicalResearchWorkspaceClient technicalResearchWorkspaceClient,
+        ISavedWatchlistWorkspaceClient savedWatchlistWorkspaceClient,
+        IDailyWorkflowWorkspaceClient dailyWorkflowWorkspaceClient,
+        ICandidateStoryWorkspaceClient candidateStoryWorkspaceClient,
+        IResearchMaturityWorkspaceClient researchMaturityWorkspaceClient,
+        IShadowReviewClient shadowReviewClient)
+        : this(
+            engineClient,
+            layoutStore,
+            readOnlyWorkspaceClient,
+            simulationWorkspaceClient: null,
+            chartWorkspaceClient: null,
+            savedWatchlistWorkspaceClient,
+            isInternalConstruction: true,
+            technicalResearchWorkspaceClient,
+            dailyWorkflowWorkspaceClient,
+            candidateStoryWorkspaceClient,
+            researchMaturityWorkspaceClient,
+            shadowReviewClient)
+    {
+    }
+
     private ShellViewModel(
         IEngineClient engineClient,
         IWorkspaceLayoutStore? layoutStore,
@@ -384,6 +411,10 @@ public sealed partial class ShellViewModel : ObservableObject
         ShadowUnfilledBlockedTrades = [];
         CommandPaletteResults = [];
         SavedWatchlistItems = [];
+        CommandCenterRankedCandidates = [];
+        CommandCenterAccepted = [];
+        CommandCenterRejected = [];
+        CommandCenterRecentEvents = [];
         OpenPositions.CollectionChanged += (_, _) => RaiseOpenPositionProperties();
         WorkspaceOptions = Enum.GetValues<WorkspaceKind>();
         IntervalOptions = ["1m", "5m", "15m", "Daily"];
@@ -434,6 +465,14 @@ public sealed partial class ShellViewModel : ObservableObject
     public ObservableCollection<ChartPaneViewModel> SecondaryCharts { get; } = [];
 
     public ObservableCollection<CommandPaletteItem> CommandPaletteResults { get; }
+
+    public ObservableCollection<CommandCenterRankedRowView> CommandCenterRankedCandidates { get; }
+
+    public ObservableCollection<CommandCenterDispositionRowView> CommandCenterAccepted { get; }
+
+    public ObservableCollection<CommandCenterDispositionRowView> CommandCenterRejected { get; }
+
+    public ObservableCollection<CommandCenterEventRowView> CommandCenterRecentEvents { get; }
 
     public IReadOnlyList<WorkspaceKind> WorkspaceOptions { get; }
 
@@ -594,6 +633,60 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty]
     private SavedWatchlistSnapshot? _savedWatchlist;
+
+    [ObservableProperty]
+    private CommandCenterSnapshot? _commandCenter;
+
+    [ObservableProperty]
+    private CommandCenterRankedRowView? _selectedCommandCenterCandidate;
+
+    public string CommandCenterLocalTimeLabel => DateTimeOffset.Now.ToString("HH:mm:ss 'LOCAL'");
+
+    public string CommandCenterSessionLabel => string.IsNullOrWhiteSpace(CommandCenter?.SessionDate)
+        ? "SESSION —"
+        : CommandCenter.SessionDate;
+
+    public string CommandCenterEvidenceModeLabel => "PERSISTED SNAPSHOT + STORED HISTORY";
+
+    public string CommandCenterLastUpdateLabel => CommandCenter?.ObservedAt.ToLocalTime().ToString("HH:mm:ss") ?? "—";
+
+    public string CommandCenterProjectionStateLabel => CommandCenter?.ProjectionState.ToString().ToUpperInvariant() ?? "UNAVAILABLE";
+
+    public string CommandCenterRadarCountLabel => PopulationCount(
+        CommandCenter?.SourceCoverage.Radar,
+        CommandCenter?.RadarMembers.Count ?? 0);
+
+    public string CommandCenterAcceptedCountLabel => PopulationCount(
+        CommandCenter?.SourceCoverage.Accepted,
+        CommandCenter?.AcceptedDispositions.Count ?? 0);
+
+    public string CommandCenterRejectedCountLabel => PopulationCount(
+        CommandCenter?.SourceCoverage.Rejected,
+        CommandCenter?.RejectedDispositions.Count ?? 0);
+
+    public string CommandCenterRankedCountLabel => CommandCenter is null
+        ? "0 source rows"
+        : $"Showing {CommandCenterRankedCandidates.Count} of {CommandCenter.RankedCandidates.Count} source-ranked rows";
+
+    public string CommandCenterLimitationsLabel => CommandCenter is null
+        ? "Command Center v3 projection is unavailable from the connected read-only host. No lifecycle population was inferred."
+        : CommandCenter.Limitations.Count > 0
+            ? string.Join(" | ", CommandCenter.Limitations)
+            : "No Command Center source limitation was reported.";
+
+    public string CommandCenterDataHealthLabel => CommandCenterProjectionStateLabel;
+
+    public string CommandCenterHostHealthLabel => $"HOST {Diagnostics.StatusLabel}";
+
+    public string CommandCenterEventHistoryLabel => "PARTIAL HISTORY";
+
+    public string CommandCenterRadarMapStatus => "RADAR MAP GEOMETRY NOT YET AUTHORIZED";
+
+    public bool HasCommandCenterAccepted => CommandCenterAccepted.Count > 0;
+
+    public bool HasCommandCenterRejected => CommandCenterRejected.Count > 0;
+
+    public bool HasCommandCenterRankedCandidates => CommandCenterRankedCandidates.Count > 0;
 
     public string MonitoringToggleLabel => IsMonitoringPaused ? "Resume Monitoring" : "Pause Monitoring";
 
@@ -1005,8 +1098,44 @@ public sealed partial class ShellViewModel : ObservableObject
         await RefreshDailyWorkflowDataAsync(cancellationToken);
         await RefreshWorkspaceDataAsync(cancellationToken);
         await RefreshResearchMaturityAsync(cancellationToken);
-        await RefreshChartPaneDataAsync(cancellationToken);
+        if (!IsReadOnlySnapshotMode)
+        {
+            await RefreshChartPaneDataAsync(cancellationToken);
+        }
         await RefreshShadowReviewAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Refreshes the complete read-only Command Center projection in one guarded
+    /// host call.  It never fans out by row and an unavailable refresh leaves the
+    /// last visible projection in place with an explicit status message.
+    /// </summary>
+    public async Task RefreshCommandCenterDisplayAsync(CancellationToken cancellationToken = default)
+    {
+        if (_readOnlyWorkspaceClient is null
+            || !await _commandCenterRefreshLock.WaitAsync(0, cancellationToken))
+        {
+            return;
+        }
+
+        try
+        {
+            var snapshot = await _readOnlyWorkspaceClient.GetSnapshotAsync(cancellationToken);
+            ApplyCommandCenterSnapshot(snapshot.CommandCenter);
+            StatusMessage = snapshot.CommandCenter is null
+                ? "Command Center projection is unavailable in the read-only snapshot. Existing lifecycle rows were not inferred."
+                : snapshot.Summary;
+        }
+        catch (Exception exception) when (
+            !cancellationToken.IsCancellationRequested
+            && exception is IOException or InvalidDataException or InvalidOperationException or JsonException)
+        {
+            StatusMessage = $"Command Center refresh unavailable: {exception.Message} The last validated rows remain visible.";
+        }
+        finally
+        {
+            _commandCenterRefreshLock.Release();
+        }
     }
 
     public async Task SelectCandidateAsync(CandidateSnapshot candidate, CancellationToken cancellationToken = default)
@@ -1493,7 +1622,7 @@ public sealed partial class ShellViewModel : ObservableObject
             BackgroundCollectionState.Degraded => HealthState.Degraded,
             _ => HealthState.Unavailable,
         };
-        Activity.Insert(0, new ActivityEvent(activity.Timestamp, "Monitoring", activity.Message, SelectedSymbol, state));
+        Activity.Insert(0, new ActivityEvent(activity.Timestamp, "Monitoring", activity.Message, string.Empty, state));
         OnPropertyChanged(nameof(ActivityLabel));
     }
 
@@ -1501,7 +1630,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
     partial void OnCommandQueryChanged(string value) => RefreshCommandPaletteResults();
 
-    partial void OnHealthChanged(SystemHealthSnapshot? value) => OnPropertyChanged(nameof(Diagnostics));
+    partial void OnHealthChanged(SystemHealthSnapshot? value)
+    {
+        OnPropertyChanged(nameof(Diagnostics));
+        OnPropertyChanged(nameof(CommandCenterHostHealthLabel));
+    }
 
     partial void OnReplaySessionChanged(ReplaySnapshot? value) => OnPropertyChanged(nameof(ReplayContext));
 
@@ -2484,12 +2617,25 @@ public sealed partial class ShellViewModel : ObservableObject
             Health = snapshot.Health;
             AlertEvidence = snapshot.AlertEvidence;
             ReplaySession = snapshot.Replay;
+            ApplyCommandCenterSnapshot(snapshot.CommandCenter);
             StatusMessage = snapshot.Summary;
             OnPropertyChanged(nameof(ActivityLabel));
             var candidateToSelect = Candidates.FirstOrDefault(candidate => candidate.Symbol == SelectedSymbol) ?? Candidates.FirstOrDefault();
             if (candidateToSelect is not null)
             {
-                await SelectCandidateAsync(candidateToSelect, cancellationToken);
+                SelectedCandidate = candidateToSelect;
+                SelectedSymbol = candidateToSelect.Symbol;
+                TradePlan = null;
+                Candles.Clear();
+                PrimaryChart = null;
+                SecondaryCharts.Clear();
+                TechnicalResearch = UnavailableTechnicalResearch(
+                    SelectedSymbol,
+                    "Technical research is not loaded by the Command Center batch projection.");
+                CandidateStory = UnavailableCandidateStory(
+                    SelectedSymbol,
+                    "Candidate Story is not loaded by the Command Center batch projection.");
+                RaisePresentationProperties();
             }
             else
             {
@@ -2520,6 +2666,7 @@ public sealed partial class ShellViewModel : ObservableObject
             ReplaySession = new ReplaySnapshot("UNAVAILABLE", now, string.Empty, "source capture", "Replay context is unavailable because the Python snapshot could not be loaded.");
             TechnicalResearch = UnavailableTechnicalResearch(SelectedSymbol, detail);
             CandidateStory = UnavailableCandidateStory(SelectedSymbol, detail);
+            ApplyCommandCenterSnapshot(null);
             TradePlan = null;
             Candles.Clear();
             PrimaryChart = null;
@@ -2529,6 +2676,126 @@ public sealed partial class ShellViewModel : ObservableObject
             RaisePresentationProperties();
         }
     }
+
+    private void ApplyCommandCenterSnapshot(CommandCenterSnapshot? snapshot)
+    {
+        var priorIdentity = SelectedCommandCenterCandidate?.StableCandidateIdentity;
+        var hadProjection = CommandCenter is not null;
+        CommandCenter = snapshot;
+        if (snapshot is null)
+        {
+            CommandCenterRankedCandidates.Clear();
+            CommandCenterAccepted.Clear();
+            CommandCenterRejected.Clear();
+            CommandCenterRecentEvents.Clear();
+            SelectedCommandCenterCandidate = null;
+            RaiseCommandCenterProperties();
+            return;
+        }
+
+        var now = DateTimeOffset.Now;
+        var ranked = CommandCenterProjection.Ranked(snapshot, now);
+        var accepted = CommandCenterProjection.Dispositions(snapshot.AcceptedDispositions, snapshot, now);
+        var rejected = CommandCenterProjection.Dispositions(snapshot.RejectedDispositions, snapshot, now);
+        var lifecycleEvents = snapshot.LifecycleEvents
+            .Take(18)
+            .Select(CommandCenterEventRowView.From)
+            .ToArray();
+        var summaryCapacity = Math.Max(0, 18 - lifecycleEvents.Length);
+        var summaryEvents = Activity
+            .Where(item => !IsCommandCenterHostHousekeeping(item))
+            .OrderByDescending(item => item.Timestamp)
+            .GroupBy(
+                item => $"{item.Category.Trim()}|{item.Symbol.Trim()}|{item.Message.Trim()}",
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Take(summaryCapacity)
+            .Select(CommandCenterEventRowView.From);
+        var events = lifecycleEvents.Concat(summaryEvents).ToArray();
+
+        SyncByIdentity(CommandCenterRankedCandidates, ranked, item => item.StableCandidateIdentity);
+        SyncByIdentity(CommandCenterAccepted, accepted, item => item.DispositionPresentationIdentity);
+        SyncByIdentity(CommandCenterRejected, rejected, item => item.DispositionPresentationIdentity);
+        SyncByIdentity(CommandCenterRecentEvents, events, item => item.EventIdentity);
+
+        SelectedCommandCenterCandidate = !string.IsNullOrWhiteSpace(priorIdentity)
+            ? CommandCenterRankedCandidates.FirstOrDefault(item => item.StableCandidateIdentity == priorIdentity)
+            : hadProjection
+                ? null
+                : CommandCenterRankedCandidates.FirstOrDefault();
+        RaiseCommandCenterProperties();
+    }
+
+    private static bool IsCommandCenterHostHousekeeping(ActivityEvent item) =>
+        string.Equals(item.Category, "Monitoring", StringComparison.OrdinalIgnoreCase)
+        && item.Message.Contains("Python Engine Host", StringComparison.OrdinalIgnoreCase);
+
+    private static void SyncByIdentity<T>(
+        ObservableCollection<T> target,
+        IReadOnlyList<T> incoming,
+        Func<T, string> identity)
+    {
+        var incomingIds = incoming.Select(identity).ToHashSet(StringComparer.Ordinal);
+        for (var index = target.Count - 1; index >= 0; index--)
+        {
+            if (!incomingIds.Contains(identity(target[index])))
+            {
+                target.RemoveAt(index);
+            }
+        }
+
+        for (var index = 0; index < incoming.Count; index++)
+        {
+            var item = incoming[index];
+            var itemIdentity = identity(item);
+            var existingIndex = -1;
+            for (var candidate = 0; candidate < target.Count; candidate++)
+            {
+                if (string.Equals(identity(target[candidate]), itemIdentity, StringComparison.Ordinal))
+                {
+                    existingIndex = candidate;
+                    break;
+                }
+            }
+            if (existingIndex < 0)
+            {
+                target.Insert(index, item);
+            }
+            else
+            {
+                if (existingIndex != index)
+                {
+                    target.Move(existingIndex, index);
+                }
+                target[index] = item;
+            }
+        }
+    }
+
+    private void RaiseCommandCenterProperties()
+    {
+        OnPropertyChanged(nameof(CommandCenterLocalTimeLabel));
+        OnPropertyChanged(nameof(CommandCenterSessionLabel));
+        OnPropertyChanged(nameof(CommandCenterLastUpdateLabel));
+        OnPropertyChanged(nameof(CommandCenterProjectionStateLabel));
+        OnPropertyChanged(nameof(CommandCenterRadarCountLabel));
+        OnPropertyChanged(nameof(CommandCenterAcceptedCountLabel));
+        OnPropertyChanged(nameof(CommandCenterRejectedCountLabel));
+        OnPropertyChanged(nameof(CommandCenterRankedCountLabel));
+        OnPropertyChanged(nameof(CommandCenterLimitationsLabel));
+        OnPropertyChanged(nameof(CommandCenterDataHealthLabel));
+        OnPropertyChanged(nameof(CommandCenterHostHealthLabel));
+        OnPropertyChanged(nameof(HasCommandCenterAccepted));
+        OnPropertyChanged(nameof(HasCommandCenterRejected));
+        OnPropertyChanged(nameof(HasCommandCenterRankedCandidates));
+    }
+
+    private static string PopulationCount(CommandCenterEvidenceState? state, int count) => state switch
+    {
+        CommandCenterEvidenceState.Available => count.ToString("N0"),
+        CommandCenterEvidenceState.Partial => $"{count:N0} PARTIAL",
+        _ => "UNAVAILABLE",
+    };
 
     partial void OnAlertEvidenceChanged(AlertEvidenceSnapshot? value)
     {

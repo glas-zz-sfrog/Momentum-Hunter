@@ -35,7 +35,7 @@ public static class PythonReadOnlyWorkspaceSnapshotMapper
         }
 
         var schemaVersion = Integer(root, "schemaVersion") ?? 0;
-        if (schemaVersion is not (1 or 2))
+        if (schemaVersion is not (1 or 2 or 3))
         {
             throw new InvalidDataException($"Unsupported Python read-only workspace schema version: {schemaVersion}.");
         }
@@ -48,6 +48,9 @@ public static class PythonReadOnlyWorkspaceSnapshotMapper
             ? AlertEvidence(Object(root, "alertEvidence"), observedAt)
             : UnavailableAlertEvidence(observedAt, "Alert evidence was not supplied by read-only workspace schema v1.");
         var replay = Replay(Object(root, "replay"), observedAt);
+        var commandCenter = schemaVersion >= 3
+            ? CommandCenter(Object(root, "commandCenter"), observedAt)
+            : null;
         return new ReadOnlyWorkspaceSnapshot(
             schemaVersion,
             observedAt,
@@ -57,7 +60,169 @@ public static class PythonReadOnlyWorkspaceSnapshotMapper
             health,
             alertEvidence,
             replay,
-            Boolean(root, "planningAvailable"));
+            Boolean(root, "planningAvailable"),
+            commandCenter);
+    }
+
+    private static CommandCenterSnapshot? CommandCenter(JsonElement item, DateTimeOffset fallback)
+    {
+        if (item.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var observedAt = Timestamp(item, "observedAt", fallback);
+        var coverage = Object(item, "sourceCoverage");
+        return new CommandCenterSnapshot(
+            observedAt,
+            String(item, "sessionDate") ?? string.Empty,
+            CommandCenterState(String(item, "projectionState")),
+            new CommandCenterSourceCoverage(
+                CommandCenterState(String(coverage, "radar")),
+                CommandCenterState(String(coverage, "accepted")),
+                CommandCenterState(String(coverage, "rejected")),
+                CommandCenterState(String(coverage, "rankedCandidates")),
+                CommandCenterState(String(coverage, "miniCharts"))),
+            StringArray(item, "limitations"),
+            String(item, "populationContractVersion") ?? "UNAVAILABLE",
+            StringDictionary(Object(item, "sourceIdentities")),
+            Array(item, "radarMembers").Select(RadarMember).ToArray(),
+            Array(item, "acceptedDispositions").Select(Disposition).ToArray(),
+            Array(item, "rejectedDispositions").Select(Disposition).ToArray(),
+            Array(item, "rankedCandidates").Select(RankedCandidate).OrderBy(row => row.SourceRank).ToArray(),
+            Array(item, "lifecycleEvents").Select(LifecycleEvent).ToArray(),
+            MiniChartDictionary(Object(item, "miniChartsBySymbol"), observedAt),
+            Timestamp(item, "reportObservedAt", observedAt),
+            String(item, "radarMapGeometryState") ?? "NOT_YET_AUTHORIZED");
+    }
+
+    private static CommandCenterRadarMemberSnapshot RadarMember(JsonElement item) => new(
+        String(item, "radarPresentationIdentity") ?? string.Empty,
+        Integer(item, "membershipGeneration") ?? 0,
+        String(item, "derivedLifecycleOpportunityId") ?? string.Empty,
+        String(item, "symbol") ?? string.Empty,
+        String(item, "sessionDate") ?? string.Empty,
+        NullableTimestamp(item, "firstSurfacedAt"),
+        NullableTimestamp(item, "lastObservedAt"),
+        String(item, "currentState") ?? "UNAVAILABLE",
+        String(item, "currentTier") ?? "UNAVAILABLE",
+        String(item, "sourceSnapshotIdentity") ?? string.Empty,
+        String(item, "dataLineage") ?? "Source lineage unavailable.");
+
+    private static CommandCenterDispositionSnapshot Disposition(JsonElement item) => new(
+        String(item, "dispositionPresentationIdentity") ?? string.Empty,
+        String(item, "dispositionEventId") ?? string.Empty,
+        String(item, "kind") ?? "UNAVAILABLE",
+        String(item, "opportunityId") ?? string.Empty,
+        String(item, "setupId") ?? string.Empty,
+        String(item, "setupFamily") ?? string.Empty,
+        Integer(item, "setupSequence") ?? 0,
+        String(item, "symbol") ?? string.Empty,
+        String(item, "sessionDate") ?? string.Empty,
+        String(item, "previousState") ?? string.Empty,
+        String(item, "reachedState") ?? string.Empty,
+        NullableTimestamp(item, "occurredAt"),
+        String(item, "reason") ?? "Reason unavailable.",
+        String(item, "sourceIdentity") ?? string.Empty,
+        String(item, "evidenceFingerprint") ?? string.Empty,
+        String(item, "dataLineage") ?? "Source lineage unavailable.");
+
+    private static CommandCenterRankedCandidateSnapshot RankedCandidate(JsonElement item) => new(
+        String(item, "stableCandidateIdentity") ?? string.Empty,
+        String(item, "symbol") ?? string.Empty,
+        String(item, "company") ?? "Company unavailable",
+        Integer(item, "sourceRank") ?? 0,
+        Integer(item, "score"),
+        Decimal(item, "relativeVolume"),
+        Decimal(item, "lastPrice"),
+        Decimal(item, "changePercent"),
+        String(item, "catalystSummary") ?? "Catalyst unavailable",
+        String(item, "radarMemberIdentity"),
+        StringArray(item, "acceptedDispositionIds"),
+        StringArray(item, "rejectedDispositionIds"),
+        String(item, "rawMachineState"),
+        NullableTimestamp(item, "displayFirstSurfacedAt"),
+        NullableTimestamp(item, "displayStateChangedAt"),
+        String(item, "dataLineage") ?? "Source lineage unavailable.",
+        String(item, "sourceIdentity") ?? string.Empty,
+        String(item, "miniChartSymbolKey") ?? string.Empty,
+        Decimal(item, "hypotheticalEntry"),
+        Decimal(item, "hypotheticalStop"),
+        Decimal(item, "hypotheticalTarget"));
+
+    private static CommandCenterLifecycleEventSnapshot LifecycleEvent(JsonElement item) => new(
+        String(item, "eventIdentity") ?? string.Empty,
+        String(item, "sourceKind") ?? "UNAVAILABLE",
+        String(item, "symbol") ?? string.Empty,
+        NullableTimestamp(item, "occurredAt"),
+        String(item, "previousState") ?? string.Empty,
+        String(item, "nextState") ?? string.Empty,
+        String(item, "reason") ?? "Reason unavailable.",
+        String(item, "opportunityId") ?? string.Empty,
+        String(item, "radarMemberIdentity"),
+        String(item, "derivedLifecycleOpportunityId"),
+        String(item, "setupId") ?? string.Empty);
+
+    private static IReadOnlyDictionary<string, CommandCenterMiniChartSeriesSnapshot> MiniChartDictionary(
+        JsonElement item,
+        DateTimeOffset fallback)
+    {
+        if (item.ValueKind != JsonValueKind.Object)
+        {
+            return new Dictionary<string, CommandCenterMiniChartSeriesSnapshot>();
+        }
+
+        return item.EnumerateObject().ToDictionary(
+            property => property.Name,
+            property => MiniChart(property.Value, fallback),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static CommandCenterMiniChartSeriesSnapshot MiniChart(JsonElement item, DateTimeOffset fallback) => new(
+        CommandCenterState(String(item, "state")),
+        String(item, "symbol") ?? string.Empty,
+        String(item, "interval") ?? "15m",
+        Integer(item, "requestedSessionCount") ?? 2,
+        StringArray(item, "sourceSessionDates"),
+        Array(item, "points")
+            .Select(point => new CommandCenterMiniChartPointSnapshot(
+                Timestamp(point, "timestamp", fallback),
+                Decimal(point, "close") ?? 0m))
+            .ToArray(),
+        String(item, "sourceLabel") ?? "Stored history source unavailable",
+        Timestamp(item, "asOf", fallback),
+        Integer(item, "gapCount") ?? 0,
+        Integer(item, "correctionCount") ?? 0,
+        StringArray(item, "findings"),
+        String(item, "limitation") ?? string.Empty);
+
+    private static CommandCenterEvidenceState CommandCenterState(string? value) => value?.Trim().ToUpperInvariant() switch
+    {
+        "AVAILABLE" => CommandCenterEvidenceState.Available,
+        "PARTIAL" => CommandCenterEvidenceState.Partial,
+        _ => CommandCenterEvidenceState.Unavailable,
+    };
+
+    private static IReadOnlyList<string> StringArray(JsonElement item, string name) =>
+        Array(item, name)
+            .Where(value => value.ValueKind == JsonValueKind.String)
+            .Select(value => value.GetString()?.Trim() ?? string.Empty)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+
+    private static IReadOnlyDictionary<string, string> StringDictionary(JsonElement item)
+    {
+        if (item.ValueKind != JsonValueKind.Object)
+        {
+            return new Dictionary<string, string>();
+        }
+
+        return item.EnumerateObject()
+            .Where(property => property.Value.ValueKind == JsonValueKind.String)
+            .ToDictionary(
+                property => property.Name,
+                property => property.Value.GetString()?.Trim() ?? string.Empty,
+                StringComparer.Ordinal);
     }
 
     private static CandidateSnapshot Candidate(JsonElement item, DateTimeOffset fallback)

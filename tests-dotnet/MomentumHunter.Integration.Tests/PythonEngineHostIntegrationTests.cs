@@ -4,6 +4,10 @@ using MomentumHunter.EngineBridge;
 
 namespace MomentumHunter.Integration.Tests;
 
+[CollectionDefinition("Python host environment isolation", DisableParallelization = true)]
+public sealed class PythonHostEnvironmentIsolationCollection;
+
+[Collection("Python host environment isolation")]
 public sealed class PythonEngineHostIntegrationTests
 {
     [Fact]
@@ -12,13 +16,61 @@ public sealed class PythonEngineHostIntegrationTests
         var root = FindRepositoryRoot();
         var configuredPython = Environment.GetEnvironmentVariable("MOMENTUM_HUNTER_PYTHON_EXECUTABLE");
         var virtualEnvironmentPython = Path.Combine(root, ".venv", "Scripts", "python.exe");
-        var options = PythonEngineHostOptions.CreateDefault();
+        var priorStateDirectory = Environment.GetEnvironmentVariable(
+            "MOMENTUM_HUNTER_ENGINE_HOST_STATE_DIRECTORY");
 
-        Assert.Equal(root, options.WorkingDirectory);
-        Assert.Contains("python-engine-host", options.StateDirectory, StringComparison.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(configuredPython) && File.Exists(virtualEnvironmentPython))
+        try
         {
-            Assert.Equal(virtualEnvironmentPython, options.PythonExecutable);
+            Environment.SetEnvironmentVariable(
+                "MOMENTUM_HUNTER_ENGINE_HOST_STATE_DIRECTORY",
+                null);
+            var options = PythonEngineHostOptions.CreateDefault();
+
+            Assert.Equal(root, options.WorkingDirectory);
+            Assert.Equal(
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "MomentumHunter",
+                    "python-engine-host"),
+                options.StateDirectory);
+            if (string.IsNullOrWhiteSpace(configuredPython) && File.Exists(virtualEnvironmentPython))
+            {
+                Assert.Equal(virtualEnvironmentPython, options.PythonExecutable);
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(
+                "MOMENTUM_HUNTER_ENGINE_HOST_STATE_DIRECTORY",
+                priorStateDirectory);
+        }
+    }
+
+    [Fact]
+    public void DefaultHostOptionsAllowAnExplicitProofIsolationStateDirectory()
+    {
+        var priorStateDirectory = Environment.GetEnvironmentVariable(
+            "MOMENTUM_HUNTER_ENGINE_HOST_STATE_DIRECTORY");
+        var isolatedDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "MomentumHunter.CommandCenter.Proof",
+            Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            Environment.SetEnvironmentVariable(
+                "MOMENTUM_HUNTER_ENGINE_HOST_STATE_DIRECTORY",
+                isolatedDirectory);
+
+            var options = PythonEngineHostOptions.CreateDefault();
+
+            Assert.Equal(Path.GetFullPath(isolatedDirectory), options.StateDirectory);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(
+                "MOMENTUM_HUNTER_ENGINE_HOST_STATE_DIRECTORY",
+                priorStateDirectory);
         }
     }
 
@@ -62,7 +114,9 @@ public sealed class PythonEngineHostIntegrationTests
             Assert.DoesNotContain("submit_order", first.Capabilities);
 
             var readOnlyWorkspacePayload = await firstConnection.GetReadOnlyWorkspaceSnapshotAsync();
-            Assert.Equal(2, readOnlyWorkspacePayload.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(3, readOnlyWorkspacePayload.GetProperty("schemaVersion").GetInt32());
+            Assert.True(readOnlyWorkspacePayload.TryGetProperty("commandCenter", out var commandCenter));
+            Assert.False(commandCenter.GetProperty("populationContractVersion").GetString() is null);
             Assert.False(readOnlyWorkspacePayload.GetProperty("planningAvailable").GetBoolean());
             Assert.True(readOnlyWorkspacePayload.TryGetProperty("candidates", out _));
             Assert.True(readOnlyWorkspacePayload.TryGetProperty("health", out _));

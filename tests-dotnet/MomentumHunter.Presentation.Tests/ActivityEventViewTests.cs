@@ -75,6 +75,7 @@ public sealed class ActivityEventViewTests
         Assert.Equal(4, viewModel.ActivityRows.Count);
         Assert.Equal("Collection blocked for source review.", viewModel.ActivityRows[0].Message);
         Assert.Equal("UNAVAILABLE", viewModel.ActivityRows[0].StateLabel);
+        Assert.Equal("Workspace", viewModel.ActivityRows[0].ScopeLabel);
         Assert.Equal(priorMessages, viewModel.ActivityRows.Skip(1).Select(row => row.Message));
         Assert.Contains(nameof(ShellViewModel.ActivityRows), changed);
         Assert.Contains(nameof(ShellViewModel.ActivityCountLabel), changed);

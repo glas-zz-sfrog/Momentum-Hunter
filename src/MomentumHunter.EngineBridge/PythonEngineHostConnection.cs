@@ -15,16 +15,22 @@ public sealed record PythonEngineHostOptions(
     TimeSpan LaunchTimeout,
     TimeSpan RequestTimeout)
 {
+    public string? ContinuousRuntimeStateRoot { get; init; }
+
     public static PythonEngineHostOptions CreateDefault()
     {
-        var stateDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MomentumHunter",
-            "python-engine-host");
+        var configuredStateDirectory = Environment.GetEnvironmentVariable(
+            "MOMENTUM_HUNTER_ENGINE_HOST_STATE_DIRECTORY");
+        var stateDirectory = string.IsNullOrWhiteSpace(configuredStateDirectory)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "MomentumHunter",
+                "python-engine-host")
+            : Path.GetFullPath(configuredStateDirectory);
         var workingDirectory = FindRepositoryRoot() ?? Directory.GetCurrentDirectory();
         var pythonExecutable = Environment.GetEnvironmentVariable("MOMENTUM_HUNTER_PYTHON_EXECUTABLE");
         var repositoryVirtualEnvironment = Path.Combine(workingDirectory, ".venv", "Scripts", "python.exe");
-        return new PythonEngineHostOptions(
+        var options = new PythonEngineHostOptions(
             stateDirectory,
             workingDirectory,
             string.IsNullOrWhiteSpace(pythonExecutable)
@@ -32,6 +38,14 @@ public sealed record PythonEngineHostOptions(
                 : pythonExecutable,
             TimeSpan.FromSeconds(20),
             TimeSpan.FromSeconds(5));
+        var continuousRuntimeStateRoot = Environment.GetEnvironmentVariable(
+            "MOMENTUM_HUNTER_CONTINUOUS_RUNTIME_STATE_ROOT");
+        return string.IsNullOrWhiteSpace(continuousRuntimeStateRoot)
+            ? options
+            : options with
+            {
+                ContinuousRuntimeStateRoot = Path.GetFullPath(continuousRuntimeStateRoot),
+            };
     }
 
     private static string? FindRepositoryRoot()
@@ -82,6 +96,11 @@ public sealed class PythonEngineHostProcessLauncher : IPythonEngineHostProcessLa
         startInfo.ArgumentList.Add("momentum_hunter.engine_host");
         startInfo.ArgumentList.Add("--state-directory");
         startInfo.ArgumentList.Add(options.StateDirectory);
+        if (!string.IsNullOrWhiteSpace(options.ContinuousRuntimeStateRoot))
+        {
+            startInfo.ArgumentList.Add("--continuous-runtime-state-root");
+            startInfo.ArgumentList.Add(options.ContinuousRuntimeStateRoot);
+        }
         startInfo.Environment["PYTHONUTF8"] = "1";
 
         using var process = Process.Start(startInfo)
