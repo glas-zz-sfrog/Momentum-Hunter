@@ -140,6 +140,26 @@ manifest hashes remain byte-identical to the pre-merge baseline; no deployment,
 GUI, provider, Paper, Shadow, broker, account, position, or order action
 occurred. Unknown instruments remain execution-blocked.
 
+`ARGUS-STAT-DATA-002` is `IMPLEMENTED_PENDING_LIVE_CANARY / RESEARCH_ONLY`
+on branch `codex/ARGUS-STAT-DATA-002`. Implementation commit
+`ebf1dbfd93a71e838a0ef4d6f90675b43d82d9e6` activates the existing immutable
+opportunity/Continuous denominator only through an explicit write-once
+activation record. It preserves every natural cycle attempt while separately
+indexing unique setup, universe-member, or discovery-row membership; historical
+backfill is context-only; nested populations are auditable; and later outcomes
+attach without rewriting admission. Unknown instruments remain statistically
+observable and execution-blocked.
+
+Offline Hard Chew passes 2,846 tests with one expected Windows skip, including
+anti-hindsight, duplicate suppression, successor identity, restart, tamper,
+terminal-failure packaging, full packet extraction, and natural Continuous
+regressions. The prospective sample is not yet live: zero natural observations,
+zero unique members, and zero outcomes exist. A bounded regular-session canary
+must create a new activation before provider contact, use the accepted natural
+Continuous path, package every terminal outcome, and stop for second-eye review.
+No merge, deployment, Paper, Shadow, broker, account, position, or order
+authority is granted.
+
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
 `d1a6e14ae3bec1a565a2eb07b47a3b1491356b16` moves the existing catalyst
@@ -312,11 +332,10 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Review the Producer-001F canonical integration closeout. Do not begin another
-Producer task, deployment, `ARGUS-STAT-DATA-002`, instrument-classification
-implementation, or Continuous Paper work without a separate directive. No new
-provider canary or second-eye ZIP is required for the accepted lineage.
-`ARGUS-STAT-DATA-002` and Continuous Paper remain held.
+Run the frozen `ARGUS-STAT-DATA-002` regular-session prospective canary on the
+next eligible session. Preserve and package any terminal result, including
+failure, then stop for independent second-eye review. Do not merge, deploy,
+start instrument-classification implementation, or resume Continuous Paper.
 Authoritative instrument subtype/leverage classification remains a pre-Paper
 gate. The authoritative ordered sequence is maintained only in `Next / Queue`
 below.
@@ -388,19 +407,16 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. Producer-001F canonical integration is terminal and awaiting closeout
-   review. Producer-001D Product runtime and Producer-001E forensic tooling are
-   canonical, research-only, and not deployed. No new provider run, install,
-   activation, or downstream implementation is active.
+1. `ARGUS-STAT-DATA-002` is active only as a frozen branch awaiting its first
+   bounded regular-session prospective canary. The sample remains empty until
+   the canary writes its immutable activation before provider contact.
 
 ### 2. Ready / Next
 
-1. Review the Producer-001F integration evidence and canonical closeout. A
-   separate directive must choose the next Roadmap gate; no task is inferred.
-2. Preserve the accepted V4 packet and original 001D evidence. A new live
-   provider canary or second-eye package is not required for this integration.
-3. Wire and activate `ARGUS-STAT-DATA-002` prospectively under a new immutable
-   research identity only after the natural path passes physical acceptance.
+1. Run and package the `ARGUS-STAT-DATA-002` natural provider canary; accept no
+   injected candidate, READY state, TradePlan, outcome, or market evidence.
+2. Stop for independent review of the resulting sanitized self-contained ZIP.
+3. Preserve the accepted Producer V4 packet and original 001D evidence.
 4. Close authoritative instrument subtype/leverage classification before any
    Continuous Paper arming; unknown and leveraged/inverse products remain
    execution-ineligible meanwhile.
@@ -430,9 +446,8 @@ next-action language preserved elsewhere cannot supersede this queue.
    successful physical exact-path acceptance, authoritative instrument
    classification, canonical reconciliation, complete requalification, and
    disabled-install proof.
-3. `ARGUS-STAT-DATA-002`: `HELD` until the natural path and its physical canary can
-   supply a truthful full stream rather than denominator-heavy incomplete
-   `SETUP_PENDING` states.
+3. `ARGUS-STAT-DATA-002`: merge and downstream activation are blocked until its
+   terminal natural provider canary is packaged and independently accepted.
 4. R034: blocked on explicit destructive approval.
 5. Continuous/live order authority: blocked on separate Paper, safety,
    account/broker, prospective-evidence, and Steven decision gates.
@@ -3456,19 +3471,20 @@ Intended specialist architecture:
 
 #### ARGUS-STAT-DATA-002 - Prospective Producer Wiring And Activation
 
-- Status: `CANONICAL_INTEGRATED / ACTIVATION_HELD`; producer wiring remains
-  dormant and must use a new immutable activation identity.
-- The Aug. 17 evidence gate is terminal and preserved. Do not begin activation
-  until `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` and its separate real
-  provider-backed research-only canary prove the complete bounded Continuous
-  cycle required by this contract. Avoid a denominator dominated by incomplete
-  `SETUP_PENDING` states.
+- Status: `IMPLEMENTED_PENDING_LIVE_CANARY / RESEARCH_ONLY` on branch
+  `codex/ARGUS-STAT-DATA-002`; merge remains unauthorized.
+- The accepted Producer lineage is canonical. Offline prospective activation,
+  immutable membership, attempts-versus-unique counters, nested populations,
+  historical-context exclusion, restart, successor identity, separate outcome
+  attachment, and mandatory terminal packaging are proven at implementation
+  commit `ebf1dbfd93a71e838a0ef4d6f90675b43d82d9e6`.
 - Feed the denominator from the complete bounded source population, including
   rows that do not survive scanner/report admission, rather than treating a
   surviving briefing subset as the original population.
-- Wire and activate prospectively under a new immutable activation identity;
-  do not backfill history, rewrite STAT-DATA-001 records, or change the current
-  Momentum/Paper strategy path.
+- The first natural sample is still empty. Run one bounded regular-session
+  canary under a new immutable activation identity; do not backfill history,
+  rewrite STAT-DATA-001 records, or change the current Momentum/Paper strategy
+  path. Package any terminal result and stop for second-eye review.
 
 #### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
 
