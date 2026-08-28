@@ -3186,7 +3186,7 @@ blocked and gains no authority from Paper evidence.
 #### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
 
 - Lifecycle: `IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PASS /
-  STEVEN_VISUAL_REVIEW_REQUIRED` on
+  STEVEN_VISUAL_PASS` on
   `codex/ARGUS-GUI-COMMAND-CENTER-001C-PRODUCTION-INTEGRATION`. The accepted
   001B macro hierarchy is implemented as the default read-only WPF Command
   Center through bounded Engine Host schema-v3 projections. It is not merged,
@@ -3215,10 +3215,20 @@ blocked and gains no authority from Paper evidence.
   `FC0F8A5944F1262078CDE2ADA5D0716E4617C9A1422D30923411F3EE54E8D4D2`.
   The accepted-vs-runtime comparison SHA-256 is
   `8884279FB796EED646413BFBA0823BB32B0411709361374250644610C3FC7420`.
+- Steven issued final runtime visual and semantic `PASS` on `2026-08-28` for
+  implementation commit
+  `fc2761ad59c09c7329aa2fbb3a66d3c2bc9e4809`, populated-proof SHA-256
+  `FC0F8A5944F1262078CDE2ADA5D0716E4617C9A1422D30923411F3EE54E8D4D2`, and
+  verification-ZIP SHA-256
+  `FADF4DAB890D3CC240051DE666AF1DCE9D6BFAA90A81CC97EE8B052754959E41`.
+  `DISPLAY_FRESHNESS != CANDIDATE_FRESHNESS_SCORE` and
+  `DISPLAY_MINICHART != TRADING_SIGNAL` remain frozen; presentation state has
+  no ranking, scoring, admission, readiness, risk, entry, exit, or execution
+  authority.
 - Merge, installation, startup/Start Menu changes, and canonical workstation
-  replacement remain unauthorized. Exact operator checks are in
-  `docs/argus-office/VERIFICATION_QUEUE.md`; populated-row and microchart
-  review is now available for Steven's final visual acceptance.
+  replacement remain unauthorized. The completed operator checks and final
+  acceptance record are preserved in `docs/argus-office/VERIFICATION_QUEUE.md`
+  and the 001C release report directory.
 
 #### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
 
