@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED_PENDING_LIVE_CANARY / RESEARCH_ONLY`
+`LIVE_CANARY_FAILED / SECOND_EYE_REVIEW_REQUIRED / RESEARCH_ONLY`
 
 ## Branch
 
@@ -72,9 +72,38 @@ and execution-blocked. Paper, Shadow, and all order authority remain unavailable
 - Continuous deployment manifest SHA-256 remained `FC2810BAA3730EDFB7679026A70F305992EC772A381E733819B54FFFD29B73EB`.
 - Installed mode remained `RESEARCH_ONLY`; order capability remained `UNAVAILABLE`.
 
+## Terminal Canary Evidence
+
+The corrected one-time scheduler fired at `2026-08-28 08:32 CT` (`13:32Z`). An
+initial launcher invocation omitted the task root from `PYTHONPATH` and stopped
+at import before creating evidence or contacting a provider. The corrected
+same-occurrence invocation created the write-once activation at
+`2026-08-28T08:33:57.369476-05:00`, then failed before provider contact while
+reloading that record:
+
+`ProspectiveDenominatorError: Activation population definitions drifted.`
+
+The persisted JSON correctly contains all 11 frozen population names, but JSON
+reload represents the collection as a list while `POPULATIONS` is a tuple and
+strict validation compares the two directly. The failure occurred before the
+provider-call try/catch, so no `terminal-result.json` or denominator root was
+created. The exact verification traceback is preserved as
+`verification-command.log`; no repair or rerun was attempted.
+
+The mandatory failure packet is:
+
+- ZIP: `C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-STAT-DATA-002-PROSPECTIVE-CANARY-20260828-D5C2CA5-SECOND-EYE.zip`
+- SHA-256: `951F49D219E9842D286E10F09C5C28C51B267A5FD584929A58630E617E27508B`
+- Files: `233`
+- Manifest entries: `232`
+- Secret scan: `PASS`
+- Manifest verification: `PASS`
+- Pre-ZIP focused verification: `84/84 PASS`
+- Extracted-ZIP focused verification: `84/84 PASS`
+
 ## Current Counts
 
-No live activation exists yet:
+The failed activation produced no prospective market observation:
 
 - natural prospective observations: `0`;
 - unique prospective members: `0`;
@@ -84,11 +113,9 @@ No live activation exists yet:
 
 ## Risk And Next Gate
 
-Offline behavior is proven, but natural statistical capture is not accepted
-until a bounded regular-session real-provider canary creates at least one member
-before outcome, preserves restart/idempotency, packages every terminal result,
-and passes independent second-eye review. No merge or downstream work is
-authorized before that review.
+Natural statistical capture remains unaccepted. The failure packet must receive
+independent second-eye review before any narrowly scoped repair or rerun is
+authorized. No merge or downstream work is authorized before that review.
 
 ## Manual QA
 
@@ -96,13 +123,33 @@ None. This task has no visual surface.
 
 ## Open Questions
 
-- Will the next regular-session market produce at least one natural prospective
-  member during the bounded canary?
-- Will enough time elapse for a natural outcome attachment? If not, the packet
-  must preserve that limitation without fabricating one.
+- Does independent review confirm the tuple/list serialization boundary as the
+  sole first missing transition?
+- Should a later repair also move activation reload inside terminal failure
+  accounting so every pre-provider failure receives `terminal-result.json`?
 
 ## Recommendation
 
-Freeze and push the branch, run the next eligible regular-session canary, emit
-the mandatory sanitized self-contained ZIP for any terminal outcome, then stop
-for independent review.
+Freeze the failed attempt and sanitized packet exactly as produced, retire the
+one-time scheduler, and stop for independent second-eye review. Do not repair,
+rerun, merge, deploy, or begin downstream work.
+
+## Terminal Classifications
+
+```text
+TERMINAL_CANARY_RESULT = FAIL
+PROVIDER_CONTACT_OCCURRED = NO
+NATURAL_PROSPECTIVE_OBSERVATIONS = 0
+UNIQUE_PROSPECTIVE_MEMBERS = 0
+OUTCOME_COMPLETE_MEMBERS = 0
+OUTCOME_PENDING_MEMBERS = 0
+SECOND_EYE_ZIP_REQUIRED = YES
+SECOND_EYE_ZIP_CREATED = YES
+SANITIZATION = PASS
+MANIFEST_VERIFICATION = PASS
+PRE_ZIP_VERIFICATION = PASS
+EXTRACTED_ZIP_VERIFICATION = PASS
+MERGE_AUTHORIZED = NO
+DOWNSTREAM_WORK_STARTED = NO
+READY_FOR_SECOND_EYE_REVIEW = YES
+```

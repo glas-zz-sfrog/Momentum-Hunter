@@ -140,7 +140,8 @@ manifest hashes remain byte-identical to the pre-merge baseline; no deployment,
 GUI, provider, Paper, Shadow, broker, account, position, or order action
 occurred. Unknown instruments remain execution-blocked.
 
-`ARGUS-STAT-DATA-002` is `IMPLEMENTED_PENDING_LIVE_CANARY / RESEARCH_ONLY`
+`ARGUS-STAT-DATA-002` is `LIVE_CANARY_FAILED / SECOND_EYE_REVIEW_REQUIRED /
+RESEARCH_ONLY`
 on branch `codex/ARGUS-STAT-DATA-002`. Implementation commit
 `ebf1dbfd93a71e838a0ef4d6f90675b43d82d9e6` activates the existing immutable
 opportunity/Continuous denominator only through an explicit write-once
@@ -153,12 +154,14 @@ observable and execution-blocked.
 Offline Hard Chew passes 2,846 tests with one expected Windows skip, including
 anti-hindsight, duplicate suppression, successor identity, restart, tamper,
 terminal-failure packaging, full packet extraction, and natural Continuous
-regressions. The prospective sample is not yet live: zero natural observations,
-zero unique members, and zero outcomes exist. A bounded regular-session canary
-must create a new activation before provider contact, use the accepted natural
-Continuous path, package every terminal outcome, and stop for second-eye review.
-No merge, deployment, Paper, Shadow, broker, account, position, or order
-authority is granted.
+regressions. The August 28 one-time canary created its immutable activation at
+08:33:57 CT but failed before provider contact when JSON reload represented
+`population_definitions` as a list while strict validation required the frozen
+tuple. The sample therefore remains at zero natural observations, zero unique
+members, and zero outcomes. The failed evidence and sanitized second-eye ZIP
+`951F49D219E9842D286E10F09C5C28C51B267A5FD584929A58630E617E27508B`
+are preserved for independent review. No rerun, repair, merge, deployment,
+Paper, Shadow, broker, account, position, or order authority is granted.
 
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
@@ -332,10 +335,10 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Run the frozen `ARGUS-STAT-DATA-002` regular-session prospective canary on the
-next eligible session. Preserve and package any terminal result, including
-failure, then stop for independent second-eye review. Do not merge, deploy,
-start instrument-classification implementation, or resume Continuous Paper.
+Independently review the terminal failed `ARGUS-STAT-DATA-002` second-eye packet.
+Do not repair or rerun the canary, merge, deploy, start instrument-classification
+implementation, or resume Continuous Paper until that review returns an
+explicit decision.
 Authoritative instrument subtype/leverage classification remains a pre-Paper
 gate. The authoritative ordered sequence is maintained only in `Next / Queue`
 below.
@@ -407,15 +410,15 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-STAT-DATA-002` is active only as a frozen branch awaiting its first
-   bounded regular-session prospective canary. The sample remains empty until
-   the canary writes its immutable activation before provider contact.
+1. `ARGUS-STAT-DATA-002` is frozen after its first bounded regular-session
+   canary failed before provider contact at activation reload validation. The
+   sanitized terminal packet awaits independent second-eye review.
 
 ### 2. Ready / Next
 
-1. Run and package the `ARGUS-STAT-DATA-002` natural provider canary; accept no
-   injected candidate, READY state, TradePlan, outcome, or market evidence.
-2. Stop for independent review of the resulting sanitized self-contained ZIP.
+1. Review the `ARGUS-STAT-DATA-002` sanitized self-contained failed-canary ZIP;
+   do not repair or rerun before the review decision.
+2. Preserve the empty prospective sample and failed activation evidence exactly.
 3. Preserve the accepted Producer V4 packet and original 001D evidence.
 4. Close authoritative instrument subtype/leverage classification before any
    Continuous Paper arming; unknown and leveraged/inverse products remain
@@ -3471,7 +3474,7 @@ Intended specialist architecture:
 
 #### ARGUS-STAT-DATA-002 - Prospective Producer Wiring And Activation
 
-- Status: `IMPLEMENTED_PENDING_LIVE_CANARY / RESEARCH_ONLY` on branch
+- Status: `LIVE_CANARY_FAILED / SECOND_EYE_REVIEW_REQUIRED / RESEARCH_ONLY` on branch
   `codex/ARGUS-STAT-DATA-002`; merge remains unauthorized.
 - The accepted Producer lineage is canonical. Offline prospective activation,
   immutable membership, attempts-versus-unique counters, nested populations,
@@ -3481,10 +3484,14 @@ Intended specialist architecture:
 - Feed the denominator from the complete bounded source population, including
   rows that do not survive scanner/report admission, rather than treating a
   surviving briefing subset as the original population.
-- The first natural sample is still empty. Run one bounded regular-session
-  canary under a new immutable activation identity; do not backfill history,
-  rewrite STAT-DATA-001 records, or change the current Momentum/Paper strategy
-  path. Package any terminal result and stop for second-eye review.
+- The August 28 one-time canary created a write-once activation but failed before
+  provider contact because JSON reload changed the runtime type of
+  `population_definitions` from tuple to list and strict validation rejected the
+  record as drift. Zero natural members, observations, or outcomes were created.
+  The mandatory packet passed sanitation, manifest, pre-ZIP, and extracted-ZIP
+  verification at SHA-256
+  `951F49D219E9842D286E10F09C5C28C51B267A5FD584929A58630E617E27508B`.
+  Preserve it and stop for independent review; no repair or rerun is authorized.
 
 #### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
 
