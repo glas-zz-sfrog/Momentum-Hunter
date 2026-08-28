@@ -1436,7 +1436,10 @@ class CaptureJobTradePlanHandoffTests(unittest.TestCase):
             with self.subTest(arguments=arguments):
                 result = self.run_installer_plan(*arguments)
                 self.assertNotEqual(0, result.returncode)
-                self.assertIn(expected, result.stderr + result.stdout)
+                normalized_output = " ".join(
+                    (result.stderr + result.stdout).split()
+                )
+                self.assertIn(expected, normalized_output)
 
     def run_installer_plan(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         project_root = Path(capture_job.__file__).resolve().parents[1]

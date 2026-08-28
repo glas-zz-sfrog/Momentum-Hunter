@@ -1,4 +1,4 @@
-"""Pure continuous-cycle adapter for the inactive opportunity denominator.
+"""Pure continuous-cycle adapter for the opportunity denominator.
 
 The producer consumes caller-supplied discovery, hot-universe, and composition
 records. It has no provider, account, broker, scheduler, service, UI, or
@@ -68,6 +68,7 @@ from momentum_hunter.opportunity_denominator import (
     NO_ACTION_RESEARCH_ONLY,
     NOT_EVALUATED_PROVIDER_BOUND,
     POLICY_FINGERPRINT,
+    PROSPECTIVE,
     PROVIDER_BOUND_ROW,
     REJECTED_STRATEGY,
     RESEARCH_ONLY,
@@ -78,6 +79,7 @@ from momentum_hunter.opportunity_denominator import (
     LIVE_READ_ONLY_QUALIFICATION,
     SYSTEM_FAILURE,
     OpportunityCycleRecord,
+    DenominatorPolicy,
     OpportunityDenominatorError,
     OpportunityDenominatorStore,
     OpportunityRecord,
@@ -171,6 +173,7 @@ class ContinuousDenominatorPolicy:
     cycle_type: str = CYCLE_TYPE
     sample_identity: str = SAMPLE_IDENTITY
     denominator_policy_fingerprint: str = POLICY_FINGERPRINT
+    activation_fingerprint: str = ""
     source_unit_rule: str = "DISCOVERY_ROWS_PLUS_RETAINED_MEMBER_OBSERVATIONS"
     discovery_failure_rule: str = "PRESERVE_PARTIAL_ROWS_AND_RETAINED_EVALUATIONS"
     authority: str = RESEARCH_ONLY
@@ -178,7 +181,10 @@ class ContinuousDenominatorPolicy:
 
     @property
     def fingerprint(self) -> str:
-        return _fingerprint("continuous-denominator-policy-v1", asdict(self))
+        payload = asdict(self)
+        if not self.activation_fingerprint:
+            payload.pop("activation_fingerprint")
+        return _fingerprint("continuous-denominator-policy-v1", payload)
 
 
 @dataclass(frozen=True)
@@ -327,10 +333,19 @@ class _SeedContext:
     treatment: str
 
 
-def reference_continuous_denominator_policy() -> ContinuousDenominatorPolicy:
-    """Return the inactive research-only producer policy."""
+def reference_continuous_denominator_policy(
+    *,
+    denominator_policy: DenominatorPolicy | None = None,
+    activation_fingerprint: str = "",
+) -> ContinuousDenominatorPolicy:
+    """Bind the producer policy to one denominator policy and activation."""
 
-    return ContinuousDenominatorPolicy()
+    resolved = denominator_policy or current_policy()
+    return ContinuousDenominatorPolicy(
+        sample_identity=resolved.sample_identity,
+        denominator_policy_fingerprint=resolved.policy_fingerprint,
+        activation_fingerprint=activation_fingerprint,
+    )
 
 
 def produce_continuous_denominator(
@@ -340,19 +355,38 @@ def produce_continuous_denominator(
     composition_cycle: ContinuousCompositionCycle,
     observation_mode: str = SYNTHETIC_TEST,
     policy: ContinuousDenominatorPolicy | None = None,
+    denominator_policy: DenominatorPolicy | None = None,
 ) -> ContinuousDenominatorResult:
     """Map one immutable upstream pulse into STAT-DATA-001 records."""
 
-    policy = policy or reference_continuous_denominator_policy()
-    _validate_policy(policy)
-    if observation_mode not in {SYNTHETIC_TEST, LIVE_READ_ONLY_QUALIFICATION}:
+    denominator_policy = denominator_policy or current_policy()
+    policy = policy or reference_continuous_denominator_policy(
+        denominator_policy=denominator_policy
+    )
+    _validate_policy(policy, denominator_policy)
+    if observation_mode not in {
+        SYNTHETIC_TEST,
+        LIVE_READ_ONLY_QUALIFICATION,
+        PROSPECTIVE,
+    }:
         raise ContinuousDenominatorError(
-            "The inactive STAT-DATA-002 producer accepts only synthetic or isolated "
-            "live read-only qualification evidence."
+            "STAT-DATA-002 observation mode is unsupported."
         )
-    denominator_policy = current_policy()
-    if denominator_policy.status != SAMPLE_STATUS:
-        raise ContinuousDenominatorError("Opportunity denominator activation drifted.")
+    if observation_mode == PROSPECTIVE:
+        if denominator_policy.status != "ACTIVE_PROSPECTIVE":
+            raise ContinuousDenominatorError(
+                "The inactive STAT-DATA-002 producer accepts only synthetic or "
+                "isolated live read-only qualification evidence; prospective "
+                "evidence requires explicit activation."
+            )
+        if not policy.activation_fingerprint:
+            raise ContinuousDenominatorError(
+                "Prospective producer policy omitted activation identity."
+            )
+    elif denominator_policy.status != SAMPLE_STATUS or policy.activation_fingerprint:
+        raise ContinuousDenominatorError(
+            "Nonprospective denominator evidence must use the inactive policy."
+        )
 
     snapshot = _validated_snapshot(discovery_snapshot)
     _validate_universe_result(universe_result)
@@ -523,6 +557,7 @@ def produce_continuous_denominator(
         members=member_records,
         counts=counts,
         incomplete_reasons=incomplete_reasons,
+        denominator_policy=denominator_policy,
     )
     result = ContinuousDenominatorResult(cycle, opportunities, linkage)
     validate_continuous_denominator_result(result)
@@ -588,17 +623,41 @@ def summarize_continuous_denominators(
 class ContinuousDenominatorStore:
     """Write the authoritative cycle first and linkage as its terminal receipt."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        denominator_policy: DenominatorPolicy | None = None,
+        producer_policy: ContinuousDenominatorPolicy | None = None,
+    ) -> None:
         if not isinstance(root, Path):
             raise ContinuousDenominatorError("Persistence root must be an explicit Path.")
         self.root = root.resolve()
-        self.denominator = OpportunityDenominatorStore(self.root)
+        self.denominator_policy = denominator_policy or current_policy()
+        self.producer_policy = producer_policy or reference_continuous_denominator_policy(
+            denominator_policy=self.denominator_policy
+        )
+        _validate_policy(self.producer_policy, self.denominator_policy)
+        self.denominator = OpportunityDenominatorStore(
+            self.root, policy=self.denominator_policy
+        )
         self.linkage_root = (
-            self.root / SAMPLE_IDENTITY / "continuous-cycle-linkage"
+            self.root / self.denominator_policy.sample_identity / "continuous-cycle-linkage"
         )
 
     def persist(self, result: ContinuousDenominatorResult) -> None:
         validate_continuous_denominator_result(result)
+        if (
+            result.linkage.sample_identity != self.denominator_policy.sample_identity
+            or result.linkage.sample_status != self.denominator_policy.status
+            or result.linkage.denominator_policy_fingerprint
+            != self.denominator_policy.policy_fingerprint
+            or result.linkage.producer_policy_fingerprint
+            != self.producer_policy.fingerprint
+        ):
+            raise ContinuousDenominatorError(
+                "Continuous result does not match its persistence policy."
+            )
         path = self._path(result.cycle.cycle_id)
         content = _linkage_bytes(result.linkage)
         if path.exists():
@@ -645,7 +704,11 @@ class ContinuousDenominatorStore:
         payload = value["payload"]
         if not isinstance(payload, dict):
             raise ContinuousDenominatorError("Continuous linkage payload is invalid.")
-        _validate_linkage_payload(payload)
+        _validate_linkage_payload(
+            payload,
+            denominator_policy=self.denominator_policy,
+            producer_policy=self.producer_policy,
+        )
         if payload.get("cycle_id") != expected_cycle_id:
             raise ContinuousDenominatorError("Continuous linkage cycle identity drifted.")
         return payload
@@ -671,6 +734,13 @@ def validate_continuous_denominator_result(
     linkage = result.linkage
     if linkage.cycle_id != result.cycle.cycle_id or linkage.cycle_fingerprint != result.cycle.fingerprint:
         raise ContinuousDenominatorError("Linkage cycle identity drifted.")
+    if (
+        linkage.sample_identity != result.cycle.sample_identity
+        or linkage.denominator_policy_fingerprint != result.cycle.policy_fingerprint
+        or linkage.observed_at != result.cycle.observed_at
+        or linkage.decision_cutoff != result.cycle.decision_cutoff
+    ):
+        raise ContinuousDenominatorError("Linkage policy or chronology drifted.")
     if linkage.complete_denominator != result.cycle.complete_denominator:
         raise ContinuousDenominatorError("Linkage completeness contradicts its cycle.")
     if linkage.counts.denominator_opportunity_records != len(result.opportunities):
@@ -1302,14 +1372,15 @@ def _build_linkage(
     members: tuple[MemberDispositionRecord, ...],
     counts: ContinuousDenominatorCounts,
     incomplete_reasons: tuple[str, ...],
+    denominator_policy: DenominatorPolicy,
 ) -> ContinuousDenominatorLinkageRecord:
     payload = {
         "contract_version": CONTRACT_VERSION,
         "producer_policy_version": policy.policy_version,
         "producer_policy_fingerprint": policy.fingerprint,
-        "sample_identity": SAMPLE_IDENTITY,
-        "sample_status": SAMPLE_STATUS,
-        "denominator_policy_fingerprint": POLICY_FINGERPRINT,
+        "sample_identity": denominator_policy.sample_identity,
+        "sample_status": denominator_policy.status,
+        "denominator_policy_fingerprint": denominator_policy.policy_fingerprint,
         "cycle_id": cycle.cycle_id,
         "cycle_fingerprint": cycle.fingerprint,
         "cycle_type": CYCLE_TYPE,
@@ -1417,13 +1488,25 @@ def _source_identity(
     return f"continuous-denominator:{snapshot.snapshot_id}:{cycle.cycle_id}", fingerprint
 
 
-def _validate_policy(policy: ContinuousDenominatorPolicy) -> None:
+def _validate_policy(
+    policy: ContinuousDenominatorPolicy,
+    denominator_policy: DenominatorPolicy,
+) -> None:
     if not isinstance(policy, ContinuousDenominatorPolicy):
         raise ContinuousDenominatorError("Producer policy is malformed.")
     if policy.contract_version != CONTRACT_VERSION or policy.policy_version != PRODUCER_POLICY_VERSION:
         raise ContinuousDenominatorError("Producer policy version drifted.")
-    if policy.sample_identity != SAMPLE_IDENTITY or policy.denominator_policy_fingerprint != POLICY_FINGERPRINT:
+    if (
+        policy.sample_identity != denominator_policy.sample_identity
+        or policy.denominator_policy_fingerprint
+        != denominator_policy.policy_fingerprint
+    ):
         raise ContinuousDenominatorError("Producer sample or denominator policy drifted.")
+    if denominator_policy.status == "ACTIVE_PROSPECTIVE":
+        if not _SHA256.fullmatch(policy.activation_fingerprint):
+            raise ContinuousDenominatorError("Producer activation identity is invalid.")
+    elif policy.activation_fingerprint:
+        raise ContinuousDenominatorError("Inactive producer carries activation identity.")
     if policy.authority != RESEARCH_ONLY or policy.execution_authority != EXECUTION_AUTHORITY_NONE:
         raise ContinuousDenominatorError("Producer policy attempted execution authority.")
 
@@ -1458,16 +1541,26 @@ def _linkage_bytes(linkage: ContinuousDenominatorLinkageRecord) -> bytes:
     )
 
 
-def _validate_linkage_payload(payload: Mapping[str, object]) -> None:
+def _validate_linkage_payload(
+    payload: Mapping[str, object],
+    *,
+    denominator_policy: DenominatorPolicy,
+    producer_policy: ContinuousDenominatorPolicy,
+) -> None:
     fingerprint = payload.get("fingerprint")
     values = dict(payload)
     values.pop("fingerprint", None)
     if fingerprint != _fingerprint("continuous-denominator-linkage-v1", values):
         raise ContinuousDenominatorError("Persisted linkage fingerprint is invalid.")
-    if payload.get("sample_identity") != SAMPLE_IDENTITY or payload.get("sample_status") != SAMPLE_STATUS:
+    if (
+        payload.get("sample_identity") != denominator_policy.sample_identity
+        or payload.get("sample_status") != denominator_policy.status
+    ):
         raise ContinuousDenominatorError("Persisted linkage sample identity drifted.")
-    if payload.get("denominator_policy_fingerprint") != POLICY_FINGERPRINT:
+    if payload.get("denominator_policy_fingerprint") != denominator_policy.policy_fingerprint:
         raise ContinuousDenominatorError("Persisted linkage denominator policy drifted.")
+    if payload.get("producer_policy_fingerprint") != producer_policy.fingerprint:
+        raise ContinuousDenominatorError("Persisted linkage producer policy drifted.")
     if payload.get("authority") != RESEARCH_ONLY or payload.get("execution_authority") != EXECUTION_AUTHORITY_NONE:
         raise ContinuousDenominatorError("Persisted linkage attempted execution authority.")
 

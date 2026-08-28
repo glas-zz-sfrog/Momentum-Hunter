@@ -99,7 +99,15 @@ from momentum_hunter.hot_universe import (
     HotUniverseStore,
 )
 from momentum_hunter.models import INSTITUTIONAL_MOMENTUM
-from momentum_hunter.opportunity_denominator import LIVE_READ_ONLY_QUALIFICATION
+from momentum_hunter.opportunity_denominator import (
+    LIVE_READ_ONLY_QUALIFICATION,
+    PROSPECTIVE,
+)
+from momentum_hunter.prospective_denominator import (
+    ProspectiveActivationRecord,
+    ProspectiveDenominatorStore,
+    load_activation_record,
+)
 from momentum_hunter.providers import FinvizProvider
 from momentum_hunter.schwab_candle_backfill import (
     CandleBackfillOptions,
@@ -1079,8 +1087,14 @@ class LiveCompositionSource:
 
 
 class LiveDenominatorSource:
-    def __init__(self, state: QualificationState) -> None:
+    def __init__(
+        self,
+        state: QualificationState,
+        *,
+        prospective_store: ProspectiveDenominatorStore | None = None,
+    ) -> None:
         self.state = state
+        self.prospective_store = prospective_store
 
     def produce(self, request: DenominatorRequest) -> DenominatorResult:
         if self.state.snapshot is None or self.state.universe is None:
@@ -1092,8 +1106,34 @@ class LiveDenominatorSource:
             discovery_snapshot=self.state.snapshot,
             universe_result=self.state.universe,
             composition_cycle=cycle,
-            observation_mode=LIVE_READ_ONLY_QUALIFICATION,
+            observation_mode=(
+                PROSPECTIVE
+                if self.prospective_store is not None
+                else LIVE_READ_ONLY_QUALIFICATION
+            ),
+            policy=(
+                self.prospective_store.producer_policy
+                if self.prospective_store is not None
+                else None
+            ),
+            denominator_policy=(
+                self.prospective_store.policy
+                if self.prospective_store is not None
+                else None
+            ),
         )
+        if self.prospective_store is not None:
+            for context in self.state.historical_contexts.values():
+                self.prospective_store.persist_historical_context(
+                    source_context_id=context.context_id,
+                    symbol=context.symbol,
+                    observed_at=context.evidence_cutoff,
+                    evidence_fingerprint=context.fingerprint,
+                )
+            self.prospective_store.persist_result(
+                result,
+                completed_at=request.requested_at,
+            )
         self.state.denominator_results[result.cycle.cycle_id] = result
         if not result.linkage.complete_denominator:
             self.state.metrics.system_failed_cycles += 1
@@ -1207,6 +1247,8 @@ def run_live_qualification(
     expected_account_ending: str,
     duration_seconds: int,
     discovery_cadence_seconds: int,
+    prospective_activation: ProspectiveActivationRecord | None = None,
+    prospective_root: Path | None = None,
 ) -> dict[str, object]:
     if not 180 <= duration_seconds <= 1800:
         raise LiveQualificationError(
@@ -1219,6 +1261,10 @@ def run_live_qualification(
     if len(expected_account_ending) != 4 or not expected_account_ending.isdigit():
         raise LiveQualificationError(
             "Expected account ending must contain four digits."
+        )
+    if (prospective_activation is None) != (prospective_root is None):
+        raise LiveQualificationError(
+            "Prospective activation and persistence root must be supplied together."
         )
     root = validate_qualification_root(
         generation_root,
@@ -1238,7 +1284,18 @@ def run_live_qualification(
         expected_account_ending=expected_account_ending,
     )
     composition = LiveCompositionSource(state)
-    denominator = LiveDenominatorSource(state)
+    prospective_store = (
+        ProspectiveDenominatorStore(
+            prospective_root,
+            activation=prospective_activation,
+        )
+        if prospective_activation is not None and prospective_root is not None
+        else None
+    )
+    denominator = LiveDenominatorSource(
+        state,
+        prospective_store=prospective_store,
+    )
     events = LiveMaterialEvents(
         state,
         market.backfill,
@@ -1370,8 +1427,10 @@ def run_live_qualification(
         )
         git_after = _git_identity(canonical_root)
         metrics = state.metrics
-        status = "PASS" if all(
-            (
+        prospective_summary = (
+            prospective_store.summary() if prospective_store is not None else None
+        )
+        acceptance = [
                 metrics.discovery_cycles >= 2,
                 metrics.finviz_pages >= 2,
                 metrics.finviz_rows > 0,
@@ -1382,8 +1441,15 @@ def run_live_qualification(
                 evidence.record_count >= 2,
                 restart_done,
                 git_before == git_after,
+        ]
+        if prospective_summary is not None:
+            acceptance.extend(
+                (
+                    prospective_summary.prospective_observations_seen >= 1,
+                    prospective_summary.unique_prospective_members >= 1,
+                )
             )
-        ) else "FAIL"
+        status = "PASS" if all(acceptance) else "FAIL"
         summary: dict[str, object] = {
             "schemaVersion": 1,
             "mode": MODE,
@@ -1415,6 +1481,16 @@ def run_live_qualification(
             "backfillAccounting": backfill_accounting,
             "compositionCycles": len(metrics.composition_cycles),
             "denominatorCycles": len(state.denominator_results),
+            "prospectiveDenominator": (
+                asdict(prospective_summary)
+                if prospective_summary is not None
+                else None
+            ),
+            "prospectiveActivationFingerprint": (
+                prospective_activation.fingerprint
+                if prospective_activation is not None
+                else None
+            ),
             "researchOnlyTradePlans": len(metrics.research_plans),
             "successorSetups": len(metrics.successor_setups),
             "systemFailedCycles": metrics.system_failed_cycles,
@@ -1460,17 +1536,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expected-account-ending", required=True)
     parser.add_argument("--duration-seconds", type=int, default=360)
     parser.add_argument("--discovery-cadence-seconds", type=int, default=120)
+    parser.add_argument("--activation-record", type=Path)
+    parser.add_argument("--prospective-root", type=Path)
     args = parser.parse_args(argv)
     if not args.execute_read_only:
         raise SystemExit(
             "Refusing live qualification without --execute-read-only."
         )
+    activation = (
+        load_activation_record(args.activation_record)
+        if args.activation_record is not None
+        else None
+    )
     result = run_live_qualification(
         generation_root=args.generation_root,
         canonical_root=args.canonical_root,
         expected_account_ending=args.expected_account_ending,
         duration_seconds=args.duration_seconds,
         discovery_cadence_seconds=args.discovery_cadence_seconds,
+        prospective_activation=activation,
+        prospective_root=args.prospective_root,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["status"] == "PASS" else 1
