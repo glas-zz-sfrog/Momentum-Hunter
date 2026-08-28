@@ -188,6 +188,35 @@ extracted-ZIP verification, and SHA-256
 No merge, deployment, Paper, Shadow, broker, account, position, or order action
 is authorized pending independent review.
 
+`ARGUS-STAT-DATA-002B` is `LIVE_CANARY_FAILED /
+SECOND_EYE_REVIEW_REQUIRED / IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY` on
+branch `codex/ARGUS-STAT-DATA-002B` at executable canary head
+`0b857262321ede0736079e661cffa981250b9f2b`. The orchestration repair keeps
+runtime/checkpoint authority under a unique `%TEMP%` root, begins cleanup at
+first capability acquisition, proves physical writer release across every
+injected initialization and runtime path, and exports only a hash-verified
+`FORENSIC_COPY_ONLY` tree after runtime/writer/capability release. The exact-
+path offline rehearsal passes normal start/checkpoint/shutdown/restore and an
+injected checkpoint-construction failure; its packet SHA-256 is
+`702EBF61BB316BBC37934D0DF0A83D4CEB627B6E593D3C3BCB0A7480BB9FDC42`.
+
+Final Hard Chew passes 2,859 tests with one expected Windows skip. The single
+natural 30-minute canary completed six real Finviz cycles, 18 pages, 280 rows,
+54 unique symbols, and one new midday admission (`DKNG`). Schwab readiness did
+not progress: all nine backfill attempts failed and quote/candle evidence
+reported `SCHWAB_INTERACTIVE_REAUTH_REQUIRED`. The run therefore created zero
+READY members, compositions, denominator cycles, TradePlans, prospective
+observations, or unique prospective members. The terminal `providerContact`
+boolean is false because its file scanner found no persisted source-evidence
+records even though the qualification summary proves real Finviz discovery;
+this accounting discrepancy is preserved for second-eye adjudication. Resource
+cleanup, hash export, temp retirement, sanitization, 269/269 manifest
+verification, and pre-ZIP/extracted 97/97 tests pass. The mandatory 270-file
+packet SHA-256 is
+`96822561FB52029CEA0A4CF4AD1BF6030001E02263815C10E109AED2F59C9690`.
+No repair, rerun, merge, deployment, Paper, Shadow, account, position, broker,
+or order action is authorized before independent review.
+
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
 `d1a6e14ae3bec1a565a2eb07b47a3b1491356b16` moves the existing catalyst
@@ -360,7 +389,7 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Independently review the terminal failed `ARGUS-STAT-DATA-002A` second-eye packet.
+Independently review the terminal failed `ARGUS-STAT-DATA-002B` second-eye packet.
 Do not repair or rerun the canary, merge, deploy, start instrument-classification
 implementation, or resume Continuous Paper until that review returns an
 explicit decision.
@@ -435,15 +464,16 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-STAT-DATA-002A` is frozen after its single bounded regular-session
-   canary failed before provider contact at the natural runtime checkpoint-root
-   boundary. The sanitized terminal packet awaits independent second-eye review.
+1. `ARGUS-STAT-DATA-002B` is frozen after its single bounded regular-session
+   canary proved the repaired runtime/resource boundary and real Finviz
+   discovery, then failed acceptance because Schwab required interactive
+   reauthentication. The sanitized terminal packet awaits independent review.
 
 ### 2. Ready / Next
 
-1. Review the `ARGUS-STAT-DATA-002A` sanitized self-contained failed-canary ZIP;
+1. Review the `ARGUS-STAT-DATA-002B` sanitized self-contained failed-canary ZIP;
    do not repair or rerun before the review decision.
-2. Preserve both failed canaries, the empty prospective samples, and all failed
+2. Preserve all prior failed canaries, the empty prospective samples, and all failed
    activation/terminal evidence exactly.
 3. Preserve the accepted Producer V4 packet and original 001D evidence.
 4. Close authoritative instrument subtype/leverage classification before any
@@ -475,7 +505,7 @@ next-action language preserved elsewhere cannot supersede this queue.
    successful physical exact-path acceptance, authoritative instrument
    classification, canonical reconciliation, complete requalification, and
    disabled-install proof.
-3. `ARGUS-STAT-DATA-002A`: merge and downstream activation are blocked until its
+3. `ARGUS-STAT-DATA-002B`: merge and downstream activation are blocked until its
    terminal failed canary packet is independently adjudicated and a separate
    repair/rerun directive is authorized.
 4. R034: blocked on explicit destructive approval.
@@ -3545,6 +3575,37 @@ Intended specialist architecture:
   sanitation, manifest, pre-ZIP, and extracted-ZIP verification at SHA-256
   `6ADE90F1B88B6EB20D1CD005FCCBD592AA08557376A103E9F8AEC39FFC5B96FC`.
   Preserve the failed run and stop for independent review.
+
+#### ARGUS-STAT-DATA-002B - Ephemeral Runtime And Resource Cleanup Repair
+
+- Status: `LIVE_CANARY_FAILED / SECOND_EYE_REVIEW_REQUIRED /
+  IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY` on branch
+  `codex/ARGUS-STAT-DATA-002B`; merge remains unauthorized.
+- Executable canary head `0b857262321ede0736079e661cffa981250b9f2b`
+  keeps checkpoints beneath `%TEMP%`, closes every acquired runtime/writer/
+  capability resource on initialization failure, runtime failure, restart, and
+  normal shutdown, then copies only hash-verified forensic evidence to the
+  durable campaign root. The durable copy has no restore/resume authority.
+- Failure injection covers capability creation, writer creation/activation,
+  checkpoint construction, runtime construction/start, mid-runtime failure,
+  and normal shutdown. Physical writer reacquisition proves ownership release.
+  Packaging refuses unverified or unreleased runtime evidence.
+- Focused task/packet verification passes 97/97; final full discovery passes
+  2,859/2,859 with one expected Windows skip. Compileall, diff, secret,
+  capability, protected-path, canonical-Git, manifest, and service checks pass.
+  The exact-path offline rehearsal and extracted packet pass at SHA-256
+  `702EBF61BB316BBC37934D0DF0A83D4CEB627B6E593D3C3BCB0A7480BB9FDC42`.
+- The one authorized live canary completed all six natural Finviz pulses and
+  observed 18 pages, 280 rows, 54 symbols, and new midday symbol `DKNG`.
+  Schwab remained unavailable with `SCHWAB_INTERACTIVE_REAUTH_REQUIRED`; all
+  nine backfills failed, so zero prospective observations or members were
+  created. Preserve the `providerContact=false` versus real-Finviz-summary
+  accounting discrepancy for independent review rather than repairing it now.
+- Runtime cleanup/export/retirement and packet sanitation all pass. The
+  mandatory 270-file packet has 269 manifest entries, passing pre-ZIP and
+  extracted 97/97 verification, and SHA-256
+  `96822561FB52029CEA0A4CF4AD1BF6030001E02263815C10E109AED2F59C9690`.
+  Stop for review; no rerun, merge, deployment, or downstream work is allowed.
 
 #### ARGUS-EXEC-QUALITY-001 - Liquidity And Execution-Quality Research
 
