@@ -203,6 +203,7 @@ def execute(
     regular_session_started: str | None = None
     provider_contact_attempted = False
     failure_stage = "LOAD_CONFIGURATION"
+    activation = None
     summary: dict[str, object] | None = None
     try:
         configuration = json.loads(
@@ -257,7 +258,29 @@ def execute(
     prospective_summary = (
         summary.get("prospectiveDenominator") if summary is not None else None
     )
-    if prospective_summary is None and not (evidence_root / "prospective-denominator").exists():
+    prospective_summary_error: dict[str, str] | None = None
+    prospective_root = evidence_root / "prospective-denominator"
+    if prospective_summary is None and activation is not None and prospective_root.exists():
+        try:
+            prospective_summary = asdict(
+                ProspectiveDenominatorStore(
+                    prospective_root,
+                    activation=activation,
+                ).summary()
+            )
+        except Exception as exc:
+            prospective_summary_error = {
+                "exceptionClass": type(exc).__name__,
+                "exceptionMessage": _sanitized_message(
+                    str(exc),
+                    expected_account_ending,
+                ),
+            }
+    if (
+        prospective_summary is None
+        and not provider_contact_attempted
+        and prospective_summary_error is None
+    ):
         prospective_summary = _zero_prospective_summary()
     terminal.update(
         {
@@ -265,6 +288,7 @@ def execute(
             "providerContact": bool(provider_evidence),
             "providerContactEvidence": provider_evidence,
             "prospectiveSummary": prospective_summary,
+            "prospectiveSummaryError": prospective_summary_error,
             "authority": AUTHORITY,
             "executionAuthority": EXECUTION_AUTHORITY,
             "accountValuesRequested": False,

@@ -159,6 +159,8 @@ class StatData002CanaryTests(unittest.TestCase):
                         **identities[identity_failure_call - 1],
                         "head": "9" * 40,
                     }
+                if name == "account-ending":
+                    (evidence / "prospective-denominator").mkdir()
                 with (
                     mock.patch.object(canary, "_git_identity", side_effect=identities),
                     mock.patch.object(
@@ -182,6 +184,10 @@ class StatData002CanaryTests(unittest.TestCase):
                 self.assertEqual("FAIL", result["status"])
                 self.assertEqual(expected_stage, result["failureStage"])
                 self.assertFalse(result["providerContact"])
+                self.assertEqual(
+                    0,
+                    result["prospectiveSummary"]["unique_prospective_members"],
+                )
                 self.assertTrue((evidence / "terminal-result.json").is_file())
 
     def test_provider_failure_preserves_attempt_and_observed_contact_separately(self) -> None:
@@ -230,6 +236,51 @@ class StatData002CanaryTests(unittest.TestCase):
         self.assertTrue(result["providerContactAttempted"])
         self.assertTrue(result["providerContact"])
         self.assertEqual(1, len(result["providerContactEvidence"]))
+
+    def test_summary_failure_is_preserved_without_losing_terminal_record(self) -> None:
+        evidence = self.root / "summary-failure"
+        task_identity, production_identity = self.write_execution_inputs(evidence)
+
+        def provider_failure(**kwargs):
+            (evidence / "prospective-denominator").mkdir()
+            raise RuntimeError("provider runtime failed")
+
+        with (
+            mock.patch.object(
+                canary,
+                "_git_identity",
+                side_effect=(task_identity, production_identity),
+            ),
+            mock.patch.object(
+                canary,
+                "_assert_regular_session",
+                return_value="2026-08-28T09:32:00-04:00",
+            ),
+            mock.patch.object(
+                canary,
+                "run_live_qualification",
+                side_effect=provider_failure,
+            ),
+            mock.patch.object(
+                canary.ProspectiveDenominatorStore,
+                "summary",
+                side_effect=RuntimeError("summary unavailable"),
+            ),
+        ):
+            result = canary.execute(
+                task_root=self.root,
+                production_root=self.root,
+                evidence_root=evidence,
+                expected_account_ending="1234",
+            )
+
+        self.assertEqual("FAIL", result["status"])
+        self.assertIsNone(result["prospectiveSummary"])
+        self.assertEqual(
+            "RuntimeError",
+            result["prospectiveSummaryError"]["exceptionClass"],
+        )
+        self.assertTrue((evidence / "terminal-result.json").is_file())
 
     def test_run_all_packages_terminal_failure_even_when_verification_raises(self) -> None:
         evidence = self.root / "terminal-failure"
