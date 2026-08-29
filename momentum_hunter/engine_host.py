@@ -281,6 +281,7 @@ class EngineHostRuntime:
         research_maturity_loader: Callable[[], dict[str, Any]] | None = None,
         runtime_build_identity: str | None = None,
         selector_arm_schema_version: int | None = None,
+        continuous_runtime_state_root: Path | None = None,
     ) -> None:
         self.host_instance_id = host_instance_id or uuid.uuid4().hex
         self.started_at_utc = utc_now()
@@ -297,6 +298,11 @@ class EngineHostRuntime:
         )
         self._cycle_runner = cycle_runner or self._run_canonical_monitor_cycle
         self._external_monitor_running = external_monitor_running or self._is_legacy_monitor_runner_active
+        self._continuous_runtime_state_root = (
+            Path(continuous_runtime_state_root).resolve()
+            if continuous_runtime_state_root is not None
+            else None
+        )
         self._workspace_snapshot_loader = workspace_snapshot_loader or self._load_read_only_workspace_snapshot
         self._simulation_workspace_service = None
         if simulation_workspace_loader is None or simulation_runner is None:
@@ -992,11 +998,17 @@ class EngineHostRuntime:
 
         return run_monitor_cycle()
 
-    @staticmethod
-    def _load_read_only_workspace_snapshot() -> dict[str, Any]:
-        from momentum_hunter.workstation_read_models import build_read_only_workspace_snapshot
+    def _load_read_only_workspace_snapshot(self) -> dict[str, Any]:
+        from momentum_hunter.workstation_read_models import (
+            WorkstationReadModelPaths,
+            build_read_only_workspace_snapshot,
+        )
 
-        return build_read_only_workspace_snapshot()
+        return build_read_only_workspace_snapshot(
+            paths=WorkstationReadModelPaths.from_data_dir(
+                continuous_runtime_state_root=self._continuous_runtime_state_root,
+            )
+        )
 
     @staticmethod
     def _load_daily_workflow_snapshot() -> dict[str, Any]:
@@ -1100,12 +1112,18 @@ def remove_endpoint_if_owned(path: Path, host_instance_id: str) -> None:
             pass
 
 
-def run_host(*, state_directory: Path, collection_interval_seconds: int = DEFAULT_COLLECTION_INTERVAL_SECONDS) -> int:
+def run_host(
+    *,
+    state_directory: Path,
+    collection_interval_seconds: int = DEFAULT_COLLECTION_INTERVAL_SECONDS,
+    continuous_runtime_state_root: Path | None = None,
+) -> int:
     state_directory.mkdir(parents=True, exist_ok=True)
     runtime = EngineHostRuntime(
         collection_interval_seconds=collection_interval_seconds,
         advance_shadow_after_collection=True,
         enable_automatic_chart_backfill=True,
+        continuous_runtime_state_root=continuous_runtime_state_root,
     )
     lease = HostLease(state_directory / HOST_LOCK_FILENAME, runtime.host_instance_id)
     if not lease.acquire():
@@ -1152,6 +1170,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the local Momentum Hunter Python Engine Host.")
     parser.add_argument("--state-directory", type=Path, default=DATA_DIR / "python-engine-host")
     parser.add_argument("--collection-interval-seconds", type=int, default=DEFAULT_COLLECTION_INTERVAL_SECONDS)
+    parser.add_argument(
+        "--continuous-runtime-state-root",
+        type=Path,
+        default=None,
+        help="Optional non-secret read-only Continuous evidence root for the Command Center.",
+    )
     return parser.parse_args(argv)
 
 
@@ -1160,6 +1184,7 @@ def main(argv: list[str] | None = None) -> int:
     return run_host(
         state_directory=args.state_directory,
         collection_interval_seconds=max(1, args.collection_interval_seconds),
+        continuous_runtime_state_root=args.continuous_runtime_state_root,
     )
 
 

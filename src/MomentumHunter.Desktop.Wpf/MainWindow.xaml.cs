@@ -65,7 +65,16 @@ public partial class MainWindow : Window, IWorkstationPresentation
             Interval = TimeSpan.FromSeconds(5),
         };
         _chartRefreshTimer.Tick += async (_, _) =>
-            await _viewModel.RefreshChartDisplayAsync();
+        {
+            if (_viewModel.IsReadOnlySnapshotMode)
+            {
+                await _viewModel.RefreshCommandCenterDisplayAsync();
+            }
+            else
+            {
+                await _viewModel.RefreshChartDisplayAsync();
+            }
+        };
         _shadowReviewTimer = new DispatcherTimer(
             DispatcherPriority.Background)
         {

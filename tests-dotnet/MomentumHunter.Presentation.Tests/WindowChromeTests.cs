@@ -9,9 +9,9 @@ public sealed class WindowChromeTests
 
         Assert.Contains("WindowStyle=\"None\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ResizeMode=\"CanResize\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("MinWidth=\"1120\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWidth=\"1280\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<shell:WindowChrome.WindowChrome>", xaml, StringComparison.Ordinal);
-        Assert.Contains("CaptionHeight=\"48\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("CaptionHeight=\"72\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ResizeBorderThickness=\"6\"", xaml, StringComparison.Ordinal);
         Assert.Contains("UseAeroCaptionButtons=\"False\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"IntegratedTitleBar\"", xaml, StringComparison.Ordinal);

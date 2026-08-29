@@ -9,10 +9,10 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Momentum Hunter Workstation"
         Icon="Assets/MomentumHunter.ico"
-        Height="920"
-        Width="1440"
-        MinHeight="650"
-        MinWidth="1120"
+        Height="1080"
+        Width="1920"
+        MinHeight="820"
+        MinWidth="1280"
         WindowStyle="None"
         ResizeMode="CanResize"
         Background="{StaticResource AppBackground}"
@@ -23,7 +23,7 @@
         StateChanged="Window_StateChanged"
         KeyDown="Window_KeyDown">
     <shell:WindowChrome.WindowChrome>
-        <shell:WindowChrome CaptionHeight="48"
+        <shell:WindowChrome CaptionHeight="72"
                             ResizeBorderThickness="6"
                             GlassFrameThickness="0"
                             CornerRadius="0"
@@ -132,7 +132,7 @@
         </Style>
         <Style x:Key="WindowCaptionButtonStyle" TargetType="{x:Type Button}">
             <Setter Property="Width" Value="46" />
-            <Setter Property="Height" Value="48" />
+            <Setter Property="Height" Value="72" />
             <Setter Property="Margin" Value="0" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
@@ -188,7 +188,7 @@
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="48" />
+            <RowDefinition Height="72" />
             <RowDefinition Height="1*" />
             <RowDefinition Height="28" />
         </Grid.RowDefinitions>
@@ -216,25 +216,26 @@
                     <ColumnDefinition Width="46" />
                     <ColumnDefinition Width="46" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
                     <TextBlock Text="MOMENTUM HUNTER"
                                FontSize="15"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0" />
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
                     <Button Content="Current" Tag="Live" Style="{StaticResource TopBarButtonStyle}" Click="WorkspaceButton_Click" />
                     <Button Content="Replay" Tag="Replay" Style="{StaticResource TopBarButtonStyle}" Click="WorkspaceButton_Click" />
                     <Button Content="Review" Tag="Review" Style="{StaticResource TopBarButtonStyle}" Click="WorkspaceButton_Click" />
                 </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
                     <Button Content="1m" Tag="1m" Style="{StaticResource TopBarButtonStyle}" Click="IntervalButton_Click" />
                     <Button Content="5m" Tag="5m" Style="{StaticResource TopBarButtonStyle}" Click="IntervalButton_Click" />
                     <Button Content="15m" Tag="15m" Style="{StaticResource TopBarButtonStyle}" Click="IntervalButton_Click" />
                     <Button Content="Daily" Tag="Daily" Style="{StaticResource TopBarButtonStyle}" Click="IntervalButton_Click" />
                 </StackPanel>
                 <Button Grid.Column="3"
+                        Visibility="Collapsed"
                         Style="{StaticResource ToolbarIconButtonStyle}"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Center"
@@ -245,6 +246,7 @@
                     <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="{StaticResource TextPrimary}" />
                 </Button>
                 <StackPanel Grid.Column="5"
+                            Visibility="Collapsed"
                             Orientation="Horizontal"
                             VerticalAlignment="Center"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
@@ -266,27 +268,32 @@
                 </StackPanel>
                 <Label x:Name="EnvironmentBadge"
                        Grid.Column="6"
+                       Visibility="Collapsed"
                        Content="{Binding EnvironmentLabel}"
                        ToolTip="{Binding EnvironmentDetail}"
                        AutomationProperties.Name="{Binding EnvironmentLabel}"
                        Style="{StaticResource EnvironmentBadgeStyle}" />
                 <Button Grid.Column="7"
+                        Visibility="Collapsed"
                         Content="{Binding PositionsButtonLabel}"
                         ToolTip="{Binding PositionsButtonToolTip}"
                         AutomationProperties.Name="Open positions"
                         Style="{StaticResource TopBarButtonStyle}"
                         Click="PositionsButton_Click" />
                 <Button Grid.Column="8"
+                        Visibility="Collapsed"
                         Content="{Binding ActivityLabel}"
                         Style="{StaticResource TopBarButtonStyle}"
                         Click="ActivityButton_Click" />
                 <Button x:Name="HealthButton"
                         Grid.Column="9"
+                        Visibility="Collapsed"
                         Content="Health"
                         Style="{StaticResource TopBarButtonStyle}"
                         Command="{Binding ToggleHealthCommand}" />
                 <Button x:Name="ApplicationMenuButton"
                         Grid.Column="10"
+                        Visibility="Collapsed"
                         Content="Menu"
                         Style="{StaticResource TopBarButtonStyle}"
                         Click="ApplicationMenuButton_Click" />
@@ -317,10 +324,48 @@
                         Click="CloseWindowButton_Click">
                     <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="11" />
                 </Button>
+                <Grid Grid.ColumnSpan="11" Background="#071522" Panel.ZIndex="5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="315" />
+                        <ColumnDefinition Width="170" />
+                        <ColumnDefinition Width="190" />
+                        <ColumnDefinition Width="1*" />
+                        <ColumnDefinition Width="145" />
+                        <ColumnDefinition Width="145" />
+                        <ColumnDefinition Width="145" />
+                        <ColumnDefinition Width="145" />
+                        <ColumnDefinition Width="150" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="16,0,0,0">
+                        <TextBlock Text="MOMENTUM HUNTER" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="ARGUS HYBRID ANALYTICS · COMMAND CENTER" Foreground="#728CA1" FontSize="9" Margin="0,3,0,0" />
+                    </StackPanel>
+                    <Border Grid.Column="1" BorderBrush="#17354A" BorderThickness="1,0,0,0" Padding="16,0">
+                        <StackPanel VerticalAlignment="Center"><TextBlock Text="SESSION" Foreground="#637E94" FontSize="9" /><TextBlock Text="{Binding CommandCenterSessionLabel}" Foreground="#55DB75" FontSize="15" FontWeight="SemiBold" /></StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" BorderBrush="#17354A" BorderThickness="1,0,0,0" Padding="16,0">
+                        <StackPanel VerticalAlignment="Center"><TextBlock Text="PROJECTION" Foreground="#637E94" FontSize="9" /><TextBlock Text="{Binding CommandCenterProjectionStateLabel}" Foreground="#55DB75" FontSize="15" FontWeight="SemiBold" /></StackPanel>
+                    </Border>
+                    <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="{Binding CommandCenterLocalTimeLabel}" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding CommandCenterEvidenceModeLabel}" Foreground="#637E94" FontSize="8" />
+                    </StackPanel>
+                    <Border Grid.Column="4" BorderBrush="#17354A" BorderThickness="1,0,0,0" Padding="15,0"><StackPanel VerticalAlignment="Center"><TextBlock Text="RADAR" Foreground="#637E94" FontSize="9" /><TextBlock Text="{Binding CommandCenterRadarCountLabel}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /></StackPanel></Border>
+                    <Border Grid.Column="5" BorderBrush="#17354A" BorderThickness="1,0,0,0" Padding="15,0"><StackPanel VerticalAlignment="Center"><TextBlock Text="ACCEPTED" Foreground="#637E94" FontSize="9" /><TextBlock Text="{Binding CommandCenterAcceptedCountLabel}" Foreground="#55DB75" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /></StackPanel></Border>
+                    <Border Grid.Column="6" BorderBrush="#17354A" BorderThickness="1,0,0,0" Padding="15,0"><StackPanel VerticalAlignment="Center"><TextBlock Text="REJECTED" Foreground="#637E94" FontSize="9" /><TextBlock Text="{Binding CommandCenterRejectedCountLabel}" Foreground="#F4585C" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /></StackPanel></Border>
+                    <Border Grid.Column="7" BorderBrush="#17354A" BorderThickness="1,0,0,0" Padding="15,0"><StackPanel VerticalAlignment="Center"><TextBlock Text="HOST HEALTH" Foreground="#637E94" FontSize="9" /><TextBlock Text="{Binding CommandCenterHostHealthLabel}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /></StackPanel></Border>
+                    <Border Grid.Column="8" BorderBrush="#17354A" BorderThickness="1,0,0,0" Padding="15,0"><StackPanel VerticalAlignment="Center"><TextBlock Text="LAST UPDATE" Foreground="#637E94" FontSize="9" /><TextBlock Text="{Binding CommandCenterLastUpdateLabel}" FontSize="15" FontWeight="SemiBold" /></StackPanel></Border>
+                </Grid>
             </Grid>
         </Border>
 
-        <avalon:DockingManager x:Name="DockManager" Grid.Row="1" Background="{StaticResource AppBackground}" BorderBrush="{StaticResource PanelBorder}">
+        <controls:CommandCenterView Grid.Row="1" />
+
+        <avalon:DockingManager x:Name="DockManager"
+                               Grid.Row="1"
+                               Visibility="Collapsed"
+                               Background="{StaticResource AppBackground}"
+                               BorderBrush="{StaticResource PanelBorder}">
             <avalon:DockingManager.Theme>
                 <themes:Vs2013DarkTheme />
             </avalon:DockingManager.Theme>
@@ -2545,10 +2590,14 @@
         </avalon:DockingManager>
 
         <Border Grid.Row="2" Background="#121C24" BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,1,0,0" Padding="16,5">
-            <DockPanel>
-                <TextBlock DockPanel.Dock="Left" Text="{Binding WorkspaceNarrative}" Foreground="{StaticResource TextMuted}" FontSize="10" />
-                <TextBlock DockPanel.Dock="Right" Text="{Binding BackgroundStatusDetail}" Foreground="{StaticResource TextMuted}" FontSize="10" />
-            </DockPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="1*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding WorkspaceNarrative}" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                <TextBlock Grid.Column="1" Text="{Binding BackgroundStatusDetail}" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" TextAlignment="Right" Margin="12,0,0,0" />
+            </Grid>
         </Border>
 
         <Popup IsOpen="{Binding IsHealthOpen}" Placement="Bottom" PlacementTarget="{Binding ElementName=HealthButton}" StaysOpen="False" AllowsTransparency="True" DataContext="{Binding DataContext, ElementName=Root}">

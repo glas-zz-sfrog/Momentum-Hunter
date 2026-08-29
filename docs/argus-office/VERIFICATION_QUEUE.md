@@ -31,6 +31,7 @@ create a rubber-stamp Steven item.
 
 | Task | Automated status | Steven status | Merge state | What Steven is checking |
 | --- | --- | --- | --- | --- |
+| ARGUS-GUI-COMMAND-CENTER-001C production integration | `AUTOMATED_PASS`; isolated Release WPF proof, independent second eye, semantic/read-model, bridge, presentation, layout, and bounded regression evidence pass after the two 001C-E repairs. Authoritative session `2026-08-27` shows Radar `19`, eight ranked rows, Accepted `0`, Rejected `1`, and projection `PARTIAL`, with truthful partial/unavailable chart history. | `MANUAL_PENDING` for checks 1-8 below; authoritative populated-row, microchart, and same-timestamp chronology proof is now available. | `IMPLEMENTED_PENDING_MERGE`; merge/install/startup changes are not authorized. | Confirm the accepted macro, no ranked horizontal scrollbar, visible freshness and microcharts, BMNR `18,17,16,15` chronology, geometry-pending treatment, absence of trading controls, and native-resolution readability. |
 | ARGUS-R033 live Schwab chart integration | `AUTOMATED_PASS`; 31 focused combined tests, all 1,203 Python tests, all 250 .NET tests, and a zero-warning Release build pass. The isolated R032B proof populated 39,165 minute versions and 1,260 Daily bars; the combined reader returns 180 Daily plus 180 intraday display bars for all five proof symbols and rejects legacy/tampered Daily input. | `MANUAL_PASS`; Steven accepted the dense 1180x820 and 1920x1080 chart on 2026-08-06 | `COMBINED_VERIFIED_PENDING_MASTER_INTEGRATION` on `codex/ARGUS-R032B-R033-candle-integration` | No further Steven check is required for this release. Git Steward must fast-forward, back up, repin the 26 remaining opening jobs, and verify the canonical data load. |
 | Monday 2026-08-03 opening-capture readiness | `AUTOMATED_PASS`: opening fail-closed behavior, clock-task hardening, installation, independent live verification, and transient state-receipt lock recovery all pass. Evidence proves SYSTEM principal, exact `w32tm` action, startup delay `PT2M`, daily 08:15/08:25 triggers, wake enabled, no late-start catch-up, five two-minute retries, task result `0`, synchronized NIST time, Running/Automatic service, fresh heartbeat, Healthy Engine Host, 30 pending opening jobs, zero Shadow jobs, and transmission `UNAVAILABLE`. ARGUS-SERVICE-007 passed compileall, 26 focused tests, 74 affected tests, all 1,019 Python tests, a real Windows lock proof, and an installed twelve-lock stress with no process restart or Application error. | `NO_STEVEN_ACTION`; the required UAC interaction passed. Leave the computer powered on and plugged in through 08:40 Central Monday. | `COMPLETE_AND_BACKED_UP` through clock commits `30c25e5`/`3821490` and receipt-lock repair `252cdc7`; installed proof passed at 02:31 Central on 2026-08-01. | No product or visual check remains. Sunday 19:00 is a read-only preflight; Monday 08:35 is the capture and 08:50 is the terminal evidence audit. Observers must not launch, retry, repair, or fabricate evidence. |
 | ARGUS-SERVICE-004/005 reboot-without-login canary | `AUTOMATED_PASS`; the final exact-time 2026-07-31 16:39 Central attempt proved a new kernel boot and service instance, Running/Automatic service, Session 0 execution with zero interactive sessions, completed runtime/Codex receipts, Healthy Engine Host, the unchanged sole `2573` individual cash binding, no position/order request, 30 preserved pending opening jobs, zero Shadow jobs, and transmission `UNAVAILABLE`. Earlier failed/invalid attempts remain preserved separately. | `NO_STEVEN_ACTION`; the reboot/sign-in-screen action is complete and no visual judgment remains. | Repairs through forced-restart commit `e24feed` are backed up; successful proof is archived and the operational gate is `PASS`. | No remaining manual check. The next evidence is the first ordinary 2026-08-03 opening-capture receipt and report; future service manifest job changes hot-reload without another restart. |
@@ -61,6 +62,51 @@ create a rubber-stamp Steven item.
 | R026 Phase 12 combined WPF review | `AUTOMATED_PASS` on its own branch | Superseded by R027 combined review | Source parent for R027; not merged to master | Preserve the isolated proof as audit evidence; do not merge R026 directly |
 | R027 Shadow + Phase 12 combined WPF review | `AUTOMATED_PASS`; final recheck passes 210 total .NET tests, 672 Python tests, and a zero-warning Release build | `MANUAL_PASS`; Steven accepted the final wording and focus-persistence round-trip; checks 12-13 remain honestly unavailable with zero test trades | `COMPLETE` and backed up through `origin/master`; repair commits `f84106a` and `cd09f1b` are integrated | Preserve as accepted visual baseline; subsequent nonvisual roadmap work follows standing delegation |
 | Actual candle-data cutover purge | `NOT_STARTED`; legacy JSON hash and 710 mirrored `CRWV` rows are identified | Destructive decision not yet due | Future market-data cutover task | Interrupt Steven immediately before deleting the exact legacy paths/rows; visual cutover proof remains manual |
+
+## ARGUS-GUI-COMMAND-CENTER-001C - Production Command Center
+
+Branch: `codex/ARGUS-GUI-COMMAND-CENTER-001C-PRODUCTION-INTEGRATION`
+
+Automated result: `AUTOMATED_PASS / SECOND_EYE_PASS`
+
+Steven status: `MANUAL_PENDING`
+
+Use the final proof files in
+`docs/argus-office/reports/releases/ARGUS-GUI-COMMAND-CENTER-001C/`. If you
+choose to inspect the running app, launch only the worktree executable; do not
+install it or replace the canonical workstation.
+
+1. Open `ARGUS-GUI-COMMAND-CENTER-001C-E-populated-1920x1080.png` at native
+   size.
+   Confirm the compact header, five-card summary, Radar / ranked / disposition
+   triad, and What Changed / Shadow Positions / System Context row are readable
+   with no clipping, overlap, dominant legacy CandleChart, or excessive blank
+   area beyond the truthful unavailable panels.
+2. Open `ARGUS-GUI-COMMAND-CENTER-001C-E-accepted-vs-runtime.png` and
+   confirm the production screen preserves the accepted 001B macro hierarchy;
+   real unavailable evidence may replace the accepted proof's example rows.
+3. Confirm the visible runtime truth is session `2026-08-27`, Radar `19`, eight
+   ranked rows, Accepted `0`, Rejected `1`, and projection `PARTIAL`.
+4. Confirm the Radar region says `GEOMETRY PENDING` and
+   `RADAR MAP GEOMETRY NOT YET AUTHORIZED`, and contains no invented symbol
+   nodes, catalyst angles, or radial authority.
+5. Confirm `HOST PARTIAL` and `PROJECTION DATA PARTIAL` are presented as
+   separate facts, and System Context truthfully reports the partial stored
+   chart-history limitation rather than implying complete candidate data.
+6. Open `ARGUS-GUI-COMMAND-CENTER-001C-E-chronology.png`. Confirm the four BMNR
+   rows at `11:55:45` appear newest first as `FAILED_BREAKOUT -> RECLAIM`,
+   `BREAKOUT_CONFIRMED -> FAILED_BREAKOUT`, `BREAKOUT_FORMING ->
+   BREAKOUT_CONFIRMED`, then `IMPULSE_DETECTED -> BREAKOUT_FORMING`.
+7. Confirm Shadow Positions remains `FAKEBROKER · READ ONLY` and no Buy, Sell,
+   Submit, Replace, Cancel, broker, account-selection, live-order, or execution
+   control appears anywhere.
+8. Open `ARGUS-GUI-COMMAND-CENTER-001C-E-ranked-microcharts.png`. Confirm all
+   eight rows show rank, symbol, score, RVOL, catalyst/population, microchart,
+   and freshness without a horizontal scrollbar; NVDA and CRM show readable
+   stored history while unavailable histories remain honest placeholders.
+
+Report a failure by check number and the exact clipped, misleading, missing, or
+unexpected element. A visual PASS authorizes neither merge nor installation.
 
 ## ARGUS-R033 - Live Schwab Chart Integration
 

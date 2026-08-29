@@ -3216,18 +3216,40 @@ blocked and gains no authority from Paper evidence.
 
 #### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
 
-- Lifecycle: `DEFERRED / UI_READ_MODEL`. No implementation or visual acceptance
-  work is authorized by this placement record.
-- Reuse the existing WPF chart, candidate story, TradePlan, history/activity,
-  monitoring, specialist, and evidence-lineage surfaces. Do not create a second
-  decision authority or market-history model.
-- The eventual read model must answer: what matters now; why a symbol is
-  interesting; whether Momentum Hunter would trade it now and why not; what
-  changed since the prior evaluation; what historical context and prior beliefs
-  exist; what happened afterward; whether a limitation is policy or bad/missing
-  evidence; and which open positions require attention.
-- Begin only after the Continuous producer and required history/catalyst/decision
-  interfaces are stable enough to avoid a UI-owned interpretation layer.
+- Lifecycle: `IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PASS /
+  STEVEN_VISUAL_REVIEW_REQUIRED` on
+  `codex/ARGUS-GUI-COMMAND-CENTER-001C-PRODUCTION-INTEGRATION`. The accepted
+  001B macro hierarchy is implemented as the default read-only WPF Command
+  Center through bounded Engine Host schema-v3 projections. It is not merged,
+  installed, or active in the canonical workstation.
+- Frozen presentation semantics are source-owned: Radar is current-session
+  `TRACKED` Hot Universe membership; Accepted is the first
+  `EXECUTION_ELIGIBLE` transition per setup; Rejected is the first
+  `ENTRY_MISSED`, `FAILED_BREAKOUT`, or `INVALIDATED` transition per setup.
+  Display freshness and persisted 2-session/15-minute microcharts are human
+  context only and have no ranking, scoring, readiness, risk, entry, exit, or
+  execution authority.
+- The final 001C-E isolated real-WPF proof reused the frozen authoritative
+  001C-D evidence set and showed session `2026-08-27`, Radar `19`, eight ranked
+  candidates, Accepted `0`, Rejected `1`, and projection `PARTIAL`. Truthful
+  stored charts were partial for NVDA, CRM, and rejected BMNR; unavailable
+  histories remained unavailable. No fallback or synthetic row was created,
+  and Radar geometry remained `NOT_YET_AUTHORIZED` with no inferred nodes.
+- Independent second-eye re-review passes after the two bounded 001C-E
+  repairs. Ranked Candidates now fits its native center-board width with all
+  required fields and freshness visible and no horizontal scrollbar. Exact
+  persisted source sequence now breaks same-timestamp ties only within the
+  same authoritative lifecycle source; BMNR is visibly ordered `18, 17, 16,
+  15` newest first. Native proof
+  `ARGUS-GUI-COMMAND-CENTER-001C-E-populated-1920x1080.png` is `1920x1080`,
+  SHA-256
+  `FC0F8A5944F1262078CDE2ADA5D0716E4617C9A1422D30923411F3EE54E8D4D2`.
+  The accepted-vs-runtime comparison SHA-256 is
+  `8884279FB796EED646413BFBA0823BB32B0411709361374250644610C3FC7420`.
+- Merge, installation, startup/Start Menu changes, and canonical workstation
+  replacement remain unauthorized. Exact operator checks are in
+  `docs/argus-office/VERIFICATION_QUEUE.md`; populated-row and microchart
+  review is now available for Steven's final visual acceptance.
 
 #### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
 

@@ -68,8 +68,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ShellViewModel>(serviceProvider => new ShellViewModel(
             serviceProvider.GetRequiredService<IEngineClient>(),
             serviceProvider.GetRequiredService<IWorkspaceLayoutStore>(),
-            serviceProvider.GetRequiredService<ISimulationWorkspaceClient>(),
-            serviceProvider.GetRequiredService<IChartWorkspaceClient>(),
+            serviceProvider.GetRequiredService<IReadOnlyWorkspaceClient>(),
             serviceProvider.GetRequiredService<ITechnicalResearchWorkspaceClient>(),
             serviceProvider.GetRequiredService<ISavedWatchlistWorkspaceClient>(),
             serviceProvider.GetRequiredService<IDailyWorkflowWorkspaceClient>(),
