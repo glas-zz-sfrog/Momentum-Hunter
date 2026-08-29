@@ -55,6 +55,32 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-GUI-COMMAND-CENTER-001F` is `COMPLETE / CANONICAL_MERGED /
+INSTALLED / STEVEN_VISUAL_PASS / FREEZE_ACTIVE`. The exact accepted GUI commit
+`fc2761ad59c09c7329aa2fbb3a66d3c2bc9e4809` was merged non-destructively into
+canonical by merge commit `250ecde3b4d4b99d57f3e35d7582c5badca0c9b9`, preserving exact parentage to
+pre-merge canonical `23ee162373654e1db91af4c19f75bbc7887e3174`. Canonical post-merge verification
+passes 154 affected Python tests and all 273 .NET tests; clean Release builds
+pass with zero warnings or errors. The canonical launcher now resolves to the
+installed Release executable SHA-256
+`9ED81F0DC8E0CFE214036F68164110C50271ACF62CA5FC88855500DCD4D3F28B`, which
+matches the independently staged build. Native `1920x1080` installed proof is
+SHA-256
+`ACD8522BA3FBA988F6E0FEA7840A8FDB72D599AE68E2E7EAED638CECFB56BA68`.
+
+Rollback was established before installation and independently extracted with
+zero missing, mismatched, or extra files. The prior workstation ZIP SHA-256 is
+`0858D27E95B1C35367BA792BE31DF93EFBF536E7672AC89EE8241DCC60D904AA`.
+Automation and Continuous service binaries, manifests, configuration, channel
+pointer, launcher, and shortcut remained byte-identical. Continuous remains
+`RESEARCH_ONLY`, execution authority remains `NONE`, and order transmission
+remains `UNAVAILABLE`. The pre-existing `APPROVED_RUNTIME_MISMATCH` remains
+fail-closed and was neither caused nor repaired by the GUI integration.
+
+The general production freeze remains active. A read-only checkpoint is
+scheduled for Monday 2026-08-31 08:32 CT; it supplies evidence for Steven and
+does not automatically release the freeze or authorize implementation.
+
 Monday August 24 is terminal as `OPENING_EVIDENCE_PASS_WITH_FINDINGS` with
 `AUTOMATION_RUNTIME_PASS`, `PIPELINE_COMPLETE`, `EXECUTION_EVIDENCE_READY`,
 and `CANDIDATES_NO_EXECUTION_READY_PLAN_BY_POLICY`. BMNR was the sole qualified
@@ -252,9 +278,12 @@ requires a separate current-head reconciliation and qualification task.
 
 - The installed research-only Continuous product remains
   `e69426b3b7bd179cd62eba2e28a5d0553da47154`. Canonical Git is synchronized
-  through the producer closeout, while opening execution is governed by active
-  V2 release `OPENING-RUNTIME-EC11418BBC35F5285CA8` rather than whole-checkout
-  identity. `MomentumHunterAutomation`,
+  through the accepted Command Center merge, while opening execution remains
+  governed by active V2 release `OPENING-RUNTIME-D220AEA03F465DEA3B6A` rather
+  than whole-checkout identity. Canonical is currently fail-closed as
+  `APPROVED_RUNTIME_MISMATCH`; the mismatch predates the GUI integration and
+  Producer-001F remains `DEPLOYMENT_HELD`. No promotion or runtime
+  reconfiguration is authorized by the GUI directive. `MomentumHunterAutomation`,
   `MomentumHunterContinuousRuntime`, and
   `MomentumHunterContinuousWriter` are Automatic/Running; the writer uses the
   dedicated `LOCAL SERVICE` principal.
@@ -312,14 +341,16 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Review the Producer-001F canonical integration closeout. Do not begin another
-Producer task, deployment, `ARGUS-STAT-DATA-002`, instrument-classification
-implementation, or Continuous Paper work without a separate directive. No new
-provider canary or second-eye ZIP is required for the accepted lineage.
-`ARGUS-STAT-DATA-002` and Continuous Paper remain held.
-Authoritative instrument subtype/leverage classification remains a pre-Paper
-gate. The authoritative ordered sequence is maintained only in `Next / Queue`
-below.
+Hold the general production freeze. At Monday 2026-08-31 08:32 CT perform the
+scheduled read-only checkpoint for canonical, installed workstation, Producer,
+automation/runtime, service, provider, execution-authority, repository, and
+weekend-change identities. That checkpoint does not release the freeze. Do not
+begin another Producer task, deployment, provider canary,
+`ARGUS-STAT-DATA-002`, instrument-classification implementation, Continuous
+Paper work, or any other production-changing work without a separate Steven
+directive. Authoritative instrument subtype/leverage classification remains a
+pre-Paper gate. The authoritative ordered sequence is maintained only in
+`Next / Queue` below.
 
 ### Recent Material Completions
 
@@ -3216,12 +3247,12 @@ blocked and gains no authority from Paper evidence.
 
 #### ARGUS-COMMAND-CENTER-001 - Question-First Operator Command Center
 
-- Lifecycle: `IMPLEMENTED_PENDING_MERGE / SECOND_EYE_PASS /
-  STEVEN_VISUAL_REVIEW_REQUIRED` on
-  `codex/ARGUS-GUI-COMMAND-CENTER-001C-PRODUCTION-INTEGRATION`. The accepted
-  001B macro hierarchy is implemented as the default read-only WPF Command
-  Center through bounded Engine Host schema-v3 projections. It is not merged,
-  installed, or active in the canonical workstation.
+- Lifecycle: `COMPLETE / CANONICAL_MERGED / INSTALLED / STEVEN_VISUAL_PASS /
+  FREEZE_ACTIVE`. The exact accepted implementation
+  `fc2761ad59c09c7329aa2fbb3a66d3c2bc9e4809` is reachable through canonical
+  merge `250ecde3b4d4b99d57f3e35d7582c5badca0c9b9`. The accepted 001B macro
+  hierarchy is now the installed default read-only WPF Command Center through
+  bounded Engine Host schema-v3 projections.
 - Frozen presentation semantics are source-owned: Radar is current-session
   `TRACKED` Hot Universe membership; Accepted is the first
   `EXECUTION_ELIGIBLE` transition per setup; Rejected is the first
@@ -3246,10 +3277,14 @@ blocked and gains no authority from Paper evidence.
   `FC0F8A5944F1262078CDE2ADA5D0716E4617C9A1422D30923411F3EE54E8D4D2`.
   The accepted-vs-runtime comparison SHA-256 is
   `8884279FB796EED646413BFBA0823BB32B0411709361374250644610C3FC7420`.
-- Merge, installation, startup/Start Menu changes, and canonical workstation
-  replacement remain unauthorized. Exact operator checks are in
-  `docs/argus-office/VERIFICATION_QUEUE.md`; populated-row and microchart
-  review is now available for Steven's final visual acceptance.
+- Steven's final visual and semantic decision is `PASS`. Installation-focused
+  Hard Chew passes, rollback was proven before replacement, and the established
+  launcher and Start Menu shortcut remain unchanged. The installed native
+  `1920x1080` proof shows the accepted macro hierarchy, ranked surface,
+  lifecycle panels, read-only Shadow surface, What Changed, and System Context;
+  truthful partial/unavailable states remain fail-closed and no trading control
+  or synthetic row appears. The general production freeze remains active until
+  Steven later releases it after the Monday 08:32 CT checkpoint.
 
 #### ARGUS-CONTINUOUS-PAPER-ACTIVATION-001 - Continuous Alpaca Paper Activation
 
