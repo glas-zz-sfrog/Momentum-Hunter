@@ -307,6 +307,20 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Parallel Authorized Research
 
+- `ARGUS-STRATEGY-SCIENCE-LAB-001` is `IMPLEMENTED_PENDING_MERGE /
+  INDEPENDENT_REVIEW_PASS / STEVEN_ACCEPTANCE_PENDING` on branch
+  `codex/argus-strategy-science-lab-001`. The byte-specific independent second
+  eye disposition is `ACCEPTED_FOR_STEVEN_REVIEW`: all 36 required deliverables
+  and all 20 directive acceptance conditions pass, and the same 245 focused
+  tests pass. The Goal Charter and review packet remain documentation/research
+  architecture only; they add no implementation, schema, provider access,
+  runtime consumer, production behavior, or trading authority. No implementation
+  directive is authorized. Steven must accept, reject, or narrow the packet
+  before any first implementation slice begins. The only recommended next
+  directive after Steven acceptance remains `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001
+  - Immutable Prospective Packet Contract And Offline Proof`; it requires
+  separate bounded authorization and remains an offline contract/proof proposal
+  with no production collection or activation.
 - `ARGUS-TRADE-REPLAY-001` is `PLANNED`, lane `PARALLEL_RESEARCH`, readiness
   `INVENTORY_READY`, gate `EVENT_LEVEL_ADMISSION_REQUIRED`. Failure-boundary
   and candidate inventory work may proceed without changing the prospective
@@ -451,6 +465,13 @@ next-action language preserved elsewhere cannot supersede this queue.
    authority and without delaying the Ready / Next sequence.
 3. Integrated specialist and denominator research may continue only under their
    dormant/read-only contracts and existing activation gates.
+4. Review the independently accepted, branch-only
+   `ARGUS-STRATEGY-SCIENCE-LAB-001` architecture packet. Independent disposition
+   is `ACCEPTED_FOR_STEVEN_REVIEW`; Steven acceptance remains pending, and no
+   implementation directive is authorized. Only after Steven acceptance may a
+   separately bounded `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001` offline
+   contract/proof directive be considered. The packet does not reorder
+   `Immediate Next` or the Ready / Next sequence.
 
 ### 4. Blocked
 
@@ -3339,6 +3360,45 @@ Intended specialist architecture:
 - Bearish Equity: later stock-shorting strategy family; no options work.
 - Meta-Arbiter: later combination layer earned only through prospective
   evidence.
+
+#### ARGUS-STRATEGY-SCIENCE-LAB-001 - Strategy Science Architecture Review
+
+- Lifecycle: `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_REVIEW_PASS /
+  STEVEN_ACCEPTANCE_PENDING`. Lane: `RESEARCH_ONLY`. Branch:
+  `codex/argus-strategy-science-lab-001`.
+- The branch-only Goal Charter, infrastructure inventory, 30-family research
+  matrix, architecture/review packet, and byte-specific independent second-eye
+  acceptance define and review the Strategy Science Lab, reusable Point-in-Time
+  Market Replay Engine, Current-Edge Research Ledger, Catalyst Asymmetry
+  boundaries, Candidate Utility Ranker, validation gates, threat controls, and
+  one proposed next directive. Final independent disposition is
+  `ACCEPTED_FOR_STEVEN_REVIEW`; D01-D36 pass `36/36`, AC01-AC20 pass `20/20`,
+  and the same 245 focused tests pass. They remain documentation and research
+  architecture only and create no canonical integration, code, schema,
+  provider, runtime, production, Paper, Shadow, broker, order, GUI, or strategy
+  behavior change.
+- The packet's proposed sequence `0` through `18` is non-authoritative until
+  Steven accepts or narrows it and the accepted reconciliation is incorporated
+  into current Roadmap authority. Existing `Now`, `Immediate Next`, Ready /
+  Next ordering, Phase 13R milestones, and the general production freeze remain
+  controlling.
+- If the architecture is accepted, `ARGUS-TRADE-REPLAY-001` becomes a named
+  fixed-entry consumer/use case of the reusable Point-in-Time Market Replay
+  Engine rather than the whole replay architecture. Until acceptance, the
+  existing TRADE-REPLAY lifecycle, event-level admission rules, and dependency
+  gates remain unchanged.
+- Broad historical, longitudinal, statistical, model-performance, or alpha
+  claims remain blocked by unresolved durable identity, price basis,
+  corporate-action lineage, point-in-time universe/survivorship, timestamp,
+  strategy/configuration, source-lineage, and golden-day certification gates.
+- The only proposed first implementation directive is
+  `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet
+  Contract And Offline Proof`. No implementation directive is authorized yet.
+  After Steven acceptance it would still require a separate bounded directive
+  and Goal Charter, caller-supplied offline research storage, deterministic
+  fixture/nonmutation proof, and independent review. Production observer wiring,
+  live cutoff capture, activation, provider access, database or schema work, and
+  strategy influence remain out of scope.
 
 #### ARGUS-DATA-CORPACTION-001 - Analysis Price-Basis And Security-Identity Integrity
 

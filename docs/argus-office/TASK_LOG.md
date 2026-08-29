@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Owner | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
+| 2026-08-29 | ARGUS-STRATEGY-SCIENCE-LAB-001 - Strategy Science architecture review packet. | `codex/argus-strategy-science-lab-001` from synchronized `8b81bcd`; branch-only documentation | Goal Steward / research and architecture reviewers / independent second eye / Release Scribe | `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_REVIEW_PASS / STEVEN_ACCEPTANCE_PENDING` | Assembled a documentation/research-only Goal Charter, 20-item reuse inventory, 30-family evidence matrix, and indexed architecture/validation packet. The byte-specific independent disposition is `ACCEPTED_FOR_STEVEN_REVIEW`; D01-D36 pass 36/36, AC01-AC20 pass 20/20, and the same 245 focused tests pass. The proposed sequence 0-18 remains non-authoritative until Steven accepts or narrows it; the production freeze and Monday checkpoint remain unchanged. Broad historical claims remain blocked. No implementation directive is authorized. The only recommended next directive after Steven acceptance is the separately bounded offline `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet Contract And Offline Proof`, with no production observer wiring, provider access, schema, activation, or behavior change. No commit, push, merge, canonical integration, deployment, or activation is claimed. |
 | 2026-08-27 | ARGUS-CONTINUOUS-PRODUCER-001F - Accepted lineage integration and canonical verification. | accepted stacked lineage through `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E` head `9967935`; fast-forwarded from canonical `82460b3` | Goal Steward / Git Steward / QA Regression / Release Scribe | `COMPLETE / CANONICAL_INTEGRATED / DEPLOYMENT_HELD` | Proved and introduced the exact 17-commit accepted lineage with zero unrelated commits, conflicts, or executable resolution. Canonical Product bytes equal accepted 001D Product `1fa914f`; Product/test/tool bytes equal V4-tested `74efea1`. Focused 125/125 and full approved-environment 2,830/2,830 pass with one expected Windows skip; compileall, PowerShell parse, diff, capability/ownership, protected-path, and context-adjudicated secret checks pass. Services and manifests stayed unchanged; no deployment, GUI, provider, Paper, Shadow, broker, account, position, or order action occurred. Unknown instruments remain execution-blocked; no new second-eye ZIP is required. |
 | 2026-08-26 | ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B - Decision chronology, atomic composition, and forensic accounting repair. | `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B`; product `01f0c2e`; pushed packaging head `ebbf9da` | Goal Steward / Builder / QA Regression / Git Steward / Release Scribe | `IMPLEMENTED_PENDING_MERGE / PROVIDER_CANARY_FAILED_ACCEPTANCE / SECOND_EYE_PACKET_READY` | Adds post-acquisition decision cutoffs, exact `knownAt` binding, preview-only/atomic composition, prospective-floor enforcement, structured failure evidence, exact event/backfill accounting, and restart rollback/exactly-once proof. The provider canary preserved 172 completed-bar events, 47 readiness completions, four ready members, seven successful symbol backfills, and one restart, but zero composition cycles or TradePlans; natural-path acceptance failed. The 625-entry V2 packet is secret-scan clean and passes staged/extracted 161-test reruns; ZIP SHA-256 `A4609AA3562D5705D88DF13498F7EBAEAB7E6A615910B4445887625B60EE371B`. No merge, deploy, Paper, Shadow, broker, account, position, or order action occurred; second-eye adjudication is next. |
 | 2026-08-26 | ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A - Natural runtime path completion. | `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` from synchronized `2a53881`; implementation `74da179`; integrated through `c9e447d` | Goal Steward / Builder / QA Regression / Git Steward / Release Scribe | `COMPLETE / CANONICAL / RESEARCH_ONLY` | Naturally connects recurring discovery, hot-universe admission, bounded Schwab readiness, completed canonical bars, lifecycle/setup chronology, immutable missed entries, successor evidence, DATA-004 TradePlan/no-plan output, and restart reconstruction without caller injection. Unknown instruments remain research-visible but execution-blocked. Full discovery passes 2,763 tests with one expected skip; post-merge 77/77, compileall, PowerShell, diff, secret/capability, opening-closure, and historical-integrity checks pass. No provider canary, install, Paper, Shadow, account, position, broker, order, opening promotion, service, scheduler, manifest, or historical evidence mutation occurred. |
@@ -604,3 +605,57 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Final safety state: 13 pending future openings, zero enabled Shadow/Paper
   jobs, order transmission unavailable, all three services Running/Automatic,
   and Continuous configuration/service hashes unchanged.
+
+## 2026-08-29 - ARGUS-STRATEGY-SCIENCE-LAB-001 Architecture Review Packet
+
+- **Branch:** `codex/argus-strategy-science-lab-001` at starting and current
+  uncommitted-docs parent `8b81bcd0d4172b5c88e08afca9933068a500c5a7`;
+  local `master` and `origin/master` matched that identity at reconciliation.
+- **Scope:** Documentation/research architecture only: Goal Charter, complete
+  current-state/reuse inventory, research evidence matrix, point-in-time replay
+  and prospective-ledger architecture, threat/validation design, proposed
+  dependency sequence, and exact proposed next directive.
+- **Files changed:** The task branch contains the Goal Charter and three packet
+  artifacts under `docs/argus-office/`, plus this Roadmap and Task Log
+  reconciliation. No product, test, package, schema, database, configuration,
+  runtime, generated-data, service, provider, broker, order, Paper, Shadow, or
+  GUI path changed.
+- **Tests or checks run:** The byte-specific independent review passed all
+  D01-D36 deliverables `36/36`, all AC01-AC20 acceptance conditions `20/20`,
+  structural/completeness and local-link checks, exact identity reconciliation,
+  and the same 245 focused tests. Release Scribe re-read the final independent
+  disposition and current Roadmap/Task Log, then ran scoped Git status/diff and
+  `git diff --check`. No product implementation test or runtime action was
+  authorized by this documentation-only closeout.
+- **Evidence for changed behavior:** None; changed behavior is intentionally
+  absent. The evidence is the identity-bound review packet, independent
+  disposition `ACCEPTED_FOR_STEVEN_REVIEW`, and documentation-only diff.
+- **Protected areas reviewed:** Replay identity and chronology, historical
+  admission and corporate-action basis, scoring/readiness/TradePlan/risk/exits,
+  schemas, broker/order behavior, provider/runtime boundaries, production
+  configuration, and GUI behavior were reviewed without semantic or physical
+  mutation. Broad historical claims remain blocked.
+- **Push/merge status:** `IMPLEMENTED_PENDING_MERGE /
+  INDEPENDENT_REVIEW_PASS / STEVEN_ACCEPTANCE_PENDING` on the task branch. No
+  commit, push, merge, canonical integration, deployment, installation,
+  activation, provider access, or implementation directive is claimed or
+  authorized by this record.
+- **Risks:** Current broad datasets remain unadmitted because durable identity,
+  price basis, corporate-action lineage, point-in-time universe/survivorship,
+  timestamp/source lineage, and golden-day certification are unresolved. The
+  proposed 0-18 sequence could be mistaken for authority unless its pending
+  Steven acceptance is preserved.
+- **Manual QA:** No visual/manual QA applies. Steven review is a governance
+  acceptance gate for the packet and any first implementation slice, not a
+  claim that software behavior changed.
+- **Open questions:** Steven must accept, reject, or narrow the packet and its
+  proposed dependency sequence. Provider, licensing, data purchase, schema,
+  activation, and strategy-authority decisions remain separate future gates.
+- **Recommendation:** Preserve the general production freeze and the Monday
+  2026-08-31 08:32 CT checkpoint ordering. Present the independently accepted
+  packet to Steven; no implementation directive is authorized yet. If Steven
+  accepts the architecture, issue only the separately bounded offline
+  `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet
+  Contract And Offline Proof`; keep it offline, caller-rooted, deterministic,
+  read-only with respect to production, and free of provider/schema/activation
+  or strategy behavior changes.
