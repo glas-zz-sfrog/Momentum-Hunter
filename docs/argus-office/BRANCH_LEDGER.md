@@ -2,6 +2,35 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-STRATEGY-SCIENCE-LAB-001 - 2026-08-29
+
+`codex/argus-strategy-science-lab-001` records the exact seven-artifact Strategy
+Science packet content at commit
+`01aab7d75938edf7562d8c321da5d7c556843da5`, with parent/base
+`8b81bcd0d4172b5c88e08afca9933068a500c5a7`. The content commit modifies
+Roadmap and Task Log and adds the Goal Charter, independent second-eye review,
+infrastructure inventory, research matrix, and main architecture packet. It
+contains no product, test, package, schema, database, configuration, runtime,
+generated-data, service, provider, broker, order, Paper, Shadow, or GUI path.
+
+Git Steward's immediate post-commit evidence found a clean worktree. `HEAD` was
+the content commit; local `master` and `origin/master` remained at the base;
+`master...HEAD` was left `0` / right `1`, so the task branch was ahead `1` /
+behind `0`. The byte-specific independent disposition is
+`ACCEPTED_FOR_STEVEN_REVIEW`; D01-D36 pass `36/36`, AC01-AC20 pass `20/20`, and
+the same 245 focused tests pass.
+
+Classification remains `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_REVIEW_PASS /
+STEVEN_ACCEPTANCE_PENDING`. This Roadmap/Task Log/Branch Ledger reconciliation
+is a docs-only follow-up to content commit `01aab7d`; it does not change the
+five immutable packet artifacts or accepted content identity. No push, merge,
+canonical integration, deployment, installation, activation, provider access,
+or implementation directive has occurred or is authorized. The general
+production freeze and Monday 2026-08-31 08:32 CT checkpoint ordering remain
+unchanged. Steven acceptance is required before merge or implementation; only
+afterward may a separately bounded offline
+`ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001` directive be considered.
+
 ## ARGUS-CONTINUOUS-PRODUCER-001F - 2026-08-27
 
 Canonical `master` fast-forwarded without conflicts from
