@@ -15,16 +15,13 @@ Reviewed artifact commit is
 Previous governance-closeout and 001A starting HEAD is
 `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`.
 
-Git Steward performed ordinary non-force pushes and read back previous closeout
-HEAD `b5ea432` on `origin/codex/argus-current-edge-research-ledger-001`. At 001A
-start the task branch was behind/ahead master `0/2`, upstream `0/0`, and clean.
-The H15 cleanup and four governance/report edits are the complete 001A repair
-tree and the branch remains unmerged. Their containing repair commit's exact
-HEAD is intentionally recorded after commit in the external manifest, avoiding
-self-reference. The external independent delta report may advance the branch
-disposition to `ACCEPTED_FOR_STEVEN_MERGE_REVIEW` only when it binds that exact
-commit and the final manifest; that external binding requires no later tracked
-edit and grants no merge authority.
+Exact 001A repair/governance commit is
+`776589f31cc1f7e9164195df85d0aed5bbf5909e`, parent `b5ea4326`. Local and
+remote task branch readback is exact; branch/master is behind `0` / ahead `3`
+and the repair remains unmerged. Independent inspection proves its five-path
+content clean and in scope, but commit/push actor and sequencing are unexplained.
+That provenance anomaly does not change content acceptance and is not silently
+attributed to Git Steward or another actor.
 
 Final module identity is SHA-256
 `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4`,
@@ -42,15 +39,15 @@ outside-root bytes on both cleanup branches. Compile/import passes, normal and
 The 207-owner `OK (skipped=1)` result is carry-forward only and was not rerun
 for 001A. Goal Charter and reuse inventory bytes are unchanged.
 
-Independent second-eye SHA-256
-`F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`
-issues `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`. The review
-preserves the initial rejection and intermediate delta, resolves F01-F04 at the
-final bytes, and reports H18/18, T14/14, D28/28. This Release Scribe update
-satisfies A01-A20 governance reconciliation at 20/20. No production consumer
-or protected-path change exists. The accepted 001 disposition remains intact;
-the narrow 001A test-harness delta still requires the final independent
-post-governance record after these docs are frozen.
+Current independent second-eye SHA-256 is
+`41967CBB6DBA0D559A3201214F17625E3118A1DA6D6888EC5BAF9A5CFE3AF425`,
+Git blob `eadbc8794662966312a23ad730a69f4005294909`. It preserves earlier
+rejection/repair history, verifies exact `776589f` content and remote readback,
+and issues `ACCEPTED_FOR_STEVEN_MERGE_REVIEW`. This grants no merge. The current
+second-eye plus Roadmap, Task Log, Branch Ledger, and author report will form a
+later final documentation commit whose future HEAD is unknown until commit and
+then bound in the external manifest. Manifest/ZIP/sidecar generation and final
+read-only package validation remain pending.
 
 The bounded authority is an offline immutable prospective packet contract and
 deterministic proof using caller-supplied absolute research/test storage. It
@@ -60,12 +57,13 @@ schedulers; schema/database/migration work; GUI changes; scoring, ranking,
 readiness, TradePlan, risk, entry, exit, or alert authority; deployment,
 installation, or activation.
 
-001A changes only the H15 focused-test cleanup plus Roadmap, Task Log, Branch
-Ledger, and the author report. Module, Goal Charter, reuse inventory, and
-independently owned second-eye report are unchanged. The branch remains
+Repair commit `776589f` changes only the H15 focused-test cleanup plus Roadmap,
+Task Log, Branch Ledger, and the author report. Current final-doc changes are
+the independently owned second-eye plus those four docs. Module, Goal Charter,
+reuse inventory, and test remain unchanged from the repair commit. The branch remains
 `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`; no merge,
-package, deployment, installation, activation, provider access, or production
-behavior change occurred. The general production freeze, Monday
+deployment, installation, activation, provider access, or production behavior
+change occurred. Packaging is pending, not completed. The general production freeze, Monday
 2026-08-31 08:32 CT read-only checkpoint, current control strategy, and Ready /
 Next sequence remain unchanged. A prospective observer remains unauthorized.
 

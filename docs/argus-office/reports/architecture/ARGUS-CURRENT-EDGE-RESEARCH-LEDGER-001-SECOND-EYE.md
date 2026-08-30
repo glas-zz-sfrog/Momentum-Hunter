@@ -2,10 +2,10 @@
 
 **Review date:** 2026-08-29
 **Reviewer:** Independent second-eye agent; not the implementation, focused-test, inventory, Goal Charter, or author-report author
-**Disposition:** `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`
+**Disposition:** `ACCEPTED_FOR_STEVEN_MERGE_REVIEW`
 **Authority boundary:** This is a research-only independent gate. It does not authorize production, observer, shadow, paper-trading, execution, merge, push, or activation.
 
-**Reading rule:** The initial rejection below is preserved as immutable review history. The controlling current disposition and corrected Goal-Charter-numbered matrices are in `Superseding independent delta review — final repaired bytes` at the end of this report. The intermediate repaired-byte delta also remains recorded there.
+**Reading rule:** The initial rejection and repaired-byte deltas below are preserved as immutable review history. The controlling current disposition is in `Controlling 001A post-governance delta` at the end of this report. It grants no merge authority.
 
 ## Executive conclusion
 
@@ -569,3 +569,163 @@ No production module imports or names the ledger. The reviewed public behavior r
 - **Manual QA:** None; this is nonvisual offline infrastructure and governance evidence.
 - **Open questions:** None for technical review. Release Scribe must reconcile current-status governance before the directive can satisfy A01/A20 or be called complete.
 - **Recommendation:** `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`. Release Scribe should update Roadmap, Task Log, and Branch Ledger from the exact final hashes/tests/review disposition, without claiming merge, canonical integration, production fitness, observer authority, or activation. A prospective observer remains a separately bounded future directive and is not authorized here.
+
+---
+
+## Controlling 001A post-governance delta
+
+**Directive:** `ARGUS-DIRECTIVE-CURRENT-EDGE-RESEARCH-LEDGER-001A`
+**Reviewed repair/governance commit:** `776589f31cc1f7e9164195df85d0aed5bbf5909e`
+**Disposition:** `ACCEPTED_FOR_STEVEN_MERGE_REVIEW`
+**Meaning:** Branch-only independent acceptance. This report does **not** authorize merge, deployment, installation, activation, observer work, provider access, production use, Paper, Shadow, broker/account/order access, or strategy influence.
+
+The approved directive and Steven's exact detached-checksum-sidecar clarification were read completely. The clarification requires the final review manifest inside the ZIP, SHA-256 entries for all nine packaged Git artifacts, no self-hash in the manifest, and a detached `.sha256` sidecar outside the ZIP containing at minimum the final manifest filename/hash and final ZIP filename/hash.
+
+### 001A identity and chronology
+
+| Identity | Exact reviewed value | Result |
+|---|---|---|
+| Branch | `codex/argus-current-edge-research-ledger-001` | PASS |
+| Canonical base / local `master` / `origin/master` | `848d20a6bd5a49e9bb8e179eaa374109756801b0` | PASS |
+| Reviewed implementation artifact | `7f37024a66b512eb3fbfefe5a78b620e44d11c0a` | PASS |
+| Previous closeout / 001A start | `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f` | PASS, commit exists |
+| Reviewed 001A repair/governance commit | `776589f31cc1f7e9164195df85d0aed5bbf5909e` | PASS, commit exists |
+| Reviewed commit parent | `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f` | PASS |
+| Local task branch HEAD | `776589f31cc1f7e9164195df85d0aed5bbf5909e` | PASS at review |
+| Remote task branch HEAD | `776589f31cc1f7e9164195df85d0aed5bbf5909e` | PASS, exact readback |
+| Task branch vs master | behind `0`, ahead `3` | PASS |
+| Task branch vs upstream | behind `0`, ahead `0` | PASS |
+| Merge state | `UNMERGED` | PASS |
+
+The commit appeared during read-only review activity. This reviewer, the root orchestrator, and Release Scribe each denied creating or pushing it; no initiating command was identified. Git metadata names `glas-zz-sfrog <steven.m.colussi@gmail.com>` as author and committer at `2026-08-29 23:16:45 -0500`, but metadata does not establish the initiating actor. This is recorded as `UNEXPLAINED_ACTOR_SEQUENCING_ANOMALY`.
+
+The anomaly does not waive any gate. Independent readback proved an ordinary commit with exact parent `b5ea432...`, exactly the five authorized paths, a clean range diff, and exact local/remote branch equality. It is therefore accepted as the in-scope 001A repair/governance commit for content review. The later final documentation commit and package validation must still bind their own exact actor-independent Git and byte evidence.
+
+### Exact 001A scope
+
+The range `b5ea4326...776589f3` contains exactly:
+
+| Path | Classification | Independent result |
+|---|---|---|
+| `tests/test_current_edge_research_ledger.py` | H15 test cleanup only | PASS |
+| `docs/argus-office/ROADMAP.md` | Documentation/status reconciliation | PASS |
+| `docs/argus-office/TASK_LOG.md` | Documentation/status reconciliation | PASS |
+| `docs/argus-office/BRANCH_LEDGER.md` | Documentation/status reconciliation | PASS |
+| `docs/argus-office/reports/architecture/ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001.md` | Author-report 001A evidence/status reconciliation | PASS |
+
+The test diff is exactly three added cleanup lines: Windows retains `os.rmdir(link)` and non-Windows uses `link.unlink()`. The hostile setup, ledger construction, expected `ROOT_REPARSE_POINT`, and outside snapshot equality are byte-unchanged. There is no skip branch. The four non-test changes are Markdown evidence/status changes only; no executable, package, dependency, configuration, schema, data, service, or production path is among them.
+
+Final reviewed implementation identities remain:
+
+| Artifact | SHA-256 | Git blob | Result |
+|---|---|---|---|
+| Module | `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4` | `9e4a5df2170b59cee0efc57927bb4463f797d2d4` | PASS, identical to accepted implementation and `b5ea432` |
+| 001A focused test | `34C94F082423E61A6EC70EBA882C690D3520CDC15A8AE13FAD90CDC216D2D3CA` | `f9770b5c7cccac1c4f4fcf0eb6989c5510477cd6` | PASS, H15 cleanup delta only |
+| Goal Charter | `BAC99C28409C2585CDB3FB0D1814C71D7A97598B29B3DE417C08DF99C4E76E43` | `1f0b426d6e5f990e75a712f3f0764fa18e435c4a` | PASS, unchanged |
+| Reuse inventory | `336659412B043F31D0DE8889698A1156F087F615B077474E32F75E29A15FAF7F` | `8c2da4b1da26293a256abd061c731c24f76ccb3d` | PASS, unchanged |
+
+### H15 portability proof
+
+| Environment/check | Exact result |
+|---|---|
+| Native Windows complete focused suite | `Ran 48 tests in 8.275s` / `OK` |
+| Isolated network-disabled Alpine/POSIX complete focused suite | `Ran 48 tests in 11.501s` / `OK` |
+| Explicit Windows H01-H18 suite | `Ran 18 tests in 2.024s` / `OK` |
+| Native Windows single H15 | `Ran 1 test in 0.175s` / `OK`; no skip |
+| Alpine/POSIX single H15 | `Ran 1 test in 0.006s` / `OK`; no skip |
+| Independent Windows junction probe | `ROOT_REPARSE_POINT`; outside bytes unchanged; skipped `false`; `os.rmdir` removed junction |
+| Static POSIX cleanup inspection | exact `link.unlink()` branch; no skip or weakened assertion |
+
+H15 remains a genuine hostile root-escape test on both executed platforms. The cleanup change happens only in `finally`, after the category and outside-nonmutation assertions.
+
+### Required behavioral and deterministic checks
+
+- The explicit H01-H18 suite passes 18/18. The prior literal H/T/A/D crosswalk remains substantively valid; 001A changes no contract or acceptance semantics.
+- A separate 22-test tamper/restart/root/F01-F04 selection passes `OK`.
+- Direct F01 probes reject final-PnL, result, post-event return, settled answer, and numeric `FINAL-PNL` as `PROHIBITED_PREDICTION_CONTENT`.
+- Direct F02 probes reject duplicate, noncanonical, and unbound reconstruction inputs for symbol, event, feature, and missingness as `INVALID_EVIDENCE`; valid cutoff-bound A/B lineage passes.
+- Direct F03 probes reject precreated-empty and missing-collection roots as `ROOT_LAYOUT_INVALID` without snapshot mutation or silent repair.
+- Direct F04 packet and receipt hardlink probes reject link count 2 as `ARTIFACT_LINK_COUNT_INVALID`; inside and outside bytes remain unchanged.
+- Source compilation succeeds without repository bytecode output. Import reports `RESEARCH_ONLY=True`, `PRODUCTION_DECISION_AUTHORITY=NONE`, and `EXECUTION_AUTHORITY=NONE`.
+- Normal and `python -O` demonstration stdout are byte-identical, both stderr streams are empty, and normalized stdout SHA-256 remains `EA633C41C3125CFD3BF89360CF4DAB3324D9CBABBC8C10185BB105624AFC2F35`.
+
+An isolated `-I -S` child that did not import the ledger module recomputed all twelve raw-byte identities unchanged:
+
+| Identity | P1 | O1 |
+|---|---|---|
+| Logical key | `377124141dc1c2de244bf055d6751b93783f7aaeddeabe1b21e97443faebc102` | `303d342171440244124adc6cb8cb1234dbaa79ce95151ec61863cb172a24b79b` |
+| Packet fingerprint | `ed086dc39f759f11b9db46905627c9afec9e0e8a8d4435145bd0ba08508ffcc9` | `d3d290e43bd6afe7dab83e6748cc397ef50d30213ca584c3e982cdde2199f380` |
+| Receipt ID | `d00b5aa3237615993c09591d97b74e3a002e647dbebe1868534e87c27d802e57` | `c8a464eb29c90ca0dda6eeb6176e8a258e82e7da4e904749677d90d8133c4e60` |
+| Packet stored-byte SHA-256 | `adb1e1f54e706ab47df4f6f3c4c71c7367c0a6e0d1695375b246d2d16bdd1664` | `2a762d392be187f4d00f35773e0be524b53e137c85c38896319128597453a782` |
+| Stored-byte fingerprint | `5eddf2fb9838cb20011624706159f21918d0d4617407576b0cbc7a9fe0bac422` | `7555d491082c11c24818e580d9c7eb6066aed3821e05d7325e79e65b312ae24d` |
+| Receipt stored-byte SHA-256 | `6c076e6b99c4db0bb731000c150db4ebe52704710a93aaeb581fb634772aca55` | `60178debe5487dc832ae6b34ab400f945a6fbe09bc6cc96e12db574393c3ab6a` |
+
+Digest paths and receipt bindings independently match for P1 and O1. Prediction/reveal chronology and one-way P1 immutability are unchanged.
+
+### Bounded-delta regression policy
+
+The 207-owner result remains exact carry-forward evidence: `Ran 207 tests`, `OK (skipped=1)`. It was **not rerun for 001A** and is not relabeled here. Carry-forward is valid under the directive's bounded-delta policy because:
+
+- module, Goal Charter, reuse inventory, package dependencies, configuration, schema, service, and production owner paths are unchanged;
+- the sole test change is cleanup after the H15 assertions;
+- repository consumer scans find no production module importing or naming the ledger;
+- the complete focused suite passes on native Windows and isolated Alpine/POSIX.
+
+### Governance and protected-scope consistency
+
+Roadmap, Task Log, Branch Ledger, Goal Charter, author report, and this second-eye history agree on the accepted module identity, current 001A test identity, F01-F04 resolution, unchanged P1/O1 identities, carry-forward-only 207 result, branch-only `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY` state, unmerged status, and absence of observer/production authority.
+
+The committed governance documents accurately describe the five-path repair tree and say the final independent record follows it. This appended section is that separately authorized independent record. A later final documentation commit will contain this report and any authorized status reconciliation; its exact HEAD is intentionally unknown here and must be externally bound after commit. No statement in this report predicts that future identity.
+
+All fifteen protected categories remain `NO CHANGE`: strategy/scoring; candidate generation/ranking/readiness; TradePlan; risk/sizing/allocation; entry/stop/target/exit; replay identity/historical capture; database/schema/migrations; provider/live collection; broker/account/order/execution; runtime/services/schedulers/installations; Paper; Shadow; GUI/WPF; live config/secrets/credentials; production/historical evidence data. The range diff contains no protected production path.
+
+Package-file hygiene before this append reports nine unique paths, zero trailing whitespace, zero tabs, zero merge markers, zero high-risk secret candidates, and range `git diff --check` exit 0.
+
+### Approved planned manifest and package contract
+
+The planned package list is exactly these nine Git paths, with no extra repository artifact:
+
+1. `momentum_hunter/current_edge_research_ledger.py`
+2. `tests/test_current_edge_research_ledger.py`
+3. `docs/argus-office/goal-charters/ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001.md`
+4. `docs/argus-office/reports/architecture/ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001-reuse-inventory.md`
+5. `docs/argus-office/reports/architecture/ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001.md`
+6. `docs/argus-office/reports/architecture/ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001-SECOND-EYE.md`
+7. `docs/argus-office/ROADMAP.md`
+8. `docs/argus-office/TASK_LOG.md`
+9. `docs/argus-office/BRANCH_LEDGER.md`
+
+The ZIP must contain those nine paths plus exactly one review manifest. The planned manifest schema is approved only if it includes:
+
+- manifest schema/version and directive ID;
+- branch, canonical/base commit, reviewed implementation artifact commit, previous closeout commit, final documentation commit, and its exact parent/ancestry relationship;
+- exact local branch HEAD, remote branch HEAD, local master, and `origin/master` readbacks;
+- truthful merge and push states;
+- an ordered nine-entry artifact array with exact relative path, SHA-256, Git blob, and proof that each packaged byte stream equals the file at the final documentation commit;
+- separately named module SHA/blob, focused-test SHA/blob, and independent-second-eye SHA-256;
+- package-generation UTC timestamp;
+- authority state `RESEARCH_ONLY`, `PRODUCTION_DECISION_AUTHORITY_NONE`, and `EXECUTION_AUTHORITY_NONE`;
+- explicit denial of merge, deployment, observer, production, Paper, Shadow, provider, broker, and strategy authority.
+
+The manifest must **not** contain or claim the SHA-256 of its own final bytes and must not contain a predicted ZIP hash. The manifest is inside the ZIP. After both are final, a detached `.sha256` sidecar outside the ZIP must record at minimum:
+
+- exact final manifest filename and SHA-256;
+- exact final ZIP filename and SHA-256.
+
+The later read-only packaging phase must independently prove: final documentation HEAD exists; its parent/ancestry and local/remote readbacks are exact; all nine packaged files equal `git show <final-head>:<path>` and their manifest hashes/blobs; manifest schema and ordered set are exact; no extra/missing ZIP entry exists; detached manifest and ZIP hashes match freshly recomputed bytes; the sidecar is outside the ZIP; extracted bytes revalidate; and no commit, push, merge, package mutation, deployment, or activation occurs during that validation.
+
+This planned contract is `APPROVED_PENDING_FINAL_BYTES`. No manifest, ZIP, or sidecar existed for final validation in this phase. Package acceptance is therefore deferred to the explicitly required second read-only follow-up.
+
+### Final 001A agent report
+
+- **Branch:** `codex/argus-current-edge-research-ledger-001`; reviewed 001A repair/governance commit and remote readback `776589f31cc1f7e9164195df85d0aed5bbf5909e`; later final documentation HEAD pending.
+- **Scope:** Read-only post-governance delta of H15 cleanup, F01-F04, packet identity, governance/protected scope, and planned package provenance; this report append only.
+- **Files changed:** Only `docs/argus-office/reports/architecture/ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001-SECOND-EYE.md` by this reviewer.
+- **Tests or checks run:** Native Windows 48 focused, explicit H01-H18 18, single H15, 22 tamper/restart/root/F01-F04 tests, independent Windows junction probe, isolated network-disabled Alpine/POSIX 48 and single H15, compile/import, normal/`-O`, raw identity recomputation, exact Git range/remote/ancestry, consumer/import/protected, secret/conflict/whitespace/diff, and nine-path manifest-plan checks. The 207-owner result was audited as carry-forward, not rerun.
+- **Evidence for changed behavior:** H15 remains `ROOT_REPARSE_POINT` plus outside nonmutation on Windows and POSIX; only cleanup differs. Module and all twelve P1/O1 identities are unchanged; F01-F04 remain resolved.
+- **Protected areas reviewed:** All fifteen charter categories; `NO CHANGE` for each.
+- **Push/merge status:** This reviewer performed no commit or push. Commit/push `776589f...` appeared from an unexplained actor during read-only review, then independently passed exact content/parent/remote checks. No merge occurred or is granted.
+- **Risks:** Unexplained commit actor/sequencing; final documentation HEAD not yet created/bound; manifest/ZIP/sidecar not yet generated or validated; general lexical, real-data, filesystem/TOCTOU/platform, scale, and future-consumer risks remain as previously disclosed.
+- **Manual QA:** None; nonvisual offline test/governance review.
+- **Open questions:** No technical blocker. The final documentation commit actor, exact HEAD, remote readback, manifest, ZIP, and detached sidecar require the mandated read-only follow-up.
+- **Recommendation:** `ACCEPTED_FOR_STEVEN_MERGE_REVIEW` at branch level. This grants no merge. Create the authorized final documentation commit, generate the exact manifest/ZIP/detached sidecar under Steven's clarification, then return for independent read-only validation before any separate merge decision.

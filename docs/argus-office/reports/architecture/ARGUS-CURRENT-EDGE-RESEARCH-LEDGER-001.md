@@ -4,9 +4,9 @@
 **Role:** Author-side Builder evidence / Release Scribe governance packet
 **Branch:** `codex/argus-current-edge-research-ledger-001`
 **Lifecycle:** `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`
-**Independent gate:** `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`
-**001A delta gate:** `EXACT_HEAD_EXTERNAL_BINDING_REQUIRED`
-**Commit/push/merge:** `PREVIOUS_CLOSEOUT b5ea432 / CONTAINING 001A REPAIR COMMIT / UNMERGED`
+**Independent gate:** `ACCEPTED_FOR_STEVEN_MERGE_REVIEW`
+**001A second-eye SHA/blob:** `41967CBB...AF425 / eadbc879...4909`
+**Commit/push/merge:** `001A REPAIR 776589f PUSHED / UNMERGED`
 
 This is the authoritative author-side D01-D28 crosswalk for the smallest offline
 Current-Edge Research Ledger V1. It is not an independent-review disposition,
@@ -35,15 +35,17 @@ database, provider, broker, account, order, service, scheduler, GUI, or
 production consumer.
 
 The initial independent second eye returned `NOT_ACCEPTED_REPAIRS_REQUIRED`.
-Author repair evidence now addresses technical findings F01-F04 without changing
-the P1/O1 packet or receipt identities. The final independent delta resolves
-F01-F04 and issues `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`.
+Author repair evidence addresses F01-F04 without changing P1/O1 identities.
+The final 001A branch-level delta now issues
+`ACCEPTED_FOR_STEVEN_MERGE_REVIEW`.
 Release Scribe governance satisfies A01-A20 at 20/20. Reviewed artifact commit
 `7f37024a66b512eb3fbfefe5a78b620e44d11c0a` is pushed and unmerged. The result
-was closed out at `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`. Authorized 001A
-changes only cross-platform H15 cleanup; its final repair commit, final
-post-governance independent delta, and external manifest/ZIP/sidecar are bound
-after the containing commit without a later tracked edit. The branch is not
+was closed out at `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`. Exact pushed
+001A repair/governance commit is `776589f31cc1f7e9164195df85d0aed5bbf5909e`,
+parent `b5ea432`. Its content is clean, but commit/push actor and sequencing are
+unexplained. Current second-eye plus four reconciled docs require a later final
+documentation commit; its unknown HEAD, package artifacts, and final read-only
+validation remain pending. The branch is not
 `COMPLETE`, canonical, production, deployed,
 installed, activated, or strategy-authoritative.
 
@@ -68,13 +70,15 @@ demonstrations are exact, all P1/O1 identities are unchanged, and F01-F04 remain
 resolved. The 207-owner `OK (skipped=1)` result is carry-forward only and was
 not rerun for 001A. Goal Charter and reuse inventory bytes are unchanged.
 
-The 001A test/doc delta remains unmerged. Final independent post-governance
-delta review and external manifest/ZIP/sidecar generation occur only after
-these governance bytes are frozen in the containing repair commit. Its exact
-HEAD is recorded after commit in the external manifest, avoiding self-reference.
-An external report that binds those exact bytes may then issue
-`ACCEPTED_FOR_STEVEN_MERGE_REVIEW` without a later tracked edit; that disposition
-is branch acceptance only and grants no merge authority.
+Repair/governance commit `776589f`, parent `b5ea432`, is pushed with exact task-
+remote readback and branch/master divergence `0/3`. Independent review accepts
+it as `ACCEPTED_FOR_STEVEN_MERGE_REVIEW`, SHA/blob
+`41967CBB6DBA0D559A3201214F17625E3118A1DA6D6888EC5BAF9A5CFE3AF425` /
+`eadbc8794662966312a23ad730a69f4005294909`. Accepted content does not resolve
+the unexplained commit/push actor and sequencing. This second-eye plus the four
+reconciled docs will form a final documentation commit whose future HEAD is
+bound after commit in the external manifest. Packaging and final read-only
+package validation remain pending; branch acceptance grants no merge.
 
 ## D01-D28 crosswalk
 
@@ -103,9 +107,9 @@ is branch acceptance only and grants no merge authority.
 | D21 | Broader tests | The post-F01-F04 ten-owner regression run remains 207 tests, `OK (skipped=1)`; it is carry-forward only and was not rerun for 001A. | `PASS_AUTHOR_WITH_DISCLOSED_DELTA` |
 | D22 | Static/compile checks | Repaired source/test hashes, `py_compile`, targeted `compileall`, import/AST structure, normal demo, and `-O` demo pass. | `PASS_AUTHOR` |
 | D23 | Secret/conflict/whitespace | `Verification ledger` records scoped secret-pattern, conflict-marker, link, structure, whitespace, and diff checks. | `PASS_AUTHOR` |
-| D24 | Independent disposition | Accepted 001 history remains preserved; the external final post-governance record must bind the containing 001A repair HEAD and final manifest after this tracked edit. | `PASS_INDEPENDENT_ACCEPTED / EXACT_HEAD_EXTERNAL_BINDING_REQUIRED` |
+| D24 | Independent disposition | Current second-eye binds repair `776589f` and issues `ACCEPTED_FOR_STEVEN_MERGE_REVIEW`; earlier dispositions remain labeled history. | `PASS_INDEPENDENT_ACCEPTED` |
 | D25 | Rollback | `Rollback` gives isolated paths, preconditions, validation, production nonmutation, and destructive-Git restriction. | `PASS_AUTHOR` |
-| D26 | Push/merge | Artifact `7f37024a` and prior closeout `b5ea432` are pushed/unmerged; the containing 001A repair HEAD and final remote readback are recorded externally after commit. | `PASS_AUTHOR` |
+| D26 | Push/merge | Repair `776589f`, parent `b5ea432`, is pushed/read back exact and unmerged; final docs/package identities remain future evidence. | `PASS_AUTHOR` |
 | D27 | Remaining risks | `Remaining risks` covers real-data admission, rights, identity, filesystems, external TOCTOU, crash semantics, platform variance, and scope limits. | `PASS_AUTHOR` |
 | D28 | Smallest next directive | Only a separately bounded prospective observer may be considered after all review and Steven gates; it is not authorized here. | `PASS_AUTHOR` |
 
@@ -121,13 +125,15 @@ not a substitute for D24.
 | Reviewed artifact commit | `7f37024a66b512eb3fbfefe5a78b620e44d11c0a` |
 | Reviewed artifact parent/base | `848d20a6bd5a49e9bb8e179eaa374109756801b0` |
 | Previous closeout / 001A starting `HEAD` | `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f` |
+| Exact pushed 001A repair/governance commit | `776589f31cc1f7e9164195df85d0aed5bbf5909e`; parent `b5ea4326` |
 | Local `master` | `848d20a6bd5a49e9bb8e179eaa374109756801b0` |
 | `origin/master` | `848d20a6bd5a49e9bb8e179eaa374109756801b0` |
-| `origin/codex/argus-current-edge-research-ledger-001` | `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f` at 001A start |
-| `master...001A starting HEAD` | behind `0`, ahead `2` |
-| `upstream...001A starting HEAD` | behind `0`, ahead `0` |
-| 001A repair tree | H15 test cleanup plus Roadmap, Task Log, Branch Ledger, and this author report |
-| 001A final repair commit | Exact containing HEAD is recorded after commit in the external manifest |
+| Local/remote task branch | exact `776589f31cc1f7e9164195df85d0aed5bbf5909e` |
+| `master...776589f` | behind `0`, ahead `3` |
+| `upstream...776589f` | behind `0`, ahead `0` |
+| 001A repair tree | Exactly H15 test cleanup plus Roadmap, Task Log, Branch Ledger, and author report |
+| Repair provenance | Content-clean; commit/push actor and sequencing unexplained |
+| Final documentation commit | Current second-eye plus four docs; future HEAD unknown until commit and then bound externally |
 | Module SHA-256 | `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4` |
 | Module Git blob | `9e4a5df2170b59cee0efc57927bb4463f797d2d4` |
 | Current 001A test SHA-256 | `34C94F082423E61A6EC70EBA882C690D3520CDC15A8AE13FAD90CDC216D2D3CA` |
@@ -136,8 +142,8 @@ not a substitute for D24.
 
 The implementation module remains frozen in reviewed artifact `7f37024a`.
 Previous closeout `b5ea432` is pushed and unmerged. The authorized 001A test
-cleanup now has the current identity above. Its containing repair commit and
-external evidence are bound after commit under the rule above. A later source/test/proof-byte change
+cleanup is exact pushed commit `776589f`; task remote readback matches. Its
+content is accepted despite the recorded actor/sequencing anomaly. A later source/test/proof-byte change
 invalidates these identities and requires focused reruns plus review refresh.
 
 ## D03 - Reuse and ownership decision
@@ -171,18 +177,19 @@ scope and chronology of that evidence are disclosed rather than relabeled.
 
 ## D04 - Exact branch file scope
 
-Against previous closeout/start HEAD `b5ea432`, 001A scope is:
+Repair commit range `b5ea432...776589f` contains exactly:
 
 | Status | Category | Path |
 |---|---|---|
 | `M` | H15 focused-test cleanup | `tests/test_current_edge_research_ledger.py` |
-| `M` | Current-status governance | `docs/argus-office/ROADMAP.md` |
-| `M` | Current-status governance | `docs/argus-office/TASK_LOG.md` |
-| `M` | Branch evidence | `docs/argus-office/BRANCH_LEDGER.md` |
-| `M` | Author report / 001A addendum | `docs/argus-office/reports/architecture/ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001.md` |
+| `M` | Repair governance | `docs/argus-office/ROADMAP.md` |
+| `M` | Repair governance | `docs/argus-office/TASK_LOG.md` |
+| `M` | Repair governance | `docs/argus-office/BRANCH_LEDGER.md` |
+| `M` | Repair author report | `docs/argus-office/reports/architecture/ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001.md` |
 
-Module, Goal Charter, reuse inventory, and independently owned second-eye report
-remain unchanged. No generated root is retained. No package, dependency,
+Current final-documentation changes are the independently owned second-eye plus
+the same four docs; module, test, Goal Charter, and reuse inventory remain at
+repair-commit bytes. No generated root is retained. No package, dependency,
 configuration, schema, migration, service, provider, broker, GUI, Paper, Shadow,
 production data, or production evidence file changed.
 
@@ -685,7 +692,7 @@ dictionary to the exact expected values.
 
 ## D24 - Independent second-eye disposition
 
-`ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`
+`ACCEPTED_FOR_STEVEN_MERGE_REVIEW`
 
 The [initial independent second-eye report](ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001-SECOND-EYE.md),
 SHA-256
@@ -707,11 +714,13 @@ technical findings and one governance finding:
 F01-F04 now have author repair evidence under D20-D23 and final independent
 closure. The first repaired F01 delta still admitted `the settled answer was
 green`; the final lexical repair and its focused test are included in the exact
-current identities. The controlling [final independent second-eye
+current identities. Historical pre-001A accepted second-eye SHA-256
+`F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`
+preserves that repair history. The current [independent second-eye
 review](ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001-SECOND-EYE.md), SHA-256
-`F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`,
-preserves that history, resolves F01-F04, and issues
-`ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`.
+`41967CBB6DBA0D559A3201214F17625E3118A1DA6D6888EC5BAF9A5CFE3AF425`,
+Git blob `eadbc8794662966312a23ad730a69f4005294909`, binds repair `776589f`
+and issues `ACCEPTED_FOR_STEVEN_MERGE_REVIEW`.
 
 The independent reviewer completed all eight required domains:
 
@@ -732,13 +741,13 @@ unmerged. The work remains branch-only and does not authorize merge,
 deployment, installation, activation, provider access, production capture,
 strategy influence, or a prospective observer.
 
-That accepted 001 history remains controlling. 001A changes only H15 cleanup
-and four governance/report files; module, Goal Charter, reuse inventory, and
-the independently owned tracked second-eye report remain byte-identical. The
-external final post-governance delta must bind the containing repair commit and
-final manifest. It may issue `ACCEPTED_FOR_STEVEN_MERGE_REVIEW` without another
-tracked edit because its own and the manifest's hashes are bound by the detached
-sidecar; this avoids falsely claiming a self-referential tracked review state.
+001A changes only H15 cleanup and four repair-governance files; the current
+independently owned second-eye is the final branch-level delta. Repair commit
+`776589f` is content-clean and exact on the task remote, while its actor and
+sequencing remain unexplained. The second-eye plus these four current docs need
+a final documentation commit whose future HEAD is unknown until committed and
+bound externally. Manifest/ZIP/sidecar and final read-only validation remain
+pending. The disposition grants no merge.
 
 Any source, test, fixture, or proof-byte change requires identity refresh and
 reviewer adjudication.
@@ -752,16 +761,16 @@ reviewer adjudication.
 | A12 | `PASS_AUTHOR` | H01-H18 exact category and nonmutation matrix |
 | A13-A14 | `PASS_AUTHOR` | Structural production non-authority and fifteen-category protected review |
 | A15-A16 | `PASS_AUTHOR` | Hard Chew checks and all fourteen exact truths |
-| A17 | `PASS_INDEPENDENT_ACCEPTED / EXACT_HEAD_EXTERNAL_BINDING_REQUIRED` | Accepted 001 disposition remains; narrow 001A post-governance record binds the containing repair HEAD after this edit |
+| A17 | `PASS_INDEPENDENT_ACCEPTED` | Current second-eye binds exact repair `776589f` and issues `ACCEPTED_FOR_STEVEN_MERGE_REVIEW` |
 | A18 | `AUTHOR_AND_INDEPENDENT_CROSSWALK_COMPLETE` | D01-D28 pass 28/28 across author and independent artifacts |
 | A19 | `PASS_AUTHOR` | Isolated rollback below |
-| A20 | `PASS_001 / 001A_RECONCILED_FOR_EXTERNAL_BINDING` | Four governance/report files state the exact branch-only repair tree and defer only self-referential commit/package identities to external evidence |
+| A20 | `PASS_001A_RECONCILED` | Four docs state exact pushed repair, current second-eye, anomaly, and pending final documentation/package identities |
 
 All A01-A20 conditions pass 20/20 through implementation, independent review,
 governance reconciliation, and reviewed artifact Git proof. The directive
 remains `IMPLEMENTED_PENDING_MERGE`, not `COMPLETE`, canonical, production,
-deployed, installed, or active. The 001A delta still requires its final exact-
-byte independent/external closeout record.
+deployed, installed, or active. Final documentation commit and package
+validation remain pending.
 
 ## D25 - Rollback
 
@@ -787,16 +796,20 @@ by this procedure and requires separate authority.
 ```text
 REVIEWED_ARTIFACT_COMMIT = 7f37024a66b512eb3fbfefe5a78b620e44d11c0a
 PREVIOUS_CLOSEOUT_HEAD = b5ea4326e1d7e8587a03759aa4d1ac88d007a75f
-001A_FINAL_HEAD = RECORDED AFTER COMMIT IN EXTERNAL MANIFEST
-BRANCH_STATE = CONTAINING 001A REPAIR COMMIT / UNMERGED
-REMOTE_BRANCH_AT_START = origin/codex/argus-current-edge-research-ledger-001 @ b5ea4326e1d7e8587a03759aa4d1ac88d007a75f
-MASTER_DIVERGENCE_AT_START = BEHIND 0 / AHEAD 2
+001A_REPAIR_COMMIT = 776589f31cc1f7e9164195df85d0aed5bbf5909e
+001A_REPAIR_PARENT = b5ea4326e1d7e8587a03759aa4d1ac88d007a75f
+BRANCH_STATE = REPAIR PUSHED / UNMERGED
+REMOTE_BRANCH = origin/codex/argus-current-edge-research-ledger-001 @ 776589f31cc1f7e9164195df85d0aed5bbf5909e
+MASTER_DIVERGENCE = BEHIND 0 / AHEAD 3
 UPSTREAM_DIVERGENCE = BEHIND 0 / AHEAD 0
-001A_WORKTREE = H15 TEST CLEANUP PLUS FOUR GOVERNANCE/REPORT FILES
-PUSH = ORDINARY NON-FORCE UPDATE / EXACT READBACK RECORDED EXTERNALLY
+REPAIR_SCOPE = H15 TEST CLEANUP PLUS FOUR GOVERNANCE/REPORT FILES
+REPAIR_PROVENANCE = CONTENT CLEAN / ACTOR AND SEQUENCING UNEXPLAINED
+PUSH = EXACT REMOTE READBACK / ACTOR UNATTRIBUTED
 MERGE = NONE
 CANONICAL_INTEGRATION = NONE
-EXTERNAL_MANIFEST_ZIP_SIDECAR = GENERATED AFTER CONTAINING COMMIT
+FINAL_DOCUMENTATION_COMMIT = FUTURE UNKNOWN HEAD; SECOND-EYE PLUS FOUR DOCS
+EXTERNAL_MANIFEST_ZIP_SIDECAR = PENDING
+FINAL_READ_ONLY_PACKAGE_VALIDATION = PENDING
 DEPLOYMENT = NONE
 INSTALLATION = NONE
 ACTIVATION = NONE
@@ -806,9 +819,9 @@ PRODUCTION_BEHAVIOR_CHANGE = NONE
 
 The truthful lifecycle is
 `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`.
-The reviewed artifact and previous closeout are pushed and unmerged. The 001A
-containing commit is identified only after commit by the external manifest.
-Branch-only work is not `COMPLETE`, canonical,
+Repair `776589f` is pushed/read back exact and unmerged; current second-eye
+accepts it for Steven merge review without granting merge. The final
+documentation commit and package proof remain pending. Branch-only work is not `COMPLETE`, canonical,
 production, deployed, installed, or active.
 
 ## D27 - Remaining risks
@@ -857,39 +870,39 @@ remain unchanged.
 
 ## Agent report
 
-- **Branch:** `codex/argus-current-edge-research-ledger-001`; reviewed artifact
-  commit `7f37024a66b512eb3fbfefe5a78b620e44d11c0a`, parent/base/master/
-  `origin/master` `848d20a6bd5a49e9bb8e179eaa374109756801b0`, pushed exact and unmerged.
-- **Scope:** Author-side D01-D28 evidence packet for the smallest offline V1;
-  independent final delta accepted and governance reconciled for Git Steward
-  proof and Steven review.
-- **Files changed:** Roadmap, Task Log, Branch Ledger, and this author report
-  only. Source/tests/Goal Charter/reuse inventory/second-eye were not edited.
+- **Branch:** `codex/argus-current-edge-research-ledger-001`; repair/governance
+  `776589f31cc1f7e9164195df85d0aed5bbf5909e`, parent `b5ea4326`, exact on the
+  task remote, behind/ahead master `0/3`, unmerged.
+- **Scope:** Final 001A author/governance reconciliation for the branch-level
+  disposition `ACCEPTED_FOR_STEVEN_MERGE_REVIEW`; no merge authority.
+- **Files changed:** Repair `776589f` contains H15 test cleanup plus four docs.
+  Current final-documentation worktree contains the independently owned
+  second-eye plus Roadmap, Task Log, Branch Ledger, and this report. Module,
+  test, Goal Charter, and reuse inventory remain at repair bytes.
 - **Checks:** Frozen module/test hash and blob checks; focused 48;
   `py_compile`; targeted `compileall`; normal versus `-O` demo identity; exact
   P1/O1 byte capture; author-side standard-library recomputation; document
   structure/link/whitespace/conflict/secret/diff checks.
-- **Evidence:** Offline synthetic P1/O1 bytes and identities remained unchanged;
-  final repaired hashes, 48-test result, post-F01-F04 207-owner-regression
-  evidence, final lexical F01 proof, F02-F04 repair cases, hostile matrix, and
-  fourteen exact truths pass author checks. The 207 tests were not rerun after
-  the final lexical-only delta. No production behavior changed.
+- **Evidence:** Current second-eye SHA/blob
+  `41967CBB6DBA0D559A3201214F17625E3118A1DA6D6888EC5BAF9A5CFE3AF425` /
+  `eadbc8794662966312a23ad730a69f4005294909`; 48/48 Windows and Alpine/POSIX,
+  unchanged H15/P1/O1/F01-F04, and carry-forward-only 207-owner evidence.
 - **Protected:** All fifteen Goal Charter categories report
   `NO CHANGE`.
-- **Push/merge:** Reviewed artifact `7f37024a` was ordinarily pushed to the task
-  remote and read back exact; branch/master is `0/1`, upstream `0/0`, clean
-  immediately post-commit, and unmerged. This containing doc-only commit is the
-  governance-closeout record; its final head is recorded after commit by Git
-  Steward and the external review ZIP manifest. No deployment, installation,
-  activation, provider access, or production action occurred.
+- **Push/merge:** Repair `776589f` is pushed/read back exact and unmerged. Its
+  content is clean, but actor/sequencing is unexplained. The current five docs
+  require a final documentation commit whose unknown HEAD is bound externally;
+  manifest/ZIP/sidecar and final read-only validation remain pending. No merge,
+  package, deployment, installation, activation, provider, or production action
+  occurred.
 - **Risks:** Real-data admission, filesystem/platform and external-TOCTOU
   residuals, caller misuse, unmeasured scale, and pending Steven/merge review
   remain. Independent acceptance grants no production fitness.
 - **Manual QA:** None; this is nonvisual offline infrastructure and governance.
-- **Open questions:** None for governance closeout. Steven review and the
-  separately controlled merge decision remain.
-- **Recommendation:** Ready for the containing doc-only commit, external
-  manifest record, and Steven review as branch-only research infrastructure. Do
-  not call it complete or canonical; do not merge, deploy, install, activate,
-  access a provider, or authorize a prospective observer from this closeout
-  alone.
+- **Open questions:** No technical blocker; final documentation actor/HEAD and
+  package identities await the mandated external/read-only follow-up.
+- **Recommendation:** Commit only the current second-eye and four reconciled
+  docs, then generate and validate the external manifest/ZIP/sidecar before any
+  separate Steven merge decision. Do not call this complete or canonical and do
+  not merge, deploy, install, activate, access a provider, or authorize an
+  observer.
