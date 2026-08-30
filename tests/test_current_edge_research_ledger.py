@@ -450,7 +450,10 @@ class CurrentEdgeLedgerTests(unittest.TestCase):
             self.assertEqual(caught.exception.category, "ROOT_REPARSE_POINT")
             self.assertEqual(_snapshot(outside), outside_before)
         finally:
-            os.rmdir(link)
+            if os.name == "nt":
+                os.rmdir(link)
+            else:
+                link.unlink()
 
     def test_absolute_root_with_traversal_is_rejected_before_write(self):
         attempted = self.root / "inside" / ".." / "outside"

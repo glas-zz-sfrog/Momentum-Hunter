@@ -325,23 +325,31 @@ requires a separate current-head reconciliation and qualification task.
   `codex/argus-current-edge-research-ledger-001`, based on synchronized
   canonical `848d20a6bd5a49e9bb8e179eaa374109756801b0`. Final module SHA-256 is
   `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4`
-  and focused-test SHA-256 is
-  `F0B05D282BBBD31D8301177B9D9EBEC2AD593DC55E6FD74934FC679C7F4B610B`.
+  with Git blob `9e4a5df2170b59cee0efc57927bb4463f797d2d4`; current 001A
+  focused-test SHA-256 is
+  `34C94F082423E61A6EC70EBA882C690D3520CDC15A8AE13FAD90CDC216D2D3CA`
+  with Git blob `f9770b5c7cccac1c4f4fcf0eb6989c5510477cd6`.
   The independent disposition is
   `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`, bound to second-eye
   SHA-256 `F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`.
-  F01-F04 are resolved; 48 focused tests, H18/18, T14/14, D28/28, and the
-  disclosed post-F01-F04 207-owner result `OK (skipped=1)` pass. This
-  governance closeout satisfies A01-A20 at 20/20. Reviewed artifact commit
-  `7f37024a66b512eb3fbfefe5a78b620e44d11c0a` has parent/base/local master/
-  `origin/master` `848d20a6bd5a49e9bb8e179eaa374109756801b0` and was pushed by ordinary
-  non-force update to `origin/codex/argus-current-edge-research-ledger-001`,
-  then read back at exact `7f37024a`. It is behind/ahead master `0/1`, upstream
-  `0/0`, and was clean immediately after artifact commit. It remains unmerged,
-  undeployed, uninstalled, and inactive, with no production consumer or
-  protected change. The final governance-closeout identity is the containing
-  doc-only commit recorded after commit by Git Steward and the external review
-  ZIP manifest. A prospective observer remains unauthorized.
+  F01-F04 remain resolved; focused tests pass 48/48 on native Windows and 48/48
+  in an isolated network-disabled Alpine/POSIX container, and the single native
+  Windows H15 test passes. H15 still rejects `ROOT_REPARSE_POINT` with
+  outside-root nonmutation on both cleanup branches; compile/import passes,
+  normal and `-O` demonstrations remain exact, and all P1/O1 identities remain
+  unchanged. The disclosed 207-owner result `OK (skipped=1)`
+  is carry-forward evidence only and was not rerun for 001A. Reviewed
+  implementation artifact `7f37024a66b512eb3fbfefe5a78b620e44d11c0a`
+  remains the accepted implementation commit; previous governance-closeout HEAD
+  is `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`. 001A changes only H15 cleanup
+  in the focused test plus these four governance/report files. Its final
+  independent post-governance delta and external manifest/ZIP/sidecar bind the
+  containing repair commit after this tracked edit. The external report may
+  issue `ACCEPTED_FOR_STEVEN_MERGE_REVIEW` only against that exact HEAD and
+  manifest, without a later tracked edit and without granting merge authority. The
+  branch remains unmerged, undeployed, uninstalled, and inactive, with no
+  production consumer or protected change. A prospective observer remains
+  unauthorized.
 - `ARGUS-TRADE-REPLAY-001` is `PLANNED`, lane `PARALLEL_RESEARCH`, readiness
   `INVENTORY_READY`, gate `EVENT_LEVEL_ADMISSION_REQUIRED`. Failure-boundary
   and candidate inventory work may proceed without changing the prospective
@@ -488,10 +496,15 @@ next-action language preserved elsewhere cannot supersede this queue.
    dormant/read-only contracts and existing activation gates.
 4. `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001` is branch-only
    `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`.
-   Governance is reconciled at A20/20 and reviewed artifact commit `7f37024a`
-   is pushed and unmerged. Steven review and the separately controlled merge
-   gate are next. This item retains its existing parallel-research position and
-   does not reorder `Immediate Next` or Ready / Next. It grants no production
+   Reviewed implementation artifact `7f37024a` and previous closeout HEAD
+   `b5ea432` are pushed and unmerged. Authorized 001A changes only cross-platform
+   H15 cleanup; the current test identity is `34C94F08...D2D3CA`, and focused
+   tests pass 48/48 on Windows plus 48/48 on isolated Alpine/POSIX. The final
+   independent post-governance delta and package evidence bind the exact
+   containing commit externally after documentation reconciliation.
+   Steven review and the separately controlled merge gate follow those exact-byte
+   records. This item retains its existing parallel-research position and does
+   not reorder `Immediate Next` or Ready / Next. It grants no production
    collection, provider/schema, deployment, activation, observer, or strategy
    authority.
 
@@ -3423,12 +3436,13 @@ Intended specialist architecture:
   `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet
   Contract And Offline Proof`. Its Goal Charter, reuse inventory, implementation,
   focused proof, author crosswalk, and independent review are complete on the
-  task branch. Release Scribe governance satisfies A01-A20 at 20/20. Reviewed
-  artifact commit `7f37024a` is pushed and unmerged; the containing doc-only
-  closeout commit is recorded after commit by Git Steward and the external
-  review ZIP manifest. Production observer wiring, live cutoff capture,
-  activation, provider access, database or schema work, and strategy influence
-  remain out of scope.
+  task branch. Reviewed artifact commit `7f37024a` and previous governance
+  closeout `b5ea432` are pushed and unmerged. Authorized 001A changes only H15
+  cross-platform cleanup and requires its exact final repair commit plus final
+  independent post-governance delta and external evidence after this
+  reconciliation. Production observer wiring, live cutoff capture, activation,
+  provider access, database or schema work, and strategy influence remain out
+  of scope.
 
 #### ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet Contract And Offline Proof
 
@@ -3443,25 +3457,36 @@ Intended specialist architecture:
   `origin/codex/argus-current-edge-research-ledger-001` at exact `7f37024a` and
   readback matched. The task branch is behind/ahead master `0/1`, upstream
   `0/0`, and was clean immediately after artifact commit. It remains unmerged.
-  The governance-closeout record is this containing doc-only commit; its exact
-  final head is recorded after commit by Git Steward and the external review ZIP
-  manifest, avoiding an impossible self-reference.
+  Previous governance-closeout HEAD is
+  `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`. It is the starting HEAD for
+  001A and is pushed to the task remote. The containing final 001A repair
+  commit's exact HEAD is recorded after commit in the external manifest,
+  avoiding an impossible self-reference. The final independent report and
+  detached sidecar bind that exact HEAD, manifest, report, and ZIP without a
+  later tracked edit.
 - Final module identity is SHA-256
   `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4`,
-  Git blob `9e4a5df2170b59cee0efc57927bb4463f797d2d4`. Final focused-test identity is
-  SHA-256 `F0B05D282BBBD31D8301177B9D9EBEC2AD593DC55E6FD74934FC679C7F4B610B`,
-  Git blob `ee5100dbc0d7759bf2dd4303c3cf2f340fde2bbb`.
+  Git blob `9e4a5df2170b59cee0efc57927bb4463f797d2d4`. Current 001A focused-test
+  identity is SHA-256
+  `34C94F082423E61A6EC70EBA882C690D3520CDC15A8AE13FAD90CDC216D2D3CA`,
+  Git blob `f9770b5c7cccac1c4f4fcf0eb6989c5510477cd6`. The prior focused-test
+  identity is historical pre-001A evidence only.
 - Independent second eye SHA-256
   `F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`
   issues `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`. It preserves
   the initial rejection and intermediate delta, resolves F01-F04 at final bytes,
   and proves H18/18, T14/14, and D28/28. Documentation reconciliation satisfies
   A01-A20 at 20/20.
-- Focused tests pass 48/48. The exact 207-owner regression result passes with
+- Focused tests pass 48/48 on native Windows and 48/48 in an isolated
+  network-disabled Alpine/POSIX container. The exact 207-owner regression result passes with
   one expected skip and is disclosed carry-forward evidence from immediately
-  after F01-F04; it was not rerun for the final isolated lexical-only delta.
-  P1/O1 packet and receipt identities remain exactly unchanged. No production
-  consumer or protected-path change exists.
+  after F01-F04; it was not rerun for 001A. The single native Windows H15 test
+  passes, and both cleanup branches prove `ROOT_REPARSE_POINT` plus outside-root
+  nonmutation.
+  Compile/import passes, normal and `-O` demonstrations are exact, and P1/O1
+  packet and receipt identities remain unchanged. Goal Charter and reuse
+  inventory bytes remain unchanged. No production consumer or protected-path
+  change exists.
 - The bounded objective is an offline immutable prospective sequence of
   `OBSERVE -> FREEZE -> WAIT -> REVEAL -> COMPARE`, with caller-supplied absolute
   research/test storage, deterministic synthetic proof, and nonmutation of
@@ -3473,10 +3498,15 @@ Intended specialist architecture:
   TradePlan/risk/entry/exit/alert authority, deployment, installation, and
   activation remain excluded. The general production freeze and Monday
   checkpoint ordering remain controlling.
-- Next gate: Steven review, followed only by a separately controlled merge
-  decision. Do not call this branch-only work complete or canonical, and do not
-  deploy, install, activate, access a provider, or authorize the prospective
-  observer from this governance closeout alone.
+- 001A addendum: only the focused H15 cleanup and four governance/report files
+  differ from previous closeout HEAD `b5ea432`; the module, Goal Charter, reuse
+  inventory, and independently owned second-eye report are unchanged. Final
+  independent post-governance delta evidence and the external manifest/ZIP/
+  sidecar bind the containing commit without a later tracked edit. Only an
+  exact-HEAD accepted external report advances the branch to Steven merge
+  review, followed by a separately controlled merge decision. Do not
+  call this branch-only work complete or canonical, and do not deploy, install,
+  activate, access a provider, or authorize the prospective observer.
 
 #### ARGUS-DATA-CORPACTION-001 - Analysis Price-Basis And Security-Identity Integrity
 

@@ -12,23 +12,35 @@ Reviewed artifact commit is
 `7f37024a66b512eb3fbfefe5a78b620e44d11c0a`; its parent/base/local master/
 `origin/master` is exact
 `848d20a6bd5a49e9bb8e179eaa374109756801b0`.
+Previous governance-closeout and 001A starting HEAD is
+`b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`.
 
-Git Steward performed an ordinary non-force push to
-`origin/codex/argus-current-edge-research-ledger-001` and read back exact
-`7f37024a`. The task branch is behind/ahead master `0/1`, upstream `0/0`, and
-was clean immediately after the reviewed artifact commit. It remains unmerged.
-The governance-closeout record is this containing doc-only commit; its exact
-final head is recorded after commit by Git Steward and the external review ZIP
-manifest, avoiding an impossible self-reference.
+Git Steward performed ordinary non-force pushes and read back previous closeout
+HEAD `b5ea432` on `origin/codex/argus-current-edge-research-ledger-001`. At 001A
+start the task branch was behind/ahead master `0/2`, upstream `0/0`, and clean.
+The H15 cleanup and four governance/report edits are the complete 001A repair
+tree and the branch remains unmerged. Their containing repair commit's exact
+HEAD is intentionally recorded after commit in the external manifest, avoiding
+self-reference. The external independent delta report may advance the branch
+disposition to `ACCEPTED_FOR_STEVEN_MERGE_REVIEW` only when it binds that exact
+commit and the final manifest; that external binding requires no later tracked
+edit and grants no merge authority.
 
 Final module identity is SHA-256
 `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4`,
-Git blob `9e4a5df2170b59cee0efc57927bb4463f797d2d4`. Final focused-test identity is
-SHA-256 `F0B05D282BBBD31D8301177B9D9EBEC2AD593DC55E6FD74934FC679C7F4B610B`,
-Git blob `ee5100dbc0d7759bf2dd4303c3cf2f340fde2bbb`. Focused tests pass 48/48.
-The disclosed 207-owner regression result passes with one expected skip after
-F01-F04 and was not rerun for the final isolated lexical-only F01 delta. P1/O1
-packet and receipt identities remain exactly unchanged.
+Git blob `9e4a5df2170b59cee0efc57927bb4463f797d2d4`. Current 001A focused-test
+identity is SHA-256
+`34C94F082423E61A6EC70EBA882C690D3520CDC15A8AE13FAD90CDC216D2D3CA`,
+Git blob `f9770b5c7cccac1c4f4fcf0eb6989c5510477cd6`. The former
+`F0B05D282BBBD31D8301177B9D9EBEC2AD593DC55E6FD74934FC679C7F4B610B` /
+`ee5100dbc0d7759bf2dd4303c3cf2f340fde2bbb` pair is historical pre-001A
+evidence only. Focused tests pass 48/48 natively on Windows and 48/48 in an
+isolated network-disabled Alpine/POSIX container; the single native Windows H15
+test also passes. H15 still returns `ROOT_REPARSE_POINT` and preserves
+outside-root bytes on both cleanup branches. Compile/import passes, normal and
+`-O` are exact, F01-F04 remain resolved, and P1/O1 identities are unchanged.
+The 207-owner `OK (skipped=1)` result is carry-forward only and was not rerun
+for 001A. Goal Charter and reuse inventory bytes are unchanged.
 
 Independent second-eye SHA-256
 `F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`
@@ -36,7 +48,9 @@ issues `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`. The review
 preserves the initial rejection and intermediate delta, resolves F01-F04 at the
 final bytes, and reports H18/18, T14/14, D28/28. This Release Scribe update
 satisfies A01-A20 governance reconciliation at 20/20. No production consumer
-or protected-path change exists.
+or protected-path change exists. The accepted 001 disposition remains intact;
+the narrow 001A test-harness delta still requires the final independent
+post-governance record after these docs are frozen.
 
 The bounded authority is an offline immutable prospective packet contract and
 deterministic proof using caller-supplied absolute research/test storage. It
@@ -46,11 +60,12 @@ schedulers; schema/database/migration work; GUI changes; scoring, ranking,
 readiness, TradePlan, risk, entry, exit, or alert authority; deployment,
 installation, or activation.
 
-This governance closeout changes only Roadmap, Task Log, Branch Ledger, and the
-author report. Source, tests, Goal Charter, reuse inventory, and independent
-review are unchanged. The reviewed artifact branch is `PUSHED / UNMERGED`; no
-deployment, installation, activation, provider access, or production behavior
-change occurred. The general production freeze, Monday
+001A changes only the H15 focused-test cleanup plus Roadmap, Task Log, Branch
+Ledger, and the author report. Module, Goal Charter, reuse inventory, and
+independently owned second-eye report are unchanged. The branch remains
+`IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`; no merge,
+package, deployment, installation, activation, provider access, or production
+behavior change occurred. The general production freeze, Monday
 2026-08-31 08:32 CT read-only checkpoint, current control strategy, and Ready /
 Next sequence remain unchanged. A prospective observer remains unauthorized.
 

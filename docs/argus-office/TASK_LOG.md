@@ -2,7 +2,7 @@
 
 | Date | Task | Branch | Owner | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| 2026-08-29 | ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable prospective packet contract and offline proof. | `codex/argus-current-edge-research-ledger-001`; reviewed artifact `7f37024a` pushed; unmerged from canonical `848d20a` | Goal Steward / App Architect / Builder / independent second eye / Release Scribe / Git Steward | `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY` | Final module/test SHAs are `A0FD9228...282CE4` / `F0B05D28...4B610B`; 48 focused tests pass, P1/O1 identities are unchanged, and the disclosed post-F01-F04 207-owner run is `OK (skipped=1)` without a rerun for the final lexical-only delta. Second-eye SHA `F952F620...ECFEB` resolves F01-F04 and proves H18/18, T14/14, D28/28. Governance is satisfied at A20/20. Reviewed artifact commit `7f37024a` was ordinarily pushed and read back exact; branch/master is behind/ahead `0/1`, upstream `0/0`, and clean post-commit. The containing doc-only closeout commit is recorded after commit by Git Steward and the external review ZIP manifest. Work remains unmerged, undeployed, uninstalled, inactive, and without production consumer or protected change. Freeze, checkpoint, control strategy, and queue order remain unchanged; the prospective observer is unauthorized. |
+| 2026-08-29 | ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 / 001A - Immutable prospective packet contract and H15 cross-platform cleanup. | `codex/argus-current-edge-research-ledger-001`; implementation `7f37024a`; previous closeout/start `b5ea432`; unmerged from canonical `848d20a` | Goal Steward / App Architect / Builder / independent second eye / Release Scribe / Git Steward | `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY` | Module SHA/blob remains `A0FD9228...282CE4` / `9e4a5df...d2d4`; current 001A test SHA/blob is `34C94F08...D2D3CA` / `f9770b5...cd6`. Only H15 cleanup changes code/test bytes. Focused tests pass 48/48 on native Windows and 48/48 in an isolated network-disabled Alpine/POSIX container; H15 remains `ROOT_REPARSE_POINT` with outside nonmutation on both cleanup branches. Compile/import passes, normal and `-O` are exact, all P1/O1 identities are unchanged, and F01-F04 remain resolved. The 207-owner `OK (skipped=1)` result is carry-forward only and was not rerun for 001A. Goal Charter/reuse inventory bytes are unchanged. The final repair HEAD is recorded after commit in the external manifest; an exact-HEAD independent delta may advance the external disposition to `ACCEPTED_FOR_STEVEN_MERGE_REVIEW` without another tracked edit, but grants no merge authority. No merge, deployment, installation, activation, observer, provider, production, or protected change is authorized; freeze, Monday checkpoint, control strategy, and queue order remain unchanged. |
 | 2026-08-29 | ARGUS-STRATEGY-SCIENCE-LAB-001 - Strategy Science architecture review packet. | historical content `01aab7d` on base `8b81bcd`; accepted/canonical review HEAD `848d20a` | Goal Steward / research and architecture reviewers / independent second eye / Git Steward / Release Scribe | `COMPLETE / CANONICAL_INTEGRATED / STEVEN_ACCEPTED` | Exact seven-artifact packet content remains identified by `01aab7d75938edf7562d8c321da5d7c556843da5`; its five immutable packet artifacts retain the accepted identity. The byte-specific independent disposition was `ACCEPTED_FOR_STEVEN_REVIEW`; D01-D36 pass 36/36, AC01-AC20 pass 20/20, and the same 245 focused tests pass. Steven explicitly accepted the architecture at `848d20a6bd5a49e9bb8e179eaa374109756801b0`; Git Steward fast-forwarded local and remote canonical from `8b81bcd` to that exact synchronized head. The accepted 0-18 map remains research architecture rather than production execution order; TRADE-REPLAY is its named fixed-entry PIT-engine consumer without changing existing gates. Broad historical claims remain blocked, and no deployment, activation, schema, provider, runtime, or behavior change occurred. |
 | 2026-08-27 | ARGUS-CONTINUOUS-PRODUCER-001F - Accepted lineage integration and canonical verification. | accepted stacked lineage through `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E` head `9967935`; fast-forwarded from canonical `82460b3` | Goal Steward / Git Steward / QA Regression / Release Scribe | `COMPLETE / CANONICAL_INTEGRATED / DEPLOYMENT_HELD` | Proved and introduced the exact 17-commit accepted lineage with zero unrelated commits, conflicts, or executable resolution. Canonical Product bytes equal accepted 001D Product `1fa914f`; Product/test/tool bytes equal V4-tested `74efea1`. Focused 125/125 and full approved-environment 2,830/2,830 pass with one expected Windows skip; compileall, PowerShell parse, diff, capability/ownership, protected-path, and context-adjudicated secret checks pass. Services and manifests stayed unchanged; no deployment, GUI, provider, Paper, Shadow, broker, account, position, or order action occurred. Unknown instruments remain execution-blocked; no new second-eye ZIP is required. |
 | 2026-08-26 | ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B - Decision chronology, atomic composition, and forensic accounting repair. | `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B`; product `01f0c2e`; pushed packaging head `ebbf9da` | Goal Steward / Builder / QA Regression / Git Steward / Release Scribe | `IMPLEMENTED_PENDING_MERGE / PROVIDER_CANARY_FAILED_ACCEPTANCE / SECOND_EYE_PACKET_READY` | Adds post-acquisition decision cutoffs, exact `knownAt` binding, preview-only/atomic composition, prospective-floor enforcement, structured failure evidence, exact event/backfill accounting, and restart rollback/exactly-once proof. The provider canary preserved 172 completed-bar events, 47 readiness completions, four ready members, seven successful symbol backfills, and one restart, but zero composition cycles or TradePlans; natural-path acceptance failed. The 625-entry V2 packet is secret-scan clean and passes staged/extracted 161-test reruns; ZIP SHA-256 `A4609AA3562D5705D88DF13498F7EBAEAB7E6A615910B4445887625B60EE371B`. No merge, deploy, Paper, Shadow, broker, account, position, or order action occurred; second-eye adjudication is next. |
@@ -666,7 +666,7 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   preserving its existing lifecycle and admission gates. Proceed separately
   with only the authorized offline Current-Edge preimplementation gates.
 
-## 2026-08-29 - ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 Governance Closeout
+## 2026-08-29 - ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 Governance Closeout (Pre-001A)
 
 - **Branch:** `codex/argus-current-edge-research-ledger-001`, created clean from
   synchronized local/remote canonical base
@@ -681,7 +681,7 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   inventory, and independent second-eye evidence remain byte-unchanged.
 - **Tests or checks run:** Final evidence records 48/48 focused tests; module
   SHA/blob `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4` /
-  `9e4a5df2170b59cee0efc57927bb4463f797d2d4`; test SHA/blob
+  `9e4a5df2170b59cee0efc57927bb4463f797d2d4`; historical pre-001A test SHA/blob
   `F0B05D282BBBD31D8301177B9D9EBEC2AD593DC55E6FD74934FC679C7F4B610B` /
   `ee5100dbc0d7759bf2dd4303c3cf2f340fde2bbb`; unchanged P1/O1 identities;
   H18/18, T14/14, and D28/28. The post-F01-F04 207-owner regressions pass with one
@@ -702,8 +702,9 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   `origin/codex/argus-current-edge-research-ledger-001` and read back exact.
   Branch/master is behind/ahead `0/1`; upstream is `0/0`; the worktree was clean
   immediately after the artifact commit. The branch is unmerged. The governance
-  closeout record is this containing doc-only commit; Git Steward and the
-  external review ZIP manifest record its exact final head after commit. No
+  previous closeout record is exact commit
+  `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`; Git Steward pushed and read it
+  back before 001A. No
   deployment, installation, activation, provider access, canonical integration,
   or production behavior change occurred.
 - **Risks:** An offline research primitive could be mistaken for production or
@@ -719,3 +720,60 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   checkpoint, current control strategy, and queue order. Do not call this task
   complete or canonical; do not merge, deploy, activate, or authorize a
   prospective observer from this closeout.
+
+## 2026-08-29 - ARGUS-DIRECTIVE-CURRENT-EDGE-RESEARCH-LEDGER-001A H15 Cleanup Addendum
+
+- **Branch:** `codex/argus-current-edge-research-ledger-001`; 001A starts from
+  previous closeout HEAD
+  `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`. Reviewed implementation artifact
+  remains `7f37024a66b512eb3fbfefe5a78b620e44d11c0a`; canonical base, local
+  `master`, and `origin/master` remain
+  `848d20a6bd5a49e9bb8e179eaa374109756801b0`.
+- **Scope:** Preserve `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED /
+  RESEARCH_ONLY` while repairing only cross-platform cleanup in H15. On Windows
+  the test removes its junction with `os.rmdir`; elsewhere it removes its
+  symlink with `unlink`. No ledger contract or runtime behavior changes.
+- **Files changed:** `tests/test_current_edge_research_ledger.py` plus Roadmap,
+  Task Log, Branch Ledger, and the author completion report. Module, Goal
+  Charter, reuse inventory, and independently owned second-eye report remain
+  byte-unchanged.
+- **Tests or checks run:** Current module SHA/blob remains
+  `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4` /
+  `9e4a5df2170b59cee0efc57927bb4463f797d2d4`; current 001A test SHA/blob is
+  `34C94F082423E61A6EC70EBA882C690D3520CDC15A8AE13FAD90CDC216D2D3CA` /
+  `f9770b5c7cccac1c4f4fcf0eb6989c5510477cd6`. Focused tests pass 48/48 on
+  native Windows and 48/48 in an isolated network-disabled Alpine/POSIX
+  container; the single native Windows H15 test also passes. Compile/import
+  passes; normal and `-O` demonstrations are exact. The 207-owner
+  `OK (skipped=1)` result is carry-forward evidence only and was not rerun for
+  001A. Release Scribe ran doc-only consistency, old-hash labeling, link,
+  whitespace, conflict, secret, scope, and diff checks.
+- **Evidence for changed behavior:** H15 still rejects the reparse escape as
+  `ROOT_REPARSE_POINT` and proves the outside root unchanged. F01-F04 remain
+  resolved and every P1/O1 packet, receipt, logical-key, fingerprint, stored
+  hash, and path identity remains unchanged. This is harness cleanup, not
+  changed ledger behavior.
+- **Protected areas reviewed:** Strategy/scoring, candidate/readiness,
+  TradePlan/risk/entry/exit, replay/historical identity, database/schema,
+  provider/broker/account/order, runtime/service/scheduler, Paper/Shadow, GUI,
+  configuration/secrets, production data, and production behavior remain
+  unchanged.
+- **Push/merge status:** Previous closeout `b5ea432` is pushed. The containing
+  001A repair commit binds only the H15 cleanup and four governance/report
+  files; its exact local/remote HEAD is recorded after commit in the external
+  manifest, avoiding self-reference. The detached sidecar binds the final
+  manifest, independent report, and ZIP after generation. No merge, deployment,
+  installation, activation, provider access, or production action occurred.
+- **Risks:** The accepted ledger remains branch-only. The H15 cleanup must not
+  be mistaken for production fitness, merge authority, or a prospective-observer
+  authorization; final exact-byte independent and external evidence are still
+  required.
+- **Manual QA:** None; nonvisual offline test/governance repair.
+- **Open questions:** None for the bounded cleanup. Steven review and the
+  separately controlled merge gate remain after exact-byte closeout.
+- **Recommendation:** Freeze these four docs in the containing repair commit,
+  then bind that exact HEAD through the independent post-governance delta and
+  external manifest/ZIP/sidecar without a later tracked edit. Preserve the general freeze,
+  Monday 2026-08-31 08:32 CT checkpoint, control strategy, and queue order. Do
+  not merge, deploy, install, activate, access a provider, or authorize an
+  observer.
