@@ -17,7 +17,7 @@ from contextlib import ExitStack
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Mapping
+from typing import Callable, Mapping, Protocol
 from zoneinfo import ZoneInfo
 
 from momentum_hunter.automatic_candle_backfill import (
@@ -522,6 +522,7 @@ class QualificationMetrics:
 class QualificationState:
     root: Path
     launch_at: datetime
+    now_provider: Callable[[], datetime] | None = None
     allow_persistent: bool = False
     metrics: QualificationMetrics = field(default_factory=QualificationMetrics)
     snapshot: DiscoverySnapshot | None = None
@@ -539,11 +540,14 @@ class QualificationState:
     refreshed_snapshot_id: str = ""
     configuration_fingerprint: str = ""
 
+    def now(self) -> datetime:
+        return self.now_provider() if self.now_provider is not None else _aware_now()
+
 
 class LiveDiscoverySource:
-    def __init__(self, state: QualificationState) -> None:
+    def __init__(self, state: QualificationState, *, provider: object | None = None) -> None:
         self.state = state
-        self.provider = FinvizProvider(backoff_seconds=())
+        self.provider = provider or FinvizProvider(backoff_seconds=())
         self.pagination = DiscoveryPaginationPolicy(
             max_pages=3,
             max_rows=60,
@@ -635,12 +639,12 @@ class LiveDiscoverySource:
                 INSTITUTIONAL_MOMENTUM,
                 pagination_policy=self.pagination,
                 requested_at=_parse_timestamp(request.requested_at),
-                evaluated_at=_aware_now(),
+                evaluated_at=self.state.now(),
             )
             universe = self.store.apply_snapshot(
                 policy=self.policy,
                 snapshot=snapshot,
-                recorded_at=_aware_now(),
+                recorded_at=self.state.now(),
             )
         except Exception as exc:
             self.state.metrics.provider_failures.append(
@@ -736,23 +740,53 @@ class LiveDiscoverySource:
         )
 
 
+class QualificationMarketDataBoundary(Protocol):
+    def auth_health(self) -> dict[str, object]: ...
+
+    def current_evidence(
+        self,
+        symbol: str,
+        cutoff: datetime,
+    ) -> CurrentMarketEvidence: ...
+
+    def decision_cutoff(self) -> datetime: ...
+
+    def backfill(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        minute_store_root: Path,
+        daily_store_root: Path,
+    ) -> Mapping[str, object]: ...
+
+
 class LiveMarketDataSource:
     def __init__(
         self,
         state: QualificationState,
         *,
         expected_account_ending: str,
+        provider_boundary: QualificationMarketDataBoundary | None = None,
     ) -> None:
         self.state = state
         self.expected_account_ending = expected_account_ending
+        self.provider_boundary = provider_boundary
         self.minute_root = state.root / "market-data" / "minute"
         self.daily_root = state.root / "market-data" / "daily"
-        self.token_provider = SchwabReadOnlyAccessTokenProvider()
-        self.access_guard = SchwabMarketDataOnlyAccessGuard(
-            token_provider=self.token_provider,
+        self.token_provider = (
+            SchwabReadOnlyAccessTokenProvider()
+            if provider_boundary is None
+            else None
         )
-        self.quote_source = SchwabMarketDataQuoteSource(
-            token_provider=self.token_provider,
+        self.access_guard = (
+            SchwabMarketDataOnlyAccessGuard(token_provider=self.token_provider)
+            if self.token_provider is not None
+            else None
+        )
+        self.quote_source = (
+            SchwabMarketDataQuoteSource(token_provider=self.token_provider)
+            if self.token_provider is not None
+            else None
         )
         self.composition_policy = ContinuousCompositionPolicy(
             required_recent_minute_bars=1,
@@ -762,6 +796,7 @@ class LiveMarketDataSource:
             minute_store_root=self.minute_root,
             daily_store_root=self.daily_root,
             run_backfill=self._run_bounded_backfill,
+            utc_clock=self.state.now,
         )
         self.history_admission = ContinuousHistoryAdmissionCoordinator(
             minute_store_root=self.minute_root,
@@ -771,7 +806,11 @@ class LiveMarketDataSource:
         )
 
     def _sync_auth_metrics(self) -> None:
-        self.state.metrics.auth_health = self.token_provider.metrics_snapshot()
+        self.state.metrics.auth_health = (
+            self.provider_boundary.auth_health()
+            if self.provider_boundary is not None
+            else self.token_provider.metrics_snapshot()
+        )
 
     @staticmethod
     def _failure_code(exc: BaseException) -> str:
@@ -804,18 +843,26 @@ class LiveMarketDataSource:
 
     def _run_bounded_backfill(self, symbols: tuple[str, ...]) -> dict[str, object]:
         try:
-            result = SchwabHistoricalCandleBackfiller(
-                minute_store=SchwabCandleStore(self.minute_root),
-                daily_store=SchwabDailyCandleStore(self.daily_root),
-                access_guard=self.access_guard,
-            ).backfill(
-                explicit_universe(symbols),
-                CandleBackfillOptions(
-                    expected_account_ending=self.expected_account_ending,
-                    minute_lookback_days=10,
-                    daily_lookback_days=365,
-                    history_attempts=2,
-                ),
+            result = (
+                self.provider_boundary.backfill(
+                    symbols,
+                    minute_store_root=self.minute_root,
+                    daily_store_root=self.daily_root,
+                )
+                if self.provider_boundary is not None
+                else SchwabHistoricalCandleBackfiller(
+                    minute_store=SchwabCandleStore(self.minute_root),
+                    daily_store=SchwabDailyCandleStore(self.daily_root),
+                    access_guard=self.access_guard,
+                ).backfill(
+                    explicit_universe(symbols),
+                    CandleBackfillOptions(
+                        expected_account_ending=self.expected_account_ending,
+                        minute_lookback_days=10,
+                        daily_lookback_days=365,
+                        history_attempts=2,
+                    ),
+                )
             )
         except Exception as exc:
             self.state.metrics.provider_failures.append(
@@ -850,12 +897,23 @@ class LiveMarketDataSource:
         self.state.metrics.schwab_minute_rows += minute_rows
         self.state.metrics.schwab_daily_rows += daily_rows
         self.state.metrics.schwab_market_data_successes += 1
-        self.state.metrics.last_successful_schwab_read = _aware_now().isoformat()
+        self.state.metrics.last_successful_schwab_read = (
+            self.state.now().isoformat()
+        )
         return result
 
     def _load_current_market_evidence(
         self, symbol: str, cutoff: datetime
     ) -> CurrentMarketEvidence:
+        if self.provider_boundary is not None:
+            current = self.provider_boundary.current_evidence(symbol, cutoff)
+            self.state.metrics.schwab_quote_symbols += 1
+            self.state.metrics.schwab_market_data_successes += 1
+            self.state.metrics.last_successful_schwab_read = (
+                current.receipt_timestamp
+            )
+            self._sync_auth_metrics()
+            return current
         del cutoff
         try:
             quote_batch = self.quote_source.quotes_with_clock((symbol,))
@@ -870,7 +928,7 @@ class LiveMarketDataSource:
             raise LiveQualificationError(
                 "Schwab current evidence omitted the requested symbol."
             )
-        received = _aware_now()
+        received = self.state.now()
         evidence_payload = {
             "symbol": symbol,
             "quote": quote,
@@ -932,7 +990,7 @@ class LiveMarketDataSource:
             raise LiveQualificationError(
                 "Readiness symbol is absent from the current universe."
             )
-        evaluated = _aware_now()
+        evaluated = self.state.now()
         self.state.material_event_fingerprints[request.symbol] = request.source_fingerprint
         self.state.material_event_known_at[request.symbol] = request.requested_at
         eastern = evaluated.astimezone(EASTERN_TZ)
@@ -971,7 +1029,11 @@ class LiveMarketDataSource:
             member=member,
             cutoff=evaluated,
             current_evidence_loader=self._load_current_market_evidence,
-            decision_cutoff_provider=_aware_now,
+            decision_cutoff_provider=(
+                self.provider_boundary.decision_cutoff
+                if self.provider_boundary is not None
+                else self.state.now
+            ),
         )
         decision_cutoff = _parse_timestamp(admission.decision_cutoff)
         evidence = admission.canonical_evidence
@@ -1009,7 +1071,9 @@ class LiveMarketDataSource:
             policy=self.composition_policy,
         )
         self.state.metrics.candle_readiness_successes += 1
-        self.state.metrics.last_successful_schwab_read = _aware_now().isoformat()
+        self.state.metrics.last_successful_schwab_read = (
+            self.state.now().isoformat()
+        )
         self._sync_auth_metrics()
         self.state.readiness_inputs[request.symbol] = CompositionMemberInput(
             universe_member_id=member.member_id,
@@ -1448,6 +1512,7 @@ def run_live_qualification(
     discovery_cadence_seconds: int,
     prospective_activation: ProspectiveActivationRecord | None = None,
     prospective_root: Path | None = None,
+    preserved_provider_replay: object | None = None,
 ) -> dict[str, object]:
     if not 180 <= duration_seconds <= 1800:
         raise LiveQualificationError(
@@ -1457,9 +1522,15 @@ def run_live_qualification(
         raise LiveQualificationError(
             "Discovery cadence must be between 60 and 600 seconds."
         )
-    if len(expected_account_ending) != 4 or not expected_account_ending.isdigit():
+    if preserved_provider_replay is None and (
+        len(expected_account_ending) != 4 or not expected_account_ending.isdigit()
+    ):
         raise LiveQualificationError(
             "Expected account ending must contain four digits."
+        )
+    if preserved_provider_replay is not None and expected_account_ending:
+        raise LiveQualificationError(
+            "Offline preserved-provider replay must not receive an account identity."
         )
     if (prospective_activation is None) != (prospective_root is None):
         raise LiveQualificationError(
@@ -1474,13 +1545,44 @@ def run_live_qualification(
             "Qualification generation root must be new and write-once."
         )
     root.mkdir(parents=True)
-    launch_at = _aware_now()
-    state = QualificationState(root=root, launch_at=launch_at)
+    now_provider = (
+        preserved_provider_replay.clock.now
+        if preserved_provider_replay is not None
+        else _aware_now
+    )
+    monotonic_provider = (
+        preserved_provider_replay.clock.monotonic
+        if preserved_provider_replay is not None
+        else time.monotonic
+    )
+    sleep_provider = (
+        preserved_provider_replay.clock.sleep
+        if preserved_provider_replay is not None
+        else time.sleep
+    )
+    launch_at = now_provider()
+    state = QualificationState(
+        root=root,
+        launch_at=launch_at,
+        now_provider=now_provider,
+    )
     git_before = _git_identity(canonical_root)
-    discovery = LiveDiscoverySource(state)
+    discovery = LiveDiscoverySource(
+        state,
+        provider=(
+            preserved_provider_replay.discovery_provider
+            if preserved_provider_replay is not None
+            else None
+        ),
+    )
     market = LiveMarketDataSource(
         state,
         expected_account_ending=expected_account_ending,
+        provider_boundary=(
+            preserved_provider_replay.market_boundary
+            if preserved_provider_replay is not None
+            else None
+        ),
     )
     composition = LiveCompositionSource(state)
     prospective_store = (
@@ -1551,14 +1653,14 @@ def run_live_qualification(
     client = resources.client
     checkpoints = resources.checkpoints
     restart_done = False
-    started_monotonic = time.monotonic()
+    started_monotonic = monotonic_provider()
     deadline = started_monotonic + duration_seconds
     restart_after = started_monotonic + (duration_seconds / 2)
     try:
-        while time.monotonic() < deadline:
-            now = _aware_now()
+        while monotonic_provider() < deadline:
+            now = now_provider()
             runtime.tick(now, work_budget=512)
-            if not restart_done and time.monotonic() >= restart_after:
+            if not restart_done and monotonic_provider() >= restart_after:
                 before_universe = discovery.store.load().fingerprint
                 before_records = read_evidence_snapshot(
                     topology,
@@ -1568,7 +1670,7 @@ def run_live_qualification(
                 runtime = ContinuousOpportunityRuntime.restore(
                     config=config,
                     runtime_instance_id=runtime_id,
-                    now=_aware_now(),
+                    now=now_provider(),
                     discovery_source=discovery,
                     market_data_source=market,
                     event_source=events,
@@ -1581,7 +1683,7 @@ def run_live_qualification(
                 resources.replace_runtime(runtime)
                 restart_done = True
                 receipt = {
-                    "restartedAt": _aware_now().isoformat(),
+                    "restartedAt": now_provider().isoformat(),
                     "universeFingerprintBefore": before_universe,
                     "universeFingerprintAfter": discovery.store.load().fingerprint,
                     "evidenceRecordsBefore": before_records,
@@ -1595,10 +1697,10 @@ def run_live_qualification(
                     root / "restart-receipt.json",
                     _canonical_bytes(receipt),
                 )
-            time.sleep(
-                min(5.0, max(0.0, deadline - time.monotonic()))
+            sleep_provider(
+                min(5.0, max(0.0, deadline - monotonic_provider()))
             )
-        final_now = _aware_now()
+        final_now = now_provider()
         health = resources.shutdown_current(final_now)
         checkpoint = checkpoints.load(config.runtime_identity)
         runtime_bar_events = tuple(
@@ -1646,7 +1748,7 @@ def run_live_qualification(
             "liveQualificationStart": launch_at.isoformat(),
             "completedAt": final_now.isoformat(),
             "durationSeconds": round(
-                time.monotonic() - started_monotonic,
+                monotonic_provider() - started_monotonic,
                 3,
             ),
             "runtimeIdentity": runtime_id,
@@ -1697,6 +1799,9 @@ def run_live_qualification(
             "orderCapability": ORDER_CAPABILITY,
             "productionMutation": False,
         }
+        if preserved_provider_replay is not None:
+            summary["providerMode"] = preserved_provider_replay.mode
+            summary["preservedProviderReplay"] = preserved_provider_replay.receipt()
         summary["fingerprint"] = _fingerprint(
             "aug17-live-qualification-summary-v1",
             summary,

@@ -617,6 +617,56 @@ class StatData002CanaryTests(unittest.TestCase):
         )
         self.assertTrue((evidence / "terminal-result.json").is_file())
 
+    def test_anti_hindsight_proof_checks_attempts_and_prospective_floor(self) -> None:
+        evidence = self.root / "chronology"
+        attempts = (
+            evidence
+            / "natural-runtime-forensic"
+            / "payload"
+            / "checkpoint"
+            / "runtime-attempts"
+            / "attempt-events.jsonl"
+        )
+        attempts.parent.mkdir(parents=True)
+        attempts.write_text(
+            json.dumps(
+                {
+                    "canonical_request_cutoff": "2026-08-27T16:24:39Z",
+                    "canonical_evidence_known_at": [
+                        ["quote", "2026-08-27T16:24:38Z"]
+                    ],
+                }
+            )
+            + "\n",
+            encoding="ascii",
+        )
+        cycle = evidence / "prospective-denominator" / "cycles" / "cycle.json"
+        cycle.parent.mkdir(parents=True)
+        cycle.write_text(
+            json.dumps(
+                {
+                    "payload": {
+                        "observed_at": "2026-08-27T16:24:04Z",
+                        "decision_cutoff": "2026-08-27T16:24:39Z",
+                        "evidence_refs": [
+                            {"as_of": "2026-08-27T16:24:38Z"}
+                        ],
+                    }
+                }
+            ),
+            encoding="ascii",
+        )
+
+        proof = canary._anti_hindsight_proof(
+            evidence,
+            activation_at="2026-08-27T16:24:03Z",
+        )
+
+        self.assertEqual("PASS", proof["status"])
+        self.assertEqual(1, proof["attemptRecordsChecked"])
+        self.assertEqual(1, proof["prospectiveRecordsChecked"])
+        self.assertEqual([], proof["violations"])
+
     def test_run_all_packages_terminal_failure_even_when_verification_raises(self) -> None:
         evidence = self.root / "terminal-failure"
 

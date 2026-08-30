@@ -36,6 +36,10 @@ from momentum_hunter.prospective_denominator import (
     build_activation_record,
     load_activation_record,
 )
+from momentum_hunter.preserved_provider_replay import (
+    PROFILE as PRESERVED_PROVIDER_REPLAY,
+    load_preserved_provider_replay,
+)
 from momentum_hunter.schwab_candle_backfill import (
     CandleBackfillOptions,
     SchwabHistoricalCandleBackfiller,
@@ -53,7 +57,7 @@ from momentum_hunter.schwab_market_data import (
 )
 
 
-TASK_BRANCH = "codex/ARGUS-STAT-DATA-002C"
+TASK_BRANCH = "codex/ARGUS-STAT-DATA-002D"
 PRODUCTION_BASE = "23ee162373654e1db91af4c19f75bbc7887e3174"
 EASTERN = ZoneInfo("America/New_York")
 REGULAR_OPEN = time(9, 30)
@@ -67,6 +71,7 @@ FOCUSED_MODULES = (
     "tests.test_continuous_denominator",
     "tests.test_continuous_live_qualification",
     "tests.test_stat_data_002_canary",
+    "tests.test_preserved_provider_replay",
 )
 FIXTURE_MODULES = (
     "test_continuous_composition.py",
@@ -104,7 +109,7 @@ def _write_once(path: Path, value: object) -> None:
 
 def _new_ephemeral_runtime_root() -> Path:
     temporary_root = Path(tempfile.gettempdir()).resolve()
-    root = temporary_root / f"MomentumHunter-StatData002C-{uuid.uuid4().hex}"
+    root = temporary_root / f"MomentumHunter-StatData002D-{uuid.uuid4().hex}"
     if root.exists():
         raise StatDataCanaryError("Ephemeral runtime root unexpectedly already exists.")
     return root
@@ -278,6 +283,7 @@ def _configuration(
     discovery_cadence_seconds: int,
     schwab_preflight_fingerprint: str | None = None,
     offline_rehearsal: bool = False,
+    preserved_provider_package: Path | None = None,
 ) -> dict[str, object]:
     task = _git_identity(task_root)
     production = _git_identity(production_root)
@@ -294,14 +300,23 @@ def _configuration(
     remote_task = _git(task_root, "rev-parse", f"origin/{TASK_BRANCH}")
     if remote_task != task["head"]:
         raise StatDataCanaryError("Task branch is not pushed at its exact head.")
+    replay = (
+        load_preserved_provider_replay(preserved_provider_package)
+        if preserved_provider_package is not None
+        else None
+    )
     current_session = datetime.now(EASTERN).date().isoformat()
-    if session_date != current_session:
+    if replay is None and session_date != current_session:
         raise StatDataCanaryError(
             f"Requested session {session_date} differs from current Eastern date {current_session}."
         )
+    if replay is not None and session_date != replay.session_date:
+        raise StatDataCanaryError(
+            "Replay session date differs from the preserved provider chronology."
+        )
     payload: dict[str, object] = {
         "schemaVersion": 1,
-        "task": "ARGUS-STAT-DATA-002C",
+        "task": "ARGUS-STAT-DATA-002D",
         "taskGit": task,
         "productionGit": production,
         "sessionDate": session_date,
@@ -317,7 +332,21 @@ def _configuration(
         "shadowRequested": False,
         "schwabPreflightRequired": schwab_preflight_fingerprint is not None,
         "schwabPreflightFingerprint": schwab_preflight_fingerprint,
-        "offlineRehearsal": offline_rehearsal,
+        "offlineRehearsal": offline_rehearsal or replay is not None,
+        "providerMode": replay.mode if replay is not None else "LIVE_PROVIDER",
+        "preservedProviderPackagePath": (
+            str(replay.package_path) if replay is not None else None
+        ),
+        "preservedProviderPackageSha256": (
+            replay.package_sha256 if replay is not None else None
+        ),
+        "preservedProviderSourceFingerprint": (
+            replay.source_fingerprint if replay is not None else None
+        ),
+        "preservedProviderLaunchAt": (
+            replay.launch_at.isoformat() if replay is not None else None
+        ),
+        "countsAsNewProspectiveLiveEvidence": False if replay is not None else True,
     }
     payload["fingerprint"] = _fingerprint("stat-data-002-canary-configuration-v1", payload)
     return payload
@@ -333,6 +362,7 @@ def prepare(
     discovery_cadence_seconds: int,
     schwab_preflight_proof: Path | None = None,
     require_schwab_preflight: bool = True,
+    preserved_provider_package: Path | None = None,
 ) -> dict[str, object]:
     if evidence_root.exists():
         raise StatDataCanaryError("Canary evidence root must be new.")
@@ -343,6 +373,15 @@ def prepare(
             production_root=production_root,
         )
         if require_schwab_preflight
+        else None
+    )
+    if require_schwab_preflight and preserved_provider_package is not None:
+        raise StatDataCanaryError(
+            "Offline preserved-provider replay cannot require live Schwab preflight."
+        )
+    replay = (
+        load_preserved_provider_replay(preserved_provider_package)
+        if preserved_provider_package is not None
         else None
     )
     configuration = _configuration(
@@ -358,9 +397,14 @@ def prepare(
             else None
         ),
         offline_rehearsal=not require_schwab_preflight,
+        preserved_provider_package=preserved_provider_package,
     )
     evidence_root.mkdir(parents=True)
-    activated_at = datetime.now().astimezone().isoformat()
+    activated_at = (
+        replay.activation_at.isoformat()
+        if replay is not None
+        else datetime.now().astimezone().isoformat()
+    )
     activation = build_activation_record(
         activated_at=activated_at,
         first_eligible_session_date=session_date,
@@ -388,7 +432,15 @@ def prepare(
         "productionHead": configuration["productionGit"]["head"],
         "providerContact": False,
         "schwabPreflight": (
-            "PASS" if validated_preflight is not None else "OFFLINE_REHEARSAL_NOT_REQUIRED"
+            "PASS"
+            if validated_preflight is not None
+            else "OFFLINE_PRESERVED_PROVIDER_REPLAY"
+            if replay is not None
+            else "OFFLINE_REHEARSAL_NOT_REQUIRED"
+        ),
+        "providerMode": replay.mode if replay is not None else "LIVE_PROVIDER",
+        "preservedProviderSourceFingerprint": (
+            replay.source_fingerprint if replay is not None else None
         ),
         "authority": AUTHORITY,
         "executionAuthority": EXECUTION_AUTHORITY,
@@ -414,10 +466,27 @@ def execute(
     runtime_root: Path | None = None
     forensic_export: dict[str, object] | None = None
     forensic_export_error: dict[str, str] | None = None
+    preserved_replay = None
+    preserved_provider_boundary_attempted = False
     try:
         configuration = json.loads(
             (evidence_root / "configuration.json").read_text(encoding="ascii")
         )
+        if configuration.get("providerMode") == PRESERVED_PROVIDER_REPLAY:
+            failure_stage = "LOAD_PRESERVED_PROVIDER_EVIDENCE"
+            preserved_path = Path(
+                str(configuration.get("preservedProviderPackagePath", ""))
+            )
+            preserved_replay = load_preserved_provider_replay(preserved_path)
+            if (
+                preserved_replay.package_sha256
+                != configuration.get("preservedProviderPackageSha256")
+                or preserved_replay.source_fingerprint
+                != configuration.get("preservedProviderSourceFingerprint")
+            ):
+                raise StatDataCanaryError(
+                    "Preserved provider evidence changed after activation."
+                )
         failure_stage = "VERIFY_SCHWAB_PREFLIGHT"
         if (
             configuration.get("schwabPreflightRequired") is not True
@@ -451,12 +520,23 @@ def execute(
         if _git_identity(production_root) != configuration["productionGit"]:
             raise StatDataCanaryError("Canonical production changed after activation.")
         failure_stage = "VALIDATE_MARKET_DATA_IDENTITY"
-        if len(expected_account_ending) != 4 or not expected_account_ending.isdigit():
+        if preserved_replay is None and (
+            len(expected_account_ending) != 4 or not expected_account_ending.isdigit()
+        ):
             raise StatDataCanaryError("Expected market-data identity ending is invalid.")
+        if preserved_replay is not None and expected_account_ending:
+            raise StatDataCanaryError(
+                "Offline preserved-provider replay received an account identity."
+            )
         failure_stage = "ASSERT_MARKET_WINDOW"
-        regular_session_started = _assert_regular_session()
+        regular_session_started = (
+            preserved_replay.launch_at.isoformat()
+            if preserved_replay is not None
+            else _assert_regular_session()
+        )
         failure_stage = "RUN_NATURAL_PROVIDER_PATH"
-        provider_contact_attempted = True
+        provider_contact_attempted = preserved_replay is None
+        preserved_provider_boundary_attempted = preserved_replay is not None
         runtime_root = _new_ephemeral_runtime_root()
         provider_error: Exception | None = None
         try:
@@ -468,6 +548,7 @@ def execute(
                 discovery_cadence_seconds=int(configuration["discoveryCadenceSeconds"]),
                 prospective_activation=activation,
                 prospective_root=evidence_root / "prospective-denominator",
+                preserved_provider_replay=preserved_replay,
             )
         except Exception as exc:
             provider_error = exc
@@ -519,7 +600,23 @@ def execute(
             "exceptionClass": type(exc).__name__,
             "exceptionMessage": _sanitized_message(str(exc), expected_account_ending),
         }
-    provider_contact = _provider_contact_report(evidence_root, summary)
+    provider_contact = (
+        {
+            "providerContact": False,
+            "providerContactEvidence": [],
+            "providerContactByProvider": {
+                "finviz": {"contact": False, "evidence": []},
+                "schwab": {
+                    "contact": False,
+                    "quoteData": False,
+                    "historyData": False,
+                    "evidence": [],
+                },
+            },
+        }
+        if preserved_replay is not None
+        else _provider_contact_report(evidence_root, summary)
+    )
     prospective_summary = (
         summary.get("prospectiveDenominator") if summary is not None else None
     )
@@ -553,6 +650,13 @@ def execute(
             "providerContact": provider_contact["providerContact"],
             "providerContactEvidence": provider_contact["providerContactEvidence"],
             "providerContactByProvider": provider_contact["providerContactByProvider"],
+            "preservedProviderBoundaryAttempted": (
+                preserved_provider_boundary_attempted
+            ),
+            "preservedProviderEvidenceConsumed": (
+                preserved_replay.receipt() if preserved_replay is not None else None
+            ),
+            "countsAsNewProspectiveLiveEvidence": preserved_replay is None,
             "ephemeralRuntimeRoot": str(runtime_root) if runtime_root else None,
             "ephemeralRuntimeUnderTemp": (
                 _runtime_root_is_ephemeral(runtime_root) if runtime_root else None
@@ -870,6 +974,100 @@ def _zero_prospective_summary() -> dict[str, object]:
     }
 
 
+def _parsed_timestamp(value: object) -> datetime:
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise StatDataCanaryError("Chronology timestamp omitted timezone evidence.")
+    return parsed
+
+
+def _anti_hindsight_proof(
+    evidence_root: Path,
+    *,
+    activation_at: str,
+) -> dict[str, object]:
+    activation = _parsed_timestamp(activation_at)
+    prospective = evidence_root / "prospective-denominator"
+    attempt_paths = tuple(
+        (evidence_root / "natural-runtime-forensic" / "payload").glob(
+            "checkpoint/*-attempts/attempt-events.jsonl"
+        )
+    )
+    attempt_count = 0
+    known_at_count = 0
+    violations: list[dict[str, str]] = []
+    for path in attempt_paths:
+        for line_number, line in enumerate(
+            path.read_text(encoding="ascii").splitlines(),
+            start=1,
+        ):
+            event = json.loads(line)
+            cutoff = _parsed_timestamp(event["canonical_request_cutoff"])
+            attempt_count += 1
+            for label, known_at in event.get("canonical_evidence_known_at", []):
+                known_at_count += 1
+                if _parsed_timestamp(known_at) > cutoff:
+                    violations.append(
+                        {
+                            "path": path.relative_to(evidence_root).as_posix(),
+                            "record": str(line_number),
+                            "field": str(label),
+                            "reason": "EVIDENCE_AFTER_DECISION_CUTOFF",
+                        }
+                    )
+    prospective_records = 0
+    prospective_floor_violations = 0
+    for family in ("cycles", "opportunities"):
+        for path in prospective.rglob(f"{family}/*.json"):
+            record = json.loads(path.read_text(encoding="ascii"))
+            payload = record.get("payload", {})
+            if not isinstance(payload, dict):
+                continue
+            prospective_records += 1
+            observed_at = _parsed_timestamp(payload.get("observed_at"))
+            if observed_at < activation:
+                prospective_floor_violations += 1
+                violations.append(
+                    {
+                        "path": path.relative_to(evidence_root).as_posix(),
+                        "record": str(prospective_records),
+                        "field": "observed_at",
+                        "reason": "PROSPECTIVE_RECORD_BEFORE_ACTIVATION",
+                    }
+                )
+            cutoff_value = payload.get("decision_cutoff")
+            for reference in payload.get("evidence_refs", []):
+                if (
+                    cutoff_value is not None
+                    and isinstance(reference, dict)
+                    and reference.get("as_of") is not None
+                    and _parsed_timestamp(reference["as_of"])
+                    > _parsed_timestamp(cutoff_value)
+                ):
+                    violations.append(
+                        {
+                            "path": path.relative_to(evidence_root).as_posix(),
+                            "record": str(prospective_records),
+                            "field": "evidence_refs.as_of",
+                            "reason": "EVIDENCE_REFERENCE_AFTER_DECISION_CUTOFF",
+                        }
+                    )
+    result: dict[str, object] = {
+        "status": "PASS" if not violations and attempt_count > 0 else "FAIL",
+        "activationAt": activation_at,
+        "attemptRecordsChecked": attempt_count,
+        "knownAtValuesChecked": known_at_count,
+        "prospectiveRecordsChecked": prospective_records,
+        "prospectiveFloorViolations": prospective_floor_violations,
+        "violations": violations,
+    }
+    result["fingerprint"] = _fingerprint(
+        "stat-data-002d-anti-hindsight-proof-v1",
+        result,
+    )
+    return result
+
+
 def verify(evidence_root: Path) -> dict[str, object]:
     activation = load_activation_record(evidence_root / "activation.json")
     terminal = json.loads((evidence_root / "terminal-result.json").read_text(encoding="ascii"))
@@ -878,23 +1076,31 @@ def verify(evidence_root: Path) -> dict[str, object]:
         summary = asdict(ProspectiveDenominatorStore(root, activation=activation).summary())
     else:
         summary = None
+    anti_hindsight = _anti_hindsight_proof(
+        evidence_root,
+        activation_at=activation.activated_at,
+    )
+    membership_precedes_outcome = (
+        summary is not None
+        and int(summary["outcome_complete_members"])
+        + int(summary["outcome_pending_members"])
+        == int(summary["unique_prospective_members"])
+    )
     result: dict[str, object] = {
         "status": (
             "PASS"
             if terminal.get("status") == "PASS"
             and summary is not None
             and int(summary["unique_prospective_members"]) >= 1
+            and membership_precedes_outcome
+            and anti_hindsight["status"] == "PASS"
             else "FAIL"
         ),
         "terminalStatus": terminal.get("status"),
         "prospectiveSummary": summary,
         "activationFingerprint": activation.fingerprint,
-        "membershipPrecedesOutcome": (
-            summary is not None
-            and int(summary["outcome_complete_members"])
-            + int(summary["outcome_pending_members"])
-            == int(summary["unique_prospective_members"])
-        ),
+        "membershipPrecedesOutcome": membership_precedes_outcome,
+        "antiHindsight": anti_hindsight,
         "authority": AUTHORITY,
         "executionAuthority": EXECUTION_AUTHORITY,
     }
@@ -912,7 +1118,10 @@ def package(
     terminal = json.loads(
         (evidence_root / "terminal-result.json").read_text(encoding="ascii")
     )
-    if terminal.get("providerContactAttempted") is True:
+    if (
+        terminal.get("providerContactAttempted") is True
+        or terminal.get("preservedProviderBoundaryAttempted") is True
+    ):
         export = terminal.get("forensicRuntimeExport")
         if not isinstance(export, dict) or (
             export.get("hashManifestVerified") is not True
@@ -946,10 +1155,29 @@ def package(
     packaged_tools.mkdir()
     shutil.copy2(Path(__file__), packaged_tools / Path(__file__).name)
     shutil.copytree(evidence_root, stage / "evidence")
+    configuration = json.loads(
+        (evidence_root / "configuration.json").read_text(encoding="ascii")
+    )
+    preserved_package = configuration.get("preservedProviderPackagePath")
+    if preserved_package:
+        inputs_root = stage / "inputs"
+        inputs_root.mkdir()
+        preserved_source = Path(str(preserved_package)).resolve(strict=True)
+        if (
+            hashlib.sha256(preserved_source.read_bytes()).hexdigest().upper()
+            != configuration.get("preservedProviderPackageSha256")
+        ):
+            raise StatDataCanaryError(
+                "Preserved provider package changed before packaging."
+            )
+        shutil.copy2(
+            preserved_source,
+            inputs_root / "preserved-provider-evidence.zip",
+        )
     docs_root = stage / "docs"
     docs_root.mkdir()
     for source in (
-        task_root / "docs" / "argus-office" / "goal-charters" / "ARGUS-STAT-DATA-002C.md",
+        task_root / "docs" / "argus-office" / "goal-charters" / "ARGUS-STAT-DATA-002D.md",
         task_root / "docs" / "research" / "stat-data-002-prospective-activation-v2.md",
     ):
         shutil.copy2(source, docs_root / source.name)
@@ -961,14 +1189,17 @@ def package(
     if scan["status"] != "PASS":
         raise StatDataCanaryError("Sanitization failed; unsafe ZIP was not emitted.")
     index = (
-        "# ARGUS-STAT-DATA-002C Second-Eye Packet\n\n"
+        "# ARGUS-STAT-DATA-002D Exact Run-All Second-Eye Packet\n\n"
         "- `evidence/`: immutable terminal canary evidence and denominator records.\n"
         "- `source/momentum_hunter/`: complete Python Product package for dependency closure.\n"
         "- `source/tests/`: focused tests plus required fixtures.\n"
         "- `source/tools/run_stat_data_002_canary.py`: exact canary/packaging wrapper.\n"
+        "- `inputs/preserved-provider-evidence.zip`: accepted 001D/001E V4 market packet.\n"
         "- `docs/`: frozen Goal Charter and inventory.\n\n"
         "Run from `source/` with an approved Python 3.12 environment:\n\n"
-        f"`python -B -m unittest {' '.join(FOCUSED_MODULES)}`\n"
+        f"`python -B -m unittest {' '.join(FOCUSED_MODULES)}`\n\n"
+        "The terminal evidence records the exact `run-all` command, preserved-source "
+        "identity, replay chronology, restart, denominator records, and package result.\n"
     ).encode("ascii")
     _write_once(stage / "INDEX.md", index)
     manifest = _manifest(stage)
@@ -1360,6 +1591,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--discovery-cadence-seconds", type=int, default=300)
     parser.add_argument("--python-executable", type=Path, required=True)
     parser.add_argument("--preserved-failed-activation", type=Path)
+    parser.add_argument("--preserved-provider-package", type=Path)
     parser.add_argument("--schwab-preflight-proof", type=Path)
     args = parser.parse_args(list(argv) if argv is not None else None)
     ending = os.environ.get("MH_CANARY_EXPECTED_ACCOUNT_ENDING", "")
@@ -1396,6 +1628,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     if args.action in {"prepare", "run-all"}:
         if not args.session_date:
             raise SystemExit("--session-date is required for preparation")
+        replay_requested = args.preserved_provider_package is not None
         prepare(
             task_root=args.task_root,
             production_root=args.production_root,
@@ -1404,7 +1637,42 @@ def main(argv: Iterable[str] | None = None) -> int:
             duration_seconds=args.duration_seconds,
             discovery_cadence_seconds=args.discovery_cadence_seconds,
             schwab_preflight_proof=args.schwab_preflight_proof,
+            require_schwab_preflight=not replay_requested,
+            preserved_provider_package=args.preserved_provider_package,
         )
+        if args.action == "run-all":
+            _write_once(
+                args.evidence_root / "exact-run-all-invocation.json",
+                {
+                    "action": "run-all",
+                    "taskRoot": str(args.task_root.resolve()),
+                    "productionRoot": str(args.production_root.resolve()),
+                    "evidenceRoot": str(args.evidence_root.resolve()),
+                    "sessionDate": args.session_date,
+                    "durationSeconds": args.duration_seconds,
+                    "discoveryCadenceSeconds": args.discovery_cadence_seconds,
+                    "pythonExecutable": str(args.python_executable.resolve()),
+                    "providerMode": (
+                        PRESERVED_PROVIDER_REPLAY
+                        if replay_requested
+                        else "LIVE_PROVIDER"
+                    ),
+                    "preservedProviderPackage": (
+                        str(args.preserved_provider_package.resolve())
+                        if replay_requested
+                        else None
+                    ),
+                    "schwabPreflightProof": (
+                        str(args.schwab_preflight_proof.resolve())
+                        if args.schwab_preflight_proof is not None
+                        else None
+                    ),
+                    "accountIdentitySupplied": bool(ending),
+                    "newProspectiveLiveEvidence": not replay_requested,
+                    "authority": AUTHORITY,
+                    "executionAuthority": EXECUTION_AUTHORITY,
+                },
+            )
     if args.action in {"execute", "run-all"}:
         terminal_result = execute(
             task_root=args.task_root,
