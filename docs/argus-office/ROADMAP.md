@@ -56,7 +56,7 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 ### Active Priority
 
 `ARGUS-CANONICAL-LEDGER-RECONCILIATION-001` is the active bounded task at
-`IMPLEMENTATION_IN_PROGRESS / BRANCH_ONLY / RESEARCH_ONLY` on
+`IMPLEMENTED_PENDING_STEVEN_REVIEW / INDEPENDENT_REVIEW_PASS / RESEARCH_ONLY` on
 `codex/argus-canonical-ledger-reconciliation-001`. It started forward-only from
 exact current canonical `99b95f530513343702e70077f970c43b5524c613`, tree
 `0c412c063d078505ed367c45f34954faf25e22a3`. Accepted Ledger head
@@ -65,9 +65,18 @@ Git history, but its six Ledger-owned artifacts were absent from the
 pre-reconciliation canonical tree. Phase A is `GO`: the accepted Ledger bytes,
 current canonical state, correction scope, Ledger collateral removal, and
 unrelated-content exclusion are independently identifiable; restoration can
-be forward-only and requires no production behavior change. The task branch is
-restoring only those exact six accepted artifacts and semantically reconciling
-shared governance. Correction history remains preserved. No merge, canonical
+be forward-only and requires no production behavior change. Exact content
+commit `5c605c24bcf8506ca42a114547b6f5a21ef0eff1`, parent
+`99b95f530513343702e70077f970c43b5524c613`, tree
+`e12724cae4087c00799230b924c833969b2af8fb`, restores only those exact six
+accepted artifacts and semantically reconciles shared governance. Fresh proof
+passes Windows focused `48/48`, H01-H18 `18/18`, Alpine/POSIX `48/48`, the
+owner suite `207 OK (skipped=1)`, compile/import, deterministic normal and
+`-O`, all 14 truths, all six accepted hashes, and scope, secret, and protected-
+path checks. Provisional independent disposition is
+`ACCEPTED_FOR_CLOSEOUT_DELTA / NO FINDINGS`. Final docs-only delta review and
+the review packet with detached checksum sidecar remain the next branch-only
+gates. Correction history remains preserved. No merge, canonical
 master mutation, reset, rebase, squash, cherry-pick, revert, force-push, or
 history rewrite is authorized or has occurred under this reconciliation.
 
@@ -390,12 +399,13 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Complete only `ARGUS-CANONICAL-LEDGER-RECONCILIATION-001`: restore the exact six
-accepted Ledger artifacts forward on top of `99b95f5`, reconcile shared
-governance, complete required proof and independent review, and prepare the
-Steven review packet. Do not merge or mutate canonical under this task. Keep
-the Prospective Observer suspended until the reconciliation is independently
-accepted and canonically integrated under separate authority.
+Complete only the remaining branch-only gates for
+`ARGUS-CANONICAL-LEDGER-RECONCILIATION-001`: independently review this final
+docs-only delta and prepare the Steven review packet with detached checksum
+sidecar for content commit `5c605c24bcf8506ca42a114547b6f5a21ef0eff1` plus
+the closeout delta. Do not merge or mutate canonical under this task. Keep the
+Prospective Observer suspended until the reconciliation is accepted by Steven
+and canonically integrated under separate authority.
 
 Hold the general production freeze. At Monday 2026-08-31 08:32 CT perform the
 scheduled read-only checkpoint for canonical, installed workstation, Producer,
@@ -476,10 +486,11 @@ next-action language preserved elsewhere cannot supersede this queue.
 ### 1. Active
 
 1. `ARGUS-CANONICAL-LEDGER-RECONCILIATION-001` is
-   `IMPLEMENTATION_IN_PROGRESS / BRANCH_ONLY / RESEARCH_ONLY` from exact
-   canonical `99b95f5`. Complete the forward-only Ledger restoration,
-   governance reconciliation, required proof, independent review, and Steven
-   review packet without merging or changing canonical.
+   `IMPLEMENTED_PENDING_STEVEN_REVIEW / INDEPENDENT_REVIEW_PASS /
+   RESEARCH_ONLY`. Content commit `5c605c24bcf8506ca42a114547b6f5a21ef0eff1`
+   has provisional independent disposition `ACCEPTED_FOR_CLOSEOUT_DELTA / NO
+   FINDINGS`. Complete the final docs-only delta review and review packet with
+   detached checksum sidecar without merging or changing canonical.
 2. Producer-001F canonical integration is terminal and awaiting closeout
    review. Producer-001D Product runtime and Producer-001E forensic tooling are
    canonical, research-only, and not deployed. No new provider run, install,

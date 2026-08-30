@@ -40,9 +40,18 @@ The exact accepted predecessor states are preserved as evidence:
 This records the exact accepted states without claiming continuous Ledger
 artifact presence in the canonical HEAD tree.
 
-Phase A disposition is `GO`. The branch is restoring only the exact six
-accepted Ledger-owned artifacts and reconciling this Roadmap, Task Log, and
-Branch Ledger against current truth. Correction history remains intact; the
+Phase A disposition is `GO`. Exact content commit
+`5c605c24bcf8506ca42a114547b6f5a21ef0eff1`, parent
+`99b95f530513343702e70077f970c43b5524c613`, tree
+`e12724cae4087c00799230b924c833969b2af8fb`, restores only the exact six
+accepted Ledger-owned artifacts and reconciles this Roadmap, Task Log, and
+Branch Ledger against current truth. Fresh proof passes Windows focused
+`48/48`, H01-H18 `18/18`, Alpine/POSIX `48/48`, the owner suite `207 OK
+(skipped=1)`, compile/import, deterministic normal and `-O`, all 14 truths, all
+six accepted hashes, and scope, secret, and protected-path checks. Provisional
+independent disposition is `ACCEPTED_FOR_CLOSEOUT_DELTA / NO FINDINGS`. Final
+docs-only delta review and the review packet with detached checksum sidecar
+remain the next branch-only gates. Correction history remains intact; the
 accepted Strategy Science and Ledger research history is not reopened.
 
 Directive chronology establishes that the correction-promotion authorization
@@ -56,10 +65,11 @@ directive-ordering explanation. Record:
 - `AUTONOMOUS_UNEXPLAINED_MUTATION = FALSE`
 
 Git cannot prove an initiating process or actor, and this record does not infer
-one. Classification is `IMPLEMENTATION_IN_PROGRESS / BRANCH_ONLY /
-RESEARCH_ONLY`. `ARGUS-CURRENT-EDGE-PROSPECTIVE-OBSERVER-001` remains
+one. Classification is `IMPLEMENTED_PENDING_STEVEN_REVIEW /
+INDEPENDENT_REVIEW_PASS / RESEARCH_ONLY`.
+`ARGUS-CURRENT-EDGE-PROSPECTIVE-OBSERVER-001` remains
 `SUSPENDED_PENDING_CANONICAL_LEDGER_RECONCILIATION / UNIMPLEMENTED` until this
-candidate passes required proof and independent review, is accepted by Steven,
+candidate completes the remaining branch-only gates, is accepted by Steven,
 and is canonically integrated under separate authority. The general production
 freeze remains active. No merge, master mutation, reset, rebase, squash,
 cherry-pick, revert, force-push, history rewrite, deployment, activation,
