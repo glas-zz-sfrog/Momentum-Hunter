@@ -307,30 +307,35 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Parallel Authorized Research
 
-- `ARGUS-STRATEGY-SCIENCE-LAB-001` is `IMPLEMENTED_PENDING_MERGE /
-  INDEPENDENT_REVIEW_PASS / STEVEN_ACCEPTANCE_PENDING` on branch
-  `codex/argus-strategy-science-lab-001`. Exact seven-artifact packet content is
-  committed at `01aab7d75938edf7562d8c321da5d7c556843da5` on parent/base
-  `8b81bcd0d4172b5c88e08afca9933068a500c5a7`. Git Steward's immediate
-  post-commit proof found a clean worktree, local `master` and `origin/master`
-  still at the base, and the task branch ahead `1` / behind `0`. The
-  byte-specific independent second-eye disposition is
-  `ACCEPTED_FOR_STEVEN_REVIEW`: all 36 required deliverables and all 20
-  directive acceptance conditions pass, and the same 245 focused tests pass.
-  This Roadmap/Task Log/Branch Ledger metadata reconciliation is a docs-only
-  follow-up to content commit `01aab7d`; it does not change the five immutable
-  packet artifacts or the accepted content identity. No push, merge,
-  deployment, or activation has occurred.
-  The packet remains documentation/research architecture only; it adds no
-  implementation, schema, provider access, runtime consumer, production
-  behavior, or trading authority. No push, merge, deployment, activation, or
-  implementation directive is authorized. Steven must accept, reject, or narrow
-  the packet before merge or any first implementation slice begins. The only
-  recommended next directive after Steven acceptance remains
-  `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet
-  Contract And Offline Proof`; it requires separate bounded authorization and
-  remains an offline contract/proof proposal with no production collection or
-  activation.
+- `ARGUS-STRATEGY-SCIENCE-LAB-001` is `COMPLETE / CANONICAL_INTEGRATED /
+  STEVEN_ACCEPTED`. Steven explicitly accepted the Strategy Science architecture
+  at review HEAD `848d20a6bd5a49e9bb8e179eaa374109756801b0`; Git Steward
+  fast-forwarded local `master` and `origin/master` from
+  `8b81bcd0d4172b5c88e08afca9933068a500c5a7` to that exact head and verified
+  synchronization plus the same 245 focused tests. The historical seven-artifact
+  packet content remains identified by
+  `01aab7d75938edf7562d8c321da5d7c556843da5`; canonical integration does not
+  change the accepted identity of its five immutable packet artifacts. The
+  accepted packet remains documentation/research architecture only and creates
+  no schema, provider, runtime, production, Paper, Shadow, broker, order, GUI,
+  or strategy behavior change. No deployment or activation occurred, and the
+  general production freeze remains unchanged.
+- `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001` is `IMPLEMENTED_PENDING_MERGE /
+  INDEPENDENT_ACCEPTED / RESEARCH_ONLY` on branch
+  `codex/argus-current-edge-research-ledger-001`, based on synchronized
+  canonical `848d20a6bd5a49e9bb8e179eaa374109756801b0`. Final module SHA-256 is
+  `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4`
+  and focused-test SHA-256 is
+  `F0B05D282BBBD31D8301177B9D9EBEC2AD593DC55E6FD74934FC679C7F4B610B`.
+  The independent disposition is
+  `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`, bound to second-eye
+  SHA-256 `F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`.
+  F01-F04 are resolved; 48 focused tests, H18/18, T14/14, D28/28, and the
+  disclosed post-F01-F04 207-owner result `OK (skipped=1)` pass. This
+  governance update satisfies A01/A20 subject to Git Steward commit/status
+  proof. The work remains uncommitted, unpushed, unmerged, undeployed,
+  uninstalled, and inactive, with no production consumer or protected change.
+  A prospective observer remains unauthorized.
 - `ARGUS-TRADE-REPLAY-001` is `PLANNED`, lane `PARALLEL_RESEARCH`, readiness
   `INVENTORY_READY`, gate `EVENT_LEVEL_ADMISSION_REQUIRED`. Failure-boundary
   and candidate inventory work may proceed without changing the prospective
@@ -475,13 +480,13 @@ next-action language preserved elsewhere cannot supersede this queue.
    authority and without delaying the Ready / Next sequence.
 3. Integrated specialist and denominator research may continue only under their
    dormant/read-only contracts and existing activation gates.
-4. Review the independently accepted, branch-only
-   `ARGUS-STRATEGY-SCIENCE-LAB-001` architecture packet. Independent disposition
-   is `ACCEPTED_FOR_STEVEN_REVIEW`; Steven acceptance remains pending, and no
-   implementation directive is authorized. Only after Steven acceptance may a
-   separately bounded `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001` offline
-   contract/proof directive be considered. The packet does not reorder
-   `Immediate Next` or the Ready / Next sequence.
+4. `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001` is branch-only
+   `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`.
+   Release Scribe governance is reconciled; Git Steward commit/status proof and
+   Steven review are next. This item retains its existing parallel-research
+   position and does not reorder `Immediate Next` or Ready / Next. It grants no
+   production collection, provider/schema, deployment, activation, observer,
+   or strategy authority.
 
 ### 4. Blocked
 
@@ -3373,50 +3378,87 @@ Intended specialist architecture:
 
 #### ARGUS-STRATEGY-SCIENCE-LAB-001 - Strategy Science Architecture Review
 
-- Lifecycle: `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_REVIEW_PASS /
-  STEVEN_ACCEPTANCE_PENDING`. Lane: `RESEARCH_ONLY`. Branch:
-  `codex/argus-strategy-science-lab-001`.
-- Exact seven-artifact packet content commit is
+- Lifecycle: `COMPLETE / CANONICAL_INTEGRATED / STEVEN_ACCEPTED`. Lane:
+  `RESEARCH_ONLY`. Accepted review and canonical HEAD:
+  `848d20a6bd5a49e9bb8e179eaa374109756801b0`.
+- The historical seven-artifact packet content commit is
   `01aab7d75938edf7562d8c321da5d7c556843da5`, with parent/base
-  `8b81bcd0d4172b5c88e08afca9933068a500c5a7`. Immediate post-commit Git proof
-  was clean and showed the branch ahead local/remote master `1` / behind `0`.
-  This metadata reconciliation is a docs-only follow-up to content commit
-  `01aab7d`; it does not change the five immutable packet artifacts or the
-  accepted content identity. No push, merge, deployment, activation, or
-  implementation authorization has occurred.
-- The branch-only Goal Charter, infrastructure inventory, 30-family research
+  `8b81bcd0d4172b5c88e08afca9933068a500c5a7`. Git Steward fast-forwarded local
+  `master` and `origin/master` from that base through the exact content and
+  metadata lineage to review HEAD `848d20a`, then verified synchronization and
+  the same 245 focused tests. The canonical metadata does not change the five
+  immutable packet artifacts or their accepted content identity. No deployment,
+  installation, activation, or implementation behavior change occurred.
+- The Goal Charter, infrastructure inventory, 30-family research
   matrix, architecture/review packet, and byte-specific independent second-eye
   acceptance define and review the Strategy Science Lab, reusable Point-in-Time
   Market Replay Engine, Current-Edge Research Ledger, Catalyst Asymmetry
   boundaries, Candidate Utility Ranker, validation gates, threat controls, and
   one proposed next directive. Final independent disposition is
   `ACCEPTED_FOR_STEVEN_REVIEW`; D01-D36 pass `36/36`, AC01-AC20 pass `20/20`,
-  and the same 245 focused tests pass. They remain documentation and research
-  architecture only and create no canonical integration, code, schema,
-  provider, runtime, production, Paper, Shadow, broker, order, GUI, or strategy
-  behavior change.
-- The packet's proposed sequence `0` through `18` is non-authoritative until
-  Steven accepts or narrows it and the accepted reconciliation is incorporated
-  into current Roadmap authority. Existing `Now`, `Immediate Next`, Ready /
-  Next ordering, Phase 13R milestones, and the general production freeze remain
-  controlling.
-- If the architecture is accepted, `ARGUS-TRADE-REPLAY-001` becomes a named
-  fixed-entry consumer/use case of the reusable Point-in-Time Market Replay
-  Engine rather than the whole replay architecture. Until acceptance, the
-  existing TRADE-REPLAY lifecycle, event-level admission rules, and dependency
-  gates remain unchanged.
+  and the same 245 focused tests pass. Steven accepted the architecture at exact
+  review HEAD `848d20a`. The materials remain documentation and research
+  architecture only and create no code, schema, provider, runtime, production,
+  Paper, Shadow, broker, order, GUI, or strategy behavior change.
+- Steven's acceptance makes the packet's proposed sequence `0` through `18` the
+  accepted research-architecture dependency map; it is not production execution
+  order and does not override existing `Now`, `Immediate Next`, Ready / Next
+  ordering, milestone-specific gates, or the general production freeze.
+- `ARGUS-TRADE-REPLAY-001` is now a named fixed-entry consumer/use case of the
+  reusable Point-in-Time Market Replay Engine rather than the whole replay
+  architecture. Its existing lifecycle, event-level admission rules, dependency
+  gates, and current queue position remain unchanged.
 - Broad historical, longitudinal, statistical, model-performance, or alpha
   claims remain blocked by unresolved durable identity, price basis,
   corporate-action lineage, point-in-time universe/survivorship, timestamp,
   strategy/configuration, source-lineage, and golden-day certification gates.
-- The only proposed first implementation directive is
+- The first separately authorized research directive is
   `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet
-  Contract And Offline Proof`. No implementation directive is authorized yet.
-  After Steven acceptance it would still require a separate bounded directive
-  and Goal Charter, caller-supplied offline research storage, deterministic
-  fixture/nonmutation proof, and independent review. Production observer wiring,
-  live cutoff capture, activation, provider access, database or schema work, and
-  strategy influence remain out of scope.
+  Contract And Offline Proof`. Its Goal Charter, reuse inventory, implementation,
+  focused proof, author crosswalk, and independent review are complete on the
+  task branch. Release Scribe governance now satisfies the previously pending
+  A01/A20 conditions subject to Git Steward commit/status proof. Production
+  observer wiring, live cutoff capture, activation, provider access, database
+  or schema work, and strategy influence remain out of scope.
+
+#### ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet Contract And Offline Proof
+
+- Lifecycle: `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED /
+  RESEARCH_ONLY`. Branch: `codex/argus-current-edge-research-ledger-001`.
+  Exact branch/base at creation remains canonical accepted Strategy Science head
+  `848d20a6bd5a49e9bb8e179eaa374109756801b0`; current work is uncommitted,
+  unpushed, and unmerged pending Git Steward proof.
+- Final module identity is SHA-256
+  `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4`,
+  Git blob `9e4a5df2170b59cee0efc57927bb4463f797d2d4`. Final focused-test identity is
+  SHA-256 `F0B05D282BBBD31D8301177B9D9EBEC2AD593DC55E6FD74934FC679C7F4B610B`,
+  Git blob `ee5100dbc0d7759bf2dd4303c3cf2f340fde2bbb`.
+- Independent second eye SHA-256
+  `F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`
+  issues `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`. It preserves
+  the initial rejection and intermediate delta, resolves F01-F04 at final bytes,
+  and proves H18/18, T14/14, and D28/28. This documentation reconciliation
+  satisfies A01/A20, producing A20/20 subject to Git Steward commit/status proof.
+- Focused tests pass 48/48. The exact 207-owner regression result passes with
+  one expected skip and is disclosed carry-forward evidence from immediately
+  after F01-F04; it was not rerun for the final isolated lexical-only delta.
+  P1/O1 packet and receipt identities remain exactly unchanged. No production
+  consumer or protected-path change exists.
+- The bounded objective is an offline immutable prospective sequence of
+  `OBSERVE -> FREEZE -> WAIT -> REVEAL -> COMPARE`, with caller-supplied absolute
+  research/test storage, deterministic synthetic proof, and nonmutation of
+  frozen evidence. `RESEARCH_ONLY=TRUE`, production decision authority is none,
+  and execution authority is none.
+- Live market/provider/broker/account/order access, Paper or Shadow activation,
+  unattended services or schedulers, production observers, database/schema or
+  migration work, GUI changes, global dependencies, scoring/ranking/readiness,
+  TradePlan/risk/entry/exit/alert authority, deployment, installation, and
+  activation remain excluded. The general production freeze and Monday
+  checkpoint ordering remain controlling.
+- Next gate: Git Steward commit/status proof, then Steven review. Do not call
+  this branch-only work complete or canonical, and do not merge, push, deploy,
+  install, activate, access a provider, or authorize the prospective observer
+  from this governance closeout alone.
 
 #### ARGUS-DATA-CORPACTION-001 - Analysis Price-Basis And Security-Identity Integrity
 
