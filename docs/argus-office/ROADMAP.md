@@ -55,6 +55,43 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-CANONICAL-LEDGER-RECONCILIATION-001` is the active bounded task at
+`IMPLEMENTATION_IN_PROGRESS / BRANCH_ONLY / RESEARCH_ONLY` on
+`codex/argus-canonical-ledger-reconciliation-001`. It started forward-only from
+exact current canonical `99b95f530513343702e70077f970c43b5524c613`, tree
+`0c412c063d078505ed367c45f34954faf25e22a3`. Accepted Ledger head
+`251ac0512cc6a9338d122b48294ac33db58d5ee5` remains in canonical ancestry and
+Git history, but its six Ledger-owned artifacts were absent from the
+pre-reconciliation canonical tree. Phase A is `GO`: the accepted Ledger bytes,
+current canonical state, correction scope, Ledger collateral removal, and
+unrelated-content exclusion are independently identifiable; restoration can
+be forward-only and requires no production behavior change. The task branch is
+restoring only those exact six accepted artifacts and semantically reconciling
+shared governance. Correction history remains preserved. No merge, canonical
+master mutation, reset, rebase, squash, cherry-pick, revert, force-push, or
+history rewrite is authorized or has occurred under this reconciliation.
+
+Forensic chronology supports that the remote `master` push at
+`2026-08-30T01:51:38-05:00` corresponds to the previously authorized
+canonical-correction promotion being executed after later work had already
+begun. Record `CANONICAL_MOVEMENT_CAUSE =
+AUTHORIZED_DIRECTIVE_EXECUTED_OUT_OF_ORDER`, `INITIATING_PROCESS = UNKNOWN`,
+and `AUTONOMOUS_UNEXPLAINED_MUTATION = FALSE`. Git does not establish a process
+identity, so none is inferred.
+
+`ARGUS-CURRENT-EDGE-PROSPECTIVE-OBSERVER-001` is
+`SUSPENDED_PENDING_CANONICAL_LEDGER_RECONCILIATION / UNIMPLEMENTED`. It may not
+resume until this reconciliation is independently accepted and canonically
+integrated under separate authority. `ARGUS-STRATEGY-SCIENCE-LAB-001 =
+COMPLETE / CANONICAL_INTEGRATED / STEVEN_ACCEPTED` at exact accepted
+review/canonical HEAD `848d20a6bd5a49e9bb8e179eaa374109756801b0`.
+`ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 = COMPLETE / CANONICAL_INTEGRATED /
+STEVEN_ACCEPTED` at exact accepted HEAD
+`251ac0512cc6a9338d122b48294ac33db58d5ee5` before the later forward correction
+made its six owned artifacts absent from the current canonical HEAD tree. Those
+accepted states and their history remain preserved; continuous Ledger artifact
+presence is not claimed. The general production freeze remains active.
+
 `ARGUS-GUI-COMMAND-CENTER-001F` is `COMPLETE / CANONICAL_MERGED /
 INSTALLED / STEVEN_VISUAL_PASS / FREEZE_ACTIVE`. The exact accepted GUI commit
 `fc2761ad59c09c7329aa2fbb3a66d3c2bc9e4809` was merged non-destructively into
@@ -307,30 +344,18 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Parallel Authorized Research
 
-- `ARGUS-STRATEGY-SCIENCE-LAB-001` is `IMPLEMENTED_PENDING_MERGE /
-  INDEPENDENT_REVIEW_PASS / STEVEN_ACCEPTANCE_PENDING` on branch
-  `codex/argus-strategy-science-lab-001`. Exact seven-artifact packet content is
-  committed at `01aab7d75938edf7562d8c321da5d7c556843da5` on parent/base
-  `8b81bcd0d4172b5c88e08afca9933068a500c5a7`. Git Steward's immediate
-  post-commit proof found a clean worktree, local `master` and `origin/master`
-  still at the base, and the task branch ahead `1` / behind `0`. The
-  byte-specific independent second-eye disposition is
-  `ACCEPTED_FOR_STEVEN_REVIEW`: all 36 required deliverables and all 20
-  directive acceptance conditions pass, and the same 245 focused tests pass.
-  This Roadmap/Task Log/Branch Ledger metadata reconciliation is a docs-only
-  follow-up to content commit `01aab7d`; it does not change the five immutable
-  packet artifacts or the accepted content identity. No push, merge,
-  deployment, or activation has occurred.
-  The packet remains documentation/research architecture only; it adds no
-  implementation, schema, provider access, runtime consumer, production
-  behavior, or trading authority. No push, merge, deployment, activation, or
-  implementation directive is authorized. Steven must accept, reject, or narrow
-  the packet before merge or any first implementation slice begins. The only
-  recommended next directive after Steven acceptance remains
-  `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet
-  Contract And Offline Proof`; it requires separate bounded authorization and
-  remains an offline contract/proof proposal with no production collection or
-  activation.
+- `ARGUS-STRATEGY-SCIENCE-LAB-001` is preserved as `COMPLETE /
+  CANONICAL_INTEGRATED / STEVEN_ACCEPTED` at exact review/canonical HEAD
+  `848d20a6bd5a49e9bb8e179eaa374109756801b0`.
+  `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001` is preserved as `COMPLETE /
+  CANONICAL_INTEGRATED / STEVEN_ACCEPTED` at exact accepted HEAD
+  `251ac0512cc6a9338d122b48294ac33db58d5ee5`; the later forward correction made
+  its six artifacts absent from current canonical HEAD, so continuous presence
+  is not claimed. The current reconciliation neither
+  reopens their accepted research conclusions nor grants implementation,
+  schema, provider, runtime-consumer, production, strategy, broker, Paper,
+  Shadow, or trading authority. The Prospective Observer is suspended as
+  stated above.
 - `ARGUS-TRADE-REPLAY-001` is `PLANNED`, lane `PARALLEL_RESEARCH`, readiness
   `INVENTORY_READY`, gate `EVENT_LEVEL_ADMISSION_REQUIRED`. Failure-boundary
   and candidate inventory work may proceed without changing the prospective
@@ -364,6 +389,13 @@ requires a separate current-head reconciliation and qualification task.
   authority remains separately decision-gated.
 
 ### Immediate Next
+
+Complete only `ARGUS-CANONICAL-LEDGER-RECONCILIATION-001`: restore the exact six
+accepted Ledger artifacts forward on top of `99b95f5`, reconcile shared
+governance, complete required proof and independent review, and prepare the
+Steven review packet. Do not merge or mutate canonical under this task. Keep
+the Prospective Observer suspended until the reconciliation is independently
+accepted and canonically integrated under separate authority.
 
 Hold the general production freeze. At Monday 2026-08-31 08:32 CT perform the
 scheduled read-only checkpoint for canonical, installed workstation, Producer,
@@ -443,7 +475,12 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. Producer-001F canonical integration is terminal and awaiting closeout
+1. `ARGUS-CANONICAL-LEDGER-RECONCILIATION-001` is
+   `IMPLEMENTATION_IN_PROGRESS / BRANCH_ONLY / RESEARCH_ONLY` from exact
+   canonical `99b95f5`. Complete the forward-only Ledger restoration,
+   governance reconciliation, required proof, independent review, and Steven
+   review packet without merging or changing canonical.
+2. Producer-001F canonical integration is terminal and awaiting closeout
    review. Producer-001D Product runtime and Producer-001E forensic tooling are
    canonical, research-only, and not deployed. No new provider run, install,
    activation, or downstream implementation is active.
@@ -475,28 +512,27 @@ next-action language preserved elsewhere cannot supersede this queue.
    authority and without delaying the Ready / Next sequence.
 3. Integrated specialist and denominator research may continue only under their
    dormant/read-only contracts and existing activation gates.
-4. Review the independently accepted, branch-only
-   `ARGUS-STRATEGY-SCIENCE-LAB-001` architecture packet. Independent disposition
-   is `ACCEPTED_FOR_STEVEN_REVIEW`; Steven acceptance remains pending, and no
-   implementation directive is authorized. Only after Steven acceptance may a
-   separately bounded `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001` offline
-   contract/proof directive be considered. The packet does not reorder
-   `Immediate Next` or the Ready / Next sequence.
+4. Preserve the accepted Strategy Science and Current-Edge Ledger history.
+   Do not resume `ARGUS-CURRENT-EDGE-PROSPECTIVE-OBSERVER-001` until the active
+   reconciliation is independently accepted and canonically integrated.
 
 ### 4. Blocked
 
-1. `ARGUS-EXIT-POLICY-001`: blocked from comparative evaluation until an
+1. `ARGUS-CURRENT-EDGE-PROSPECTIVE-OBSERVER-001`:
+   `SUSPENDED_PENDING_CANONICAL_LEDGER_RECONCILIATION / UNIMPLEMENTED` until
+   reconciliation acceptance and canonical integration.
+2. `ARGUS-EXIT-POLICY-001`: blocked from comparative evaluation until an
    admitted fixed-entry replay population and preregistration exist.
-2. `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001`: producer compatibility is proven;
+3. `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001`: producer compatibility is proven;
    activation remains blocked on Producer-001B second-eye adjudication,
    successful physical exact-path acceptance, authoritative instrument
    classification, canonical reconciliation, complete requalification, and
    disabled-install proof.
-3. `ARGUS-STAT-DATA-002`: `HELD` until the natural path and its physical canary can
+4. `ARGUS-STAT-DATA-002`: `HELD` until the natural path and its physical canary can
    supply a truthful full stream rather than denominator-heavy incomplete
    `SETUP_PENDING` states.
-4. R034: blocked on explicit destructive approval.
-5. Continuous/live order authority: blocked on separate Paper, safety,
+5. R034: blocked on explicit destructive approval.
+6. Continuous/live order authority: blocked on separate Paper, safety,
    account/broker, prospective-evidence, and Steven decision gates.
 
 ### 5. Deferred / Later

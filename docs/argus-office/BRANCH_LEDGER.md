@@ -2,6 +2,69 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-CANONICAL-LEDGER-RECONCILIATION-001 - 2026-08-30
+
+`codex/argus-canonical-ledger-reconciliation-001` is a fresh forward-only task
+branch from exact current canonical
+`99b95f530513343702e70077f970c43b5524c613`, tree
+`0c412c063d078505ed367c45f34954faf25e22a3`. Local `master`, `origin/master`,
+and direct remote `master` were independently identified at that same commit;
+this reconciliation has not changed them.
+
+Accepted Ledger head `251ac0512cc6a9338d122b48294ac33db58d5ee5`
+remains reachable in canonical ancestry and Git history. The pre-reconciliation
+`99b95f5` tree does not contain the six Ledger-owned accepted artifacts. Phase A
+classified those six paths as accepted Ledger technical/documentation
+artifacts, the three shared governance paths as requiring semantic
+reconciliation, and found no unauthorized or unrelated content in the bounded
+transition. Therefore:
+
+- `ACCEPTED_LEDGER_BYTES_IDENTIFIABLE = TRUE`
+- `CURRENT_CANONICAL_STATE_IDENTIFIABLE = TRUE`
+- `CORRECTION_SCOPE_IDENTIFIABLE = TRUE`
+- `LEDGER_COLLATERAL_REMOVAL_IDENTIFIABLE = TRUE`
+- `UNRELATED_CONTENT_CAN_BE_EXCLUDED = TRUE`
+- `RESTORATION_CAN_BE_FORWARD_ONLY = TRUE`
+- `PRODUCTION_BEHAVIOR_CHANGE_REQUIRED = FALSE`
+
+The exact accepted predecessor states are preserved as evidence:
+
+- `ARGUS-STRATEGY-SCIENCE-LAB-001 = COMPLETE / CANONICAL_INTEGRATED /
+  STEVEN_ACCEPTED` at exact review/canonical HEAD
+  `848d20a6bd5a49e9bb8e179eaa374109756801b0`.
+- `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 = COMPLETE /
+  CANONICAL_INTEGRATED / STEVEN_ACCEPTED` at exact accepted HEAD
+  `251ac0512cc6a9338d122b48294ac33db58d5ee5` before the later forward correction
+  made its six owned artifacts absent from current canonical HEAD.
+
+This records the exact accepted states without claiming continuous Ledger
+artifact presence in the canonical HEAD tree.
+
+Phase A disposition is `GO`. The branch is restoring only the exact six
+accepted Ledger-owned artifacts and reconciling this Roadmap, Task Log, and
+Branch Ledger against current truth. Correction history remains intact; the
+accepted Strategy Science and Ledger research history is not reopened.
+
+Directive chronology establishes that the correction-promotion authorization
+preceded the remote `master` movement and that the remote reflog recorded
+`update by push` to `99b95f5` at `2026-08-30T01:51:38-05:00`; local `master`
+then moved to the same commit. This timing and exact target support the
+directive-ordering explanation. Record:
+
+- `CANONICAL_MOVEMENT_CAUSE = AUTHORIZED_DIRECTIVE_EXECUTED_OUT_OF_ORDER`
+- `INITIATING_PROCESS = UNKNOWN`
+- `AUTONOMOUS_UNEXPLAINED_MUTATION = FALSE`
+
+Git cannot prove an initiating process or actor, and this record does not infer
+one. Classification is `IMPLEMENTATION_IN_PROGRESS / BRANCH_ONLY /
+RESEARCH_ONLY`. `ARGUS-CURRENT-EDGE-PROSPECTIVE-OBSERVER-001` remains
+`SUSPENDED_PENDING_CANONICAL_LEDGER_RECONCILIATION / UNIMPLEMENTED` until this
+candidate passes required proof and independent review, is accepted by Steven,
+and is canonically integrated under separate authority. The general production
+freeze remains active. No merge, master mutation, reset, rebase, squash,
+cherry-pick, revert, force-push, history rewrite, deployment, activation,
+provider, broker, Paper, Shadow, strategy, or order authority is included.
+
 ## ARGUS-STRATEGY-SCIENCE-LAB-001 - 2026-08-29
 
 `codex/argus-strategy-science-lab-001` records the exact seven-artifact Strategy
