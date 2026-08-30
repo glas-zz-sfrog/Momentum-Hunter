@@ -2,8 +2,7 @@
 
 | Date | Task | Branch | Owner | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| 2026-08-29 | ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 / 001A - Immutable prospective packet contract and H15 cross-platform cleanup. | `codex/argus-current-edge-research-ledger-001`; implementation `7f37024a`; closeout `b5ea432`; repair `776589f`; unmerged from canonical `848d20a` | Goal Steward / App Architect / Builder / independent second eye / Release Scribe / Git Steward | `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY` | Exact pushed repair/governance commit is `776589f31cc1f7e9164195df85d0aed5bbf5909e`, parent `b5ea4326`; task remote readback is exact and branch/master is `0/3`. Content is clean but commit/push actor and sequencing remain unexplained. Final branch-level disposition is `ACCEPTED_FOR_STEVEN_MERGE_REVIEW`, second-eye SHA/blob `41967CBB...AF425` / `eadbc879...4909`. Module and P1/O1 identities are unchanged; current test SHA/blob remains `34C94F08...D2D3CA` / `f9770b5...cd6`; 48/48 passes on Windows and isolated Alpine/POSIX, H15 remains `ROOT_REPARSE_POINT` with outside nonmutation, and 207-owner evidence is carry-forward only. The current second-eye plus four docs require a final documentation commit with unknown future HEAD, then manifest/ZIP/sidecar generation and read-only validation. No merge or production authority follows; freeze, Monday checkpoint, control strategy, and queue order remain unchanged. |
-| 2026-08-29 | ARGUS-STRATEGY-SCIENCE-LAB-001 - Strategy Science architecture review packet. | historical content `01aab7d` on base `8b81bcd`; accepted/canonical review HEAD `848d20a` | Goal Steward / research and architecture reviewers / independent second eye / Git Steward / Release Scribe | `COMPLETE / CANONICAL_INTEGRATED / STEVEN_ACCEPTED` | Exact seven-artifact packet content remains identified by `01aab7d75938edf7562d8c321da5d7c556843da5`; its five immutable packet artifacts retain the accepted identity. The byte-specific independent disposition was `ACCEPTED_FOR_STEVEN_REVIEW`; D01-D36 pass 36/36, AC01-AC20 pass 20/20, and the same 245 focused tests pass. Steven explicitly accepted the architecture at `848d20a6bd5a49e9bb8e179eaa374109756801b0`; Git Steward fast-forwarded local and remote canonical from `8b81bcd` to that exact synchronized head. The accepted 0-18 map remains research architecture rather than production execution order; TRADE-REPLAY is its named fixed-entry PIT-engine consumer without changing existing gates. Broad historical claims remain blocked, and no deployment, activation, schema, provider, runtime, or behavior change occurred. |
+| 2026-08-29 | ARGUS-STRATEGY-SCIENCE-LAB-001 - Strategy Science architecture review packet. | `codex/argus-strategy-science-lab-001`; content `01aab7d` on base `8b81bcd`; branch-only documentation | Goal Steward / research and architecture reviewers / independent second eye / Git Steward / Release Scribe | `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_REVIEW_PASS / STEVEN_ACCEPTANCE_PENDING` | Exact seven-artifact packet content is committed at `01aab7d75938edf7562d8c321da5d7c556843da5`. Immediate post-commit proof found a clean worktree, local/remote master at `8b81bcd`, and the task branch ahead 1 / behind 0. The byte-specific independent disposition is `ACCEPTED_FOR_STEVEN_REVIEW`; D01-D36 pass 36/36, AC01-AC20 pass 20/20, and the same 245 focused tests pass. This metadata reconciliation is a docs-only follow-up to content commit `01aab7d`; it does not change the five immutable packet artifacts or accepted content identity, and no push, merge, deployment, or activation has occurred. The proposed sequence 0-18 remains non-authoritative, the production freeze and Monday checkpoint remain unchanged, and broad historical claims remain blocked. Steven acceptance is required before merge or implementation; no implementation directive is authorized. The only recommended next directive after acceptance is the separately bounded offline `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001`. |
 | 2026-08-27 | ARGUS-CONTINUOUS-PRODUCER-001F - Accepted lineage integration and canonical verification. | accepted stacked lineage through `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001E` head `9967935`; fast-forwarded from canonical `82460b3` | Goal Steward / Git Steward / QA Regression / Release Scribe | `COMPLETE / CANONICAL_INTEGRATED / DEPLOYMENT_HELD` | Proved and introduced the exact 17-commit accepted lineage with zero unrelated commits, conflicts, or executable resolution. Canonical Product bytes equal accepted 001D Product `1fa914f`; Product/test/tool bytes equal V4-tested `74efea1`. Focused 125/125 and full approved-environment 2,830/2,830 pass with one expected Windows skip; compileall, PowerShell parse, diff, capability/ownership, protected-path, and context-adjudicated secret checks pass. Services and manifests stayed unchanged; no deployment, GUI, provider, Paper, Shadow, broker, account, position, or order action occurred. Unknown instruments remain execution-blocked; no new second-eye ZIP is required. |
 | 2026-08-26 | ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B - Decision chronology, atomic composition, and forensic accounting repair. | `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001B`; product `01f0c2e`; pushed packaging head `ebbf9da` | Goal Steward / Builder / QA Regression / Git Steward / Release Scribe | `IMPLEMENTED_PENDING_MERGE / PROVIDER_CANARY_FAILED_ACCEPTANCE / SECOND_EYE_PACKET_READY` | Adds post-acquisition decision cutoffs, exact `knownAt` binding, preview-only/atomic composition, prospective-floor enforcement, structured failure evidence, exact event/backfill accounting, and restart rollback/exactly-once proof. The provider canary preserved 172 completed-bar events, 47 readiness completions, four ready members, seven successful symbol backfills, and one restart, but zero composition cycles or TradePlans; natural-path acceptance failed. The 625-entry V2 packet is secret-scan clean and passes staged/extracted 161-test reruns; ZIP SHA-256 `A4609AA3562D5705D88DF13498F7EBAEAB7E6A615910B4445887625B60EE371B`. No merge, deploy, Paper, Shadow, broker, account, position, or order action occurred; second-eye adjudication is next. |
 | 2026-08-26 | ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A - Natural runtime path completion. | `codex/ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` from synchronized `2a53881`; implementation `74da179`; integrated through `c9e447d` | Goal Steward / Builder / QA Regression / Git Steward / Release Scribe | `COMPLETE / CANONICAL / RESEARCH_ONLY` | Naturally connects recurring discovery, hot-universe admission, bounded Schwab readiness, completed canonical bars, lifecycle/setup chronology, immutable missed entries, successor evidence, DATA-004 TradePlan/no-plan output, and restart reconstruction without caller injection. Unknown instruments remain research-visible but execution-blocked. Full discovery passes 2,763 tests with one expected skip; post-merge 77/77, compileall, PowerShell, diff, secret/capability, opening-closure, and historical-integrity checks pass. No provider canary, install, Paper, Shadow, account, position, broker, order, opening promotion, service, scheduler, manifest, or historical evidence mutation occurred. |
@@ -609,181 +608,64 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 
 ## 2026-08-29 - ARGUS-STRATEGY-SCIENCE-LAB-001 Architecture Review Packet
 
-- **Branch:** Historical packet branch `codex/argus-strategy-science-lab-001`;
-  exact seven-artifact content commit
-  `01aab7d75938edf7562d8c321da5d7c556843da5`, parent/base
-  `8b81bcd0d4172b5c88e08afca9933068a500c5a7`; accepted review and canonical
-  HEAD `848d20a6bd5a49e9bb8e179eaa374109756801b0`.
+- **Branch:** `codex/argus-strategy-science-lab-001`; exact seven-artifact
+  content commit `01aab7d75938edf7562d8c321da5d7c556843da5`, parent/base
+  `8b81bcd0d4172b5c88e08afca9933068a500c5a7`. Immediate post-commit evidence
+  showed a clean worktree, local `master` and `origin/master` at the base, and
+  the task branch ahead `1` / behind `0`.
 - **Scope:** Documentation/research architecture only: Goal Charter, complete
   current-state/reuse inventory, research evidence matrix, point-in-time replay
   and prospective-ledger architecture, threat/validation design, proposed
   dependency sequence, and exact proposed next directive.
-- **Files changed:** Historical content commit `01aab7d` contains exactly seven Office
+- **Files changed:** Content commit `01aab7d` contains exactly seven Office
   artifacts: Roadmap, Task Log, Goal Charter, independent second-eye review,
   infrastructure inventory, research matrix, and main architecture packet.
-  Canonical review head `848d20a` adds only the Roadmap, Task Log, and Branch
-  Ledger metadata follow-up; it does not change the five immutable packet
-  artifacts or their accepted content identity.
+  This post-commit metadata reconciliation changes only Roadmap, Task Log, and
+  Branch Ledger as a docs-only follow-up to content commit `01aab7d`; it does
+  not change the five immutable packet artifacts or accepted content identity.
   No product, test, package, schema, database, configuration, runtime,
   generated-data, service, provider, broker, order, Paper, Shadow, or GUI path
-  changed, and no deployment or activation occurred.
+  changed, and no push, merge, deployment, or activation has occurred.
 - **Tests or checks run:** The byte-specific independent review passed all
   D01-D36 deliverables `36/36`, all AC01-AC20 acceptance conditions `20/20`,
   structural/completeness and local-link checks, exact identity reconciliation,
   and the same 245 focused tests. Release Scribe re-read the final independent
-  disposition and current Roadmap, Task Log, and Branch Ledger. Git Steward
-  verified exact fast-forward synchronization of local and remote canonical at
-  `848d20a` and reran the 245 focused tests. No product implementation test or
-  runtime action was introduced by this documentation-only architecture work.
+  disposition and current Roadmap, Task Log, and Branch Ledger, verified commit
+  parent/content, post-commit cleanliness, ahead/behind state, and exact changed
+  paths, then ran scoped Git status/diff and `git diff --check`. No product
+  implementation test or runtime action was authorized by this
+  documentation-only closeout.
 - **Evidence for changed behavior:** None; changed behavior is intentionally
   absent. The evidence is the identity-bound review packet, independent
-  disposition `ACCEPTED_FOR_STEVEN_REVIEW`, Steven's explicit acceptance at
-  exact review HEAD `848d20a`, and synchronized canonical Git state.
+  disposition `ACCEPTED_FOR_STEVEN_REVIEW`, and documentation-only diff.
 - **Protected areas reviewed:** Replay identity and chronology, historical
   admission and corporate-action basis, scoring/readiness/TradePlan/risk/exits,
   schemas, broker/order behavior, provider/runtime boundaries, production
   configuration, and GUI behavior were reviewed without semantic or physical
   mutation. Broad historical claims remain blocked.
-- **Push/merge status:** `COMPLETE / CANONICAL_INTEGRATED / STEVEN_ACCEPTED`.
-  Git Steward fast-forwarded local `master` and `origin/master` from `8b81bcd`
-  through historical packet content `01aab7d` to exact accepted review head
-  `848d20a`; local and remote canonical are synchronized. No deployment,
-  installation, activation, provider access, or software behavior change
-  occurred.
+- **Push/merge status:** `IMPLEMENTED_PENDING_MERGE /
+  INDEPENDENT_REVIEW_PASS / STEVEN_ACCEPTANCE_PENDING` on the task branch.
+  Packet content is committed at `01aab7d`; this metadata reconciliation is a
+  docs-only follow-up that does not change the five immutable packet artifacts
+  or accepted content identity. No push, merge, canonical integration,
+  deployment, installation, activation, provider access, or implementation
+  directive has occurred or is authorized by this record.
 - **Risks:** Current broad datasets remain unadmitted because durable identity,
   price basis, corporate-action lineage, point-in-time universe/survivorship,
   timestamp/source lineage, and golden-day certification are unresolved. The
-  accepted 0-18 sequence could be mistaken for production execution authority;
-  it remains a research-architecture dependency map subordinate to current
-  Roadmap order and milestone-specific gates.
-- **Manual QA:** No visual/manual QA applies. Steven's governance acceptance of
-  the architecture is recorded and does not claim software behavior changed.
-- **Open questions:** Provider, licensing, data purchase, schema, activation,
-  and strategy-authority decisions remain separate future gates.
+  proposed 0-18 sequence could be mistaken for authority unless its pending
+  Steven acceptance is preserved.
+- **Manual QA:** No visual/manual QA applies. Steven review is a governance
+  acceptance gate for the packet and any first implementation slice, not a
+  claim that software behavior changed.
+- **Open questions:** Steven must accept, reject, or narrow the packet and its
+  proposed dependency sequence. Provider, licensing, data purchase, schema,
+  activation, and strategy-authority decisions remain separate future gates.
 - **Recommendation:** Preserve the general production freeze and the Monday
-  2026-08-31 08:32 CT checkpoint ordering. Treat TRADE-REPLAY as the accepted
-  architecture's named fixed-entry Point-in-Time engine consumer while
-  preserving its existing lifecycle and admission gates. Proceed separately
-  with only the authorized offline Current-Edge preimplementation gates.
-
-## 2026-08-29 - ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 Governance Closeout (Pre-001A)
-
-- **Branch:** `codex/argus-current-edge-research-ledger-001`, created clean from
-  synchronized local/remote canonical base
-  `848d20a6bd5a49e9bb8e179eaa374109756801b0`. Reviewed artifact commit is
-  `7f37024a66b512eb3fbfefe5a78b620e44d11c0a`; its parent, local master, and
-  `origin/master` are that same base.
-- **Scope:** `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED /
-  RESEARCH_ONLY`. Reconcile the accepted, branch-only offline ledger to current
-  governance without adding production or observer authority.
-- **Files changed:** This closeout edits only Roadmap, Task Log, Branch Ledger,
-  and the author completion report. Source, focused tests, Goal Charter, reuse
-  inventory, and independent second-eye evidence remain byte-unchanged.
-- **Tests or checks run:** Final evidence records 48/48 focused tests; module
-  SHA/blob `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4` /
-  `9e4a5df2170b59cee0efc57927bb4463f797d2d4`; historical pre-001A test SHA/blob
-  `F0B05D282BBBD31D8301177B9D9EBEC2AD593DC55E6FD74934FC679C7F4B610B` /
-  `ee5100dbc0d7759bf2dd4303c3cf2f340fde2bbb`; unchanged P1/O1 identities;
-  H18/18, T14/14, and D28/28. The post-F01-F04 207-owner regressions pass with one
-  expected skip and were not rerun for the final lexical-only delta. Release
-  Scribe ran cross-document status/hash/freeze/queue, link, structure,
-  whitespace, conflict, secret, and diff checks.
-- **Evidence for changed behavior:** Historical pre-001A independent second-eye SHA-256
-  `F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`
-  issues `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT` and resolves
-  F01-F04 at the final bytes. Governance closeout satisfies A01-A20 at 20/20.
-  No production behavior changed.
-- **Protected areas reviewed:** Live market/provider/broker/account/order access,
-  Paper/Shadow activation, unattended production observers/services/schedulers,
-  schema/database/migration, GUI, scoring/ranking/readiness, TradePlan/risk,
-  entry/exit/alert, deployment, installation, and activation remain excluded.
-- **Push/merge status:** Reviewed artifact commit `7f37024a` was pushed by
-  ordinary non-force update to
-  `origin/codex/argus-current-edge-research-ledger-001` and read back exact.
-  Branch/master is behind/ahead `0/1`; upstream is `0/0`; the worktree was clean
-  immediately after the artifact commit. The branch is unmerged. The governance
-  previous closeout record is exact commit
-  `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`; Git Steward pushed and read it
-  back before 001A. No
-  deployment, installation, activation, provider access, canonical integration,
-  or production behavior change occurred.
-- **Risks:** An offline research primitive could be mistaken for production or
-  strategy authority; caller-supplied absolute research/test roots,
-  deterministic fixtures, immutable frozen evidence, and explicit fail-closed
-  boundaries must remain acceptance conditions.
-- **Manual QA:** None; this is nonvisual offline infrastructure and governance.
-- **Open questions:** None for governance reconciliation. Provider, licensing,
-  purchase, schema, deployment, activation, or production wiring remains a
-  separate authority gate.
-- **Recommendation:** Ready for the containing doc-only commit and then Steven
-  review. Preserve the general production freeze, Monday 2026-08-31 08:32 CT
-  checkpoint, current control strategy, and queue order. Do not call this task
-  complete or canonical; do not merge, deploy, activate, or authorize a
-  prospective observer from this closeout.
-
-## 2026-08-29 - ARGUS-DIRECTIVE-CURRENT-EDGE-RESEARCH-LEDGER-001A H15 Cleanup Addendum
-
-- **Branch:** `codex/argus-current-edge-research-ledger-001`; 001A starts from
-  previous closeout HEAD
-  `b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`. Reviewed implementation artifact
-  remains `7f37024a66b512eb3fbfefe5a78b620e44d11c0a`; canonical base, local
-  `master`, and `origin/master` remain
-  `848d20a6bd5a49e9bb8e179eaa374109756801b0`.
-  Exact pushed 001A repair/governance commit is
-  `776589f31cc1f7e9164195df85d0aed5bbf5909e`, parent `b5ea432`; task remote
-  readback is exact and branch/master is behind `0` / ahead `3`.
-- **Scope:** Preserve `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED /
-  RESEARCH_ONLY` while repairing only cross-platform cleanup in H15. On Windows
-  the test removes its junction with `os.rmdir`; elsewhere it removes its
-  symlink with `unlink`. No ledger contract or runtime behavior changes.
-- **Files changed:** Repair commit `776589f` contains only the H15 test cleanup
-  plus Roadmap, Task Log, Branch Ledger, and the author report. The current final
-  documentation worktree contains the independently owned second-eye plus those
-  same four docs. Module, Goal Charter, reuse inventory, and test bytes remain
-  unchanged from the repair commit.
-- **Tests or checks run:** Current module SHA/blob remains
-  `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4` /
-  `9e4a5df2170b59cee0efc57927bb4463f797d2d4`; current 001A test SHA/blob is
-  `34C94F082423E61A6EC70EBA882C690D3520CDC15A8AE13FAD90CDC216D2D3CA` /
-  `f9770b5c7cccac1c4f4fcf0eb6989c5510477cd6`. Focused tests pass 48/48 on
-  native Windows and 48/48 in an isolated network-disabled Alpine/POSIX
-  container; the single native Windows H15 test also passes. Compile/import
-  passes; normal and `-O` demonstrations are exact. The 207-owner
-  `OK (skipped=1)` result is carry-forward evidence only and was not rerun for
-  001A. Release Scribe ran doc-only consistency, old-hash labeling, link,
-  whitespace, conflict, secret, scope, and diff checks.
-- **Evidence for changed behavior:** H15 still rejects the reparse escape as
-  `ROOT_REPARSE_POINT` and proves the outside root unchanged. F01-F04 remain
-  resolved and every P1/O1 packet, receipt, logical-key, fingerprint, stored
-  hash, and path identity remains unchanged. This is harness cleanup, not
-  changed ledger behavior.
-  Current second-eye SHA/blob
-  `41967CBB6DBA0D559A3201214F17625E3118A1DA6D6888EC5BAF9A5CFE3AF425` /
-  `eadbc8794662966312a23ad730a69f4005294909` issues the final branch-level
-  disposition `ACCEPTED_FOR_STEVEN_MERGE_REVIEW` and grants no merge.
-- **Protected areas reviewed:** Strategy/scoring, candidate/readiness,
-  TradePlan/risk/entry/exit, replay/historical identity, database/schema,
-  provider/broker/account/order, runtime/service/scheduler, Paper/Shadow, GUI,
-  configuration/secrets, production data, and production behavior remain
-  unchanged.
-- **Push/merge status:** Repair/governance commit `776589f`, parent `b5ea432`, is
-  pushed with exact task-remote readback and remains unmerged. Its five-path
-  content is clean, but commit/push actor and sequencing are unexplained. The
-  current docs plus second-eye will form a final documentation commit whose
-  unknown future HEAD is bound after commit in the external manifest.
-  Manifest/ZIP/sidecar generation and final read-only validation remain
-  pending. No merge, deployment, installation, activation, provider access, or
-  production action occurred.
-- **Risks:** The accepted ledger remains branch-only. The unexplained commit
-  actor/sequencing and pending final documentation/package identities must stay
-  visible. Branch-level acceptance is not merge or prospective-observer
-  authority.
-- **Manual QA:** None; nonvisual offline test/governance repair.
-- **Open questions:** None for the bounded cleanup. Steven review and the
-  separately controlled merge gate remain after exact-byte closeout.
-- **Recommendation:** Commit only the four reconciled docs plus independently
-  owned second-eye as the final documentation commit, then bind its exact HEAD
-  through the external manifest/ZIP/sidecar and final read-only validation. Preserve the general freeze,
-  Monday 2026-08-31 08:32 CT checkpoint, control strategy, and queue order. Do
-  not merge, deploy, install, activate, access a provider, or authorize an
-  observer.
+  2026-08-31 08:32 CT checkpoint ordering. Present the independently accepted
+  packet to Steven; no implementation directive is authorized yet. If Steven
+  accepts the architecture, issue only the separately bounded offline
+  `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet
+  Contract And Offline Proof`; keep it offline, caller-rooted, deterministic,
+  read-only with respect to production, and free of provider/schema/activation
+  or strategy behavior changes.

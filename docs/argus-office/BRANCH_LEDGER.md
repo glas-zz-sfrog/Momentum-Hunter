@@ -2,75 +2,10 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
-## ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - 2026-08-29
-
-`codex/argus-current-edge-research-ledger-001` was created clean from exact
-synchronized local/remote canonical base
-`848d20a6bd5a49e9bb8e179eaa374109756801b0`. Current classification is
-`IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`.
-Reviewed artifact commit is
-`7f37024a66b512eb3fbfefe5a78b620e44d11c0a`; its parent/base/local master/
-`origin/master` is exact
-`848d20a6bd5a49e9bb8e179eaa374109756801b0`.
-Previous governance-closeout and 001A starting HEAD is
-`b5ea4326e1d7e8587a03759aa4d1ac88d007a75f`.
-
-Exact 001A repair/governance commit is
-`776589f31cc1f7e9164195df85d0aed5bbf5909e`, parent `b5ea4326`. Local and
-remote task branch readback is exact; branch/master is behind `0` / ahead `3`
-and the repair remains unmerged. Independent inspection proves its five-path
-content clean and in scope, but commit/push actor and sequencing are unexplained.
-That provenance anomaly does not change content acceptance and is not silently
-attributed to Git Steward or another actor.
-
-Final module identity is SHA-256
-`A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4`,
-Git blob `9e4a5df2170b59cee0efc57927bb4463f797d2d4`. Current 001A focused-test
-identity is SHA-256
-`34C94F082423E61A6EC70EBA882C690D3520CDC15A8AE13FAD90CDC216D2D3CA`,
-Git blob `f9770b5c7cccac1c4f4fcf0eb6989c5510477cd6`. The former
-`F0B05D282BBBD31D8301177B9D9EBEC2AD593DC55E6FD74934FC679C7F4B610B` /
-`ee5100dbc0d7759bf2dd4303c3cf2f340fde2bbb` pair is historical pre-001A
-evidence only. Focused tests pass 48/48 natively on Windows and 48/48 in an
-isolated network-disabled Alpine/POSIX container; the single native Windows H15
-test also passes. H15 still returns `ROOT_REPARSE_POINT` and preserves
-outside-root bytes on both cleanup branches. Compile/import passes, normal and
-`-O` are exact, F01-F04 remain resolved, and P1/O1 identities are unchanged.
-The 207-owner `OK (skipped=1)` result is carry-forward only and was not rerun
-for 001A. Goal Charter and reuse inventory bytes are unchanged.
-
-Current independent second-eye SHA-256 is
-`41967CBB6DBA0D559A3201214F17625E3118A1DA6D6888EC5BAF9A5CFE3AF425`,
-Git blob `eadbc8794662966312a23ad730a69f4005294909`. It preserves earlier
-rejection/repair history, verifies exact `776589f` content and remote readback,
-and issues `ACCEPTED_FOR_STEVEN_MERGE_REVIEW`. This grants no merge. The current
-second-eye plus Roadmap, Task Log, Branch Ledger, and author report will form a
-later final documentation commit whose future HEAD is unknown until commit and
-then bound in the external manifest. Manifest/ZIP/sidecar generation and final
-read-only package validation remain pending.
-
-The bounded authority is an offline immutable prospective packet contract and
-deterministic proof using caller-supplied absolute research/test storage. It
-does not authorize live collection, provider, broker, account, position, or
-order access; Paper or Shadow activation; production observers, services, or
-schedulers; schema/database/migration work; GUI changes; scoring, ranking,
-readiness, TradePlan, risk, entry, exit, or alert authority; deployment,
-installation, or activation.
-
-Repair commit `776589f` changes only the H15 focused-test cleanup plus Roadmap,
-Task Log, Branch Ledger, and the author report. Current final-doc changes are
-the independently owned second-eye plus those four docs. Module, Goal Charter,
-reuse inventory, and test remain unchanged from the repair commit. The branch remains
-`IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`; no merge,
-deployment, installation, activation, provider access, or production behavior
-change occurred. Packaging is pending, not completed. The general production freeze, Monday
-2026-08-31 08:32 CT read-only checkpoint, current control strategy, and Ready /
-Next sequence remain unchanged. A prospective observer remains unauthorized.
-
 ## ARGUS-STRATEGY-SCIENCE-LAB-001 - 2026-08-29
 
-Historical branch `codex/argus-strategy-science-lab-001` records the exact
-seven-artifact Strategy Science packet content at commit
+`codex/argus-strategy-science-lab-001` records the exact seven-artifact Strategy
+Science packet content at commit
 `01aab7d75938edf7562d8c321da5d7c556843da5`, with parent/base
 `8b81bcd0d4172b5c88e08afca9933068a500c5a7`. The content commit modifies
 Roadmap and Task Log and adds the Goal Charter, independent second-eye review,
@@ -78,23 +13,23 @@ infrastructure inventory, research matrix, and main architecture packet. It
 contains no product, test, package, schema, database, configuration, runtime,
 generated-data, service, provider, broker, order, Paper, Shadow, or GUI path.
 
-The byte-specific independent disposition was `ACCEPTED_FOR_STEVEN_REVIEW`;
-D01-D36 pass `36/36`, AC01-AC20 pass `20/20`, and the same 245 focused tests
-pass. Steven explicitly accepted the Strategy Science architecture at review
-HEAD `848d20a6bd5a49e9bb8e179eaa374109756801b0`. Git Steward fast-forwarded
-local `master` and `origin/master` from `8b81bcd` through exact packet content
-`01aab7d` to review HEAD `848d20a`, then verified synchronization and the same
-245 focused tests.
+Git Steward's immediate post-commit evidence found a clean worktree. `HEAD` was
+the content commit; local `master` and `origin/master` remained at the base;
+`master...HEAD` was left `0` / right `1`, so the task branch was ahead `1` /
+behind `0`. The byte-specific independent disposition is
+`ACCEPTED_FOR_STEVEN_REVIEW`; D01-D36 pass `36/36`, AC01-AC20 pass `20/20`, and
+the same 245 focused tests pass.
 
-Classification is `COMPLETE / CANONICAL_INTEGRATED / STEVEN_ACCEPTED`.
-Canonical metadata does not change the five immutable packet artifacts or their
-accepted content identity. No deployment, installation, activation, provider
-access, schema, runtime, production, or strategy behavior change occurred. The
-accepted 0-18 sequence is research architecture rather than production
-execution order; TRADE-REPLAY is its named fixed-entry Point-in-Time engine
-consumer while its existing lifecycle and admission gates remain unchanged.
-The general production freeze and Monday 2026-08-31 08:32 CT checkpoint
-ordering remain unchanged.
+Classification remains `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_REVIEW_PASS /
+STEVEN_ACCEPTANCE_PENDING`. This Roadmap/Task Log/Branch Ledger reconciliation
+is a docs-only follow-up to content commit `01aab7d`; it does not change the
+five immutable packet artifacts or accepted content identity. No push, merge,
+canonical integration, deployment, installation, activation, provider access,
+or implementation directive has occurred or is authorized. The general
+production freeze and Monday 2026-08-31 08:32 CT checkpoint ordering remain
+unchanged. Steven acceptance is required before merge or implementation; only
+afterward may a separately bounded offline
+`ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001` directive be considered.
 
 ## ARGUS-CONTINUOUS-PRODUCER-001F - 2026-08-27
 
