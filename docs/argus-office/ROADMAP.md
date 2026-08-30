@@ -55,6 +55,51 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-MONDAY-READINESS-REPAIR-002` is
+`IMPLEMENTED_PENDING_INDEPENDENT_SECOND_EYE`. The serial offline repair closed
+both known Monday rehearsal gaps without changing canonical, installed
+runtime, services, manifests, schedules, provider roles, or execution
+authority.
+
+Phase A is frozen on `codex/ARGUS-STAT-DATA-002D` at pushed commit
+`039d4e0f71c082d07d0a774d4c2d3a9dc20888b9`. The exact `run-all` path consumed
+preserved real Finviz/Schwab evidence through activation, prospective
+membership, readiness/composition, TradePlan/no-plan, checkpoint,
+restart/restore, terminalization, forensic export, package, extraction, and
+reverification. It preserved 482 prospective observations across 188 unique
+members, four READY members, eight composition cycles, and four research-only
+TradePlans with zero provider/system/writer failures. Full discovery passes
+2,869 tests with one expected skip. Package A is
+`ARGUS-STAT-DATA-002D-EXACT-RUN-ALL-SECOND-EYE.zip`, SHA-256
+`3C581B3BCE942DAA7D45F1068E02B567D22C05DCC546838BD4CC90CC26CDF574`.
+
+Phase B is frozen on `codex/ARGUS-OPENING-RUNTIME-D221`; tested implementation
+commit `d50f035b778c49f3e94358b49240603a23ed18ea` is pushed. The isolated logical
+successor is release `OPENING-RUNTIME-B781E13F101899031CCC`, based on canonical
+`23ee162373654e1db91af4c19f75bbc7887e3174`, with runtime fingerprint
+`b781e13f101899031ccc278bf36d3b7ab5f11ebd112d5ebae48430084098cd3a`.
+Its authoritative closure has 96 reachable package modules, three explicit
+runtime files, and ten relevant distributions. Physical reconciliation found
+one actual D220/canonical byte mismatch, in
+`canonical_candle_evidence.py`; `engine_host.py` and
+`workstation_read_models.py` already match D220 byte-for-byte.
+
+The actual `tools.capture_job.main` opening chain replayed preserved August 14
+Finviz and Schwab evidence with zero network attempts: two candidates, 5/5
+opening bars and seven baseline sessions for each, one SNDK
+`EXECUTION_READY_TRADE`, and one NU `DO_NOT_TRADE_MISSED_ENTRY`. Source evidence
+remained immutable, D220's installed release tree remained byte-identical, and
+the isolated D221 runtime gate matches if selected. Focused verification passes
+114 tests; exact-final-byte full discovery passes 2,837 tests with one expected
+skip; compileall, diff, protected-path, secret, capability, pre-ZIP, extracted-
+ZIP, manifest, canonical, installed-state, and schedule nonmutation checks pass.
+Package B is `ARGUS-OPENING-RUNTIME-D221-SECOND-EYE.zip`, SHA-256
+`E42DFC4EC9F1EA73B70A1B8A2893E33DBD58A48A22AE3C467364F9B7C59996C8`.
+
+Current readiness is `STAT_DATA = GO_PENDING_REVIEW`,
+`OPENING = GO_PENDING_REVIEW`, and `FREEZE_OBSERVER = GO`. Neither 002D nor
+D221 is merged, promoted, installed, repinned, or authorized for execution.
+
 Monday August 24 is terminal as `OPENING_EVIDENCE_PASS_WITH_FINDINGS` with
 `AUTOMATION_RUNTIME_PASS`, `PIPELINE_COMPLETE`, `EXECUTION_EVIDENCE_READY`,
 and `CANDIDATES_NO_EXECUTION_READY_PLAN_BY_POLICY`. BMNR was the sole qualified
