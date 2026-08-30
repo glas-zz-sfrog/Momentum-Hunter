@@ -332,10 +332,16 @@ requires a separate current-head reconciliation and qualification task.
   SHA-256 `F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`.
   F01-F04 are resolved; 48 focused tests, H18/18, T14/14, D28/28, and the
   disclosed post-F01-F04 207-owner result `OK (skipped=1)` pass. This
-  governance update satisfies A01/A20 subject to Git Steward commit/status
-  proof. The work remains uncommitted, unpushed, unmerged, undeployed,
-  uninstalled, and inactive, with no production consumer or protected change.
-  A prospective observer remains unauthorized.
+  governance closeout satisfies A01-A20 at 20/20. Reviewed artifact commit
+  `7f37024a66b512eb3fbfefe5a78b620e44d11c0a` has parent/base/local master/
+  `origin/master` `848d20a6bd5a49e9bb8e179eaa374109756801b0` and was pushed by ordinary
+  non-force update to `origin/codex/argus-current-edge-research-ledger-001`,
+  then read back at exact `7f37024a`. It is behind/ahead master `0/1`, upstream
+  `0/0`, and was clean immediately after artifact commit. It remains unmerged,
+  undeployed, uninstalled, and inactive, with no production consumer or
+  protected change. The final governance-closeout identity is the containing
+  doc-only commit recorded after commit by Git Steward and the external review
+  ZIP manifest. A prospective observer remains unauthorized.
 - `ARGUS-TRADE-REPLAY-001` is `PLANNED`, lane `PARALLEL_RESEARCH`, readiness
   `INVENTORY_READY`, gate `EVENT_LEVEL_ADMISSION_REQUIRED`. Failure-boundary
   and candidate inventory work may proceed without changing the prospective
@@ -482,11 +488,12 @@ next-action language preserved elsewhere cannot supersede this queue.
    dormant/read-only contracts and existing activation gates.
 4. `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001` is branch-only
    `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`.
-   Release Scribe governance is reconciled; Git Steward commit/status proof and
-   Steven review are next. This item retains its existing parallel-research
-   position and does not reorder `Immediate Next` or Ready / Next. It grants no
-   production collection, provider/schema, deployment, activation, observer,
-   or strategy authority.
+   Governance is reconciled at A20/20 and reviewed artifact commit `7f37024a`
+   is pushed and unmerged. Steven review and the separately controlled merge
+   gate are next. This item retains its existing parallel-research position and
+   does not reorder `Immediate Next` or Ready / Next. It grants no production
+   collection, provider/schema, deployment, activation, observer, or strategy
+   authority.
 
 ### 4. Blocked
 
@@ -3416,18 +3423,29 @@ Intended specialist architecture:
   `ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet
   Contract And Offline Proof`. Its Goal Charter, reuse inventory, implementation,
   focused proof, author crosswalk, and independent review are complete on the
-  task branch. Release Scribe governance now satisfies the previously pending
-  A01/A20 conditions subject to Git Steward commit/status proof. Production
-  observer wiring, live cutoff capture, activation, provider access, database
-  or schema work, and strategy influence remain out of scope.
+  task branch. Release Scribe governance satisfies A01-A20 at 20/20. Reviewed
+  artifact commit `7f37024a` is pushed and unmerged; the containing doc-only
+  closeout commit is recorded after commit by Git Steward and the external
+  review ZIP manifest. Production observer wiring, live cutoff capture,
+  activation, provider access, database or schema work, and strategy influence
+  remain out of scope.
 
 #### ARGUS-CURRENT-EDGE-RESEARCH-LEDGER-001 - Immutable Prospective Packet Contract And Offline Proof
 
 - Lifecycle: `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED /
   RESEARCH_ONLY`. Branch: `codex/argus-current-edge-research-ledger-001`.
   Exact branch/base at creation remains canonical accepted Strategy Science head
-  `848d20a6bd5a49e9bb8e179eaa374109756801b0`; current work is uncommitted,
-  unpushed, and unmerged pending Git Steward proof.
+  `848d20a6bd5a49e9bb8e179eaa374109756801b0`.
+- Reviewed artifact commit is
+  `7f37024a66b512eb3fbfefe5a78b620e44d11c0a`, with exact parent/base/local
+  master/`origin/master`
+  `848d20a6bd5a49e9bb8e179eaa374109756801b0`. An ordinary non-force push placed
+  `origin/codex/argus-current-edge-research-ledger-001` at exact `7f37024a` and
+  readback matched. The task branch is behind/ahead master `0/1`, upstream
+  `0/0`, and was clean immediately after artifact commit. It remains unmerged.
+  The governance-closeout record is this containing doc-only commit; its exact
+  final head is recorded after commit by Git Steward and the external review ZIP
+  manifest, avoiding an impossible self-reference.
 - Final module identity is SHA-256
   `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4`,
   Git blob `9e4a5df2170b59cee0efc57927bb4463f797d2d4`. Final focused-test identity is
@@ -3437,8 +3455,8 @@ Intended specialist architecture:
   `F952F620CFF63A7645194D220A4596A7DC3894428E842D241CEB09B4963ECFEB`
   issues `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`. It preserves
   the initial rejection and intermediate delta, resolves F01-F04 at final bytes,
-  and proves H18/18, T14/14, and D28/28. This documentation reconciliation
-  satisfies A01/A20, producing A20/20 subject to Git Steward commit/status proof.
+  and proves H18/18, T14/14, and D28/28. Documentation reconciliation satisfies
+  A01-A20 at 20/20.
 - Focused tests pass 48/48. The exact 207-owner regression result passes with
   one expected skip and is disclosed carry-forward evidence from immediately
   after F01-F04; it was not rerun for the final isolated lexical-only delta.
@@ -3455,10 +3473,10 @@ Intended specialist architecture:
   TradePlan/risk/entry/exit/alert authority, deployment, installation, and
   activation remain excluded. The general production freeze and Monday
   checkpoint ordering remain controlling.
-- Next gate: Git Steward commit/status proof, then Steven review. Do not call
-  this branch-only work complete or canonical, and do not merge, push, deploy,
-  install, activate, access a provider, or authorize the prospective observer
-  from this governance closeout alone.
+- Next gate: Steven review, followed only by a separately controlled merge
+  decision. Do not call this branch-only work complete or canonical, and do not
+  deploy, install, activate, access a provider, or authorize the prospective
+  observer from this governance closeout alone.
 
 #### ARGUS-DATA-CORPACTION-001 - Analysis Price-Basis And Security-Identity Integrity
 

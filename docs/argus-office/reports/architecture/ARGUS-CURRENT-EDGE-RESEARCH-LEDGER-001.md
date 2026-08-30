@@ -5,7 +5,7 @@
 **Branch:** `codex/argus-current-edge-research-ledger-001`
 **Lifecycle:** `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`
 **Independent gate:** `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`
-**Commit/push/merge:** `COMMIT_PENDING_GIT_STEWARD / UNPUSHED / UNMERGED`
+**Commit/push/merge:** `REVIEWED_ARTIFACT_COMMIT 7f37024a / PUSHED / UNMERGED`
 
 This is the authoritative author-side D01-D28 crosswalk for the smallest offline
 Current-Edge Research Ledger V1. It is not an independent-review disposition,
@@ -37,10 +37,11 @@ The initial independent second eye returned `NOT_ACCEPTED_REPAIRS_REQUIRED`.
 Author repair evidence now addresses technical findings F01-F04 without changing
 the P1/O1 packet or receipt identities. The final independent delta resolves
 F01-F04 and issues `ACCEPTED_FOR_STEVEN_REVIEW_PENDING_GOVERNANCE_CLOSEOUT`.
-This Release Scribe update satisfies the pending A01/A20 governance conditions
-subject to Git Steward commit/status proof. The result is ready for that proof
-and Steven review, not for a `COMPLETE`, canonical, production, deployed,
-installed, activated, or strategy-authority claim.
+Release Scribe governance satisfies A01-A20 at 20/20. Reviewed artifact commit
+`7f37024a66b512eb3fbfefe5a78b620e44d11c0a` is pushed and unmerged. The result
+is ready for the containing doc-only closeout commit and Steven review, not for
+a `COMPLETE`, canonical, production, deployed, installed, activated, or
+strategy-authority claim.
 
 ## D01-D28 crosswalk
 
@@ -71,7 +72,7 @@ installed, activated, or strategy-authority claim.
 | D23 | Secret/conflict/whitespace | `Verification ledger` records scoped secret-pattern, conflict-marker, link, structure, whitespace, and diff checks. | `PASS_AUTHOR` |
 | D24 | Independent disposition | Initial rejection and intermediate delta remain preserved; final second eye resolves F01-F04 at exact bytes and accepts the branch-only result for Steven review pending governance closeout. | `PASS_INDEPENDENT_ACCEPTED` |
 | D25 | Rollback | `Rollback` gives isolated paths, preconditions, validation, production nonmutation, and destructive-Git restriction. | `PASS_AUTHOR` |
-| D26 | Push/merge | `COMMIT_PENDING_GIT_STEWARD / UNPUSHED / UNMERGED`; deployment, installation, activation, and provider access remain none. | `PASS_AUTHOR` |
+| D26 | Push/merge | Reviewed artifact commit `7f37024a` is pushed and unmerged; the containing doc-only closeout avoids self-reference and deployment, installation, activation, and provider access remain none. | `PASS_AUTHOR` |
 | D27 | Remaining risks | `Remaining risks` covers real-data admission, rights, identity, filesystems, external TOCTOU, crash semantics, platform variance, and scope limits. | `PASS_AUTHOR` |
 | D28 | Smallest next directive | Only a separately bounded prospective observer may be considered after all review and Steven gates; it is not authorized here. | `PASS_AUTHOR` |
 
@@ -84,20 +85,26 @@ not a substitute for D24.
 |---|---|
 | Task branch | `codex/argus-current-edge-research-ledger-001` |
 | Accepted base | `848d20a6bd5a49e9bb8e179eaa374109756801b0` |
-| Branch `HEAD` | `848d20a6bd5a49e9bb8e179eaa374109756801b0` |
+| Reviewed artifact commit | `7f37024a66b512eb3fbfefe5a78b620e44d11c0a` |
+| Reviewed artifact parent/base | `848d20a6bd5a49e9bb8e179eaa374109756801b0` |
 | Local `master` | `848d20a6bd5a49e9bb8e179eaa374109756801b0` |
 | `origin/master` | `848d20a6bd5a49e9bb8e179eaa374109756801b0` |
-| `master...HEAD` | left `0`, right `0` |
-| Implementation commit | `NONE - UNCOMMITTED` |
+| `origin/codex/argus-current-edge-research-ledger-001` | `7f37024a66b512eb3fbfefe5a78b620e44d11c0a` - ordinary non-force push, exact readback |
+| `master...reviewed artifact` | behind `0`, ahead `1` |
+| `upstream...reviewed artifact` | behind `0`, ahead `0` |
+| Post-artifact-commit worktree | `CLEAN` |
+| Governance closeout record | `THIS CONTAINING DOC-ONLY COMMIT` - exact final head is recorded by Git Steward and external review ZIP manifest after commit |
 | Module SHA-256 | `A0FD9228BB1CB47C3251D641809787AFE29DB7417C806D1724D7F5D327282CE4` |
 | Module Git blob | `9e4a5df2170b59cee0efc57927bb4463f797d2d4` |
 | Test SHA-256 | `F0B05D282BBBD31D8301177B9D9EBEC2AD593DC55E6FD74934FC679C7F4B610B` |
 | Test Git blob | `ee5100dbc0d7759bf2dd4303c3cf2f340fde2bbb` |
 
-The implementation and tests are frozen by byte identity even though no commit
-exists. The worktree is intentionally dirty with task-owned files. A later
-source/test/proof-byte change invalidates these identities and requires focused
-reruns plus independent-review refresh.
+The implementation and tests are frozen by byte identity in reviewed artifact
+commit `7f37024a`. The artifact commit was pushed, read back exact, and clean
+immediately afterward. This documentation-only reconciliation intentionally
+follows that commit; its containing commit identity is recorded externally
+after commit. A later source/test/proof-byte change invalidates the frozen
+identities and requires focused reruns plus independent-review refresh.
 
 ## D03 - Reuse and ownership decision
 
@@ -676,12 +683,11 @@ The independent reviewer completed all eight required domains:
 8. Every protected category, truth T01-T14, acceptance condition A01-A20, and
    deliverable D01-D28.
 
-The final result is H18/18, T14/14, D28/28, with A01/A20 pending solely on the
-authorized governance reconciliation performed in this update. This update
-satisfies those documentation conditions, yielding A20/20 subject to Git
-Steward commit/status proof. The work remains branch-only and does not authorize
-merge, push, deployment, installation, activation, provider access, production
-capture, strategy influence, or a prospective observer.
+The final result is H18/18, T14/14, D28/28, and A01-A20 at 20/20. Governance
+closeout is satisfied. Reviewed artifact commit `7f37024a` is pushed and
+unmerged. The work remains branch-only and does not authorize merge,
+deployment, installation, activation, provider access, production capture,
+strategy influence, or a prospective observer.
 
 Any source, test, fixture, or proof-byte change requires identity refresh and
 reviewer adjudication.
@@ -690,7 +696,7 @@ reviewer adjudication.
 
 | Conditions | Author status | Basis |
 |---|---|---|
-| A01-A02 | `SATISFIED_PENDING_GIT_STEWARD_PROOF` | Exact base/branch preflight, collision-free inventory, and current Roadmap reconciliation; commit/status proof remains |
+| A01-A02 | `PASS` | Exact base/branch preflight, collision-free inventory, reconciled Roadmap, and reviewed artifact commit/push/readback proof |
 | A03-A11 | `PASS_AUTHOR` | Two contracts, canonical identity, immutable/idempotent writes, chronology, missingness, root isolation, and restart/tamper proof |
 | A12 | `PASS_AUTHOR` | H01-H18 exact category and nonmutation matrix |
 | A13-A14 | `PASS_AUTHOR` | Structural production non-authority and fifteen-category protected review |
@@ -698,12 +704,12 @@ reviewer adjudication.
 | A17 | `PASS_INDEPENDENT_ACCEPTED` | Final second eye resolved F01-F04 at exact final bytes and accepted for Steven review pending governance closeout |
 | A18 | `AUTHOR_AND_INDEPENDENT_CROSSWALK_COMPLETE` | D01-D28 pass 28/28 across author and independent artifacts |
 | A19 | `PASS_AUTHOR` | Isolated rollback below |
-| A20 | `SATISFIED_PENDING_GIT_STEWARD_PROOF` | Roadmap, Task Log, Branch Ledger, and this report now reconcile exact branch-only state |
+| A20 | `PASS` | Roadmap, Task Log, Branch Ledger, and this report reconcile exact pushed, unmerged branch-only state |
 
-All A01-A20 conditions are substantively satisfied by the implementation,
-independent review, and this governance update; Git Steward commit/status proof
-is still required. The directive remains `IMPLEMENTED_PENDING_MERGE`, not
-`COMPLETE`, canonical, production, deployed, installed, or active.
+All A01-A20 conditions pass 20/20 through implementation, independent review,
+governance reconciliation, and reviewed artifact Git proof. The directive
+remains `IMPLEMENTED_PENDING_MERGE`, not `COMPLETE`, canonical, production,
+deployed, installed, or active.
 
 ## D25 - Rollback
 
@@ -727,9 +733,14 @@ by this procedure and requires separate authority.
 ## D26 - Commit, push, merge, deployment, and activation
 
 ```text
-IMPLEMENTATION_COMMIT = COMMIT_PENDING_GIT_STEWARD
-BRANCH_STATE = COMMIT_PENDING_GIT_STEWARD / UNPUSHED / UNMERGED
-PUSH = NONE
+REVIEWED_ARTIFACT_COMMIT = 7f37024a66b512eb3fbfefe5a78b620e44d11c0a
+GOVERNANCE_CLOSEOUT_RECORD = THIS CONTAINING DOC-ONLY COMMIT (exact final head is recorded by Git Steward and external review ZIP manifest after commit)
+BRANCH_STATE = PUSHED / UNMERGED
+REMOTE_BRANCH = origin/codex/argus-current-edge-research-ledger-001 @ 7f37024a66b512eb3fbfefe5a78b620e44d11c0a
+MASTER_DIVERGENCE = BEHIND 0 / AHEAD 1
+UPSTREAM_DIVERGENCE = BEHIND 0 / AHEAD 0
+POST_ARTIFACT_COMMIT_WORKTREE = CLEAN
+PUSH = ORDINARY_NON_FORCE / READBACK_EXACT
 MERGE = NONE
 CANONICAL_INTEGRATION = NONE
 DEPLOYMENT = NONE
@@ -741,8 +752,9 @@ PRODUCTION_BEHAVIOR_CHANGE = NONE
 
 The truthful lifecycle is
 `IMPLEMENTED_PENDING_MERGE / INDEPENDENT_ACCEPTED / RESEARCH_ONLY`.
-Git Steward commit/status proof and Steven review remain. Branch-only work is
-not `COMPLETE`, canonical, production, deployed, installed, or active.
+The reviewed artifact is pushed and unmerged; Steven review and a separately
+controlled merge decision remain. Branch-only work is not `COMPLETE`, canonical,
+production, deployed, installed, or active.
 
 ## D27 - Remaining risks
 
@@ -765,9 +777,9 @@ not `COMPLETE`, canonical, production, deployed, installed, or active.
   production non-consumption remains an enforced architecture gate.
 - The simple V1 scans complete packet/receipt sets on reload; scale and latency
   are unmeasured and do not justify a database/service expansion.
-- F01-F04 are independently resolved. This governance update closes F05/A01/A20
-  substantively, but exact commit/status proof remains with Git Steward and
-  branch-only acceptance must not be mistaken for merge or canonical status.
+- F01-F04 are independently resolved and governance closes F05/A01/A20 at
+  20/20. Branch-only acceptance and a pushed artifact must not be mistaken for
+  merge or canonical status.
 
 Broad historical, longitudinal, statistical, model-performance, alpha, or
 production-fitness claims remain blocked.
@@ -789,8 +801,9 @@ remain unchanged.
 
 ## Agent report
 
-- **Branch:** `codex/argus-current-edge-research-ledger-001` at uncommitted base
-  HEAD `848d20a6bd5a49e9bb8e179eaa374109756801b0`.
+- **Branch:** `codex/argus-current-edge-research-ledger-001`; reviewed artifact
+  commit `7f37024a66b512eb3fbfefe5a78b620e44d11c0a`, parent/base/master/
+  `origin/master` `848d20a6bd5a49e9bb8e179eaa374109756801b0`, pushed exact and unmerged.
 - **Scope:** Author-side D01-D28 evidence packet for the smallest offline V1;
   independent final delta accepted and governance reconciled for Git Steward
   proof and Steven review.
@@ -807,16 +820,20 @@ remain unchanged.
   the final lexical-only delta. No production behavior changed.
 - **Protected:** All fifteen Goal Charter categories report
   `NO CHANGE`.
-- **Push/merge:** `COMMIT_PENDING_GIT_STEWARD / UNPUSHED / UNMERGED`. No
-  deployment, installation, activation, provider access, or production action
-  occurred.
+- **Push/merge:** Reviewed artifact `7f37024a` was ordinarily pushed to the task
+  remote and read back exact; branch/master is `0/1`, upstream `0/0`, clean
+  immediately post-commit, and unmerged. This containing doc-only commit is the
+  governance-closeout record; its final head is recorded after commit by Git
+  Steward and the external review ZIP manifest. No deployment, installation,
+  activation, provider access, or production action occurred.
 - **Risks:** Real-data admission, filesystem/platform and external-TOCTOU
-  residuals, caller misuse, unmeasured scale, and pending Git/Steven review
+  residuals, caller misuse, unmeasured scale, and pending Steven/merge review
   remain. Independent acceptance grants no production fitness.
 - **Manual QA:** None; this is nonvisual offline infrastructure and governance.
-- **Open questions:** None for governance closeout. Git Steward commit/status
-  proof and Steven review remain.
-- **Recommendation:** Ready for Git Steward commit/status proof and Steven
-  review as branch-only research infrastructure. Do not call it complete or
-  canonical; do not merge, push, deploy, install, activate, access a provider,
-  or authorize a prospective observer from this closeout alone.
+- **Open questions:** None for governance closeout. Steven review and the
+  separately controlled merge decision remain.
+- **Recommendation:** Ready for the containing doc-only commit, external
+  manifest record, and Steven review as branch-only research infrastructure. Do
+  not call it complete or canonical; do not merge, deploy, install, activate,
+  access a provider, or authorize a prospective observer from this closeout
+  alone.
