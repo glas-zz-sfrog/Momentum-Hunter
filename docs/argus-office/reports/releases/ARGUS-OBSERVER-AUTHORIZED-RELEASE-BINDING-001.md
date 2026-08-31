@@ -151,6 +151,14 @@ unchanged.
 - Opening authorized-channel pointer: byte-unchanged.
 - Automation, Continuous Runtime, and Continuous Writer services:
   `Running / Automatic`, unchanged.
+- The task made no provider call and did not read or write credential contents.
+  During the long verification run, the independently installed research-only
+  Continuous Runtime naturally advanced a discovery cycle at
+  2026-08-31T19:05:20Z. Its Finviz source evidence and writer records have that
+  timestamp, and encrypted secrets.bin refreshed at
+  2026-08-31T19:05:20.9107488Z. The account-binding and refresh-lock files
+  remained byte-identical. This is preserved as authorized external production
+  activity, not task provider contact or task-caused auth mutation.
 
 ## Files Changed
 
@@ -172,10 +180,12 @@ fixture, opening-closure proof, focused log, and full-suite log.
 ## Protected Boundary And Risk
 
 No scheduler, installed observer, runtime, release, channel, manifest, service,
-provider, canonical checkout, Paper, Shadow, brokerage, account, position, or
-order state was modified. The branch is intentionally unmerged and undeployed.
-Until a separately authorized activation replaces future fixed heartbeat values
-with this verifier, production behavior remains unchanged.
+canonical checkout, Paper, Shadow, brokerage, account, position, or order state
+was modified by this task. The independently running Continuous service's
+ordinary auth refresh is recorded separately above. The branch is intentionally
+unmerged and undeployed. Until a separately authorized activation replaces
+future fixed heartbeat values with this verifier, production behavior remains
+unchanged.
 
 ## Required Agent Closeout
 
@@ -188,8 +198,9 @@ with this verifier, production behavior remains unchanged.
 - Evidence for changed behavior: Monday fixed-F18 replay fails while the same
   observation resolves and passes authorized 1C49 in current-authorized mode.
 - Protected areas reviewed: all listed above; unchanged.
-- Push/merge status: implementation committed; branch push and second-eye seal
-  are the remaining closeout actions. Merge and deployment are unauthorized.
+- Push/merge status: implementation and qualification commits are pushed;
+  second-eye sealing follows the frozen documentation head. Merge and
+  deployment are unauthorized.
 - Risks: activation is intentionally deferred; future observer creation must
   invoke the reviewed current-authorized verifier rather than copy release IDs.
 - Manual QA: none; this task is nonvisual.
@@ -225,5 +236,8 @@ READY_FOR_SECOND_EYE_REVIEW = PENDING_PACKAGE
 MASTER_CHANGED_BY_BUILDER = NO
 PRODUCTION_CHECKOUT_CHANGED = NO
 PAPER_OR_EXECUTION_AUTHORITY_USED = NO
+TASK_PROVIDER_CONTACT = NO
+PROVIDER_AUTH_STATE_CHANGED_BY_TASK = NO
+AUTHORIZED_EXTERNAL_PROVIDER_AUTH_REFRESH_OBSERVED = YES
 MERGE_AUTHORIZED = NO
 ```
