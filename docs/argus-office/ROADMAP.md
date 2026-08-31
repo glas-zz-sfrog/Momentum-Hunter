@@ -140,8 +140,8 @@ manifest hashes remain byte-identical to the pre-merge baseline; no deployment,
 GUI, provider, Paper, Shadow, broker, account, position, or order action
 occurred. Unknown instruments remain execution-blocked.
 
-`ARGUS-STAT-DATA-002` is `LIVE_CANARY_FAILED / SECOND_EYE_REVIEW_REQUIRED /
-RESEARCH_ONLY`
+`ARGUS-STAT-DATA-002` is `COMPLETE / CANONICAL_LINEAGE /
+SUPERSEDED_BY_002D / RESEARCH_ONLY`
 on branch `codex/ARGUS-STAT-DATA-002`. Implementation commit
 `ebf1dbfd93a71e838a0ef4d6f90675b43d82d9e6` activates the existing immutable
 opportunity/Continuous denominator only through an explicit write-once
@@ -160,11 +160,12 @@ regressions. The August 28 one-time canary created its immutable activation at
 tuple. The sample therefore remains at zero natural observations, zero unique
 members, and zero outcomes. The failed evidence and sanitized second-eye ZIP
 `951F49D219E9842D286E10F09C5C28C51B267A5FD584929A58630E617E27508B`
-are preserved for independent review. No rerun, repair, merge, deployment,
-Paper, Shadow, broker, account, position, or order authority is granted.
+remain immutable historical failure evidence. The repaired serial lineage is
+now canonical through accepted 002D. No deployment, Paper, Shadow, broker,
+account, position, or order authority is granted.
 
-`ARGUS-STAT-DATA-002A` is `LIVE_CANARY_FAILED /
-SECOND_EYE_REVIEW_REQUIRED / IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY` on
+`ARGUS-STAT-DATA-002A` is `COMPLETE / CANONICAL_LINEAGE /
+SUPERSEDED_BY_002D / RESEARCH_ONLY` on
 branch `codex/ARGUS-STAT-DATA-002A` at implementation head
 `415a3e2e5432420bde2ffee9ada0a28c2e55c65f`. The repaired activation loader
 normalizes the exact JSON population array to the canonical tuple before
@@ -185,11 +186,12 @@ members remain zero, and the canary was not rerun. Its mandatory sanitized
 second-eye ZIP has 237 files, 236 manifest entries, passing pre-ZIP and
 extracted-ZIP verification, and SHA-256
 `6ADE90F1B88B6EB20D1CD005FCCBD592AA08557376A103E9F8AEC39FFC5B96FC`.
-No merge, deployment, Paper, Shadow, broker, account, position, or order action
-is authorized pending independent review.
+The failed canary remains immutable historical evidence. Its repair is included
+in the accepted canonical 002D lineage; no deployment, Paper, Shadow, broker,
+account, position, or order action followed from integration.
 
-`ARGUS-STAT-DATA-002B` is `LIVE_CANARY_FAILED /
-SECOND_EYE_REVIEW_REQUIRED / IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY` on
+`ARGUS-STAT-DATA-002B` is `COMPLETE / CANONICAL_LINEAGE /
+SUPERSEDED_BY_002D / RESEARCH_ONLY` on
 branch `codex/ARGUS-STAT-DATA-002B` at executable canary head
 `0b857262321ede0736079e661cffa981250b9f2b`. The orchestration repair keeps
 runtime/checkpoint authority under a unique `%TEMP%` root, begins cleanup at
@@ -214,11 +216,12 @@ cleanup, hash export, temp retirement, sanitization, 269/269 manifest
 verification, and pre-ZIP/extracted 97/97 tests pass. The mandatory 270-file
 packet SHA-256 is
 `96822561FB52029CEA0A4CF4AD1BF6030001E02263815C10E109AED2F59C9690`.
-No repair, rerun, merge, deployment, Paper, Shadow, account, position, broker,
-or order action is authorized before independent review.
+The failed canary and accounting discrepancy remain immutable historical
+evidence. The repaired lineage is canonical through accepted 002D; no
+deployment, Paper, Shadow, account, position, broker, or order action occurred.
 
-`ARGUS-STAT-DATA-002C` is `IMPLEMENTED_PENDING_LIVE_CANARY /
-SCHWAB_PREFLIGHT_PROVEN / RESEARCH_ONLY` on branch
+`ARGUS-STAT-DATA-002C` is `COMPLETE / CANONICAL_LINEAGE /
+SUPERSEDED_BY_002D / SCHWAB_PREFLIGHT_PROVEN / RESEARCH_ONLY` on branch
 `codex/ARGUS-STAT-DATA-002C` at pushed implementation head
 `4001bfdd857b5104561aaf1c380e033c9d60aca4`. Provider-contact accounting now
 uses the hash-verified forensic export inventory at `payload/source-evidence`
@@ -238,13 +241,12 @@ Shadow, or orders. Full discovery passes 2,865 tests with one expected Windows
 skip. The offline exact-path/package rehearsal passes pre-ZIP and extracted
 103/103 tests, manifest and secret checks; its 250-file ZIP SHA-256 is
 `606DFE4E4619EFDD40B3CBCC759F065716496DC621FB8FC8ACE53DE715788DA3`.
-Insufficient Friday session time correctly prevented a shortened canary. One
-observer is active for Monday August 31 at 08:30 CT to rerun the fresh Schwab
-gate and, only if passing, start the authorized 30-minute natural canary. Merge,
-deployment, Continuous Paper, Shadow, and execution authority remain prohibited.
+Insufficient Friday session time correctly prevented a shortened canary. The
+Monday August 31 successor preflight and natural canary later passed under
+002D. This source is now part of the accepted canonical lineage; deployment,
+Continuous Paper, Shadow, and execution authority remain unavailable.
 
-`ARGUS-STAT-DATA-002D` is `LIVE_CANARY_PASS / SECOND_EYE_REVIEW_REQUIRED /
-IMPLEMENTED_PENDING_MERGE / RESEARCH_ONLY` on branch
+`ARGUS-STAT-DATA-002D` is `COMPLETE / CANONICAL_INTEGRATED / RESEARCH_ONLY` on branch
 `codex/ARGUS-STAT-DATA-002D`. Frozen executable head
 `039d4e0f71c082d07d0a774d4c2d3a9dc20888b9` completed the exact live `run-all`
 path from 08:34:36 through 09:04:45 CT on August 31 after a fresh passing Schwab
@@ -259,8 +261,17 @@ hashing, sanitation, manifest verification, and pre-ZIP/extracted 107/107 tests
 pass. The 1,294-file mandatory packet has 1,293 manifest entries and SHA-256
 `5702F113BC8E2EB9BBCD1A3E5DDD53C33E2C3F2F4B52CF56A816380AE4C5B991`.
 The one-time automation was deleted; no recurring or future occurrence remains.
-No merge, deployment, Paper, Shadow, account, position, broker, or order
-authority is granted before independent review.
+Independent second-eye review accepted the packet and live prospective
+denominator result. `ARGUS-STAT-DATA-002E` then proved the post-package delta
+was governance-only and fast-forwarded the exact 13-commit serial lineage from
+canonical `23ee162373654e1db91af4c19f75bbc7887e3174` to
+`481a37c796e20195fb6780db73588402d91b9414` without conflicts or history
+rewriting. Canonical runtime, test, and tool bytes are identical to reviewed
+executable head `039d4e0f71c082d07d0a774d4c2d3a9dc20888b9`. Compileall, 146 focused tests,
+and all 2,869 discovered tests pass with one expected skip. Secret/capability,
+protected-path, and installed-state nonmutation checks pass. No deployment,
+Paper, Shadow, account, position, broker, order, service, scheduler, GUI, or
+Opening runtime action occurred.
 
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
@@ -434,13 +445,12 @@ requires a separate current-head reconciliation and qualification task.
 
 ### Immediate Next
 
-Preserve the terminal `ARGUS-STAT-DATA-002D` evidence root and mandatory ZIP
-unchanged and await independent second-eye review. The live canary passed, but
-merge, deployment, instrument-classification implementation, Continuous Paper,
-Shadow, and downstream work remain unauthorized until a separate directive.
-Authoritative instrument subtype/leverage classification remains a pre-Paper
-gate. The authoritative ordered sequence is maintained only in `Next / Queue`
-below.
+Preserve the accepted `ARGUS-STAT-DATA-002D` evidence root and mandatory ZIP
+unchanged. The complete accepted STAT-DATA lineage is canonical and remains
+research-only and undeployed. A separately authorized three-lane governance
+setup is ready next; it was not established by 002E. Authoritative instrument
+subtype/leverage classification remains a pre-Paper gate. The authoritative
+ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
 
@@ -509,17 +519,16 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-STAT-DATA-002D` is terminal `LIVE_CANARY_PASS` at frozen executable
-   head `039d4e0`. Its fresh provider preflight, natural 30-minute run, restart,
-   denominator accounting, anti-hindsight verification, resource retirement,
-   and mandatory self-contained package pass. Independent second-eye review is
-   the only active next gate.
+1. No STAT-DATA integration task remains active. `ARGUS-STAT-DATA-002E` is
+   complete at canonical `481a37c796e20195fb6780db73588402d91b9414`; source
+   integration is proven and deployment remains held.
 
 ### 2. Ready / Next
 
 1. Preserve every prior failed STAT-DATA canary, the 002C repaired replay, and
-   the terminal 002D package. Await independent review; no merge or downstream
-   activation is authorized before a separate directive.
+   the accepted terminal 002D package. Begin the three-lane governance setup
+   only under its own directive; source integration grants no deployment or
+   activation authority.
 2. Preserve all prior failed canaries, the empty prospective samples, and all failed
    activation/terminal evidence exactly.
 3. Preserve the accepted Producer V4 packet and original 001D evidence.
@@ -552,9 +561,9 @@ next-action language preserved elsewhere cannot supersede this queue.
    successful physical exact-path acceptance, authoritative instrument
    classification, canonical reconciliation, complete requalification, and
    disabled-install proof.
-3. `ARGUS-STAT-DATA-002D`: live acceptance passed and is packaged; merge and
-   downstream activation remain blocked until independent adjudication and a
-   separate integration directive.
+3. STAT-DATA deployment and prospective production activation remain blocked
+   despite accepted canonical source integration; they require separate
+   governance and deployment authority.
 4. R034: blocked on explicit destructive approval.
 5. Continuous/live order authority: blocked on separate Paper, safety,
    account/broker, prospective-evidence, and Steven decision gates.
