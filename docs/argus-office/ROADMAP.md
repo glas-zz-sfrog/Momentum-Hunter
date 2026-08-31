@@ -447,10 +447,14 @@ requires a separate current-head reconciliation and qualification task.
 
 Preserve the accepted `ARGUS-STAT-DATA-002D` evidence root and mandatory ZIP
 unchanged. The complete accepted STAT-DATA lineage is canonical and remains
-research-only and undeployed. A separately authorized three-lane governance
-setup is ready next; it was not established by 002E. Authoritative instrument
-subtype/leverage classification remains a pre-Paper gate. The authoritative
-ordered sequence is maintained only in `Next / Queue` below.
+research-only and undeployed. `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` has
+established the three clean detached lane roots and governance artifacts from
+accepted canonical `14f7b24783146fc2dcf7ad64f205aac11b19d392`; it remains
+`IMPLEMENTED_PENDING_INTEGRATION` until its disposable integration qualification
+and canonical fast-forward complete. No Science, Opening Engine, or GUI task has
+started. Authoritative instrument subtype/leverage classification remains a
+pre-Paper gate. The authoritative ordered sequence is maintained only in
+`Next / Queue` below.
 
 ### Recent Material Completions
 
@@ -519,16 +523,17 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No STAT-DATA integration task remains active. `ARGUS-STAT-DATA-002E` is
-   complete at canonical `481a37c796e20195fb6780db73588402d91b9414`; source
-   integration is proven and deployment remains held.
+1. `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` is governance-only and
+   `IMPLEMENTED_PENDING_INTEGRATION` from accepted canonical
+   `14f7b24783146fc2dcf7ad64f205aac11b19d392`. The three persistent lane roots
+   are idle, detached, and contain no active task.
 
 ### 2. Ready / Next
 
-1. Preserve every prior failed STAT-DATA canary, the 002C repaired replay, and
-   the accepted terminal 002D package. Begin the three-lane governance setup
-   only under its own directive; source integration grants no deployment or
-   activation authority.
+1. Qualify the governance-only candidate through the serialized disposable
+   integration worktree, then fast-forward canonical only if protected-state,
+   diff, secret, and lane-isolation checks remain clean. This grants no lane
+   task, deployment, or activation authority.
 2. Preserve all prior failed canaries, the empty prospective samples, and all failed
    activation/terminal evidence exactly.
 3. Preserve the accepted Producer V4 packet and original 001D evidence.
@@ -570,6 +575,10 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 5. Deferred / Later
 
+- `OBSERVER-AUTHORIZED-RELEASE-BINDING-001` will bind Freeze Observer
+  expectations to the currently authorized reviewed Opening release/channel
+  identity instead of a stale task-specific predecessor constant. It is recorded
+  only; no observer or runtime byte is changed by the governance setup.
 - `ARGUS-COMMAND-CENTER-001` is a deferred question-first operator read-model/UI
   milestone. It follows the Continuous producer and the relevant historical,
   catalyst, and decision-read interfaces; no WPF work is authorized now.

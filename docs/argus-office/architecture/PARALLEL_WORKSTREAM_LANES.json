@@ -1,0 +1,205 @@
+{
+  "SCHEMA_VERSION": 1,
+  "ESTABLISHED_BY": "ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001",
+  "ACCEPTED_CANONICAL_AT_ESTABLISHMENT": "14f7b24783146fc2dcf7ad64f205aac11b19d392",
+  "PRODUCTION_CHECKOUT": {
+    "PATH": "C:\\Users\\steve\\OneDrive\\Documents\\Investing",
+    "PERMANENT_BRANCH": "master",
+    "MODE": "ACCEPTED_INTEGRATION_ONLY",
+    "DEVELOPMENT_ALLOWED": false,
+    "TEST_EXECUTION_ALLOWED": false
+  },
+  "ACTIVE_TASK_RECORD_CONTRACT": {
+    "REQUIRED_FIELDS": [
+      "LANE",
+      "TASK_ID",
+      "BASE_CANONICAL_SHA",
+      "BRANCH",
+      "WORKTREE",
+      "OWNED_PATHS",
+      "PROTECTED_PATHS",
+      "ALLOWED_CAPABILITIES",
+      "PROHIBITED_CAPABILITIES",
+      "EVIDENCE_ROOT",
+      "TEMP_RUNTIME_ROOT",
+      "PACKAGE_ROOT",
+      "PACKAGE_GATE",
+      "SECOND_EYE_GATE",
+      "MERGE_GATE"
+    ],
+    "BRANCH_PREFIX": "codex/",
+    "BASE_CANONICAL_IMMUTABLE": true,
+    "MID_TASK_REBASE_OR_SYNC_ALLOWED": false,
+    "REVIEWED_HEAD_IMMUTABLE": true,
+    "OWNED_PATH_DIFF_REQUIRED": true,
+    "PROTECTED_PATH_DIFF_REQUIRED": true,
+    "BUILDER_MERGE_AUTHORIZED": false
+  },
+  "LANES": [
+    {
+      "LANE": "SCIENCE",
+      "PERSISTENT_WORKTREE": "C:\\Users\\steve\\AppData\\Local\\MomentumHunter\\worktrees\\LANE-SCIENCE",
+      "IDLE_STATE": "DETACHED_AT_ACCEPTED_CANONICAL",
+      "IDLE_HEAD_AT_ESTABLISHMENT": "14f7b24783146fc2dcf7ad64f205aac11b19d392",
+      "ACTIVE_TASK": null,
+      "DEFAULT_OWNED_PATHS": [
+        "task-declared statistical/research/replay/evidence modules",
+        "task-matched tests",
+        "unique task reports and research artifacts"
+      ],
+      "DEFAULT_PROTECTED_PATHS": [
+        "src/",
+        "momentum_hunter/automation_opening_capture.py",
+        "momentum_hunter/opening_runtime_*.py",
+        "production services, schedulers, manifests, and installed runtimes",
+        "broker/account/position/order modules"
+      ],
+      "DEFAULT_ALLOWED_CAPABILITIES": [
+        "offline research",
+        "read-only replay",
+        "isolated evidence production",
+        "approved-environment test execution without mutation"
+      ],
+      "DEFAULT_PROHIBITED_CAPABILITIES": [
+        "GUI mutation outside an explicit cross-lane contract",
+        "opening release or installed runtime mutation",
+        "service or scheduler mutation",
+        "Paper, Shadow, broker, account, position, or order authority"
+      ],
+      "EVIDENCE_ROOT_TEMPLATE": "C:\\Users\\steve\\OneDrive\\Documents\\ArgusReviewBundles\\LANE-SCIENCE\\<TASK_ID>-<BASE_CANONICAL_SHORT>",
+      "TEMP_RUNTIME_ROOT_TEMPLATE": "%TEMP%\\MomentumHunter-LANE-SCIENCE-<TASK_ID>-<BASE_CANONICAL_SHORT>",
+      "PACKAGE_ROOT_TEMPLATE": "C:\\Users\\steve\\OneDrive\\Documents\\ArgusReviewBundles\\LANE-SCIENCE\\packages\\<TASK_ID>-<FROZEN_HEAD>",
+      "PACKAGE_GATE": "NEW_AUTONOMOUS_OR_STATISTICAL_NATURAL_RUNTIME_CLAIM_REQUIRES_ZIP",
+      "SECOND_EYE_GATE": "REQUIRED_WHEN_PACKAGE_GATE_TRIGGERS",
+      "MERGE_GATE": "SERIALIZED_INTEGRATION_STEWARD_ONLY"
+    },
+    {
+      "LANE": "OPENING_ENGINE",
+      "PERSISTENT_WORKTREE": "C:\\Users\\steve\\AppData\\Local\\MomentumHunter\\worktrees\\LANE-OPENING-ENGINE",
+      "IDLE_STATE": "DETACHED_AT_ACCEPTED_CANONICAL",
+      "IDLE_HEAD_AT_ESTABLISHMENT": "14f7b24783146fc2dcf7ad64f205aac11b19d392",
+      "ACTIVE_TASK": null,
+      "DEFAULT_OWNED_PATHS": [
+        "task-declared opening/runtime/provider/environment modules",
+        "task-matched tests",
+        "unique task release and qualification reports"
+      ],
+      "DEFAULT_PROTECTED_PATHS": [
+        "src/",
+        "prospective/statistical membership and outcome semantics",
+        "strategy/scoring/readiness semantics outside explicit task scope",
+        "Paper, Shadow, broker/account/position/order modules",
+        "production services and schedulers unless explicitly authorized"
+      ],
+      "DEFAULT_ALLOWED_CAPABILITIES": [
+        "offline opening/runtime qualification",
+        "read-only provider qualification when explicitly authorized",
+        "isolated runtime identity and environment proof",
+        "approved-environment test execution without mutation"
+      ],
+      "DEFAULT_PROHIBITED_CAPABILITIES": [
+        "statistical semantic mutation",
+        "GUI mutation",
+        "strategy changes made to satisfy runtime qualification",
+        "Paper, Shadow, broker, account, position, or order authority"
+      ],
+      "EVIDENCE_ROOT_TEMPLATE": "C:\\Users\\steve\\OneDrive\\Documents\\ArgusReviewBundles\\LANE-OPENING-ENGINE\\<TASK_ID>-<BASE_CANONICAL_SHORT>",
+      "TEMP_RUNTIME_ROOT_TEMPLATE": "%TEMP%\\MomentumHunter-LANE-OPENING-ENGINE-<TASK_ID>-<BASE_CANONICAL_SHORT>",
+      "PACKAGE_ROOT_TEMPLATE": "C:\\Users\\steve\\OneDrive\\Documents\\ArgusReviewBundles\\LANE-OPENING-ENGINE\\packages\\<TASK_ID>-<FROZEN_HEAD>",
+      "PACKAGE_GATE": "NEW_EXECUTABLE_RUNTIME_ENVIRONMENT_IDENTITY_OR_NATURAL_RUNTIME_CLAIM_REQUIRES_ZIP",
+      "SECOND_EYE_GATE": "REQUIRED_WHEN_PACKAGE_GATE_TRIGGERS",
+      "MERGE_GATE": "SERIALIZED_INTEGRATION_STEWARD_ONLY"
+    },
+    {
+      "LANE": "GUI",
+      "PERSISTENT_WORKTREE": "C:\\Users\\steve\\AppData\\Local\\MomentumHunter\\worktrees\\LANE-GUI",
+      "IDLE_STATE": "DETACHED_AT_ACCEPTED_CANONICAL",
+      "IDLE_HEAD_AT_ESTABLISHMENT": "14f7b24783146fc2dcf7ad64f205aac11b19d392",
+      "ACTIVE_TASK": null,
+      "DEFAULT_OWNED_PATHS": [
+        "src/",
+        "tests-dotnet/",
+        "task-declared presentation-only Python read models",
+        "unique task visual reports and screenshots"
+      ],
+      "DEFAULT_PROTECTED_PATHS": [
+        "Python strategy, provider, readiness, TradePlan, and statistical semantics",
+        "production services, schedulers, manifests, and installed runtimes",
+        "broker/account/position/order modules"
+      ],
+      "DEFAULT_ALLOWED_CAPABILITIES": [
+        "WPF and Command Center development",
+        "read-only presentation and read-model development",
+        "isolated visual test execution",
+        "screenshot production for exact operator review"
+      ],
+      "DEFAULT_PROHIBITED_CAPABILITIES": [
+        "strategy or provider semantic mutation",
+        "readiness, TradePlan, or statistical membership mutation",
+        "service or scheduler mutation",
+        "Paper, Shadow, broker, account, position, or order authority"
+      ],
+      "EVIDENCE_ROOT_TEMPLATE": "C:\\Users\\steve\\OneDrive\\Documents\\ArgusReviewBundles\\LANE-GUI\\<TASK_ID>-<BASE_CANONICAL_SHORT>",
+      "TEMP_RUNTIME_ROOT_TEMPLATE": "%TEMP%\\MomentumHunter-LANE-GUI-<TASK_ID>-<BASE_CANONICAL_SHORT>",
+      "PACKAGE_ROOT_TEMPLATE": "C:\\Users\\steve\\OneDrive\\Documents\\ArgusReviewBundles\\LANE-GUI\\packages\\<TASK_ID>-<FROZEN_HEAD>",
+      "PACKAGE_GATE": "SCREENSHOTS_AND_EXACT_MANUAL_VISUAL_ACCEPTANCE_NORMALLY_SUFFICIENT",
+      "SECOND_EYE_GATE": "ZIP_ONLY_WHEN_EXPLICITLY_REQUIRED",
+      "MERGE_GATE": "SERIALIZED_INTEGRATION_STEWARD_ONLY_AFTER_VISUAL_ACCEPTANCE"
+    }
+  ],
+  "CROSS_LANE_CONTRACT_GATE": {
+    "ESTABLISHED": true,
+    "DISCOVERING_LANE_MAY_IMPLEMENT_SHARED_CHANGE": false,
+    "REQUIRED_CLASSIFICATION": "CROSS_LANE_CONTRACT_CHANGE_REQUIRED",
+    "REQUIRED_ACTION": "STOP_AND_CREATE_SEPARATE_SERIALIZED_CONTRACT_TASK_FROM_ACCEPTED_CANONICAL"
+  },
+  "SHARED_GOVERNANCE": {
+    "STEWARD": "MH - Engines / Integration Steward",
+    "STEWARD_OWNED_PATHS": [
+      "docs/argus-office/ROADMAP.md",
+      "docs/argus-office/BRANCH_LEDGER.md",
+      "docs/argus-office/TASK_LOG.md"
+    ],
+    "BUILDER_EXCEPTION_REQUIRES_EXPLICIT_DECLARATION": true
+  },
+  "EXTERNAL_STATE": {
+    "UNIQUE_PER_TASK": [
+      "EVIDENCE_ROOT",
+      "TEMP_RUNTIME_ROOT",
+      "PACKAGE_ROOT",
+      "checkpoint identities",
+      "writer ownership",
+      "package staging",
+      "build outputs",
+      "scheduler identities"
+    ],
+    "CROSS_LANE_REUSE": "READ_ONLY_AND_EXPLICITLY_DECLARED_ONLY",
+    "SHARED_APPROVED_PYTHON_ENVIRONMENT_MUTATION_ALLOWED": false,
+    "PRODUCTION_SERVICE_OR_SCHEDULER_MUTATION_ALLOWED": false
+  },
+  "INTEGRATION_TRAIN": {
+    "MODE": "SERIALIZED_ONE_ACCEPTED_LANE_AT_A_TIME",
+    "STEWARD": "MH - Engines / Integration Steward",
+    "DISPOSABLE_WORKTREE_TEMPLATE": "C:\\Users\\steve\\AppData\\Local\\MomentumHunter\\worktrees\\INTEGRATION-<TASK_ID>",
+    "BUILDER_SELF_MERGE_ALLOWED": false,
+    "EXECUTABLE_TEST_TOOL_CONFLICT_ACTION": "STOP_NEW_INTEGRATION_REVIEW_REQUIRED",
+    "MASTER_ADVANCE_REQUIRES": [
+      "clean synchronized current master",
+      "exact accepted source head",
+      "accepted second-eye decision when required",
+      "disposable integration worktree qualification",
+      "conflict classification",
+      "equivalence and applicable Hard Chew",
+      "secret and protected-path checks",
+      "non-force origin push"
+    ]
+  },
+  "DEFERRED_TASKS": [
+    {
+      "TASK_ID": "OBSERVER-AUTHORIZED-RELEASE-BINDING-001",
+      "STATUS": "DEFERRED_NOT_IMPLEMENTED",
+      "INTENT": "Bind Freeze Observer expectations to the currently authorized reviewed Opening release/channel identity instead of a stale task-specific predecessor constant.",
+      "AUTHORIZED_BY_THIS_REGISTRY": false
+    }
+  ]
+}

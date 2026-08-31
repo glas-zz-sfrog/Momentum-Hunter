@@ -90,5 +90,14 @@ Every agent report must include:
 ## Branch Policy
 Use task branches. Git Steward may fast-forward verified nonvisual work into local `master` and perform a non-force backup push under standing delegation when the worktree is clean, the branch is an ancestor-compatible fast-forward, protected-path review passes, and secret scanning is clean. Visual/UI work waits for Steven's manual acceptance.
 
+## Parallel Workstream Governance
+- The production checkout at `C:\Users\steve\OneDrive\Documents\Investing` remains clean on `master` and is used only to receive accepted serialized integrations. It is not a development or test worktree.
+- Parallel implementation uses one of three persistent detached AppData lane roots: `LANE-SCIENCE`, `LANE-OPENING-ENGINE`, or `LANE-GUI`. Each authorized task creates a short-lived `codex/` task branch in its assigned lane from an immutable `BASE_CANONICAL_SHA`; a lane does not accumulate work on a permanent branch.
+- Every task must register the fields and honor the path, capability, external-state, package, second-eye, and merge gates defined in `docs/argus-office/architecture/PARALLEL_WORKSTREAM_LANES.json` and `docs/argus-office/architecture/PARALLEL_WORKSTREAM_GOVERNANCE.md`.
+- Do not rebase, merge newer `master`, or import another lane into an active or reviewed task. A frozen reviewed head is immutable. Reconcile only through the serialized integration train.
+- A shared cross-lane contract change is not owned by the discovering lane. Stop that portion and create a separately authorized serialized contract task from accepted canonical.
+- `ROADMAP.md`, `BRANCH_LEDGER.md`, and `TASK_LOG.md` are Integration-Steward-owned by default. Builders use unique task reports and isolated evidence roots unless an explicit directive grants a shared-document exception.
+- Only the Integration Steward may advance `master`, one accepted lineage at a time, after qualification in a disposable integration worktree. Any executable, test, or tool conflict stops integration for a new review.
+
 ## Git Integration Safety
 Routine clean fast-forward merge and non-force push are standing-authorized for proven nonvisual work. Git Steward must interrupt Steven before reset, rebase, branch deletion, force-push, non-fast-forward merge, remote divergence resolution, or any integration whose exact content or secret safety is unclear.
