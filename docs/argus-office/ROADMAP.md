@@ -447,17 +447,25 @@ requires a separate current-head reconciliation and qualification task.
 
 Preserve the accepted `ARGUS-STAT-DATA-002D` evidence root and mandatory ZIP
 unchanged. The complete accepted STAT-DATA lineage is canonical and remains
-research-only and undeployed. `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` has
-established the three clean detached lane roots and governance artifacts from
-accepted canonical `14f7b24783146fc2dcf7ad64f205aac11b19d392`; it remains
-`IMPLEMENTED_PENDING_INTEGRATION` until its disposable integration qualification
-and canonical fast-forward complete. No Science, Opening Engine, or GUI task has
-started. Authoritative instrument subtype/leverage classification remains a
-pre-Paper gate. The authoritative ordered sequence is maintained only in
-`Next / Queue` below.
+research-only and undeployed. `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` is
+`COMPLETE / CANONICAL_INTEGRATED / GOVERNANCE_ONLY`; implementation commit
+`97b751f14e6241beae8d64d8aea24c4b46c1179d` establishes three clean detached
+AppData lane roots, a machine-readable registry, cross-lane contract gates,
+shared-governance ownership, isolated external-state templates, and serialized
+integration. No Science, Opening Engine, or GUI task has started. Authoritative
+instrument subtype/leverage classification remains a pre-Paper gate. The
+authoritative ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
 
+- `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` establishes the permanent
+  `SCIENCE`, `OPENING_ENGINE`, and `GUI` lane roots while keeping the production
+  checkout clean on integration-only `master`. Task bases and reviewed heads are
+  immutable, shared contracts and master integration are serialized, external
+  state is namespaced, and shared high-churn governance is Integration-Steward-
+  owned. All three lanes remain idle with no active task; no executable, test,
+  tool, runtime, service, scheduler, manifest, provider, or execution state
+  changed. `OBSERVER-AUTHORIZED-RELEASE-BINDING-001` is recorded but unimplemented.
 - `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` qualifies the natural lifecycle,
   completed-bar event, sequential successor, TradePlan/no-plan, and restart
   reconstruction path on branch commit `74da179`. Focused, adjacent, soak, and
@@ -523,17 +531,15 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` is governance-only and
-   `IMPLEMENTED_PENDING_INTEGRATION` from accepted canonical
-   `14f7b24783146fc2dcf7ad64f205aac11b19d392`. The three persistent lane roots
-   are idle, detached, and contain no active task.
+1. No lane task is active. `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` is
+   complete and canonical; the three persistent lane roots are idle, detached,
+   clean, and contain no active task.
 
 ### 2. Ready / Next
 
-1. Qualify the governance-only candidate through the serialized disposable
-   integration worktree, then fast-forward canonical only if protected-state,
-   diff, secret, and lane-isolation checks remain clean. This grants no lane
-   task, deployment, or activation authority.
+1. Initialize Science, Opening Engine, and GUI separately, one task-specific
+   directive at a time, from the newest accepted canonical. The governance setup
+   itself grants no lane task, deployment, or activation authority.
 2. Preserve all prior failed canaries, the empty prospective samples, and all failed
    activation/terminal evidence exactly.
 3. Preserve the accepted Producer V4 packet and original 001D evidence.
