@@ -30,6 +30,13 @@ from momentum_hunter.autonomy.ledger import ExecutionLedger, ExecutionLedgerEven
 from momentum_hunter.autonomy.risk_governor import RiskGovernorResult, evaluate_trade_plan
 from momentum_hunter.autonomy.view_models import candidate_plan_from_report_row, stable_trade_plan_id
 from momentum_hunter.config import DATA_DIR
+from momentum_hunter.lifecycle_position_identity import (
+    IDENTITY_LINKAGE_NOT_AVAILABLE,
+    IDENTITY_LINKAGE_PROVEN,
+    IDENTITY_LINKAGE_UNKNOWN,
+    LifecyclePositionIdentityError,
+    authoritative_lifecycle_identity_from_report_row,
+)
 from momentum_hunter.shadow_market_validity import (
     EASTERN_TZ,
     MAX_SELECTOR_PROOF_ARTIFACT_BYTES,
@@ -219,6 +226,9 @@ class ShadowPosition:
     highest_price: float
     lowest_price: float
     direction: str = "LONG"
+    opportunity_id: str = ""
+    setup_id: str = ""
+    trade_plan_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -289,6 +299,8 @@ class ShadowOrderTicket:
     constitution_hash: str = ""
     decision_cycle_id: str = ""
     opportunity_id: str = ""
+    setup_id: str = ""
+    shadow_selection_id: str = ""
     selection_quote_json: str = ""
     account_allocation_fingerprint: str = ""
     allocation_policy_fingerprint: str = ""
@@ -332,6 +344,8 @@ class ShadowTrade:
     constitution_hash: str = ""
     decision_cycle_id: str = ""
     opportunity_id: str = ""
+    setup_id: str = ""
+    shadow_selection_id: str = ""
     selection_quote_json: str = ""
     account_allocation_json: str = ""
     account_allocation_fingerprint: str = ""
@@ -1466,6 +1480,9 @@ class ShadowTradingService:
         selection_policy_evidence: dict[str, str] | None = None,
         decision_cycle_id: str = "",
         opportunity_id: str = "",
+        setup_id: str = "",
+        authoritative_trade_plan_id: str = "",
+        shadow_selection_id: str = "",
         selector_arm_id: str = "",
         constitution_hash: str = "",
         selection_quote_json: str = "",
@@ -1494,11 +1511,15 @@ class ShadowTradingService:
                 or constitution_hash != active_selector_arm.constitution_hash
                 or not decision_cycle_id
                 or not opportunity_id
+                or not setup_id
+                or not authoritative_trade_plan_id
+                or not shadow_selection_id
                 or not selection_quote_json
             ):
                 raise ValueError(
                     "Official Shadow sample requires exact selector-arm, "
-                    "decision-cycle, opportunity, constitution, and quote evidence."
+                    "decision-cycle, lifecycle, TradePlan, selection, constitution, "
+                    "and quote evidence."
                 )
         normalized_symbol = symbol.strip().upper()
         if not normalized_symbol:
@@ -1565,6 +1586,9 @@ class ShadowTradingService:
                 or cycle.get("selected_symbol") != normalized_symbol
                 or int(cycle.get("selected_rank") or 0) != rank
                 or cycle.get("opportunity_id") != opportunity_id
+                or cycle.get("setup_id") != setup_id
+                or cycle.get("trade_plan_id") != authoritative_trade_plan_id
+                or cycle.get("shadow_selection_id") != shadow_selection_id
                 or canonical_json(cycle.get("selection_quote"))
                 != selection_quote_json
                 or cycle.get("selector_arm_id") != selector_arm_id
@@ -1602,6 +1626,31 @@ class ShadowTradingService:
         )
         if candidate is None:
             raise ValueError(f"{normalized_symbol} does not contain a valid persisted TradePlan.")
+        try:
+            authoritative_identity = (
+                authoritative_lifecycle_identity_from_report_row(row)
+            )
+        except LifecyclePositionIdentityError as exc:
+            raise ValueError(
+                "Shadow TradePlan lacks a proven authoritative lifecycle identity."
+            ) from exc
+        supplied_identity = (
+            opportunity_id,
+            setup_id,
+            authoritative_trade_plan_id,
+        )
+        expected_identity = (
+            authoritative_identity.opportunity_id,
+            authoritative_identity.setup_id,
+            authoritative_identity.trade_plan_id,
+        )
+        if any(supplied_identity) and supplied_identity != expected_identity:
+            raise ValueError(
+                "Selected lifecycle identity does not match the persisted TradePlan binding."
+            )
+        opportunity_id, setup_id, trade_plan_id = expected_identity
+        if self.sample_activation is not None and not shadow_selection_id:
+            raise ValueError("Shadow selection identity is required and must remain distinct.")
         canonical_candidate = canonical_json(row)
         source_capture_key = "|".join(
             [
@@ -1616,7 +1665,6 @@ class ShadowTradingService:
         plan_payload = asdict(candidate.trade_plan)
         plan_json = canonical_json(plan_payload)
         plan_fingerprint = hashlib.sha256(plan_json.encode("utf-8")).hexdigest()
-        trade_plan_id = stable_trade_plan_id(normalized_symbol, candidate.trade_plan)
         allocation_findings = account_allocation_decision_findings(
             account_allocation,
             trade_plan_id=trade_plan_id,
@@ -1663,6 +1711,9 @@ class ShadowTradingService:
                 [
                     decision_cycle_id,
                     opportunity_id,
+                    setup_id,
+                    trade_plan_id,
+                    shadow_selection_id,
                     selector_arm_id,
                     constitution_hash,
                     hashlib.sha256(
@@ -1747,6 +1798,9 @@ class ShadowTradingService:
                 "constitution_hash": constitution_hash,
                 "decision_cycle_id": decision_cycle_id,
                 "opportunity_id": opportunity_id,
+                "setup_id": setup_id,
+                "trade_plan_id": trade_plan_id,
+                "shadow_selection_id": shadow_selection_id,
                 "selection_quote_sha256": (
                     hashlib.sha256(selection_quote_json.encode("utf-8")).hexdigest()
                     if selection_quote_json
@@ -1832,6 +1886,8 @@ class ShadowTradingService:
                 constitution_hash=constitution_hash,
                 decision_cycle_id=decision_cycle_id,
                 opportunity_id=opportunity_id,
+                setup_id=setup_id,
+                shadow_selection_id=shadow_selection_id,
                 selection_quote_json=selection_quote_json,
                 account_allocation_fingerprint=allocation_fingerprint,
                 allocation_policy_fingerprint=(
@@ -1977,6 +2033,8 @@ class ShadowTradingService:
             constitution_hash=constitution_hash,
             decision_cycle_id=decision_cycle_id,
             opportunity_id=opportunity_id,
+            setup_id=setup_id,
+            shadow_selection_id=shadow_selection_id,
             selection_quote_json=selection_quote_json,
             account_allocation_json=allocation_json,
             account_allocation_fingerprint=allocation_fingerprint,
@@ -2661,6 +2719,9 @@ class ShadowTradingService:
                     candidate_position,
                     stop_price=float(plan.bullish_stop),
                     target_price=float(plan.bullish_target_1),
+                    opportunity_id=trade.opportunity_id,
+                    setup_id=trade.setup_id,
+                    trade_plan_id=trade.trade_plan_id,
                 )
             else:
                 position = replace(
@@ -3148,6 +3209,8 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
             trade.ticket.constitution_hash,
             trade.ticket.decision_cycle_id,
             trade.ticket.opportunity_id,
+            trade.ticket.setup_id,
+            trade.ticket.shadow_selection_id,
             trade.ticket.selection_quote_json,
             trade.ticket.account_allocation_fingerprint,
             trade.ticket.allocation_policy_fingerprint,
@@ -3161,6 +3224,8 @@ def audit_shadow_trade(trade: ShadowTrade) -> AuditReport:
             trade.constitution_hash,
             trade.decision_cycle_id,
             trade.opportunity_id,
+            trade.setup_id,
+            trade.shadow_selection_id,
             trade.selection_quote_json,
             trade.account_allocation_fingerprint,
             trade.allocation_policy_fingerprint,
@@ -3408,7 +3473,18 @@ def frozen_plan_findings(trade: ShadowTrade) -> list[AuditFinding]:
     except (json.JSONDecodeError, TypeError, ValueError):
         findings.append(AuditFinding(trade.shadow_trade_id, "trade_plan_json", "Frozen TradePlan evidence is not valid."))
         return findings
-    if stable_trade_plan_id(trade.symbol, plan) != trade.trade_plan_id:
+    if trade.setup_id:
+        try:
+            bound_identity = authoritative_lifecycle_identity_from_report_row(
+                candidate_payload
+            )
+        except LifecyclePositionIdentityError:
+            bound_plan_id = ""
+        else:
+            bound_plan_id = bound_identity.trade_plan_id
+    else:
+        bound_plan_id = stable_trade_plan_id(trade.symbol, plan)
+    if bound_plan_id != trade.trade_plan_id:
         findings.append(AuditFinding(trade.shadow_trade_id, "trade_plan_id", "TradePlan identity does not match the frozen plan."))
     candidate_plan = candidate_payload.get("trade_plan")
     if not isinstance(candidate_plan, dict) or canonical_json(candidate_plan) != trade.trade_plan_json:
@@ -3694,6 +3770,51 @@ def build_shadow_review_snapshot(
     }
 
 
+def shadow_identity_linkage_status(trade: ShadowTrade) -> str:
+    """Return only persisted, exact linkage state; never infer by symbol/time."""
+
+    if trade.position is None:
+        return IDENTITY_LINKAGE_NOT_AVAILABLE
+    position = trade.position
+    complete = (
+        trade.opportunity_id,
+        trade.setup_id,
+        trade.trade_plan_id,
+        position.opportunity_id,
+        position.setup_id,
+        position.trade_plan_id,
+        position.position_id,
+        position.opened_at,
+    )
+    if not all(complete):
+        return IDENTITY_LINKAGE_UNKNOWN
+    if (
+        (position.opportunity_id, position.setup_id, position.trade_plan_id)
+        != (trade.opportunity_id, trade.setup_id, trade.trade_plan_id)
+    ):
+        return IDENTITY_LINKAGE_UNKNOWN
+    if (
+        position.position_id != stable_id("shadow-position", trade.shadow_trade_id)
+        or parse_datetime(position.opened_at) is None
+    ):
+        return IDENTITY_LINKAGE_UNKNOWN
+    try:
+        candidate_row = json.loads(trade.evidence.candidate_json)
+        identity = authoritative_lifecycle_identity_from_report_row(candidate_row)
+    except (json.JSONDecodeError, LifecyclePositionIdentityError, TypeError):
+        return IDENTITY_LINKAGE_UNKNOWN
+    return (
+        IDENTITY_LINKAGE_PROVEN
+        if (
+            identity.opportunity_id,
+            identity.setup_id,
+            identity.trade_plan_id,
+        )
+        == (trade.opportunity_id, trade.setup_id, trade.trade_plan_id)
+        else IDENTITY_LINKAGE_UNKNOWN
+    )
+
+
 def shadow_review_trade_to_dict(
     trade: ShadowTrade,
     audit: AuditReport,
@@ -3791,6 +3912,15 @@ def shadow_review_trade_to_dict(
             or trade.evidence.decision_timestamp
         ),
         "tradePlanId": trade.trade_plan_id,
+        "opportunityId": trade.opportunity_id or IDENTITY_LINKAGE_UNKNOWN,
+        "setupId": trade.setup_id or IDENTITY_LINKAGE_UNKNOWN,
+        "positionId": (
+            trade.position.position_id
+            if trade.position is not None
+            else IDENTITY_LINKAGE_NOT_AVAILABLE
+        ),
+        "openedAt": trade.position.opened_at if trade.position is not None else "",
+        "identityLinkage": shadow_identity_linkage_status(trade),
         "riskDecisionId": trade.risk_decision_id,
         "riskDecision": str(risk.get("status") or "Unavailable"),
         "riskReasons": [str(reason) for reason in risk.get("reasons", []) if str(reason).strip()],
@@ -4377,6 +4507,8 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
         constitution_hash=str(payload.get("constitution_hash", "")),
         decision_cycle_id=str(payload.get("decision_cycle_id", "")),
         opportunity_id=str(payload.get("opportunity_id", "")),
+        setup_id=str(payload.get("setup_id", "")),
+        shadow_selection_id=str(payload.get("shadow_selection_id", "")),
         selection_quote_json=str(payload.get("selection_quote_json", "")),
         account_allocation_json=str(payload.get("account_allocation_json", "")),
         account_allocation_fingerprint=str(
@@ -4445,6 +4577,25 @@ def validate_shadow_trade_lifecycle(trade: ShadowTrade) -> None:
             trade,
             f"unknown trade status '{trade.status or 'missing'}'.",
         )
+
+    if trade.setup_id or trade.shadow_selection_id:
+        try:
+            candidate_row = json.loads(trade.evidence.candidate_json)
+            identity = authoritative_lifecycle_identity_from_report_row(candidate_row)
+        except (json.JSONDecodeError, LifecyclePositionIdentityError, TypeError) as exc:
+            _raise_shadow_lifecycle_error(
+                trade,
+                f"authoritative lifecycle binding is invalid: {exc}",
+            )
+        if (
+            identity.opportunity_id,
+            identity.setup_id,
+            identity.trade_plan_id,
+        ) != (trade.opportunity_id, trade.setup_id, trade.trade_plan_id):
+            _raise_shadow_lifecycle_error(
+                trade,
+                "authoritative lifecycle binding does not match the Shadow Trade.",
+            )
 
     if trade.status == "blocked":
         if trade.order is not None or trade.position is not None or trade.outcome is not None:
@@ -4630,6 +4781,25 @@ def _validate_persisted_shadow_position(trade: ShadowTrade) -> None:
         _raise_shadow_lifecycle_error(
             trade,
             "position identity does not match its Shadow Trade.",
+        )
+    position_provenance = (
+        position.opportunity_id,
+        position.setup_id,
+        position.trade_plan_id,
+    )
+    if any(position_provenance) and position_provenance != (
+        trade.opportunity_id,
+        trade.setup_id,
+        trade.trade_plan_id,
+    ):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "position lifecycle provenance does not match its Shadow Trade.",
+        )
+    if trade.setup_id and not all(position_provenance):
+        _raise_shadow_lifecycle_error(
+            trade,
+            "authoritative Shadow position is missing lifecycle provenance.",
         )
     if position.quantity <= 0:
         _raise_shadow_lifecycle_error(

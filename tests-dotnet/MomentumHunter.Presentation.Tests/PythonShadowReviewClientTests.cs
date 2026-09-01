@@ -15,6 +15,13 @@ public sealed class PythonShadowReviewClientTests
         Assert.False(snapshot.Transmitting);
         var trade = Assert.Single(snapshot.Trades);
         Assert.Equal("shadow-1", trade.ShadowTradeId);
+        Assert.Equal("opportunity-1", trade.Identity.OpportunityId);
+        Assert.Equal("setup-1", trade.Identity.SetupId);
+        Assert.Equal("position-1", trade.Identity.PositionId);
+        Assert.Equal("PROVEN", trade.Identity.IdentityLinkage);
+        Assert.Equal(
+            DateTimeOffset.Parse("2026-07-23T10:00:05-05:00"),
+            trade.Identity.OpenedAt);
         Assert.True(trade.EvidenceLock.EvidenceFrozen);
         Assert.True(trade.EvidenceLock.PlanFrozen);
         Assert.False(trade.EvidenceLock.PostDecisionCorrectionOccurred);
@@ -146,6 +153,39 @@ public sealed class PythonShadowReviewClientTests
     }
 
     [Fact]
+    public void MapperRejectsAProvenIdentityChainWithoutPositionChronology()
+    {
+        var payload = Payload()
+            .Replace("\"positionId\": \"position-1\"", "\"positionId\": \"NOT_AVAILABLE\"", StringComparison.Ordinal)
+            .Replace("\"openedAt\": \"2026-07-23T10:00:05-05:00\"", "\"openedAt\": \"\"", StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(payload);
+
+        Assert.Throws<InvalidDataException>(
+            () => PythonShadowReviewSnapshotMapper.Map(document.RootElement));
+    }
+
+    [Fact]
+    public void MapperKeepsLegacyIdentityLinkageUnknownWithoutInference()
+    {
+        var payload = Payload()
+            .Replace("\"opportunityId\": \"opportunity-1\"", "\"opportunityId\": \"\"", StringComparison.Ordinal)
+            .Replace("\"setupId\": \"setup-1\"", "\"setupId\": \"\"", StringComparison.Ordinal)
+            .Replace("\"positionId\": \"position-1\"", "\"positionId\": \"\"", StringComparison.Ordinal)
+            .Replace("\"openedAt\": \"2026-07-23T10:00:05-05:00\"", "\"openedAt\": \"\"", StringComparison.Ordinal)
+            .Replace("\"identityLinkage\": \"PROVEN\"", "\"identityLinkage\": \"UNKNOWN\"", StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(payload);
+
+        var identity = Assert.Single(
+            PythonShadowReviewSnapshotMapper.Map(document.RootElement).Trades).Identity;
+
+        Assert.Equal("UNKNOWN", identity.OpportunityId);
+        Assert.Equal("UNKNOWN", identity.SetupId);
+        Assert.Equal("NOT_AVAILABLE", identity.PositionId);
+        Assert.Null(identity.OpenedAt);
+        Assert.Equal("UNKNOWN", identity.IdentityLinkage);
+    }
+
+    [Fact]
     public void ReviewClientContractExposesOnlySnapshotRead()
     {
         var methods = typeof(MomentumHunter.Application.IShadowReviewClient).GetMethods();
@@ -172,6 +212,11 @@ public sealed class PythonShadowReviewClientTests
           "decisionTimestamp": "2026-07-23T10:00:00-05:00",
           "evidenceSnapshotTimestamp": "2026-07-23T09:59:00-05:00",
           "tradePlanId": "plan-1",
+          "opportunityId": "opportunity-1",
+          "setupId": "setup-1",
+          "positionId": "position-1",
+          "openedAt": "2026-07-23T10:00:05-05:00",
+          "identityLinkage": "PROVEN",
           "riskDecisionId": "risk-1",
           "riskDecision": "Simulation-only",
           "riskReasons": ["FakeBroker simulation only."],

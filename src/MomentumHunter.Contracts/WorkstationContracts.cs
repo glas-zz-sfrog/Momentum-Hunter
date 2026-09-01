@@ -646,7 +646,14 @@ public sealed record ShadowTradeIdentity(
     DateTimeOffset DecisionTimestamp,
     DateTimeOffset EvidenceSnapshotTimestamp,
     string TradePlanId,
-    string RiskDecisionId);
+    string RiskDecisionId)
+{
+    public string OpportunityId { get; init; } = "UNKNOWN";
+    public string SetupId { get; init; } = "UNKNOWN";
+    public string PositionId { get; init; } = "NOT_AVAILABLE";
+    public DateTimeOffset? OpenedAt { get; init; }
+    public string IdentityLinkage { get; init; } = "UNKNOWN";
+}
 
 public sealed record ShadowPlanReview(
     string RiskDecision,

@@ -147,18 +147,45 @@ public static class PythonShadowReviewSnapshotMapper
             throw new InvalidDataException("Stale or halted Shadow evidence cannot be painted as live P&L.");
         }
 
+        var identityLinkage = String(item, "identityLinkage") ?? "UNKNOWN";
+        var opportunityId = NonEmptyString(item, "opportunityId") ?? "UNKNOWN";
+        var setupId = NonEmptyString(item, "setupId") ?? "UNKNOWN";
+        var positionId = NonEmptyString(item, "positionId") ?? "NOT_AVAILABLE";
+        var openedAt = OptionalTimestamp(item, "openedAt");
+        if (identityLinkage is not ("PROVEN" or "UNKNOWN" or "NOT_AVAILABLE"))
+        {
+            throw new InvalidDataException("Shadow identity linkage state is unsupported.");
+        }
+        if (identityLinkage == "PROVEN"
+            && (opportunityId == "UNKNOWN"
+                || setupId == "UNKNOWN"
+                || positionId == "NOT_AVAILABLE"
+                || openedAt is null))
+        {
+            throw new InvalidDataException(
+                "A proven Shadow identity chain requires opportunity, setup, position, and opened-at evidence.");
+        }
+        var identity = new ShadowTradeIdentity(
+            RequiredString(item, "shadowTradeId"),
+            RequiredString(item, "symbol"),
+            String(item, "setup") ?? "Unknown",
+            String(item, "catalyst") ?? "Unknown",
+            String(item, "marketRegime") ?? "Unknown",
+            String(item, "session") ?? "Unknown",
+            decisionTimestamp,
+            RequiredTimestamp(item, "evidenceSnapshotTimestamp"),
+            RequiredString(item, "tradePlanId"),
+            RequiredString(item, "riskDecisionId"))
+        {
+            OpportunityId = opportunityId,
+            SetupId = setupId,
+            PositionId = positionId,
+            OpenedAt = openedAt,
+            IdentityLinkage = identityLinkage,
+        };
+
         return new ShadowTradeReviewSnapshot(
-            new ShadowTradeIdentity(
-                RequiredString(item, "shadowTradeId"),
-                RequiredString(item, "symbol"),
-                String(item, "setup") ?? "Unknown",
-                String(item, "catalyst") ?? "Unknown",
-                String(item, "marketRegime") ?? "Unknown",
-                String(item, "session") ?? "Unknown",
-                decisionTimestamp,
-                RequiredTimestamp(item, "evidenceSnapshotTimestamp"),
-                RequiredString(item, "tradePlanId"),
-                RequiredString(item, "riskDecisionId")),
+            identity,
             new ShadowPlanReview(
                 RequiredString(item, "riskDecision"),
                 StringArray(item, "riskReasons"),
@@ -386,6 +413,11 @@ public static class PythonShadowReviewSnapshotMapper
         && item.TryGetProperty(name, out var value)
         && value.ValueKind == JsonValueKind.String
             ? value.GetString()
+            : null;
+
+    private static string? NonEmptyString(JsonElement item, string name) =>
+        String(item, name) is { } value && !string.IsNullOrWhiteSpace(value)
+            ? value
             : null;
 
     private static int RequiredInteger(JsonElement item, string name) =>

@@ -54,6 +54,11 @@ from momentum_hunter.intraday_trade_plan import (
     PULLBACK,
     transition_intraday_plan,
 )
+from momentum_hunter.lifecycle_position_identity import (
+    REPORT_IDENTITY_FIELD,
+    authoritative_lifecycle_identity_from_report_row,
+    bind_report_row_to_producer_identity,
+)
 from momentum_hunter.models import Candidate, INSTITUTIONAL_MOMENTUM
 from momentum_hunter.schwab_candle_contract import (
     EASTERN_TZ,
@@ -520,6 +525,24 @@ class ContinuousTradePlanProducerTests(unittest.TestCase):
         self.assertEqual(HISTORY_READY, context.status)
         self.assertEqual(1, context.current_session_bar_count)
         self.assertIsNotNone(result.member_result.intraday_plan)
+        self.assertEqual(
+            result.member_result.lifecycle_proposal.opportunity_id,
+            result.record.opportunity_id,
+        )
+        bound_row = bind_report_row_to_producer_identity(
+            {
+                "symbol": result.record.symbol,
+                "trade_plan": {
+                    "intraday_evidence": {"plan_id": result.record.trade_plan_id}
+                },
+            },
+            result.record,
+        )
+        identity = authoritative_lifecycle_identity_from_report_row(bound_row)
+        self.assertEqual(result.record.opportunity_id, identity.opportunity_id)
+        self.assertEqual(result.record.setup_id, identity.setup_id)
+        self.assertEqual(result.record.trade_plan_id, identity.trade_plan_id)
+        self.assertIn(REPORT_IDENTITY_FIELD, bound_row)
 
     def test_one_backfilled_current_bar_is_enough_without_five_new_bars(self) -> None:
         cutoff = at(11, 22)

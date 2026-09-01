@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Engine-host bridge for prospective, nontransmitting Shadow Trading."""
 
+import json
 import math
 import threading
 from dataclasses import dataclass
@@ -145,6 +146,10 @@ class ShadowWorkspaceService:
         if self.allocation_source is None:
             return None
         from momentum_hunter.autonomy.view_models import build_candidate_plans_from_report
+        from momentum_hunter.lifecycle_position_identity import (
+            LifecyclePositionIdentityError,
+            authoritative_lifecycle_identity_from_report_row,
+        )
 
         normalized_symbol = symbol.strip().upper()
         candidate = next(
@@ -162,11 +167,32 @@ class ShadowWorkspaceService:
         )
         if candidate is None:
             return None
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            rows = report.get("candidates") or report.get("top_5_for_capital") or []
+            identity_rows = [
+                row
+                for row in rows
+                if isinstance(row, dict)
+                and str(row.get("symbol", "")).strip().upper() == normalized_symbol
+            ]
+            if len(identity_rows) != 1:
+                return None
+            identity = authoritative_lifecycle_identity_from_report_row(
+                identity_rows[0]
+            )
+        except (
+            OSError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            LifecyclePositionIdentityError,
+        ):
+            return None
         allocator = getattr(self.allocation_source, "allocate", self.allocation_source)
         try:
             return allocator(
                 symbol=candidate.ticker,
-                trade_plan_id=candidate.trade_plan_id,
+                trade_plan_id=identity.trade_plan_id,
                 entry_price=candidate.trade_plan.bullish_entry,
                 stop_price=candidate.trade_plan.bullish_stop,
                 target_price=candidate.trade_plan.bullish_target_1,
