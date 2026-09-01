@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "OpeningObserverSeptember1RegressionFixtureV1",
+  "captureDate": "2026-09-01",
+  "observerRuntimeIdentity": "argus-opening-authorized-release-observer",
+  "observerInstanceCount": 1,
+  "authorizedReleaseId": "OPENING-RUNTIME-1C49F7F328503BF8FECF",
+  "authorizedRuntimeFingerprint": "1c49f7f328503bf8fecfd359af084c01d5a731133ae4ec1555aa5b1f88997151",
+  "authorizedReleaseFingerprint": "6a8ec3d7bed42bb5dc88e509941f9f9c008ebf0add345b37f5facec0c56ddfc3",
+  "authorizedReleaseSourceGitSha": "23ee162373654e1db91af4c19f75bbc7887e3174",
+  "promotionReceiptFingerprint": "063a03f5fb407664a2ddcb33cc71201e123633f6071576bf3b30d9dc673fc6f6",
+  "currentCanonicalGitSha": "986407467ae8de27df1bc228d843a8701014ac06",
+  "acceptedReleaseBindingResult": "PASS",
+  "legacyPromptPredicateResult": "FAIL_SOURCE_GIT_EQUALITY_OVERBINDING",
+  "expectedHeartbeatResultAfterRepair": "PASS"
+}
