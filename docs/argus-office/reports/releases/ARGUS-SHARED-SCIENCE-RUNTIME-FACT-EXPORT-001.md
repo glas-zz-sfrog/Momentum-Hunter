@@ -13,7 +13,7 @@ This is a candidate-only shared-contract implementation. It is not integrated in
 - Accepted architecture: `OPTION_C_ONE_WAY_VERSIONED_RUNTIME_FACT_EXPORT_CONSUMED_READ_ONLY_BY_SCIENCE_CUSTODY`
 - Admitted canonical: `986407467ae8de27df1bc228d843a8701014ac06`
 - Candidate branch: `codex/ARGUS-SHARED-SCIENCE-RUNTIME-FACT-EXPORT-001`
-- Full-suite executable tree: `09abc2b05f973e1e6d1516b9b87886fc817da55e`
+- Full-suite executable identity: recorded in the sealed Hard Chew summary and second-eye manifest
 - Design packet root: `C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\LANE-SCIENCE\ARGUS-SCIENCE-ALWAYS-ON-RECORDER-CONTRACT-001-20260831-213529-9638763-CT`
 - Design checksum-sidecar SHA-256: `f40207a300b0d5ea91992e4e7f03491e3de031714a8928d01118a8a9b9ec4434`
 - Design inventory: 13 files including the checksum sidecar; all 12 substantive artifacts verified against it.
@@ -74,7 +74,7 @@ No existing application source, GUI, Science recorder, Opening Engine runtime, s
 
 Sealed Hard Chew evidence:
 
-`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\INTEGRATION\ARGUS-SHARED-SCIENCE-RUNTIME-FACT-EXPORT-001-9864074-PASS5`
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\INTEGRATION\ARGUS-SHARED-SCIENCE-RUNTIME-FACT-EXPORT-001-9864074-PASS6`
 
 - Approved environment gate: PASS (`Python 3.12.6`, `bs4 4.12.3`, `requests 2.32.3`, `PySide6 6.7.3`)
 - Compile/import: PASS

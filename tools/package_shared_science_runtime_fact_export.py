@@ -25,7 +25,7 @@ REQUIRED_CANDIDATE_PATHS = (
     "tools/run_shared_science_runtime_fact_export_hard_chew.py",
     "tools/verify_research_fact_export.py",
 )
-SUPPORT_PATHS = ("momentum_hunter/__init__.py", "tests/__init__.py")
+SUPPORT_PATHS = ("momentum_hunter/__init__.py",)
 SECRET_PATTERNS = (
     re.compile(rb"sk-(?:proj-)?[A-Za-z0-9_-]{20,}"),
     re.compile(rb"Bearer\s+[A-Za-z0-9._~+/=-]{20,}", re.IGNORECASE),
