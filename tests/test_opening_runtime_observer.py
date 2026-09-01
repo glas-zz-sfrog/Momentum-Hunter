@@ -18,6 +18,8 @@ from momentum_hunter.opening_runtime_observer import (
     CURRENT_AUTHORIZED_RELEASE,
     FIXED_EXPECTED_RELEASE,
     OBSERVATION_SCHEMA,
+    SOURCE_GIT_DIFFERENT,
+    SOURCE_GIT_EQUAL,
     observe_opening_runtime,
 )
 
@@ -156,6 +158,22 @@ class OpeningRuntimeObserverTests(unittest.TestCase):
         self.assertEqual("AUTHORIZED_RUNTIME_MATCH", result["classification"])
         self.assertEqual(self.release_a["releaseId"], result["expectedReleaseId"])
         self.assertFalse(result["runtimeDrift"])
+        self.assertTrue(result["authorizedReleaseSourceProvenanceVerified"])
+        self.assertTrue(result["currentSourceEqualsReleaseSource"])
+        self.assertEqual(SOURCE_GIT_EQUAL, result["sourceGitRelationship"])
+
+    def test_current_canonical_may_advance_beyond_release_source(self) -> None:
+        result = observe_opening_runtime(
+            self._observation(canonical_sha=HEAD_B),
+            expected_canonical_git_sha=HEAD_B,
+            release_root=self.release_root,
+        )
+
+        self.assertEqual("PASS", result["observerResult"])
+        self.assertFalse(result["canonicalDrift"])
+        self.assertTrue(result["authorizedReleaseSourceProvenanceVerified"])
+        self.assertFalse(result["currentSourceEqualsReleaseSource"])
+        self.assertEqual(SOURCE_GIT_DIFFERENT, result["sourceGitRelationship"])
 
     def test_authorized_successor_rejects_predecessor_runtime(self) -> None:
         predecessor_observation = self._observation()
