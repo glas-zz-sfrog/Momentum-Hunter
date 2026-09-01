@@ -273,6 +273,24 @@ protected-path, and installed-state nonmutation checks pass. No deployment,
 Paper, Shadow, account, position, broker, order, service, scheduler, GUI, or
 Opening runtime action occurred.
 
+`ARGUS-OBSERVER-AUTHORIZED-RELEASE-BINDING-001` is
+`COMPLETE / CANONICAL_INTEGRATED / ACTIVATION_DEFERRED`. Canonical fast-forwarded
+and pushed the exact three-commit accepted OPENING_ENGINE lineage from
+`4a8b0bbbb5354dd31ea4c3a847a4061ab18fbf49` to reviewed head
+`020c6d5660373239fd821b8a80189f78b6619583` with zero conflicts, unrelated
+commits, history rewriting, or executable resolution. The authoritative
+second-eye ZIP SHA-256 is
+`9673F0343076AC80361300BBDC60C44099EEDD66F519E6CE46D12D8003EE12CB`.
+Post-integration verification passes 11/11 observer tests, 171/171 Opening and
+automation regressions with one expected Windows skip, and all 2,880 approved-
+environment tests with one expected skip. Monday current-authorized replay
+resolves `OPENING-RUNTIME-1C49F7F328503BF8FECF` and passes; explicit fixed-F18
+historical replay fails closed as `RUNTIME_DRIFT`. Reviewed executable, test,
+and tool bytes are identical to the accepted head. No operational observer,
+heartbeat, scheduler, service, release/channel, provider, authentication,
+Paper, Shadow, broker, account, position, or order state changed. Activation
+requires a separate directive.
+
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
 `d1a6e14ae3bec1a565a2eb07b47a3b1491356b16` moves the existing catalyst
@@ -384,10 +402,11 @@ requires a separate current-head reconciliation and qualification task.
 ### Current Runtime And Strategy Truth
 
 - The installed research-only Continuous product remains
-  `e69426b3b7bd179cd62eba2e28a5d0553da47154`. Canonical Git is synchronized
-  through the producer closeout, while opening execution is governed by active
-  V2 release `OPENING-RUNTIME-EC11418BBC35F5285CA8` rather than whole-checkout
-  identity. `MomentumHunterAutomation`,
+  `e69426b3b7bd179cd62eba2e28a5d0553da47154`. Canonical Git is synchronized,
+  while opening execution is governed by the verified authorized release
+  `OPENING-RUNTIME-1C49F7F328503BF8FECF` with runtime fingerprint
+  `1c49f7f328503bf8fecfd359af084c01d5a731133ae4ec1555aa5b1f88997151`
+  rather than whole-checkout identity. `MomentumHunterAutomation`,
   `MomentumHunterContinuousRuntime`, and
   `MomentumHunterContinuousWriter` are Automatic/Running; the writer uses the
   dedicated `LOCAL SERVICE` principal.
@@ -452,20 +471,30 @@ research-only and undeployed. `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` is
 `97b751f14e6241beae8d64d8aea24c4b46c1179d` establishes three clean detached
 AppData lane roots, a machine-readable registry, cross-lane contract gates,
 shared-governance ownership, isolated external-state templates, and serialized
-integration. No Science, Opening Engine, or GUI task has started. Authoritative
+integration. The accepted observer source is now canonical; operational
+observer creation and heartbeat behavior remain unchanged pending a separate
+activation directive. Science and GUI work were not touched. Authoritative
 instrument subtype/leverage classification remains a pre-Paper gate. The
 authoritative ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
 
+- `ARGUS-OBSERVER-AUTHORIZED-RELEASE-BINDING-001` integrates the independently
+  accepted OPENING_ENGINE verifier at exact reviewed head `020c6d5`. Current-
+  authorized observation resolves the complete verified promotion chain and
+  immutable 1C49 release at evaluation time; fixed-release historical mode is
+  preserved, and malformed authority or runtime mismatch fails closed. Full
+  approved-environment discovery passes 2,880/2,880. Source integration did not
+  activate an observer or alter heartbeat, scheduler, service, provider,
+  authentication, Paper, Shadow, broker, account, position, or order state.
 - `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` establishes the permanent
   `SCIENCE`, `OPENING_ENGINE`, and `GUI` lane roots while keeping the production
   checkout clean on integration-only `master`. Task bases and reviewed heads are
   immutable, shared contracts and master integration are serialized, external
   state is namespaced, and shared high-churn governance is Integration-Steward-
-  owned. All three lanes remain idle with no active task; no executable, test,
-  tool, runtime, service, scheduler, manifest, provider, or execution state
-  changed. `OBSERVER-AUTHORIZED-RELEASE-BINDING-001` is recorded but unimplemented.
+  owned. The governance setup changed no executable, test, tool, runtime,
+  service, scheduler, manifest, provider, or execution state. The later accepted
+  observer source integration is recorded separately above.
 - `ARGUS-CONTINUOUS-TRADEPLAN-PRODUCER-001A` qualifies the natural lifecycle,
   completed-bar event, sequential successor, TradePlan/no-plan, and restart
   reconstruction path on branch commit `74da179`. Focused, adjacent, soak, and
@@ -531,22 +560,24 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No lane task is active. `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` is
-   complete and canonical; the three persistent lane roots are idle, detached,
-   clean, and contain no active task.
+1. No canonical integration-train item is active after the observer source
+   closeout. Operational observer creation and heartbeat behavior remain
+   unchanged; activation is separately unauthorized.
 
 ### 2. Ready / Next
 
-1. Initialize Science, Opening Engine, and GUI separately, one task-specific
-   directive at a time, from the newest accepted canonical. The governance setup
-   itself grants no lane task, deployment, or activation authority.
-2. Preserve all prior failed canaries, the empty prospective samples, and all failed
+1. Authorize and qualify a separate observer activation task before changing any
+   operational observer creation, heartbeat payload, scheduler, or service.
+2. Continue Science, Opening Engine, and GUI work only under separate task-
+   specific directives and immutable lane bases. Source integration grants no
+   deployment or activation authority.
+3. Preserve all prior failed canaries, the empty prospective samples, and all failed
    activation/terminal evidence exactly.
-3. Preserve the accepted Producer V4 packet and original 001D evidence.
-4. Close authoritative instrument subtype/leverage classification before any
+4. Preserve the accepted Producer V4 packet and original 001D evidence.
+5. Close authoritative instrument subtype/leverage classification before any
    Continuous Paper arming; unknown and leveraged/inverse products remain
    execution-ineligible meanwhile.
-5. Reconcile and fully requalify the existing
+6. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch, then separately prove disabled
    installation, read-only Paper preflight, and one-entry arming. No gate
    automatically advances to live execution.
@@ -581,10 +612,6 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 5. Deferred / Later
 
-- `OBSERVER-AUTHORIZED-RELEASE-BINDING-001` will bind Freeze Observer
-  expectations to the currently authorized reviewed Opening release/channel
-  identity instead of a stale task-specific predecessor constant. It is recorded
-  only; no observer or runtime byte is changed by the governance setup.
 - `ARGUS-COMMAND-CENTER-001` is a deferred question-first operator read-model/UI
   milestone. It follows the Continuous producer and the relevant historical,
   catalyst, and decision-read interfaces; no WPF work is authorized now.

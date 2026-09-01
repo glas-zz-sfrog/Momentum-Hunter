@@ -197,8 +197,8 @@
   "DEFERRED_TASKS": [
     {
       "TASK_ID": "OBSERVER-AUTHORIZED-RELEASE-BINDING-001",
-      "STATUS": "DEFERRED_NOT_IMPLEMENTED",
-      "INTENT": "Bind Freeze Observer expectations to the currently authorized reviewed Opening release/channel identity instead of a stale task-specific predecessor constant.",
+      "STATUS": "SOURCE_CANONICAL_INTEGRATED_ACTIVATION_DEFERRED",
+      "INTENT": "Canonical source now binds observer verification to the currently authorized reviewed Opening release/channel identity. Operational observer creation and heartbeat activation remain separate and unauthorized.",
       "AUTHORIZED_BY_THIS_REGISTRY": false
     }
   ]

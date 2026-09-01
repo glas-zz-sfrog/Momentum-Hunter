@@ -2,6 +2,31 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-INTEGRATE-OBSERVER-AUTHORIZED-RELEASE-BINDING-001 - 2026-08-31
+
+Canonical `master` fast-forwarded and pushed without conflicts from
+`4a8b0bbbb5354dd31ea4c3a847a4061ab18fbf49` through the exact accepted
+three-commit OPENING_ENGINE lineage to reviewed head
+`020c6d5660373239fd821b8a80189f78b6619583`. The lineage contains zero
+unrelated commits and was not rebased, amended, squashed, cherry-picked, or
+semantically resolved during integration.
+
+The authoritative second-eye ZIP SHA-256 is
+`9673F0343076AC80361300BBDC60C44099EEDD66F519E6CE46D12D8003EE12CB`.
+Post-integration verification passes 11/11 observer tests, 171/171 Opening and
+automation regressions with one expected Windows skip, and all 2,880 approved-
+environment tests with one expected skip. Monday current-authorized replay
+passes against verified 1C49; explicit fixed-F18 replay fails closed as the
+expected stale runtime. Compileall, diff, secret, capability, protected-path,
+package-manifest, production-hash, and service-state checks pass.
+
+Canonical executable, test, and tool blobs are byte-identical to the reviewed
+head. No Science or GUI path changed. No observer activation, heartbeat,
+scheduler, service, release/channel, provider, authentication, Paper, Shadow,
+broker, account, position, or order action occurred. Classification is
+`COMPLETE / CANONICAL_INTEGRATED / ACTIVATION_DEFERRED`; no new second-eye ZIP
+is required.
+
 ## ARGUS-CONTINUOUS-PRODUCER-001F - 2026-08-27
 
 Canonical `master` fast-forwarded without conflicts from
