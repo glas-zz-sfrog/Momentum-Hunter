@@ -1,0 +1,69 @@
+"""Dormant research-only Strategy Science recorder custody package."""
+
+from .canonical import (
+    CANONICALIZATION_VERSION,
+    CanonicalizationError,
+    canonical_json_v1,
+    logical_id,
+    owner_identity,
+    recorder_identity,
+    sha256_hex,
+)
+from .contract import (
+    AUTHORITY,
+    EXECUTION_AUTHORITY,
+    RECORD_FAMILIES,
+    RecorderContractError,
+    parse_export_envelope_v1,
+)
+from .coverage import CoverageReconciliationError, CoverageSummary, METRIC_IDS, derive_coverage
+from .custody import (
+    AcceptanceResult,
+    FinalizationResult,
+    RecorderConflictError,
+    RecorderCustodyError,
+    RecorderRecoveryError,
+    SimulatedRecorderCrash,
+    StrategyScienceRecorder,
+    VerificationReport,
+)
+from .outcomes import (
+    OUTCOME_ATTACHMENT_CONTRACT,
+    SCIENCE_OFFLINE_OUTCOME_PROFILE,
+    outcome_linkage_sha256,
+    outcome_series_binding_sha256,
+    parse_outcome_attachment,
+)
+
+
+__all__ = [
+    "AUTHORITY",
+    "AcceptanceResult",
+    "CANONICALIZATION_VERSION",
+    "CanonicalizationError",
+    "CoverageSummary",
+    "CoverageReconciliationError",
+    "EXECUTION_AUTHORITY",
+    "FinalizationResult",
+    "METRIC_IDS",
+    "OUTCOME_ATTACHMENT_CONTRACT",
+    "RECORD_FAMILIES",
+    "RecorderConflictError",
+    "RecorderContractError",
+    "RecorderCustodyError",
+    "RecorderRecoveryError",
+    "SCIENCE_OFFLINE_OUTCOME_PROFILE",
+    "SimulatedRecorderCrash",
+    "StrategyScienceRecorder",
+    "VerificationReport",
+    "canonical_json_v1",
+    "derive_coverage",
+    "logical_id",
+    "outcome_linkage_sha256",
+    "outcome_series_binding_sha256",
+    "owner_identity",
+    "recorder_identity",
+    "parse_export_envelope_v1",
+    "parse_outcome_attachment",
+    "sha256_hex",
+]
