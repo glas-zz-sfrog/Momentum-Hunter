@@ -55,6 +55,24 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-SHARED-LIFECYCLE-POSITION-IDENTITY-001` is
+`IMPLEMENTED_PENDING_INDEPENDENT_SECOND_EYE / NOT_MERGED` on
+`codex/ARGUS-SHARED-LIFECYCLE-POSITION-IDENTITY-001` from canonical
+`986407467ae8de27df1bc228d843a8701014ac06`; implementation commit is
+`a7858373c7eb4b8c8461aa13c881a199e6e75a9f`. It preserves the authoritative
+candidate opportunity and setup through the Continuous Producer TradePlan and
+immutable Shadow position/`opened_at`, retains the former Shadow identity only
+as `shadow_selection_id`, and exposes the exact chain through the read-only
+Python/C# boundary. Missing, legacy, partial, mismatched, symbol-only, and
+tampered chains remain `UNKNOWN` or rejected; no inference is permitted.
+Focused tests pass 155/155, full approved-environment discovery passes
+2,892/2,892 with one expected Windows skip, .NET passes 261/261, and Release
+build, compileall, diff, secret, capability, and protected-path gates pass. No
+GUI presentation, Science semantic, trading policy, execution authority,
+Shadow activation, service, scheduler, deployment, or canonical mutation
+occurred. A sanitized second-eye ZIP and independent adjudication are the next
+required gates; merge and GUI resume remain unauthorized.
+
 Monday August 24 is terminal as `OPENING_EVIDENCE_PASS_WITH_FINDINGS` with
 `AUTOMATION_RUNTIME_PASS`, `PIPELINE_COMPLETE`, `EXECUTION_EVIDENCE_READY`,
 and `CANDIDATES_NO_EXECUTION_READY_PLAN_BY_POLICY`. BMNR was the sole qualified

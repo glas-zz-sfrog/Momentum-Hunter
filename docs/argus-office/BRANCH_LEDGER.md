@@ -2,6 +2,28 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-SHARED-LIFECYCLE-POSITION-IDENTITY-001 - 2026-09-01
+
+Integration Steward created
+`codex/ARGUS-SHARED-LIFECYCLE-POSITION-IDENTITY-001` in an isolated worktree
+from clean synchronized canonical
+`986407467ae8de27df1bc228d843a8701014ac06`. Implementation commit
+`a7858373c7eb4b8c8461aa13c881a199e6e75a9f` adds the minimum shared
+provenance contract joining lifecycle opportunity/setup to the Producer
+TradePlan and immutable Shadow position/`opened_at`. It retains the separate
+Shadow selection identity without overloading lifecycle authority and exposes
+only additive read fields through Python and C# contracts.
+
+Focused verification passes 155/155; the final approved-environment discovery
+passes 2,892/2,892 with one expected Windows skip; .NET passes 261/261; Release
+build, compileall, diff, secret, capability, and protected-path gates pass.
+Legacy, incomplete, mismatched, symbol-only, timestamp-heuristic, and tampered
+joins cannot return `PROVEN`. No GUI presentation, Science semantics, trading
+policy, execution authority, Shadow activation, service, scheduler, deployment,
+or canonical mutation occurred. Classification is
+`IMPLEMENTED_PENDING_INDEPENDENT_SECOND_EYE / NOT_MERGED`; a sanitized review
+ZIP and independent decision are required before any integration directive.
+
 ## ARGUS-ACTIVATE-OBSERVER-AUTHORIZED-RELEASE-BINDING-001 - 2026-08-31
 
 Activation began from clean synchronized canonical
