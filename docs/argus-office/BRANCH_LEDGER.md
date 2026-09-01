@@ -2,6 +2,36 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-INTEGRATE-SCIENCE-ALWAYS-ON-RECORDER-KERNEL-001 - 2026-09-01
+
+Canonical `master` accepted the exact direct Science task commit from
+`986407467ae8de27df1bc228d843a8701014ac06` to reviewed head
+`c21bd957240b036ad8e834c4e186f21ae7dc651a` through the dedicated disposable
+Integration Steward worktree. The lineage contains one task commit and zero
+unrelated commits. The integration produced zero executable, test, or tool
+conflicts and required no rebase, rewrite, cherry-pick, squash, or semantic
+resolution.
+
+The authoritative review ZIP matches SHA-256
+`858402E377DE2BC9341B2D3C1EF3E40138C35AAE47F1EA252D5F94C00F6330D4` and
+the detached sidecar matches SHA-256
+`CA2AD8F3A1B9CECE00A82B8A04828F9676D46D6BA5A1FF26A95FDCA9F34B6555`.
+All 25 ZIP entries, 24 internal checksum bindings, and 23 manifest records
+reconcile. Canonical Science executable/test bytes are identical to the
+reviewed head.
+
+Post-integration verification passes 51/51 focused tests, the exact 218/218
+adjacent storage, Continuous writer/runtime boundary, denominator, research-
+governance, and package regressions, and the full 2,931-test approved-
+environment suite with one expected Windows privilege skip. Compileall,
+`git diff --check`, secret, capability, import, scope, protected-path, and byte-
+equivalence checks pass. No Opening, GUI, Continuous runtime, provider,
+service, scheduler, Paper, Shadow, broker, account, position, or order path or
+authority changed. Classification is `COMPLETE / CANONICAL_INTEGRATED /
+BOUNDED_OFFLINE_CUSTODY_KERNEL`; a separately authorized Science source-reader
+task may proceed, but prospective always-on capture remains unqualified and
+inactive. No new second-eye ZIP is required.
+
 ## ARGUS-ACTIVATE-OBSERVER-AUTHORIZED-RELEASE-BINDING-001 - 2026-08-31
 
 Activation began from clean synchronized canonical

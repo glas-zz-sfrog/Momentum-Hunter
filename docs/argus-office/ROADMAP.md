@@ -55,6 +55,28 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-INTEGRATE-SCIENCE-ALWAYS-ON-RECORDER-KERNEL-001` is
+`COMPLETE / CANONICAL_INTEGRATED / BOUNDED_OFFLINE_CUSTODY_KERNEL`.
+Canonical accepted the exact one-commit reviewed Science lineage from
+`986407467ae8de27df1bc228d843a8701014ac06` to
+`c21bd957240b036ad8e834c4e186f21ae7dc651a` with zero conflicts or unrelated
+commits. The reviewed six-module custody kernel and six focused test files
+remain byte-identical to the accepted head. The authoritative ZIP SHA-256 is
+`858402E377DE2BC9341B2D3C1EF3E40138C35AAE47F1EA252D5F94C00F6330D4` and
+its detached sidecar SHA-256 is
+`CA2AD8F3A1B9CECE00A82B8A04828F9676D46D6BA5A1FF26A95FDCA9F34B6555`;
+all internal checksum and manifest bindings pass.
+
+Post-integration verification passes 51/51 focused recorder tests, 218/218
+storage/Continuous-boundary/denominator/research-governance regressions, and
+all 2,931 approved-environment tests with one expected Windows privilege skip.
+Compileall, diff, secret, capability, protected-path, and reviewed-byte checks
+pass. This remains an explicit-input offline custody kernel: it adds no live
+source reader, provider client, autonomous worker, service, scheduler, Paper,
+Shadow, broker, account, position, or order authority and activates no capture.
+The next separately authorized Science source-reader task may begin from this
+canonical; `READY_FOR_PROSPECTIVE_ALWAYS_ON_CAPTURE` remains `NO`.
+
 Monday August 24 is terminal as `OPENING_EVIDENCE_PASS_WITH_FINDINGS` with
 `AUTOMATION_RUNTIME_PASS`, `PIPELINE_COMPLETE`, `EXECUTION_EVIDENCE_READY`,
 and `CANDIDATES_NO_EXECUTION_READY_PLAN_BY_POLICY`. BMNR was the sole qualified
