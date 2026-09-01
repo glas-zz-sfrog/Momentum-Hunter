@@ -274,7 +274,8 @@ Paper, Shadow, account, position, broker, order, service, scheduler, GUI, or
 Opening runtime action occurred.
 
 `ARGUS-OBSERVER-AUTHORIZED-RELEASE-BINDING-001` is
-`COMPLETE / CANONICAL_INTEGRATED / ACTIVATION_DEFERRED`. Canonical fast-forwarded
+`COMPLETE / CANONICAL_INTEGRATED / PRODUCTION_HEARTBEAT_ACTIVE_READ_ONLY`.
+Canonical fast-forwarded
 and pushed the exact three-commit accepted OPENING_ENGINE lineage from
 `4a8b0bbbb5354dd31ea4c3a847a4061ab18fbf49` to reviewed head
 `020c6d5660373239fd821b8a80189f78b6619583` with zero conflicts, unrelated
@@ -286,10 +287,25 @@ automation regressions with one expected Windows skip, and all 2,880 approved-
 environment tests with one expected skip. Monday current-authorized replay
 resolves `OPENING-RUNTIME-1C49F7F328503BF8FECF` and passes; explicit fixed-F18
 historical replay fails closed as `RUNTIME_DRIFT`. Reviewed executable, test,
-and tool bytes are identical to the accepted head. No operational observer,
-heartbeat, scheduler, service, release/channel, provider, authentication,
-Paper, Shadow, broker, account, position, or order state changed. Activation
-requires a separate directive.
+and tool bytes are identical to the accepted head.
+
+`ARGUS-ACTIVATE-OBSERVER-AUTHORIZED-RELEASE-BINDING-001` is `COMPLETE /
+PRODUCTION_HEARTBEAT_ACTIVE_READ_ONLY`. The sole current Observer automation is
+the active Codex heartbeat `argus-opening-authorized-release-observer`, scheduled
+for 08:35 CT on weekdays and instructed to no-op when no matching manifest job
+exists. It reads only persisted local evidence, resolves the verified
+`opening-capture` channel, complete promotion chain, and immutable authorized
+release at observation time, and requires `mutationPerformed=false` plus
+`orderTransmission=UNAVAILABLE`. Monday production replay passes against
+`OPENING-RUNTIME-1C49F7F328503BF8FECF`; no release or fingerprint is pinned in
+the heartbeat. Observer configuration inventory contains one current instance;
+the predecessor one-time heartbeat has no current configuration. Focused
+verification passes 11/11, Opening/automation regressions pass 171/171 with one
+expected Windows skip, and full approved-environment discovery passes 2,880 of
+2,880 with one expected skip. Automation manifest, Continuous deployment,
+opening channel, Windows Task Scheduler, and Momentum Hunter services are
+unchanged. No provider, authentication, Paper, Shadow, broker, account,
+position, or order authority was used.
 
 `ARGUS-CATALYST-SCORE-AUTHORITY-001` is `COMPLETE / APPROVED_RUNTIME_ACTIVE`.
 Implementation commit
@@ -471,14 +487,20 @@ research-only and undeployed. `ARGUS-PARALLEL-WORKSTREAM-GOVERNANCE-001` is
 `97b751f14e6241beae8d64d8aea24c4b46c1179d` establishes three clean detached
 AppData lane roots, a machine-readable registry, cross-lane contract gates,
 shared-governance ownership, isolated external-state templates, and serialized
-integration. The accepted observer source is now canonical; operational
-observer creation and heartbeat behavior remain unchanged pending a separate
-activation directive. Science and GUI work were not touched. Authoritative
-instrument subtype/leverage classification remains a pre-Paper gate. The
+integration. The accepted observer source is canonical and its single read-only
+production Codex heartbeat is active. Science and GUI work were not touched.
+Authoritative instrument subtype/leverage classification remains a pre-Paper gate. The
 authoritative ordered sequence is maintained only in `Next / Queue` below.
 
 ### Recent Material Completions
 
+- `ARGUS-ACTIVATE-OBSERVER-AUTHORIZED-RELEASE-BINDING-001` activates exactly one
+  production Codex heartbeat, `argus-opening-authorized-release-observer`, at
+  08:35 CT on manifest opening weekdays. It resolves current authorized release
+  identity at run time and is explicitly read-only, fail-closed, provider-free,
+  and execution-unavailable. Full approved-environment discovery passes
+  2,880/2,880. Windows Task Scheduler, Momentum Hunter services/manifests,
+  provider authentication, Paper, Shadow, Science, and GUI are unchanged.
 - `ARGUS-OBSERVER-AUTHORIZED-RELEASE-BINDING-001` integrates the independently
   accepted OPENING_ENGINE verifier at exact reviewed head `020c6d5`. Current-
   authorized observation resolves the complete verified promotion chain and
@@ -560,24 +582,23 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No canonical integration-train item is active after the observer source
-   closeout. Operational observer creation and heartbeat behavior remain
-   unchanged; activation is separately unauthorized.
+1. No canonical integration-train item is active after the Observer activation
+   closeout. The single read-only production Observer heartbeat is active; any
+   identity, singleton, canonical, or safety anomaly fails closed and requires a
+   separate repair directive.
 
 ### 2. Ready / Next
 
-1. Authorize and qualify a separate observer activation task before changing any
-   operational observer creation, heartbeat payload, scheduler, or service.
-2. Continue Science, Opening Engine, and GUI work only under separate task-
+1. Continue Science, Opening Engine, and GUI work only under separate task-
    specific directives and immutable lane bases. Source integration grants no
    deployment or activation authority.
-3. Preserve all prior failed canaries, the empty prospective samples, and all failed
+2. Preserve all prior failed canaries, the empty prospective samples, and all failed
    activation/terminal evidence exactly.
-4. Preserve the accepted Producer V4 packet and original 001D evidence.
-5. Close authoritative instrument subtype/leverage classification before any
+3. Preserve the accepted Producer V4 packet and original 001D evidence.
+4. Close authoritative instrument subtype/leverage classification before any
    Continuous Paper arming; unknown and leveraged/inverse products remain
    execution-ineligible meanwhile.
-6. Reconcile and fully requalify the existing
+5. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch, then separately prove disabled
    installation, read-only Paper preflight, and one-entry arming. No gate
    automatically advances to live execution.

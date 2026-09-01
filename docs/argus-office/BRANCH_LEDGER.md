@@ -2,6 +2,36 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-ACTIVATE-OBSERVER-AUTHORIZED-RELEASE-BINDING-001 - 2026-08-31
+
+Activation began from clean synchronized canonical
+`e6ece7e63623911c328b3a499e94b6282970b47d`. The integrated verifier replayed
+Monday persisted production evidence against the live verified
+`opening-capture` channel, complete promotion chain, and immutable release and
+returned `PASS / AUTHORIZED_RUNTIME_MATCH`, `mutationPerformed=false`, and
+`orderTransmission=UNAVAILABLE` for
+`OPENING-RUNTIME-1C49F7F328503BF8FECF` with runtime fingerprint
+`1c49f7f328503bf8fecfd359af084c01d5a731133ae4ec1555aa5b1f88997151`.
+
+The minimum production mutation created one active Codex heartbeat:
+`argus-opening-authorized-release-observer`. It runs at 08:35 CT on weekdays,
+no-ops when no matching manifest opening job exists, dynamically resolves
+current authority at observation time, and is explicitly prohibited from
+provider, authentication, operational, service, Windows scheduler, Paper,
+Shadow, broker, account, position, or order mutation. Exactly one current
+Observer automation configuration exists. The predecessor one-time heartbeat
+has no current configuration, and no Windows Observer task or persistent
+Observer process exists.
+
+Focused verification passes 11/11, Opening/automation regressions pass 171/171
+with one expected Windows skip, and full approved-environment discovery passes
+2,880/2,880 with one expected skip. Compileall, diff, secret, schedule,
+prompt-safety, protected-path, runtime-identity, singleton, production-hash,
+service-state, and lane checks pass. Automation manifest, Continuous deployment,
+opening channel, Windows Task Scheduler, and all Momentum Hunter service states
+remain unchanged. Science and GUI lane roots are untouched. Classification is
+`COMPLETE / PRODUCTION_HEARTBEAT_ACTIVE_READ_ONLY`; rollback is not required.
+
 ## ARGUS-INTEGRATE-OBSERVER-AUTHORIZED-RELEASE-BINDING-001 - 2026-08-31
 
 Canonical `master` fast-forwarded and pushed without conflicts from

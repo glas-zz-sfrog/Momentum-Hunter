@@ -197,8 +197,8 @@
   "DEFERRED_TASKS": [
     {
       "TASK_ID": "OBSERVER-AUTHORIZED-RELEASE-BINDING-001",
-      "STATUS": "SOURCE_CANONICAL_INTEGRATED_ACTIVATION_DEFERRED",
-      "INTENT": "Canonical source now binds observer verification to the currently authorized reviewed Opening release/channel identity. Operational observer creation and heartbeat activation remain separate and unauthorized.",
+      "STATUS": "SOURCE_CANONICAL_INTEGRATED_PRODUCTION_HEARTBEAT_ACTIVE_READ_ONLY",
+      "INTENT": "Canonical source binds observer verification to the currently authorized reviewed Opening release/channel identity. Production Codex heartbeat argus-opening-authorized-release-observer is active, resolves authority dynamically, reads persisted local evidence only, and has no provider, authentication, service, Windows scheduler, Paper, Shadow, broker, account, position, or order authority.",
       "AUTHORIZED_BY_THIS_REGISTRY": false
     }
   ]
