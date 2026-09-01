@@ -1,8 +1,9 @@
 """Strict, provider-free consumer view of the approved recorder contract.
 
-``ResearchExportEnvelopeV1`` remains a proposed shared cross-lane interface.
-The parser here is intentionally a Science-only offline reference consumer; it
-does not claim natural producer compatibility.
+``ResearchExportEnvelopeV1`` remains the accepted legacy offline profile.
+``ResearchExportEnvelopeV2`` repairs the producer/Science clock boundary while
+remaining a Science-only offline reference consumer.  Neither profile claims
+natural producer compatibility.
 """
 
 from __future__ import annotations
@@ -30,6 +31,10 @@ SCHEMA_MAJOR_VERSION = 1
 SOURCE_CONTRACT = "ResearchExportEnvelopeV1"
 PREDECESSOR_SCHEMA_VERSION = "1.0.0-proposal"
 SCIENCE_OFFLINE_EXPORT_PROFILE = "ARGUS_SCIENCE_OFFLINE_RESEARCH_EXPORT_V1"
+REPAIRED_EXPORT_SCHEMA_VERSION = "2.0.0"
+REPAIRED_SOURCE_CONTRACT = "ResearchExportEnvelopeV2"
+REPAIRED_SOURCE_CONTRACT_VERSION = "2.0.0-proposal"
+SCIENCE_OFFLINE_EXPORT_PROFILE_V2 = "ARGUS_SCIENCE_OFFLINE_RESEARCH_EXPORT_V2"
 HASH_ALGORITHM = "SHA-256"
 HASH_UNIT = "EXACT_CANONICAL_UTF8_JSON_BYTES_WITH_LF"
 PREVIOUS_HASH_TARGET = "EXACT_PRIOR_RAW_SOURCE_ENVELOPE_BYTES"
@@ -908,33 +913,41 @@ def _validate_reference_level_profile(value: object, label: str, role: str) -> N
         raise RecorderContractError(f"{label} non-PRESENT state prohibits level value fields.")
 
 
-def _validate_decision_profile(payload: Mapping[str, object]) -> None:
+def _validate_decision_profile(
+    payload: Mapping[str, object],
+    *,
+    export_schema_version: str,
+) -> None:
     require_exact_fields(
         payload,
         required={"decision_event"},
         optional={"reference_plan"},
         label="DECISION_FACT payload",
     )
+    required = {
+        "decision_id",
+        "observation_id",
+        "candidate_or_setup_identity",
+        "decision_state",
+        "reason_codes",
+        "decision_time",
+        "decision_cutoff",
+        "known_at_evidence_refs",
+        "strategy_identity",
+        "decision_policy_fingerprint_sha256",
+        "config_fingerprint_sha256",
+        "runtime_fingerprint_sha256",
+        "market_snapshot_id",
+        "tradeplan_id",
+        "reference_plan_id",
+    }
+    if export_schema_version == SCHEMA_VERSION:
+        required.add("outcome_eligibility_commitment_sha256")
+    elif export_schema_version != REPAIRED_EXPORT_SCHEMA_VERSION:
+        raise RecorderContractError("Unsupported decision export schema version.")
     decision = require_exact_fields(
         payload["decision_event"],
-        required={
-            "decision_id",
-            "observation_id",
-            "candidate_or_setup_identity",
-            "decision_state",
-            "reason_codes",
-            "decision_time",
-            "decision_cutoff",
-            "known_at_evidence_refs",
-            "strategy_identity",
-            "decision_policy_fingerprint_sha256",
-            "config_fingerprint_sha256",
-            "runtime_fingerprint_sha256",
-            "outcome_eligibility_commitment_sha256",
-            "market_snapshot_id",
-            "tradeplan_id",
-            "reference_plan_id",
-        },
+        required=required,
         optional={
             "score",
             "score_version",
@@ -970,12 +983,14 @@ def _validate_decision_profile(payload: Mapping[str, object]) -> None:
             raise RecorderContractError("Known-at reference must use a provider-known/received role.")
         require_sha256(known_ref["payload_sha256"], f"known_at_evidence_refs[{index}].payload_sha256")
     require_evidence_value(decision["strategy_identity"], "strategy_identity", value_kind="string")
-    for field in (
+    hash_fields = [
         "decision_policy_fingerprint_sha256",
         "config_fingerprint_sha256",
         "runtime_fingerprint_sha256",
-        "outcome_eligibility_commitment_sha256",
-    ):
+    ]
+    if export_schema_version == SCHEMA_VERSION:
+        hash_fields.append("outcome_eligibility_commitment_sha256")
+    for field in hash_fields:
         require_sha256(decision[field], field)
     require_evidence_value(decision["market_snapshot_id"], "market_snapshot_id", value_kind="identity", identity_kinds=frozenset({"MARKET_SNAPSHOT_ID"}))
     require_evidence_value(decision["tradeplan_id"], "tradeplan_id", value_kind="identity", identity_kinds=frozenset({"TRADEPLAN_ID"}))
@@ -1141,11 +1156,19 @@ def _validate_health_profile(payload: Mapping[str, object]) -> None:
                 require_sha256(record[field]["value"], f"{field}.value")
 
 
-def validate_export_payload_profile(event_type: str, payload: Mapping[str, object]) -> None:
+def validate_export_payload_profile(
+    event_type: str,
+    payload: Mapping[str, object],
+    *,
+    export_schema_version: str = SCHEMA_VERSION,
+) -> None:
     if event_type == "DISCOVERY_CYCLE":
         _validate_discovery_profile(payload)
     elif event_type == "DECISION_FACT":
-        _validate_decision_profile(payload)
+        _validate_decision_profile(
+            payload,
+            export_schema_version=export_schema_version,
+        )
     elif event_type == "MARKET_FACT":
         _validate_market_profile(payload)
     elif event_type == "PROVIDER_HEALTH":
@@ -1238,12 +1261,18 @@ def parse_export_envelope(raw: bytes) -> ValidatedExportEnvelope:
     }
     if set(value) != required_fields:
         raise RecorderContractError("Export envelope has missing or unknown top-level fields.")
-    if value["schema_version"] != SCHEMA_VERSION:
+    schema_version = value["schema_version"]
+    if schema_version not in {SCHEMA_VERSION, REPAIRED_EXPORT_SCHEMA_VERSION}:
         raise RecorderContractError("Unsupported export schema version; fail closed.")
     from .canonical import CANONICALIZATION_VERSION
 
+    repaired = schema_version == REPAIRED_EXPORT_SCHEMA_VERSION
     exact_profile = {
-        "offline_reference_profile": SCIENCE_OFFLINE_EXPORT_PROFILE,
+        "offline_reference_profile": (
+            SCIENCE_OFFLINE_EXPORT_PROFILE_V2
+            if repaired
+            else SCIENCE_OFFLINE_EXPORT_PROFILE
+        ),
         "canonicalization_version": CANONICALIZATION_VERSION,
         "hash_algorithm": HASH_ALGORITHM,
         "hash_unit": HASH_UNIT,
@@ -1256,9 +1285,15 @@ def parse_export_envelope(raw: bytes) -> ValidatedExportEnvelope:
     event_type = _text(value, "event_type")
     if event_type not in EVENT_TYPES:
         raise RecorderContractError("Unsupported export event type.")
+    expected_source_contract = (
+        REPAIRED_SOURCE_CONTRACT if repaired else SOURCE_CONTRACT
+    )
+    expected_source_version = (
+        REPAIRED_SOURCE_CONTRACT_VERSION if repaired else PREDECESSOR_SCHEMA_VERSION
+    )
     if (
-        value["source_contract"] != SOURCE_CONTRACT
-        or value["source_contract_version"] != PREDECESSOR_SCHEMA_VERSION
+        value["source_contract"] != expected_source_contract
+        or value["source_contract_version"] != expected_source_version
     ):
         raise RecorderContractError("Unsupported source contract lineage.")
     if value["authority"] != AUTHORITY or value["execution_authority"] != EXECUTION_AUTHORITY:
@@ -1282,19 +1317,23 @@ def parse_export_envelope(raw: bytes) -> ValidatedExportEnvelope:
     if sha256_hex(canonical_json_bytes(payload)) != payload_sha:
         raise RecorderContractError("payload_sha256 does not match canonical payload bytes.")
     _walk_prohibited(value)
-    validate_export_payload_profile(event_type, payload)
+    validate_export_payload_profile(
+        event_type,
+        payload,
+        export_schema_version=str(schema_version),
+    )
     validate_export_clock_relationships(value, event_type, payload)
     return ValidatedExportEnvelope(
         raw_bytes=raw,
         raw_sha256=sha256_hex(raw),
-        schema_version=SCHEMA_VERSION,
+        schema_version=str(schema_version),
         event_type=event_type,
         stream_id=_text(value, "stream_id"),
         session_id=session_id,
         source_owner_identity=_text(value, "source_owner_identity"),
         source_interface_identity=_text(value, "source_interface_identity"),
-        source_contract=SOURCE_CONTRACT,
-        source_contract_version=PREDECESSOR_SCHEMA_VERSION,
+        source_contract=expected_source_contract,
+        source_contract_version=expected_source_version,
         source_event_id=_text(value, "source_event_id"),
         source_event_fingerprint_sha256=str(value["source_event_fingerprint_sha256"]),
         source_sequence=sequence,
@@ -1307,9 +1346,22 @@ def parse_export_envelope(raw: bytes) -> ValidatedExportEnvelope:
     )
 
 
-# Public handoff name.  This remains an offline Science reference parser, not
-# an operative cross-lane DTO implementation.
-parse_export_envelope_v1 = parse_export_envelope
+def parse_export_envelope_v1(raw: bytes) -> ValidatedExportEnvelope:
+    """Parse only the immutable legacy V1 profile."""
+
+    parsed = parse_export_envelope(raw)
+    if parsed.schema_version != SCHEMA_VERSION:
+        raise RecorderContractError("Envelope is not the legacy V1 profile.")
+    return parsed
+
+
+def parse_export_envelope_v2(raw: bytes) -> ValidatedExportEnvelope:
+    """Parse only the repaired one-way V2 profile."""
+
+    parsed = parse_export_envelope(raw)
+    if parsed.schema_version != REPAIRED_EXPORT_SCHEMA_VERSION:
+        raise RecorderContractError("Envelope is not the repaired V2 profile.")
+    return parsed
 
 
 __all__ = [
@@ -1328,11 +1380,15 @@ __all__ = [
     "PREDECESSOR_SCHEMA_VERSION",
     "PREDECESSOR_SCHEMA_SHA256",
     "PREDECESSOR_SIDECAR_SHA256",
+    "REPAIRED_EXPORT_SCHEMA_VERSION",
+    "REPAIRED_SOURCE_CONTRACT",
+    "REPAIRED_SOURCE_CONTRACT_VERSION",
     "RECORD_FAMILIES",
     "RecorderContractError",
     "SCHEMA_MAJOR_VERSION",
     "SCHEMA_VERSION",
     "SCIENCE_OFFLINE_EXPORT_PROFILE",
+    "SCIENCE_OFFLINE_EXPORT_PROFILE_V2",
     "SOURCE_CONTRACT",
     "SOURCE_SEQUENCE_SCOPE",
     "TERMINAL_OUTCOME_STATES",
@@ -1341,6 +1397,7 @@ __all__ = [
     "evidence_instant",
     "parse_export_envelope",
     "parse_export_envelope_v1",
+    "parse_export_envelope_v2",
     "require_evidence_value",
     "require_exact_fields",
     "require_instrument_identity",

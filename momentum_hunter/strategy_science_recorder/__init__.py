@@ -12,9 +12,14 @@ from .canonical import (
 from .contract import (
     AUTHORITY,
     EXECUTION_AUTHORITY,
+    REPAIRED_EXPORT_SCHEMA_VERSION,
+    REPAIRED_SOURCE_CONTRACT,
+    REPAIRED_SOURCE_CONTRACT_VERSION,
     RECORD_FAMILIES,
     RecorderContractError,
+    parse_export_envelope,
     parse_export_envelope_v1,
+    parse_export_envelope_v2,
 )
 from .coverage import CoverageReconciliationError, CoverageSummary, METRIC_IDS, derive_coverage
 from .custody import (
@@ -23,9 +28,12 @@ from .custody import (
     RecorderConflictError,
     RecorderCustodyError,
     RecorderRecoveryError,
+    SCIENCE_ELIGIBILITY_PROFILE,
+    SCIENCE_ELIGIBILITY_RECORD_VERSION,
     SimulatedRecorderCrash,
     StrategyScienceRecorder,
     VerificationReport,
+    science_eligibility_sha256,
 )
 from .outcomes import (
     OUTCOME_ATTACHMENT_CONTRACT,
@@ -47,12 +55,17 @@ __all__ = [
     "FinalizationResult",
     "METRIC_IDS",
     "OUTCOME_ATTACHMENT_CONTRACT",
+    "REPAIRED_EXPORT_SCHEMA_VERSION",
+    "REPAIRED_SOURCE_CONTRACT",
+    "REPAIRED_SOURCE_CONTRACT_VERSION",
     "RECORD_FAMILIES",
     "RecorderConflictError",
     "RecorderContractError",
     "RecorderCustodyError",
     "RecorderRecoveryError",
     "SCIENCE_OFFLINE_OUTCOME_PROFILE",
+    "SCIENCE_ELIGIBILITY_PROFILE",
+    "SCIENCE_ELIGIBILITY_RECORD_VERSION",
     "SimulatedRecorderCrash",
     "StrategyScienceRecorder",
     "VerificationReport",
@@ -63,7 +76,10 @@ __all__ = [
     "outcome_series_binding_sha256",
     "owner_identity",
     "recorder_identity",
+    "parse_export_envelope",
     "parse_export_envelope_v1",
+    "parse_export_envelope_v2",
     "parse_outcome_attachment",
     "sha256_hex",
+    "science_eligibility_sha256",
 ]

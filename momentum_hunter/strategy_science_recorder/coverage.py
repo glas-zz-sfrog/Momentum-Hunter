@@ -101,6 +101,12 @@ def derive_coverage(
     observations = [item for item in items if item.get("record_type") == "candidate-observation" and _recorder_id(item.get("observation_id"))]
     decisions = [item for item in items if item.get("record_type") == "decision-event" and _recorder_id(item.get("decision_id"))]
     outcomes = [item for item in items if item.get("record_type") == "outcome-observation" and _recorder_id(item.get("outcome_observation_id"))]
+    science_eligibility_records = [
+        item
+        for item in items
+        if item.get("record_type") == "science-eligibility"
+        and _recorder_id(item.get("eligibility_id"))
+    ]
     observations_by_id: dict[str, Mapping[str, object]] = {}
     for item in observations:
         observation_id = _recorder_id(item.get("observation_id"))
@@ -124,16 +130,61 @@ def derive_coverage(
         and isinstance(item["instrument_identity"].get("instrument_identity_fingerprint_sha256"), str)
         and item["instrument_identity"].get("instrument_identity_fingerprint_sha256")
     }
-    eligible_observations = {
-        observation_id: item
-        for observation_id, item in observations_by_id.items()
-        if isinstance(item.get("outcome_eligibility"), Mapping)
-        and item["outcome_eligibility"].get("eligibility_state") == "ELIGIBLE"
-        and isinstance(
-            item["outcome_eligibility"].get("commitment_payload_sha256"), str
-        )
-        and item["outcome_eligibility"].get("commitment_payload_sha256")
-    }
+    science_eligibility_by_instrument: dict[
+        str, tuple[Mapping[str, object], Mapping[str, object]]
+    ] = {}
+    for record in science_eligibility_records:
+        material = record.get("science_eligibility")
+        fingerprint = record.get("instrument_identity_fingerprint_sha256")
+        if (
+            not isinstance(material, Mapping)
+            or material.get("eligibility_state") != "ELIGIBLE"
+            or not isinstance(material.get("commitment_payload_sha256"), str)
+            or not isinstance(fingerprint, str)
+            or material.get("instrument_identity_fingerprint_sha256") != fingerprint
+        ):
+            raise CoverageReconciliationError(
+                "Science eligibility record is malformed."
+            )
+        previous = science_eligibility_by_instrument.get(fingerprint)
+        if previous is not None and previous[1] != material:
+            raise CoverageReconciliationError(
+                "One instrument has conflicting Science eligibility records."
+            )
+        science_eligibility_by_instrument[fingerprint] = (record, material)
+    eligible_observations: dict[str, Mapping[str, object]] = {}
+    eligibility_hash_by_observation: dict[str, str] = {}
+    eligibility_id_by_observation: dict[str, object] = {}
+    for observation_id, item in observations_by_id.items():
+        commitment = item.get("outcome_eligibility")
+        eligibility_id: object = None
+        if not isinstance(commitment, Mapping):
+            instrument = item.get("instrument_identity")
+            fingerprint = (
+                instrument.get("instrument_identity_fingerprint_sha256")
+                if isinstance(instrument, Mapping)
+                else None
+            )
+            science_entry = (
+                science_eligibility_by_instrument.get(str(fingerprint))
+                if isinstance(fingerprint, str)
+                else None
+            )
+            if science_entry is not None:
+                eligibility_id = science_entry[0].get("eligibility_id")
+                commitment = science_entry[1]
+        if (
+            isinstance(commitment, Mapping)
+            and commitment.get("eligibility_state") == "ELIGIBLE"
+            and isinstance(commitment.get("commitment_payload_sha256"), str)
+            and commitment.get("commitment_payload_sha256")
+        ):
+            eligible_observations[observation_id] = item
+            eligibility_hash_by_observation[observation_id] = str(
+                commitment["commitment_payload_sha256"]
+            )
+            if eligibility_id is not None:
+                eligibility_id_by_observation[observation_id] = eligibility_id
     eligible = {
         str(item["instrument_identity"]["instrument_identity_fingerprint_sha256"])
         for item in eligible_observations.values()
@@ -156,14 +207,23 @@ def derive_coverage(
             raise CoverageReconciliationError(
                 "Decision lacks one exact eligible observation parent."
             )
-        commitment = observation["outcome_eligibility"][
-            "commitment_payload_sha256"
-        ]
-        if (
+        commitment = eligibility_hash_by_observation[observation_id]
+        candidate_mismatch = (
             item.get("candidate_or_setup_identity")
             != observation.get("candidate_or_setup_identity")
-            or item.get("outcome_eligibility_commitment_sha256") != commitment
-        ):
+        )
+        science_link = item.get("science_eligibility_commitment_sha256")
+        if science_link is not None:
+            linkage_mismatch = (
+                science_link != commitment
+                or item.get("science_eligibility_id")
+                != eligibility_id_by_observation.get(observation_id)
+            )
+        else:
+            linkage_mismatch = (
+                item.get("outcome_eligibility_commitment_sha256") != commitment
+            )
+        if candidate_mismatch or linkage_mismatch:
             raise CoverageReconciliationError(
                 "Decision does not exactly bind its eligible observation."
             )
@@ -200,7 +260,7 @@ def derive_coverage(
             or item.get("candidate_or_setup_identity")
             != decision.get("candidate_or_setup_identity")
             or item.get("eligibility_commitment_sha256")
-            != observation["outcome_eligibility"]["commitment_payload_sha256"]
+            != eligibility_hash_by_observation[observation_id]
         ):
             raise CoverageReconciliationError(
                 "Outcome does not exactly bind its decision and observation parents."
