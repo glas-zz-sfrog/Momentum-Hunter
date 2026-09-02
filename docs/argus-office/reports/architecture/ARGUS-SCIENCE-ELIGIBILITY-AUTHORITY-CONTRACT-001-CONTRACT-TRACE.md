@@ -103,4 +103,3 @@ record, its repaired-linkage classification is:
   later Outcome attachment.
 
 `CONTRACT_VERSION_ACTION = NEW_VERSION_REQUIRED`
-

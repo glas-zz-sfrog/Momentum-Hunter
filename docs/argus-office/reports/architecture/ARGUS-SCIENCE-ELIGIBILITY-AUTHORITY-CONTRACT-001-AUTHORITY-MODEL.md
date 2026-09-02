@@ -93,4 +93,3 @@ V1 and V2 are explicit parallel read profiles:
 This contract adds no exporter, reader, provider client, live worker, service,
 scheduler, deployment, GUI, Opening Engine, trading-policy, Paper, Shadow,
 broker, account, position, or execution authority.
-
