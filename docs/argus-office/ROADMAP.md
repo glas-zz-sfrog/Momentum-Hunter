@@ -55,6 +55,42 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-INTEGRATE-CONTINUOUS-RESEARCH-EXPORT-002` is
+`COMPLETE / CANONICAL_INTEGRATED / DORMANT_OFFLINE_RESEARCH_EXPORTER`.
+Canonical accepted the exact one-commit reviewed Continuous export lineage from
+`367af2a33a34c76558eb60b65008df88414815f1` to frozen review head
+`4e70c96c72c35224a90a0c798fdb778db74a9e28` with zero conflicts,
+unrelated commits, history rewriting, or executable/test/tool adaptation. The
+authoritative second-eye ZIP matches SHA-256
+`E7EE83E7D5AC59201C98D2B8FDFCD527471C6EFB35CFD62A1C0BF13B83ECF959`;
+fresh independent extraction passes path safety, manifest byte counts and
+hashes, `SHA256SUMS`, sanitization, base/head/task identity, and exact packaged-
+source-to-Git byte equivalence.
+
+`ContinuousResearchExporterV2` now supplies dormant, offline-qualified,
+write-once `ResearchExportEnvelopeV2` bytes under source contract
+`2.0.0-proposal`. Producer bytes require no future Science hash and pass the
+unchanged canonical V2 parser and Science custody directly without an adapter,
+rewrite, or reserialization. START-first chronology, deterministic raw bytes,
+per-stream sequence and previous-envelope hash chains, explicit producer
+dependencies, restart/crash recovery, partial-stage invisibility, truthful
+incomplete/no-FINAL behavior, terminal FINAL derivation, unresolved-instrument
+preservation, outcome separation, and historical Class-B non-upgrade all pass.
+The two-clock proof preserves identical Producer bytes and hashes while later
+Science receipt and eligibility identities remain Science-owned.
+
+Post-integration verification passes 31/31 focused exporter tests, 96/96 Science
+compatibility tests, 253/253 Continuous-adjacent tests, and all 2,990 approved-
+environment tests with one expected Windows privilege skip. Compileall, diff,
+capability, secret, protected-path, ancestry, reviewed-byte, and clean-tree
+checks pass. This integration attaches no exporter to production, implements or
+activates no Science reader, contacts no provider or broker/account surface,
+adds no service or scheduler, and grants no Paper, Shadow, or execution
+authority. Opening, Observer, GUI, strategy/scoring/TradePlan economics, and the
+September 2 evidence remain unchanged. A separately authorized Science source-
+reader task may now begin; reader activation and always-on capture remain
+unauthorized.
+
 `ARGUS-INTEGRATE-SCIENCE-ELIGIBILITY-AUTHORITY-CONTRACT-001A` is
 `COMPLETE / CANONICAL_INTEGRATED / DORMANT_VERSIONED_SCIENCE_CONTRACT`.
 Canonical accepted the complete reviewed Science delta atomically from original
@@ -670,17 +706,18 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No canonical integration-train item is active after the Science eligibility-
-   authority contract closeout. The single read-only production Observer
+1. No canonical integration-train item is active after the Continuous research-
+   exporter closeout. The single read-only production Observer
    heartbeat remains active; any identity, singleton, canonical, or safety
    anomaly fails closed and requires a separate repair directive.
 
 ### 2. Ready / Next
 
-1. `ARGUS-CONTINUOUS-RESEARCH-EXPORT-001` may begin only under its separate,
-   bounded task directive from this accepted canonical contract. This readiness
-   grants no exporter or Science-reader restart, deployment, provider contact,
-   service/scheduler mutation, Paper authority, or execution authority.
+1. A bounded Science source-reader task may begin only under a separate explicit
+   directive from this accepted canonical export boundary. This readiness grants
+   no reader activation, always-on capture, exporter runtime attachment,
+   deployment, provider contact, service/scheduler mutation, Paper authority, or
+   execution authority.
 2. Continue Science, Opening Engine, and GUI work only under separate task-
    specific directives and immutable lane bases. Source integration grants no
    deployment or activation authority.

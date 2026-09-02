@@ -2,6 +2,43 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-INTEGRATE-CONTINUOUS-RESEARCH-EXPORT-002 - 2026-09-02
+
+Canonical `master` accepted the exact one-commit reviewed Continuous export
+lineage from pre-task canonical
+`367af2a33a34c76558eb60b65008df88414815f1` to frozen review head
+`4e70c96c72c35224a90a0c798fdb778db74a9e28`. Qualification in the
+detached disposable Integration Steward worktree produced a direct fast-forward
+with identical reviewed and integrated tree IDs, zero conflicts, zero unrelated
+commits, and no cherry-pick, rebase, squash, history rewrite, or executable,
+test, or tool semantic adaptation.
+
+The authoritative second-eye ZIP matches SHA-256
+`E7EE83E7D5AC59201C98D2B8FDFCD527471C6EFB35CFD62A1C0BF13B83ECF959`.
+Independent fresh extraction verifies all 31 entries, 29 manifest bindings,
+`SHA256SUMS`, safe member paths, sanitization, exact base/head/task identities,
+the declared ten-path delta, and byte equality between every packaged source and
+the frozen Git blob. No new second-eye package is required.
+
+Post-integration verification passes 31/31 focused exporter tests, 96/96 Science
+compatibility tests, 253/253 Continuous-adjacent tests, and 2,990/2,990 full
+approved-environment tests with one expected Windows privilege skip. Compileall,
+diff, capability, secret, protected-path, ancestry, exact-byte, proof-binding,
+and clean-tree checks pass. Direct canonical parser/custody compatibility, the
+two-clock noncircular proof, START/FINAL truth, per-stream sequence/hash chains,
+restart/crash recovery, atomic publication visibility, anti-hindsight, outcome
+separation, unresolved-instrument preservation, and historical Class-B non-
+upgrade all pass.
+
+The exporter remains dormant and offline. No production attachment, provider,
+authentication, Science reader, service, scheduler, Golden Session, Opening,
+Observer, GUI, strategy/scoring/TradePlan economics, Paper, Shadow, broker,
+account, position, order, or execution authority or state changed. September 2
+opening evidence remains byte-identical. Classification is `COMPLETE /
+CANONICAL_INTEGRATED / DORMANT_OFFLINE_RESEARCH_EXPORTER`; a separately
+authorized Science source-reader task may begin, but reader activation and
+always-on capture remain unauthorized.
+
 ## ARGUS-INTEGRATE-SCIENCE-ELIGIBILITY-AUTHORITY-CONTRACT-001A - 2026-09-02
 
 Canonical `master` accepted the complete reviewed Science contract delta from
