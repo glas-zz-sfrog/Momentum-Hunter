@@ -2,6 +2,39 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-INTEGRATE-ACTIVATE-OBSERVER-SOURCE-GIT-OVERBINDING-001 - 2026-09-02
+
+Canonical `master` accepted the reviewed OPENING_ENGINE implementation and
+review closeout from pre-task head
+`04f6f8382e03906cbd174711a1d4df2d43a5cab4` to source-integration head
+`1d0b76c190fc50308f466b98b02f989908195f62` through the disposable Integration
+Steward worktree. The accepted files are exactly the five reviewed paths; all
+executable, test, fixture, and release-report bytes match frozen review head
+`6c940d7a6a1fdcae7007b848321358f33246b349`. Integration was conflict-free and
+required no executable or test semantic resolution. The authoritative
+second-eye ZIP matches SHA-256
+`1F539B9B4A0C80F25FFCBBA791B0B4058799EB88B4D2976BB221C3369B61C136`.
+
+Focused verification passes 25/25, exact adjacent Opening/automation
+regressions pass 173/173, and full approved-environment discovery passes all
+2,945 tests with one expected Windows privilege skip. Compileall, diff, secret,
+capability, scope, protected-path, reviewed-byte, prompt-wiring, and singleton
+checks pass. The offline September 1 mismatch replay and post-activation
+provider-free canary both pass; all 17 negative controls fail closed.
+
+Activation changed only the existing Codex Observer heartbeat prompt from
+automation-config SHA-256
+`B1C00CEFCB8FE7939B396F6C55E2119087471E05F1EDC075D0E21198009C2DEF` to
+`41C9D6E760B8A7383F78F5DE1EE753F31BAE287BF664DCE8A66D74C881289972`.
+The installed logical prompt is the exact approved
+`37D8EAF93CE5E6CE5314D20A74667FA0E62B196591776CE523A8974E2255B633`
+payload. Exactly one ACTIVE Observer remains on the unchanged weekday 08:35 CT
+cadence and unchanged target thread. Services, Windows scheduler,
+release/channel, protected production hashes, and September 1 artifacts are
+unchanged; no provider/authentication, broker/account, Paper, Shadow, execution,
+capture retry, Science, or GUI action occurred. Classification is `COMPLETE /
+CANONICAL_INTEGRATED / PRODUCTION_HEARTBEAT_ACTIVE_READ_ONLY`.
+
 ## ARGUS-INTEGRATE-SCIENCE-ALWAYS-ON-RECORDER-KERNEL-001 - 2026-09-01
 
 Canonical `master` accepted the exact direct Science task commit from

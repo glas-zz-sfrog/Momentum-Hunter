@@ -55,6 +55,40 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-INTEGRATE-ACTIVATE-OBSERVER-SOURCE-GIT-OVERBINDING-001` is
+`COMPLETE / CANONICAL_INTEGRATED / PRODUCTION_HEARTBEAT_ACTIVE_READ_ONLY`.
+Canonical accepted the exact reviewed OPENING_ENGINE bytes without conflict at
+source-integration head `1d0b76c190fc50308f466b98b02f989908195f62` from pre-task
+canonical `04f6f8382e03906cbd174711a1d4df2d43a5cab4`. The authoritative
+second-eye ZIP SHA-256 is
+`1F539B9B4A0C80F25FFCBBA791B0B4058799EB88B4D2976BB221C3369B61C136`;
+the reviewed implementation and frozen review head are respectively
+`c2051845d81feee87b366d23cf7095de5221333e` and
+`6c940d7a6a1fdcae7007b848321358f33246b349`.
+
+The sole activation mutation updated the existing singleton
+`argus-opening-authorized-release-observer` heartbeat prompt. Its weekday 08:35
+America/Chicago cadence, ACTIVE status, target thread, services, Windows
+scheduler, release/channel, and protected production files remain unchanged.
+The pre/post automation-config SHA-256 values are
+`B1C00CEFCB8FE7939B396F6C55E2119087471E05F1EDC075D0E21198009C2DEF` and
+`41C9D6E760B8A7383F78F5DE1EE753F31BAE287BF664DCE8A66D74C881289972`;
+the installed logical prompt exactly matches approved SHA-256
+`37D8EAF93CE5E6CE5314D20A74667FA0E62B196591776CE523A8974E2255B633`.
+It now passes the exact `observe_opening_runtime(...)` result object directly
+to `evaluate_opening_observer_heartbeat(...)`; the obsolete source-Git equality
+predicate is absent.
+
+Offline September 1 mismatch replay and the post-activation provider-free
+nonmarket canary pass with `AUTHORIZED_RUNTIME_MATCH`, truthful
+`CURRENT_CANONICAL_DIFFERS_FROM_AUTHORIZED_RELEASE_SOURCE`, and all 17 negative
+controls failing closed. Focused tests pass 25/25, adjacent Opening/automation
+regressions pass 173/173, and the full approved-environment suite passes all
+2,945 tests with one expected Windows privilege skip. No provider,
+authentication, broker, account, Paper, Shadow, execution, capture retry,
+service, scheduler, Science, or GUI authority or mutation occurred. The next
+natural Observer heartbeat is authorized to run read-only under this wiring.
+
 `ARGUS-INTEGRATE-SCIENCE-ALWAYS-ON-RECORDER-KERNEL-001` is
 `COMPLETE / CANONICAL_INTEGRATED / BOUNDED_OFFLINE_CUSTODY_KERNEL`.
 Canonical accepted the exact one-commit reviewed Science lineage from
