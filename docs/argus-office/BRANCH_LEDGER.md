@@ -2,6 +2,45 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-INTEGRATE-SCIENCE-ELIGIBILITY-AUTHORITY-CONTRACT-001A - 2026-09-02
+
+Canonical `master` accepted the complete reviewed Science contract delta from
+original Science base `04f6f8382e03906cbd174711a1d4df2d43a5cab4` through
+final review head `760a620aed4da1470457ae7ba2819e53276322f8`. The Integration
+Steward applied that delta atomically to pre-task canonical
+`ee698d12be8baeef22ddb22b9d797116c95e38e4`, producing source-integration
+commit `0f0637c313529846d612186993af674cae1068c8` with the exact expected tree
+and twelve reviewed paths. Current-canonical and accepted-delta paths were
+disjoint, merge-tree qualification was conflict-free, and no executable, test,
+or tool semantic resolution was required. Rejected intermediate
+`663fad740df56e0ff4bc2f8308a508d4b107b589` is not an ancestor of the
+integration commit and was not integrated standalone.
+
+The authoritative second-eye ZIP matches SHA-256
+`4D3BB768A53A3D7FA9EB7145B351FD18D050F049F62196CF37F05AEFD9AF4FCF`.
+Fresh extraction verification passes all checksums, manifest bindings, source
+closure, sanitization, frozen-head identity, approved-Python identity, and
+focused reproduction. Packaged source bytes normalize exactly to the frozen Git
+blobs, and every accepted path in the integration commit is byte-identical to
+the final review head.
+
+Post-integration verification passes 65/65 focused tests, 162/162 Continuous
+compatibility tests, and 2,959/2,959 full approved-environment tests with one
+expected Windows privilege skip. Compileall, diff, secret, capability, scope,
+protected-path, ancestry, exact-byte, and clean-tree checks pass. The repaired
+V2 contract proves truthful T1 receipt and T2 evaluation/materialization clocks,
+anti-hindsight recovery, separate producer/custody/eligibility hashes, outcome
+separation, V1 preservation, and explicit `science-eligibility` family coverage.
+
+No reader, exporter, runtime, provider/authentication, broker/account, Paper,
+execution, service, scheduler, Opening, Observer, Science capture, or GUI state
+changed. September 1 and September 2 opening evidence, the active Observer
+prompt/configuration, service definitions, scheduler state, and protected
+runtime hashes remain exact. Classification is `COMPLETE /
+CANONICAL_INTEGRATED / DORMANT_VERSIONED_SCIENCE_CONTRACT`. A separately
+authorized Continuous export task may begin; exporter and Science-reader
+restart authority remain `NO`.
+
 ## ARGUS-INTEGRATE-ACTIVATE-OBSERVER-SOURCE-GIT-OVERBINDING-001 - 2026-09-02
 
 Canonical `master` accepted the reviewed OPENING_ENGINE implementation and

@@ -55,6 +55,38 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-INTEGRATE-SCIENCE-ELIGIBILITY-AUTHORITY-CONTRACT-001A` is
+`COMPLETE / CANONICAL_INTEGRATED / DORMANT_VERSIONED_SCIENCE_CONTRACT`.
+Canonical accepted the complete reviewed Science delta atomically from original
+Science base `04f6f8382e03906cbd174711a1d4df2d43a5cab4` through final review
+head `760a620aed4da1470457ae7ba2819e53276322f8`, on pre-integration
+canonical `ee698d12be8baeef22ddb22b9d797116c95e38e4`, at source-integration
+head `0f0637c313529846d612186993af674cae1068c8`. The rejected intermediate
+`663fad740df56e0ff4bc2f8308a508d4b107b589` was not integrated as a
+standalone lineage item. The authoritative second-eye ZIP matches SHA-256
+`4D3BB768A53A3D7FA9EB7145B351FD18D050F049F62196CF37F05AEFD9AF4FCF`;
+all packaged checksums, manifest bindings, source closure, sanitization, frozen-
+head identity, and accepted-path byte-equivalence checks pass.
+
+The V2 contract now separates producer content, Science custody, and Science
+eligibility hashes without requiring a producer to know a future Science hash.
+Receipt effective time records T1 custody truth; actual eligibility evaluation
+and materialization record T2 chronology, including crash recovery. Eligibility
+remains anti-hindsight, outcome-separated, and fail-closed; legacy V1 remains
+unchanged and `RECORD_FAMILIES` includes `science-eligibility`. Focused tests
+pass 65/65, Continuous compatibility passes 162/162, and the full approved-
+environment suite passes 2,959/2,959 with one expected Windows privilege skip.
+Compileall, diff, secret, capability, protected-path, scope, ancestry, conflict,
+and exact-byte checks pass.
+
+This integration activates no reader, exporter, runtime, provider, broker,
+Paper, execution, service, scheduler, Opening, Observer, Science capture, or GUI
+authority. The September 1 and September 2 opening evidence, active Observer
+prompt/configuration, service definitions, scheduler state, and protected
+runtime hashes remain exact. A separately authorized Continuous export task may
+now begin from canonical, but no Continuous exporter or Science reader restart,
+deployment, or activation is authorized by this integration.
+
 `ARGUS-INTEGRATE-ACTIVATE-OBSERVER-SOURCE-GIT-OVERBINDING-001` is
 `COMPLETE / CANONICAL_INTEGRATED / PRODUCTION_HEARTBEAT_ACTIVE_READ_ONLY`.
 Canonical accepted the exact reviewed OPENING_ENGINE bytes without conflict at
@@ -638,23 +670,27 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No canonical integration-train item is active after the Observer activation
-   closeout. The single read-only production Observer heartbeat is active; any
-   identity, singleton, canonical, or safety anomaly fails closed and requires a
-   separate repair directive.
+1. No canonical integration-train item is active after the Science eligibility-
+   authority contract closeout. The single read-only production Observer
+   heartbeat remains active; any identity, singleton, canonical, or safety
+   anomaly fails closed and requires a separate repair directive.
 
 ### 2. Ready / Next
 
-1. Continue Science, Opening Engine, and GUI work only under separate task-
+1. `ARGUS-CONTINUOUS-RESEARCH-EXPORT-001` may begin only under its separate,
+   bounded task directive from this accepted canonical contract. This readiness
+   grants no exporter or Science-reader restart, deployment, provider contact,
+   service/scheduler mutation, Paper authority, or execution authority.
+2. Continue Science, Opening Engine, and GUI work only under separate task-
    specific directives and immutable lane bases. Source integration grants no
    deployment or activation authority.
-2. Preserve all prior failed canaries, the empty prospective samples, and all failed
+3. Preserve all prior failed canaries, the empty prospective samples, and all failed
    activation/terminal evidence exactly.
-3. Preserve the accepted Producer V4 packet and original 001D evidence.
-4. Close authoritative instrument subtype/leverage classification before any
+4. Preserve the accepted Producer V4 packet and original 001D evidence.
+5. Close authoritative instrument subtype/leverage classification before any
    Continuous Paper arming; unknown and leveraged/inverse products remain
    execution-ineligible meanwhile.
-5. Reconcile and fully requalify the existing
+6. Reconcile and fully requalify the existing
    `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch, then separately prove disabled
    installation, read-only Paper preflight, and one-entry arming. No gate
    automatically advances to live execution.
