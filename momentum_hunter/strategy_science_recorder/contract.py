@@ -64,6 +64,7 @@ EVENT_TYPES = frozenset(
 RECORD_FAMILIES = (
     "discovery-cycle",
     "candidate-observation",
+    "science-eligibility",
     "decision-event",
     "market-snapshot",
     "reference-plan",

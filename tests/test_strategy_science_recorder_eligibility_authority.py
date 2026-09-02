@@ -18,6 +18,7 @@ from momentum_hunter.strategy_science_recorder import (
     sha256_hex,
 )
 from momentum_hunter.strategy_science_recorder.contract import (
+    RECORD_FAMILIES,
     REPAIRED_EXPORT_SCHEMA_VERSION,
     REPAIRED_SOURCE_CONTRACT,
     REPAIRED_SOURCE_CONTRACT_VERSION,
@@ -518,6 +519,256 @@ class ScienceEligibilityAuthorityContractTests(unittest.TestCase):
                         )
                     finally:
                         recovered.close()
+
+    def test_crash_after_observation_receipt_records_truthful_t1_t2_chronology(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            crashed_root = root / "crashed"
+            clean_root = root / "clean"
+            t1 = "2026-09-01T14:00:00Z"
+            t2 = "2026-09-01T15:00:00Z"
+            discovery_raw = discovery_envelope_v2()
+
+            first = self.recorder(crashed_root, FixedClock(t1), "critical-t1")
+            try:
+                first.accept(start_envelope_v2())
+                with self.assertRaises(SimulatedRecorderCrash):
+                    first.accept(
+                        discovery_raw,
+                        crash_phase="after_candidate_observation_receipt",
+                    )
+                observation = stored_records(
+                    crashed_root, "candidate-observation"
+                )[0][1]
+                self.assertEqual(
+                    t1,
+                    observation["recorder_capture_time"]["normalized_rfc3339"],
+                )
+                observation_path = stored_records(
+                    crashed_root, "candidate-observation"
+                )[0][0]
+                observation_key = observation_path.name.removesuffix(
+                    ".payload.json"
+                )
+                self.assertEqual(
+                    1,
+                    len(list(crashed_root.rglob(f"{observation_key}.receipt.json"))),
+                )
+                self.assertEqual(
+                    [], stored_records(crashed_root, "science-eligibility")
+                )
+                producer_before = next(
+                    path.read_bytes()
+                    for path in crashed_root.rglob("*.source.json")
+                    if path.read_bytes() == discovery_raw
+                )
+            finally:
+                first.close()
+
+            recovered = self.recorder(
+                crashed_root, FixedClock(t2), "critical-t2"
+            )
+            try:
+                self.assertEqual(1, len(recovered.recover()))
+                eligibility_record = stored_records(
+                    crashed_root, "science-eligibility"
+                )[0][1]
+                eligibility = eligibility_record["science_eligibility"]
+                self.assertEqual(
+                    t1,
+                    eligibility["science_receipt_effective_at"][
+                        "normalized_rfc3339"
+                    ],
+                )
+                self.assertEqual(
+                    t2,
+                    eligibility["science_evaluated_at"][
+                        "normalized_rfc3339"
+                    ],
+                )
+                self.assertEqual(
+                    t2,
+                    eligibility_record["recorder_capture_time"][
+                        "normalized_rfc3339"
+                    ],
+                )
+                self.assertEqual(
+                    eligibility["commitment_payload_sha256"],
+                    science_eligibility_sha256(eligibility),
+                )
+                self.assertTrue(recovered.verify(SESSION_ID).all_hashes_valid)
+                self.assertEqual(
+                    "IDEMPOTENT_ACK", recovered.accept(discovery_raw).status
+                )
+                producer_after = next(
+                    path.read_bytes()
+                    for path in crashed_root.rglob("*.source.json")
+                    if path.read_bytes() == discovery_raw
+                )
+                self.assertEqual(producer_before, producer_after)
+            finally:
+                recovered.close()
+
+            clean = self.recorder(clean_root, FixedClock(t1), "clean-t1")
+            try:
+                clean.accept(start_envelope_v2())
+                clean.accept(discovery_raw)
+                clean_eligibility = stored_records(
+                    clean_root, "science-eligibility"
+                )[0][1]["science_eligibility"]
+                self.assertEqual(
+                    clean_eligibility["commitment_payload_sha256"],
+                    eligibility["commitment_payload_sha256"],
+                )
+                self.assertEqual(
+                    t1,
+                    clean_eligibility["science_evaluated_at"][
+                        "normalized_rfc3339"
+                    ],
+                )
+            finally:
+                clean.close()
+
+    def test_v2_full_eligibility_crash_matrix_recovers_once(self) -> None:
+        phases = {
+            "after_source": "2026-09-01T15:00:00Z",
+            "after_discovery_cycle_payload": "2026-09-01T15:00:00Z",
+            "after_discovery_cycle_receipt": "2026-09-01T15:00:00Z",
+            "after_candidate_observation_payload": "2026-09-01T15:00:00Z",
+            "after_candidate_observation_receipt": "2026-09-01T15:00:00Z",
+            "after_science_eligibility_payload": "2026-09-01T14:00:00Z",
+            "after_science_eligibility_receipt": "2026-09-01T14:00:00Z",
+            None: "2026-09-01T14:00:00Z",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            discovery_raw = discovery_envelope_v2()
+            for ordinal, (phase, expected_evaluation) in enumerate(
+                phases.items(), start=1
+            ):
+                with self.subTest(phase=phase or "clean"):
+                    custody_root = root / f"case-{ordinal}"
+                    first = self.recorder(
+                        custody_root,
+                        FixedClock("2026-09-01T14:00:00Z"),
+                        f"matrix-t1-{ordinal}",
+                    )
+                    try:
+                        first.accept(start_envelope_v2())
+                        if phase is None:
+                            first.accept(discovery_raw)
+                        else:
+                            with self.assertRaises(SimulatedRecorderCrash):
+                                first.accept(discovery_raw, crash_phase=phase)
+                        producer_before = next(
+                            path.read_bytes()
+                            for path in custody_root.rglob("*.source.json")
+                            if path.read_bytes() == discovery_raw
+                        )
+                    finally:
+                        first.close()
+
+                    recovered = self.recorder(
+                        custody_root,
+                        FixedClock("2026-09-01T15:00:00Z"),
+                        f"matrix-t2-{ordinal}",
+                    )
+                    try:
+                        reports = recovered.recover()
+                        self.assertEqual(1, len(reports))
+                        observations = stored_records(
+                            custody_root, "candidate-observation"
+                        )
+                        eligibilities = stored_records(
+                            custody_root, "science-eligibility"
+                        )
+                        self.assertEqual(1, len(observations))
+                        self.assertEqual(1, len(eligibilities))
+                        eligibility_record = eligibilities[0][1]
+                        eligibility = eligibility_record["science_eligibility"]
+                        self.assertEqual(
+                            expected_evaluation,
+                            eligibility["science_evaluated_at"][
+                                "normalized_rfc3339"
+                            ],
+                        )
+                        self.assertEqual(
+                            expected_evaluation,
+                            eligibility_record["recorder_capture_time"][
+                                "normalized_rfc3339"
+                            ],
+                        )
+                        self.assertEqual(
+                            observation_receipt_sha256(custody_root),
+                            eligibility["science_custody_receipt_sha256"],
+                        )
+                        self.assertEqual([], list(custody_root.rglob("*.conflict.json")))
+                        producer_after = next(
+                            path.read_bytes()
+                            for path in custody_root.rglob("*.source.json")
+                            if path.read_bytes() == discovery_raw
+                        )
+                        self.assertEqual(producer_before, producer_after)
+                        self.assertEqual(
+                            "IDEMPOTENT_ACK",
+                            recovered.accept(discovery_raw).status,
+                        )
+                        self.assertTrue(
+                            recovered.verify(SESSION_ID).all_hashes_valid
+                        )
+                        checkpoints = [
+                            json.loads(path.read_bytes())
+                            for path in custody_root.rglob("*.checkpoint.json")
+                            if json.loads(path.read_bytes()).get(
+                                "source_event_id"
+                            )
+                            == "discovery-1"
+                        ]
+                        self.assertEqual(1, len(checkpoints))
+                        self.assertEqual(
+                            3, len(checkpoints[0]["accepted_record_ids"])
+                        )
+                    finally:
+                        recovered.close()
+
+    def test_semantic_eligibility_hash_excludes_only_materialization_clock(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "science"
+            recorder = self.recorder(
+                root, FixedClock("2026-09-01T14:00:00Z"), "hash-clock"
+            )
+            try:
+                recorder.accept(start_envelope_v2())
+                recorder.accept(discovery_envelope_v2())
+                material = stored_records(root, "science-eligibility")[0][1][
+                    "science_eligibility"
+                ]
+                expected = material["commitment_payload_sha256"]
+                later_evaluation = copy.deepcopy(material)
+                later_evaluation["science_evaluated_at"][
+                    "normalized_rfc3339"
+                ] = "2030-01-01T00:00:00Z"
+                later_evaluation["science_evaluated_at"][
+                    "raw_value"
+                ] = "2030-01-01T00:00:00Z"
+                self.assertEqual(
+                    expected, science_eligibility_sha256(later_evaluation)
+                )
+                later_receipt = copy.deepcopy(material)
+                later_receipt["science_receipt_effective_at"][
+                    "normalized_rfc3339"
+                ] = "2030-01-01T00:00:00Z"
+                later_receipt["science_receipt_effective_at"][
+                    "raw_value"
+                ] = "2030-01-01T00:00:00Z"
+                self.assertNotEqual(
+                    expected, science_eligibility_sha256(later_receipt)
+                )
+            finally:
+                recorder.close()
+
+    def test_record_families_includes_persisted_science_eligibility(self) -> None:
+        self.assertIn("science-eligibility", RECORD_FAMILIES)
 
 
 if __name__ == "__main__":
