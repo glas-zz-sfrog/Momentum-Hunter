@@ -21,9 +21,9 @@ from .canonical import (
     CANONICALIZATION_VERSION,
     CanonicalizationError,
     canonical_json_bytes,
-    logical_id,
     owner_identity,
     parse_rfc3339,
+    recorder_identity,
     require_sha256,
     sha256_hex,
     strict_json_loads,
@@ -38,6 +38,8 @@ from .contract import (
     PREDECESSOR_SCHEMA_SHA256,
     PREDECESSOR_SCHEMA_VERSION,
     PREDECESSOR_SIDECAR_SHA256,
+    REPAIRED_EXPORT_SCHEMA_VERSION,
+    REPAIRED_SOURCE_CONTRACT_VERSION,
     RECORD_FAMILIES,
     RecorderContractError,
     SCHEMA_MAJOR_VERSION,
@@ -46,7 +48,7 @@ from .contract import (
     TIME_NORMALIZATION_RULE,
     ValidatedExportEnvelope,
     evidence_instant,
-    parse_export_envelope_v1,
+    parse_export_envelope,
     require_evidence_value,
     require_exact_fields,
     require_instrument_identity,
@@ -65,6 +67,8 @@ TOPOLOGY_PROFILE = "ARGUS_SCIENCE_RECORDER_CUSTODY_V1"
 CURSOR_VERSION = "ARGUS_RECORDER_CURSOR_V1"
 RECEIPT_VERSION = "ARGUS_RECORDER_RECEIPT_V1"
 MANIFEST_VERSION = "ARGUS_RECORDER_MANIFEST_V1"
+SCIENCE_ELIGIBILITY_PROFILE = "ARGUS_SCIENCE_RECEIPT_ELIGIBILITY_V2"
+SCIENCE_ELIGIBILITY_RECORD_VERSION = "2.0.0"
 
 
 class RecorderCustodyError(RuntimeError):
@@ -179,6 +183,15 @@ def _capture_time_evidence(value: str) -> dict[str, object]:
         "state": "PRESENT",
         "timezone_or_offset": offset,
     }
+
+
+def science_eligibility_sha256(value: Mapping[str, object]) -> str:
+    """Hash semantic Science eligibility, not physical materialization chronology."""
+
+    material = dict(value)
+    material.pop("commitment_payload_sha256", None)
+    material.pop("science_evaluated_at", None)
+    return sha256_hex(canonical_json_bytes(material))
 
 
 def _present_value(value: object, *, authority: str) -> dict[str, object]:
@@ -482,7 +495,7 @@ class StrategyScienceRecorder:
     ) -> tuple[list[dict[str, object]], dict[str, int]]:
         stream_ids: set[str] = set()
         for path in self._files(partition / "sources" / "export", ".source.json"):
-            parsed = parse_export_envelope_v1(path.read_bytes())
+            parsed = parse_export_envelope(path.read_bytes())
             stream_ids.add(parsed.stream_id)
         heads: list[dict[str, object]] = []
         counts = {event_type: 0 for event_type in EVENT_CHANNEL}
@@ -497,7 +510,7 @@ class StrategyScienceRecorder:
                 source_path = source_dir / (
                     f"{_source_event_key(str(checkpoint['source_event_id']))}.source.json"
                 )
-                parsed = parse_export_envelope_v1(
+                parsed = parse_export_envelope(
                     (self._storage.root / Path(source_path)).read_bytes()
                 )
                 counts[parsed.event_type] += 1
@@ -562,7 +575,7 @@ class StrategyScienceRecorder:
             stream_ids: set[str] = set()
             for path in paths:
                 parsed = (
-                    parse_export_envelope_v1(path.read_bytes())
+                    parse_export_envelope(path.read_bytes())
                     if source_kind == "export"
                     else parse_outcome_attachment(path.read_bytes())
                 )
@@ -720,7 +733,7 @@ class StrategyScienceRecorder:
             if source is None or sha256_hex(source[1]) != checkpoint.get("source_envelope_sha256"):
                 raise RecorderRecoveryError("Checkpoint does not resolve exact source bytes.")
             if source_kind == "export":
-                parsed = parse_export_envelope_v1(source[1])
+                parsed = parse_export_envelope(source[1])
             elif source_kind == "outcome":
                 parsed = parse_outcome_attachment(source[1])
             else:
@@ -918,6 +931,7 @@ class StrategyScienceRecorder:
             for family, channel_name in (
                 ("discovery-cycle", "discovery"),
                 ("candidate-observation", "discovery"),
+                ("science-eligibility", "discovery"),
                 ("decision-event", "decision"),
                 ("reference-plan", "decision"),
                 ("market-snapshot", "market"),
@@ -1122,8 +1136,354 @@ class StrategyScienceRecorder:
                     result[fingerprint] = commitment
         return result
 
+    def _science_eligibility_record(
+        self,
+        partition: PurePath,
+        observation: Mapping[str, object],
+        *,
+        observation_payload_sha256: str,
+        observation_receipt_sha256: str,
+    ) -> dict[str, object]:
+        start = self._start_record(partition)
+        policy = start["outcome_followup_policy"]
+        instrument = observation["instrument_identity"]
+        fingerprint = str(instrument["instrument_identity_fingerprint_sha256"])
+        producer_known_at = _text(observation, "producer_effective_known_at")
+        receipt_effective_at = observation["recorder_capture_time"]
+        if evidence_instant(
+            receipt_effective_at, "science_receipt_effective_at"
+        ) < parse_rfc3339(
+            producer_known_at, "producer_effective_known_at"
+        ):
+            raise RecorderContractError(
+                "Science receipt time cannot precede producer effective-known-at."
+            )
+        eligibility_id = recorder_identity(
+            "SCIENCE_ELIGIBILITY_ID",
+            {
+                "instrument_identity_fingerprint_sha256": fingerprint,
+                "profile": SCIENCE_ELIGIBILITY_PROFILE,
+                "session_id": observation["session_id"],
+            },
+        )
+        evaluated_at = self._science_eligibility_evaluated_at(
+            partition, eligibility_id
+        )
+        if evidence_instant(
+            evaluated_at, "science_evaluated_at"
+        ) < evidence_instant(
+            receipt_effective_at, "science_receipt_effective_at"
+        ):
+            raise RecorderContractError(
+                "Science eligibility evaluation cannot precede receipt-effective time."
+            )
+        material: dict[str, object] = {
+            "commitment_provenance": "SCIENCE_CUSTODY_RECEIPT_DERIVATION",
+            "eligibility_basis_time": observation["discovery_time"],
+            "eligibility_state": "ELIGIBLE",
+            "first_observation_id": observation["observation_id"],
+            "instrument_identity_fingerprint_sha256": fingerprint,
+            "policy_id": policy["policy_id"],
+            "policy_sha256": policy["policy_sha256"],
+            "policy_version": policy["policy_version"],
+            "producer_content_sha256": observation["source_envelope_sha256"],
+            "producer_effective_known_at": producer_known_at,
+            "producer_observation_payload_sha256": observation_payload_sha256,
+            "science_custody_receipt_sha256": observation_receipt_sha256,
+            "science_eligibility_profile": SCIENCE_ELIGIBILITY_PROFILE,
+            "science_eligibility_record_version": SCIENCE_ELIGIBILITY_RECORD_VERSION,
+            "science_receipt_effective_at": receipt_effective_at,
+            "science_evaluated_at": evaluated_at,
+        }
+        material["commitment_payload_sha256"] = science_eligibility_sha256(material)
+        capture_time = str(evaluated_at["normalized_rfc3339"])
+        return self._base_record(
+            partition=partition,
+            record_type="science-eligibility",
+            record_id=eligibility_id,
+            session_id=observation["session_id"],
+            source_owner="SCIENCE_RECORDER",
+            source_contract="ScienceEligibilityV2",
+            source_contract_version=SCIENCE_ELIGIBILITY_RECORD_VERSION,
+            source_interface_identity="SCIENCE_CUSTODY_INTERNAL_V2",
+            source_event_id=str(eligibility_id["recorder_id"]),
+            source_fingerprint_sha256=str(material["commitment_payload_sha256"]),
+            source_payload_sha256=observation_payload_sha256,
+            source_envelope_sha256=str(observation["source_envelope_sha256"]),
+            capture_time=capture_time,
+            core={
+                "eligibility_id": eligibility_id,
+                "instrument_identity_fingerprint_sha256": fingerprint,
+                "observation_id": observation["observation_id"],
+                "science_eligibility": material,
+            },
+        )
+
+    def _science_eligibility_evaluated_at(
+        self,
+        partition: PurePath,
+        eligibility_id: Mapping[str, object],
+    ) -> Mapping[str, object]:
+        """Use actual first derivation time, reusing an already staged value."""
+
+        recorder_id = str(eligibility_id["recorder_id"])
+        state = self._channel_state(partition, "discovery")
+        existing = state.payloads.get(_record_key(recorder_id))
+        if existing is None:
+            return _capture_time_evidence(self._capture_time())
+        record = existing[1]
+        value = record.get("science_eligibility")
+        if (
+            record.get("record_type") != "science-eligibility"
+            or record.get("eligibility_id") != eligibility_id
+            or not isinstance(value, Mapping)
+        ):
+            raise RecorderRecoveryError(
+                "Staged Science eligibility logical identity is malformed."
+            )
+        evaluated_at = require_time_evidence(
+            value.get("science_evaluated_at"),
+            "science_evaluated_at",
+            role="RECORDER_CAPTURE_TIME",
+        )
+        record_capture = require_time_evidence(
+            record.get("recorder_capture_time"),
+            "recorder_capture_time",
+            role="RECORDER_CAPTURE_TIME",
+        )
+        if evaluated_at != record_capture:
+            raise RecorderRecoveryError(
+                "Staged Science eligibility evaluation and record clocks differ."
+            )
+        return evaluated_at
+
+    def _validate_science_eligibility_record(
+        self,
+        partition: PurePath,
+        record: Mapping[str, object],
+    ) -> Mapping[str, object]:
+        if record.get("record_type") != "science-eligibility":
+            raise RecorderContractError("Science eligibility record type is invalid.")
+        eligibility_id = require_identity(
+            record.get("eligibility_id"),
+            "eligibility_id",
+            kinds=frozenset({"SCIENCE_ELIGIBILITY_ID"}),
+            allow_recorder_allocated=True,
+        )
+        if record.get("record_id") != eligibility_id:
+            raise RecorderContractError("Science eligibility identity is inconsistent.")
+        observation_id = require_identity(
+            record.get("observation_id"),
+            "eligibility.observation_id",
+            kinds=frozenset({"OBSERVATION_ID"}),
+        )
+        value = record.get("science_eligibility")
+        if not isinstance(value, Mapping):
+            raise RecorderContractError("Science eligibility material is missing.")
+        required = {
+            "commitment_payload_sha256",
+            "commitment_provenance",
+            "eligibility_basis_time",
+            "eligibility_state",
+            "first_observation_id",
+            "instrument_identity_fingerprint_sha256",
+            "policy_id",
+            "policy_sha256",
+            "policy_version",
+            "producer_content_sha256",
+            "producer_effective_known_at",
+            "producer_observation_payload_sha256",
+            "science_custody_receipt_sha256",
+            "science_eligibility_profile",
+            "science_eligibility_record_version",
+            "science_receipt_effective_at",
+            "science_evaluated_at",
+        }
+        if set(value) != required:
+            raise RecorderContractError("Science eligibility material shape is invalid.")
+        for field in (
+            "commitment_payload_sha256",
+            "instrument_identity_fingerprint_sha256",
+            "policy_sha256",
+            "producer_content_sha256",
+            "producer_observation_payload_sha256",
+            "science_custody_receipt_sha256",
+        ):
+            require_sha256(value.get(field), f"science_eligibility.{field}")
+        if (
+            value.get("commitment_provenance")
+            != "SCIENCE_CUSTODY_RECEIPT_DERIVATION"
+            or value.get("eligibility_state") != "ELIGIBLE"
+            or value.get("science_eligibility_profile")
+            != SCIENCE_ELIGIBILITY_PROFILE
+            or value.get("science_eligibility_record_version")
+            != SCIENCE_ELIGIBILITY_RECORD_VERSION
+        ):
+            raise RecorderContractError("Science eligibility authority profile is invalid.")
+        require_time_evidence(
+            value.get("science_receipt_effective_at"),
+            "science_receipt_effective_at",
+            role="RECORDER_CAPTURE_TIME",
+        )
+        require_time_evidence(
+            value.get("science_evaluated_at"),
+            "science_evaluated_at",
+            role="RECORDER_CAPTURE_TIME",
+        )
+        producer_known_at = parse_rfc3339(
+            value.get("producer_effective_known_at"),
+            "producer_effective_known_at",
+        )
+        receipt_effective_at = evidence_instant(
+            value["science_receipt_effective_at"],
+            "science_receipt_effective_at",
+        )
+        evaluated_at = evidence_instant(
+            value["science_evaluated_at"], "science_evaluated_at"
+        )
+        if receipt_effective_at < producer_known_at:
+            raise RecorderContractError(
+                "Science receipt-effective time precedes producer effective-known-at."
+            )
+        if evaluated_at < receipt_effective_at:
+            raise RecorderContractError(
+                "Science eligibility evaluation precedes receipt-effective time."
+            )
+        if value.get("commitment_payload_sha256") != science_eligibility_sha256(value):
+            raise RecorderContractError("Science eligibility self-hash does not verify.")
+        first_observation_id = require_identity(
+            value.get("first_observation_id"),
+            "first_observation_id",
+            kinds=frozenset({"OBSERVATION_ID"}),
+        )
+        if first_observation_id != observation_id:
+            raise RecorderContractError("Science eligibility first-observation link differs.")
+        observation_entry = self._record_index(partition).get(
+            str(observation_id["recorder_id"])
+        )
+        if (
+            observation_entry is None
+            or observation_entry[0].get("record_type") != "candidate-observation"
+        ):
+            raise RecorderContractError("Science eligibility observation parent is missing.")
+        observation, observation_raw = observation_entry
+        observation_key = _record_key(str(observation_id["recorder_id"]))
+        discovery_state = self._channel_state(partition, "discovery")
+        observation_receipt = discovery_state.receipts.get(observation_key)
+        if observation_receipt is None:
+            raise RecorderContractError("Science eligibility custody receipt is missing.")
+        start = self._start_record(partition)
+        policy = start["outcome_followup_policy"]
+        instrument = observation.get("instrument_identity")
+        fingerprint = (
+            instrument.get("instrument_identity_fingerprint_sha256")
+            if isinstance(instrument, Mapping)
+            else None
+        )
+        expected_eligibility_id = recorder_identity(
+            "SCIENCE_ELIGIBILITY_ID",
+            {
+                "instrument_identity_fingerprint_sha256": fingerprint,
+                "profile": SCIENCE_ELIGIBILITY_PROFILE,
+                "session_id": observation["session_id"],
+            },
+        )
+        if eligibility_id != expected_eligibility_id:
+            raise RecorderContractError("Science eligibility logical identity is invalid.")
+        exact_links = {
+            "eligibility_basis_time": observation.get("discovery_time"),
+            "instrument_identity_fingerprint_sha256": fingerprint,
+            "policy_id": policy.get("policy_id"),
+            "policy_sha256": policy.get("policy_sha256"),
+            "policy_version": policy.get("policy_version"),
+            "producer_content_sha256": observation.get("source_envelope_sha256"),
+            "producer_effective_known_at": observation.get(
+                "producer_effective_known_at"
+            ),
+            "producer_observation_payload_sha256": sha256_hex(observation_raw),
+            "science_custody_receipt_sha256": sha256_hex(observation_receipt[2]),
+            "science_receipt_effective_at": observation.get(
+                "recorder_capture_time"
+            ),
+        }
+        for field, expected in exact_links.items():
+            if value.get(field) != expected:
+                raise RecorderContractError(
+                    f"Science eligibility {field} does not bind exact custody authority."
+                )
+        if value.get("science_evaluated_at") != record.get(
+            "recorder_capture_time"
+        ):
+            raise RecorderContractError(
+                "Science eligibility evaluation time differs from record creation time."
+            )
+        if (
+            record.get("instrument_identity_fingerprint_sha256") != fingerprint
+            or record.get("source_owner") != "SCIENCE_RECORDER"
+            or record.get("source_contract") != "ScienceEligibilityV2"
+            or record.get("source_contract_version")
+            != SCIENCE_ELIGIBILITY_RECORD_VERSION
+            or record.get("source_interface_identity")
+            != "SCIENCE_CUSTODY_INTERNAL_V2"
+            or record.get("source_fingerprint_sha256")
+            != value.get("commitment_payload_sha256")
+            or record.get("source_payload_sha256") != sha256_hex(observation_raw)
+            or record.get("source_envelope_sha256")
+            != observation.get("source_envelope_sha256")
+        ):
+            raise RecorderContractError(
+                "Science eligibility outer custody binding is invalid."
+            )
+        return value
+
+    def _science_eligibility_by_instrument(
+        self,
+        partition: PurePath,
+    ) -> dict[str, tuple[Mapping[str, object], Mapping[str, object]]]:
+        result: dict[
+            str, tuple[Mapping[str, object], Mapping[str, object]]
+        ] = {}
+        for record, _raw in self._record_index(partition).values():
+            if record.get("record_type") != "science-eligibility":
+                continue
+            material = self._validate_science_eligibility_record(partition, record)
+            fingerprint = str(material["instrument_identity_fingerprint_sha256"])
+            previous = result.get(fingerprint)
+            if previous is not None and previous[1] != material:
+                raise RecorderRecoveryError(
+                    "One instrument has conflicting Science eligibility records."
+                )
+            result[fingerprint] = (record, material)
+        return result
+
+    def _science_eligibility_for_observation(
+        self,
+        partition: PurePath,
+        observation: Mapping[str, object],
+    ) -> tuple[Mapping[str, object], Mapping[str, object]]:
+        instrument = observation.get("instrument_identity")
+        fingerprint = (
+            instrument.get("instrument_identity_fingerprint_sha256")
+            if isinstance(instrument, Mapping)
+            else None
+        )
+        if not isinstance(fingerprint, str):
+            raise RecorderContractError("Observation instrument identity is malformed.")
+        eligibility = self._science_eligibility_by_instrument(partition).get(
+            fingerprint
+        )
+        if eligibility is None:
+            raise RecorderContractError(
+                "Decision observation lacks one Science receipt-bound eligibility record."
+            )
+        return eligibility
+
     def _validate_decision(
-        self, partition: PurePath, payload: Mapping[str, object]
+        self,
+        partition: PurePath,
+        payload: Mapping[str, object],
+        *,
+        export_schema_version: str = SCHEMA_VERSION,
     ) -> tuple[Mapping[str, object], Mapping[str, object] | None]:
         if set(payload).difference({"decision_event", "reference_plan"}) or "decision_event" not in payload:
             raise RecorderContractError("DECISION_FACT payload shape is not the offline profile.")
@@ -1131,7 +1491,7 @@ class StrategyScienceRecorder:
         plan = payload.get("reference_plan")
         if not isinstance(decision, Mapping) or (plan is not None and not isinstance(plan, Mapping)):
             raise RecorderContractError("Decision and optional plan must be objects.")
-        required = (
+        required = [
             "decision_id",
             "observation_id",
             "candidate_or_setup_identity",
@@ -1144,11 +1504,23 @@ class StrategyScienceRecorder:
             "decision_policy_fingerprint_sha256",
             "config_fingerprint_sha256",
             "runtime_fingerprint_sha256",
-            "outcome_eligibility_commitment_sha256",
             "market_snapshot_id",
             "tradeplan_id",
             "reference_plan_id",
-        )
+        ]
+        if export_schema_version == SCHEMA_VERSION:
+            required.append("outcome_eligibility_commitment_sha256")
+        elif export_schema_version != REPAIRED_EXPORT_SCHEMA_VERSION:
+            raise RecorderContractError("Unsupported decision export schema version.")
+        elif {
+            "outcome_eligibility_commitment_sha256",
+            "science_eligibility_commitment_sha256",
+            "science_eligibility_id",
+            "science_receipt_hash",
+        }.intersection(decision):
+            raise RecorderContractError(
+                "V2 producer Decision contains a future Science-owned fact."
+            )
         for field in required:
             if field not in decision:
                 raise RecorderContractError(f"Decision event missing {field}.")
@@ -1209,12 +1581,14 @@ class StrategyScienceRecorder:
                     "Known-at reference value/role differs from the exact hashed parent field."
                 )
         require_evidence_value(decision["strategy_identity"], "strategy_identity")
-        for field in (
+        hash_fields = [
             "decision_policy_fingerprint_sha256",
             "config_fingerprint_sha256",
             "runtime_fingerprint_sha256",
-            "outcome_eligibility_commitment_sha256",
-        ):
+        ]
+        if export_schema_version == SCHEMA_VERSION:
+            hash_fields.append("outcome_eligibility_commitment_sha256")
+        for field in hash_fields:
             require_sha256(decision[field], field)
         for field in ("market_snapshot_id", "tradeplan_id", "reference_plan_id"):
             require_evidence_value(decision[field], field)
@@ -1225,9 +1599,18 @@ class StrategyScienceRecorder:
             raise RecorderContractError("Decision setup/candidate identity differs from observation.")
         if evidence_instant(parent[0]["discovery_time"], "observation.discovery_time") > cutoff:
             raise RecorderContractError("Decision cutoff precedes the linked observation discovery.")
-        commitment = parent[0].get("outcome_eligibility")
-        if not isinstance(commitment, Mapping) or decision["outcome_eligibility_commitment_sha256"] != commitment.get("commitment_payload_sha256"):
-            raise RecorderContractError("Decision eligibility hash does not bind its observation.")
+        if export_schema_version == SCHEMA_VERSION:
+            commitment = parent[0].get("outcome_eligibility")
+            if (
+                not isinstance(commitment, Mapping)
+                or decision["outcome_eligibility_commitment_sha256"]
+                != commitment.get("commitment_payload_sha256")
+            ):
+                raise RecorderContractError(
+                    "Decision eligibility hash does not bind its observation."
+                )
+        else:
+            self._science_eligibility_for_observation(partition, parent[0])
         reference_state = decision["reference_plan_id"].get("state")
         market_state = decision["market_snapshot_id"].get("state")
         if market_state == "PRESENT":
@@ -1497,6 +1880,16 @@ class StrategyScienceRecorder:
         partition: PurePath,
         capture_time: str,
     ) -> tuple[dict[str, object], ...]:
+        if envelope.schema_version == REPAIRED_EXPORT_SCHEMA_VERSION:
+            received = parse_rfc3339(capture_time, "recorder_capture_time")
+            producer_known_at = parse_rfc3339(
+                envelope.effective_known_at, "effective_known_at"
+            )
+            producer_sealed_at = parse_rfc3339(envelope.emitted_at, "emitted_at")
+            if received < producer_known_at or received < producer_sealed_at:
+                raise RecorderContractError(
+                    "Science receipt time cannot precede producer known-at or seal time."
+                )
         common = {
             "partition": partition,
             "session_id": envelope.session_id,
@@ -1551,18 +1944,21 @@ class StrategyScienceRecorder:
             eligibility_by_instrument = self._existing_eligibility_by_instrument(partition)
             for observation in observations:
                 core = dict(observation)
+                if envelope.schema_version == REPAIRED_EXPORT_SCHEMA_VERSION:
+                    core["producer_effective_known_at"] = envelope.effective_known_at
                 fingerprint = str(
                     observation["instrument_identity"][
                         "instrument_identity_fingerprint_sha256"
                     ]
                 )
-                commitment = eligibility_by_instrument.get(fingerprint)
-                if commitment is None:
-                    commitment = self._eligibility_commitment(
-                        partition, observation, capture_time
-                    )
-                    eligibility_by_instrument[fingerprint] = commitment
-                core["outcome_eligibility"] = commitment
+                if envelope.schema_version == SCHEMA_VERSION:
+                    commitment = eligibility_by_instrument.get(fingerprint)
+                    if commitment is None:
+                        commitment = self._eligibility_commitment(
+                            partition, observation, capture_time
+                        )
+                        eligibility_by_instrument[fingerprint] = commitment
+                    core["outcome_eligibility"] = commitment
                 records.append(
                     self._base_record(
                         record_type="candidate-observation",
@@ -1573,12 +1969,37 @@ class StrategyScienceRecorder:
                 )
             return tuple(records)
         if envelope.event_type == "DECISION_FACT":
-            decision, plan = self._validate_decision(partition, envelope.payload)
+            decision, plan = self._validate_decision(
+                partition,
+                envelope.payload,
+                export_schema_version=envelope.schema_version,
+            )
+            decision_core = dict(decision)
+            if envelope.schema_version == REPAIRED_EXPORT_SCHEMA_VERSION:
+                observation_id = require_identity(
+                    decision["observation_id"],
+                    "observation_id",
+                    kinds=frozenset({"OBSERVATION_ID"}),
+                )
+                observation = self._record_index(partition)[
+                    str(observation_id["recorder_id"])
+                ][0]
+                eligibility_record, eligibility = (
+                    self._science_eligibility_for_observation(
+                        partition, observation
+                    )
+                )
+                decision_core["science_eligibility_id"] = eligibility_record[
+                    "eligibility_id"
+                ]
+                decision_core[
+                    "science_eligibility_commitment_sha256"
+                ] = eligibility["commitment_payload_sha256"]
             records = [
                 self._base_record(
                     record_type="decision-event",
                     record_id=decision["decision_id"],
-                    core=decision,
+                    core=decision_core,
                     **common,
                 )
             ]
@@ -1630,6 +2051,7 @@ class StrategyScienceRecorder:
         if not isinstance(identity, Mapping):
             raise RecorderContractError("Normalized record identity is malformed.")
         recorder_id = str(identity["recorder_id"])
+        record_type = str(record["record_type"])
         key = _record_key(recorder_id)
         state = self._channel_state(partition, channel)
         existing = state.payloads.get(key)
@@ -1663,7 +2085,18 @@ class StrategyScienceRecorder:
                 partition / "payloads" / channel / f"{key}.payload.json",
                 payload_bytes,
             )
-            if crash_phase == "after_payload" and not crash_used:
+            payload_crash_phase = {
+                "discovery-cycle": "after_discovery_cycle_payload",
+                "candidate-observation": "after_candidate_observation_payload",
+                "science-eligibility": "after_science_eligibility_payload",
+            }.get(record_type)
+            if (
+                (crash_phase == "after_payload" and not crash_used)
+                or (
+                    payload_crash_phase is not None
+                    and crash_phase == payload_crash_phase
+                )
+            ):
                 raise SimulatedRecorderCrash("Synthetic interruption after payload install.")
         state = self._channel_state(partition, channel)
         existing_receipt = state.receipts.get(key)
@@ -1695,7 +2128,18 @@ class StrategyScienceRecorder:
                 partition / "receipts" / channel / f"{key}.receipt.json",
                 receipt_bytes,
             )
-            if crash_phase == "after_receipt" and not crash_used:
+            receipt_crash_phase = {
+                "discovery-cycle": "after_discovery_cycle_receipt",
+                "candidate-observation": "after_candidate_observation_receipt",
+                "science-eligibility": "after_science_eligibility_receipt",
+            }.get(record_type)
+            if (
+                (crash_phase == "after_receipt" and not crash_used)
+                or (
+                    receipt_crash_phase is not None
+                    and crash_phase == receipt_crash_phase
+                )
+            ):
                 raise SimulatedRecorderCrash("Synthetic interruption after receipt commit.")
         else:
             receipt_bytes = existing_receipt[2]
@@ -1722,6 +2166,7 @@ class StrategyScienceRecorder:
         raw_sha256: str,
         channel: str,
         records: tuple[dict[str, object], ...],
+        derive_science_eligibility: bool,
         crash_phase: str | None,
     ) -> AcceptanceResult:
         if self._stream_is_frozen(partition, source_kind, stream_id):
@@ -1794,6 +2239,11 @@ class StrategyScienceRecorder:
         receipt_hashes: list[str] = []
         record_sequences: list[int] = []
         crash_used = False
+        science_eligibility_by_instrument = (
+            self._science_eligibility_by_instrument(partition)
+            if derive_science_eligibility
+            else {}
+        )
         for record in records:
             record_id, payload_hash, receipt_hash, record_sequence = self._persist_record(
                 partition,
@@ -1809,6 +2259,76 @@ class StrategyScienceRecorder:
             receipt_hashes.append(receipt_hash)
             record_sequences.append(record_sequence)
             crash_used = crash_used or crash_phase in {"after_payload", "after_receipt"}
+            if (
+                derive_science_eligibility
+                and record.get("record_type") == "candidate-observation"
+            ):
+                instrument = record.get("instrument_identity")
+                fingerprint = (
+                    instrument.get("instrument_identity_fingerprint_sha256")
+                    if isinstance(instrument, Mapping)
+                    else None
+                )
+                if not isinstance(fingerprint, str):
+                    raise RecorderContractError(
+                        "Candidate observation instrument identity is malformed."
+                    )
+                existing_eligibility = science_eligibility_by_instrument.get(
+                    fingerprint
+                )
+                if existing_eligibility is None:
+                    eligibility_record = self._science_eligibility_record(
+                        partition,
+                        record,
+                        observation_payload_sha256=payload_hash,
+                        observation_receipt_sha256=receipt_hash,
+                    )
+                    (
+                        eligibility_record_id,
+                        eligibility_payload_hash,
+                        eligibility_receipt_hash,
+                        eligibility_record_sequence,
+                    ) = self._persist_record(
+                        partition,
+                        source_kind,
+                        stream_id,
+                        source_event_id,
+                        eligibility_record,
+                        crash_phase=crash_phase,
+                        crash_used=crash_used,
+                    )
+                    record_ids.append(eligibility_record_id)
+                    payload_hashes.append(eligibility_payload_hash)
+                    receipt_hashes.append(eligibility_receipt_hash)
+                    record_sequences.append(eligibility_record_sequence)
+                    material = self._validate_science_eligibility_record(
+                        partition, eligibility_record
+                    )
+                    science_eligibility_by_instrument[fingerprint] = (
+                        eligibility_record,
+                        material,
+                    )
+                elif existing_eligibility[0].get("observation_id") == record.get(
+                    "observation_id"
+                ):
+                    eligibility_record = existing_eligibility[0]
+                    identity = eligibility_record["record_id"]
+                    eligibility_key = _record_key(str(identity["recorder_id"]))
+                    eligibility_state = self._channel_state(
+                        partition, str(eligibility_record["channel"])
+                    )
+                    payload_entry = eligibility_state.payloads.get(eligibility_key)
+                    receipt_entry = eligibility_state.receipts.get(eligibility_key)
+                    if payload_entry is None or receipt_entry is None:
+                        raise RecorderRecoveryError(
+                            "Accepted Science eligibility lacks its payload or receipt."
+                        )
+                    record_ids.append(str(identity["recorder_id"]))
+                    payload_hashes.append(sha256_hex(payload_entry[2]))
+                    receipt_hashes.append(sha256_hex(receipt_entry[2]))
+                    record_sequences.append(
+                        int(eligibility_record["record_sequence"])
+                    )
         if not record_ids:
             raise RecorderCustodyError("Source event normalized to no custody records.")
         checkpoint = {
@@ -1858,9 +2378,20 @@ class StrategyScienceRecorder:
     ) -> AcceptanceResult:
         """Accept one strict offline export envelope and advance only after proof."""
 
-        if crash_phase not in {None, "after_source", "after_payload", "after_receipt"}:
+        if crash_phase not in {
+            None,
+            "after_source",
+            "after_payload",
+            "after_receipt",
+            "after_discovery_cycle_payload",
+            "after_discovery_cycle_receipt",
+            "after_candidate_observation_payload",
+            "after_candidate_observation_receipt",
+            "after_science_eligibility_payload",
+            "after_science_eligibility_receipt",
+        }:
             raise RecorderCustodyError("Unknown fault-injection phase.")
-        envelope = parse_export_envelope_v1(raw_envelope)
+        envelope = parse_export_envelope(raw_envelope)
         if envelope.event_type == "SESSION_MANIFEST":
             phase = envelope.payload.get("manifest_phase")
             if phase == "START":
@@ -1910,6 +2441,9 @@ class StrategyScienceRecorder:
                 raw_sha256=envelope.raw_sha256,
                 channel=envelope.channel,
                 records=records,
+                derive_science_eligibility=(
+                    envelope.schema_version == REPAIRED_EXPORT_SCHEMA_VERSION
+                ),
                 crash_phase=crash_phase,
             )
         return result
@@ -1941,13 +2475,47 @@ class StrategyScienceRecorder:
             )
         if sha256_hex(decision[1]) != payload["decision_payload_sha256"]:
             raise RecorderContractError("Outcome does not bind exact frozen decision bytes.")
-        commitment = observation[0].get("outcome_eligibility")
-        if not isinstance(commitment, Mapping) or commitment.get("eligibility_state") != "ELIGIBLE":
-            raise RecorderContractError("Outcome observation is not pre-outcome eligible.")
-        if commitment.get("commitment_payload_sha256") != payload["eligibility_commitment_sha256"]:
-            raise RecorderContractError("Outcome eligibility hash does not bind the observation.")
-        if decision[0].get("outcome_eligibility_commitment_sha256") != payload["eligibility_commitment_sha256"]:
-            raise RecorderContractError("Outcome eligibility hash does not bind the decision.")
+        science_eligibility_id = decision[0].get("science_eligibility_id")
+        science_eligibility_hash = decision[0].get(
+            "science_eligibility_commitment_sha256"
+        )
+        if science_eligibility_id is not None or science_eligibility_hash is not None:
+            eligibility_record, commitment = (
+                self._science_eligibility_for_observation(
+                    partition, observation[0]
+                )
+            )
+            if (
+                science_eligibility_id != eligibility_record.get("eligibility_id")
+                or science_eligibility_hash
+                != commitment.get("commitment_payload_sha256")
+            ):
+                raise RecorderContractError(
+                    "Science custody decision eligibility linkage is inconsistent."
+                )
+        else:
+            commitment = observation[0].get("outcome_eligibility")
+            if (
+                not isinstance(commitment, Mapping)
+                or commitment.get("eligibility_state") != "ELIGIBLE"
+            ):
+                raise RecorderContractError(
+                    "Outcome observation is not pre-outcome eligible."
+                )
+            if (
+                decision[0].get("outcome_eligibility_commitment_sha256")
+                != payload["eligibility_commitment_sha256"]
+            ):
+                raise RecorderContractError(
+                    "Outcome eligibility hash does not bind the decision."
+                )
+        if (
+            commitment.get("commitment_payload_sha256")
+            != payload["eligibility_commitment_sha256"]
+        ):
+            raise RecorderContractError(
+                "Outcome eligibility hash does not bind the observation."
+            )
         decision_time = evidence_instant(decision[0]["decision_time"], "decision_time")
         target = payload["target_time"]
         target_instant = evidence_instant(target, "target_time")
@@ -2094,6 +2662,7 @@ class StrategyScienceRecorder:
                 raw_sha256=attachment.raw_sha256,
                 channel="outcome",
                 records=(record,),
+                derive_science_eligibility=False,
                 crash_phase=crash_phase,
             )
 
@@ -2119,7 +2688,7 @@ class StrategyScienceRecorder:
             ):
                 raw = path.read_bytes()
                 parsed = (
-                    parse_export_envelope_v1(raw)
+                    parse_export_envelope(raw)
                     if source_kind == "export"
                     else parse_outcome_attachment(raw)
                 )
@@ -2247,6 +2816,15 @@ class StrategyScienceRecorder:
                     "Evidence object is a reparse/link alias rather than one custody file."
                 )
         records = self._all_records(partition)
+        for record in records:
+            if record.get("record_type") == "science-eligibility":
+                self._validate_science_eligibility_record(partition, record)
+            elif (
+                record.get("record_type") == "candidate-observation"
+                and record.get("source_contract_version")
+                == REPAIRED_SOURCE_CONTRACT_VERSION
+            ):
+                self._science_eligibility_for_observation(partition, record)
         streams: set[tuple[str, str]] = set()
         source_count = 0
         for source_kind in ("export", "outcome"):
@@ -2254,7 +2832,7 @@ class StrategyScienceRecorder:
             for path in self._files(base, ".source.json"):
                 raw = path.read_bytes()
                 parsed = (
-                    parse_export_envelope_v1(raw)
+                    parse_export_envelope(raw)
                     if source_kind == "export"
                     else parse_outcome_attachment(raw)
                 )
@@ -2576,7 +3154,7 @@ class StrategyScienceRecorder:
                     continue
                 raw = path.read_bytes()
                 parsed = (
-                    parse_export_envelope_v1(raw)
+                    parse_export_envelope(raw)
                     if source_kind == "export"
                     else parse_outcome_attachment(raw)
                 )
@@ -2876,7 +3454,10 @@ __all__ = [
     "RecorderConflictError",
     "RecorderCustodyError",
     "RecorderRecoveryError",
+    "SCIENCE_ELIGIBILITY_PROFILE",
+    "SCIENCE_ELIGIBILITY_RECORD_VERSION",
     "SimulatedRecorderCrash",
     "StrategyScienceRecorder",
     "VerificationReport",
+    "science_eligibility_sha256",
 ]
