@@ -2,6 +2,41 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-INTEGRATE-SCIENCE-READER-002-ATOMIC-CURSOR-REPAIR-001 - 2026-09-03
+
+Canonical `master` accepted the exact one-commit Science lineage from
+pre-integration canonical `0f3005d546c8292212cfcdecf5baa18dd0164b80` to
+reviewed source head `e296776be741ece367d5b6f0beb8faea9cdd0e56`. Local and
+remote source refs matched; the source parent and merge base were the stated
+canonical; the lineage contained one direct child commit and zero unrelated
+commits. A disposable Integration Steward branch fast-forwarded to source tree
+`302f7f0f5ed1704e7f38ac8e7e075aefaa741e2e`, then production `master`
+advanced by `git merge --ff-only` with zero conflicts, cherry-picks, rebases,
+squashes, history rewriting, or executable/test/tool semantic resolution.
+
+The six accepted Git blobs reproduce candidate aggregate
+`18D2395FA493687AAE95C7B858B457D1D9F429BB830CB69FBD6E5335A14C5D92`.
+The authoritative second-eye package SHA-256 is
+`63700CE94A08D725D70AE6D996437058258CB9FF942F82062FF90213BC73B692`;
+its receipt, safe-path read, reviewed head, candidate identity, and disposition
+`ACCEPT` all match. The superseded rejected A0CC candidate is absent from the
+admission path. Reviewed executable, test, and proof-tool bytes are unchanged.
+
+Independent qualification passes Reader-focused 34/34, atomic cursor/restart
+6/6, exporter compatibility 65/65, Science custody compatibility 99/99,
+Continuous-adjacent 284/284, and the full 3,028/3,028 suite with one expected
+Windows symlink-privilege skip. Compileall, diff, exact-scope, package, secret,
+capability, protected-path, and clean-tree checks pass. The full-suite transcript
+SHA-256 is `0A9B07FEE7835C94CFD1FB060D4C6DAEF9C6F86F0DD7E2B6B338EDE8195A7DC1`;
+the prior GUI stall does not recur, no Qt threading warning is emitted, and no
+Schwab auth persistence failure appears.
+
+The delta contains only the Reader module, its test module, and four Reader
+proof/package tools. It adds no production wiring and changes no GUI, Engine,
+provider, service, scheduler, Paper, live, or execution-authority path.
+Classification is `COMPLETE / CANONICAL_INTEGRATED / DORMANT_READER_CAPABILITY`.
+Reader activation and prospective collection remain separately gated.
+
 ## ARGUS-INTEGRATE-GUI-PROGRESS-DIALOG-THREAD-AFFINITY-REPAIR-001 - 2026-09-02
 
 Canonical `master` accepted the exact one-commit GUI lineage from pre-task

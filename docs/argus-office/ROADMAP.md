@@ -55,6 +55,31 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-INTEGRATE-SCIENCE-READER-002-ATOMIC-CURSOR-REPAIR-001` is
+`COMPLETE / CANONICAL_INTEGRATED / DORMANT_READER_CAPABILITY`. Canonical
+accepted the exact one-commit Science lineage from
+`0f3005d546c8292212cfcdecf5baa18dd0164b80` to independently accepted source
+head `e296776be741ece367d5b6f0beb8faea9cdd0e56` by strict fast-forward only.
+The six reviewed Git blobs reproduce candidate aggregate
+`18D2395FA493687AAE95C7B858B457D1D9F429BB830CB69FBD6E5335A14C5D92`;
+the second-eye package matches SHA-256
+`63700CE94A08D725D70AE6D996437058258CB9FF942F82062FF90213BC73B692` and
+retains disposition `ACCEPT`. The superseded A0CC candidate is excluded.
+
+Qualification in the disposable Integration Steward worktree passes 34/34
+Reader-focused, 6/6 atomic cursor/restart, 65/65 exporter compatibility, 99/99
+Science custody compatibility, 284/284 Continuous-adjacent, and 3,028/3,028
+full-suite tests with one established Windows symlink-privilege skip. Compile-
+all, diff, scope, secret, capability, protected-path, ancestry, package, exact-
+byte, and clean-tree checks pass. The full suite completes without the prior
+GUI stall, Qt threading warnings, or Schwab auth persistence failures.
+
+Reader-002 capability is present but dormant. No application wiring activates
+the Reader; no collection process, service, scheduler, provider/authentication,
+GUI, Engine, Paper, live, or execution-authority change is included. Activation
+or prospective capture requires a separate directive. Every remaining lane
+candidate must reconcile against the new accepted canonical before admission.
+
 `ARGUS-INTEGRATE-GUI-PROGRESS-DIALOG-THREAD-AFFINITY-REPAIR-001` is
 `COMPLETE / CANONICAL_INTEGRATED / NONVISUAL_GUI_THREAD_AFFINITY_REPAIR`.
 Canonical accepted the exact one-commit GUI lineage from
