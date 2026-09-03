@@ -10,7 +10,7 @@ from datetime import datetime
 from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import QMargins, QObject, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QMargins, QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QColor, QBrush, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QLineSeries, QScatterSeries, QValueAxis
 from PySide6.QtWidgets import (
@@ -307,6 +307,40 @@ class ReportLoaderWorker(QObject):
             self.finished.emit(result, time.perf_counter() - started)
 
 
+class ReportLoaderUiRelay(QObject):
+    """Deliver report-loader completion to the GUI thread exactly once."""
+
+    def __init__(
+        self,
+        *,
+        on_finished: Callable[[object, float], None],
+        on_failed: Callable[[str, str, float], None],
+        parent: QObject,
+    ) -> None:
+        super().__init__(parent)
+        self._on_finished: Callable[[object, float], None] | None = on_finished
+        self._on_failed: Callable[[str, str, float], None] | None = on_failed
+
+    @Slot(object, float)
+    def finish(self, result: object, elapsed_seconds: float) -> None:
+        callback = self._take_terminal_callback(self._on_finished)
+        if callback is not None:
+            callback(result, elapsed_seconds)
+
+    @Slot(str, str, float)
+    def fail(self, error_type: str, message: str, elapsed_seconds: float) -> None:
+        callback = self._take_terminal_callback(self._on_failed)
+        if callback is not None:
+            callback(error_type, message, elapsed_seconds)
+
+    def _take_terminal_callback(self, callback: Callable[..., None] | None) -> Callable[..., None] | None:
+        if self._on_finished is None and self._on_failed is None:
+            return None
+        self._on_finished = None
+        self._on_failed = None
+        return callback
+
+
 class MomentumHunterWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -338,7 +372,7 @@ class MomentumHunterWindow(QMainWindow):
         self.current_operator_context: OperatorReviewContext | None = None
         self.provider_status_text = "Provider: not checked"
         self.provider_status_ok = True
-        self._report_loader_refs: list[tuple[QThread, ReportLoaderWorker, QDialog]] = []
+        self._report_loader_refs: list[tuple[QThread, ReportLoaderWorker, QDialog, ReportLoaderUiRelay]] = []
         self._active_report_loader_titles: set[str] = set()
         self._page_history: list[int] = []
         self.market_regime = MarketRegimeSnapshot(
@@ -3203,9 +3237,7 @@ class MomentumHunterWindow(QMainWindow):
         thread = QThread(self)
         worker = ReportLoaderWorker(loader)
         worker.moveToThread(thread)
-        ref = (thread, worker, progress)
-        self._report_loader_refs.append(ref)
-        self._update_status(loading_message)
+        ref: tuple[QThread, ReportLoaderWorker, QDialog, ReportLoaderUiRelay]
 
         def cleanup() -> None:
             if ref in self._report_loader_refs:
@@ -3215,6 +3247,7 @@ class MomentumHunterWindow(QMainWindow):
             thread.wait(1500)
             worker.deleteLater()
             thread.deleteLater()
+            relay.deleteLater()
 
         def finish(result: object, elapsed_seconds: float) -> None:
             progress.close()
@@ -3235,9 +3268,18 @@ class MomentumHunterWindow(QMainWindow):
                 error_title,
             )
 
+        relay = ReportLoaderUiRelay(
+            on_finished=finish,
+            on_failed=fail,
+            parent=self,
+        )
+        ref = (thread, worker, progress, relay)
+        self._report_loader_refs.append(ref)
+        self._update_status(loading_message)
+
         thread.started.connect(worker.run)
-        worker.finished.connect(finish)
-        worker.failed.connect(fail)
+        worker.finished.connect(relay.finish, Qt.ConnectionType.QueuedConnection)
+        worker.failed.connect(relay.fail, Qt.ConnectionType.QueuedConnection)
         thread.start()
 
     def _show_loading_dialog(self, title: str, message: str) -> QDialog:
