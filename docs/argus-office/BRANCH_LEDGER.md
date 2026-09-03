@@ -2,6 +2,40 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-INTEGRATE-GUI-PROGRESS-DIALOG-THREAD-AFFINITY-REPAIR-001 - 2026-09-02
+
+Canonical `master` accepted the exact one-commit GUI lineage from pre-task
+canonical `0f42c5d7997823cffd888df29e9c46de71eadba6` to reviewed source head
+`d383a77a9f67b13469d49f9dd28457ddf2c916e1`. Local and remote source refs match;
+the merge base is the stated canonical; the lineage contains one direct child
+commit and zero unrelated commits. Qualification in a detached disposable
+Integration Steward worktree produced a direct fast-forward with identical
+source and candidate tree `11067097734b9a823fdc14b2be7b3e51ef53f1f9`, zero
+conflicts, and no cherry-pick, rebase, squash, rewrite, or executable/test
+semantic resolution.
+
+The reviewed delta changes only `momentum_hunter/app.py` and
+`tests/test_report_loader_hardening.py`. The GUI-owned `ReportLoaderUiRelay`
+receives worker completion through explicit `QueuedConnection` slots, delivers
+one terminal callback, and keeps dialog close and UI callbacks on the GUI
+thread. The prior `thread.quit()` / `thread.wait(1500)` sequence is byte-
+preserved. Tests cover successful and failed completion, GUI and worker thread
+identity, exactly-once close, repeated sequential loads, thread completion, and
+duplicate terminal suppression.
+
+Independent verification passes 6/6 targeted report-loader tests, 20/20 final
+focused tests, 78/78 GUI-adjacent tests, and 2,994/2,994 full approved-
+environment tests with one expected Windows symlink-privilege skip. Compileall,
+diff, ancestry, exact-tree, scope, secret, capability, protected-path, and
+clean-tree checks pass. The full suite completes without the former stall and
+emits no Qt thread-affinity warning.
+
+No Reader/Science implementation, trading logic, provider, service, scheduler,
+Paper, execution-authority, or GUI redesign change is included. Classification
+is `COMPLETE / CANONICAL_INTEGRATED / NONVISUAL_GUI_THREAD_AFFINITY_REPAIR`.
+Science Reader-002 is ready only for its separately authorized closeout rerun;
+this integration grants no Reader activation or deployment authority.
+
 ## ARGUS-INTEGRATE-CONTINUOUS-RESEARCH-EXPORT-002 - 2026-09-02
 
 Canonical `master` accepted the exact one-commit reviewed Continuous export

@@ -55,6 +55,33 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-INTEGRATE-GUI-PROGRESS-DIALOG-THREAD-AFFINITY-REPAIR-001` is
+`COMPLETE / CANONICAL_INTEGRATED / NONVISUAL_GUI_THREAD_AFFINITY_REPAIR`.
+Canonical accepted the exact one-commit GUI lineage from
+`0f42c5d7997823cffd888df29e9c46de71eadba6` to reviewed source head
+`d383a77a9f67b13469d49f9dd28457ddf2c916e1`. The source tree and disposable
+integration tree are identical, the two-path delta is limited to
+`momentum_hunter/app.py` and `tests/test_report_loader_hardening.py`, and the
+integration required zero conflicts, unrelated commits, history rewriting, or
+executable/test semantic adaptation.
+
+`ReportLoaderUiRelay` is a GUI-owned `QObject`; worker success and failure use
+explicit queued Qt connections into typed relay slots. Progress-dialog close,
+terminal callbacks, and cleanup therefore execute on GUI-thread ownership, and
+duplicate terminal delivery is suppressed. The existing `thread.quit()` then
+`thread.wait(1500)` shutdown sequence is unchanged; no self-wait repair,
+additional threading cleanup, or GUI redesign was introduced.
+
+Independent verification passes the 6/6 report-loader tests, the 20/20 final
+focused regression, the exact 78/78 GUI-adjacent set, and all 2,994 approved-
+environment tests with one expected Windows symlink-privilege skip. Compileall,
+diff, ancestry, exact-tree, scope, secret, capability, protected-path, and
+clean-tree checks pass. The former full-suite stall does not recur and no Qt
+thread-affinity warning is emitted. Reader/Science, trading, provider, service,
+scheduler, Paper, and execution-authority paths are unchanged. Science Reader-
+002 may proceed only through its separately authorized closeout rerun; this
+integration implements or activates no Reader behavior.
+
 `ARGUS-INTEGRATE-CONTINUOUS-RESEARCH-EXPORT-002` is
 `COMPLETE / CANONICAL_INTEGRATED / DORMANT_OFFLINE_RESEARCH_EXPORTER`.
 Canonical accepted the exact one-commit reviewed Continuous export lineage from
@@ -706,16 +733,18 @@ next-action language preserved elsewhere cannot supersede this queue.
 
 ### 1. Active
 
-1. No canonical integration-train item is active after the Continuous research-
-   exporter closeout. The single read-only production Observer
+1. No canonical integration-train item is active after the GUI thread-affinity
+   repair closeout. The single read-only production Observer
    heartbeat remains active; any identity, singleton, canonical, or safety
    anomaly fails closed and requires a separate repair directive.
 
 ### 2. Ready / Next
 
-1. A bounded Science source-reader task may begin only under a separate explicit
-   directive from this accepted canonical export boundary. This readiness grants
-   no reader activation, always-on capture, exporter runtime attachment,
+1. `ARGUS-SCIENCE-ALWAYS-ON-SOURCE-READER-002` is ready for its separately
+   authorized closeout rerun against accepted canonical containing the GUI
+   thread-affinity repair. Do not merge newer `master` into a frozen Science
+   head; reconcile only through the serialized integration train. This readiness
+   grants no reader activation, always-on capture, exporter runtime attachment,
    deployment, provider contact, service/scheduler mutation, Paper authority, or
    execution authority.
 2. Continue Science, Opening Engine, and GUI work only under separate task-
