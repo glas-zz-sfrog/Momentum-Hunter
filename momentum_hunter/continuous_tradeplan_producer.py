@@ -25,6 +25,7 @@ from momentum_hunter.automatic_candle_backfill import (
 from momentum_hunter.canonical_candle_evidence import (
     load_canonical_minute_finality_as_of,
 )
+from momentum_hunter.candidate_lifecycle import expected_opportunity_id, expected_setup_id
 from momentum_hunter.continuous_composition import (
     CanonicalEvidenceInput,
     CompositionMemberInput,
@@ -34,6 +35,7 @@ from momentum_hunter.continuous_composition import (
     compose_cycle,
 )
 from momentum_hunter.hot_universe import HotUniverseMember, HotUniverseState
+from momentum_hunter.lifecycle_position_identity import bind_report_row_to_producer_identity
 from momentum_hunter.path_transaction import PathTransactionLease
 from momentum_hunter.schwab_candle_contract import EASTERN_TZ
 from momentum_hunter.schwab_candle_store import SchwabCandleStore
@@ -226,6 +228,10 @@ class ContinuousProducerEvaluation:
     member_result: ContinuousCompositionMemberResult | None
     duplicate: bool
 
+    @property
+    def report_row(self) -> dict[str, object] | None:
+        return producer_bound_report_row(self.record)
+
 
 class ContinuousTradePlanProducerStore:
     """Bounded operational restart cache; durable evidence remains writer-owned."""
@@ -302,11 +308,10 @@ class ContinuousTradePlanProducerStore:
             raise ContinuousTradePlanProducerError(
                 "Continuous producer restart state is unreadable or untrusted."
             ) from exc
-        if not isinstance(payload, Mapping) or set(payload) != {
-            "schemaVersion",
-            "profile",
-            "records",
-        }:
+        if not isinstance(payload, Mapping) or set(payload) not in (
+            {"schemaVersion", "profile", "records"},
+            {"schemaVersion", "profile", "records", "candidates"},
+        ):
             raise ContinuousTradePlanProducerError(
                 "Continuous producer restart state schema is invalid."
             )
@@ -346,6 +351,14 @@ class ContinuousTradePlanProducerStore:
                     "Continuous producer restart state repeated a record identity."
                 )
             identities.add(record.record_id)
+        expected_rows = [
+            row for record in records
+            if (row := producer_bound_report_row(record)) is not None
+        ]
+        if payload.get("candidates", []) != expected_rows:
+            raise ContinuousTradePlanProducerError(
+                "Persisted Producer report rows contradict their authoritative records."
+            )
         return records
 
     def _write_unlocked(self, records: tuple[ContinuousProducerRecord, ...]) -> None:
@@ -353,6 +366,10 @@ class ContinuousTradePlanProducerStore:
             "schemaVersion": PRODUCER_SCHEMA_VERSION,
             "profile": PRODUCER_PROFILE,
             "records": [asdict(item) for item in records],
+            "candidates": [
+                row for item in records
+                if (row := producer_bound_report_row(item)) is not None
+            ],
         }
         content = _canonical_bytes(payload)
         if len(content) > _MAX_STATE_BYTES:
@@ -690,15 +707,13 @@ class ContinuousTradePlanProducer:
             and instrument_admission.execution_eligible
             and not blockers
         )
-        opportunity_id = (
-            member_result.lifecycle_proposal.opportunity_id
-            if member_result.lifecycle_proposal is not None
-            else ""
+        proposal = member_result.lifecycle_proposal
+        lifecycle = admitted_input.lifecycle
+        opportunity_id = proposal.opportunity_id if proposal else (
+            lifecycle.opportunity_id if lifecycle and lifecycle.current_setup_id else ""
         )
-        setup_id = (
-            member_result.lifecycle_proposal.setup_id
-            if member_result.lifecycle_proposal is not None
-            else ""
+        setup_id = proposal.setup_id if proposal else (
+            lifecycle.current_setup_id if lifecycle else ""
         )
         predecessor_setup_id = (
             member_result.lifecycle_proposal.predecessor_setup_id
@@ -716,6 +731,8 @@ class ContinuousTradePlanProducer:
             "opportunityId": opportunity_id,
             "setupId": setup_id,
             "tradePlanId": plan.plan_id if plan else "",
+            "reportRowContract": 1,
+            "lifecycleSnapshot": asdict(lifecycle) if lifecycle else None,
             "historicalContext": asdict(history_context),
             "currentMarketEvidence": asdict(current_market_evidence),
             "instrumentAdmission": asdict(instrument_admission),
@@ -1180,6 +1197,10 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         "setupId",
         "tradePlanId",
     }.intersection(payload if isinstance(payload, Mapping) else {})
+    if isinstance(payload, Mapping) and "reportRowContract" in payload and (
+        type(payload["reportRowContract"]) is not int or payload["reportRowContract"] != 1
+    ):
+        raise ContinuousTradePlanProducerError("Producer report row contract is unsupported.")
     if explicit_identity_fields and explicit_identity_fields != {
         "opportunityId",
         "setupId",
@@ -1261,14 +1282,38 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
             )
         member_result = matching_results[0]
         proposal = member_result.get("lifecycle_proposal")
-        if record.opportunity_id and (
-            not isinstance(proposal, Mapping)
-            or proposal.get("opportunity_id") != record.opportunity_id
-            or proposal.get("setup_id") != record.setup_id
-        ):
-            raise ContinuousTradePlanProducerError(
-                "Producer lifecycle provenance contradicts its composition result."
-            )
+        if record.opportunity_id:
+            if isinstance(proposal, Mapping):
+                if (
+                    proposal.get("opportunity_id") != record.opportunity_id
+                    or proposal.get("setup_id") != record.setup_id
+                ):
+                    raise ContinuousTradePlanProducerError(
+                        "Producer lifecycle provenance contradicts its composition result."
+                    )
+            else:
+                snapshot = payload.get("lifecycleSnapshot")
+                if not isinstance(snapshot, Mapping) or (
+                    snapshot.get("symbol") != record.symbol
+                    or snapshot.get("session_date") != record.session_date
+                    or snapshot.get("opportunity_id") != record.opportunity_id
+                    or snapshot.get("current_setup_id") != record.setup_id
+                    or not snapshot.get("latest_event_id")
+                    or expected_opportunity_id(
+                        record.symbol, record.session_date,
+                        str(snapshot.get("originating_evidence_family", "")),
+                    ) != record.opportunity_id
+                    or expected_setup_id(
+                        record.opportunity_id,
+                        str(snapshot.get("current_setup_family", "")),
+                        snapshot.get("current_setup_sequence", 0),
+                    ) != record.setup_id
+                    or _parse_timestamp(str(snapshot.get("updated_at", "")))
+                    > _parse_timestamp(record.evidence_cutoff)
+                ):
+                    raise ContinuousTradePlanProducerError(
+                        "Producer ongoing lifecycle provenance is unavailable or contradictory."
+                    )
         plan = member_result.get("intraday_plan")
         if record.trade_plan_id and (
             not isinstance(plan, Mapping)
@@ -1303,6 +1348,50 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         raise ContinuousTradePlanProducerError(
             "Execution-eligible producer record is incomplete or blocked."
         )
+
+
+def producer_bound_report_row(record: ContinuousProducerRecord) -> dict[str, object] | None:
+    """Serialize issued levels and provenance, never manufacture execution readiness.
+
+    The row is a deterministic projection, outside the record fingerprint to
+    avoid a self-referential binding. Store load verifies the entire projection.
+    Old records are not retrospectively upgraded to the new report contract.
+    """
+
+    validate_producer_record(record)
+    payload = json.loads(record.payload_json)
+    if payload.get("reportRowContract") != 1 or not record.trade_plan_id:
+        return None
+    results = payload["compositionCycle"]["member_results"]
+    result = next(item for item in results if item["universe_member_id"] == record.member_id)
+    plan = result["intraday_plan"]
+    targets = plan["target_prices"]
+    row = {
+        "symbol": record.symbol,
+        "opportunity_id": record.opportunity_id,
+        "setup_id": record.setup_id,
+        "trade_plan_id": record.trade_plan_id,
+        "authority": RESEARCH_ONLY,
+        "executionAuthority": EXECUTION_AUTHORITY_NONE,
+        "orderCapability": ORDER_CAPABILITY_UNAVAILABLE,
+        "trade_plan": {
+            "bullish_entry": plan["planned_entry"],
+            "bullish_stop": plan["stop_price"],
+            "bullish_target_1": targets[0] if targets else None,
+            "bullish_target_2": targets[1] if len(targets) > 1 else None,
+            "risk_reward_ratio": None,
+            "estimated_shares_for_500": None,
+            "estimated_dollar_risk": None,
+            "estimated_target_1_reward": None,
+            "confidence": "UNAVAILABLE",
+            "tradeability": RESEARCH_ONLY,
+            "readiness": "PLANNING_SCAFFOLD",
+            "blocking_reasons": list(dict.fromkeys((*record.blockers, "RESEARCH_ONLY"))),
+            "warnings": [],
+            "intraday_evidence": plan,
+        },
+    }
+    return bind_report_row_to_producer_identity(row, record)
 
 
 def _refingerprint_context(context: HistoricalContextEvidence) -> HistoricalContextEvidence:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import tempfile
 import threading
 import unittest
@@ -57,7 +58,6 @@ from momentum_hunter.intraday_trade_plan import (
 from momentum_hunter.lifecycle_position_identity import (
     REPORT_IDENTITY_FIELD,
     authoritative_lifecycle_identity_from_report_row,
-    bind_report_row_to_producer_identity,
 )
 from momentum_hunter.models import Candidate, INSTITUTIONAL_MOMENTUM
 from momentum_hunter.schwab_candle_contract import (
@@ -529,15 +529,8 @@ class ContinuousTradePlanProducerTests(unittest.TestCase):
             result.member_result.lifecycle_proposal.opportunity_id,
             result.record.opportunity_id,
         )
-        bound_row = bind_report_row_to_producer_identity(
-            {
-                "symbol": result.record.symbol,
-                "trade_plan": {
-                    "intraday_evidence": {"plan_id": result.record.trade_plan_id}
-                },
-            },
-            result.record,
-        )
+        bound_row = json.loads(self.store_path.read_text())["candidates"][0]
+        self.assertEqual(bound_row, result.report_row)
         identity = authoritative_lifecycle_identity_from_report_row(bound_row)
         self.assertEqual(result.record.opportunity_id, identity.opportunity_id)
         self.assertEqual(result.record.setup_id, identity.setup_id)

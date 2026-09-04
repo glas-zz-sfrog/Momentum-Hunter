@@ -31,6 +31,7 @@ from momentum_hunter.autonomy.risk_governor import RiskGovernorResult, evaluate_
 from momentum_hunter.autonomy.view_models import candidate_plan_from_report_row, stable_trade_plan_id
 from momentum_hunter.config import DATA_DIR
 from momentum_hunter.lifecycle_position_identity import (
+    AuthoritativeLifecycleTradePlanIdentity,
     IDENTITY_LINKAGE_LEGACY_UNBOUND,
     IDENTITY_LINKAGE_PROVEN,
     IDENTITY_LINKAGE_UNAVAILABLE,
@@ -1567,10 +1568,13 @@ class ShadowTradingService:
             raise ValueError(
                 "The trade-planning report candidate collection is invalid."
             )
-        matches = [(index, row) for index, row in enumerate(rows, 1) if isinstance(row, dict) and str(row.get("symbol", "")).upper() == normalized_symbol]
-        if len(matches) != 1:
-            raise ValueError(f"Expected exactly one persisted candidate row for {normalized_symbol}; found {len(matches)}.")
-        persisted_rank, row = matches[0]
+        persisted_rank, row, authoritative_identity = _select_persisted_shadow_candidate(
+            rows,
+            symbol=normalized_symbol,
+            opportunity_id=opportunity_id,
+            setup_id=setup_id,
+            authoritative_trade_plan_id=authoritative_trade_plan_id,
+        )
         rank = (
             int(row.get("rank") or 0)
             if self.sample_activation is not None
@@ -1628,35 +1632,11 @@ class ShadowTradingService:
         )
         if candidate is None:
             raise ValueError(f"{normalized_symbol} does not contain a valid persisted TradePlan.")
-        if REPORT_IDENTITY_FIELD in row:
-            try:
-                authoritative_identity = (
-                    authoritative_lifecycle_identity_from_report_row(row)
-                )
-            except LifecyclePositionIdentityError as exc:
-                raise ValueError(
-                    "Shadow TradePlan has an invalid authoritative lifecycle identity."
-                ) from exc
-            supplied_identity = (
-                opportunity_id,
-                setup_id,
-                authoritative_trade_plan_id,
-            )
-            expected_identity = (
-                authoritative_identity.opportunity_id,
-                authoritative_identity.setup_id,
-                authoritative_identity.trade_plan_id,
-            )
-            if any(supplied_identity) and supplied_identity != expected_identity:
-                raise ValueError(
-                    "Selected lifecycle identity does not match the persisted TradePlan binding."
-                )
-            opportunity_id, setup_id, trade_plan_id = expected_identity
+        if authoritative_identity is not None:
+            opportunity_id = authoritative_identity.opportunity_id
+            setup_id = authoritative_identity.setup_id
+            trade_plan_id = authoritative_identity.trade_plan_id
         else:
-            if setup_id or authoritative_trade_plan_id:
-                raise ValueError(
-                    "Authoritative lifecycle identity inputs require a persisted Producer binding."
-                )
             if opportunity_id and not shadow_selection_id:
                 shadow_selection_id = opportunity_id
             opportunity_id = ""
@@ -3418,6 +3398,69 @@ def automatic_selection_findings(trade: ShadowTrade) -> list[AuditFinding]:
     return findings
 
 
+def _select_persisted_shadow_candidate(
+    rows: list[Any],
+    *,
+    symbol: str,
+    opportunity_id: str = "",
+    setup_id: str = "",
+    authoritative_trade_plan_id: str = "",
+) -> tuple[int, dict[str, Any], AuthoritativeLifecycleTradePlanIdentity | None]:
+    supplied_identity = (opportunity_id, setup_id, authoritative_trade_plan_id)
+    if setup_id or authoritative_trade_plan_id:
+        if not all(supplied_identity):
+            raise ValueError(
+                "Authoritative lifecycle identity inputs require a persisted Producer binding "
+                "and all three exact IDs."
+            )
+        # Count exact claims before validation so malformed duplicates cannot be hidden.
+        matches = [
+            (index, row)
+            for index, row in enumerate(rows, 1)
+            if isinstance(row, dict)
+            and isinstance(row.get(REPORT_IDENTITY_FIELD), Mapping)
+            and tuple(
+                row[REPORT_IDENTITY_FIELD].get(field)
+                for field in ("opportunity_id", "setup_id", "trade_plan_id")
+            ) == supplied_identity
+        ]
+        selector = "exact authoritative lifecycle identity"
+    else:
+        # An opportunity-only input may be the historical Shadow selection alias.
+        matches = [
+            (index, row)
+            for index, row in enumerate(rows, 1)
+            if isinstance(row, dict) and str(row.get("symbol", "")).upper() == symbol
+        ]
+        selector = symbol
+    if len(matches) != 1:
+        raise ValueError(
+            f"Expected exactly one persisted candidate row for {selector}; found {len(matches)}."
+        )
+    rank, row = matches[0]
+    identity = None
+    if REPORT_IDENTITY_FIELD in row:
+        try:
+            identity = authoritative_lifecycle_identity_from_report_row(row)
+        except LifecyclePositionIdentityError as exc:
+            raise ValueError(
+                "Shadow TradePlan has an invalid authoritative lifecycle identity."
+            ) from exc
+        if any(supplied_identity) and supplied_identity != (
+            identity.opportunity_id,
+            identity.setup_id,
+            identity.trade_plan_id,
+        ):
+            raise ValueError(
+                "Selected lifecycle identity does not match the persisted TradePlan binding."
+            )
+    if str(row.get("symbol", "")).upper() != symbol:
+        raise ValueError(
+            "Selected lifecycle identity has a different persisted candidate symbol."
+        )
+    return rank, row, identity
+
+
 def frozen_evidence_findings(trade: ShadowTrade) -> list[AuditFinding]:
     findings: list[AuditFinding] = []
     if trade.evidence.evidence_snapshot_id != trade.evidence_snapshot_id:
@@ -3445,15 +3488,21 @@ def frozen_evidence_findings(trade: ShadowTrade) -> list[AuditFinding]:
     if str(metadata.get("source_capture_time", "")) != trade.evidence.source_capture_time:
         findings.append(AuditFinding(trade.shadow_trade_id, "source_capture_time", "Frozen capture timestamp does not match its report."))
     rows = source_report.get("candidates") or source_report.get("top_5_for_capital") or []
-    matches = [
-        (index, row)
-        for index, row in enumerate(rows, 1)
-        if isinstance(row, dict) and str(row.get("symbol", "")).upper() == trade.symbol.upper()
-    ] if isinstance(rows, list) else []
-    if len(matches) != 1 or canonical_json(matches[0][1]) != trade.evidence.candidate_json:
+    has_binding = REPORT_IDENTITY_FIELD in candidate_payload or bool(trade.setup_id)
+    try:
+        rank, row, _ = _select_persisted_shadow_candidate(
+            rows if isinstance(rows, list) else [],
+            symbol=trade.symbol.upper(),
+            opportunity_id=trade.opportunity_id,
+            setup_id=trade.setup_id,
+            authoritative_trade_plan_id=trade.trade_plan_id if has_binding else "",
+        )
+    except ValueError:
         findings.append(AuditFinding(trade.shadow_trade_id, "candidate_json", "Frozen candidate evidence does not match the frozen source report."))
         return findings
-    rank, _ = matches[0]
+    if canonical_json(row) != trade.evidence.candidate_json:
+        findings.append(AuditFinding(trade.shadow_trade_id, "candidate_json", "Frozen candidate evidence does not match the frozen source report."))
+        return findings
     source_capture_key = "|".join(
         [
             trade.evidence.source_capture_path,

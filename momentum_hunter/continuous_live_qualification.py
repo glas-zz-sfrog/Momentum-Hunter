@@ -1290,6 +1290,7 @@ class LiveCompositionSource:
                         "producerRecord": json.loads(evaluation.record.payload_json),
                         "producerRecordId": evaluation.record.record_id,
                         "producerRecordFingerprint": evaluation.record.fingerprint,
+                        "producerBoundReportRow": evaluation.report_row,
                         "duplicate": evaluation.duplicate,
                     }
                     for step, evaluation in evaluations
