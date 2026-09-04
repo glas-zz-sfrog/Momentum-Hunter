@@ -147,18 +147,10 @@ public static class PythonShadowReviewSnapshotMapper
             throw new InvalidDataException("Stale or halted Shadow evidence cannot be painted as live P&L.");
         }
 
+        var identity = ShadowIdentity(item, decisionTimestamp);
+
         return new ShadowTradeReviewSnapshot(
-            new ShadowTradeIdentity(
-                RequiredString(item, "shadowTradeId"),
-                RequiredString(item, "symbol"),
-                String(item, "setup") ?? "Unknown",
-                String(item, "catalyst") ?? "Unknown",
-                String(item, "marketRegime") ?? "Unknown",
-                String(item, "session") ?? "Unknown",
-                decisionTimestamp,
-                RequiredTimestamp(item, "evidenceSnapshotTimestamp"),
-                RequiredString(item, "tradePlanId"),
-                RequiredString(item, "riskDecisionId")),
+            identity,
             new ShadowPlanReview(
                 RequiredString(item, "riskDecision"),
                 StringArray(item, "riskReasons"),
@@ -188,6 +180,180 @@ public static class PythonShadowReviewSnapshotMapper
             RequiredString(item, "dataQualityState"),
             eligible,
             countsTowardSample);
+    }
+
+    private static ShadowTradeIdentity ShadowIdentity(
+        JsonElement item,
+        DateTimeOffset decisionTimestamp)
+    {
+        var linkageElement = default(JsonElement);
+        var historicalElement = default(JsonElement);
+        var hasLinkageStatus = item.ValueKind == JsonValueKind.Object
+                               && item.TryGetProperty("linkageStatus", out linkageElement);
+        var hasHistoricalIdentityLinkage = item.ValueKind == JsonValueKind.Object
+                                           && item.TryGetProperty("identityLinkage", out historicalElement);
+        if (hasLinkageStatus && hasHistoricalIdentityLinkage)
+        {
+            throw new InvalidDataException(
+                "Shadow identity payload cannot mix authoritative linkageStatus with historical identityLinkage.");
+        }
+
+        var isHistoricalRepresentation = !hasLinkageStatus;
+        var linkageStatus = hasLinkageStatus
+            ? ParseLinkageStatus(linkageElement)
+            : HistoricalLinkageStatus(hasHistoricalIdentityLinkage, historicalElement);
+        var opportunityId = OptionalIdentityString(
+            item,
+            "opportunityId",
+            isHistoricalRepresentation);
+        var setupId = OptionalIdentityString(
+            item,
+            "setupId",
+            isHistoricalRepresentation);
+        var positionId = OptionalIdentityString(
+            item,
+            "positionId",
+            isHistoricalRepresentation);
+        var openedAt = OptionalIdentityTimestamp(item, "openedAt");
+        var tradePlanId = RequiredString(item, "tradePlanId");
+
+        if (linkageStatus == LifecyclePositionLinkageStatus.Proven
+            && (opportunityId is null
+                || setupId is null
+                || string.IsNullOrWhiteSpace(tradePlanId)
+                || positionId is null
+                || openedAt is null))
+        {
+            throw new InvalidDataException(
+                "A PROVEN lifecycle-position chain requires opportunityId, setupId, tradePlanId, positionId, and openedAt.");
+        }
+        if (linkageStatus == LifecyclePositionLinkageStatus.Unavailable
+            && (opportunityId is null
+                || setupId is null
+                || string.IsNullOrWhiteSpace(tradePlanId)
+                || positionId is not null
+                || openedAt is not null))
+        {
+            throw new InvalidDataException(
+                "An UNAVAILABLE lifecycle-position chain requires authoritative upstream IDs and no positionId or openedAt.");
+        }
+
+        return new ShadowTradeIdentity(
+            RequiredString(item, "shadowTradeId"),
+            RequiredString(item, "symbol"),
+            String(item, "setup") ?? "Unknown",
+            String(item, "catalyst") ?? "Unknown",
+            String(item, "marketRegime") ?? "Unknown",
+            String(item, "session") ?? "Unknown",
+            decisionTimestamp,
+            RequiredTimestamp(item, "evidenceSnapshotTimestamp"),
+            tradePlanId,
+            RequiredString(item, "riskDecisionId"))
+        {
+            OpportunityId = opportunityId,
+            SetupId = setupId,
+            PositionId = positionId,
+            OpenedAt = openedAt,
+            LinkageStatus = linkageStatus,
+        };
+    }
+
+    private static LifecyclePositionLinkageStatus ParseLinkageStatus(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidDataException("Shadow linkageStatus must be a string.");
+        }
+        return value.GetString() switch
+        {
+            "PROVEN" => LifecyclePositionLinkageStatus.Proven,
+            "UNKNOWN" => LifecyclePositionLinkageStatus.Unknown,
+            "UNAVAILABLE" => LifecyclePositionLinkageStatus.Unavailable,
+            "LEGACY_UNBOUND" => LifecyclePositionLinkageStatus.LegacyUnbound,
+            _ => throw new InvalidDataException("Shadow linkageStatus is unsupported."),
+        };
+    }
+
+    private static LifecyclePositionLinkageStatus HistoricalLinkageStatus(
+        bool hasHistoricalIdentityLinkage,
+        JsonElement value)
+    {
+        if (hasHistoricalIdentityLinkage
+            && value.ValueKind is not JsonValueKind.Null and not JsonValueKind.String)
+        {
+            throw new InvalidDataException("Historical Shadow identityLinkage must be a string or null.");
+        }
+        if (hasHistoricalIdentityLinkage
+            && value.ValueKind == JsonValueKind.String
+            && value.GetString() is not ("PROVEN" or "UNKNOWN" or "NOT_AVAILABLE"))
+        {
+            throw new InvalidDataException("Historical Shadow identityLinkage is unsupported.");
+        }
+        return LifecyclePositionLinkageStatus.LegacyUnbound;
+    }
+
+    private static string? OptionalIdentityString(
+        JsonElement item,
+        string name,
+        bool historicalRepresentation)
+    {
+        if (item.ValueKind != JsonValueKind.Object
+            || !item.TryGetProperty(name, out var value)
+            || value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidDataException($"Shadow review field '{name}' must be a string or null.");
+        }
+        var text = value.GetString();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+        if (historicalRepresentation && text is "UNKNOWN" or "NOT_AVAILABLE")
+        {
+            return null;
+        }
+        if (!historicalRepresentation && text is "UNKNOWN" or "NOT_AVAILABLE")
+        {
+            throw new InvalidDataException(
+                $"Authoritative Shadow review field '{name}' cannot use a historical sentinel value.");
+        }
+        return text;
+    }
+
+    private static DateTimeOffset? OptionalIdentityTimestamp(JsonElement item, string name)
+    {
+        if (item.ValueKind != JsonValueKind.Object
+            || !item.TryGetProperty(name, out var value)
+            || value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidDataException($"Shadow review field '{name}' must be a timestamp or null.");
+        }
+        var text = value.GetString();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+        if (!HasExplicitOffset(text))
+        {
+            throw new InvalidDataException(
+                $"Shadow review field '{name}' must include an explicit UTC offset.");
+        }
+        return DateTimeOffset.TryParse(
+            text,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var timestamp)
+            ? timestamp
+            : throw new InvalidDataException(
+                $"Shadow review field '{name}' must be a timestamp when supplied.");
     }
 
     private static ShadowActiveMarkReview ActiveMark(JsonElement item)

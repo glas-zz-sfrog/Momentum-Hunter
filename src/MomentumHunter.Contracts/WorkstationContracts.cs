@@ -636,6 +636,14 @@ public sealed record SimulationWorkspaceSnapshot(
     IReadOnlyList<TradePlanSnapshot> TradePlans,
     bool PlanningAvailable);
 
+public enum LifecyclePositionLinkageStatus
+{
+    Proven,
+    Unknown,
+    Unavailable,
+    LegacyUnbound,
+}
+
 public sealed record ShadowTradeIdentity(
     string ShadowTradeId,
     string Symbol,
@@ -646,7 +654,15 @@ public sealed record ShadowTradeIdentity(
     DateTimeOffset DecisionTimestamp,
     DateTimeOffset EvidenceSnapshotTimestamp,
     string TradePlanId,
-    string RiskDecisionId);
+    string RiskDecisionId)
+{
+    public string? OpportunityId { get; init; }
+    public string? SetupId { get; init; }
+    public string? PositionId { get; init; }
+    public DateTimeOffset? OpenedAt { get; init; }
+    public LifecyclePositionLinkageStatus LinkageStatus { get; init; } =
+        LifecyclePositionLinkageStatus.LegacyUnbound;
+}
 
 public sealed record ShadowPlanReview(
     string RiskDecision,
@@ -815,6 +831,12 @@ public sealed record ShadowTradeReviewSnapshot(
     public string MarketRegime => Identity.MarketRegime;
     public string Session => Identity.Session;
     public DateTimeOffset DecisionTimestamp => Identity.DecisionTimestamp;
+    public string? OpportunityId => Identity.OpportunityId;
+    public string? SetupId => Identity.SetupId;
+    public string TradePlanId => Identity.TradePlanId;
+    public string? PositionId => Identity.PositionId;
+    public DateTimeOffset? OpenedAt => Identity.OpenedAt;
+    public LifecyclePositionLinkageStatus LinkageStatus => Identity.LinkageStatus;
     public string LifecycleState => Execution.LifecycleState;
     public string OutcomeLabel => ActiveMark.DisplayState;
     public string EligibilityLabel => EvidenceEligible ? "ELIGIBLE" : "EXCLUDED";
