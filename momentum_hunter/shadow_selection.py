@@ -14,10 +14,7 @@ from momentum_hunter.account_allocation import (
     account_allocation_decision_findings,
 )
 from momentum_hunter.autonomy.risk_governor import evaluate_trade_plan
-from momentum_hunter.autonomy.view_models import (
-    candidate_plan_from_report_row,
-    stable_trade_plan_id,
-)
+from momentum_hunter.autonomy.view_models import candidate_plan_from_report_row
 from momentum_hunter.evidence_integrity import (
     CATALYST_SCORE_SUPPORTED,
     EXECUTION_ELIGIBLE,
@@ -28,6 +25,10 @@ from momentum_hunter.intraday_trade_plan import (
     IntradayPlanEvidence,
     intraday_plan_decision_findings,
     intraday_plan_validation_findings,
+)
+from momentum_hunter.lifecycle_position_identity import (
+    LifecyclePositionIdentityError,
+    authoritative_lifecycle_identity_from_report_row,
 )
 from momentum_hunter.shadow_market_validity import (
     DecisionCycleStore,
@@ -148,6 +149,9 @@ class AutomaticShadowSelectionResult:
     simulation_command_id: str = ""
     shadow_trade_id: str = ""
     opportunity_id: str = ""
+    setup_id: str = ""
+    trade_plan_id: str = ""
+    shadow_selection_id: str = ""
     selector_arm_id: str = ""
     constitution_hash: str = ""
     selection_policy_recorded_at: str = ""
@@ -170,6 +174,9 @@ class AutomaticShadowSelectionResult:
             "simulationCommandId": self.simulation_command_id or None,
             "shadowTradeId": self.shadow_trade_id or None,
             "opportunityId": self.opportunity_id or None,
+            "setupId": self.setup_id or None,
+            "tradePlanId": self.trade_plan_id or None,
+            "shadowSelectionId": self.shadow_selection_id or None,
             "selectorArmId": self.selector_arm_id or None,
             "constitutionHash": self.constitution_hash or None,
             "selectionPolicyRecordedAt": (
@@ -463,6 +470,13 @@ class AutomaticShadowSelector:
             "opportunity_id": (
                 selected["opportunity_id"] if selected is not None else None
             ),
+            "setup_id": selected["setup_id"] if selected is not None else None,
+            "trade_plan_id": (
+                selected["trade_plan_id"] if selected is not None else None
+            ),
+            "shadow_selection_id": (
+                selected["shadow_selection_id"] if selected is not None else None
+            ),
             "selection_quote": (
                 selected["quote"] if selected is not None else None
             ),
@@ -510,6 +524,9 @@ class AutomaticShadowSelector:
                 ),
                 decision_cycle_id=cycle_id,
                 opportunity_id=selected["opportunity_id"],
+                setup_id=selected["setup_id"],
+                authoritative_trade_plan_id=selected["trade_plan_id"],
+                shadow_selection_id=selected["shadow_selection_id"],
                 selector_arm_id=arm.arm_id,
                 constitution_hash=arm.constitution_hash,
                 selection_quote_json=canonical_json(selected["quote"]),
@@ -554,6 +571,9 @@ class AutomaticShadowSelector:
             simulation_command_id=trade.simulation_command_id,
             shadow_trade_id=trade.shadow_trade_id,
             opportunity_id=trade.opportunity_id,
+            setup_id=trade.setup_id,
+            trade_plan_id=trade.trade_plan_id,
+            shadow_selection_id=trade.shadow_selection_id,
             selector_arm_id=trade.selector_arm_id,
             constitution_hash=trade.constitution_hash,
             selection_policy_recorded_at=selection_policy.recorded_at,
@@ -592,6 +612,9 @@ class AutomaticShadowSelector:
         informational_warnings: tuple[str, ...] = ()
         risk_payload: dict[str, Any] = {}
         opportunity_id = ""
+        setup_id = ""
+        trade_plan_id = ""
+        shadow_selection_id = ""
         plan_fingerprint = ""
         allocation_decision: AccountAllocationDecision | None = None
         allocation_payload: dict[str, Any] = {
@@ -611,11 +634,21 @@ class AutomaticShadowSelector:
             reasons.extend(fatal_warnings)
             plan_json = canonical_json(asdict(plan))
             plan_fingerprint = hashlib.sha256(plan_json.encode("utf-8")).hexdigest()
-            opportunity_id = opportunity_identity(
+            shadow_selection_id = opportunity_identity(
                 row,
                 plan_fingerprint=plan_fingerprint,
                 decision_at=decision_at,
             )
+            try:
+                authoritative_identity = (
+                    authoritative_lifecycle_identity_from_report_row(row)
+                )
+            except LifecyclePositionIdentityError as exc:
+                reasons.append(f"AUTHORITATIVE_LIFECYCLE_IDENTITY_INVALID:{exc}")
+            else:
+                opportunity_id = authoritative_identity.opportunity_id
+                setup_id = authoritative_identity.setup_id
+                trade_plan_id = authoritative_identity.trade_plan_id
             reasons.extend(
                 intraday_plan_decision_findings(
                     plan.intraday_evidence,
@@ -625,7 +658,7 @@ class AutomaticShadowSelector:
             risk = evaluate_trade_plan(
                 plan,
                 ticker=symbol,
-                trade_plan_id=stable_trade_plan_id(symbol, plan),
+                trade_plan_id=trade_plan_id,
                 checked_at=decision_at,
             )
             risk_payload = {
@@ -635,7 +668,6 @@ class AutomaticShadowSelector:
             }
             if not risk.allows_simulation or risk.status != "Simulation-only":
                 reasons.extend(risk.reasons or ("Risk Governor did not allow simulation.",))
-            trade_plan_id = stable_trade_plan_id(symbol, plan)
             if self.allocation_source is not None:
                 allocator = getattr(self.allocation_source, "allocate", self.allocation_source)
                 try:
@@ -748,6 +780,9 @@ class AutomaticShadowSelector:
                 else None
             ),
             "opportunity_id": opportunity_id,
+            "setup_id": setup_id,
+            "trade_plan_id": trade_plan_id,
+            "shadow_selection_id": shadow_selection_id,
             "plan_fingerprint": plan_fingerprint,
         }, allocation_decision
 
@@ -1344,6 +1379,9 @@ def result_for_existing_cycle(
         selected_rank=int(cycle.get("selected_rank") or 0),
         shadow_trade_id=str(cycle.get("shadow_trade_id") or ""),
         opportunity_id=str(cycle.get("opportunity_id") or ""),
+        setup_id=str(cycle.get("setup_id") or ""),
+        trade_plan_id=str(cycle.get("trade_plan_id") or ""),
+        shadow_selection_id=str(cycle.get("shadow_selection_id") or ""),
         selector_arm_id=str(cycle.get("selector_arm_id") or ""),
         constitution_hash=str(cycle.get("constitution_hash") or ""),
         terminal_cycle_status=str(cycle.get("status") or ""),

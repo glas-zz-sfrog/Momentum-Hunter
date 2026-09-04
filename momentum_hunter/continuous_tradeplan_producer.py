@@ -216,6 +216,7 @@ class ContinuousProducerRecord:
     schema_version: int = PRODUCER_SCHEMA_VERSION
     profile: str = PRODUCER_PROFILE
     fingerprint: str = ""
+    opportunity_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -689,6 +690,11 @@ class ContinuousTradePlanProducer:
             and instrument_admission.execution_eligible
             and not blockers
         )
+        opportunity_id = (
+            member_result.lifecycle_proposal.opportunity_id
+            if member_result.lifecycle_proposal is not None
+            else ""
+        )
         setup_id = (
             member_result.lifecycle_proposal.setup_id
             if member_result.lifecycle_proposal is not None
@@ -707,6 +713,9 @@ class ContinuousTradePlanProducer:
             "producerFingerprint": self.producer_fingerprint,
             "trigger": str(trigger).strip().upper(),
             "candidateOriginIdentity": candidate_origin,
+            "opportunityId": opportunity_id,
+            "setupId": setup_id,
+            "tradePlanId": plan.plan_id if plan else "",
             "historicalContext": asdict(history_context),
             "currentMarketEvidence": asdict(current_market_evidence),
             "instrumentAdmission": asdict(instrument_admission),
@@ -730,6 +739,7 @@ class ContinuousTradePlanProducer:
             "symbol": member.symbol,
             "session_date": member.session_date,
             "candidate_origin_identity": candidate_origin,
+            "opportunity_id": opportunity_id,
             "setup_id": setup_id,
             "predecessor_setup_id": predecessor_setup_id,
             "evidence_cutoff": cutoff.isoformat(),
@@ -768,9 +778,12 @@ class ContinuousTradePlanProducer:
                 "producerFingerprint": self.producer_fingerprint,
             }
         )
+        fingerprint_core = dict(core)
+        if not opportunity_id:
+            fingerprint_core.pop("opportunity_id")
         record = ContinuousProducerRecord(
             record_id=f"continuous-tradeplan-producer-{identity_fingerprint[:24]}",
-            fingerprint=_fingerprint(core),
+            fingerprint=_fingerprint(fingerprint_core),
             **core,
         )
         validate_producer_record(record)
@@ -1144,6 +1157,14 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         raise ContinuousTradePlanProducerError(
             "Producer record has a TradePlan fingerprint without an identity."
         )
+    lifecycle_ids = (record.opportunity_id, record.setup_id)
+    if any(lifecycle_ids) and not all(lifecycle_ids):
+        raise ContinuousTradePlanProducerError(
+            "Producer lifecycle opportunity/setup identity is incomplete."
+        )
+    if record.opportunity_id:
+        _require_fingerprint(record.opportunity_id, "Lifecycle opportunity identity")
+        _require_fingerprint(record.setup_id, "Lifecycle setup identity")
     if hashlib.sha256(record.payload_json.encode("ascii")).hexdigest() != record.payload_fingerprint:
         raise ContinuousTradePlanProducerError(
             "Continuous producer payload fingerprint did not verify."
@@ -1154,6 +1175,23 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         raise ContinuousTradePlanProducerError(
             "Continuous producer payload is malformed."
         ) from exc
+    explicit_identity_fields = {
+        "opportunityId",
+        "setupId",
+        "tradePlanId",
+    }.intersection(payload if isinstance(payload, Mapping) else {})
+    if explicit_identity_fields and explicit_identity_fields != {
+        "opportunityId",
+        "setupId",
+        "tradePlanId",
+    }:
+        raise ContinuousTradePlanProducerError(
+            "Continuous producer payload lifecycle identity is incomplete."
+        )
+    if explicit_identity_fields and record.trade_plan_id and not all(lifecycle_ids):
+        raise ContinuousTradePlanProducerError(
+            "Producer TradePlan is missing authoritative lifecycle provenance."
+        )
     if (
         not isinstance(payload, Mapping)
         or payload.get("payloadType") != "CONTINUOUS_TRADEPLAN_PRODUCER"
@@ -1170,6 +1208,14 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         or payload.get("accountValuesRequested") is not False
         or payload.get("positionsRequested") is not False
         or payload.get("ordersRequested") is not False
+        or (
+            bool(record.opportunity_id)
+            and (
+                payload.get("opportunityId") != record.opportunity_id
+                or payload.get("setupId") != record.setup_id
+                or payload.get("tradePlanId") != record.trade_plan_id
+            )
+        )
     ):
         raise ContinuousTradePlanProducerError(
             "Continuous producer payload identity is contradictory."
@@ -1197,9 +1243,46 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         raise ContinuousTradePlanProducerError(
             "Continuous producer embedded evidence identity is contradictory."
         )
+    if explicit_identity_fields:
+        member_results = cycle.get("member_results")
+        matching_results = (
+            [
+                item
+                for item in member_results
+                if isinstance(item, Mapping)
+                and item.get("universe_member_id") == record.member_id
+            ]
+            if isinstance(member_results, list)
+            else []
+        )
+        if len(matching_results) != 1:
+            raise ContinuousTradePlanProducerError(
+                "Continuous producer lifecycle result identity is unavailable."
+            )
+        member_result = matching_results[0]
+        proposal = member_result.get("lifecycle_proposal")
+        if record.opportunity_id and (
+            not isinstance(proposal, Mapping)
+            or proposal.get("opportunity_id") != record.opportunity_id
+            or proposal.get("setup_id") != record.setup_id
+        ):
+            raise ContinuousTradePlanProducerError(
+                "Producer lifecycle provenance contradicts its composition result."
+            )
+        plan = member_result.get("intraday_plan")
+        if record.trade_plan_id and (
+            not isinstance(plan, Mapping)
+            or plan.get("plan_id") != record.trade_plan_id
+        ):
+            raise ContinuousTradePlanProducerError(
+                "Producer TradePlan identity contradicts its composition result."
+            )
     core = asdict(record)
     core.pop("record_id")
     core.pop("fingerprint")
+    if not record.opportunity_id:
+        # Pre-contract records remain readable, but cannot emit a proven binding.
+        core.pop("opportunity_id")
     if record.fingerprint != _fingerprint(core):
         raise ContinuousTradePlanProducerError(
             "Continuous producer record fingerprint did not verify."

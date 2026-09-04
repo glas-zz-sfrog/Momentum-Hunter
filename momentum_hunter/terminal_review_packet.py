@@ -26,6 +26,7 @@ from momentum_hunter.shadow_trading import (
     ShadowStateError,
     ShadowTrade,
     audit_shadow_trade,
+    shadow_identity_linkage_status,
     shadow_sample_metadata_findings,
     shadow_state_from_dict,
     shadow_trade_direction,
@@ -514,6 +515,12 @@ def _validate_event_chain(
         "selected symbol": (trade.symbol, cycle.get("selected_symbol")),
         "selected rank": (trade.candidate_rank, cycle.get("selected_rank")),
         "opportunity": (trade.opportunity_id, cycle.get("opportunity_id")),
+        "setup": (trade.setup_id, cycle.get("setup_id")),
+        "TradePlan": (trade.trade_plan_id, cycle.get("trade_plan_id")),
+        "Shadow selection": (
+            trade.shadow_selection_id,
+            cycle.get("shadow_selection_id"),
+        ),
         "selector arm": (trade.selector_arm_id, cycle.get("selector_arm_id")),
         "constitution": (trade.constitution_hash, cycle.get("constitution_hash")),
         "selection policy": (
@@ -611,6 +618,20 @@ def _trade_sections(trade: ShadowTrade, cycle: Mapping[str, Any]) -> dict[str, A
             "selectedSymbol": stored(cycle.get("selected_symbol"), "DecisionCycle.selected_symbol"),
             "selectedRank": stored(cycle.get("selected_rank"), "DecisionCycle.selected_rank"),
             "opportunityId": stored(trade.opportunity_id, "ShadowTrade.opportunity_id"),
+            "setupId": stored(trade.setup_id, "ShadowTrade.setup_id"),
+            "tradePlanId": stored(trade.trade_plan_id, "ShadowTrade.trade_plan_id"),
+            "positionId": _fact_or_missing(
+                position.position_id if position else None,
+                "ShadowPosition.position_id",
+            ),
+            "openedAt": _fact_or_missing(
+                position.opened_at if position else None,
+                "ShadowPosition.opened_at",
+            ),
+            "linkageStatus": stored(
+                shadow_identity_linkage_status(trade),
+                "Persisted exact lifecycle-position provenance",
+            ),
             "selectorArmId": stored(trade.selector_arm_id, "ShadowTrade.selector_arm_id"),
             "selectionPolicyFingerprint": stored(
                 trade.selection_policy_fingerprint,
@@ -907,6 +928,9 @@ def _order_row(order: Any) -> dict[str, Any]:
 def _position_row(position: Any) -> dict[str, Any]:
     return {
         "positionId": position.position_id,
+        "opportunityId": position.opportunity_id or None,
+        "setupId": position.setup_id or None,
+        "tradePlanId": position.trade_plan_id or None,
         "direction": position.direction,
         "quantity": position.quantity,
         "averageEntryPrice": position.average_entry_price,

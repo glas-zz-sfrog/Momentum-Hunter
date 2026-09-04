@@ -20,9 +20,18 @@ from momentum_hunter.engine_host import (
     EngineHostRuntime,
 )
 from momentum_hunter.autonomy.view_models import stable_trade_plan_id
+from momentum_hunter.candidate_lifecycle import (
+    expected_opportunity_id,
+    expected_setup_id,
+)
 from momentum_hunter.intraday_trade_plan import (
     CONTINUATION_BREAKOUT,
     build_intraday_plan_evidence,
+)
+from momentum_hunter.lifecycle_position_identity import (
+    REPORT_IDENTITY_FIELD,
+    build_authoritative_lifecycle_identity,
+    lifecycle_identity_to_dict,
 )
 from momentum_hunter.shadow_market_validity import (
     SHADOW_SELECTOR_ARM_CONFIRMATION,
@@ -135,8 +144,13 @@ def allocation_for_report(
     rows = payload.get("candidates") or payload.get("top_5_for_capital") or []
     row = next(item for item in rows if str(item.get("symbol", "")).upper() == symbol.upper())
     plan = trade_plan_from_dict(row["trade_plan"])
+    trade_plan_id = (
+        row[REPORT_IDENTITY_FIELD]["trade_plan_id"]
+        if REPORT_IDENTITY_FIELD in row
+        else stable_trade_plan_id(symbol, plan)
+    )
     return synthetic_quantity_allocation_decision(
-        trade_plan_id=stable_trade_plan_id(symbol, plan),
+        trade_plan_id=trade_plan_id,
         entry_price=plan.bullish_entry,
         stop_price=plan.bullish_stop,
         target_price=plan.bullish_target_1,
@@ -189,7 +203,7 @@ class ShadowTradingLifecycleTests(unittest.TestCase):
         self.assertEqual("pending_entry", trade.status)
         self.assertTrue(trade.candidate_id.startswith("candidate-"))
         self.assertTrue(trade.evidence_snapshot_id.startswith("evidence-"))
-        self.assertTrue(trade.trade_plan_id.startswith("tp-"))
+        self.assertRegex(trade.trade_plan_id, r"^[0-9a-f]{64}$")
         self.assertTrue(trade.risk_decision_id.startswith("risk-"))
         self.assertEqual("shadow-command-1", trade.simulation_command_id)
         self.assertTrue(trade.outcome_id.startswith("shadow-outcome-"))
@@ -1523,6 +1537,7 @@ def bind_setup_identity(
     created_at: datetime | None = None,
     early_close: bool = False,
     setup_invalidation_level: float | None = None,
+    setup_sequence: int = 1,
 ) -> dict:
     """Keep a synthetic report row's setup chain internally consistent."""
 
@@ -1579,6 +1594,28 @@ def bind_setup_identity(
     )
     row["evidence_integrity"]["intraday_plan_evidence"] = copy.deepcopy(intraday)
     trade_plan["intraday_evidence"] = copy.deepcopy(intraday)
+    opportunity_id = expected_opportunity_id(
+        symbol,
+        "2026-07-23",
+        "SYNTHETIC_SHADOW_TEST",
+    )
+    setup_id = expected_setup_id(
+        opportunity_id,
+        CONTINUATION_BREAKOUT,
+        setup_sequence,
+    )
+    identity = build_authoritative_lifecycle_identity(
+        opportunity_id=opportunity_id,
+        setup_id=setup_id,
+        trade_plan_id=intraday["plan_id"],
+        producer_record_id=f"synthetic-producer-{symbol.lower()}",
+        producer_record_fingerprint=hashlib.sha256(
+            f"synthetic-producer-record:{symbol}:{intraday['plan_id']}".encode(
+                "utf-8"
+            )
+        ).hexdigest(),
+    )
+    row[REPORT_IDENTITY_FIELD] = lifecycle_identity_to_dict(identity)
     return row
 
 
