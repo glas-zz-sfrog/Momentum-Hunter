@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
@@ -32,9 +33,11 @@ from momentum_hunter.continuous_composition import (
     ContinuousCompositionCycle,
     ContinuousCompositionMemberResult,
     ContinuousCompositionPolicy,
+    EXECUTION_AUTHORITY_NONE as COMPOSITION_EXECUTION_AUTHORITY_NONE,
     compose_cycle,
 )
 from momentum_hunter.hot_universe import HotUniverseMember, HotUniverseState
+from momentum_hunter import historical_producer_admission as historical_admission
 from momentum_hunter.lifecycle_position_identity import (
     LifecyclePositionIdentityError,
     authoritative_lifecycle_identity_from_report_row,
@@ -237,6 +240,34 @@ class ContinuousProducerEvaluation:
         return producer_bound_report_row(self.record)
 
 
+@dataclass(frozen=True)
+class _HistoricalProducerDocument:
+    raw: bytes
+    authority: historical_admission._CurrentAuthority
+    decision: historical_admission.HistoricalAdmissionDecision
+    membership: frozenset[bytes] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        document = json.loads(self.raw)
+        if not isinstance(document, Mapping) or type(document.get("records")) is not list:
+            raise ContinuousTradePlanProducerError("Historical whole-document membership is malformed.")
+        object.__setattr__(self, "membership", frozenset(
+            _canonical_bytes(item) for item in document["records"]
+        ))
+
+    def contains(self, record: ContinuousProducerRecord) -> bool:
+        core = asdict(record)
+        core.pop("opportunity_id")
+        return not record.opportunity_id and _canonical_bytes(core) in self.membership
+
+    def revalidate(self, path: Path) -> None:
+        self.authority.revalidate()
+        with path.open("rb") as stream:
+            if stream.read(_MAX_STATE_BYTES + 1) != self.raw:
+                raise ContinuousTradePlanProducerError("Historical artifact changed during inspection.")
+        self.authority.revalidate()
+
+
 class ContinuousTradePlanProducerStore:
     """Bounded operational restart cache; durable evidence remains writer-owned."""
 
@@ -251,9 +282,16 @@ class ContinuousTradePlanProducerStore:
             return self._load_unlocked()
 
     def append(self, record: ContinuousProducerRecord) -> ContinuousProducerRecord:
-        validate_producer_record(record)
         with self.lease.transaction():
-            records = list(self._load_unlocked())
+            loaded, historical = self._load_document_unlocked()
+            if historical is not None:
+                if not historical.contains(record):
+                    raise ContinuousTradePlanProducerError("Historical cache is read-only; append is forbidden.")
+                _validate_producer_record(record, historical_document=historical)
+                historical.revalidate(self.path)
+                return record
+            validate_producer_record(record)
+            records = list(loaded)
             by_id = {item.record_id: item for item in records}
             existing = by_id.get(record.record_id)
             if existing is not None:
@@ -286,33 +324,78 @@ class ContinuousTradePlanProducerStore:
         self, member_id: str, material_fingerprint: str
     ) -> ContinuousProducerRecord | None:
         _require_fingerprint(material_fingerprint, "Material evidence fingerprint")
-        return next(
-            (
-                item
-                for item in reversed(self.load())
-                if item.member_id == member_id
-                and item.material_evidence_fingerprint == material_fingerprint
-            ),
-            None,
-        )
+        with self.lease.transaction():
+            records, historical = self._load_document_unlocked()
+            if historical is not None:
+                raise ContinuousTradePlanProducerError("Historical inspection cannot seed material evaluation.")
+            return next(
+                (item for item in reversed(records)
+                 if item.member_id == member_id
+                 and item.material_evidence_fingerprint == material_fingerprint),
+                None,
+            )
 
     def _load_unlocked(self) -> tuple[ContinuousProducerRecord, ...]:
+        records, historical = self._load_document_unlocked()
+        if historical is not None and historical.decision.purpose == historical_admission.PRODUCTION_PURPOSE:
+            raise ContinuousTradePlanProducerError("Production historical data requires inspect_legacy; operational load is forbidden.")
+        return records
+
+    def _load_document_unlocked(self) -> tuple[tuple[ContinuousProducerRecord, ...], _HistoricalProducerDocument | None]:
         if not self.path.exists():
-            return ()
+            return (), None
         try:
-            raw = self.path.read_bytes()
+            with self.path.open("rb") as stream:
+                raw = stream.read(_MAX_STATE_BYTES + 1)
             if len(raw) > _MAX_STATE_BYTES:
                 raise ContinuousTradePlanProducerError(
                     "Continuous producer restart state exceeded its bounded size."
                 )
-            payload = json.loads(raw)
+            payload = json.loads(raw, object_pairs_hook=_unique_producer_pairs)
         except ContinuousTradePlanProducerError:
             raise
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ContinuousTradePlanProducerError(
                 "Continuous producer restart state is unreadable or untrusted."
             ) from exc
-        return self.validate_document(payload)
+        try:
+            return self.validate_document(payload), None
+        except ContinuousTradePlanProducerError as modern_error:
+            try:
+                decision, authority = historical_admission._resolve(raw)
+                if decision.disposition != historical_admission.ADMITTED:
+                    raise ContinuousTradePlanProducerError(
+                        f"{modern_error} Historical admission denied: {decision.disposition}: {decision.reason}"
+                    )
+                context = _HistoricalProducerDocument(raw, authority, decision)
+                payload = _strict_historical_json(raw.decode("utf-8"))
+                records = self._validate_document(payload, historical_document=context)
+                context.revalidate(self.path)
+                return records, context
+            except (historical_admission.HistoricalAdmissionError, OSError) as exc:
+                raise ContinuousTradePlanProducerError(
+                    f"{modern_error} Historical admission denied: AMBIGUOUS_ADMISSION: {exc}"
+                ) from modern_error
+
+    def inspect_legacy(self) -> dict[str, object]:
+        """Unbound historical inspection only; documentary IDs are not provenance."""
+        with self.lease.transaction():
+            records, historical = self._load_document_unlocked()
+            if historical is None:
+                raise ContinuousTradePlanProducerError("This is not an admitted historical cache.")
+            historical.revalidate(self.path)
+            return {
+                "opportunityId": None, "setupId": None, "tradePlanId": None,
+                "positionId": None, "openedAt": None, "linkageStatus": "LEGACY_UNBOUND",
+                "documentaryRecords": [asdict(record) for record in records],
+                "admissionDisposition": historical.decision.disposition,
+            }
+
+    def _assert_modern_publication(self) -> None:
+        with self.lease.transaction():
+            _, historical = self._load_document_unlocked()
+            if historical is not None:
+                raise ContinuousTradePlanProducerError("Historical cache cannot be published or rewritten.")
 
     @staticmethod
     def validate_document(
@@ -324,6 +407,13 @@ class ContinuousTradePlanProducerStore:
         It still validates every record, and the selected row must equal one
         complete authoritative projection. Full cache reload checks all rows.
         """
+        return ContinuousTradePlanProducerStore._validate_document(payload, selected_row=selected_row)
+
+    @staticmethod
+    def _validate_document(
+        payload: object, *, selected_row: Mapping[str, object] | None = None,
+        historical_document: _HistoricalProducerDocument | None = None,
+    ) -> tuple[ContinuousProducerRecord, ...]:
         if not isinstance(payload, Mapping) or set(payload) not in (
             {"schemaVersion", "profile", "records"},
             {"schemaVersion", "profile", "records", "candidates"},
@@ -331,6 +421,11 @@ class ContinuousTradePlanProducerStore:
             raise ContinuousTradePlanProducerError(
                 "Continuous producer restart state schema is invalid."
             )
+        if historical_document is not None and (
+            _canonical_bytes(payload) != _canonical_bytes(json.loads(historical_document.raw))
+            or "candidates" in payload or selected_row is not None
+        ):
+            raise ContinuousTradePlanProducerError("Historical whole-document identity differs.")
         if (
             type(payload.get("schemaVersion")) is not int
             or payload.get("schemaVersion") != PRODUCER_SCHEMA_VERSION
@@ -362,13 +457,13 @@ class ContinuousTradePlanProducerStore:
             )
         identities: set[str] = set()
         for record in records:
-            validate_producer_record(record)
+            _validate_producer_record(record, historical_document=historical_document)
             if record.record_id in identities:
                 raise ContinuousTradePlanProducerError(
                     "Continuous producer restart state repeated a record identity."
                 )
             identities.add(record.record_id)
-        expected_rows = [
+        expected_rows = [] if historical_document is not None else [
             row for record in records
             if (row := producer_bound_report_row(record)) is not None
         ]
@@ -400,6 +495,12 @@ class ContinuousTradePlanProducerStore:
         return records
 
     def _write_unlocked(self, records: tuple[ContinuousProducerRecord, ...]) -> None:
+        # No extracted/reconstructed members may inherit whole-cache admission.
+        _, historical = self._load_document_unlocked()
+        if historical is not None:
+            raise ContinuousTradePlanProducerError("Historical cache is read-only.")
+        for record in records:
+            validate_producer_record(record)
         payload = {
             "schemaVersion": PRODUCER_SCHEMA_VERSION,
             "profile": PRODUCER_PROFILE,
@@ -1183,6 +1284,14 @@ def validate_historical_context(
 
 
 def validate_producer_record(record: ContinuousProducerRecord) -> None:
+    """Bare records have no exact whole-artifact custody; modern admission only."""
+    _validate_producer_record(record)
+
+
+def _validate_producer_record(
+    record: ContinuousProducerRecord, *,
+    historical_document: _HistoricalProducerDocument | None = None,
+) -> None:
     if (
         type(record.schema_version) is not int
         or record.schema_version != PRODUCER_SCHEMA_VERSION
@@ -1218,12 +1327,20 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
             "Continuous producer payload fingerprint did not verify."
         )
     try:
-        payload = json.loads(record.payload_json)
+        payload = (_strict_historical_json(record.payload_json)
+                   if historical_document is not None else json.loads(record.payload_json))
     except json.JSONDecodeError as exc:
         raise ContinuousTradePlanProducerError(
             "Continuous producer payload is malformed."
         ) from exc
-    historical = _is_precontract_producer_record(record, payload)
+    historical = historical_document is not None
+    if historical and (
+        not historical_document.contains(record)
+        or not _is_precontract_producer_record(record, payload)
+    ):
+        raise ContinuousTradePlanProducerError("Record is not a member of the admitted old-contract artifact.")
+    if historical:
+        _validate_historical_payload(record, payload)
     lifecycle_ids = (record.opportunity_id, record.setup_id)
     if not historical and any(lifecycle_ids) and not all(lifecycle_ids):
         raise ContinuousTradePlanProducerError(
@@ -1415,8 +1532,8 @@ _PRECONTRACT_PAYLOAD_FIELDS = frozenset({
 
 
 def _is_precontract_producer_record(record: ContinuousProducerRecord, payload: object) -> bool:
-    # Historical privilege requires the exact old payload contract AND the old
-    # record hash committing to those bytes. Deleting modern fields alone fails.
+    # Structural consistency only. Origin comes from independently current
+    # whole-artifact admission, never this recomputable record-local hash.
     if not isinstance(payload, Mapping) or set(payload) != _PRECONTRACT_PAYLOAD_FIELDS:
         return False
     core = asdict(record)
@@ -1430,6 +1547,63 @@ def _is_precontract_producer_record(record: ContinuousProducerRecord, payload: o
         and payload.get("producerVersion") == PRODUCER_VERSION
         and record.fingerprint == _fingerprint(core)
     )
+
+
+def _strict_historical_json(raw: str) -> object:
+    def reject_constant(value: str) -> None:
+        raise ContinuousTradePlanProducerError("Historical JSON contains a nonfinite number.")
+
+    def finite_float(value: str) -> float:
+        result = float(value)
+        if not math.isfinite(result):
+            reject_constant(value)
+        return result
+
+    return json.loads(raw, object_pairs_hook=_unique_producer_pairs,
+                      parse_constant=reject_constant, parse_float=finite_float)
+
+
+def _validate_historical_payload(record: ContinuousProducerRecord, payload: Mapping[str, object]) -> None:
+    # Reuse existing evidence contracts; admission cannot waive nested consistency.
+    try:
+        history = HistoricalContextEvidence(**payload["historicalContext"])
+        current = CurrentMarketEvidence(**payload["currentMarketEvidence"])
+        instrument = InstrumentAdmissionEvidence(**payload["instrumentAdmission"])
+        if history.symbol != record.symbol or history.session_date != record.session_date:
+            raise ContinuousTradePlanProducerError("Historical context contradicts its record.")
+        validate_historical_context(history)
+        _strict_historical_json(current.market_payload_json)
+        validate_current_market_evidence(current, expected_symbol=record.symbol)
+        if type(instrument.authoritative) is not bool:
+            raise ContinuousTradePlanProducerError("Historical instrument authority is malformed.")
+        validate_instrument_admission(instrument, expected_symbol=record.symbol)
+        cycle = payload["compositionCycle"]
+        if set(cycle) != {field.name for field in fields(ContinuousCompositionCycle)}:
+            raise ContinuousTradePlanProducerError("Historical composition schema differs.")
+        cycle_core = {key: value for key, value in cycle.items() if key not in ("cycle_id", "fingerprint")}
+        cycle_hash = hashlib.sha256(json.dumps(cycle_core, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        if (cycle["fingerprint"] != cycle_hash or cycle["cycle_id"] != f"continuous-composition-{cycle_hash[:24]}"
+                or cycle["session_date"] != record.session_date
+                or type(cycle["member_results"]) is not list):
+            raise ContinuousTradePlanProducerError("Historical composition fingerprint/identity differs.")
+        for result in cycle["member_results"]:
+            if set(result) != {field.name for field in fields(ContinuousCompositionMemberResult)}:
+                raise ContinuousTradePlanProducerError("Historical composition member schema differs.")
+            member_core = {key: value for key, value in result.items() if key != "fingerprint"}
+            member_hash = hashlib.sha256(json.dumps(member_core, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+            if result["fingerprint"] != member_hash or result["authority"] != COMPOSITION_EXECUTION_AUTHORITY_NONE:
+                raise ContinuousTradePlanProducerError("Historical composition member fingerprint/authority differs.")
+    except (TypeError, KeyError, AttributeError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ContinuousTradePlanProducerError("Historical embedded evidence is malformed.") from exc
+
+
+def _unique_producer_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ContinuousTradePlanProducerError("Producer JSON repeats an object key.")
+        result[key] = value
+    return result
 
 
 def producer_bound_report_row(record: ContinuousProducerRecord) -> dict[str, object] | None:

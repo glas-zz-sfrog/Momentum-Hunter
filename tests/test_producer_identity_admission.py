@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from tests.test_historical_producer_admission import SyntheticAuthority
 
 from momentum_hunter.continuous_live_qualification import LiveCompositionSource
 from momentum_hunter.continuous_tradeplan_producer import (
@@ -289,7 +290,8 @@ class PrecontractProducerCompatibilityTests(unittest.TestCase):
     def test_exact_canonical_fixture_loads_without_rewrite_or_identity_fabrication(self):
         raw = FIXTURE.read_bytes()
         self.assertEqual(FIXTURE_SHA, hashlib.sha256(raw).hexdigest().upper())
-        with tempfile.TemporaryDirectory(prefix="repair003-legacy-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="repair005-legacy-") as temporary, SyntheticAuthority(Path(temporary) / "authority") as authority:
+            authority.publish([authority.event(raw)])
             path = Path(temporary) / "producer.json"
             path.write_bytes(raw)
             store = ContinuousTradePlanProducerStore(path)
@@ -297,7 +299,10 @@ class PrecontractProducerCompatibilityTests(unittest.TestCase):
             self.assertEqual(3, len(records))
             self.assertTrue(any(r.setup_id for r in records))
             self.assertTrue(all(not r.opportunity_id for r in records))
-            self.assertTrue(all(producer_bound_report_row(r) is None for r in records))
+            self.assertEqual("LEGACY_UNBOUND", store.inspect_legacy()["linkageStatus"])
+            for record in records:
+                with self.assertRaises(ContinuousTradePlanProducerError):
+                    producer_bound_report_row(record)
             self.assertEqual(raw, path.read_bytes())
             self.assertEqual(records, store.load())
             for record in records:
@@ -305,12 +310,12 @@ class PrecontractProducerCompatibilityTests(unittest.TestCase):
             self.assertEqual(raw, path.read_bytes())
             copied = ContinuousTradePlanProducerStore(Path(temporary) / "resaved.json")
             for record in records:
-                copied.append(record)
+                with self.assertRaises(ContinuousTradePlanProducerError):
+                    copied.append(record)
+            self.assertFalse(copied.path.exists())
+            copied.path.write_bytes(raw)
             self.assertEqual(records, copied.load())
-            saved = copied.path.read_bytes()
-            for record in records:
-                copied.append(record)
-            self.assertEqual(saved, copied.path.read_bytes())
+            self.assertEqual(raw, copied.path.read_bytes())
         self.assertEqual(raw, FIXTURE.read_bytes())
 
     def test_historical_cache_cannot_gain_modern_marker_privilege(self):

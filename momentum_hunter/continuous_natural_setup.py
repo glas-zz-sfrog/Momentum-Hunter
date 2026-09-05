@@ -748,6 +748,10 @@ class ContinuousNaturalSetupCoordinator:
             self.producer_store.path.parent / ".continuous-natural-composition"
         )
         with lease.transaction():
+            # Historical inspection may clone exact bytes, but cannot seed a
+            # prospective publication or mutate any authoritative target.
+            self.producer_store._assert_modern_publication()
+            preview.producer_store._assert_modern_publication()
             for key, target in authoritative.items():
                 if _optional_bytes(target) != preview.original_payloads[key]:
                     raise ContinuousNaturalSetupError(
