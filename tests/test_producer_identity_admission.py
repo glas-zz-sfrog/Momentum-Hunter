@@ -13,7 +13,9 @@ from momentum_hunter.continuous_tradeplan_producer import (
     ContinuousTradePlanProducerError, ContinuousTradePlanProducerStore,
     producer_bound_report_row,
 )
-from momentum_hunter.lifecycle_position_identity import REPORT_IDENTITY_FIELD
+from momentum_hunter.lifecycle_position_identity import (
+    REPORT_IDENTITY_FIELD, authoritative_lifecycle_identity_from_report_row,
+)
 from momentum_hunter.shadow_trading import (
     ShadowExecutionPolicy, ShadowStateError, ShadowStateStore, ShadowTradingService,
     shadow_identity_linkage_status,
@@ -23,6 +25,9 @@ from tests import test_continuous_natural_setup as natural
 
 FIXTURE = Path(__file__).parent / "fixtures/identity_precontract/producer.json"
 FIXTURE_SHA = "664885014323AC60819AA2BCEA5178003344E81DD60871FE7ADA7E4F995E2596"
+INVALID_NESTED_SCHEMAS = (
+    True, False, 1.0, 1.5, "1", "1.0", None, -1, 0, 2, 999, [], {}, "MISSING",
+)
 
 
 class ProducerIdentityAdmissionTests(unittest.TestCase):
@@ -147,6 +152,137 @@ class ProducerIdentityAdmissionTests(unittest.TestCase):
         record["payload_fingerprint"] = hashlib.sha256(record["payload_json"].encode("ascii")).hexdigest()
         # Changing the inner bytes cannot inherit the original outer commitment.
         self.rejected(document)
+
+    def nested_document(self, value):
+        document = copy.deepcopy(self.document)
+        binding = document["candidates"][0][REPORT_IDENTITY_FIELD]
+        if value == "MISSING":
+            binding.pop("schema_version")
+        else:
+            binding["schema_version"] = value
+        return document
+
+    def test_nested_schema_rejects_before_all_producer_admission_and_shadow_paths(self):
+        for value in INVALID_NESTED_SCHEMAS:
+            with self.subTest(value=value, value_type=type(value).__name__):
+                document = self.nested_document(value)
+                row = document["candidates"][0]
+                self.store.path.write_text(json.dumps(document), encoding="ascii")
+                original = self.store.path.read_bytes()
+                calls = {
+                    "document": lambda: self.store.validate_document(document),
+                    "selected": lambda: self.store.validate_document(document, selected_row=row),
+                    "load": self.store.load,
+                    "append": lambda: self.store.append(self.record),
+                    "latest_material": lambda: self.store.latest_material(
+                        self.record.member_id, self.record.material_evidence_fingerprint),
+                }
+                for name, call in calls.items():
+                    with self.subTest(entrypoint=name):
+                        with self.assertRaises(ContinuousTradePlanProducerError):
+                            call()
+                        self.assertEqual(original, self.store.path.read_bytes())
+                with self.assertRaises(ValueError):
+                    authoritative_lifecycle_identity_from_report_row(row)
+                with self.assertRaises((ValueError, ShadowStateError)):
+                    self.start(document)
+                self.assertFalse(self.state.exists())
+                self.assertEqual(original, self.store.path.read_bytes())
+
+    def test_nested_integer_one_is_accepted_by_producer_and_shadow(self):
+        document = self.nested_document(1)
+        row = document["candidates"][0]
+        self.assertIs(type(row[REPORT_IDENTITY_FIELD]["schema_version"]), int)
+        for selected in (None, row):
+            self.assertEqual((self.record,), self.store.validate_document(
+                document, selected_row=selected))
+        self.assertEqual((self.record,), self.store.load())
+        original = self.store.path.read_bytes()
+        self.assertEqual(self.record, self.store.append(self.record))
+        self.assertEqual(self.record, self.store.latest_material(
+            self.record.member_id, self.record.material_evidence_fingerprint))
+        self.assertEqual(original, self.store.path.read_bytes())
+        self.assertEqual(1, authoritative_lifecycle_identity_from_report_row(row).schema_version)
+        trade = self.start(document)
+        self.assertEqual("UNAVAILABLE", shadow_identity_linkage_status(trade))
+        self.assertEqual(trade, ShadowStateStore(self.state).load().trades[0])
+
+    def test_valid_selected_copy_cannot_mask_malformed_persisted_nested_schema(self):
+        # The caller's int-1 copy compares equal to the stored bool/float row.
+        for value in (True, 1.0):
+            with self.subTest(value=value, value_type=type(value).__name__):
+                with self.assertRaises(ContinuousTradePlanProducerError):
+                    self.store.validate_document(
+                        self.nested_document(value), selected_row=self.document["candidates"][0])
+                with self.assertRaises(ContinuousTradePlanProducerError):
+                    self.store.validate_document(self.document,
+                        selected_row=self.nested_document(value)["candidates"][0])
+
+    def test_malformed_nested_schema_and_missing_provenance_never_gain_legacy(self):
+        for value in INVALID_NESTED_SCHEMAS:
+            for field in ("opportunity_id", "setup_id", "trade_plan_id", REPORT_IDENTITY_FIELD):
+                with self.subTest(value=value, field=field):
+                    document = self.nested_document(value)
+                    document["candidates"][0].pop(field)
+                    self.rejected(document)
+
+    def test_nested_schema_is_strict_even_with_recomputed_binding_fingerprint(self):
+        for value in INVALID_NESTED_SCHEMAS:
+            with self.subTest(value=value, value_type=type(value).__name__):
+                document = self.nested_document(value)
+                binding = document["candidates"][0][REPORT_IDENTITY_FIELD]
+                core = {k: v for k, v in binding.items() if k != "binding_fingerprint"}
+                binding["binding_fingerprint"] = hashlib.sha256(json.dumps(
+                    core, sort_keys=True, separators=(",", ":")).encode("ascii")).hexdigest()
+                self.rejected(document)
+                with self.assertRaises(ValueError):
+                    authoritative_lifecycle_identity_from_report_row(document["candidates"][0])
+
+    def test_valid_natural_same_symbol_alternate_survives_malformed_sibling(self):
+        from tests.test_producer_shadow_provenance import ProducerShadowProvenanceTests
+        fixture = ProducerShadowProvenanceTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.compose(natural.at(11, 21), 1)
+        fixture.successor()
+        document = json.loads(fixture.source.producer.store.path.read_bytes())
+        rows = document["candidates"]
+        valid = rows[-1]
+        malformed = rows[0]
+        self.assertEqual(valid["symbol"], malformed["symbol"])
+        self.assertNotEqual(valid["trade_plan_id"], malformed["trade_plan_id"])
+        identity = authoritative_lifecycle_identity_from_report_row(valid)
+        for index, value in enumerate(INVALID_NESTED_SCHEMAS):
+            with self.subTest(value=value, value_type=type(value).__name__):
+                changed = copy.deepcopy(document)
+                bad = changed["candidates"][0]
+                if value == "MISSING":
+                    bad[REPORT_IDENTITY_FIELD].pop("schema_version")
+                else:
+                    bad[REPORT_IDENTITY_FIELD]["schema_version"] = value
+                with self.assertRaises(ContinuousTradePlanProducerError):
+                    self.store.validate_document(changed)
+                with self.assertRaises(ContinuousTradePlanProducerError):
+                    self.store.validate_document(changed, selected_row=bad)
+                self.store.validate_document(changed, selected_row=valid)
+                self.store.path.write_text(json.dumps(changed), encoding="ascii")
+                original = self.store.path.read_bytes()
+                state = self.root / f"selected-{index}.json"
+                service = ShadowTradingService(store=ShadowStateStore(state), policy=ShadowExecutionPolicy())
+                with self.assertRaises(ValueError):
+                    service.start_trade(self.store.path, symbol=valid["symbol"],
+                        simulation_command_id="repair004-rejected", decision_at=natural.at(11, 22),
+                        opportunity_id=bad["opportunity_id"], setup_id=bad["setup_id"],
+                        authoritative_trade_plan_id=bad["trade_plan_id"])
+                self.assertFalse(state.exists())
+                trade = service.start_trade(self.store.path, symbol=valid["symbol"],
+                    simulation_command_id="repair004-valid", decision_at=natural.at(11, 22),
+                    opportunity_id=identity.opportunity_id, setup_id=identity.setup_id,
+                    authoritative_trade_plan_id=identity.trade_plan_id)
+                self.assertEqual(valid, trade.evidence.candidate_payload())
+                self.assertEqual("UNAVAILABLE", shadow_identity_linkage_status(trade))
+                self.assertEqual(trade, ShadowStateStore(state).load().trades[0])
+                self.assertEqual(original, self.store.path.read_bytes())
 
 
 class PrecontractProducerCompatibilityTests(unittest.TestCase):

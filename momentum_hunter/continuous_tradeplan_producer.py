@@ -35,7 +35,11 @@ from momentum_hunter.continuous_composition import (
     compose_cycle,
 )
 from momentum_hunter.hot_universe import HotUniverseMember, HotUniverseState
-from momentum_hunter.lifecycle_position_identity import bind_report_row_to_producer_identity
+from momentum_hunter.lifecycle_position_identity import (
+    LifecyclePositionIdentityError,
+    authoritative_lifecycle_identity_from_report_row,
+    bind_report_row_to_producer_identity,
+)
 from momentum_hunter.path_transaction import PathTransactionLease
 from momentum_hunter.schwab_candle_contract import EASTERN_TZ
 from momentum_hunter.schwab_candle_store import SchwabCandleStore
@@ -380,6 +384,19 @@ class ContinuousTradePlanProducerStore:
             raise ContinuousTradePlanProducerError(
                 "Persisted Producer report rows contradict their authoritative records."
             )
+        # Python projection equality alone admits True/1.0 as integer schema 1.
+        admitted_rows = payload.get("candidates", [])
+        if selected_row is not None:
+            admitted_rows = [selected_row, *(
+                row for row in admitted_rows if row == selected_row
+            )]
+        try:
+            for row in admitted_rows:
+                authoritative_lifecycle_identity_from_report_row(row)
+        except LifecyclePositionIdentityError as exc:
+            raise ContinuousTradePlanProducerError(
+                "Persisted Producer report rows have an invalid authoritative identity."
+            ) from exc
         return records
 
     def _write_unlocked(self, records: tuple[ContinuousProducerRecord, ...]) -> None:
