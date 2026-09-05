@@ -38,6 +38,7 @@ from momentum_hunter.lifecycle_position_identity import (
     IDENTITY_LINKAGE_UNKNOWN,
     LifecyclePositionIdentityError,
     REPORT_IDENTITY_FIELD,
+    REPORT_LINEAGE_FIELD,
     authoritative_lifecycle_identity_from_report_row,
 )
 from momentum_hunter.shadow_market_validity import (
@@ -68,7 +69,7 @@ from momentum_hunter.time_utils import now_central
 from momentum_hunter.trade_planning import TradePlan, parse_datetime, trade_plan_from_dict
 
 
-SHADOW_SCHEMA_VERSION = 1
+SHADOW_SCHEMA_VERSION = 2
 SHADOW_REVIEW_SCHEMA_VERSION = 2
 SHADOW_MODE = "PAPER SHADOW / NONTRANSMITTING"
 SHADOW_ENGINE_VERSION = "shadow_trading_v1"
@@ -364,6 +365,9 @@ class ShadowTrade:
     processed_observation_ids: tuple[str, ...] = ()
     last_observation_timestamp: str = ""
     last_reason: str = ""
+    identity_record_version: int = 1
+    identity_lineage: str = "UNKNOWN"
+    position_identity_json: str = ""
 
     def trade_plan(self) -> TradePlan:
         return trade_plan_from_dict(json.loads(self.trade_plan_json))
@@ -909,14 +913,30 @@ class ShadowStateStore:
             payload = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ShadowStateError(f"Shadow state cannot be loaded: {type(exc).__name__}") from exc
-        if not isinstance(payload, dict) or payload.get("schema_version") != SHADOW_SCHEMA_VERSION:
+        if (
+            not isinstance(payload, dict)
+            or type(payload.get("schema_version")) is not int
+            or payload["schema_version"] not in {1, SHADOW_SCHEMA_VERSION}
+        ):
             raise ShadowStateError("Shadow state has an unsupported or missing schema version.")
         return shadow_state_from_dict(payload)
 
     def save(self, state: ShadowTradingState) -> Path:
         validate_shadow_state(state)
+        if self.path.exists():
+            previous = {trade.shadow_trade_id: trade for trade in self.load().trades}
+            for trade in state.trades:
+                old = previous.get(trade.shadow_trade_id)
+                if old is not None and (
+                    (old.identity_record_version, old.identity_lineage)
+                    != (trade.identity_record_version, trade.identity_lineage)
+                    or (old.position_identity_json and old.position_identity_json != trade.position_identity_json)
+                ):
+                    raise ShadowStateError("Immutable Shadow identity provenance cannot be rewritten.")
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = shadow_state_to_dict(replace(state, updated_at=now_central().isoformat()))
+        payload = shadow_state_to_dict(replace(
+            state, schema_version=SHADOW_SCHEMA_VERSION, updated_at=now_central().isoformat()
+        ))
         temporary = self.path.with_name(f"{self.path.name}.{uuid.uuid4().hex}.tmp")
         temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         temporary.replace(self.path)
@@ -1793,6 +1813,8 @@ class ShadowTradingService:
                 "setup_id": setup_id,
                 "trade_plan_id": trade_plan_id,
                 "shadow_selection_id": shadow_selection_id,
+                "identity_record_version": 1,
+                "identity_lineage": "PRODUCER_BOUND" if authoritative_identity else "UPSTREAM_UNAVAILABLE",
                 "selection_quote_sha256": (
                     hashlib.sha256(selection_quote_json.encode("utf-8")).hexdigest()
                     if selection_quote_json
@@ -2045,6 +2067,7 @@ class ShadowTradingService:
             ticket=ticket,
             ledger_events=events,
             last_reason=last_reason,
+            identity_lineage="PRODUCER_BOUND" if authoritative_identity else "UPSTREAM_UNAVAILABLE",
         )
         updated_state = replace(
             state,
@@ -2755,6 +2778,11 @@ class ShadowTradingService:
                     "slippage_bps": self.policy.slippage_bps,
                 },
             )
+            if previous_position is None and trade.identity_record_version == 1:
+                filled_trade = replace(
+                    filled_trade,
+                    position_identity_json=canonical_json(_position_identity_payload(filled_trade)),
+                )
             return replace(
                 filled_trade,
                 executable_mark=build_executable_mark(
@@ -3439,6 +3467,8 @@ def _select_persisted_shadow_candidate(
         )
     rank, row = matches[0]
     identity = None
+    if _row_claims_lifecycle_identity(row) and REPORT_IDENTITY_FIELD not in row:
+        raise ValueError("Modern lifecycle provenance requires a persisted Producer binding.")
     if REPORT_IDENTITY_FIELD in row:
         try:
             identity = authoritative_lifecycle_identity_from_report_row(row)
@@ -3503,6 +3533,11 @@ def frozen_evidence_findings(trade: ShadowTrade) -> list[AuditFinding]:
     if canonical_json(row) != trade.evidence.candidate_json:
         findings.append(AuditFinding(trade.shadow_trade_id, "candidate_json", "Frozen candidate evidence does not match the frozen source report."))
         return findings
+    if trade.selection_policy_recorded_at:
+        # Official admission uses the frozen canonical rank, not collection order.
+        rank = int(row.get("rank") or 0)
+    if rank != trade.candidate_rank:
+        findings.append(AuditFinding(trade.shadow_trade_id, "candidate_rank", "Candidate rank contradicts its frozen report."))
     source_capture_key = "|".join(
         [
             trade.evidence.source_capture_path,
@@ -3837,6 +3872,45 @@ def build_shadow_review_snapshot(
     }
 
 
+def _row_claims_lifecycle_identity(row: Mapping[str, Any]) -> bool:
+    return any(name in row for name in (
+        REPORT_IDENTITY_FIELD, REPORT_LINEAGE_FIELD, "opportunity_id", "setup_id",
+        "trade_plan_id", "producer_record_id", "producer_record_fingerprint",
+    ))
+
+
+def _position_identity_payload(trade: ShadowTrade) -> dict[str, Any]:
+    """Bind the first actual FakeBroker fill event, never a later timestamp."""
+    position = trade.position
+    fills = [event for event in trade.ledger_events if event.requested_action == "fake_order_filled"]
+    if position is None or not fills:
+        raise ShadowStateError("Position identity requires its first fill event.")
+    first = fills[0]
+    if (
+        first.event_type != "fake_order_filled"
+        or first.timestamp != position.opened_at
+        or first.trade_plan_id != trade.trade_plan_id
+        or first.ticker != trade.symbol
+        or parse_datetime(position.opened_at) is None
+        or position.shadow_trade_id != trade.shadow_trade_id
+        or position.position_id != stable_id("shadow-position", trade.shadow_trade_id)
+    ):
+        raise ShadowStateError("Position identity contradicts its first fill event.")
+    core = {
+        "schema_version": 1,
+        "shadow_trade_id": trade.shadow_trade_id,
+        "position_id": position.position_id,
+        "opened_at": position.opened_at,
+        "opportunity_id": trade.opportunity_id,
+        "setup_id": trade.setup_id,
+        "trade_plan_id": trade.trade_plan_id,
+        "source_sha256": trade.evidence.source_sha256,
+        "first_fill_event_id": first.event_id,
+        "first_fill_event_sha256": hashlib.sha256(canonical_json(first.to_dict()).encode("utf-8")).hexdigest(),
+    }
+    return {**core, "fingerprint": hashlib.sha256(canonical_json(core).encode("utf-8")).hexdigest()}
+
+
 def shadow_identity_linkage_status(trade: ShadowTrade) -> str:
     """Classify only persisted exact provenance; never infer by symbol or time."""
 
@@ -3844,7 +3918,6 @@ def shadow_identity_linkage_status(trade: ShadowTrade) -> str:
         candidate_row = trade.evidence.candidate_payload()
     except (json.JSONDecodeError, TypeError, ValueError):
         return IDENTITY_LINKAGE_UNKNOWN
-    has_binding = REPORT_IDENTITY_FIELD in candidate_row
     position_provenance = (
         (
             trade.position.opportunity_id,
@@ -3854,8 +3927,49 @@ def shadow_identity_linkage_status(trade: ShadowTrade) -> str:
         if trade.position is not None
         else ("", "", "")
     )
-    if not has_binding and not trade.setup_id and not any(position_provenance):
-        return IDENTITY_LINKAGE_LEGACY_UNBOUND
+    if type(trade.identity_record_version) is not int or trade.identity_record_version not in {0, 1}:
+        return IDENTITY_LINKAGE_UNKNOWN
+    if trade.identity_record_version == 0:
+        # Only the persisted pre-contract state reader can assign this lineage.
+        if (
+            trade.identity_lineage == "PRE_CONTRACT"
+            and not _row_claims_lifecycle_identity(candidate_row)
+            and not trade.setup_id and not any(position_provenance)
+            and not trade.position_identity_json
+            and not any("identity_record_version" in event.payload or event.payload.get("setup_id") for event in trade.ledger_events)
+            and not frozen_evidence_findings(trade)
+        ):
+            return IDENTITY_LINKAGE_LEGACY_UNBOUND
+        return IDENTITY_LINKAGE_UNKNOWN
+    risks = [event for event in trade.ledger_events if event.requested_action == "risk_gate_evaluated"]
+    if (
+        len(risks) != 1
+        or type(risks[0].payload.get("identity_record_version")) is not int
+        or risks[0].payload.get("identity_record_version") != 1
+        or risks[0].payload.get("identity_lineage") != trade.identity_lineage
+        or any(risks[0].payload.get(name) != getattr(trade, name) for name in ("opportunity_id", "setup_id", "trade_plan_id"))
+        or frozen_evidence_findings(trade)
+    ):
+        return IDENTITY_LINKAGE_UNKNOWN
+    if trade.position is not None:
+        try:
+            binding = json.loads(trade.position_identity_json)
+            if (
+                not isinstance(binding, dict)
+                or type(binding.get("schema_version")) is not int
+                or binding != _position_identity_payload(trade)
+            ):
+                return IDENTITY_LINKAGE_UNKNOWN
+        except (TypeError, ValueError, ShadowStateError):
+            return IDENTITY_LINKAGE_UNKNOWN
+    elif trade.position_identity_json:
+        return IDENTITY_LINKAGE_UNKNOWN
+    if trade.identity_lineage == "UPSTREAM_UNAVAILABLE":
+        if _row_claims_lifecycle_identity(candidate_row) or trade.setup_id or any(position_provenance):
+            return IDENTITY_LINKAGE_UNKNOWN
+        return IDENTITY_LINKAGE_UNAVAILABLE
+    if trade.identity_lineage != "PRODUCER_BOUND":
+        return IDENTITY_LINKAGE_UNKNOWN
     try:
         identity = authoritative_lifecycle_identity_from_report_row(candidate_row)
     except LifecyclePositionIdentityError:
@@ -4479,6 +4593,9 @@ def shadow_sample_readiness_to_dict(readiness: ShadowSampleReadiness) -> dict[st
 
 
 def shadow_state_from_dict(payload: dict[str, Any]) -> ShadowTradingState:
+    version = payload.get("schema_version")
+    if type(version) is not int or version not in {1, SHADOW_SCHEMA_VERSION}:
+        raise ShadowStateError("Shadow state has an unsupported or missing schema version.")
     raw_trades = payload.get("trades", [])
     raw_receipts = payload.get("command_receipts", [])
     if not isinstance(raw_trades, list) or not isinstance(raw_receipts, list):
@@ -4486,10 +4603,10 @@ def shadow_state_from_dict(payload: dict[str, Any]) -> ShadowTradingState:
     if any(not isinstance(item, dict) for item in raw_trades) or any(not isinstance(item, dict) for item in raw_receipts):
         raise ShadowStateError("Shadow state contains malformed trade or command receipt entries.")
     state = ShadowTradingState(
-        schema_version=int(payload.get("schema_version", 0)),
+        schema_version=version,
         engine_version=str(payload.get("engine_version", "")),
         updated_at=str(payload.get("updated_at", "")),
-        trades=tuple(shadow_trade_from_dict(item) for item in raw_trades),
+        trades=tuple(shadow_trade_from_dict(item, state_schema_version=version) for item in raw_trades),
         command_receipts=tuple(
             ShadowCommandReceipt(
                 command_id=str(item.get("command_id", "")),
@@ -4511,7 +4628,14 @@ def shadow_trade_to_dict(trade: ShadowTrade) -> dict[str, Any]:
     return payload
 
 
-def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
+def shadow_trade_from_dict(payload: dict[str, Any], *, state_schema_version: int = SHADOW_SCHEMA_VERSION) -> ShadowTrade:
+    record_version = payload.get("identity_record_version")
+    lineage = payload.get("identity_lineage", "UNKNOWN")
+    if state_schema_version == 1 and "identity_record_version" not in payload:
+        record_version = 0
+        lineage = "PRE_CONTRACT"
+    if type(record_version) is not int or record_version not in {0, 1}:
+        raise ShadowStateError("Shadow identity record version is missing or unsupported.")
     evidence_payload = require_mapping(payload.get("evidence"), "evidence")
     order_payload = payload.get("order")
     position_payload = payload.get("position")
@@ -4542,6 +4666,9 @@ def shadow_trade_from_dict(payload: dict[str, Any]) -> ShadowTrade:
     else:
         raise ShadowStateError("Shadow state field 'sample_metadata' must be an object.")
     return ShadowTrade(
+        identity_record_version=record_version,
+        identity_lineage=lineage,
+        position_identity_json=payload.get("position_identity_json", ""),
         shadow_trade_id=str(payload.get("shadow_trade_id", "")),
         simulation_command_id=str(payload.get("simulation_command_id", "")),
         candidate_id=str(payload.get("candidate_id", "")),
@@ -4619,6 +4746,8 @@ def is_canonical_scheduled_trade_report_path(path: Path) -> bool:
 
 
 def validate_shadow_state(state: ShadowTradingState) -> None:
+    if type(state.schema_version) is not int or state.schema_version not in {1, SHADOW_SCHEMA_VERSION}:
+        raise ShadowStateError("Shadow state has an unsupported schema version.")
     trade_ids = [trade.shadow_trade_id for trade in state.trades]
     command_ids = [receipt.command_id for receipt in state.command_receipts]
     if any(not trade_id for trade_id in trade_ids):
@@ -4645,12 +4774,6 @@ def validate_shadow_trade_lifecycle(trade: ShadowTrade) -> None:
         _raise_shadow_lifecycle_error(
             trade,
             f"unknown trade status '{trade.status or 'missing'}'.",
-        )
-
-    if shadow_identity_linkage_status(trade) == IDENTITY_LINKAGE_UNKNOWN:
-        _raise_shadow_lifecycle_error(
-            trade,
-            "authoritative lifecycle-position provenance is incomplete or contradictory.",
         )
 
     if trade.status == "blocked":
@@ -4739,6 +4862,11 @@ def validate_shadow_trade_lifecycle(trade: ShadowTrade) -> None:
         _raise_shadow_lifecycle_error(
             trade,
             "ledger event identifiers must be unique.",
+        )
+    if shadow_identity_linkage_status(trade) == IDENTITY_LINKAGE_UNKNOWN:
+        _raise_shadow_lifecycle_error(
+            trade,
+            "authoritative lifecycle-position provenance is incomplete or contradictory.",
         )
 
 

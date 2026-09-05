@@ -232,19 +232,15 @@ class ShadowProvenanceSelectionTests(unittest.TestCase):
         self.assertEqual(self.row_b, trade.evidence.candidate_payload())
         self.assertTrue(audit_shadow_trade(trade).passed)
 
-    def test_legacy_row_and_historical_selection_alias_remain_unbound(self) -> None:
+    def test_stripped_modern_row_cannot_become_legacy_through_selection_alias(self) -> None:
         legacy = copy.deepcopy(self.row_b)
         legacy.pop(REPORT_IDENTITY_FIELD)
         for selection_id in ("", "historical-shadow-selection"):
             with self.subTest(selection_id=selection_id):
                 self.state_path = self.root / f"legacy-{selection_id}.json"
                 self._persist([legacy])
-                trade = self._start(allocation_row=legacy, opportunity_id=selection_id)
-                self.assertEqual(("", ""), (trade.opportunity_id, trade.setup_id))
-                self.assertEqual(selection_id, trade.shadow_selection_id)
-                self.assertEqual("LEGACY_UNBOUND", shadow_identity_linkage_status(trade))
-                self.assertTrue(audit_shadow_trade(trade).passed)
-                self.assertEqual(trade, ShadowStateStore(self.state_path).load().trades[0])
+                with self.assertRaisesRegex(ValueError, "persisted Producer binding"):
+                    self._start(allocation_row=legacy, opportunity_id=selection_id)
 
     def test_legacy_rows_cannot_satisfy_exact_or_ambiguous_selection(self) -> None:
         legacy = copy.deepcopy(self.row_b)

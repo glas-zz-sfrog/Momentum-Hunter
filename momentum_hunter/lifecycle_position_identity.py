@@ -16,6 +16,7 @@ from typing import Any, Mapping
 IDENTITY_SCHEMA_VERSION = 1
 IDENTITY_AUTHORITY = "CONTINUOUS_TRADEPLAN_PRODUCER"
 REPORT_IDENTITY_FIELD = "authoritative_lifecycle_identity"
+REPORT_LINEAGE_FIELD = "lifecycle_identity_contract"
 
 IDENTITY_LINKAGE_PROVEN = "PROVEN"
 IDENTITY_LINKAGE_UNKNOWN = "UNKNOWN"
@@ -109,7 +110,12 @@ def bind_report_row_to_producer_identity(
             "Report TradePlan identity does not match the Continuous Producer binding."
         )
     bound = dict(row)
+    for name in ("opportunity_id", "setup_id", "trade_plan_id"):
+        if name in bound and bound[name] != getattr(identity, name):
+            raise LifecyclePositionIdentityError("Report row contradicts its Producer identity.")
+        bound[name] = getattr(identity, name)
     bound[REPORT_IDENTITY_FIELD] = lifecycle_identity_to_dict(identity)
+    authoritative_lifecycle_identity_from_report_row(bound)
     return bound
 
 
@@ -137,7 +143,7 @@ def authoritative_lifecycle_identity_from_report_row(
         )
     try:
         identity = AuthoritativeLifecycleTradePlanIdentity(
-            schema_version=int(raw["schema_version"]),
+            schema_version=raw["schema_version"],
             authority=str(raw["authority"]),
             opportunity_id=str(raw["opportunity_id"]),
             setup_id=str(raw["setup_id"]),
@@ -151,6 +157,16 @@ def authoritative_lifecycle_identity_from_report_row(
             "Authoritative lifecycle identity is malformed."
         ) from exc
     validate_authoritative_lifecycle_identity(identity)
+    ids = ("opportunity_id", "setup_id", "trade_plan_id")
+    if REPORT_LINEAGE_FIELD in row:
+        if type(row[REPORT_LINEAGE_FIELD]) is not int or row[REPORT_LINEAGE_FIELD] != 1:
+            raise LifecyclePositionIdentityError("Report lineage schema is unsupported.")
+    if REPORT_LINEAGE_FIELD in row or any(name in row for name in ids):
+        if any(row.get(name) != getattr(identity, name) for name in ids):
+            raise LifecyclePositionIdentityError("Persisted row identity contradicts its Producer binding.")
+    for name in ("producer_record_id", "producer_record_fingerprint"):
+        if name in row and row[name] != getattr(identity, name):
+            raise LifecyclePositionIdentityError("Persisted Producer record identity contradicts its binding.")
     if report_row_intraday_plan_id(row) != identity.trade_plan_id:
         raise LifecyclePositionIdentityError(
             "Persisted TradePlan does not match its authoritative lifecycle binding."
@@ -162,7 +178,8 @@ def validate_authoritative_lifecycle_identity(
     identity: AuthoritativeLifecycleTradePlanIdentity,
 ) -> None:
     if (
-        identity.schema_version != IDENTITY_SCHEMA_VERSION
+        type(identity.schema_version) is not int
+        or identity.schema_version != IDENTITY_SCHEMA_VERSION
         or identity.authority != IDENTITY_AUTHORITY
     ):
         raise LifecyclePositionIdentityError(
@@ -230,6 +247,7 @@ __all__ = [
     "IDENTITY_SCHEMA_VERSION",
     "LifecyclePositionIdentityError",
     "REPORT_IDENTITY_FIELD",
+    "REPORT_LINEAGE_FIELD",
     "authoritative_lifecycle_identity_from_report_row",
     "bind_report_row_to_producer_identity",
     "build_authoritative_lifecycle_identity",
