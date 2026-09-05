@@ -308,6 +308,18 @@ class ContinuousTradePlanProducerStore:
             raise ContinuousTradePlanProducerError(
                 "Continuous producer restart state is unreadable or untrusted."
             ) from exc
+        return self.validate_document(payload)
+
+    @staticmethod
+    def validate_document(
+        payload: object, *, selected_row: Mapping[str, object] | None = None,
+    ) -> tuple[ContinuousProducerRecord, ...]:
+        """Validate persisted records and their deterministic report projection.
+
+        Shadow may inspect an exact selected row without admitting other rows.
+        It still validates every record, and the selected row must equal one
+        complete authoritative projection. Full cache reload checks all rows.
+        """
         if not isinstance(payload, Mapping) or set(payload) not in (
             {"schemaVersion", "profile", "records"},
             {"schemaVersion", "profile", "records", "candidates"},
@@ -316,7 +328,8 @@ class ContinuousTradePlanProducerStore:
                 "Continuous producer restart state schema is invalid."
             )
         if (
-            payload.get("schemaVersion") != PRODUCER_SCHEMA_VERSION
+            type(payload.get("schemaVersion")) is not int
+            or payload.get("schemaVersion") != PRODUCER_SCHEMA_VERSION
             or payload.get("profile") != PRODUCER_PROFILE
             or not isinstance(payload.get("records"), list)
         ):
@@ -355,7 +368,15 @@ class ContinuousTradePlanProducerStore:
             row for record in records
             if (row := producer_bound_report_row(record)) is not None
         ]
-        if payload.get("candidates", []) != expected_rows:
+        if selected_row is None:
+            projection_matches = payload.get("candidates", []) == expected_rows
+        else:
+            projection_matches = (
+                isinstance(payload.get("candidates"), list)
+                and sum(row == selected_row for row in payload["candidates"]) == 1
+                and sum(row == selected_row for row in expected_rows) == 1
+            )
+        if not projection_matches:
             raise ContinuousTradePlanProducerError(
                 "Persisted Producer report rows contradict their authoritative records."
             )
@@ -1146,7 +1167,8 @@ def validate_historical_context(
 
 def validate_producer_record(record: ContinuousProducerRecord) -> None:
     if (
-        record.schema_version != PRODUCER_SCHEMA_VERSION
+        type(record.schema_version) is not int
+        or record.schema_version != PRODUCER_SCHEMA_VERSION
         or record.profile != PRODUCER_PROFILE
         or record.producer_version != PRODUCER_VERSION
         or record.symbol.strip().upper() != record.symbol
@@ -1174,14 +1196,6 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         raise ContinuousTradePlanProducerError(
             "Producer record has a TradePlan fingerprint without an identity."
         )
-    lifecycle_ids = (record.opportunity_id, record.setup_id)
-    if any(lifecycle_ids) and not all(lifecycle_ids):
-        raise ContinuousTradePlanProducerError(
-            "Producer lifecycle opportunity/setup identity is incomplete."
-        )
-    if record.opportunity_id:
-        _require_fingerprint(record.opportunity_id, "Lifecycle opportunity identity")
-        _require_fingerprint(record.setup_id, "Lifecycle setup identity")
     if hashlib.sha256(record.payload_json.encode("ascii")).hexdigest() != record.payload_fingerprint:
         raise ContinuousTradePlanProducerError(
             "Continuous producer payload fingerprint did not verify."
@@ -1192,6 +1206,22 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         raise ContinuousTradePlanProducerError(
             "Continuous producer payload is malformed."
         ) from exc
+    historical = _is_precontract_producer_record(record, payload)
+    lifecycle_ids = (record.opportunity_id, record.setup_id)
+    if not historical and any(lifecycle_ids) and not all(lifecycle_ids):
+        raise ContinuousTradePlanProducerError(
+            "Producer lifecycle opportunity/setup identity is incomplete."
+        )
+    if record.opportunity_id:
+        _require_fingerprint(record.opportunity_id, "Lifecycle opportunity identity")
+        _require_fingerprint(record.setup_id, "Lifecycle setup identity")
+    if not historical and (
+        not isinstance(payload, Mapping)
+        or set(_MODERN_PRODUCER_FIELDS) - set(payload)
+        or type(payload.get("reportRowContract")) is not int
+        or payload.get("reportRowContract") != 1
+    ):
+        raise ContinuousTradePlanProducerError("Modern Producer lineage is incomplete.")
     explicit_identity_fields = {
         "opportunityId",
         "setupId",
@@ -1215,6 +1245,10 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         )
     if (
         not isinstance(payload, Mapping)
+        or type(payload.get("schemaVersion")) is not int
+        or payload.get("schemaVersion") != record.schema_version
+        or payload.get("profile") != record.profile
+        or payload.get("producerVersion") != record.producer_version
         or payload.get("payloadType") != "CONTINUOUS_TRADEPLAN_PRODUCER"
         or payload.get("producerFingerprint") != record.producer_fingerprint
         or payload.get("materialEvidenceFingerprint")
@@ -1348,6 +1382,37 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         raise ContinuousTradePlanProducerError(
             "Execution-eligible producer record is incomplete or blocked."
         )
+
+
+_MODERN_PRODUCER_FIELDS = frozenset({
+    "opportunityId", "setupId", "tradePlanId", "reportRowContract", "lifecycleSnapshot",
+})
+_PRECONTRACT_PAYLOAD_FIELDS = frozenset({
+    "schemaVersion", "profile", "payloadType", "producerVersion", "producerFingerprint",
+    "trigger", "candidateOriginIdentity", "historicalContext", "currentMarketEvidence",
+    "instrumentAdmission", "materialEvidenceFingerprint", "materialExtensionFingerprints",
+    "configurationFingerprint", "compositionCycle", "executionEligible", "blockers",
+    "authority", "executionAuthority", "orderCapability", "accountValuesRequested",
+    "positionsRequested", "ordersRequested",
+})
+
+
+def _is_precontract_producer_record(record: ContinuousProducerRecord, payload: object) -> bool:
+    # Historical privilege requires the exact old payload contract AND the old
+    # record hash committing to those bytes. Deleting modern fields alone fails.
+    if not isinstance(payload, Mapping) or set(payload) != _PRECONTRACT_PAYLOAD_FIELDS:
+        return False
+    core = asdict(record)
+    for field in ("record_id", "fingerprint", "opportunity_id"):
+        core.pop(field)
+    return (
+        record.opportunity_id == ""
+        and type(payload.get("schemaVersion")) is int
+        and payload.get("schemaVersion") == PRODUCER_SCHEMA_VERSION
+        and payload.get("profile") == PRODUCER_PROFILE
+        and payload.get("producerVersion") == PRODUCER_VERSION
+        and record.fingerprint == _fingerprint(core)
+    )
 
 
 def producer_bound_report_row(record: ContinuousProducerRecord) -> dict[str, object] | None:

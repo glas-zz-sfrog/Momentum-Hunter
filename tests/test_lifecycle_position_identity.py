@@ -149,7 +149,7 @@ class LifecyclePositionIdentityContractTests(unittest.TestCase):
         self.assertNotEqual(first.trade_plan_id, second.trade_plan_id)
         self.assertNotEqual(first.position.position_id, second.position.position_id)
 
-    def test_new_unbound_record_is_unavailable_not_historical(self) -> None:
+    def test_new_unbound_record_is_unknown_not_historical_or_valid_upstream(self) -> None:
         payload = report_payload()
         payload["candidates"][0].pop(REPORT_IDENTITY_FIELD)
         _, state_path, trade = self._open(name="legacy", payload=payload)
@@ -157,12 +157,12 @@ class LifecyclePositionIdentityContractTests(unittest.TestCase):
         self.assertEqual("", trade.setup_id)
         self.assertEqual("", trade.position.opportunity_id)
         self.assertEqual(
-            IDENTITY_LINKAGE_UNAVAILABLE,
+            IDENTITY_LINKAGE_UNKNOWN,
             shadow_identity_linkage_status(trade),
         )
         restored = ShadowStateStore(state_path).load().trades[0]
         self.assertEqual(
-            IDENTITY_LINKAGE_UNAVAILABLE,
+            IDENTITY_LINKAGE_UNKNOWN,
             shadow_identity_linkage_status(restored),
         )
 

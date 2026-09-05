@@ -1590,6 +1590,7 @@ class ShadowTradingService:
             )
         persisted_rank, row, authoritative_identity = _select_persisted_shadow_candidate(
             rows,
+            source_report=report,
             symbol=normalized_symbol,
             opportunity_id=opportunity_id,
             setup_id=setup_id,
@@ -3429,6 +3430,7 @@ def automatic_selection_findings(trade: ShadowTrade) -> list[AuditFinding]:
 def _select_persisted_shadow_candidate(
     rows: list[Any],
     *,
+    source_report: Mapping[str, Any] | None = None,
     symbol: str,
     opportunity_id: str = "",
     setup_id: str = "",
@@ -3466,6 +3468,7 @@ def _select_persisted_shadow_candidate(
             f"Expected exactly one persisted candidate row for {selector}; found {len(matches)}."
         )
     rank, row = matches[0]
+    _validate_enclosing_producer_provenance(source_report, row)
     identity = None
     if _row_claims_lifecycle_identity(row) and REPORT_IDENTITY_FIELD not in row:
         raise ValueError("Modern lifecycle provenance requires a persisted Producer binding.")
@@ -3489,6 +3492,24 @@ def _select_persisted_shadow_candidate(
             "Selected lifecycle identity has a different persisted candidate symbol."
         )
     return rank, row, identity
+
+
+def _validate_enclosing_producer_provenance(
+    report: Mapping[str, Any] | None, row: Mapping[str, Any],
+) -> None:
+    if report is None:
+        return
+    # Typed Producer documents retain authority in records, not merely in rows.
+    # Reuse cache validation on the same frozen bytes at admission and restart.
+    from momentum_hunter.continuous_tradeplan_producer import (
+        PRODUCER_PROFILE, ContinuousTradePlanProducerStore,
+    )
+    if (
+        "records" in report or report.get("profile") == PRODUCER_PROFILE
+        or report.get("payloadType") == "CONTINUOUS_TRADEPLAN_PRODUCER"
+        or "reportRowContract" in report
+    ):
+        ContinuousTradePlanProducerStore.validate_document(report, selected_row=row)
 
 
 def frozen_evidence_findings(trade: ShadowTrade) -> list[AuditFinding]:
@@ -3522,6 +3543,7 @@ def frozen_evidence_findings(trade: ShadowTrade) -> list[AuditFinding]:
     try:
         rank, row, _ = _select_persisted_shadow_candidate(
             rows if isinstance(rows, list) else [],
+            source_report=source_report,
             symbol=trade.symbol.upper(),
             opportunity_id=trade.opportunity_id,
             setup_id=trade.setup_id,
@@ -3914,6 +3936,14 @@ def _position_identity_payload(trade: ShadowTrade) -> dict[str, Any]:
 def shadow_identity_linkage_status(trade: ShadowTrade) -> str:
     """Classify only persisted exact provenance; never infer by symbol or time."""
 
+    status = _validated_shadow_identity_status(trade)
+    # Honest unbound compatibility is not proof of upstream provenance.
+    # UNAVAILABLE is reserved for a valid upstream chain awaiting a position.
+    return IDENTITY_LINKAGE_UNKNOWN if status == "VALID_UNBOUND_COMPATIBILITY" else status
+
+
+def _validated_shadow_identity_status(trade: ShadowTrade) -> str:
+
     try:
         candidate_row = trade.evidence.candidate_payload()
     except (json.JSONDecodeError, TypeError, ValueError):
@@ -3967,7 +3997,7 @@ def shadow_identity_linkage_status(trade: ShadowTrade) -> str:
     if trade.identity_lineage == "UPSTREAM_UNAVAILABLE":
         if _row_claims_lifecycle_identity(candidate_row) or trade.setup_id or any(position_provenance):
             return IDENTITY_LINKAGE_UNKNOWN
-        return IDENTITY_LINKAGE_UNAVAILABLE
+        return "VALID_UNBOUND_COMPATIBILITY"
     if trade.identity_lineage != "PRODUCER_BOUND":
         return IDENTITY_LINKAGE_UNKNOWN
     try:
@@ -4863,7 +4893,7 @@ def validate_shadow_trade_lifecycle(trade: ShadowTrade) -> None:
             trade,
             "ledger event identifiers must be unique.",
         )
-    if shadow_identity_linkage_status(trade) == IDENTITY_LINKAGE_UNKNOWN:
+    if _validated_shadow_identity_status(trade) == IDENTITY_LINKAGE_UNKNOWN:
         _raise_shadow_lifecycle_error(
             trade,
             "authoritative lifecycle-position provenance is incomplete or contradictory.",

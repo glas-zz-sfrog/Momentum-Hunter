@@ -1,2 +1,3 @@
 # Preserve the exact pre-contract serializer bytes bound by origin.json.
 state.json -text
+producer.json -text

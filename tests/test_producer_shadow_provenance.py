@@ -165,7 +165,7 @@ class ProducerShadowProvenanceTests(unittest.TestCase):
         self.compose(natural.at(11, 21), 1)
         self.assertEqual(records, self.source.producer.store.load())
 
-    def test_pre_contract_record_is_not_retrospectively_bound(self):
+    def test_modern_record_cannot_gain_legacy_privilege_by_removing_markers(self):
         self.compose(natural.at(11, 21), 1)
         record = next(item for item in self.source.producer.store.load() if item.trade_plan_id)
         payload = json.loads(record.payload_json)
@@ -183,10 +183,9 @@ class ProducerShadowProvenanceTests(unittest.TestCase):
         path.write_text(json.dumps({"schemaVersion": legacy.schema_version,
                                    "profile": legacy.profile, "records": [asdict(legacy)]}))
         original = path.read_bytes()
-        self.assertEqual((legacy,), ContinuousTradePlanProducerStore(path).load())
+        with self.assertRaises(ContinuousTradePlanProducerError):
+            ContinuousTradePlanProducerStore(path).load()
         self.assertEqual(original, path.read_bytes())
-        from momentum_hunter.continuous_tradeplan_producer import producer_bound_report_row
-        self.assertIsNone(producer_bound_report_row(legacy))
 
 
 class ProducerOngoingIdentityTests(unittest.TestCase):
