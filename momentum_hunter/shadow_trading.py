@@ -230,8 +230,14 @@ class ModernShadowFill:
     identity: object
     first_fill: bytes
     admission: object = None
+    fill_snapshot: object = None
 
-    def validate(self, epoch) -> None:
+    def validate(self, epoch, *, require_latest=True) -> None:
+        self._validate_state(epoch)
+        from momentum_hunter.modern_shadow_fill_custody import validate_fill_custody
+        validate_fill_custody(self, epoch, require_latest=require_latest)
+
+    def _validate_state(self, epoch) -> None:
         from momentum_hunter.lifecycle_position_identity import ModernDecisionIdentity, ModernPositionIdentity
         from momentum_hunter.modern_operational import deny, parse_bytes, digest, canonical_bytes
         if type(self.decision) is not ModernDecisionIdentity or type(self.identity) is not ModernPositionIdentity:
@@ -273,7 +279,9 @@ class ModernShadowFill:
         return {"decision": self.decision.wire(), "order": asdict(self.order),
                 "position": asdict(self.position), "identity": {
                     **self.identity.core(), "fingerprint": self.identity.fingerprint},
-                "firstFill": self.first_fill.decode("ascii"), "admission": self.admission.wire()}
+                "firstFill": self.first_fill.decode("ascii"), "admission": self.admission.wire(),
+                "fillSnapshotId": self.fill_snapshot.snapshot_id,
+                "fillSnapshot": self.fill_snapshot.to_bytes().decode("ascii")}
 
 
 class ModernShadowPositionStore:
@@ -284,9 +292,51 @@ class ModernShadowPositionStore:
         self.publication = SnapshotPublication(epoch, "POSITION")
 
     def load(self):
+        from momentum_hunter.modern_operational import SnapshotPublication, parse_bytes, deny
+        from momentum_hunter.modern_recovery_integrity import complete_publication_history
+        with self.epoch.transaction():
+            rows, snapshot_id = self._load(require_latest=True)
+            receipts = complete_publication_history(SnapshotPublication(self.epoch, "SHADOW_FILL"))
+            if {row.order.order_id for row in rows} != {
+                    parse_bytes(receipt.component("fill"))["orderId"] for receipt in receipts}:
+                deny("Position aggregates omit committed fills; explicit recovery is required.")
+            return rows, snapshot_id
+
+    def recover_pending_fills(self, *, expected_previous, recorded_at):
+        """Explicit crash recovery from exact receipts, never aggregate normalization."""
+        from momentum_hunter.continuous_operational_admission import admission_from_wire
+        from momentum_hunter.lifecycle_position_identity import ModernPositionIdentity
+        from momentum_hunter.modern_operational import SnapshotPublication, parse_bytes, deny
+        from momentum_hunter.modern_recovery_integrity import complete_publication_history
+        with self.epoch.transaction(), self.publication.lease.transaction():
+            _, current = self._load(require_latest=False)
+            if current != expected_previous:
+                deny("Position generation changed before explicit fill recovery.")
+            latest = {}
+            for receipt in complete_publication_history(SnapshotPublication(self.epoch, "SHADOW_FILL")):
+                body = parse_bytes(receipt.component("fill"))
+                latest.setdefault(body["orderId"], (receipt, body))
+            recovered = []
+            for receipt, body in latest.values():
+                admitted = admission_from_wire(body["admission"], self.epoch)
+                decision = admitted.validate(self.epoch, new_entry=False)[0]
+                value = body["positionIdentity"]
+                identity = ModernPositionIdentity(decision, value["positionId"], value["openedAt"],
+                    value["firstFillId"], value["firstFillSha256"], value["fingerprint"])
+                fill = ModernShadowFill(decision, ShadowOrder(**body["order"]), ShadowPosition(**body["position"]),
+                    identity, body["firstFill"].encode("ascii"), admitted, receipt)
+                fill.validate(self.epoch)
+                recovered.append(fill)
+            for fill in recovered:
+                current = self.save(fill, expected_previous=current, recorded_at=recorded_at)
+            return self.load()
+
+    def _load(self, *, require_latest):
         from momentum_hunter.lifecycle_position_identity import decision_from_wire, ModernPositionIdentity
         from momentum_hunter.modern_operational import deny, parse_bytes
-        snapshot = self.publication.current()
+        from momentum_hunter.modern_recovery_integrity import complete_publication_history
+        history = complete_publication_history(self.publication)
+        snapshot = history[0] if history else None
         if snapshot is None:
             return (), None
         payload = parse_bytes(snapshot.component("positions"))
@@ -294,7 +344,7 @@ class ModernShadowPositionStore:
             deny("Invalid modern position ledger.")
         results = []
         for row in payload["positions"]:
-            if type(row) is not dict or set(row) != {"decision", "order", "position", "identity", "firstFill", "admission"}:
+            if type(row) is not dict or set(row) != {"decision", "order", "position", "identity", "firstFill", "admission", "fillSnapshot", "fillSnapshotId"}:
                 deny("Legacy or malformed position cannot be recovered.")
             decision = decision_from_wire(row["decision"], self.epoch,
                 expected_snapshot_id=row["decision"]["snapshotId"], current=False)
@@ -308,9 +358,12 @@ class ModernShadowPositionStore:
                 identity["firstFillId"], identity["firstFillSha256"], identity["fingerprint"])
             from momentum_hunter.continuous_operational_admission import admission_from_wire
             admission = admission_from_wire(row["admission"], self.epoch)
+            from momentum_hunter.modern_operational import snapshot_from_bytes
+            fill_snapshot = snapshot_from_bytes(row["fillSnapshot"].encode("ascii"), self.epoch,
+                kind="SHADOW_FILL", expected_id=row["fillSnapshotId"])
             item = ModernShadowFill(decision, ShadowOrder(**row["order"]), ShadowPosition(**row["position"]),
-                                   bound, row["firstFill"].encode("ascii"), admission)
-            item.validate(self.epoch)
+                                   bound, row["firstFill"].encode("ascii"), admission, fill_snapshot)
+            item.validate(self.epoch, require_latest=require_latest)
             if any(prior.position.position_id == item.position.position_id for prior in results):
                 deny("Duplicate current position identity.")
             results.append(item)
@@ -324,7 +377,9 @@ class ModernShadowPositionStore:
         if instant(recorded_at) < max(instant(fill.position.opened_at), instant(fill.order.last_update_at)):
             deny("Position snapshot cutoff predates its contained fill/order evidence.")
         with self.epoch.transaction(), self.publication.lease.transaction():
-            items, current_id = self.load()
+            fill.validate(self.epoch)
+            # An exact older aggregate is only a persistence predecessor, never fill authority.
+            items, current_id = self._load(require_latest=False)
             if current_id != expected_previous:
                 deny("Position generation changed before persistence.")
             previous = next((item for item in items if item.position.position_id == fill.position.position_id), None)
@@ -338,7 +393,7 @@ class ModernShadowPositionStore:
                 if previous == fill:
                     return current_id
             else:
-                fill.decision.validate(self.epoch)
+                fill.decision.validate(self.epoch, current=False)
             items = tuple(item for item in items if item.position.position_id != fill.position.position_id) + (fill,)
             current = self.publication.current()
             sequence = parse_bytes(current.manifest_bytes)["sequence"] + 1 if current else 1
@@ -1101,6 +1156,16 @@ class ProspectiveFakeBroker:
     def fill_modern_entry(self, order, quote, *, decision, epoch, received_at,
                           committed_notional, open_position_count, realized_pnl_today,
                           prior=None, admission=None):
+        from momentum_hunter.modern_operational import SnapshotPublication
+        with epoch.transaction(), SnapshotPublication(epoch, "SHADOW_FILL").lease.transaction():
+            return self._fill_modern_entry(order, quote, decision=decision, epoch=epoch,
+                received_at=received_at, committed_notional=committed_notional,
+                open_position_count=open_position_count, realized_pnl_today=realized_pnl_today,
+                prior=prior, admission=admission)
+
+    def _fill_modern_entry(self, order, quote, *, decision, epoch, received_at,
+                          committed_notional, open_position_count, realized_pnl_today,
+                          prior=None, admission=None):
         """Reuse native fill economics; bind its result to exact modern custody."""
         from momentum_hunter.lifecycle_position_identity import (
             ModernDecisionIdentity, bind_first_fill,
@@ -1140,6 +1205,15 @@ class ProspectiveFakeBroker:
                 deny("Partial-fill recovery must use its exact owned order and decision.")
         elif order.filled_quantity or order.remaining_quantity != order.quantity:
             deny("Already-filled order requires confirmed modern position recovery.")
+        from momentum_hunter.modern_shadow_fill_custody import receipt_history, record_fill
+        history = receipt_history(epoch, order.order_id)
+        if prior is None and history:
+            deny("An order with confirmed fills requires exact receipt-backed recovery.")
+        if prior is not None:
+            if any(item[1]["quoteFingerprint"] == digest(canonical_bytes(asdict(quote))) for item in history):
+                return order, prior, "Exact confirmed fill observation replay; no additional quantity."
+            if instant(quote.timestamp) <= instant(order.last_update_at):
+                deny("Follow-on fill observation does not advance confirmed fill chronology.")
         updated, position, reason = self._fill_entry(order, quote, received_at=received_at,
             committed_notional=committed_notional, open_position_count=open_position_count,
             realized_pnl_today=realized_pnl_today)
@@ -1160,7 +1234,11 @@ class ProspectiveFakeBroker:
                                highest_price=max(position.highest_price, prior.position.highest_price),
                                lowest_price=min(position.lowest_price, prior.position.lowest_price))
         position = replace(position, stop_price=plan["stop_price"], target_price=plan["target_prices"][0])
-        result = ModernShadowFill(decision, updated, position, identity, first_fill, admission)
+        pending = ModernShadowFill(decision, updated, position, identity, first_fill, admission)
+        pending._validate_state(epoch)
+        receipt = record_fill(epoch, admission=admission, order=updated, position=position,
+                              identity=identity, first_fill=first_fill, quote=quote, prior=prior)
+        result = ModernShadowFill(decision, updated, position, identity, first_fill, admission, receipt)
         result.validate(epoch)
         return updated, result, reason
 

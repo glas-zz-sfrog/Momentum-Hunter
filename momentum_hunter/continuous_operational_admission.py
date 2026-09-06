@@ -339,6 +339,7 @@ class ContinuousFillLineage:
             position["firstFillId"], position["firstFillSha256"], position["fingerprint"])
         first = self.snapshot.component("firstFill")
         bound.validate(epoch, first_fill=first, position_id=bound.position_id, opened_at=bound.opened_at)
+        _validate_first_fill_quantity(first, parts[4].final_authorized_quantity)
         if (parse_bytes(first).get("localOrderId") != parse_bytes(intent.snapshot.component("intent"))["localOrderId"]
                 or instant(bound.opened_at) < instant(parse_bytes(intent.snapshot.manifest_bytes)["createdAt"])
                 or instant(bound.opened_at) > instant(parse_bytes(self.snapshot.manifest_bytes)["createdAt"])):
@@ -354,6 +355,15 @@ class ContinuousFillLineage:
             "executionAuthority": "NONE", "orderCapability": "UNAVAILABLE"}
 
 
+def _validate_first_fill_quantity(first_fill, authorized):
+    quantity = parse_bytes(first_fill).get("filledQuantity")
+    if type(quantity) not in (int, float):
+        deny("Confirmed first-fill quantity must be numeric.")
+    value = Decimal(str(quantity))
+    if not value.is_finite() or not 0 < value <= authorized:
+        deny("Confirmed first-fill quantity exceeds or contradicts exact admission authorization.")
+
+
 def bind_continuous_first_fill(intent, epoch, *, consumer, first_fill, recorded_at):
     from momentum_hunter.lifecycle_position_identity import bind_first_fill
     if type(intent) is not ContinuousEntryIntent or type(first_fill) is not bytes:
@@ -362,6 +372,7 @@ def bind_continuous_first_fill(intent, epoch, *, consumer, first_fill, recorded_
     composition = SnapshotPublication(epoch, "COMPOSITION")
     with epoch.transaction(), composition.lease.transaction(), publication.lease.transaction():
         _, parts = intent.validate(epoch, consumer=consumer)
+        _validate_first_fill_quantity(first_fill, parts[4].final_authorized_quantity)
         # Only the first confirmed receipt creates identity. Subsequent partial
         # fills must retain it, never relabel an earlier position or obligation.
         for previous in _history(publication):

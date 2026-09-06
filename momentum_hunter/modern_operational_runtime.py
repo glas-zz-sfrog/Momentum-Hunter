@@ -100,7 +100,8 @@ def open_modern_runtime(
                 else:
                     require_epoch_started(epoch)
                 checkpoints = RuntimeCheckpointStore(
-                    root / "runtime", allow_persistent=True, operational_epoch=epoch)
+                    root / "runtime", allow_persistent=True, operational_epoch=epoch,
+                    runtime_config=config)
                 if fresh:
                     launch_at = now
                 else:

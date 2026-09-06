@@ -20,7 +20,8 @@ class ModernRuntimeCheckpointTests(unittest.TestCase):
         self.addCleanup(self.cutover.patch.stop)
         self.cutover.start()
         self.native.store = runtime_module.RuntimeCheckpointStore(
-            self.cutover.root / "runtime", operational_epoch=self.cutover.epoch)
+            self.cutover.root / "runtime", operational_epoch=self.cutover.epoch,
+            runtime_config=self.native.config)
         self.native.runtime = self.native.new_runtime("modern-1")
 
     def start_with_work(self):
@@ -35,7 +36,7 @@ class ModernRuntimeCheckpointTests(unittest.TestCase):
         works = [item for queue in checkpoint["queues"].values() for item in queue]
         self.assertTrue(works)
         for item in works:
-            runtime_module._restore_work(item, self.cutover.epoch)
+            runtime_module._restore_work(item, self.cutover.epoch, self.native.config.runtime_identity)
         self.native.clock.advance(31)
         restored = runtime_module.ContinuousOpportunityRuntime.restore(
             config=self.native.config, runtime_instance_id="modern-2", now=self.native.clock.now(),
