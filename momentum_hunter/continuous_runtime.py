@@ -1120,16 +1120,16 @@ class RuntimeCheckpointStore:
             self._validate_modern_payload(body, runtime_identity)
             if self.path_for(runtime_identity).exists():
                 raise RuntimeCheckpointError("Legacy checkpoint occupies the selected modern namespace.")
-            previous = self.publication.current()
-            from momentum_hunter.modern_recovery_integrity import complete_publication_history
-            complete_publication_history(self.publication)
-            predecessor = previous.snapshot_id if previous else None
-            sequence = parse_bytes(previous.manifest_bytes)["sequence"] + 1 if previous else 1
-            snapshot = freeze_snapshot(self.operational_epoch, kind="CHECKPOINT",
-                components=(("checkpoint", content),), sequence=sequence, predecessor=predecessor,
-                created_at=body["last_heartbeat_at"], known_at=body["last_heartbeat_at"],
-                decision_cutoff=body["last_heartbeat_at"])
-            self.publication.publish(snapshot, expected_previous=predecessor)
+            with self.operational_epoch.transaction(), self.publication.lease.transaction():
+                self.require_write_capacity()
+                previous = self.publication.current()
+                predecessor = previous.snapshot_id if previous else None
+                sequence = parse_bytes(previous.manifest_bytes)["sequence"] + 1 if previous else 1
+                snapshot = freeze_snapshot(self.operational_epoch, kind="CHECKPOINT",
+                    components=(("checkpoint", content),), sequence=sequence, predecessor=predecessor,
+                    created_at=body["last_heartbeat_at"], known_at=body["last_heartbeat_at"],
+                    decision_cutoff=body["last_heartbeat_at"])
+                self.publication.publish(snapshot, expected_previous=predecessor)
             return self.publication.pointer
         destination = self.path_for(runtime_identity)
         temporary = destination.with_suffix(".tmp")
@@ -1139,6 +1139,29 @@ class RuntimeCheckpointStore:
             os.fsync(handle.fileno())
         os.replace(temporary, destination)
         return destination
+
+    def checkpoint_capacity(self) -> dict[str, object] | None:
+        """Inspect the validated retained chain without resuming runtime work."""
+        if self.operational_epoch is None:
+            return None
+        from momentum_hunter.modern_operational import (
+            CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED, MAX_RETAINED_CHECKPOINTS,
+        )
+        from momentum_hunter.modern_recovery_integrity import complete_publication_history
+        retained = len(complete_publication_history(self.publication))
+        return {
+            "retained_checkpoints": retained,
+            "maximum_retained_checkpoints": MAX_RETAINED_CHECKPOINTS,
+            "write_capacity_remaining": MAX_RETAINED_CHECKPOINTS - retained,
+            "condition": CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED
+                if retained == MAX_RETAINED_CHECKPOINTS else "CHECKPOINT_HISTORY_CAPACITY_AVAILABLE",
+        }
+
+    def require_write_capacity(self) -> None:
+        capacity = self.checkpoint_capacity()
+        if capacity is not None and capacity["write_capacity_remaining"] == 0:
+            from momentum_hunter.modern_operational import CheckpointHistoryCapacityError
+            raise CheckpointHistoryCapacityError()
 
     def load(self, runtime_identity: str) -> dict[str, object]:
         path = self.path_for(runtime_identity)
@@ -1375,6 +1398,24 @@ class ContinuousOpportunityRuntime:
         self._accepting_work = False
         self._stale_lease_takeovers = 0
 
+    def _require_checkpoint_capacity(self) -> None:
+        if self.operational_epoch is None:
+            return
+        from momentum_hunter.modern_operational import CheckpointHistoryCapacityError
+        try:
+            self.checkpoint_store.require_write_capacity()
+        except CheckpointHistoryCapacityError as exc:
+            self._block_checkpoint_capacity(exc.condition)
+            raise
+
+    def _block_checkpoint_capacity(self, condition: str) -> None:
+        self._accepting_work = False
+        self.process_state = FAILED
+        self._active_degradations.add(condition)
+        if self.lease is not None:
+            self.lease_registry.release(self.lease)
+            self.lease = None
+
     def start(self, now: datetime) -> RuntimeHealth:
         if self.process_state not in {STOPPED, FAILED}:
             raise ContinuousRuntimeError("Runtime is already started.")
@@ -1402,6 +1443,7 @@ class ContinuousOpportunityRuntime:
         return self.health(now)
 
     def submit_event(self, event: RuntimeTriggerEvent, now: datetime) -> str:
+        self._require_checkpoint_capacity()
         if event.trigger == CANONICAL_BAR_COMPLETED and not event.provider_timestamp:
             raise ContinuousRuntimeError(
                 "New completed-bar events require an authoritative provider timestamp."
@@ -1456,6 +1498,7 @@ class ContinuousOpportunityRuntime:
         )
 
     def request_discovery(self, now: datetime, reason: str = "CADENCE") -> str:
+        self._require_checkpoint_capacity()
         if not self._accepting_work:
             return self._record_backpressure(
                 DISCOVERY_QUEUE,
@@ -1480,6 +1523,7 @@ class ContinuousOpportunityRuntime:
     def set_session_eligibility(self, eligible: bool, now: datetime) -> None:
         """Expose session eligibility to health without inventing strategy state."""
 
+        self._require_checkpoint_capacity()
         _timestamp(now)
         self._session_work_eligible = bool(eligible)
         if not eligible:
@@ -1492,10 +1536,12 @@ class ContinuousOpportunityRuntime:
                     if self.last_forward_progress_at is not None
                     else PIPELINE_INITIALIZING
                 )
+        self._require_checkpoint_capacity()
 
     def release_deferred_readiness(self, now: datetime) -> int:
         """Prospectively requeue retained premarket candidates at regular open."""
 
+        self._require_checkpoint_capacity()
         _timestamp(now)
         released = 0
         for symbol, deferred in tuple(self._deferred_readiness.items()):
@@ -1527,6 +1573,7 @@ class ContinuousOpportunityRuntime:
         work_budget: int = 256,
         discovery_cadence_seconds: float | None = None,
     ) -> RuntimeHealth:
+        self._require_checkpoint_capacity()
         if self.process_state not in {READY, RUNNING, DEGRADED}:
             raise ContinuousRuntimeError("Runtime is not available for ticking.")
         _positive(work_budget, "Work budget")
@@ -1569,6 +1616,7 @@ class ContinuousOpportunityRuntime:
         return self.health(now)
 
     def crash_with_in_flight(self, queue_name: str, now: datetime) -> None:
+        self._require_checkpoint_capacity()
         if queue_name not in {DISCOVERY_QUEUE, READINESS_QUEUE, COMPOSITION_QUEUE, HEALTH_QUEUE}:
             raise ContinuousRuntimeError("Crash injection queue is unsupported.")
         work = self._queues[queue_name].pop()
@@ -1584,6 +1632,7 @@ class ContinuousOpportunityRuntime:
     def shutdown(self, now: datetime, *, work_budget: int = 4096) -> RuntimeHealth:
         if self.process_state in {STOPPED, FAILED}:
             return self.health(now)
+        self._require_checkpoint_capacity()
         self.process_state = DRAINING
         self._accepting_work = False
         deadline = now + timedelta(seconds=self.config.shutdown_timeout_seconds)
@@ -1625,6 +1674,7 @@ class ContinuousOpportunityRuntime:
         checkpoint_store: RuntimeCheckpointStore,
     ) -> "ContinuousOpportunityRuntime":
         payload = checkpoint_store.load(config.runtime_identity)
+        checkpoint_store.require_write_capacity()
         if payload.get("contract_version") != CONTRACT_VERSION:
             raise RuntimeCheckpointError("Checkpoint contract version is incompatible.")
         checkpoint_schema = int(payload.get("checkpoint_schema_version", 1))
@@ -1896,6 +1946,7 @@ class ContinuousOpportunityRuntime:
         return runtime
 
     def admit_evidence_intent(self, intent: EvidenceWriteIntent, now: datetime) -> str:
+        self._require_checkpoint_capacity()
         existing = self._intents.get(intent.sequence)
         if existing is not None:
             if existing == intent:
@@ -2182,6 +2233,10 @@ class ContinuousOpportunityRuntime:
             flags.append(DENOMINATOR_DEGRADED)
         if FAILED_FORWARD_PROGRESS in self._active_degradations:
             flags.append(FAILED_FORWARD_PROGRESS)
+        if self.operational_epoch is not None:
+            from momentum_hunter.modern_operational import CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED
+            if CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED in self._active_degradations:
+                flags.append(CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED)
         metrics = self.queue_metrics(now)
         active_queue = self._next_queue_with_work()
         queue_head = (
@@ -2339,6 +2394,7 @@ class ContinuousOpportunityRuntime:
         return None
 
     def _process_one(self, queue_name: str, now: datetime) -> bool:
+        self._require_checkpoint_capacity()
         work = self._queues[queue_name].pop()
         if work is None:
             return False
@@ -2966,6 +3022,7 @@ class ContinuousOpportunityRuntime:
             self._provider_bound_events.clear()
 
     def _process_evidence(self, now: datetime) -> bool:
+        self._require_checkpoint_capacity()
         work = self._queues[EVIDENCE_QUEUE].peek()
         if work is None:
             return False
@@ -3082,6 +3139,7 @@ class ContinuousOpportunityRuntime:
         )
 
     def _enqueue(self, queue_name: str, work: QueuedWork, now: datetime) -> str:
+        self._require_checkpoint_capacity()
         if self.operational_epoch is not None:
             if type(work) is not ModernQueuedWork:
                 raise RuntimeCheckpointError("Unbound or old queued work cannot enter the modern runtime.")
@@ -3317,6 +3375,7 @@ class ContinuousOpportunityRuntime:
         self._degrade(FAILED_FORWARD_PROGRESS)
 
     def _checkpoint(self, now: datetime) -> Path:
+        self._require_checkpoint_capacity()
         if self.started_at is None or self.last_heartbeat_at is None:
             raise RuntimeCheckpointError("Runtime cannot checkpoint before start.")
         payload = {
@@ -3434,8 +3493,18 @@ class ContinuousOpportunityRuntime:
             "execution_authority": EXECUTION_AUTHORITY_NONE,
             "order_capability": ORDER_CAPABILITY_UNAVAILABLE,
         }
-        path = self.checkpoint_store.save(self.config.runtime_identity, payload)
+        if self.operational_epoch is None:
+            path = self.checkpoint_store.save(self.config.runtime_identity, payload)
+        else:
+            from momentum_hunter.modern_operational import CheckpointHistoryCapacityError
+            try:
+                path = self.checkpoint_store.save(self.config.runtime_identity, payload)
+            except CheckpointHistoryCapacityError as exc:
+                # The in-lock store check may discover exhaustion after our precheck.
+                self._block_checkpoint_capacity(exc.condition)
+                raise
         self._counters["checkpoint_writes"] += 1
+        self._require_checkpoint_capacity()
         return path
 
 

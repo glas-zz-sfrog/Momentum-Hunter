@@ -22,6 +22,9 @@ from momentum_hunter.path_transaction import PathTransactionLease
 
 
 MODERN_CONTRACT = "MODERN_OPERATIONAL_CUTOVER_V1"
+# Safety containment only; indefinite history management is a separate activation gate.
+MAX_RETAINED_CHECKPOINTS = 4096
+CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED = "CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED"
 MODERN_PRODUCER_SCHEMA = 3
 MODERN_PRODUCER_PROFILE = "continuous-authoritative-tradeplan-producer-v1"
 CURRENT_CUTOVER = Path(
@@ -40,6 +43,15 @@ class ModernOperationalError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(f"{code}: {message}")
         self.diagnostic_code = code
+
+
+class CheckpointHistoryCapacityError(ModernOperationalError):
+    """Readable committed state has no remaining changed-write capacity."""
+
+    def __init__(self) -> None:
+        self.condition = CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED
+        super().__init__("BLOCKED_CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED",
+                         "Checkpoint history is readable but active writes require history management.")
 
 
 def deny(message: str, code: str = "MODERN_OPERATIONAL_ADMISSION_DENIED") -> None:
@@ -480,6 +492,9 @@ class SnapshotPublication:
             from momentum_hunter.lifecycle_position_identity import validate_composition_snapshot
             validate_composition_snapshot(snapshot, self.epoch)
         manifest = parse_bytes(snapshot.manifest_bytes)
+        if self.kind == "CHECKPOINT" and manifest["sequence"] > MAX_RETAINED_CHECKPOINTS:
+            deny("Prepared checkpoint exceeds supported retained history; reconciliation required.",
+                 "BLOCK_RECONCILIATION_REQUIRED")
         previous = self._read_current(prepared=True)
         if previous != snapshot:
             actual = previous.snapshot_id if previous else None
@@ -501,6 +516,8 @@ class SnapshotPublication:
         if type(snapshot) is not OperationalSnapshot:
             deny("Publication requires the exact native immutable snapshot type.")
         manifest = snapshot.validate(self.epoch, kind=self.kind)
+        if self.kind == "CHECKPOINT" and manifest["sequence"] > MAX_RETAINED_CHECKPOINTS:
+            raise CheckpointHistoryCapacityError()
         if self.kind == "COMPOSITION":
             from momentum_hunter.lifecycle_position_identity import validate_composition_snapshot
             validate_composition_snapshot(snapshot, self.epoch)

@@ -106,6 +106,7 @@ def open_modern_runtime(
                     launch_at = now
                 else:
                     checkpoint = checkpoints.load(config.runtime_identity)
+                    checkpoints.require_write_capacity()
                     launch_at = instant(checkpoint["started_at"])
                     if launch_at > instant(now.isoformat()):
                         deny("Runtime checkpoint start is in the future.")
