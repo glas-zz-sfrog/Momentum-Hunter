@@ -27,7 +27,6 @@ class ModernRuntimeCheckpointTests(unittest.TestCase):
     def start_with_work(self):
         self.native.runtime.start(self.native.clock.now())
         self.native.runtime.request_discovery(self.native.clock.now())
-        self.native.runtime._checkpoint(self.native.clock.now())
 
     def test_current_modern_runtime_checkpoint_and_queue_roundtrip(self):
         self.start_with_work()

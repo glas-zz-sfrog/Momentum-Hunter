@@ -6,9 +6,12 @@ import os
 import tempfile
 import time
 from collections import OrderedDict, deque
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
+from functools import wraps
 from pathlib import Path
+from threading import RLock
 from typing import Any, Iterable, Mapping, Protocol
 
 from momentum_hunter.continuous_attempt_ledger import (
@@ -1249,6 +1252,41 @@ class ManualClock:
         return self._now
 
 
+def _capacity_operation(*, queue_change: bool = False, now_position: int = 0,
+                        inspection: bool = False):
+    """Serialize modern admission and bind a successful queue result to persistence."""
+    def decorate(method):
+        @wraps(method)
+        def guarded(self, *args, **kwargs):
+            if self.operational_epoch is None:
+                return method(self, *args, **kwargs)
+            from momentum_hunter.modern_operational import CheckpointHistoryCapacityError
+            with self._capacity_operation_lock:
+                if inspection:
+                    return method(self, *args, **kwargs)
+                self._require_checkpoint_capacity()
+                outer_queue_change = queue_change and self._queue_change_depth == 0
+                if outer_queue_change:
+                    now = kwargs["now"] if "now" in kwargs else args[now_position]
+                    before = deepcopy(self._checkpoint_payload(now))
+                if queue_change:
+                    self._queue_change_depth += 1
+                try:
+                    result = method(self, *args, **kwargs)
+                    if outer_queue_change and before != self._checkpoint_payload(now):
+                        self._checkpoint(now)
+                    self._require_checkpoint_capacity()
+                    return result
+                except CheckpointHistoryCapacityError as exc:
+                    self._block_checkpoint_capacity(exc.condition)
+                    raise
+                finally:
+                    if queue_change:
+                        self._queue_change_depth -= 1
+        return guarded
+    return decorate
+
+
 class ContinuousOpportunityRuntime:
     """Deterministic owner for a future independent, research-only process lane."""
 
@@ -1397,11 +1435,18 @@ class ContinuousOpportunityRuntime:
         self._active_degradations: set[str] = set()
         self._accepting_work = False
         self._stale_lease_takeovers = 0
+        self._capacity_operation_lock = RLock()
+        self._queue_change_depth = 0
+        self._checkpoint_capacity_blocked = False
+        self._capacity_failure_proposal = None
+        self._committed_checkpoint_payload = None
 
     def _require_checkpoint_capacity(self) -> None:
         if self.operational_epoch is None:
             return
         from momentum_hunter.modern_operational import CheckpointHistoryCapacityError
+        if self._checkpoint_capacity_blocked:
+            raise CheckpointHistoryCapacityError()
         try:
             self.checkpoint_store.require_write_capacity()
         except CheckpointHistoryCapacityError as exc:
@@ -1411,11 +1456,105 @@ class ContinuousOpportunityRuntime:
     def _block_checkpoint_capacity(self, condition: str) -> None:
         self._accepting_work = False
         self.process_state = FAILED
+        self.pipeline_state = "BLOCKED_CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED"
+        self.stall_blocker = condition
         self._active_degradations.add(condition)
         if self.lease is not None:
             self.lease_registry.release(self.lease)
             self.lease = None
+        if self._checkpoint_capacity_blocked:
+            return
+        self._checkpoint_capacity_blocked = True
+        # Keep failed observations separate from the committed inspection view. Durable
+        # attempt/fill/writer stores are never rolled back by this in-memory containment.
+        self._capacity_failure_proposal = {"authority": "NONE"}
+        try:
+            self._capacity_failure_proposal.update(deepcopy(
+                self._checkpoint_payload(self.last_heartbeat_at or self.started_at)))
+            self._capacity_failure_proposal["authority"] = "NONE"
+        except (OSError, ValueError, KeyError, TypeError):
+            self._capacity_failure_proposal["inspection"] = "UNAVAILABLE"
+        inspection_failed = False
+        try:
+            committed = self.checkpoint_store.load(self.config.runtime_identity)
+            state = self._checkpoint_inspection_state(committed)
+        except (OSError, ValueError, KeyError, TypeError):
+            inspection_failed = True
+            committed = self._committed_checkpoint_payload
+            state = (self._checkpoint_inspection_state(committed) if committed is not None else {
+                "_queues": {name: BoundedWorkQueue(name, capacity)
+                            for name, capacity in self.config.queues.as_mapping().items()},
+                "_deferred_readiness": OrderedDict(), "_provider_bound_events": OrderedDict(),
+                "_in_flight": None, "_in_flight_queue": None,
+            })
+        self.__dict__.update(state)
+        self._committed_checkpoint_payload = deepcopy(committed)
+        self.process_state = FAILED
+        self.pipeline_state = "BLOCKED_CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED"
+        self.stall_blocker = condition
+        self._active_degradations.add(condition)
+        if inspection_failed:
+            self._active_degradations.add("BLOCKED_COMMITTED_WORK_INSPECTION_UNAVAILABLE")
 
+    def _checkpoint_inspection_state(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Decode without acquiring leases, replaying work, or touching durable stores."""
+        state = {}
+        for name in ("started_at", "last_heartbeat_at", "last_tick_at", "last_discovery_started_at",
+                     "last_discovery_completed_at", "last_readiness_completed_at",
+                     "last_composition_completed_at", "last_denominator_completed_at",
+                     "last_evidence_accepted_at", "last_forward_progress_at", "stalled_since",
+                     "next_discovery_at", "next_housekeeping_at", "last_successful_discovery_at",
+                     "last_successful_composition_at"):
+            state[name] = _optional_checkpoint_timestamp(payload, name)
+        for name in ("resolved_discovery_cadence_seconds", "session_work_eligible", "sequence",
+                     "last_intent_id", "last_evidence_payload_bytes",
+                     "last_evidence_encoded_envelope_bytes", "maximum_evidence_encoded_envelope_bytes",
+                     "evidence_protocol_ceiling_bytes"):
+            state["_" + name] = deepcopy(payload[name])
+        for name in ("counters", "evidence_retry_counts", "evidence_retry_failure_class",
+                     "setup_identities", "plan_identities", "membership_generations"):
+            state["_" + name] = dict(payload[name])
+        state["_evidence_retry_not_before"] = {
+            key: _parse_timestamp(value) for key, value in payload["evidence_retry_not_before"].items()}
+        state["_active_degradations"] = set(payload["active_degradations"])
+        state["_ready_symbols"] = set(payload["ready_symbols"])
+        state["_backpressure"] = deque((BackpressureDecision(**item) for item in payload["backpressure"]),
+                                       maxlen=self.config.diagnostic_capacity)
+        state["_symbol_failures"] = OrderedDict((item["symbol"], SymbolFailure(**{
+            **item, "evidence_known_at": tuple(tuple(value) for value in item.get("evidence_known_at", ()))
+        })) for item in payload["symbol_failures"])
+        state["_seen_events"] = OrderedDict(payload["seen_events"])
+        state["_event_records"] = OrderedDict((item["event_id"], RuntimeTriggerEvent(**item))
+                                             for item in payload["event_records"])
+        state["_intents"] = OrderedDict((int(item["sequence"]), EvidenceWriteIntent(**item))
+                                       for item in payload["intents"])
+        state["_evidence_rejections"] = OrderedDict((item["failed_intent_id"], EvidenceRejection(**item))
+                                                   for item in payload["evidence_rejections"])
+        state["_terminal_cycle_ids"] = OrderedDict(payload["terminal_cycle_ids"])
+        queues = {name: BoundedWorkQueue(name, capacity)
+                  for name, capacity in self.config.queues.as_mapping().items()}
+        for name, items in payload["queues"].items():
+            for item in items:
+                queues[name].restore(_restore_work(item, self.operational_epoch, self.config.runtime_identity))
+        state["_queues"] = queues
+        for name in ("deferred_readiness", "provider_bound_events"):
+            state["_" + name] = OrderedDict(
+                (item["key"], _restore_work(item, self.operational_epoch, self.config.runtime_identity))
+                for item in payload[name])
+        state["_in_flight"] = (_restore_work(payload["in_flight"], self.operational_epoch,
+                                            self.config.runtime_identity)
+                               if payload["in_flight"] is not None else None)
+        state["_in_flight_queue"] = payload["in_flight_queue"]
+        return state
+
+    def _raise_if_checkpoint_capacity(self, error: Exception) -> None:
+        if self.operational_epoch is not None:
+            from momentum_hunter.modern_operational import CheckpointHistoryCapacityError
+            if isinstance(error, CheckpointHistoryCapacityError):
+                self._block_checkpoint_capacity(error.condition)
+                raise error
+
+    @_capacity_operation()
     def start(self, now: datetime) -> RuntimeHealth:
         if self.process_state not in {STOPPED, FAILED}:
             raise ContinuousRuntimeError("Runtime is already started.")
@@ -1442,6 +1581,7 @@ class ContinuousOpportunityRuntime:
         self._checkpoint(now)
         return self.health(now)
 
+    @_capacity_operation(queue_change=True, now_position=1)
     def submit_event(self, event: RuntimeTriggerEvent, now: datetime) -> str:
         self._require_checkpoint_capacity()
         if event.trigger == CANONICAL_BAR_COMPLETED and not event.provider_timestamp:
@@ -1497,6 +1637,7 @@ class ContinuousOpportunityRuntime:
             now=now,
         )
 
+    @_capacity_operation(queue_change=True)
     def request_discovery(self, now: datetime, reason: str = "CADENCE") -> str:
         self._require_checkpoint_capacity()
         if not self._accepting_work:
@@ -1520,6 +1661,7 @@ class ContinuousOpportunityRuntime:
         )
         return self._enqueue(DISCOVERY_QUEUE, work, now)
 
+    @_capacity_operation()
     def set_session_eligibility(self, eligible: bool, now: datetime) -> None:
         """Expose session eligibility to health without inventing strategy state."""
 
@@ -1538,6 +1680,7 @@ class ContinuousOpportunityRuntime:
                 )
         self._require_checkpoint_capacity()
 
+    @_capacity_operation(queue_change=True)
     def release_deferred_readiness(self, now: datetime) -> int:
         """Prospectively requeue retained premarket candidates at regular open."""
 
@@ -1566,6 +1709,7 @@ class ContinuousOpportunityRuntime:
                 released += 1
         return released
 
+    @_capacity_operation()
     def tick(
         self,
         now: datetime,
@@ -1615,6 +1759,7 @@ class ContinuousOpportunityRuntime:
         self._checkpoint(now)
         return self.health(now)
 
+    @_capacity_operation()
     def crash_with_in_flight(self, queue_name: str, now: datetime) -> None:
         self._require_checkpoint_capacity()
         if queue_name not in {DISCOVERY_QUEUE, READINESS_QUEUE, COMPOSITION_QUEUE, HEALTH_QUEUE}:
@@ -1629,6 +1774,7 @@ class ContinuousOpportunityRuntime:
         self._checkpoint(now)
         # Abrupt termination intentionally does not release the logical lease.
 
+    @_capacity_operation()
     def shutdown(self, now: datetime, *, work_budget: int = 4096) -> RuntimeHealth:
         if self.process_state in {STOPPED, FAILED}:
             return self.health(now)
@@ -1694,6 +1840,7 @@ class ContinuousOpportunityRuntime:
             lease_registry=lease_registry,
             checkpoint_store=checkpoint_store,
         )
+        runtime._committed_checkpoint_payload = deepcopy(payload)
         anchored_attempt_count = int(payload.get("attempt_ledger_count", 0))
         anchored_attempt_head = payload.get("attempt_ledger_head")
         if anchored_attempt_count > len(runtime.attempt_history):
@@ -1911,6 +2058,8 @@ class ContinuousOpportunityRuntime:
         if len(runtime._provider_bound_events) > config.maximum_tracked_symbols:
             raise RuntimeCheckpointError("Provider-bound checkpoint state exceeds its bound.")
         runtime._active_degradations = set(payload.get("active_degradations", []))
+        # Recovery commits once, after all queues and their intent lineage are restored.
+        runtime._queue_change_depth = 1
         for name, items in dict(payload["queues"]).items():
             if name not in runtime._queues or not isinstance(items, list):
                 raise RuntimeCheckpointError("Checkpoint queue topology changed.")
@@ -1942,9 +2091,11 @@ class ContinuousOpportunityRuntime:
         runtime._in_flight_queue = None
         runtime._accepting_work = True
         runtime.process_state = DEGRADED if runtime._active_degradations else READY
+        runtime._queue_change_depth = 0
         runtime._checkpoint(now)
         return runtime
 
+    @_capacity_operation(queue_change=True, now_position=1)
     def admit_evidence_intent(self, intent: EvidenceWriteIntent, now: datetime) -> str:
         self._require_checkpoint_capacity()
         existing = self._intents.get(intent.sequence)
@@ -2039,6 +2190,7 @@ class ContinuousOpportunityRuntime:
         )
         self._evidence_protocol_ceiling_bytes = preflight.protocol_ceiling_bytes
 
+    @_capacity_operation(queue_change=True, now_position=2)
     def _replace_with_compact_rejection(
         self,
         intent: EvidenceWriteIntent,
@@ -2185,14 +2337,17 @@ class ContinuousOpportunityRuntime:
         self._active_degradations.discard("WRITER_SLOW")
 
     @property
+    @_capacity_operation(inspection=True)
     def pending_work(self) -> int:
         return sum(len(queue) for queue in self._queues.values()) + int(self._in_flight is not None)
 
     @property
+    @_capacity_operation(inspection=True)
     def backpressure_decisions(self) -> tuple[BackpressureDecision, ...]:
         return tuple(self._backpressure)
 
     @property
+    @_capacity_operation(inspection=True)
     def symbol_failures(self) -> tuple[SymbolFailure, ...]:
         return tuple(self._symbol_failures.values())
 
@@ -2201,20 +2356,25 @@ class ContinuousOpportunityRuntime:
         return self._attempt_ledger.events
 
     @property
+    @_capacity_operation(inspection=True)
     def evidence_intents(self) -> tuple[EvidenceWriteIntent, ...]:
         return tuple(self._intents.values())
 
     @property
+    @_capacity_operation(inspection=True)
     def evidence_rejections(self) -> tuple[EvidenceRejection, ...]:
         return tuple(self._evidence_rejections.values())
 
     @property
+    @_capacity_operation(inspection=True)
     def deferred_readiness_symbols(self) -> tuple[str, ...]:
         return tuple(self._deferred_readiness)
 
+    @_capacity_operation(inspection=True)
     def queue_metrics(self, now: datetime) -> dict[str, QueueMetrics]:
         return {name: queue.metrics(now) for name, queue in self._queues.items()}
 
+    @_capacity_operation(inspection=True)
     def health(self, now: datetime) -> RuntimeHealth:
         started = self.started_at or now
         heartbeat = self.last_heartbeat_at or started
@@ -2235,8 +2395,10 @@ class ContinuousOpportunityRuntime:
             flags.append(FAILED_FORWARD_PROGRESS)
         if self.operational_epoch is not None:
             from momentum_hunter.modern_operational import CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED
-            if CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED in self._active_degradations:
-                flags.append(CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED)
+            for condition in (CHECKPOINT_HISTORY_CAPACITY_EXHAUSTED,
+                              "BLOCKED_COMMITTED_WORK_INSPECTION_UNAVAILABLE"):
+                if condition in self._active_degradations:
+                    flags.append(condition)
         metrics = self.queue_metrics(now)
         active_queue = self._next_queue_with_work()
         queue_head = (
@@ -2347,6 +2509,7 @@ class ContinuousOpportunityRuntime:
             fingerprint=_fingerprint("continuous-runtime-health-v1", payload),
         )
 
+    @_capacity_operation(queue_change=True)
     def _schedule_due_work(
         self,
         now: datetime,
@@ -2393,6 +2556,7 @@ class ContinuousOpportunityRuntime:
                 return name
         return None
 
+    @_capacity_operation(queue_change=True, now_position=1)
     def _process_one(self, queue_name: str, now: datetime) -> bool:
         self._require_checkpoint_capacity()
         work = self._queues[queue_name].pop()
@@ -2411,8 +2575,9 @@ class ContinuousOpportunityRuntime:
                 self.last_heartbeat_at = now
                 self._counters["heartbeat_count"] += 1
         finally:
-            self._in_flight = None
-            self._in_flight_queue = None
+            if not self._checkpoint_capacity_blocked:
+                self._in_flight = None
+                self._in_flight_queue = None
         return True
 
     def _process_discovery(self, work: QueuedWork, now: datetime) -> None:
@@ -2427,11 +2592,13 @@ class ContinuousOpportunityRuntime:
         try:
             pulse = self.discovery_source.discover(request)
         except Exception as exc:
+            self._raise_if_checkpoint_capacity(exc)
             self._counters["discovery_failures"] += 1
             self.last_discovery_completed_at = now
             self._degrade("DISCOVERY_FAILURE")
             self._record_system_failure("DISCOVERY", type(exc).__name__, now, work.fingerprint)
             return
+        self._require_checkpoint_capacity()
         if len(set(pulse.symbols_for_readiness)) > self.config.maximum_tracked_symbols:
             self._counters["discovery_failures"] += 1
             self.last_discovery_completed_at = now
@@ -2516,6 +2683,7 @@ class ContinuousOpportunityRuntime:
         try:
             result = self.market_data_source.evaluate(request)
         except Exception as exc:
+            self._raise_if_checkpoint_capacity(exc)
             terminal_attempt = self._attempt_ledger.finish(
                 attempt,
                 runtime_instance_id=self.runtime_instance_id,
@@ -2551,6 +2719,7 @@ class ContinuousOpportunityRuntime:
             self.last_readiness_completed_at = now
             self._mark_forward_progress(now)
             return
+        self._require_checkpoint_capacity()
         self._counters["readiness_completed"] += 1
         self._counters["readiness_assessments"] += 1
         self.last_readiness_completed_at = now
@@ -2759,6 +2928,7 @@ class ContinuousOpportunityRuntime:
                 if not any(record.composition_cycle_id == result.cycle_id for record in records):
                     raise ValueError("Runtime result is not bound to its committed composition.")
         except Exception as exc:
+            self._raise_if_checkpoint_capacity(exc)
             terminal_attempt = self._attempt_ledger.finish(
                 attempt,
                 runtime_instance_id=self.runtime_instance_id,
@@ -2805,6 +2975,7 @@ class ContinuousOpportunityRuntime:
                 attempt_event=terminal_attempt,
             )
             return
+        self._require_checkpoint_capacity()
         if result.request_id != request.request_id or result.symbol != request.symbol:
             terminal_attempt = self._attempt_ledger.finish(
                 attempt,
@@ -2910,10 +3081,12 @@ class ContinuousOpportunityRuntime:
         try:
             denominator = self.denominator_source.produce(denominator_request)
         except Exception as exc:
+            self._raise_if_checkpoint_capacity(exc)
             self._counters["incomplete_denominator_cycles"] += 1
             self._degrade("DENOMINATOR_FAILURE")
             self._record_system_failure("DENOMINATOR", type(exc).__name__, now, result.fingerprint)
             return
+        self._require_checkpoint_capacity()
         self._counters["denominator_cycles"] += 1
         self.last_denominator_completed_at = now
         self._mark_forward_progress(now)
@@ -2961,6 +3134,7 @@ class ContinuousOpportunityRuntime:
         )
         return self.admit_evidence_intent(intent, now)
 
+    @_capacity_operation(queue_change=True)
     def _flush_provider_bound_cycle(self, now: datetime) -> None:
         if not self._provider_bound_events:
             return
@@ -2982,12 +3156,14 @@ class ContinuousOpportunityRuntime:
         try:
             denominator = self.denominator_source.produce(request)
         except Exception as exc:
+            self._raise_if_checkpoint_capacity(exc)
             self._counters["incomplete_denominator_cycles"] += 1
             self._degrade("DENOMINATOR_PROVIDER_BOUND_FAILURE")
             self._record_system_failure(
                 "DENOMINATOR_PROVIDER_BOUND", type(exc).__name__, now, source_fingerprint
             )
             return
+        self._require_checkpoint_capacity()
         if denominator.opportunity_count != len(symbols):
             self._counters["incomplete_denominator_cycles"] += 1
             self._degrade("DENOMINATOR_PROVIDER_BOUND_COUNT_MISMATCH")
@@ -3021,6 +3197,7 @@ class ContinuousOpportunityRuntime:
         if decision not in {REJECTED_CAPACITY, REJECTED_STALE}:
             self._provider_bound_events.clear()
 
+    @_capacity_operation(queue_change=True)
     def _process_evidence(self, now: datetime) -> bool:
         self._require_checkpoint_capacity()
         work = self._queues[EVIDENCE_QUEUE].peek()
@@ -3031,6 +3208,7 @@ class ContinuousOpportunityRuntime:
         if retry_at is not None and now < retry_at:
             return False
         raw_result = self.writer.write_intent(intent)
+        self._require_checkpoint_capacity()
         if isinstance(raw_result, WriterWriteResult):
             result = raw_result
         else:
@@ -3138,6 +3316,7 @@ class ContinuousOpportunityRuntime:
             now,
         )
 
+    @_capacity_operation(queue_change=True, now_position=2)
     def _enqueue(self, queue_name: str, work: QueuedWork, now: datetime) -> str:
         self._require_checkpoint_capacity()
         if self.operational_epoch is not None:
@@ -3374,11 +3553,10 @@ class ContinuousOpportunityRuntime:
         self.stall_blocker = self._stall_blocker()
         self._degrade(FAILED_FORWARD_PROGRESS)
 
-    def _checkpoint(self, now: datetime) -> Path:
-        self._require_checkpoint_capacity()
+    def _checkpoint_payload(self, now: datetime) -> dict[str, Any]:
         if self.started_at is None or self.last_heartbeat_at is None:
             raise RuntimeCheckpointError("Runtime cannot checkpoint before start.")
-        payload = {
+        return {
             "contract_version": CONTRACT_VERSION,
             **(self.operational_epoch.wire() if self.operational_epoch is not None else {}),
             "checkpoint_schema_version": CHECKPOINT_SCHEMA_VERSION,
@@ -3493,6 +3671,11 @@ class ContinuousOpportunityRuntime:
             "execution_authority": EXECUTION_AUTHORITY_NONE,
             "order_capability": ORDER_CAPABILITY_UNAVAILABLE,
         }
+
+    @_capacity_operation()
+    def _checkpoint(self, now: datetime) -> Path:
+        self._require_checkpoint_capacity()
+        payload = self._checkpoint_payload(now)
         if self.operational_epoch is None:
             path = self.checkpoint_store.save(self.config.runtime_identity, payload)
         else:
@@ -3503,6 +3686,7 @@ class ContinuousOpportunityRuntime:
                 # The in-lock store check may discover exhaustion after our precheck.
                 self._block_checkpoint_capacity(exc.condition)
                 raise
+        self._committed_checkpoint_payload = deepcopy(payload)
         self._counters["checkpoint_writes"] += 1
         self._require_checkpoint_capacity()
         return path
