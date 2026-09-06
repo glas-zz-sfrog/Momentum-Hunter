@@ -733,6 +733,36 @@ class QueuedWork:
         return value
 
 
+@dataclass(frozen=True)
+class ModernQueuedWork(QueuedWork):
+    operational_snapshot_json: str
+    operational_snapshot_id: str
+
+    def validate_modern(self, epoch) -> None:
+        from momentum_hunter.modern_operational import snapshot_from_bytes
+        snapshot = snapshot_from_bytes(self.operational_snapshot_json.encode("ascii"), epoch,
+            kind="QUEUED_DECISION", expected_id=self.operational_snapshot_id)
+        core = {key: value for key, value in asdict(self).items()
+                if key not in {"operational_snapshot_json", "operational_snapshot_id"}}
+        if snapshot.component("work") != _canonical_json(core):
+            raise RuntimeCheckpointError("Queued work differs from its current-epoch snapshot.")
+        fingerprint = core.pop("fingerprint")
+        if fingerprint != _fingerprint("continuous-runtime-work-v1", core):
+            raise RuntimeCheckpointError("Queued work fingerprint differs from immutable snapshot.")
+        epoch.require_time(self.requested_at)
+
+
+def _restore_work(item, epoch):
+    if epoch is None:
+        return QueuedWork(**item)
+    try:
+        work = ModernQueuedWork(**item)
+        work.validate_modern(epoch)
+        return work
+    except (TypeError, ValueError) as exc:
+        raise RuntimeCheckpointError("Old or malformed work cannot resume in the modern epoch.") from exc
+
+
 def build_work(
     *, kind: str, key: str, requested_at: str, priority: int, payload: Mapping[str, object]
 ) -> QueuedWork:
@@ -1021,7 +1051,7 @@ class RuntimeHealth:
 class RuntimeCheckpointStore:
     """Atomic checkpoint store with an explicit opt-in for production persistence."""
 
-    def __init__(self, root: Path, *, allow_persistent: bool = False) -> None:
+    def __init__(self, root: Path, *, allow_persistent: bool = False, operational_epoch=None) -> None:
         resolved = root.resolve()
         lowered = str(resolved).lower()
         if allow_persistent:
@@ -1038,6 +1068,13 @@ class RuntimeCheckpointStore:
             if "momentumhunterdata" in lowered or "programdata" in lowered:
                 raise RuntimeCheckpointError("Production checkpoint roots are prohibited.")
         self.root = resolved
+        self.operational_epoch = operational_epoch
+        self.publication = None
+        if operational_epoch is not None:
+            from momentum_hunter.modern_operational import SnapshotPublication
+            if resolved != Path(operational_epoch.root) / "runtime":
+                raise RuntimeCheckpointError("Checkpoint root is not the independently selected epoch root.")
+            self.publication = SnapshotPublication(operational_epoch, "CHECKPOINT")
         self.root.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, runtime_identity: str) -> Path:
@@ -1053,6 +1090,20 @@ class RuntimeCheckpointStore:
             "continuous-runtime-checkpoint-v1", body
         )
         content = _canonical_json(body)
+        if self.operational_epoch is not None:
+            from momentum_hunter.modern_operational import freeze_snapshot, parse_bytes
+            self._validate_modern_payload(body)
+            if self.path_for(runtime_identity).exists():
+                raise RuntimeCheckpointError("Legacy checkpoint occupies the selected modern namespace.")
+            previous = self.publication.current()
+            predecessor = previous.snapshot_id if previous else None
+            sequence = parse_bytes(previous.manifest_bytes)["sequence"] + 1 if previous else 1
+            snapshot = freeze_snapshot(self.operational_epoch, kind="CHECKPOINT",
+                components=(("checkpoint", content),), sequence=sequence, predecessor=predecessor,
+                created_at=body["last_heartbeat_at"], known_at=body["last_heartbeat_at"],
+                decision_cutoff=body["last_heartbeat_at"])
+            self.publication.publish(snapshot, expected_previous=predecessor)
+            return self.publication.pointer
         destination = self.path_for(runtime_identity)
         temporary = destination.with_suffix(".tmp")
         with temporary.open("wb") as handle:
@@ -1065,7 +1116,16 @@ class RuntimeCheckpointStore:
     def load(self, runtime_identity: str) -> dict[str, object]:
         path = self.path_for(runtime_identity)
         try:
-            payload = json.loads(path.read_text(encoding="ascii"))
+            if self.operational_epoch is not None:
+                if path.exists():
+                    raise RuntimeCheckpointError("Legacy checkpoint cannot be substituted for modern recovery.")
+                current = self.publication.current()
+                if current is None:
+                    raise RuntimeCheckpointError("Checkpoint is not the accepted current-epoch snapshot.")
+                raw = current.component("checkpoint")
+            else:
+                raw = path.read_bytes()
+            payload = json.loads(raw)
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise RuntimeCheckpointError("Runtime checkpoint is unreadable.") from exc
         if not isinstance(payload, dict):
@@ -1075,7 +1135,27 @@ class RuntimeCheckpointStore:
         if fingerprint != expected:
             raise RuntimeCheckpointError("Runtime checkpoint fingerprint is invalid.")
         payload["checkpoint_fingerprint"] = fingerprint
+        if self.operational_epoch is not None:
+            self._validate_modern_payload(payload)
         return payload
+
+    def _validate_modern_payload(self, payload) -> None:
+        epoch = self.operational_epoch
+        epoch.require_current()
+        epoch.validate_binding(payload)
+        if type(payload.get("checkpoint_schema_version")) is not int or payload["checkpoint_schema_version"] != CHECKPOINT_SCHEMA_VERSION:
+            raise RuntimeCheckpointError("Legacy checkpoint schema cannot enter the modern epoch.")
+        if payload.get("config_fingerprint") != epoch.configuration_identity:
+            raise RuntimeCheckpointError("Checkpoint configuration is not the accepted modern configuration.")
+        epoch.require_time(payload["started_at"])
+        epoch.require_time(payload["last_heartbeat_at"])
+        items = [item for queue in payload["queues"].values() for item in queue]
+        items.extend(payload.get("deferred_readiness", ()))
+        items.extend(payload.get("provider_bound_events", ()))
+        if payload.get("in_flight") is not None:
+            items.append(payload["in_flight"])
+        for item in items:
+            _restore_work(item, epoch)
 
 
 class ManualClock:
@@ -1122,6 +1202,13 @@ class ContinuousOpportunityRuntime:
         self.writer = writer
         self.lease_registry = lease_registry
         self.checkpoint_store = checkpoint_store
+        self.operational_epoch = checkpoint_store.operational_epoch
+        if self.operational_epoch is not None:
+            self.operational_epoch.require_current()
+            if config.fingerprint != self.operational_epoch.configuration_identity:
+                raise RuntimeCheckpointError("Runtime configuration differs from the selected modern epoch.")
+            if checkpoint_store.path_for(config.runtime_identity).exists():
+                raise RuntimeCheckpointError("Pre-contract runtime state occupies the selected namespace.")
         self.lease: RuntimeLease | None = None
         self.process_state = STOPPED
         self.started_at: datetime | None = None
@@ -1236,6 +1323,10 @@ class ContinuousOpportunityRuntime:
     def start(self, now: datetime) -> RuntimeHealth:
         if self.process_state not in {STOPPED, FAILED}:
             raise ContinuousRuntimeError("Runtime is already started.")
+        if self.operational_epoch is not None:
+            self.operational_epoch.require_time(_timestamp(now))
+            if self.checkpoint_store.publication.current() is not None:
+                raise RuntimeCheckpointError("Existing modern checkpoint requires exact restore, not fresh start.")
         lease, stale = self.lease_registry.acquire(
             self.config.runtime_identity,
             self.runtime_instance_id,
@@ -1289,7 +1380,7 @@ class ContinuousOpportunityRuntime:
         if event.trigger == HEARTBEAT_REEVALUATION:
             return self._enqueue(
                 HEALTH_QUEUE,
-                build_work(
+                self._new_work(
                     kind="HEARTBEAT",
                     key="heartbeat",
                     requested_at=event.occurred_at,
@@ -1322,7 +1413,7 @@ class ContinuousOpportunityRuntime:
             "continuous-discovery-request-v1",
             {"runtime": self.config.runtime_identity, "requested_at": _timestamp(now), "reason": reason},
         )
-        work = build_work(
+        work = self._new_work(
             kind="DISCOVERY",
             key="broad-discovery",
             requested_at=_timestamp(now),
@@ -1694,7 +1785,7 @@ class ContinuousOpportunityRuntime:
             payload.get("evidence_protocol_ceiling_bytes", 0)
         )
         runtime._deferred_readiness = OrderedDict(
-            (item["key"], QueuedWork(**item))
+            (item["key"], _restore_work(item, runtime.operational_epoch))
             for item in payload.get("deferred_readiness", [])
         )
         runtime._setup_identities = {
@@ -1709,7 +1800,7 @@ class ContinuousOpportunityRuntime:
         }
         runtime._terminal_cycle_ids = OrderedDict(payload.get("terminal_cycle_ids", []))
         runtime._provider_bound_events = OrderedDict(
-            (item["key"], QueuedWork(**item))
+            (item["key"], _restore_work(item, runtime.operational_epoch))
             for item in payload.get("provider_bound_events", [])
         )
         if len(runtime._provider_bound_events) > config.maximum_tracked_symbols:
@@ -1719,7 +1810,7 @@ class ContinuousOpportunityRuntime:
             if name not in runtime._queues or not isinstance(items, list):
                 raise RuntimeCheckpointError("Checkpoint queue topology changed.")
             for item in items:
-                work = QueuedWork(**item)
+                work = _restore_work(item, runtime.operational_epoch)
                 if name == EVIDENCE_QUEUE:
                     runtime._restore_evidence_work(
                         work,
@@ -1733,7 +1824,7 @@ class ContinuousOpportunityRuntime:
             queue_name = str(payload.get("in_flight_queue"))
             if queue_name not in runtime._queues:
                 raise RuntimeCheckpointError("Checkpoint in-flight queue is invalid.")
-            work = QueuedWork(**in_flight)
+            work = _restore_work(in_flight, runtime.operational_epoch)
             if queue_name == EVIDENCE_QUEUE:
                 runtime._restore_evidence_work(
                     work,
@@ -1801,7 +1892,7 @@ class ContinuousOpportunityRuntime:
     def _admit_preflighted_intent(
         self, intent: EvidenceWriteIntent, now: datetime
     ) -> str:
-        work = build_work(
+        work = self._new_work(
             kind="EVIDENCE",
             key=str(intent.sequence),
             requested_at=intent.requested_at,
@@ -1938,7 +2029,7 @@ class ContinuousOpportunityRuntime:
         self._evidence_retry_counts.pop(intent.intent_id, None)
         self._evidence_retry_failure_class.pop(intent.intent_id, None)
         self._evidence_retry_not_before.pop(intent.intent_id, None)
-        work = build_work(
+        work = self._new_work(
             kind="EVIDENCE",
             key=str(compact.sequence),
             requested_at=compact.requested_at,
@@ -2473,7 +2564,7 @@ class ContinuousOpportunityRuntime:
         )
         enqueue_decision = self._enqueue(
             COMPOSITION_QUEUE,
-            build_work(
+            self._new_work(
                 kind="COMPOSITION",
                 key=request.symbol,
                 requested_at=canonical_cutoff,
@@ -2544,6 +2635,18 @@ class ContinuousOpportunityRuntime:
         self._counters["composition_attempts_started"] += 1
         try:
             result = self.composition_source.compose(request)
+            if self.operational_epoch is not None:
+                from momentum_hunter.lifecycle_position_identity import validate_composition_snapshot
+                from momentum_hunter.modern_operational import snapshot_from_bytes, parse_bytes, SnapshotPublication
+                payload = parse_bytes(result.evidence_payload_json.encode("ascii"))
+                snapshot = snapshot_from_bytes(payload["operationalSnapshot"].encode("ascii"),
+                    self.operational_epoch, kind="COMPOSITION",
+                    expected_id=payload["operationalSnapshotId"])
+                SnapshotPublication(self.operational_epoch, "COMPOSITION").require_consumed(
+                    snapshot, expected_id=payload["operationalSnapshotId"])
+                records, _, _ = validate_composition_snapshot(snapshot, self.operational_epoch)
+                if not any(record.composition_cycle_id == result.cycle_id for record in records):
+                    raise ValueError("Runtime result is not bound to its committed composition.")
         except Exception as exc:
             terminal_attempt = self._attempt_ledger.finish(
                 attempt,
@@ -2908,7 +3011,7 @@ class ContinuousOpportunityRuntime:
         )
         return self._enqueue(
             READINESS_QUEUE,
-            build_work(
+            self._new_work(
                 kind="READINESS",
                 key=symbol,
                 requested_at=requested_at,
@@ -2924,6 +3027,10 @@ class ContinuousOpportunityRuntime:
         )
 
     def _enqueue(self, queue_name: str, work: QueuedWork, now: datetime) -> str:
+        if self.operational_epoch is not None:
+            if type(work) is not ModernQueuedWork:
+                raise RuntimeCheckpointError("Unbound or old queued work cannot enter the modern runtime.")
+            work.validate_modern(self.operational_epoch)
         decision, displaced = self._queues[queue_name].enqueue(work, now)
         if queue_name == READINESS_QUEUE:
             if decision == REJECTED_CAPACITY:
@@ -2943,6 +3050,22 @@ class ContinuousOpportunityRuntime:
                 displaced.key if displaced else None,
             )
         return decision
+
+    def _new_work(self, **kwargs) -> QueuedWork:
+        work = build_work(**kwargs)
+        if self.operational_epoch is None:
+            return work
+        from momentum_hunter.modern_operational import freeze_snapshot
+        self.operational_epoch.require_time(work.requested_at)
+        snapshot = freeze_snapshot(self.operational_epoch, kind="QUEUED_DECISION",
+            components=(("work", _canonical_json(asdict(work))),), sequence=1, predecessor=None,
+            created_at=work.requested_at, known_at=work.requested_at,
+            decision_cutoff=work.requested_at)
+        result = ModernQueuedWork(**asdict(work),
+            operational_snapshot_json=snapshot.to_bytes().decode("ascii"),
+            operational_snapshot_id=snapshot.snapshot_id)
+        result.validate_modern(self.operational_epoch)
+        return result
 
     def _record_backpressure(
         self,
@@ -3141,6 +3264,7 @@ class ContinuousOpportunityRuntime:
             raise RuntimeCheckpointError("Runtime cannot checkpoint before start.")
         payload = {
             "contract_version": CONTRACT_VERSION,
+            **(self.operational_epoch.wire() if self.operational_epoch is not None else {}),
             "checkpoint_schema_version": CHECKPOINT_SCHEMA_VERSION,
             "runtime_profile": RUNTIME_PROFILE,
             "config_fingerprint": self.config.fingerprint,

@@ -543,6 +543,33 @@ def load_paper_engineering_arm(
 
 
 class AlpacaPaperEngineeringEngine:
+    def prepare_continuous_entry(self, admission, *, epoch, recorded_at):
+        """Dormant handoff only; never invokes this engine's broker adapter."""
+        from momentum_hunter.continuous_operational_admission import prepare_continuous_intent
+        return prepare_continuous_intent(admission, epoch, consumer="PAPER", recorded_at=recorded_at)
+
+    def bind_continuous_first_fill(self, intent, *, epoch, first_fill, recorded_at):
+        from momentum_hunter.continuous_operational_admission import bind_continuous_first_fill
+        return bind_continuous_first_fill(intent, epoch, consumer="PAPER",
+            first_fill=first_fill, recorded_at=recorded_at)
+
+    def recover_continuous_entry(self, raw, *, epoch, expected_intent_id):
+        from momentum_hunter.modern_operational import snapshot_from_bytes
+        from momentum_hunter.continuous_operational_admission import ContinuousEntryIntent
+        intent = ContinuousEntryIntent(snapshot_from_bytes(raw, epoch, kind="CONTINUOUS_INTENT",
+                                                           expected_id=expected_intent_id))
+        intent.validate(epoch, consumer="PAPER")
+        return intent
+
+    def admit_modern_decision(self, decision, *, epoch):
+        """Identity handoff only; the legacy report runner cannot transmit it."""
+        from momentum_hunter.lifecycle_position_identity import ModernDecisionIdentity
+        from momentum_hunter.modern_operational import deny
+        if type(decision) is not ModernDecisionIdentity:
+            deny("Paper handoff requires an exact modern decision, not a report/symbol.")
+        decision.validate(epoch)
+        return decision
+
     def __init__(
         self,
         *,
@@ -564,6 +591,8 @@ class AlpacaPaperEngineeringEngine:
         *,
         confirmation: str,
     ) -> dict[str, object]:
+        from momentum_hunter.modern_operational import reject_legacy_operation
+        reject_legacy_operation(self.output_directory)
         if confirmation != PAPER_ENGINEERING_DECISION_CONFIRMATION:
             raise PaperEngineeringError(
                 "The exact prospective Paper decision confirmation was not provided."
@@ -1281,6 +1310,8 @@ class AlpacaPaperEngineeringEngine:
     ) -> dict[str, object]:
         """Recover an accepted Paper entry without ever submitting a late new entry."""
 
+        from momentum_hunter.modern_operational import reject_legacy_operation
+        reject_legacy_operation(self.output_directory)
         intent = _load_json_object(intent_path, "Paper entry intent")
         fingerprint = intent.get("fingerprint")
         unsigned = {key: value for key, value in intent.items() if key != "fingerprint"}
@@ -1813,6 +1844,8 @@ class AlpacaPaperEngineeringEngine:
     def reconcile_active(self) -> list[dict[str, object]]:
         """Reconcile active Paper positions and force flat at target/session deadline."""
 
+        from momentum_hunter.modern_operational import reject_legacy_operation
+        reject_legacy_operation(self.output_directory)
         policy = load_paper_engineering_policy(self.output_directory)
         load_paper_engineering_arm(policy=policy, output_directory=self.output_directory)
         results: list[dict[str, object]] = []
@@ -1839,6 +1872,8 @@ class AlpacaPaperEngineeringEngine:
         outcome_path: Path,
         policy: PaperEngineeringPolicy,
     ) -> dict[str, object]:
+        from momentum_hunter.modern_operational import reject_legacy_operation
+        reject_legacy_operation(self.output_directory)
         symbol = str(active.get("symbol", "")).strip().upper()
         quantity = Decimal(str(active.get("quantity")))
         target = Decimal(str(active.get("targetPrice")))

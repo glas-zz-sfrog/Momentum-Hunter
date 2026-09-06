@@ -19,6 +19,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
+from momentum_hunter.path_transaction import PathTransactionLease
 
 from momentum_hunter.candidate_lifecycle import (
     expected_opportunity_id,
@@ -186,6 +187,7 @@ class SequentialBreakoutStore:
         validate_policy(policy)
         self.path = path
         self.policy = policy
+        self.lease = PathTransactionLease(path)
 
     def load(self) -> SequentialBreakoutLedger:
         if not self.path.exists():
@@ -207,6 +209,10 @@ class SequentialBreakoutStore:
     def append(
         self, events: Iterable[SequentialBreakoutEvent]
     ) -> SequentialBreakoutLedger:
+        with self.lease.transaction():
+            return self._append_unlocked(events)
+
+    def _append_unlocked(self, events: Iterable[SequentialBreakoutEvent]) -> SequentialBreakoutLedger:
         current = self.load()
         by_id = {event.event_id: event for event in current.events}
         changed = False

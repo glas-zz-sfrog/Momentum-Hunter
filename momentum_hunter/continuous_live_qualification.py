@@ -1133,6 +1133,7 @@ class LiveCompositionSource:
         *,
         configuration_fingerprint: str | None = None,
         natural_setup: ContinuousNaturalSetupCoordinator | None = None,
+        operational_epoch=None,
     ) -> None:
         self.state = state
         self.policy = ContinuousCompositionPolicy(
@@ -1146,7 +1147,9 @@ class LiveCompositionSource:
             )
         )
         self.producer_store = ContinuousTradePlanProducerStore(
-            state.root / "state" / "continuous-tradeplan-producer.json"
+            (Path(operational_epoch.root) if operational_epoch is not None else state.root)
+            / "state" / "continuous-tradeplan-producer.json",
+            operational_epoch=operational_epoch,
         )
         self.producer = ContinuousTradePlanProducer(
             store=self.producer_store,
@@ -1154,7 +1157,7 @@ class LiveCompositionSource:
             policy=self.policy,
         )
         self.natural_setup = natural_setup or ContinuousNaturalSetupCoordinator(
-            root=state.root / "state" / "continuous-natural-setup",
+            root=self.producer_store.path.parent / "continuous-natural-setup",
             minute_store_root=state.root / "market-data" / "minute",
             producer_store=self.producer_store,
             runtime_started_at=state.launch_at,
@@ -1314,6 +1317,10 @@ class LiveCompositionSource:
                 "positionsRequested": False,
                 "ordersRequested": False,
             }
+            operational_snapshot = preview.freeze_operational(cutoff_text)
+            if operational_snapshot is not None:
+                evidence_payload["operationalSnapshotId"] = operational_snapshot.snapshot_id
+                evidence_payload["operationalSnapshot"] = operational_snapshot.to_bytes().decode("ascii")
             result = CompositionResult(
                 request_id=request.request_id,
                 symbol=request.symbol,

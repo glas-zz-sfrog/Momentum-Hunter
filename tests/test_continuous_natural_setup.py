@@ -82,6 +82,7 @@ def fingerprint(value: object) -> str:
 
 
 class ContinuousNaturalSetupTests(unittest.TestCase):
+    fixture_symbol = "AAA"
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -121,10 +122,10 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         observed = at(11, 0)
         row = DiscoverySourceRow.from_mapping(
             source_row_ordinal=1,
-            source_row_identity=f"finviz:AAA:{observed.isoformat()}",
-            source_values={"Ticker": "AAA", "No.": "1"},
+            source_row_identity=f"finviz:{self.fixture_symbol}:{observed.isoformat()}",
+            source_values={"Ticker": self.fixture_symbol, "No.": "1"},
             candidate=Candidate(
-                ticker="AAA",
+                ticker=self.fixture_symbol,
                 company="AAA Incorporated",
                 price=100.0,
                 percent_change=5.0,
@@ -166,7 +167,7 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         minute_store.append_history(
             tuple(
                 SchwabMinuteCandle(
-                    symbol="AAA",
+                    symbol=self.fixture_symbol,
                     timestamp=timestamp,
                     open=95.0,
                     high=95.2,
@@ -182,7 +183,7 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         SchwabDailyCandleStore(self.daily_root).append_history(
             tuple(
                 SchwabDailyCandle(
-                    symbol="AAA",
+                    symbol=self.fixture_symbol,
                     timestamp=timestamp.replace(hour=16),
                     session_date=timestamp.date().isoformat(),
                     open=94.0,
@@ -200,7 +201,7 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
     def _append_initial_sequence(self) -> None:
         bars = [
             SchwabMinuteCandle(
-                symbol="AAA",
+                symbol=self.fixture_symbol,
                 timestamp=at(11, minute),
                 open=99.9,
                 high=100.0,
@@ -213,7 +214,7 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         ]
         bars.append(
             SchwabMinuteCandle(
-                symbol="AAA",
+                symbol=self.fixture_symbol,
                 timestamp=at(11, 20),
                 open=100.15,
                 high=100.3,
@@ -230,7 +231,7 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
     def _rvol(self, cutoff: datetime) -> TimeNormalizedRvolEvidence:
         return TimeNormalizedRvolEvidence(
             status=EXECUTION_ELIGIBLE,
-            symbol="AAA",
+            symbol=self.fixture_symbol,
             session_date=SESSION,
             through_minute=(cutoff - timedelta(minutes=1)).isoformat(),
             baseline_session_count=5,
@@ -245,23 +246,23 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         context, canonical = inspect_historical_context(
             minute_store_root=self.minute_root,
             daily_store_root=self.daily_root,
-            symbol="AAA",
+            symbol=self.fixture_symbol,
             session_date=SESSION,
             cutoff=cutoff,
             policy=ContinuousCompositionPolicy(required_recent_minute_bars=1),
         )
-        self.state.historical_contexts["AAA"] = context
-        self.state.current_market_evidence["AAA"] = build_current_market_evidence(
-            symbol="AAA",
+        self.state.historical_contexts[self.fixture_symbol] = context
+        self.state.current_market_evidence[self.fixture_symbol] = build_current_market_evidence(
+            symbol=self.fixture_symbol,
             provider_timestamp=(cutoff - timedelta(seconds=5)).isoformat(),
             receipt_timestamp=cutoff.isoformat(),
             source_identity="synthetic-read-only-current-market",
-            market_payload={"symbol": "AAA", "generation": generation},
+            market_payload={"symbol": self.fixture_symbol, "generation": generation},
         )
-        self.state.instrument_admissions["AAA"] = unavailable_instrument_admission(
-            "AAA", observed_at=cutoff
+        self.state.instrument_admissions[self.fixture_symbol] = unavailable_instrument_admission(
+            self.fixture_symbol, observed_at=cutoff
         )
-        self.state.readiness_inputs["AAA"] = CompositionMemberInput(
+        self.state.readiness_inputs[self.fixture_symbol] = CompositionMemberInput(
             universe_member_id=self.member.member_id,
             canonical_evidence=canonical,
             rvol_evidence=self._rvol(cutoff),
@@ -269,12 +270,12 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
 
     def _request(self, cutoff: datetime, *, generation: int) -> CompositionRequest:
         material = fingerprint(("material", generation))
-        self.state.material_event_fingerprints["AAA"] = material
-        self.state.material_event_known_at["AAA"] = cutoff.isoformat()
+        self.state.material_event_fingerprints[self.fixture_symbol] = material
+        self.state.material_event_known_at[self.fixture_symbol] = cutoff.isoformat()
         chronology = self._known_at(cutoff)
         return CompositionRequest(
             request_id=f"natural-request-{generation}",
-            symbol="AAA",
+            symbol=self.fixture_symbol,
             trigger=CANONICAL_BAR_COMPLETED,
             requested_at=cutoff.isoformat(),
             readiness_fingerprint=fingerprint(("readiness", generation)),
@@ -283,10 +284,10 @@ class ContinuousNaturalSetupTests(unittest.TestCase):
         )
 
     def _known_at(self, cutoff: datetime) -> tuple[tuple[str, str], ...]:
-        context = self.state.historical_contexts["AAA"]
-        current = self.state.current_market_evidence["AAA"]
-        instrument = self.state.instrument_admissions["AAA"]
-        canonical = self.state.readiness_inputs["AAA"].canonical_evidence
+        context = self.state.historical_contexts[self.fixture_symbol]
+        current = self.state.current_market_evidence[self.fixture_symbol]
+        instrument = self.state.instrument_admissions[self.fixture_symbol]
+        canonical = self.state.readiness_inputs[self.fixture_symbol].canonical_evidence
         return (
             ("universeMember", self.member.first_observed_at),
             ("historicalContext", context.evidence_cutoff),

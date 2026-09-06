@@ -35,6 +35,10 @@ from momentum_hunter.continuous_composition import (
 )
 from momentum_hunter.hot_universe import HotUniverseMember, HotUniverseState
 from momentum_hunter.path_transaction import PathTransactionLease
+from momentum_hunter.modern_operational import (
+    MODERN_PRODUCER_PROFILE, MODERN_PRODUCER_SCHEMA, OperationalEpoch,
+    exact_chain, parse_bytes, require_epoch_started, require_schema,
+)
 from momentum_hunter.schwab_candle_contract import EASTERN_TZ
 from momentum_hunter.schwab_candle_store import SchwabCandleStore
 from momentum_hunter.schwab_daily_candle_store import SchwabDailyCandleStore
@@ -226,11 +230,20 @@ class ContinuousProducerEvaluation:
     duplicate: bool
 
 
-class ContinuousTradePlanProducerStore:
-    """Bounded operational restart cache; durable evidence remains writer-owned."""
+@dataclass(frozen=True)
+class ModernProducerRecord(ContinuousProducerRecord):
+    opportunity_id: str = ""
+    operational_epoch_id: str = ""
 
-    def __init__(self, path: Path, *, lease_timeout_seconds: float = 5.0) -> None:
+
+class ContinuousTradePlanProducerStore:
+    """Research cache, or explicit epoch-bound modern state; no legacy upgrade."""
+
+    def __init__(self, path: Path, *, lease_timeout_seconds: float = 5.0,
+                 operational_epoch: OperationalEpoch | None = None) -> None:
         self.path = Path(path)
+        self.operational_epoch = operational_epoch
+        self._last_written_bytes: bytes | None = None
         self.lease = PathTransactionLease(
             self.path, timeout_seconds=lease_timeout_seconds
         )
@@ -240,7 +253,7 @@ class ContinuousTradePlanProducerStore:
             return self._load_unlocked()
 
     def append(self, record: ContinuousProducerRecord) -> ContinuousProducerRecord:
-        validate_producer_record(record)
+        self.validate_record(record)
         with self.lease.transaction():
             records = list(self._load_unlocked())
             by_id = {item.record_id: item for item in records}
@@ -287,31 +300,54 @@ class ContinuousTradePlanProducerStore:
 
     def _load_unlocked(self) -> tuple[ContinuousProducerRecord, ...]:
         if not self.path.exists():
+            if self.operational_epoch is not None:
+                raise ContinuousTradePlanProducerError(
+                    "Modern Producer state is missing; reset or legacy fallback is prohibited."
+                )
             return ()
         try:
             raw = self.path.read_bytes()
+            return self.validate_bytes(raw)
+        except OSError as exc:
+            raise ContinuousTradePlanProducerError("Producer state is unreadable.") from exc
+
+    def validate_record(self, record: ContinuousProducerRecord) -> None:
+        if self.operational_epoch is None:
+            validate_producer_record(record)
+        else:
+            validate_modern_producer_record(record, self.operational_epoch)
+
+    def validate_bytes(self, raw: bytes) -> tuple[ContinuousProducerRecord, ...]:
+        try:
             if len(raw) > _MAX_STATE_BYTES:
                 raise ContinuousTradePlanProducerError(
                     "Continuous producer restart state exceeded its bounded size."
                 )
-            payload = json.loads(raw)
+            payload = parse_bytes(raw)
         except ContinuousTradePlanProducerError:
             raise
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ContinuousTradePlanProducerError(
                 "Continuous producer restart state is unreadable or untrusted."
             ) from exc
-        if not isinstance(payload, Mapping) or set(payload) != {
+        required = {
             "schemaVersion",
             "profile",
             "records",
-        }:
+        }
+        epoch = self.operational_epoch
+        if epoch is not None:
+            require_epoch_started(epoch)
+            required.update(epoch.wire())
+            epoch.validate_binding(payload)
+        if not isinstance(payload, Mapping) or set(payload) != required:
             raise ContinuousTradePlanProducerError(
                 "Continuous producer restart state schema is invalid."
             )
         if (
-            payload.get("schemaVersion") != PRODUCER_SCHEMA_VERSION
-            or payload.get("profile") != PRODUCER_PROFILE
+            type(payload.get("schemaVersion")) is not int
+            or payload.get("schemaVersion") != (MODERN_PRODUCER_SCHEMA if epoch else PRODUCER_SCHEMA_VERSION)
+            or payload.get("profile") != (MODERN_PRODUCER_PROFILE if epoch else PRODUCER_PROFILE)
             or not isinstance(payload.get("records"), list)
         ):
             raise ContinuousTradePlanProducerError(
@@ -319,7 +355,7 @@ class ContinuousTradePlanProducerStore:
             )
         try:
             records = tuple(
-                ContinuousProducerRecord(
+                (ModernProducerRecord if epoch else ContinuousProducerRecord)(
                     **{
                         **dict(item),
                         "blockers": tuple(item.get("blockers", ())),
@@ -339,7 +375,7 @@ class ContinuousTradePlanProducerStore:
             )
         identities: set[str] = set()
         for record in records:
-            validate_producer_record(record)
+            self.validate_record(record)
             if record.record_id in identities:
                 raise ContinuousTradePlanProducerError(
                     "Continuous producer restart state repeated a record identity."
@@ -348,12 +384,15 @@ class ContinuousTradePlanProducerStore:
         return records
 
     def _write_unlocked(self, records: tuple[ContinuousProducerRecord, ...]) -> None:
+        epoch = self.operational_epoch
         payload = {
-            "schemaVersion": PRODUCER_SCHEMA_VERSION,
-            "profile": PRODUCER_PROFILE,
+            "schemaVersion": MODERN_PRODUCER_SCHEMA if epoch else PRODUCER_SCHEMA_VERSION,
+            "profile": MODERN_PRODUCER_PROFILE if epoch else PRODUCER_PROFILE,
+            **(epoch.wire() if epoch else {}),
             "records": [asdict(item) for item in records],
         }
         content = _canonical_bytes(payload)
+        self.validate_bytes(content)
         if len(content) > _MAX_STATE_BYTES:
             raise ContinuousTradePlanProducerError(
                 "Continuous producer restart state exceeded its bounded size."
@@ -366,8 +405,25 @@ class ContinuousTradePlanProducerStore:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, self.path)
+            self._last_written_bytes = content
         finally:
             temporary.unlink(missing_ok=True)
+
+    def initialize_modern(self) -> None:
+        epoch = self.operational_epoch
+        if epoch is None:
+            raise ContinuousTradePlanProducerError("An independent modern epoch is required.")
+        require_epoch_started(epoch)
+        root = Path(epoch.root)
+        if self.path != root / "state" / "continuous-tradeplan-producer.json":
+            raise ContinuousTradePlanProducerError("Producer root differs from authorized namespace.")
+        with self.lease.transaction():
+            if self.path.exists():
+                raise ContinuousTradePlanProducerError("Modern state already exists; use exact recovery.")
+            if any(path.is_file() and path.name != "epoch.json" and path.suffix != ".lock"
+                   for path in root.rglob("*")):
+                raise ContinuousTradePlanProducerError("Existing decision state cannot initialize a new Producer.")
+            self._write_unlocked(())
 
 
 class ContinuousHistoryAdmissionCoordinator:
@@ -522,6 +578,11 @@ class ContinuousTradePlanProducer:
         _require_fingerprint(configuration_fingerprint, "Configuration fingerprint")
         self.store = store
         self.configuration_fingerprint = configuration_fingerprint
+        epoch = store.operational_epoch
+        if epoch is not None:
+            require_epoch_started(epoch)
+            if configuration_fingerprint != epoch.configuration_identity:
+                raise ContinuousTradePlanProducerError("Producer configuration differs from cutover.")
         self.policy = policy or ContinuousCompositionPolicy(
             required_recent_minute_bars=1,
         )
@@ -533,6 +594,7 @@ class ContinuousTradePlanProducer:
                 "authority": RESEARCH_ONLY,
                 "executionAuthority": EXECUTION_AUTHORITY_NONE,
                 "orderCapability": ORDER_CAPABILITY_UNAVAILABLE,
+                **(epoch.wire() if epoch else {}),
             }
         )
 
@@ -549,6 +611,10 @@ class ContinuousTradePlanProducer:
         material_evidence_fingerprints: tuple[str, ...] = (),
     ) -> ContinuousProducerEvaluation:
         cutoff = _aware(evidence_cutoff)
+        epoch = self.store.operational_epoch
+        if epoch is not None:
+            require_epoch_started(epoch)
+            epoch.require_time(cutoff.isoformat())
         member = next(
             (
                 item
@@ -561,6 +627,10 @@ class ContinuousTradePlanProducer:
             raise ContinuousTradePlanProducerError(
                 "Producer input referenced an unknown hot-universe member."
             )
+        if epoch is not None:
+            epoch.require_time(member.first_observed_at)
+            if member_input.lifecycle is None:
+                raise ContinuousTradePlanProducerError("Modern lifecycle provenance is required.")
         validate_historical_context(history_context, expected_member=member)
         validate_current_market_evidence(
             current_market_evidence, expected_symbol=member.symbol
@@ -692,7 +762,8 @@ class ContinuousTradePlanProducer:
         setup_id = (
             member_result.lifecycle_proposal.setup_id
             if member_result.lifecycle_proposal is not None
-            else ""
+            else (admitted_input.lifecycle.current_setup_id
+                  if epoch is not None and admitted_input.lifecycle is not None else "")
         )
         predecessor_setup_id = (
             member_result.lifecycle_proposal.predecessor_setup_id
@@ -700,8 +771,14 @@ class ContinuousTradePlanProducer:
             else ""
         )
         payload = {
-            "schemaVersion": PRODUCER_SCHEMA_VERSION,
-            "profile": PRODUCER_PROFILE,
+            "schemaVersion": MODERN_PRODUCER_SCHEMA if epoch else PRODUCER_SCHEMA_VERSION,
+            "profile": MODERN_PRODUCER_PROFILE if epoch else PRODUCER_PROFILE,
+            **(epoch.wire() if epoch else {}),
+            **({"authoritativeLifecycle": asdict(admitted_input.lifecycle),
+                 "compositionPolicy": asdict(self.policy),
+                 "opportunityId": admitted_input.lifecycle.opportunity_id,
+                 "setupId": setup_id, "tradePlanId": plan.plan_id if plan else ""}
+               if epoch else {}),
             "payloadType": "CONTINUOUS_TRADEPLAN_PRODUCER",
             "producerVersion": PRODUCER_VERSION,
             "producerFingerprint": self.producer_fingerprint,
@@ -757,8 +834,10 @@ class ContinuousTradePlanProducer:
             "blockers": blockers,
             "payload_json": payload_json,
             "payload_fingerprint": payload_fingerprint,
-            "schema_version": PRODUCER_SCHEMA_VERSION,
-            "profile": PRODUCER_PROFILE,
+            "schema_version": MODERN_PRODUCER_SCHEMA if epoch else PRODUCER_SCHEMA_VERSION,
+            "profile": MODERN_PRODUCER_PROFILE if epoch else PRODUCER_PROFILE,
+            **({"opportunity_id": admitted_input.lifecycle.opportunity_id,
+                "operational_epoch_id": epoch.epoch_id} if epoch else {}),
         }
         identity_fingerprint = _fingerprint(
             {
@@ -768,12 +847,12 @@ class ContinuousTradePlanProducer:
                 "producerFingerprint": self.producer_fingerprint,
             }
         )
-        record = ContinuousProducerRecord(
+        record = (ModernProducerRecord if epoch else ContinuousProducerRecord)(
             record_id=f"continuous-tradeplan-producer-{identity_fingerprint[:24]}",
             fingerprint=_fingerprint(core),
             **core,
         )
-        validate_producer_record(record)
+        self.store.validate_record(record)
         stored = self.store.append(record)
         return ContinuousProducerEvaluation(
             record=stored,
@@ -1115,9 +1194,17 @@ def validate_historical_context(
 
 
 def validate_producer_record(record: ContinuousProducerRecord) -> None:
+    """Source-native research validation, never schema-3 operational admission."""
+    if type(record.schema_version) is not int or record.schema_version != PRODUCER_SCHEMA_VERSION:
+        raise ContinuousTradePlanProducerError("Research-only Producer contract is unsupported.")
+    _validate_record_content(record, modern=False)
+
+
+def _validate_record_content(record: ContinuousProducerRecord, *, modern: bool) -> None:
     if (
-        record.schema_version != PRODUCER_SCHEMA_VERSION
-        or record.profile != PRODUCER_PROFILE
+        type(record.schema_version) is not int
+        or record.schema_version != (MODERN_PRODUCER_SCHEMA if modern else PRODUCER_SCHEMA_VERSION)
+        or record.profile != (MODERN_PRODUCER_PROFILE if modern else PRODUCER_PROFILE)
         or record.producer_version != PRODUCER_VERSION
         or record.symbol.strip().upper() != record.symbol
     ):
@@ -1220,6 +1307,212 @@ def validate_producer_record(record: ContinuousProducerRecord) -> None:
         raise ContinuousTradePlanProducerError(
             "Execution-eligible producer record is incomplete or blocked."
         )
+
+
+def validate_modern_producer_record(record: ContinuousProducerRecord,
+                                    epoch: OperationalEpoch) -> None:
+    """One authoritative semantic for Producer reload and downstream handoff."""
+    from dataclasses import fields
+    from momentum_hunter import continuous_composition as composition
+    from momentum_hunter.intraday_trade_plan import (
+        IntradayPlanEvidence, intraday_plan_validation_findings,
+    )
+
+    require_epoch_started(epoch)
+    if type(record) is not ModernProducerRecord or record.operational_epoch_id != epoch.epoch_id:
+        raise ContinuousTradePlanProducerError("Record was not created in this modern epoch.")
+    _validate_record_content(record, modern=True)
+    epoch.require_time(record.evidence_cutoff)
+    epoch.require_time(record.created_at)
+    payload = parse_bytes(record.payload_json.encode("ascii"))
+    epoch.validate_binding(payload)
+    require_schema(payload.get("schemaVersion"), MODERN_PRODUCER_SCHEMA)
+    if payload.get("profile") != MODERN_PRODUCER_PROFILE:
+        raise ContinuousTradePlanProducerError("Modern Producer profile mismatch.")
+    if record.configuration_fingerprint != epoch.configuration_identity:
+        raise ContinuousTradePlanProducerError("Modern record configuration mismatch.")
+    _require_fingerprint(record.opportunity_id, "Authoritative opportunity")
+    lifecycle = payload.get("authoritativeLifecycle")
+    if (not isinstance(lifecycle, dict)
+            or lifecycle.get("opportunity_id") != record.opportunity_id
+            or lifecycle.get("symbol") != record.symbol
+            or lifecycle.get("session_date") != record.session_date
+            or payload.get("opportunityId") != record.opportunity_id
+            or payload.get("setupId") != record.setup_id
+            or payload.get("tradePlanId") != record.trade_plan_id):
+        raise ContinuousTradePlanProducerError("Modern lifecycle identity contradiction.")
+    from momentum_hunter.candidate_lifecycle import CandidateLifecycleSnapshot, CANDIDATE_STATES
+    lifecycle_value = _modern_dataclass(CandidateLifecycleSnapshot, lifecycle)
+    if (lifecycle_value.current_state not in CANDIDATE_STATES
+            or lifecycle_value.current_setup_sequence < 0
+            or _parse_timestamp(lifecycle_value.updated_at) > _parse_timestamp(record.evidence_cutoff)):
+        raise ContinuousTradePlanProducerError("Modern lifecycle state/chronology is invalid.")
+    policy = _modern_dataclass(ContinuousCompositionPolicy, payload.get("compositionPolicy"))
+    composition._validate_policy(policy)
+    if policy.fingerprint != record.composition_policy_fingerprint:
+        raise ContinuousTradePlanProducerError("Modern composition policy identity mismatch.")
+    history = _modern_dataclass(HistoricalContextEvidence, payload["historicalContext"])
+    validate_historical_context(history)
+    current = _modern_dataclass(CurrentMarketEvidence, payload["currentMarketEvidence"])
+    validate_current_market_evidence(current, expected_symbol=record.symbol)
+    instrument = _modern_dataclass(InstrumentAdmissionEvidence, payload["instrumentAdmission"])
+    validate_instrument_admission(instrument, expected_symbol=record.symbol)
+    for known_at in (history.evidence_cutoff, current.receipt_timestamp, instrument.observed_at):
+        if _parse_timestamp(known_at) > _parse_timestamp(record.evidence_cutoff):
+            raise ContinuousTradePlanProducerError("Modern evidence is newer than the frozen decision cutoff.")
+
+    cycle = payload["compositionCycle"]
+    if set(cycle) != {field.name for field in fields(composition.ContinuousCompositionCycle)}:
+        raise ContinuousTradePlanProducerError("Modern composition shape is invalid.")
+    summary = cycle["summary"]
+    if (type(summary) is not dict
+            or set(summary) != {field.name for field in fields(composition.ContinuousCompositionSummary)}
+            or any(type(value) is not int or value < 0 for value in summary.values())):
+        raise ContinuousTradePlanProducerError("Modern composition summary is invalid.")
+    members = cycle["member_results"]
+    if type(members) is not list:
+        raise ContinuousTradePlanProducerError("Modern composition members are invalid.")
+    matched = []
+    typed_members = []
+    seen_members = set()
+    for member in members:
+        if (type(member) is not dict
+                or set(member) != {field.name for field in fields(composition.ContinuousCompositionMemberResult)}
+                or member.get("authority") != composition.EXECUTION_AUTHORITY_NONE):
+            raise ContinuousTradePlanProducerError("Modern member shape/authority is invalid.")
+        body = dict(member)
+        fingerprint = body.pop("fingerprint")
+        if composition._fingerprint(body) != fingerprint:
+            raise ContinuousTradePlanProducerError("Modern member fingerprint mismatch.")
+        if member["universe_member_id"] in seen_members:
+            raise ContinuousTradePlanProducerError("Modern cycle repeated a member.")
+        seen_members.add(member["universe_member_id"])
+        parsed_member = dict(member)
+        for field_name, record_type in (
+            ("readiness_request", composition.ContinuousReadinessRequest),
+            ("readiness_assessment", composition.ContinuousReadinessAssessment),
+            ("lifecycle_proposal", composition.LifecycleTransitionProposal),
+            ("intraday_plan", IntradayPlanEvidence),
+        ):
+            item = member[field_name]
+            if item is None:
+                continue
+            typed = _modern_dataclass(record_type, item)
+            if typed.symbol != member["symbol"] or typed.session_date != member["session_date"]:
+                raise ContinuousTradePlanProducerError("Modern nested evidence symbol/session mismatch.")
+            if field_name in {"readiness_request", "readiness_assessment"}:
+                if typed.universe_member_id != member["universe_member_id"]:
+                    raise ContinuousTradePlanProducerError("Modern readiness member mismatch.")
+                at = typed.requested_at if field_name == "readiness_request" else typed.evaluated_at
+                if _parse_timestamp(at) > _parse_timestamp(record.evidence_cutoff):
+                    raise ContinuousTradePlanProducerError("Modern readiness chronology mismatch.")
+                if field_name == "readiness_request":
+                    composition._validate_request(typed, policy)
+            if field_name == "intraday_plan":
+                require_schema(typed.schema_version, 1)
+                if intraday_plan_validation_findings(typed):
+                    raise ContinuousTradePlanProducerError("Modern TradePlan validation failed.")
+            elif field_name != "readiness_request":
+                identity_body = dict(item)
+                identity_fp = identity_body.pop("fingerprint")
+                if composition._fingerprint(identity_body) != identity_fp:
+                    raise ContinuousTradePlanProducerError("Modern nested evidence fingerprint mismatch.")
+            parsed_member[field_name] = typed
+        parsed_member["blocker_reasons"] = tuple(member["blocker_reasons"])
+        if member["disposition"] not in composition.MEMBER_RESULT_STATUSES:
+            raise ContinuousTradePlanProducerError("Modern member disposition is invalid.")
+        typed_members.append(composition.ContinuousCompositionMemberResult(**parsed_member))
+        if member["universe_member_id"] == record.member_id:
+            matched.append(member)
+    if asdict(composition._summary(tuple(typed_members))) != summary:
+        raise ContinuousTradePlanProducerError("Modern summary contradicts its actual members.")
+    if len(matched) != 1:
+        raise ContinuousTradePlanProducerError("Modern member identity is missing or duplicated.")
+    member = matched[0]
+    if (member["symbol"] != record.symbol or member["session_date"] != record.session_date
+            or cycle["session_date"] != record.session_date
+            or _parse_timestamp(cycle["evidence_cutoff"]) != _parse_timestamp(record.evidence_cutoff)):
+        raise ContinuousTradePlanProducerError("Modern nested member identity contradiction.")
+    proposal = member["lifecycle_proposal"]
+    if proposal is not None:
+        if (type(proposal) is not dict
+                or set(proposal) != {field.name for field in fields(composition.LifecycleTransitionProposal)}):
+            raise ContinuousTradePlanProducerError("Modern proposal shape is invalid.")
+        proposal_body = dict(proposal)
+        supplied = proposal_body.pop("fingerprint")
+        if composition._fingerprint(proposal_body) != supplied:
+            raise ContinuousTradePlanProducerError("Modern proposal fingerprint mismatch.")
+        if (proposal["opportunity_id"] != record.opportunity_id
+                or proposal["setup_id"] != record.setup_id
+                or proposal["symbol"] != record.symbol
+                or proposal["session_date"] != record.session_date):
+            raise ContinuousTradePlanProducerError("Modern proposal identity contradiction.")
+    elif record.setup_id != lifecycle.get("current_setup_id"):
+        raise ContinuousTradePlanProducerError("Ongoing modern setup identity contradiction.")
+    plan = member["intraday_plan"]
+    if record.trade_plan_id:
+        exact_chain(asdict(record))
+        if type(plan) is not dict or set(plan) != {field.name for field in fields(IntradayPlanEvidence)}:
+            raise ContinuousTradePlanProducerError("Modern nested TradePlan shape is invalid.")
+        require_schema(plan.get("schema_version"), 1)
+        plan_values = dict(plan)
+        for key in ("target_prices", "source_evidence_ids", "findings"):
+            if type(plan_values[key]) is not list:
+                raise ContinuousTradePlanProducerError("Modern TradePlan sequence is invalid.")
+            plan_values[key] = tuple(plan_values[key])
+        parsed_plan = IntradayPlanEvidence(**plan_values)
+        if (intraday_plan_validation_findings(parsed_plan)
+                or plan["plan_id"] != record.trade_plan_id
+                or plan["fingerprint"] != record.trade_plan_fingerprint
+                or plan["symbol"] != record.symbol
+                or plan["session_date"] != record.session_date):
+            raise ContinuousTradePlanProducerError("Modern nested TradePlan identity is invalid.")
+    elif plan is not None:
+        raise ContinuousTradePlanProducerError("Unbound nested modern TradePlan.")
+    cycle_body = dict(cycle)
+    cycle_body.pop("cycle_id")
+    fingerprint = cycle_body.pop("fingerprint")
+    if composition._fingerprint(cycle_body) != fingerprint:
+        raise ContinuousTradePlanProducerError("Modern composition fingerprint mismatch.")
+
+
+def _modern_dataclass(record_type, value):
+    """Strict primitive shape before native domain validation; no coercive upgrades."""
+    import types
+    from dataclasses import fields
+    from typing import get_args, get_origin, get_type_hints
+
+    if type(value) is not dict or set(value) != {field.name for field in fields(record_type)}:
+        raise ContinuousTradePlanProducerError("Modern nested record shape is invalid.")
+    hints = get_type_hints(record_type)
+
+    def convert(item, hint):
+        origin = get_origin(hint)
+        if origin is tuple:
+            args = get_args(hint)
+            if type(item) is not list:
+                raise ContinuousTradePlanProducerError("Modern sequence type is invalid.")
+            if len(args) != 2 or args[1] is not Ellipsis:
+                raise ContinuousTradePlanProducerError("Unsupported modern sequence contract.")
+            return tuple(convert(entry, args[0]) for entry in item)
+        if origin is types.UnionType:
+            if item is None and type(None) in get_args(hint):
+                return None
+            choices = tuple(choice for choice in get_args(hint) if choice is not type(None))
+            if len(choices) == 1:
+                return convert(item, choices[0])
+        if hint in (str, int, bool):
+            if type(item) is not hint:
+                raise ContinuousTradePlanProducerError("Modern scalar type is invalid.")
+        elif hint is float:
+            import math
+            if type(item) not in (int, float) or not math.isfinite(item):
+                raise ContinuousTradePlanProducerError("Modern numeric type is invalid.")
+        else:
+            raise ContinuousTradePlanProducerError("Unrepresented modern nested type.")
+        return item
+
+    return record_type(**{key: convert(item, hints[key]) for key, item in value.items()})
 
 
 def _refingerprint_context(context: HistoricalContextEvidence) -> HistoricalContextEvidence:

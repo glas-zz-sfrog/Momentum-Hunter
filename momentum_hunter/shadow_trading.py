@@ -222,6 +222,135 @@ class ShadowPosition:
 
 
 @dataclass(frozen=True)
+class ModernShadowFill:
+    """Native FakeBroker result plus immutable upstream and first-fill custody."""
+    decision: object
+    order: ShadowOrder
+    position: ShadowPosition
+    identity: object
+    first_fill: bytes
+    admission: object = None
+
+    def validate(self, epoch) -> None:
+        from momentum_hunter.lifecycle_position_identity import ModernDecisionIdentity, ModernPositionIdentity
+        from momentum_hunter.modern_operational import deny, parse_bytes, digest, canonical_bytes
+        if type(self.decision) is not ModernDecisionIdentity or type(self.identity) is not ModernPositionIdentity:
+            deny("A Shadow position is missing modern upstream provenance.")
+        if self.identity.decision != self.decision:
+            deny("Position decision was rebound.")
+        from momentum_hunter.continuous_operational_admission import ContinuousOperationalAdmission
+        if type(self.admission) is not ContinuousOperationalAdmission:
+            deny("Modern position lacks its admitted strategy/risk result.")
+        admitted = self.admission.validate(epoch, new_entry=False)
+        if admitted[0] != self.decision or admitted[4].final_authorized_quantity != self.order.quantity:
+            deny("Modern position changed its admitted identity or approved size.")
+        if (self.order.order_id != digest(canonical_bytes({"consumer": "SHADOW", "admissionId": self.admission.admission_id}))
+                or self.order.shadow_trade_id != stable_id("continuous-shadow", self.admission.admission_id)):
+            deny("Restored Shadow order is not the admission's exact local order.")
+        self.identity.validate(epoch, first_fill=self.first_fill,
+            position_id=self.position.position_id, opened_at=self.position.opened_at)
+        record = self.decision.validate(epoch, current=False)
+        plan = next(item for item in parse_bytes(record.payload_json.encode("ascii"))[
+            "compositionCycle"]["member_results"] if item["universe_member_id"] == record.member_id)["intraday_plan"]
+        p, o = self.position, self.order
+        if (type(p) is not ShadowPosition or type(o) is not ShadowOrder
+                or not o.order_id or not o.shadow_trade_id or p.shadow_trade_id != o.shadow_trade_id
+                or p.position_id != stable_id("shadow-position", o.shadow_trade_id)
+                or p.symbol != record.symbol or o.symbol != record.symbol
+                or p.direction != "LONG" or o.side != "buy" or o.order_type != "limit"
+                or o.limit_price != plan["planned_entry"] or p.stop_price != plan["stop_price"]
+                or p.target_price != plan["target_prices"][0]
+                or type(p.quantity) is not int or p.quantity <= 0 or o.filled_quantity != p.quantity
+                or type(o.quantity) is not int or o.quantity < p.quantity
+                or type(o.remaining_quantity) is not int or o.remaining_quantity != o.quantity - p.quantity
+                or o.status != ("filled" if o.remaining_quantity == 0 else "partially_filled")
+                or p.average_entry_price != o.average_fill_price
+                or any(type(number) not in (int, float) or not math.isfinite(number) or number <= 0
+                       for number in (p.average_entry_price, p.highest_price, p.lowest_price))):
+            deny("Native position/order state contradicts its frozen modern identity.")
+
+    def to_wire(self):
+        return {"decision": self.decision.wire(), "order": asdict(self.order),
+                "position": asdict(self.position), "identity": {
+                    **self.identity.core(), "fingerprint": self.identity.fingerprint},
+                "firstFill": self.first_fill.decode("ascii"), "admission": self.admission.wire()}
+
+
+class ModernShadowPositionStore:
+    """Immutable current-epoch FakeBroker position ledger, never legacy restore."""
+    def __init__(self, epoch):
+        from momentum_hunter.modern_operational import SnapshotPublication
+        self.epoch = epoch
+        self.publication = SnapshotPublication(epoch, "POSITION")
+
+    def load(self):
+        from momentum_hunter.lifecycle_position_identity import decision_from_wire, ModernPositionIdentity
+        from momentum_hunter.modern_operational import deny, parse_bytes
+        snapshot = self.publication.current()
+        if snapshot is None:
+            return (), None
+        payload = parse_bytes(snapshot.component("positions"))
+        if set(payload) != {"positions"} or type(payload["positions"]) is not list:
+            deny("Invalid modern position ledger.")
+        results = []
+        for row in payload["positions"]:
+            if type(row) is not dict or set(row) != {"decision", "order", "position", "identity", "firstFill", "admission"}:
+                deny("Legacy or malformed position cannot be recovered.")
+            decision = decision_from_wire(row["decision"], self.epoch,
+                expected_snapshot_id=row["decision"]["snapshotId"], current=False)
+            identity = row["identity"]
+            if (type(identity) is not dict or identity.get("decision") != decision.wire()
+                    or set(identity) != {"schemaVersion", "decision", "positionId", "openedAt", "firstFillId",
+                                         "firstFillSha256", "fingerprint"}
+                    or type(identity["schemaVersion"]) is not int or identity["schemaVersion"] != 1):
+                deny("Position binding is stripped or contradictory.")
+            bound = ModernPositionIdentity(decision, identity["positionId"], identity["openedAt"],
+                identity["firstFillId"], identity["firstFillSha256"], identity["fingerprint"])
+            from momentum_hunter.continuous_operational_admission import admission_from_wire
+            admission = admission_from_wire(row["admission"], self.epoch)
+            item = ModernShadowFill(decision, ShadowOrder(**row["order"]), ShadowPosition(**row["position"]),
+                                   bound, row["firstFill"].encode("ascii"), admission)
+            item.validate(self.epoch)
+            if any(prior.position.position_id == item.position.position_id for prior in results):
+                deny("Duplicate current position identity.")
+            results.append(item)
+        return tuple(results), snapshot.snapshot_id
+
+    def save(self, fill, *, expected_previous, recorded_at):
+        from momentum_hunter.modern_operational import canonical_bytes, deny, freeze_snapshot, parse_bytes, instant
+        if type(fill) is not ModernShadowFill:
+            deny("Legacy positions cannot be imported or retagged.")
+        fill.validate(self.epoch)
+        if instant(recorded_at) < max(instant(fill.position.opened_at), instant(fill.order.last_update_at)):
+            deny("Position snapshot cutoff predates its contained fill/order evidence.")
+        with self.epoch.transaction(), self.publication.lease.transaction():
+            items, current_id = self.load()
+            if current_id != expected_previous:
+                deny("Position generation changed before persistence.")
+            previous = next((item for item in items if item.position.position_id == fill.position.position_id), None)
+            if previous is not None:
+                if (previous.identity != fill.identity or previous.first_fill != fill.first_fill
+                        or previous.admission != fill.admission
+                        or previous.order.order_id != fill.order.order_id
+                        or previous.order.quantity != fill.order.quantity
+                        or previous.position.quantity > fill.position.quantity):
+                    deny("Position identity/first fill cannot be rewritten or abandoned.")
+                if previous == fill:
+                    return current_id
+            else:
+                fill.decision.validate(self.epoch)
+            items = tuple(item for item in items if item.position.position_id != fill.position.position_id) + (fill,)
+            current = self.publication.current()
+            sequence = parse_bytes(current.manifest_bytes)["sequence"] + 1 if current else 1
+            snapshot = freeze_snapshot(self.epoch, kind="POSITION",
+                components=(("positions", canonical_bytes({"positions": [item.to_wire() for item in items]})),),
+                sequence=sequence, predecessor=current_id, created_at=recorded_at,
+                known_at=recorded_at, decision_cutoff=recorded_at)
+            self.publication.publish(snapshot, expected_previous=current_id)
+            return snapshot.snapshot_id
+
+
+@dataclass(frozen=True)
 class ShadowExecutableMark:
     schema_version: int = 1
     direction: str = "LONG"
@@ -897,6 +1026,8 @@ class ShadowStateStore:
         return shadow_state_from_dict(payload)
 
     def save(self, state: ShadowTradingState) -> Path:
+        from momentum_hunter.modern_operational import reject_legacy_operation
+        reject_legacy_operation(self.path)
         validate_shadow_state(state)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = shadow_state_to_dict(replace(state, updated_at=now_central().isoformat()))
@@ -949,6 +1080,93 @@ class ProspectiveFakeBroker:
         committed_notional: float,
         open_position_count: int,
         realized_pnl_today: float,
+    ) -> tuple[ShadowOrder, ShadowPosition | None, str]:
+        return self._fill_entry(order, quote, received_at=received_at,
+            committed_notional=committed_notional, open_position_count=open_position_count,
+            realized_pnl_today=realized_pnl_today)
+
+    def prepare_modern_entry(self, admission, *, epoch, submitted_at):
+        from momentum_hunter.continuous_operational_admission import prepare_continuous_intent
+        from momentum_hunter.modern_operational import deny, parse_bytes
+        intent = prepare_continuous_intent(admission, epoch, consumer="SHADOW", recorded_at=submitted_at)
+        _, record, _, request, allocation, plan = admission.validate(epoch)
+        quantity = allocation.final_authorized_quantity
+        if request.entry_order_type != "limit" or quantity != int(quantity):
+            deny("Native Shadow cannot change an approved order type or fractional quantity.")
+        body = parse_bytes(intent.snapshot.component("intent"))
+        return intent, ShadowOrder(body["localOrderId"], stable_id("continuous-shadow", admission.admission_id),
+            record.symbol, "buy", int(quantity), int(quantity), "limit", plan["planned_entry"],
+            "submitted", parse_bytes(intent.snapshot.manifest_bytes)["createdAt"])
+
+    def fill_modern_entry(self, order, quote, *, decision, epoch, received_at,
+                          committed_notional, open_position_count, realized_pnl_today,
+                          prior=None, admission=None):
+        """Reuse native fill economics; bind its result to exact modern custody."""
+        from momentum_hunter.lifecycle_position_identity import (
+            ModernDecisionIdentity, bind_first_fill,
+        )
+        from momentum_hunter.modern_operational import canonical_bytes, deny, parse_bytes, instant
+        from momentum_hunter.continuous_operational_admission import ContinuousOperationalAdmission
+        if type(admission) is not ContinuousOperationalAdmission:
+            deny("Modern Shadow requires native Continuous admission, not identity alone.")
+        admitted = admission.validate(epoch, new_entry=prior is None)
+        if (admitted[0] != decision or admitted[3].entry_order_type != "limit"
+                or admitted[4].final_authorized_quantity != order.quantity):
+            deny("Shadow handoff changed the exact admitted decision or approved size.")
+        from momentum_hunter.modern_operational import digest
+        if (order.order_id != digest(canonical_bytes({"consumer": "SHADOW", "admissionId": admission.admission_id}))
+                or order.shadow_trade_id != stable_id("continuous-shadow", admission.admission_id)):
+            deny("Shadow local order identity cannot duplicate or rebind an admitted decision.")
+        if type(decision) is not ModernDecisionIdentity:
+            deny("Shadow handoff requires an exact modern decision.")
+        record = decision.validate(epoch, current=prior is None)
+        payload = parse_bytes(record.payload_json.encode("ascii"))
+        member = next(item for item in payload["compositionCycle"]["member_results"]
+                      if item["universe_member_id"] == record.member_id)
+        plan = member["intraday_plan"]
+        if (instant(order.submitted_at) < instant(admitted[2].decision_at)
+                or not instant(plan["entry_valid_from"]) <= instant(quote.timestamp)
+                <= instant(plan["entry_expires_at"])):
+            deny("Modern Shadow order/fill is outside its admitted chronology.")
+        if (type(order) is not ShadowOrder or order.symbol != record.symbol
+                or order.symbol != quote.symbol or order.side != "buy"
+                or order.order_type != "limit" or order.limit_price != plan["planned_entry"]
+                or type(order.quantity) is not int or order.quantity <= 0
+                or order.filled_quantity + order.remaining_quantity != order.quantity):
+            deny("Shadow order contradicts the exact selected modern plan.")
+        if prior is not None:
+            prior.validate(epoch)
+            if prior.decision != decision or prior.order != order or prior.admission != admission:
+                deny("Partial-fill recovery must use its exact owned order and decision.")
+        elif order.filled_quantity or order.remaining_quantity != order.quantity:
+            deny("Already-filled order requires confirmed modern position recovery.")
+        updated, position, reason = self._fill_entry(order, quote, received_at=received_at,
+            committed_notional=committed_notional, open_position_count=open_position_count,
+            realized_pnl_today=realized_pnl_today)
+        if position is None:
+            return updated, None, reason
+        if prior is None:
+            first_fill = canonical_bytes({"schemaVersion": 1, **epoch.wire(),
+                "opportunity_id": decision.opportunity_id, "setup_id": decision.setup_id,
+                "trade_plan_id": decision.trade_plan_id, "snapshotId": decision.snapshot_id,
+                "fillId": stable_id("shadow-first-fill", updated.order_id, quote.timestamp),
+                "filledAt": position.opened_at, "positionId": position.position_id,
+                "filledQuantity": position.quantity})
+            identity = bind_first_fill(decision, epoch, first_fill=first_fill)
+        else:
+            identity, first_fill = prior.identity, prior.first_fill
+            position = replace(position, position_id=prior.position.position_id,
+                               opened_at=prior.position.opened_at,
+                               highest_price=max(position.highest_price, prior.position.highest_price),
+                               lowest_price=min(position.lowest_price, prior.position.lowest_price))
+        position = replace(position, stop_price=plan["stop_price"], target_price=plan["target_prices"][0])
+        result = ModernShadowFill(decision, updated, position, identity, first_fill, admission)
+        result.validate(epoch)
+        return updated, result, reason
+
+    def _fill_entry(
+        self, order, quote, *, received_at, committed_notional,
+        open_position_count, realized_pnl_today,
     ) -> tuple[ShadowOrder, ShadowPosition | None, str]:
         reason = self.validate_quote(quote, received_at=received_at)
         if reason:
@@ -1471,6 +1689,8 @@ class ShadowTradingService:
         selection_quote_json: str = "",
         account_allocation: AccountAllocationDecision | None = None,
     ) -> ShadowTrade:
+        from momentum_hunter.modern_operational import reject_legacy_operation
+        reject_legacy_operation(self.store.path)
         self._refresh_sample_activation()
         active_selection_policy: ShadowSelectionPolicy | None = None
         active_selector_arm: SelectorArmRecord | None = None
@@ -2008,6 +2228,8 @@ class ShadowTradingService:
         return trade
 
     def process_quote(self, quote: ShadowQuote, *, received_at: datetime | None = None) -> list[ShadowTrade]:
+        from momentum_hunter.modern_operational import reject_legacy_operation
+        reject_legacy_operation(self.store.path)
         received_at = received_at or now_central()
         normalized_quote = replace(quote, symbol=quote.symbol.strip().upper())
         if not normalized_quote.symbol:
@@ -2044,6 +2266,8 @@ class ShadowTradingService:
         return [trade for trade in updated if trade.symbol == normalized_quote.symbol]
 
     def process_missing_quote(self, symbol: str, *, observed_at: datetime | None = None) -> list[ShadowTrade]:
+        from momentum_hunter.modern_operational import reject_legacy_operation
+        reject_legacy_operation(self.store.path)
         observed_at = observed_at or now_central()
         normalized_symbol = symbol.strip().upper()
         observation_id = stable_id("shadow-missing-observation", normalized_symbol, observed_at.isoformat())

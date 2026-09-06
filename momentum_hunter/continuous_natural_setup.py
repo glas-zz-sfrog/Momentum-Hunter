@@ -14,9 +14,17 @@ import shutil
 import tempfile
 import uuid
 from dataclasses import asdict, dataclass
+from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Iterable, Mapping
+
+from momentum_hunter import candidate_lifecycle as lifecycle_wire
+from momentum_hunter import sequential_breakout_research as breakout_wire
+from momentum_hunter.modern_operational import (
+    SnapshotPublication, freeze_snapshot, parse_bytes, require_epoch_started,
+)
 
 from momentum_hunter.candidate_lifecycle import (
     BREAKOUT_CONFIRMED as LIFECYCLE_BREAKOUT_CONFIRMED,
@@ -146,11 +154,24 @@ class ContinuousNaturalSetupCoordinator:
             self.root / "sequential-breakout.json",
             policy=self.breakout_policy,
         )
+        self.snapshot_publication = (
+            SnapshotPublication(producer_store.operational_epoch, "COMPOSITION")
+            if producer_store.operational_epoch is not None else None
+        )
         self._recover_interrupted_composition()
 
     def preview(self) -> "NaturalCompositionPreview":
         """Stage all natural/Producer mutations outside authoritative state."""
-
+        if self.snapshot_publication is not None:
+            current = self.snapshot_publication.current()
+            if current is None:
+                if self.producer_store.load() or self.lifecycle.store.load().events or self.breakouts.load().events:
+                    raise ContinuousNaturalSetupError("Existing decisions lack a published modern snapshot.")
+            else:
+                self._validate_joint_snapshot(current)
+                for key, target in self._authoritative_paths().items():
+                    if _optional_bytes(target) != current.component(key):
+                        raise ContinuousNaturalSetupError("Current state bytes disagree with the published snapshot.")
         return NaturalCompositionPreview(self)
 
     def completed_bar_events(
@@ -697,6 +718,20 @@ class ContinuousNaturalSetupCoordinator:
         }
 
     def _recover_interrupted_composition(self) -> None:
+        if not (self.producer_store.path.parent / _COMPOSITION_JOURNAL).exists():
+            return
+        with PathTransactionLease(
+            self.producer_store.path.parent / ".continuous-natural-composition"
+        ).transaction(), ExitStack() as held:
+            if self.producer_store.operational_epoch is not None:
+                held.enter_context(self.producer_store.operational_epoch.transaction())
+            for path in sorted(self._authoritative_paths().values(), key=lambda item: str(item).casefold()):
+                held.enter_context(PathTransactionLease(path).transaction())
+            if self.snapshot_publication is not None:
+                held.enter_context(self.snapshot_publication.lease.transaction())
+            self._recover_composition_locked()
+
+    def _recover_composition_locked(self) -> None:
         journal = self.producer_store.path.parent / _COMPOSITION_JOURNAL
         if not journal.exists():
             return
@@ -714,13 +749,16 @@ class ContinuousNaturalSetupCoordinator:
                     "Interrupted composition journal is invalid."
                 )
             transaction_root = journal.parent / transaction_name
+            originals = {}
             for key, target in self._authoritative_paths().items():
                 entry = entries.get(key)
                 if not isinstance(entry, Mapping):
                     raise ContinuousNaturalSetupError(
                         "Interrupted composition journal target is invalid."
                     )
-                existed = bool(entry.get("originalExists"))
+                existed = entry.get("originalExists")
+                if type(existed) is not bool:
+                    raise ContinuousNaturalSetupError("Interrupted original-exists type is invalid.")
                 backup_name = str(entry.get("backupFile", ""))
                 if Path(backup_name).name != backup_name:
                     raise ContinuousNaturalSetupError(
@@ -731,7 +769,37 @@ class ContinuousNaturalSetupCoordinator:
                     if existed
                     else None
                 )
-                _replace_exact(target, original)
+                if _optional_sha256(original) != entry.get("originalSha256"):
+                    raise ContinuousNaturalSetupError("Interrupted backup bytes failed identity verification.")
+                originals[key] = original
+            epoch = self.producer_store.operational_epoch
+            if epoch is not None:
+                from momentum_hunter.modern_operational import snapshot_from_bytes
+                require_epoch_started(epoch)
+                snapshot = snapshot_from_bytes(
+                    payload["operationalSnapshot"].encode("ascii"), epoch,
+                    kind="COMPOSITION", expected_id=payload["operationalSnapshotId"])
+                self._validate_joint_snapshot(snapshot)
+                original_hashes = parse_bytes(snapshot.component("originalState"))
+                if original_hashes != {key: _optional_sha256(raw) for key, raw in originals.items()}:
+                    raise ContinuousNaturalSetupError("Rollback does not match frozen snapshot original state.")
+                for key, target in self._authoritative_paths().items():
+                    if entries[key]["stagedSha256"] != _optional_sha256(snapshot.component(key)):
+                        raise ContinuousNaturalSetupError("Journal and frozen publication identity differ.")
+                    if _optional_bytes(target) not in (originals[key], snapshot.component(key)):
+                        raise ContinuousNaturalSetupError("Recovery encountered an unrelated current generation.")
+                publication = SnapshotPublication(epoch, "COMPOSITION")
+                current = publication.current()
+                if current == snapshot:
+                    if any(_optional_bytes(path) != snapshot.component(key)
+                           for key, path in self._authoritative_paths().items()):
+                        raise ContinuousNaturalSetupError("Committed snapshot and current state disagree.")
+                    originals = {}
+                elif (current.snapshot_id if current else None) != parse_bytes(snapshot.manifest_bytes)["predecessorSnapshotId"]:
+                    raise ContinuousNaturalSetupError("Recovery predecessor is not current.")
+            # Validate all backups and generation bindings before the first write.
+            for key, original in originals.items():
+                _replace_exact(self._authoritative_paths()[key], original)
             journal.unlink(missing_ok=True)
             shutil.rmtree(transaction_root, ignore_errors=True)
         except ContinuousNaturalSetupError:
@@ -743,16 +811,34 @@ class ContinuousNaturalSetupCoordinator:
 
     def _commit_preview(self, preview: "NaturalCompositionPreview") -> None:
         authoritative = self._authoritative_paths()
-        staged = preview.staged_paths
+        # These are the evaluated buffers, not another read of mutable staging.
+        staged_payloads = preview.validated_payloads()
+        if preview.operational_snapshot is not None:
+            staged_payloads = MappingProxyType({key: preview.operational_snapshot.component(key)
+                                                for key in authoritative})
         lease = PathTransactionLease(
             self.producer_store.path.parent / ".continuous-natural-composition"
         )
-        with lease.transaction():
+        with lease.transaction(), ExitStack() as held:
+            if self.producer_store.operational_epoch is not None:
+                held.enter_context(self.producer_store.operational_epoch.transaction())
+            for path in sorted(authoritative.values(), key=lambda item: str(item).casefold()):
+                held.enter_context(PathTransactionLease(path).transaction())
+            if self.snapshot_publication is not None:
+                held.enter_context(self.snapshot_publication.lease.transaction())
+                previous = self.snapshot_publication.current()
+                if (previous.snapshot_id if previous else None) != preview.predecessor_snapshot_id:
+                    raise ContinuousNaturalSetupError("Snapshot generation changed during preview.")
             for key, target in authoritative.items():
                 if _optional_bytes(target) != preview.original_payloads[key]:
                     raise ContinuousNaturalSetupError(
                         "Authoritative composition state changed during preview."
                     )
+            snapshot = preview.operational_snapshot
+            if self.snapshot_publication is not None:
+                if snapshot is None:
+                    raise ContinuousNaturalSetupError("Modern composition was not frozen before publication.")
+                self._validate_joint_snapshot(snapshot)
             transaction_id = uuid.uuid4().hex
             transaction_root = (
                 self.producer_store.path.parent
@@ -765,7 +851,7 @@ class ContinuousNaturalSetupCoordinator:
             try:
                 for index, key in enumerate(authoritative):
                     original = preview.original_payloads[key]
-                    staged_payload = _optional_bytes(staged[key])
+                    staged_payload = staged_payloads[key]
                     backup_name = f"original-{index}.bin"
                     staged_name = f"staged-{index}.bin"
                     if original is not None:
@@ -788,17 +874,29 @@ class ContinuousNaturalSetupCoordinator:
                             "transactionId": transaction_id,
                             "transactionDirectory": transaction_root.name,
                             "targets": target_entries,
+                            **({"operationalSnapshotId": snapshot.snapshot_id,
+                                "operationalSnapshot": snapshot.to_bytes().decode("ascii")}
+                               if snapshot is not None else {}),
                         }
                     ),
                 )
                 for key, target in authoritative.items():
-                    _replace_exact(target, _optional_bytes(staged[key]))
+                    _replace_exact(target, staged_payloads[key])
                 self.lifecycle.store.load()
                 self.breakouts.load()
                 self.producer_store.load()
+                if self.snapshot_publication is not None:
+                    self.snapshot_publication.publish(snapshot,
+                        expected_previous=preview.predecessor_snapshot_id)
             except Exception as exc:
                 rollback_error: Exception | None = None
                 try:
+                    if self.snapshot_publication is not None:
+                        # Once publication is prepared, recovery completes that
+                        # exact commit. Never roll its state views back afterward.
+                        current = self.snapshot_publication.current()
+                        if current == snapshot:
+                            return
                     for key, target in authoritative.items():
                         _replace_exact(target, preview.original_payloads[key])
                 except Exception as rollback_exc:  # pragma: no cover - catastrophic I/O.
@@ -812,9 +910,74 @@ class ContinuousNaturalSetupCoordinator:
                     "Composition publication failed and authoritative state was restored."
                 ) from exc
             finally:
+                # Process termination (BaseException) must leave its journal for
+                # restart; ordinary completion/rollback alone may remove it.
+                import sys
+                if sys.exc_info()[0] is not None and not issubclass(sys.exc_info()[0], Exception):
+                    cleanup_transaction = False
                 if cleanup_transaction:
                     journal.unlink(missing_ok=True)
                     shutil.rmtree(transaction_root, ignore_errors=True)
+
+    def _validate_joint_snapshot(self, snapshot) -> None:
+        from momentum_hunter.lifecycle_position_identity import validate_composition_snapshot
+        validate_composition_snapshot(snapshot, self.producer_store.operational_epoch)
+
+
+class _PreviewLifecycleStore(CandidateLifecycleStore):
+    def __init__(self, path: Path, raw: bytes | None) -> None:
+        super().__init__(path)
+        self.content = raw
+
+    def load(self):
+        ledger = (lifecycle_wire.CandidateLifecycleLedger() if self.content is None
+                  else lifecycle_wire.ledger_from_wire(parse_bytes(self.content)))
+        lifecycle_wire.validate_ledger(ledger)
+        return ledger
+
+    def _save(self, ledger) -> None:
+        lifecycle_wire.validate_ledger(ledger)
+        raw = lifecycle_wire.canonical_json_bytes(lifecycle_wire.ledger_to_wire(ledger))
+        _replace_exact(self.path, raw)
+        self.content = raw
+
+
+class _PreviewBreakoutStore(SequentialBreakoutStore):
+    def __init__(self, path: Path, *, policy, raw: bytes | None) -> None:
+        super().__init__(path, policy=policy)
+        self.content = raw
+
+    def load(self):
+        ledger = (breakout_wire.SequentialBreakoutLedger(policy=self.policy)
+                  if self.content is None
+                  else breakout_wire.ledger_from_wire(parse_bytes(self.content)))
+        breakout_wire.validate_ledger(ledger)
+        if ledger.policy != self.policy:
+            raise ContinuousNaturalSetupError("Preview breakout policy changed.")
+        return ledger
+
+    def _save(self, ledger) -> None:
+        breakout_wire.validate_ledger(ledger)
+        raw = breakout_wire.canonical_json_bytes(breakout_wire.ledger_to_wire(ledger))
+        _replace_exact(self.path, raw)
+        self.content = raw
+
+
+class _PreviewProducerStore(ContinuousTradePlanProducerStore):
+    def __init__(self, path: Path, *, raw: bytes | None, operational_epoch) -> None:
+        super().__init__(path, operational_epoch=operational_epoch)
+        self.content = raw
+
+    def _load_unlocked(self):
+        if self.content is None:
+            if self.operational_epoch is not None:
+                raise ContinuousNaturalSetupError("Modern preview has no initial Producer state.")
+            return ()
+        return self.validate_bytes(self.content)
+
+    def _write_unlocked(self, records) -> None:
+        super()._write_unlocked(records)
+        self.content = self._last_written_bytes
 
 
 class NaturalCompositionPreview:
@@ -827,11 +990,14 @@ class NaturalCompositionPreview:
         )
         root = Path(self._temporary.name)
         natural_root = root / "natural"
-        producer_store = ContinuousTradePlanProducerStore(root / "producer.json")
-        self.original_payloads = {
+        self.original_payloads = MappingProxyType({
             key: _optional_bytes(path)
             for key, path in owner._authoritative_paths().items()
-        }
+        })
+        producer_store = _PreviewProducerStore(
+            root / "producer.json", raw=self.original_payloads["producer"],
+            operational_epoch=owner.producer_store.operational_epoch,
+        )
         self.original_state_identity = _fingerprint(
             "continuous-natural-authoritative-state-v1",
             {
@@ -853,8 +1019,58 @@ class NaturalCompositionPreview:
             runtime_started_at=owner.runtime_started_at,
         )
         self.producer_store = producer_store
+        self.coordinator.lifecycle.store = _PreviewLifecycleStore(
+            staged_targets["candidateLifecycle"], self.original_payloads["candidateLifecycle"]
+        )
+        self.coordinator.breakouts = _PreviewBreakoutStore(
+            staged_targets["sequentialBreakout"], policy=owner.breakout_policy,
+            raw=self.original_payloads["sequentialBreakout"],
+        )
         self.staged_paths = staged_targets
         self.committed = False
+        self.operational_snapshot = None
+        self.predecessor_snapshot_id = None
+
+    def validated_payloads(self) -> Mapping[str, bytes | None]:
+        self.coordinator.lifecycle.store.load()
+        self.coordinator.breakouts.load()
+        self.producer_store.load()
+        return MappingProxyType({
+            "candidateLifecycle": self.coordinator.lifecycle.store.content,
+            "sequentialBreakout": self.coordinator.breakouts.content,
+            "producer": self.producer_store.content,
+        })
+
+    def freeze_operational(self, cutoff: str):
+        epoch = self.owner.producer_store.operational_epoch
+        if epoch is None:
+            return None
+        if self.operational_snapshot is not None:
+            raise ContinuousNaturalSetupError("Modern preview was already frozen.")
+        require_epoch_started(epoch)
+        payloads = dict(self.validated_payloads())
+        # Empty native ledgers are serialized explicitly; missing modern Producer
+        # state is never manufactured here.
+        if payloads["candidateLifecycle"] is None:
+            payloads["candidateLifecycle"] = lifecycle_wire.canonical_json_bytes(
+                lifecycle_wire.ledger_to_wire(self.coordinator.lifecycle.store.load()))
+        if payloads["sequentialBreakout"] is None:
+            payloads["sequentialBreakout"] = breakout_wire.canonical_json_bytes(
+                breakout_wire.ledger_to_wire(self.coordinator.breakouts.load()))
+        previous = self.owner.snapshot_publication.current()
+        if previous is not None and any(self.original_payloads[key] != previous.component(key)
+                                        for key in self.original_payloads):
+            raise ContinuousNaturalSetupError("Preview original generation differs from published predecessor.")
+        self.predecessor_snapshot_id = previous.snapshot_id if previous else None
+        sequence = parse_bytes(previous.manifest_bytes)["sequence"] + 1 if previous else 1
+        snapshot = freeze_snapshot(epoch, kind="COMPOSITION",
+            components=tuple(payloads.items()) + (("originalState", _canonical_bytes(
+                {key: _optional_sha256(raw) for key, raw in self.original_payloads.items()})),),
+            sequence=sequence, predecessor=self.predecessor_snapshot_id,
+            created_at=cutoff, known_at=cutoff, decision_cutoff=cutoff)
+        self.owner._validate_joint_snapshot(snapshot)
+        self.operational_snapshot = snapshot
+        return snapshot
 
     def __enter__(self) -> "NaturalCompositionPreview":
         return self

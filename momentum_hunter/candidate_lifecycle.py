@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Mapping
+from momentum_hunter.path_transaction import PathTransactionLease
 
 from momentum_hunter.intraday_trade_plan import (
     CONTINUATION_BREAKOUT,
@@ -315,6 +316,7 @@ class CandidateLifecycleStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self._lock = threading.RLock()
+        self.lease = PathTransactionLease(path)
 
     def load(self) -> CandidateLifecycleLedger:
         with self._lock:
@@ -331,7 +333,7 @@ class CandidateLifecycleStore:
             return ledger
 
     def append_event(self, event: CandidateLifecycleEvent) -> CandidateLifecycleEvent:
-        with self._lock:
+        with self._lock, self.lease.transaction():
             ledger = self.load()
             existing = next(
                 (item for item in ledger.events if item.event_id == event.event_id),
@@ -351,7 +353,7 @@ class CandidateLifecycleStore:
     def append_availability_event(
         self, event: RuntimeAvailabilityEvent
     ) -> RuntimeAvailabilityEvent:
-        with self._lock:
+        with self._lock, self.lease.transaction():
             ledger = self.load()
             existing = next(
                 (
