@@ -8,6 +8,9 @@ import tomllib
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from typing import Callable
+
+from momentum_hunter.automation_guardian_liveness import ObservationClock, automation_heartbeat
 
 from momentum_hunter.automation_state_recovery import (
     DurableStateStorage, StateRecoveryError, decode, digest, timestamp,
@@ -126,10 +129,23 @@ def continuous_phase_liveness(status: dict, config: dict, expected: dict, now: d
         "snapshotObservedAt":observed.isoformat(), "snapshotAgeSeconds":(checked-observed).total_seconds(),
         "snapshotCurrent":current, "phaseMatches":matching_phase, "cadenceMatches":matching_cadence,
         "expectedDiscoveryCadenceSeconds":cadence, "stateValid":state_ok, "clocksValid":clocks_ok,
+        "runtimeInstanceId": health.get("runtime_instance_id"), "runtimeIdentityMatches": identity,
+        "runtimeStartedAt": started.isoformat(), "heartbeatAt": heartbeat.isoformat(),
+        "heartbeatType": "RUNTIME_START_OR_HOUSEKEEPING",
+        "heartbeatAgeSeconds": (checked-heartbeat).total_seconds(),
+        "lastTickAt": tick.isoformat() if tick else None,
+        "evaluatedAt": now.isoformat(),
+        "readinessState": ("HEALTHY_CLOSED_SESSION" if model == "CLOSED_SESSION" else
+                          "HEALTHY_PREOPEN" if model == "PREOPEN" else "HEALTHY_ACTIVE_SESSION") if valid else
+                         "RUNTIME_INSTANCE_MISMATCH" if not identity else
+                         "CONFIG_MISMATCH" if not matching_cadence else
+                         "STALE" if not current else "UNKNOWN",
         "policy":"Fresh serialized status in every phase; active tick/housekeeping freshness <=120 seconds. No market-data success inferred."}
 
 
-def service_and_observer_checks(continuous: dict, expected: dict, services: dict, now: datetime) -> tuple[dict, dict, dict]:
+def service_and_observer_checks(continuous: dict, expected: dict, services: dict, now: datetime,
+                                *, clock: ObservationClock | None = None,
+                                snapshot: dict | None = None) -> tuple[dict, dict, dict]:
     gates, errors, phase_evidence = {}, {}, {}
     for name, label in (("MomentumHunterAutomation", "AUTOMATION"),
                         ("MomentumHunterContinuousRuntime", "CONTINUOUS"),
@@ -151,7 +167,10 @@ def service_and_observer_checks(continuous: dict, expected: dict, services: dict
         gates["CONTINUOUS_INSTALLED_BYTES_EXPECTED"] = False
     try:
         status_path = Path(continuous["runtimeStateRoot"]) / "runtime-status.json"
-        status = json.loads(status_path.read_bytes())
+        read_started = clock.take("continuousReadStarted") if clock else now
+        raw_status = status_path.read_bytes()
+        read_completed = clock.take("continuousReadCompleted") if clock else now
+        status = json.loads(raw_status)
         health = status["health"]
         # The status fingerprint is integrity, not proof of provider freshness.
         body = {k: v for k, v in status.items() if k != "fingerprint"}
@@ -159,7 +178,12 @@ def service_and_observer_checks(continuous: dict, expected: dict, services: dict
                               sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode()
         status_hash = digest(material)
         gates["CONTINUOUS_STATUS_INTEGRITY_VALID"] = status.get("fingerprint") == status_hash
-        gates["CONTINUOUS_EXPECTED_LIVENESS"], phase_evidence = continuous_phase_liveness(status, continuous, runtime, now)
+        gates["CONTINUOUS_EXPECTED_LIVENESS"], phase_evidence = continuous_phase_liveness(status, continuous, runtime, read_completed)
+        phase_evidence.update(sourcePath=str(status_path), sourceSha256=digest(raw_status),
+                              readStartedAt=read_started.isoformat(), readCompletedAt=read_completed.isoformat())
+        if snapshot is not None:
+            snapshot.update(status=status, read_completed=read_completed,
+                            read_liveness=gates["CONTINUOUS_EXPECTED_LIVENESS"])
         gates["CONTINUOUS_STATUS_NO_EXECUTION"] = (status.get("mode") == "RESEARCH_ONLY"
             and status.get("executionAuthority") == "EXECUTION_AUTHORITY_NONE"
             and all(status.get(k) == "UNAVAILABLE" for k in ("orderCapability", "accountReads", "positionReads",
@@ -197,9 +221,15 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
                       continuous_path: Path, expected_manifest_sha256: str,
                       expected_continuous_sha256: str, canonical_head: str,
                       origin_head: str, canonical_clean: bool, expected_canonical: str,
-                      services: dict, session_date: str, now: datetime,
-                      expectations: dict | None = None) -> dict:
+                      services: dict, session_date: str, now: datetime | None = None,
+                      expectations: dict | None = None,
+                      clock: Callable[[], datetime] | None = None,
+                      service_reader: Callable[[], dict] | None = None) -> dict:
     expectations = expectations or {}
+    fixed_now = now
+    observation_clock = ObservationClock(clock or ((lambda: fixed_now) if fixed_now is not None
+                                                  else (lambda: datetime.now().astimezone())))
+    now = observation_clock.take("inspectionStarted")
     gates = {}
     errors = {}
     contract, start, latest = {}, None, None
@@ -230,14 +260,48 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
     except Exception as exc:
         gates["MANIFEST_SCHEMA_VALID"] = False
         errors["manifestValidation"] = type(exc).__name__
-    more_gates, more_errors, phase_evidence = service_and_observer_checks(continuous, expectations, services, now)
+    continuous_snapshot = {}
+    more_gates, more_errors, phase_evidence = service_and_observer_checks(
+        continuous, expectations, services, now, clock=observation_clock, snapshot=continuous_snapshot)
     gates.update(more_gates)
     errors.update(more_errors)
     gates["STATE_FILE_EXISTS"] = state_path.is_file()
-    try:
-        raw_state = state_path.read_bytes()
-    except OSError:
-        raw_state = b""
+    def forbidden_replace(*args):
+        raise AssertionError("READ_ONLY_GUARDIAN")
+    authoritative_state, recovery_report, raw_state = {}, {}, b""
+    state_attempts = []
+    # Never mix a heartbeat from one current JSON with another generation's
+    # epoch/receipts. A concurrent atomic publish gets three bounded attempts.
+    for attempt in range(3):
+        read_started = observation_clock.take("stateReadStarted")
+        try:
+            raw_state = state_path.read_bytes()
+        except OSError:
+            raw_state = b""
+        recovery_report, authoritative_state = {}, {}
+        recovery_error = None
+        try:
+            storage = DurableStateStorage(state_path, forbidden_replace)
+            authoritative_state = storage.load(now=read_started, custody=False) or {}
+            recovery_report = storage.report
+        except (OSError, StateRecoveryError) as exc:
+            recovery_error = str(exc)
+        try:
+            after_raw = state_path.read_bytes()
+        except OSError:
+            after_raw = b""
+        read_completed = observation_clock.take("stateReadCompleted")
+        stable = raw_state == after_raw
+        state_attempts.append({"attempt": attempt+1, "readStartedAt": read_started.isoformat(),
+            "readCompletedAt": read_completed.isoformat(), "beforeSha256": digest(raw_state),
+            "afterSha256": digest(after_raw), "stable": stable, "recoveryError": recovery_error})
+        if stable:
+            break
+    gates["STATE_SNAPSHOT_STABLE"] = stable
+    if recovery_error:
+        errors["recovery"] = recovery_error
+    gates["RECOVERY_GENERATION_AVAILABLE"] = recovery_report.get("valid_generations", 0) > 0
+    gates["STATE_RECONCILIATION_HEALTHY"] = recovery_report.get("recovery_source") == "CURRENT"
     gates["STATE_FILE_NONZERO"] = bool(raw_state) and any(raw_state)
     try:
         json.loads(raw_state)
@@ -251,23 +315,8 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
         errors["state"] = exc.code
         state = {}
         gates["STATE_SCHEMA_VALID"] = False
-    def forbidden_replace(*args):
-        raise AssertionError("READ_ONLY_GUARDIAN")
-    authoritative_state = {}
-    try:
-        storage = DurableStateStorage(state_path, forbidden_replace)
-        authoritative_state = storage.load(now=now, custody=False) or {}
-        gates["RECOVERY_GENERATION_AVAILABLE"] = storage.report.get("valid_generations", 0) > 0
-        gates["STATE_RECONCILIATION_HEALTHY"] = storage.report.get("recovery_source") == "CURRENT"
-    except (OSError, StateRecoveryError) as exc:
-        errors["recovery"] = str(exc)
-        gates["RECOVERY_GENERATION_AVAILABLE"] = False
-        gates["STATE_RECONCILIATION_HEALTHY"] = False
-    try:
-        age = now - timestamp(state.get("last_heartbeat_at"))
-        gates["STATE_HEARTBEAT_CURRENT"] = timedelta(0) <= age <= timedelta(seconds=120)
-    except StateRecoveryError:
-        gates["STATE_HEARTBEAT_CURRENT"] = False
+    gates["STATE_SNAPSHOT_COHERENT"] = bool(state) and state == authoritative_state
+    state_read_completed = read_completed
     jobs = manifest.get("jobs", [])
     jobs_valid = isinstance(jobs, list) and all(isinstance(j, dict) for j in jobs)
     jobs = jobs if jobs_valid else []
@@ -326,14 +375,41 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
         for key in ("OPENING_RELEASE_IDENTITY_EXPECTED", "OPENING_AUTHORIZED_BINDING_VALID", "OPENING_RUNTIME_BYTES_MATCH", "OPENING_LOADED_BYTES_MATCH"):
             gates[key] = False
         errors["openingRuntime"] = getattr(exc, "code", type(exc).__name__)
+    if service_reader is not None:
+        try:
+            gates["SERVICE_OBSERVATION_STABLE"] = service_reader() == services
+        except Exception as exc:
+            gates["SERVICE_OBSERVATION_STABLE"] = False
+            errors["serviceRecheck"] = type(exc).__name__
+    evaluated_at = observation_clock.take("inspectionCompleted")
+    gates["OBSERVATION_CLOCK_ORDERED"] = observation_clock.valid
+    heartbeat_evidence = automation_heartbeat(authoritative_state,
+        services.get("MomentumHunterAutomation", {}), expectations.get("automationRuntime", {}),
+        now=evaluated_at, read_at=state_read_completed, source_sha256=digest(raw_state))
+    heartbeat_evidence.update(sourcePath=str(state_path), sourceSha256=digest(raw_state),
+                             readAttempts=state_attempts, recovery=recovery_report)
+    gates["STATE_HEARTBEAT_CURRENT"] = heartbeat_evidence["ready"]
+    if continuous_snapshot:
+        final_valid, final_phase = continuous_phase_liveness(continuous_snapshot["status"], continuous,
+                                                           expectations.get("continuous", {}), evaluated_at)
+        phase_evidence.update(final_phase)
+        gates["CONTINUOUS_EXPECTED_LIVENESS"] = continuous_snapshot["read_liveness"] and final_valid
+    now = evaluated_at
     gates["OPENING_WINDOW_NOT_PASSED"] = latest is not None and now <= latest
     failed = [key for key, value in gates.items() if value is not True]
+    # Partial startup is explicitly non-green. Other failed invariants always
+    # remain RED, including mismatched epoch, loaded bytes, or service identity.
+    pending = heartbeat_evidence["pending"] and set(failed) <= {
+        "STATE_HEARTBEAT_CURRENT", "OPENING_LOADED_BYTES_MATCH", "AUTOMATION_SERVICE_RUNNING"}
+    readiness = "PENDING_NOT_READY" if pending else "RED_NOT_READY" if failed else "GREEN_READY"
     return {"schemaVersion": 1, "checkedAt": now.isoformat(), "sessionDate": session_date,
-            "status": "RED_NOT_READY" if failed else "GREEN_READY", "targetSession": contract, "gates": gates,
+            "status": readiness, "targetSession": contract, "gates": gates,
             "failedGates": failed, "errors": errors, "authority": "READ_ONLY",
             "continuousServicePresent": "MomentumHunterContinuousRuntime" in services,
             "continuousSchedulingNote": "Separate service/configuration/identity and persisted liveness; no Automation Continuous job exists.",
             "continuousAuthorityModel": "SEPARATE_CONTINUOUS_SERVICE",
             "continuousPhaseEvidence": phase_evidence,
+            "automationHeartbeatEvidence": heartbeat_evidence,
+            "observationChronology": observation_clock.samples,
             "providerReadiness": "FUTURE_PROVIDER_RESULTS_UNPROVEN",
             "mutationsPerformed": False, "executionAuthority": "NONE"}

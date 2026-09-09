@@ -90,6 +90,12 @@ class GuardianTests(unittest.TestCase):
             manifest_sha256=digest(self.manifest.read_bytes()), corrupt_sha256=digest(bytes(36072)))
         self.expectations["expectedEpochId"] = self.epoch["epochId"]
         self.expectations["expectedEpochBoundary"] = self.epoch["boundaryAt"]
+        self.services["MomentumHunterAutomation"].update(ProcessId=123,
+            ProcessCreatedAt=(self.now-timedelta(minutes=1)).isoformat())
+        self.expectations["automationRuntime"] = {"wrapperProcessId": 123,
+            "wrapperCreatedAt": (self.now-timedelta(minutes=1)).isoformat(),
+            "serviceInstanceId": "guardian-fixture-instance", "serviceStartedAt": self.now.isoformat(),
+            "minimumStateVersion": 1, "epochId": self.epoch["epochId"]}
         self.fixture.store().save(self.state())
 
     def write_status(self, status):
@@ -104,6 +110,7 @@ class GuardianTests(unittest.TestCase):
 
     def state(self, status="PENDING"):
         state = self.fixture.state(status, job_id=self.job_id)
+        state.service_instance_id = "guardian-fixture-instance"
         state.service_started_at = state.last_heartbeat_at = self.now.isoformat()
         receipt = state.jobs[self.job_id]
         receipt.scheduled_at = receipt.observed_at = self.now.isoformat()

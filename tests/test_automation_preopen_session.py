@@ -125,8 +125,12 @@ class SessionTests(unittest.TestCase):
     def phase_fixture(self, phase, check):
         value = self.fixture()
         state = value.state()
+        state.service_started_at = (check-timedelta(minutes=1)).isoformat()
         state.last_heartbeat_at = check.isoformat()
         value.fixture.store().save(state)
+        value.services["MomentumHunterAutomation"]["ProcessCreatedAt"] = (check-timedelta(minutes=2)).isoformat()
+        value.expectations["automationRuntime"].update(wrapperCreatedAt=(check-timedelta(minutes=2)).isoformat(),
+            serviceStartedAt=state.service_started_at)
         status = json.loads(value.status_path.read_bytes())
         started = check-timedelta(days=2)
         closed = phase == "SESSION_CLOSED"
