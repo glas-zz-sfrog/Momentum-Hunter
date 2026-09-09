@@ -63,7 +63,7 @@ class GuardianTests(unittest.TestCase):
         _write_runtime_status(self.status_path, None, state="RUNNING", config=config)
         status = json.loads(self.status_path.read_text())
         status["health"] = {"last_heartbeat_at": NOW.isoformat(), "process_state": "RUNNING",
-            "runtime_instance_id": config["runtimeIdentity"], "stall_blocker": None, "stalled_since": None}
+            "runtime_instance_id": "production-continuous-runtime-" + "1"*24, "stall_blocker": None, "stalled_since": None}
         self.write_status(status)
         self.observer = self.root / "automations" / "observer" / "automation.toml"
         self.observer.parent.mkdir(parents=True)
@@ -74,6 +74,7 @@ class GuardianTests(unittest.TestCase):
             "observer": {"path": str(self.observer), "sha256": digest(self.observer.read_bytes()),
                          "id": "argus-opening-authorized-release-observer"},
             "openingReleaseId": release["releaseId"], "openingReleaseFingerprint": release["releaseFingerprint"]}
+        self.expectations["continuous"]["runtimeInstanceId"] = status["health"]["runtime_instance_id"]
         self.epoch = prospective_epoch(floor=NOW-timedelta(hours=1), first_session="2026-09-09",
             manifest_sha256=digest(self.manifest.read_bytes()), corrupt_sha256=digest(bytes(36072)))
         self.expectations["expectedEpochId"] = self.epoch["epochId"]
@@ -113,6 +114,19 @@ class GuardianTests(unittest.TestCase):
         self.assertEqual("GREEN_READY", result["status"])
         self.assertNotIn("CONTINUOUS_JOB_PRESENT", result["gates"])
         self.assertTrue(result["continuousServicePresent"])
+
+    def test_continuous_instance_identity_is_not_deployment_identity(self):
+        expected = self.expectations["continuous"]
+        self.assertNotEqual(expected["runtimeIdentity"], expected["runtimeInstanceId"])
+        self.assertEqual("GREEN_READY", self.inspect()["status"])
+        status = json.loads(self.status_path.read_text())
+        status["health"]["runtime_instance_id"] = expected["runtimeIdentity"]
+        self.write_status(status)
+        self.assertFalse(self.inspect()["gates"]["CONTINUOUS_EXPECTED_LIVENESS"])
+
+    def test_missing_bound_continuous_instance_fails_closed(self):
+        self.expectations["continuous"].pop("runtimeInstanceId")
+        self.assertFalse(self.inspect()["gates"]["CONTINUOUS_EXPECTED_LIVENESS"])
 
     def test_zero_state_can_be_reported_without_service_parser_or_mutation(self):
         self.fixture.corrupt()

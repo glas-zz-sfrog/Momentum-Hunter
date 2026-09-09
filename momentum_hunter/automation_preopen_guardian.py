@@ -84,7 +84,8 @@ def service_and_observer_checks(continuous: dict, expected: dict, services: dict
         age = now - timestamp(health["last_heartbeat_at"])
         gates["CONTINUOUS_EXPECTED_LIVENESS"] = (status.get("state") == "RUNNING"
             and health.get("process_state") == "RUNNING" and timedelta(0) <= age <= timedelta(seconds=120)
-            and health.get("runtime_instance_id") == continuous.get("runtimeIdentity")
+            and bool(runtime.get("runtimeInstanceId"))
+            and health.get("runtime_instance_id") == runtime["runtimeInstanceId"]
             and status.get("activationStart") == continuous.get("activationStart")
             and health.get("stall_blocker") is None and health.get("stalled_since") is None)
         gates["CONTINUOUS_STATUS_NO_EXECUTION"] = (status.get("mode") == "RESEARCH_ONLY"
