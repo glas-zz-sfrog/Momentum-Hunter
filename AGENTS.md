@@ -4,6 +4,16 @@
 Protect Momentum Hunter / Argus behavior. Make small, scoped, reversible changes only when the task is clear and is authorized by the current task, Roadmap, or standing delegation.
 Rule: done means proven, not merely changed.
 
+## Pragmatic Gate And Evidence Policy
+Apply `docs/argus-office/PRAGMATIC_GATE_AND_EVIDENCE_POLICY.md` to all agent work. It qualifies blanket stop/evidence wording below and in role docs by the affected claim and consequence.
+- `TIER_1_MATERIAL`: fail closed on money, execution, account, safety, and code authority. Preserve required tests, hashes, ancestry, independent custody, and integration/activation gates.
+- `TIER_2_OPERATIONAL`: record exact impact and continue DEGRADED / QUALIFIED only when no authority expands, code identity is clear, consequential effects cannot duplicate, and the limitation is recorded. State bounds and monitoring; escalate only when impact crosses Tier 1.
+- `TIER_3_EVIDENTIARY`: preserve and label research/history limitations, including terminal UNKNOWN or RECONSTRUCTED evidence, and continue unrelated authorized work. Do not fabricate certainty or promote research into authority.
+- Separate capture research value from scheduler/exact-opening qualification. Record TARGET_TIME, ACTUAL_TIME, DELTA, and CAPTURE_CLASSIFICATION using declared policy inputs; dates are operational targets/test fixtures unless explicitly fixed.
+- After a proven accepted canonical fast-forward, dependent read-only work verifies ancestry and relevant input hashes, records readmission, and continues when unchanged. Preserve frozen bases/candidates; revalidate only material affected dependencies. Identity contradictions remain Tier 1.
+- Astra and all specialists classify findings by tier and state impact, limitations, correction, permitted continuation, and blocked claims. A missing redundant copy does not invalidate proven primary custody unless that copy supplies required Tier-1 authority.
+- Paper entry retains every Tier-1 safety/authority gate; bounded Tier-2 and honestly labeled Tier-3 imperfections do not automatically block it. This policy grants no activation or execution authority and does not bypass existing executable gates.
+
 ## Authority Model
 - Steven is CEO, product owner, final visual acceptance authority, and decision-maker for anomaly and consequence gates.
 - Routine nonvisual implementation, verification, Git integration, and backup are delegated under the standing policy below; do not ask Steven to rubber-stamp expected results.
@@ -66,6 +76,7 @@ If the task is inside the subagent's role, do the work. If the subagent cannot c
 Do not stop at advice unless blocked. If the task crosses role boundaries, create a handoff for the right agent instead of silently doing another agent's job.
 
 ## Stop Conditions
+Apply the three-tier policy to the affected claim/action before stopping. Tier-2/Tier-3 limitations alone do not stop unrelated authorized implementation; failed qualification must still be reported honestly. Requirements or identity ambiguity affecting Tier-1 authority, unauthorized scope, and unsafe Git actions remain hard stops for the affected progression.
 Stop and report when:
 - Requirements are ambiguous or conflict.
 - Requested changes exceed the current task, Roadmap, or standing delegation.
@@ -83,6 +94,7 @@ Every agent report must include:
 - Protected areas reviewed
 - Push/merge status
 - Risks
+- Finding tiers, impact, limitations, correction, and bounded continuation or blocked claims
 - Manual QA, if applicable
 - Open questions
 - Recommendation

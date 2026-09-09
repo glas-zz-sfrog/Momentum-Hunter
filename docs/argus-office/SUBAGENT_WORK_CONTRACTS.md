@@ -14,6 +14,8 @@ If the task is inside the subagent's role, do the work. If the subagent cannot c
 Do not stop at advice unless blocked. If the task crosses role boundaries, create a handoff for the right agent instead of silently doing another agent's job.
 
 ## Role Contracts
+All roles apply `PRAGMATIC_GATE_AND_EVIDENCE_POLICY.md` when interpreting their stop/review rules. Every finding states its exact tier, affected claim/action, evidence, impact, limitations, recommended correction, bounded continuation and any blocked claims. Astra and other reviewers retain frozen candidate identity and independence. Tier-1 authority proof stays mandatory; Tier-2/Tier-3 limitations do not automatically stop unrelated implementation or Paper preparation. Readmission or an advisory review never grants integration, activation or execution authority.
+
 | Agent | Work means | Boundaries |
 | --- | --- | --- |
 | argus_orchestrator | Produce one CEO report, delegation map, scope summary, evidence summary, and blocked handoffs. | No app code unless explicitly instructed. Git actions remain with Git Steward. |

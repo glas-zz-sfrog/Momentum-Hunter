@@ -1,5 +1,10 @@
 # Operating Rules
 
+## Gate Classification
+`PRAGMATIC_GATE_AND_EVIDENCE_POLICY.md` is the project-wide interpretation of stop, anomaly, evidence, and review gates. Fail closed on Tier-1 money/execution/code/account authority. For Tier-2 operational defects, state exact impact, limits and monitoring and continue DEGRADED / QUALIFIED only with clear identity, no expanded authority and no duplicate consequential effect. Preserve Tier-3 research limitations and terminal UNKNOWN honestly without blocking unrelated implementation. Qualify the affected claim; never manufacture a PASS.
+
+This classification applies to every role and to the blanket wording later in this document. Existing executable checks, required proof for changed behavior, independent custody, frozen review, and consequential authorization remain mandatory. Tier-2/Tier-3 labels cannot downgrade a Tier-1 dependency.
+
 ## Intake
 CEO requests start in `commandbus/inbox/` using `templates/CEO_REQUEST_TEMPLATE.md`.
 
@@ -38,7 +43,10 @@ Implementation tasks must complete:
 
 Required evidence includes commands run, test results, files changed, screenshots or proof artifacts when UI changed, protected areas reviewed, branch status, push/merge status, and remaining risks.
 
+Match proof to the claim. Required implementation tests and authority proofs still pass before acceptance; unrelated historical UNKNOWN, research timing limits or optional-copy loss are separately labeled under the three-tier policy. Governance-only text changes require scope/link/content review, concrete policy cases and Git/hash evidence, not an application full-suite run that would prove no changed application behavior. This does not waive full-suite validation where a product task requires it.
+
 ## Review
+Use `TIER_1_MATERIAL`, `TIER_2_OPERATIONAL`, or `TIER_3_EVIDENTIARY` for each finding. State impact, limitations, recommended correction, permitted bounded continuation and blocked claims. Only Tier 1 automatically blocks consequential progression. A nonqualifying research or scheduler claim stays nonqualifying while safe work continues. Independent reviewers keep frozen candidates unchanged and never authorize activation by issuing an advisory ACCEPT.
 Specialists produce role-specific artifacts and may include recommendations inside those artifacts. QA may write tests only when explicitly assigned. Release Scribe updates logs, reports, and checklists but does not approve merges.
 
 ## Roadmap Reconciliation
@@ -110,7 +118,7 @@ Codex Orchestrator produces one consolidated CEO report. Steven decides whether 
 10. Git Steward performs a non-force backup push when the integrated source, tests, protected-path review, and secret scan are clean.
 
 ## Stop Conditions
-Stop when requirements are ambiguous, the task exceeds standing authority, an anomaly interruption condition is reached, unrelated files change, branch state is ambiguous, or Git integration would require anything other than a clean fast-forward and non-force push.
+Stop the affected progression for Tier-1 authority/identity ambiguity, unauthorized scope, an applicable consequence gate, unexplained changed source, or unsafe Git integration. Classify operational/research limitations before invoking a blanket stop. Continue independent authorized work under recorded Tier-2 bounds or Tier-3 limitations; uncertainty about required consequential authority remains Tier 1. A proven accepted fast-forward permits read-only readmission after ancestry and relevant-input verification, without mutating the original base or frozen candidate.
 
 ## Protected Areas
 Protected areas require explicit task scope and Hard Chew proof: core scoring logic, trade readiness logic, replay identity rules, historical capture selection, database schema/migrations, broker/order execution behavior, alert threshold semantics, secrets/API keys/env config, production configs, or runtime behavior. Do not request a second approval when the exact bounded change is already authorized. Interrupt Steven before semantic expansion, destructive migration, secret exposure/revocation, or real execution.

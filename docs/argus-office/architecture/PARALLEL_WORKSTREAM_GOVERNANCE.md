@@ -5,7 +5,10 @@
 This contract governs Momentum Hunter parallel development. The machine-readable
 registry is `PARALLEL_WORKSTREAM_LANES.json`. The Roadmap remains authoritative
 for current priority and next work. If these records disagree, stop before
-implementation and reconcile them through the Integration Steward.
+consequential implementation and reconcile them through the Integration Steward.
+Apply `../PRAGMATIC_GATE_AND_EVIDENCE_POLICY.md` to classify the affected claims:
+authority/source contradictions remain Tier 1; operational or historical-record
+limitations alone do not stop independent authorized work.
 
 Established invariants:
 
@@ -83,6 +86,15 @@ An active task keeps its original base while another lane advances `master`.
 Do not rebase it, merge newer `master`, or pull another lane into it. Reconciliation
 belongs to integration.
 
+For dependent read-only work, a proven accepted fast-forward does not by itself
+invalidate completed analysis. Verify old/new ancestry, accepted integration
+evidence and relevant input/dependency hashes; append a readmission record and
+continue if those inputs and authority remain valid. Keep the original task base,
+frozen candidate and evidence identity unchanged. Material overlapping source
+changes require revalidation of affected claims; Tier-1 identity/authority
+contradictions fail closed. This admission does not authorize candidate mutation,
+canonical integration, deployment or activation.
+
 Once a review package is sealed or a head is formally frozen, that head is
 immutable. Do not amend, rebase, rewrite, force-push, or append executable, test,
 tool, or runtime bytes. A later executable change creates a new candidate and, when
@@ -113,6 +125,13 @@ scheduler unless its directive explicitly grants that authority.
   and runtime bytes are unchanged.
 - Exact conflict-free integration of already reviewed bytes requires no new ZIP.
   Executable, test, or tool conflict resolution requires new review.
+
+Required authoritative package/source/custody proof for consequential acceptance
+remains Tier 1. Loss of an additional redundant copy is Tier 3 when independently
+proven authoritative custody remains valid and that copy is not itself required
+Tier-1 evidence. Preserve both primary-valid and redundant-incomplete results.
+Research-only missing history/UNKNOWN qualifies its claims without blocking
+unrelated implementation; it is never a substitute for required package proof.
 
 ## Serialized Integration Train
 

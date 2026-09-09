@@ -18,6 +18,9 @@ No reset, rebase, branch deletion, force-push, non-fast-forward merge, or branch
 ## Review Baseline
 Compare final changes against the current local branch state. Do not assume `origin/master` is the correct comparison point when local `master` may be ahead of remote.
 
+## Read-Only Canonical Readmission
+Apply `PRAGMATIC_GATE_AND_EVIDENCE_POLICY.md`: after a proven accepted fast-forward, verify old/new ancestry and relevant input/dependency hashes, append a readmission record, and continue valid read-only work. Preserve original base, candidate and evidence identities. Stop/revalidate affected claims for material overlapping source changes or Tier-1 identity/authority failure; do not automatically discard unaffected completed work. This is not permission to rebase, edit a frozen candidate, import newer master into a lane, bypass review, or integrate without the Integration Steward.
+
 ## Commit Shape
 Prefer one focused commit per scoped task after acceptance criteria pass.
 
