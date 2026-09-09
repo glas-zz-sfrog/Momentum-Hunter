@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from momentum_hunter.automation_state_recovery import (
     DurableStateStorage, StateRecoveryError, decode, digest, encoded, RETAINED_GENERATIONS,
-    prepare_quarantined_epoch,
+    prepare_quarantined_epoch, prospective_epoch, validate_epoch,
 )
 from momentum_hunter.automation_supervisor import (
     AutomationJob, AutomationManifest, AutomationSupervisor, AutomationSupervisorError,
@@ -44,6 +44,67 @@ class RecoveryTests(unittest.TestCase):
     def corrupt(self, raw=b"\0" * 36072):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_bytes(raw)
+
+    def epoch_state(self):
+        state = self.state()
+        state.prospective_epoch = prospective_epoch(floor=NOW-timedelta(hours=1), first_session="2026-09-09",
+            manifest_sha256="a"*64, corrupt_sha256=digest(bytes(36072)))
+        state.recovery_floor_at = state.prospective_epoch["boundaryAt"]
+        return state
+
+    def test_epoch_identity_floor_and_unknown_history_are_explicit(self):
+        epoch = self.epoch_state().prospective_epoch
+        validate_epoch(epoch)
+        for key, value in (("epochId", "wrong"), ("legacyHistory", "COMPLETE"),
+            ("preEpochReplayBlocked", False), ("boundaryAt", NOW.isoformat()), ("firstProspectiveSession", "invalid")):
+            with self.subTest(key=key), self.assertRaises(StateRecoveryError):
+                validate_epoch(dict(epoch, **{key: value}))
+        state = asdict(self.epoch_state())
+        state["recovery_floor_at"] = ""
+        with self.assertRaisesRegex(StateRecoveryError, "EPOCH_REPLAY_FLOOR_INVALID"):
+            decode(encoded(state))
+
+    def test_epoch_cannot_disappear_or_change_across_save_and_restart(self):
+        state = self.epoch_state()
+        self.store().save(state)
+        loaded = self.store().load(started_at=NOW)
+        self.assertEqual(state.prospective_epoch, loaded.prospective_epoch)
+        loaded.prospective_epoch = {}
+        with self.assertRaisesRegex(AutomationSupervisorError, "EPOCH_HISTORY_REWRITE"):
+            self.store().save(loaded)
+        raw = json.loads(self.path.read_bytes())
+        raw["prospective_epoch"] = {}
+        self.path.write_bytes(encoded(raw))
+        with self.assertRaises(AutomationSupervisorError):
+            self.store().load(started_at=NOW)
+
+    def test_newer_unbound_generation_cannot_erase_epoch(self):
+        state = self.epoch_state()
+        self.store().save(state)
+        storage = self.store().storage
+        forged = json.loads(self.path.read_bytes())
+        forged.pop("prospective_epoch")
+        forged["state_version"] += 1
+        storage._retain(forged)
+        with self.assertRaisesRegex(AutomationSupervisorError, "EPOCH_HISTORY_CONFLICT"):
+            self.store().load(started_at=NOW)
+
+    def test_explicit_epoch_blocks_past_and_future_opening_is_singleton(self):
+        state = self.epoch_state()
+        self.store().save(state)
+        floor = datetime.fromisoformat(state.recovery_floor_at)
+        past = AutomationJob("pre-epoch", "opening_capture", floor, NOW+timedelta(minutes=5))
+        future = AutomationJob("opening-capture-20260909", "opening_capture", NOW, NOW+timedelta(minutes=5))
+        manifest = AutomationManifest(self.root, Path("python.exe"), Path("powershell.exe"), None,
+            self.path.parent, self.root/"engine", 1, (past, future))
+        calls = []
+        for _ in range(3):
+            supervisor = AutomationSupervisor(manifest, clock=lambda: NOW, engine_host_probe=lambda:{},
+                job_executor=lambda job,path: (calls.append(job.job_id) or 0, "SYNTHETIC_ONLY"))
+            supervisor.tick()
+            self.assertNotIn(past.job_id, supervisor.state.jobs)
+            self.assertEqual(state.prospective_epoch, supervisor.state.prospective_epoch)
+        self.assertEqual([future.job_id], calls)
 
     def test_01_exact_zero_02_empty_03_malformed_04_truncation_fail_custodied(self):
         for raw, code in [(b"\0" * 36072, "ALL_ZERO_STATE"), (b"", "ZERO_LENGTH_STATE"),

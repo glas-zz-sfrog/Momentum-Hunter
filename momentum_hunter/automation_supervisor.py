@@ -206,6 +206,7 @@ class SupervisorState:
     jobs: dict[str, JobReceipt] = field(default_factory=dict)
     state_version: int = 0
     recovery_floor_at: str = ""
+    prospective_epoch: dict = field(default_factory=dict)
 
 
 Clock = Callable[[], datetime]

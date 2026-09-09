@@ -10,7 +10,7 @@ import json
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -74,7 +74,7 @@ def validate(payload: object) -> None:
                "engine_host_state", "engine_host_detail", "engine_host_observed_at",
                "loaded_supervisor_sha256", "loaded_runtime_identity_module_sha256",
                "loaded_service_host_sha256", "recovery_floor_at"}
-    allowed = strings | {"schema_version", "jobs", "state_version"}
+    allowed = strings | {"schema_version", "jobs", "state_version", "prospective_epoch"}
     if set(payload) - allowed or any(not isinstance(payload[k], str) for k in strings & payload.keys()):
         raise StateRecoveryError("SCHEMA_INVALID_STATE")
     for key in ("service_started_at", "last_heartbeat_at", "engine_host_observed_at", "recovery_floor_at"):
@@ -83,6 +83,13 @@ def validate(payload: object) -> None:
     version = payload.get("state_version", 0)
     if type(version) is not int or version < 0 or not isinstance(payload.get("jobs"), dict):
         raise StateRecoveryError("SCHEMA_INVALID_STATE")
+    epoch = payload.get("prospective_epoch", {})
+    if not isinstance(epoch, dict):
+        raise StateRecoveryError("EPOCH_INVALID")
+    if epoch:
+        validate_epoch(epoch)
+        if not payload.get("recovery_floor_at") or timestamp(payload["recovery_floor_at"]) < timestamp(epoch["boundaryAt"]):
+            raise StateRecoveryError("EPOCH_REPLAY_FLOOR_INVALID")
     receipt_strings = {"job_id", "kind", "status", "scheduled_at", "latest_start_at", "observed_at",
                        "started_at", "completed_at", "reason", "log_path", "depends_on_job_id",
                        "runtime_identity_mode", "approved_runtime_channel", "approved_release_id",
@@ -147,9 +154,43 @@ def durable_new(path: Path, raw: bytes) -> None:
     sync_directory(path.parent)
 
 
+def validate_epoch(epoch: dict) -> None:
+    fields = {"schemaVersion", "epochId", "boundaryAt", "firstProspectiveSession",
+              "manifestSha256", "corruptSourceSha256", "legacyHistory", "preEpochReplayBlocked"}
+    if set(epoch) != fields or type(epoch.get("schemaVersion")) is not int or epoch["schemaVersion"] != 1:
+        raise StateRecoveryError("EPOCH_INVALID")
+    if epoch["legacyHistory"] != "UNKNOWN" or epoch["preEpochReplayBlocked"] is not True:
+        raise StateRecoveryError("EPOCH_HISTORY_AUTHORITY_INVALID")
+    if any(not isinstance(epoch[k], str) or not re.fullmatch(r"[0-9a-f]{64}", epoch[k])
+           for k in ("manifestSha256", "corruptSourceSha256")):
+        raise StateRecoveryError("EPOCH_SOURCE_IDENTITY_INVALID")
+    boundary = timestamp(epoch["boundaryAt"])
+    try:
+        session = date.fromisoformat(epoch["firstProspectiveSession"])
+        opening = datetime.fromisoformat(session.isoformat() + "T08:35:00-05:00")
+    except (ValueError, TypeError) as exc:
+        raise StateRecoveryError("EPOCH_SESSION_INVALID") from exc
+    if not opening - timedelta(days=1) <= boundary < opening:
+        raise StateRecoveryError("EPOCH_BOUNDARY_INVALID")
+    body = {k: v for k, v in epoch.items() if k != "epochId"}
+    if epoch["epochId"] != "AUTOMATION-PROSPECTIVE-" + digest(encoded(body)):
+        raise StateRecoveryError("EPOCH_ID_INVALID")
+
+
+def prospective_epoch(*, floor: datetime, first_session: str,
+                      manifest_sha256: str, corrupt_sha256: str) -> dict:
+    body = {"schemaVersion": 1, "boundaryAt": floor.isoformat(),
+            "firstProspectiveSession": first_session, "manifestSha256": manifest_sha256.lower(),
+            "corruptSourceSha256": corrupt_sha256.lower(), "legacyHistory": "UNKNOWN",
+            "preEpochReplayBlocked": True}
+    result = dict(body, epochId="AUTOMATION-PROSPECTIVE-" + digest(encoded(body)))
+    validate_epoch(result)
+    return result
+
+
 def prepare_quarantined_epoch(*, output: Path, corrupt_bytes: bytes,
                               expected_corrupt_sha256: str, manifest_sha256: str,
-                              floor: datetime) -> dict:
+                              floor: datetime, first_session: str | None = None) -> dict:
     """Prepare a NEW disposable proposal, never recover or replace a source path.
 
     The caller's adoption authority is deliberately not inferred. This artifact
@@ -172,6 +213,11 @@ def prepare_quarantined_epoch(*, output: Path, corrupt_bytes: bytes,
     timestamp(floor.isoformat())
     if not re.fullmatch(r"[0-9a-fA-F]{64}", manifest_sha256):
         raise StateRecoveryError("MANIFEST_IDENTITY_INVALID")
+    if first_session is None:
+        opening = floor.replace(hour=8, minute=35, second=0, microsecond=0)
+        first_session = (floor.date() + timedelta(days=int(floor >= opening))).isoformat()
+    epoch = prospective_epoch(floor=floor, first_session=first_session,
+                              manifest_sha256=manifest_sha256, corrupt_sha256=digest(corrupt_bytes))
     output.mkdir(parents=True, exist_ok=False)
     custody = output / "legacy-state.bin"
     durable_new(custody, corrupt_bytes)
@@ -179,11 +225,13 @@ def prepare_quarantined_epoch(*, output: Path, corrupt_bytes: bytes,
                 "recoverySource": "NONE_ADMISSIBLE", "legacyHistory": "UNKNOWN",
                 "corruptSourceSha256": digest(corrupt_bytes), "corruption": diagnosis,
                 "manifestSha256": manifest_sha256.lower(), "prospectiveFloor": floor.isoformat(),
-                "completionReceiptsFabricated": 0, "productionAdopted": False}
+                "completionReceiptsFabricated": 0, "productionAdopted": False,
+                "prospectiveEpoch": epoch}
     durable_new(output / "PROSPECTIVE-EPOCH-PROPOSAL.json", encoded(boundary))
     path = output / "state" / "automation-service-state.json"
     storage = DurableStateStorage(path, lambda source, target: source.replace(target))
-    storage.save({"schema_version": 1, "jobs": {}, "recovery_floor_at": floor.isoformat()})
+    storage.save({"schema_version": 1, "jobs": {}, "recovery_floor_at": floor.isoformat(),
+                  "prospective_epoch": epoch})
     return boundary
 
 
@@ -310,6 +358,15 @@ class DurableStateStorage:
                 return None
             raise StateRecoveryError("NONE_ADMISSIBLE:" + error)
         candidates = generations + ([current] if current else [])
+        epochs = [item["prospective_epoch"] for item in candidates if item.get("prospective_epoch")]
+        if epochs and (any(epoch != epochs[0] for epoch in epochs)
+                       or current is not None and current.get("prospective_epoch") != epochs[0]):
+            raise StateRecoveryError("EPOCH_HISTORY_CONFLICT")
+        if epochs:
+            first_epoch_version = min(item.get("state_version", 0) for item in candidates if item.get("prospective_epoch"))
+            if any(item.get("state_version", 0) >= first_epoch_version and item.get("prospective_epoch") != epochs[0]
+                   for item in candidates):
+                raise StateRecoveryError("EPOCH_HISTORY_CONFLICT")
         versions = {}
         for item in candidates:
             version = item.get("state_version", 0)
@@ -373,6 +430,9 @@ class DurableStateStorage:
                 if old["status"] == "RUNNING" and new["status"] == "PENDING":
                     raise StateRecoveryError("RUNNING_HISTORY_ROLLBACK")
             prior_floor = max((timestamp(x["recovery_floor_at"]) for x in generations + ([current] if current else []) if x.get("recovery_floor_at")), default=None)
+            for previous in generations + ([current] if current else []):
+                if previous.get("prospective_epoch") and payload.get("prospective_epoch") != previous["prospective_epoch"]:
+                    raise StateRecoveryError("EPOCH_HISTORY_REWRITE")
             if prior_floor and (not payload.get("recovery_floor_at") or timestamp(payload["recovery_floor_at"]) < prior_floor):
                 raise StateRecoveryError("RECOVERY_FLOOR_ROLLBACK")
             version = max([x.get("state_version", 0) for x in generations + ([current] if current else [])] + [anchor["version"] if anchor else 0]) + 1
