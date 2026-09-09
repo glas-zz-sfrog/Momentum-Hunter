@@ -48,6 +48,10 @@ from momentum_hunter.opening_runtime_identity import (
     file_sha256 as runtime_file_sha256,
     verify_execution_gate,
 )
+from momentum_hunter.automation_state_recovery import (
+    DurableStateStorage, StateRecoveryError, receipt_identity, timestamp,
+)
+from momentum_hunter.path_transaction import PathTransactionLease
 
 
 MANIFEST_SCHEMA_VERSION = 1
@@ -137,6 +141,27 @@ class AutomationManifest:
     opening_runtime_release_root: Path = DEFAULT_RELEASE_ROOT
 
 
+def job_definition_sha256(job: AutomationJob) -> str:
+    return hashlib.sha256(json.dumps(
+        {key: value for key, value in asdict(job).items() if key != "enabled"},
+        default=str, sort_keys=True, separators=(",", ":")
+    ).encode()).hexdigest()
+
+
+def receipt_compatibility_error(job: AutomationJob, receipt: dict) -> str:
+    """Shared read-only admission check; absence of a legacy hash stays unbound."""
+    expected = {"job_id": job.job_id, "kind": job.kind,
+                "scheduled_at": job.scheduled_at.isoformat(),
+                "latest_start_at": job.latest_start_at.isoformat(),
+                "depends_on_job_id": job.depends_on_job_id,
+                "approved_runtime_channel": job.approved_runtime_channel}
+    if receipt_identity(receipt) != receipt_identity(expected):
+        return "JOB_IDENTITY_MISMATCH"
+    if receipt.get("job_definition_sha256") and receipt["job_definition_sha256"] != job_definition_sha256(job):
+        return "JOB_DEFINITION_MISMATCH"
+    return ""
+
+
 @dataclass
 class JobReceipt:
     job_id: str
@@ -163,6 +188,7 @@ class JobReceipt:
     current_git_sha_at_execution: str = ""
     runtime_match: bool | None = None
     runtime_identity_failure_code: str = ""
+    job_definition_sha256: str = ""
 
 
 @dataclass
@@ -178,6 +204,8 @@ class SupervisorState:
     loaded_runtime_identity_module_sha256: str = ""
     loaded_service_host_sha256: str = ""
     jobs: dict[str, JobReceipt] = field(default_factory=dict)
+    state_version: int = 0
+    recovery_floor_at: str = ""
 
 
 Clock = Callable[[], datetime]
@@ -588,68 +616,24 @@ def _require_within_repository(path: Path, repository_root: Path) -> None:
 class SupervisorStateStore:
     def __init__(self, path: Path) -> None:
         self.path = path
+        self.storage = DurableStateStorage(path, _replace_state_file)
 
-    def load(self, *, started_at: datetime) -> SupervisorState:
+    def load(self, *, started_at: datetime, custody: bool = False) -> SupervisorState:
         try:
-            payload = json.loads(self.path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return SupervisorState(service_started_at=started_at.isoformat())
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise AutomationSupervisorError(
-                "Automation supervisor state is unreadable."
-            ) from exc
-        if not isinstance(payload, dict) or payload.get("schema_version") != STATE_SCHEMA_VERSION:
-            raise AutomationSupervisorError(
-                "Automation supervisor state schema is unsupported."
-            )
-        raw_jobs = payload.get("jobs", {})
-        if not isinstance(raw_jobs, dict):
-            raise AutomationSupervisorError(
-                "Automation supervisor job state is invalid."
-            )
-        jobs: dict[str, JobReceipt] = {}
-        for key, value in raw_jobs.items():
-            if not isinstance(value, dict):
-                raise AutomationSupervisorError(
-                    "Automation supervisor receipt is invalid."
-                )
-            jobs[str(key)] = JobReceipt(**value)
-        return SupervisorState(
-            schema_version=STATE_SCHEMA_VERSION,
-            service_instance_id=str(payload.get("service_instance_id", "")),
-            service_started_at=str(payload.get("service_started_at", "")),
-            last_heartbeat_at=str(payload.get("last_heartbeat_at", "")),
-            engine_host_state=str(payload.get("engine_host_state", "UNKNOWN")),
-            engine_host_detail=str(payload.get("engine_host_detail", "")),
-            engine_host_observed_at=str(
-                payload.get("engine_host_observed_at", "")
-            ),
-            loaded_supervisor_sha256=str(
-                payload.get("loaded_supervisor_sha256", "")
-            ),
-            loaded_runtime_identity_module_sha256=str(
-                payload.get("loaded_runtime_identity_module_sha256", "")
-            ),
-            loaded_service_host_sha256=str(
-                payload.get("loaded_service_host_sha256", "")
-            ),
-            jobs=jobs,
-        )
+            payload = self.storage.load(now=started_at, custody=custody)
+            if payload is None:
+                return SupervisorState(service_started_at=started_at.isoformat())
+            return SupervisorState(**dict(payload, jobs={
+                key: JobReceipt(**value) for key, value in payload["jobs"].items()
+            }))
+        except (StateRecoveryError, TypeError) as exc:
+            raise AutomationSupervisorError(f"Automation state rejected: {exc}") from exc
 
     def save(self, state: SupervisorState) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = asdict(state)
-        temporary = self.path.with_name(
-            f"{self.path.name}.{uuid.uuid4().hex}.tmp"
-        )
         try:
-            temporary.write_text(
-                json.dumps(payload, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-            _replace_state_file(temporary, self.path)
-        finally:
-            temporary.unlink(missing_ok=True)
+            state.state_version = self.storage.save(asdict(state))
+        except StateRecoveryError as exc:
+            raise AutomationSupervisorError(f"Automation state rejected: {exc.code}") from exc
 
 
 def _replace_state_file(temporary: Path, destination: Path) -> None:
@@ -686,7 +670,7 @@ class AutomationSupervisor:
         self.state_store = SupervisorStateStore(
             manifest.state_directory / "automation-service-state.json"
         )
-        self.state = self.state_store.load(started_at=started_at)
+        self.state = self.state_store.load(started_at=started_at, custody=True)
         self.state.service_instance_id = uuid.uuid4().hex
         self.state.service_started_at = started_at.isoformat()
         self.state.loaded_supervisor_sha256 = LOADED_SUPERVISOR_SHA256
@@ -700,6 +684,13 @@ class AutomationSupervisor:
         self._last_engine_probe_monotonic = 0.0
 
     def tick(self) -> SupervisorState:
+        # Retain ownership through child execution, not only the JSON replacement.
+        with PathTransactionLease(self.state_store.path).transaction():
+            if self.state_store.storage._current_digest() != self.state_store.storage.expected:
+                raise AutomationSupervisorError("CONCURRENT_STATE_CHANGED")
+            return self._owned_tick()
+
+    def _owned_tick(self) -> SupervisorState:
         now = self.clock()
         opening_jobs = tuple(
             job
@@ -773,7 +764,16 @@ class AutomationSupervisor:
 
     def _evaluate_job(self, job: AutomationJob, now: datetime) -> None:
         receipt = self.state.jobs.get(job.job_id)
+        if receipt is not None:
+            error = receipt_compatibility_error(job, asdict(receipt))
+            if error:
+                raise AutomationSupervisorError(error)
         if receipt is not None and receipt.status in FINAL_JOB_STATES:
+            return
+        if (self.state.recovery_floor_at
+                and job.scheduled_at <= timestamp(self.state.recovery_floor_at)
+                and (receipt is None or receipt.status == "PENDING")):
+            # Unknown history blocks only this identity; do not fabricate a receipt.
             return
         if not job.enabled:
             self.state.jobs[job.job_id] = self._receipt(
@@ -909,6 +909,7 @@ class AutomationSupervisor:
             reason=reason,
             depends_on_job_id=job.depends_on_job_id,
             approved_runtime_channel=job.approved_runtime_channel,
+            job_definition_sha256=job_definition_sha256(job),
         )
 
     @staticmethod
@@ -1519,6 +1520,13 @@ def status_report(manifest_path: Path) -> dict[str, object]:
             state.loaded_runtime_identity_module_sha256
         ),
         "loadedServiceHostSha256": state.loaded_service_host_sha256,
+        "stateVersion": state.state_version,
+        "recoveryFloorAt": state.recovery_floor_at,
+        "stateRecovery": store.storage.report,
+        "quarantinedJobIds": [job.job_id for job in manifest.jobs
+            if state.recovery_floor_at
+            and job.scheduled_at <= timestamp(state.recovery_floor_at)
+            and (job.job_id not in state.jobs or state.jobs[job.job_id].status == "PENDING")],
         "jobs": {
             key: {
                 "kind": value.kind,

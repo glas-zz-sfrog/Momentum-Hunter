@@ -96,7 +96,8 @@ class AutomationSupervisorTests(unittest.TestCase):
         ):
             store.save(state)
 
-        self.assertEqual(3, attempts)
+        # Admission-anchor promotion is durable before current-state promotion.
+        self.assertEqual(4, attempts)
         self.assertEqual(2, sleep.call_count)
         stored = store.load(started_at=self.now)
         self.assertEqual(state.service_started_at, stored.service_started_at)
