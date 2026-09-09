@@ -10,11 +10,12 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from momentum_hunter.automation_preopen_guardian import inspect_readiness
+from momentum_hunter.automation_preopen_guardian import inspect_readiness, parse_session_date
 
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--session-date", type=parse_session_date, required=True)
     for name in ("manifest", "state", "continuous", "canonical", "output-root", "expectations"):
         parser.add_argument("--" + name, type=Path, required=True)
     for name in ("expected-manifest-sha256", "expected-continuous-sha256", "expected-canonical", "expected-expectations-sha256"):
@@ -50,7 +51,7 @@ def main():
     report = inspect_readiness(manifest_path=args.manifest, state_path=args.state, continuous_path=args.continuous,
         expected_manifest_sha256=args.expected_manifest_sha256, expected_continuous_sha256=args.expected_continuous_sha256,
         canonical_head=head, origin_head=origin, canonical_clean=clean, expected_canonical=args.expected_canonical,
-        services=services, session_date="2026-09-09", now=datetime.now().astimezone(), expectations=expectations)
+        services=services, session_date=args.session_date.isoformat(), now=datetime.now().astimezone(), expectations=expectations)
     output.mkdir(parents=True, exist_ok=False)
     with (output / "TOMORROW-OPENING-READINESS.json").open("x", encoding="utf-8") as stream:
         json.dump(report, stream, indent=2, sort_keys=True)

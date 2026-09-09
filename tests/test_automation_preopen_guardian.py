@@ -1,10 +1,11 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from dataclasses import asdict, replace
 import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from momentum_hunter.automation_preopen_guardian import inspect_readiness
 from momentum_hunter.automation_state_recovery import digest, prospective_epoch
@@ -22,6 +23,9 @@ NOW = fixtures.NOW
 
 class GuardianTests(unittest.TestCase):
     def setUp(self):
+        self.session_date = getattr(self, "session_date", "2026-09-09")
+        self.now = datetime.fromisoformat(self.session_date + "T08:35:00").replace(tzinfo=ZoneInfo("America/Chicago"))
+        self.job_id = "opening-capture-" + self.session_date.replace("-", "")
         self.fixture = fixtures.RecoveryTests()
         self.fixture.setUp()
         self.root = self.fixture.root
@@ -35,9 +39,9 @@ class GuardianTests(unittest.TestCase):
             "engineHostStateDirectory": str(self.root / "engine"),
             "expectedAccountEnding": "0000", "expectedAccountType": "INDIVIDUAL_CASH",
             "stateDirectory": str(self.fixture.path.parent), "jobs": [
-            {"jobId": "opening-capture-20260909", "kind": "opening_capture", "enabled": True,
+            {"jobId": self.job_id, "kind": "opening_capture", "enabled": True,
              "approvedRuntimeChannel": "opening-capture",
-             "scheduledAt": NOW.isoformat(), "latestStartAt": (NOW + timedelta(minutes=5)).isoformat()}]}))
+             "scheduledAt": self.now.isoformat(), "latestStartAt": (self.now + timedelta(minutes=5)).isoformat()}]}))
         self.opening = opening_fixtures.OpeningRuntimeIdentityTests()
         self.opening.setUp()
         self.opening.context = replace(self.opening.context, state_directory=self.fixture.path.parent, poll_interval_seconds=1.0)
@@ -54,6 +58,7 @@ class GuardianTests(unittest.TestCase):
                 "MomentumHunterAutomation", "MomentumHunterContinuousRuntime", "MomentumHunterContinuousWriter")}
         config = {"mode": "RESEARCH_ONLY", "executionAuthority": "NONE", "orderCapability": "UNAVAILABLE",
             "positionsRequested": False, "ordersRequested": False, "runtimeStateRoot": str(self.root / "runtime"),
+            "premarketDiscoverySeconds": 600, "broadDiscoverySeconds": 300,
             "runtimeIdentity": "synthetic-continuous", "runtimeBuildHash": "b"*40,
             "configurationFingerprint": "c"*64, "activationStart": "2026-09-09T07:00:00-05:00"}
         self.continuous.write_text(json.dumps(config))
@@ -62,22 +67,29 @@ class GuardianTests(unittest.TestCase):
         # Use the production serializer; no runtime construction or provider contact.
         _write_runtime_status(self.status_path, None, state="RUNNING", config=config)
         status = json.loads(self.status_path.read_text())
-        status["health"] = {"last_heartbeat_at": NOW.isoformat(), "process_state": "RUNNING",
-            "runtime_instance_id": "production-continuous-runtime-" + "1"*24, "stall_blocker": None, "stalled_since": None}
+        status["health"] = {"last_heartbeat_at": self.now.isoformat(), "process_state": "RUNNING",
+            "runtime_instance_id": "production-continuous-runtime-" + "1"*24, "stall_blocker": None, "stalled_since": None,
+            "started_at": (self.now-timedelta(days=1)).isoformat(), "uptime_seconds": 86400,
+            "last_tick_at": self.now.isoformat(), "pipeline_state": "FORWARD_PROGRESS", "health_flags": ["PROCESS_ALIVE"]}
+        status.update(sessionPhase="REGULAR_SESSION", resolvedDiscoveryCadenceSeconds=300)
         self.write_status(status)
         self.observer = self.root / "automations" / "observer" / "automation.toml"
         self.observer.parent.mkdir(parents=True)
         self.observer.write_text('id = "argus-opening-authorized-release-observer"\nkind = "heartbeat"\nstatus = "ACTIVE"\n'
             'prompt = "strictly read-only mode=CURRENT_AUTHORIZED_RELEASE orderTransmission UNAVAILABLE executionAuthorityUsed false paperAuthorityUsed false"\n')
-        self.expectations = {"schemaVersion": 1, "continuousAuthorityModel": "SEPARATE_CONTINUOUS_SERVICE",
+        self.expectations = {"schemaVersion": 2, "continuousAuthorityModel": "SEPARATE_CONTINUOUS_SERVICE",
+            "targetSession": {"sessionDate": self.session_date, "timezone": "America/Chicago", "jobId": self.job_id,
+                "scheduledAt": self.now.isoformat(), "latestStartAt": (self.now+timedelta(minutes=5)).isoformat(),
+                "approvedRuntimeChannel": "opening-capture", "observerId": "argus-opening-authorized-release-observer"},
             "services": json.loads(json.dumps(self.services)), "continuous": dict(config, files={str(self.opening.python): file_sha256(self.opening.python)}),
             "observer": {"path": str(self.observer), "sha256": digest(self.observer.read_bytes()),
                          "id": "argus-opening-authorized-release-observer"},
             "openingReleaseId": release["releaseId"], "openingReleaseFingerprint": release["releaseFingerprint"]}
         self.expectations["continuous"]["runtimeInstanceId"] = status["health"]["runtime_instance_id"]
-        self.epoch = prospective_epoch(floor=NOW-timedelta(hours=1), first_session="2026-09-09",
+        self.epoch = prospective_epoch(floor=getattr(self, "epoch_floor", self.now-timedelta(hours=1)), first_session=getattr(self, "first_session", self.session_date),
             manifest_sha256=digest(self.manifest.read_bytes()), corrupt_sha256=digest(bytes(36072)))
         self.expectations["expectedEpochId"] = self.epoch["epochId"]
+        self.expectations["expectedEpochBoundary"] = self.epoch["boundaryAt"]
         self.fixture.store().save(self.state())
 
     def write_status(self, status):
@@ -91,8 +103,13 @@ class GuardianTests(unittest.TestCase):
         self.fixture.tearDown()
 
     def state(self, status="PENDING"):
-        state = self.fixture.state(status)
-        state.jobs["opening-capture-20260909"].approved_runtime_channel = "opening-capture"
+        state = self.fixture.state(status, job_id=self.job_id)
+        state.service_started_at = state.last_heartbeat_at = self.now.isoformat()
+        receipt = state.jobs[self.job_id]
+        receipt.scheduled_at = receipt.observed_at = self.now.isoformat()
+        receipt.latest_start_at = (self.now+timedelta(minutes=5)).isoformat()
+        receipt.completed_at = self.now.isoformat() if status == "COMPLETED" else ""
+        receipt.approved_runtime_channel = "opening-capture"
         state.prospective_epoch = self.epoch
         state.recovery_floor_at = self.epoch["boundaryAt"]
         state.loaded_supervisor_sha256, state.loaded_runtime_identity_module_sha256, state.loaded_service_host_sha256 = self.opening.loaded_hashes(self.release)
@@ -103,7 +120,7 @@ class GuardianTests(unittest.TestCase):
             continuous_path=self.continuous, expected_manifest_sha256=digest(self.manifest.read_bytes()) if self.manifest.exists() else "a"*64,
             expected_continuous_sha256=digest(self.continuous.read_bytes()) if self.continuous.exists() else "b"*64,
             canonical_head="a" * 40, origin_head="a" * 40, canonical_clean=True, expected_canonical="a" * 40,
-            services=self.services, expectations=self.expectations, session_date="2026-09-09", now=NOW)
+            services=self.services, expectations=self.expectations, session_date=self.session_date, now=self.now)
         arguments.update(overrides)
         with patch("momentum_hunter.opening_runtime_identity.probe_runtime_environment", return_value=self.opening.environment):
             return inspect_readiness(**arguments)

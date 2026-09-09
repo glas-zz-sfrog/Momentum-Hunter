@@ -2,14 +2,44 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 import tomllib
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from momentum_hunter.automation_state_recovery import (
     DurableStateStorage, StateRecoveryError, decode, digest, timestamp,
     validate_epoch,
 )
+
+
+def parse_session_date(value: str) -> date:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+        raise ValueError("SESSION_DATE_REQUIRES_ISO_YYYY_MM_DD")
+    return date.fromisoformat(value)
+
+
+def session_contract(expectations: dict, session_date: str) -> tuple[dict, datetime, datetime]:
+    requested = parse_session_date(session_date)
+    contract = expectations["targetSession"]
+    if not isinstance(contract, dict) or contract.get("sessionDate") != requested.isoformat():
+        raise ValueError("TARGET_SESSION_EXPECTATION_MISMATCH")
+    if contract.get("timezone") != "America/Chicago":
+        raise ValueError("TARGET_SESSION_TIMEZONE_MISMATCH")
+    start, latest = timestamp(contract["scheduledAt"]), timestamp(contract["latestStartAt"])
+    central = ZoneInfo("America/Chicago")
+    if any(value.astimezone(central).date() != requested
+           or value.utcoffset() != value.astimezone(central).utcoffset() for value in (start, latest)):
+        raise ValueError("TARGET_SESSION_DATE_OR_OFFSET_MISMATCH")
+    if not start < latest or contract.get("jobId") != "opening-capture-" + requested.strftime("%Y%m%d"):
+        raise ValueError("TARGET_SESSION_JOB_OR_WINDOW_MISMATCH")
+    if (contract.get("approvedRuntimeChannel") != "opening-capture"
+        or contract.get("observerId") != "argus-opening-authorized-release-observer"
+        or contract.get("observerId") != expectations.get("observer", {}).get("id")):
+        raise ValueError("TARGET_SESSION_HANDOFF_MISMATCH")
+    return contract, start, latest
 
 
 def verify_opening_readonly(manifest, state: dict, expected: dict) -> dict:
@@ -51,8 +81,56 @@ def verify_opening_readonly(manifest, state: dict, expected: dict) -> dict:
     }
 
 
-def service_and_observer_checks(continuous: dict, expected: dict, services: dict, now: datetime) -> tuple[dict, dict]:
-    gates, errors = {}, {}
+def continuous_phase_liveness(status: dict, config: dict, expected: dict, now: datetime) -> tuple[bool, dict]:
+    from momentum_hunter.continuous_production import (
+        _market_session_phase, _resolved_discovery_cadence, PROFILE,
+    )
+    health = status["health"]
+    started = timestamp(health["started_at"]).astimezone(timezone.utc)
+    uptime = health["uptime_seconds"]
+    if type(uptime) not in (int, float) or not math.isfinite(uptime) or uptime < 0:
+        raise ValueError("CONTINUOUS_STATUS_UPTIME_INVALID")
+    observed = started + timedelta(seconds=uptime)
+    checked = now.astimezone(timezone.utc)
+    phase = _market_session_phase(now)
+    snapshot_phase = _market_session_phase(observed)
+    cadence = _resolved_discovery_cadence(phase, config)
+    heartbeat = timestamp(health["last_heartbeat_at"]).astimezone(timezone.utc)
+    current = timedelta(0) <= checked-observed <= timedelta(seconds=120)
+    identity = (bool(expected.get("runtimeInstanceId"))
+        and health.get("runtime_instance_id") == expected["runtimeInstanceId"]
+        and status.get("activationStart") == config.get("activationStart"))
+    matching_phase = phase == snapshot_phase == status.get("sessionPhase")
+    matching_cadence = ("resolvedDiscoveryCadenceSeconds" in status
+        and status["resolvedDiscoveryCadenceSeconds"] == cadence
+        and (cadence is None or (math.isfinite(cadence) and cadence > 0)))
+    flags = health.get("health_flags")
+    healthy = (health.get("stall_blocker") is None and health.get("stalled_since") is None
+        and health.get("pipeline_state") in {"INITIALIZING", "FORWARD_PROGRESS"}
+        and isinstance(flags, list) and "FAILED_FORWARD_PROGRESS" not in flags)
+    chronology = started <= heartbeat <= observed <= checked
+    tick_raw = health.get("last_tick_at")
+    tick = timestamp(tick_raw).astimezone(timezone.utc) if tick_raw is not None else None
+    if phase == "SESSION_CLOSED":
+        state_ok = status.get("state") == "IDLE_OUT_OF_SESSION" and health.get("process_state") in {"READY", "RUNNING"}
+        clocks_ok = chronology and (tick is None or started <= tick <= observed)
+        model = "CLOSED_SESSION"
+    else:
+        state_ok = status.get("state") == health.get("process_state") == "RUNNING"
+        clocks_ok = (chronology and tick is not None and heartbeat <= tick <= observed
+            and checked-heartbeat <= timedelta(seconds=120) and checked-tick <= timedelta(seconds=120))
+        model = "PREOPEN" if phase == "PREMARKET" else "REGULAR_SESSION"
+    valid = (status.get("schemaVersion") == 1 and status.get("profile") == PROFILE
+        and current and identity and matching_phase and matching_cadence and healthy and state_ok and clocks_ok)
+    return bool(valid), {"currentPhase":phase, "guardianPhase":model, "snapshotPhase":snapshot_phase,
+        "snapshotObservedAt":observed.isoformat(), "snapshotAgeSeconds":(checked-observed).total_seconds(),
+        "snapshotCurrent":current, "phaseMatches":matching_phase, "cadenceMatches":matching_cadence,
+        "expectedDiscoveryCadenceSeconds":cadence, "stateValid":state_ok, "clocksValid":clocks_ok,
+        "policy":"Fresh serialized status in every phase; active tick/housekeeping freshness <=120 seconds. No market-data success inferred."}
+
+
+def service_and_observer_checks(continuous: dict, expected: dict, services: dict, now: datetime) -> tuple[dict, dict, dict]:
+    gates, errors, phase_evidence = {}, {}, {}
     for name, label in (("MomentumHunterAutomation", "AUTOMATION"),
                         ("MomentumHunterContinuousRuntime", "CONTINUOUS"),
                         ("MomentumHunterContinuousWriter", "CONTINUOUS_WRITER")):
@@ -81,18 +159,12 @@ def service_and_observer_checks(continuous: dict, expected: dict, services: dict
                               sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode()
         status_hash = digest(material)
         gates["CONTINUOUS_STATUS_INTEGRITY_VALID"] = status.get("fingerprint") == status_hash
-        age = now - timestamp(health["last_heartbeat_at"])
-        gates["CONTINUOUS_EXPECTED_LIVENESS"] = (status.get("state") == "RUNNING"
-            and health.get("process_state") == "RUNNING" and timedelta(0) <= age <= timedelta(seconds=120)
-            and bool(runtime.get("runtimeInstanceId"))
-            and health.get("runtime_instance_id") == runtime["runtimeInstanceId"]
-            and status.get("activationStart") == continuous.get("activationStart")
-            and health.get("stall_blocker") is None and health.get("stalled_since") is None)
+        gates["CONTINUOUS_EXPECTED_LIVENESS"], phase_evidence = continuous_phase_liveness(status, continuous, runtime, now)
         gates["CONTINUOUS_STATUS_NO_EXECUTION"] = (status.get("mode") == "RESEARCH_ONLY"
             and status.get("executionAuthority") == "EXECUTION_AUTHORITY_NONE"
             and all(status.get(k) == "UNAVAILABLE" for k in ("orderCapability", "accountReads", "positionReads",
                 "brokerOrders", "alpacaPaper", "alpacaLive", "shadowExecution")))
-    except (OSError, ValueError, TypeError, KeyError, StateRecoveryError) as exc:
+    except (OSError, ValueError, TypeError, KeyError, OverflowError, StateRecoveryError) as exc:
         for key in ("CONTINUOUS_STATUS_INTEGRITY_VALID", "CONTINUOUS_EXPECTED_LIVENESS", "CONTINUOUS_STATUS_NO_EXECUTION"):
             gates[key] = False
         errors["continuousStatus"] = type(exc).__name__
@@ -118,7 +190,7 @@ def service_and_observer_checks(continuous: dict, expected: dict, services: dict
         gates["OBSERVER_SINGLETON"] = active == [path.resolve()]
     except (OSError, ValueError, TypeError, KeyError) as exc:
         errors["observer"] = type(exc).__name__
-    return gates, errors
+    return gates, errors, phase_evidence
 
 
 def inspect_readiness(*, manifest_path: Path, state_path: Path,
@@ -130,6 +202,13 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
     expectations = expectations or {}
     gates = {}
     errors = {}
+    contract, start, latest = {}, None, None
+    try:
+        contract, start, latest = session_contract(expectations, session_date)
+        gates["TARGET_SESSION_CONTRACT_VALID"] = True
+    except (ValueError, TypeError, KeyError, StateRecoveryError) as exc:
+        gates["TARGET_SESSION_CONTRACT_VALID"] = False
+        errors["targetSession"] = str(exc)
     def read_json(path, label):
         try:
             raw = path.read_bytes()
@@ -151,7 +230,7 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
     except Exception as exc:
         gates["MANIFEST_SCHEMA_VALID"] = False
         errors["manifestValidation"] = type(exc).__name__
-    more_gates, more_errors = service_and_observer_checks(continuous, expectations, services, now)
+    more_gates, more_errors, phase_evidence = service_and_observer_checks(continuous, expectations, services, now)
     gates.update(more_gates)
     errors.update(more_errors)
     gates["STATE_FILE_EXISTS"] = state_path.is_file()
@@ -192,9 +271,9 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
     jobs = manifest.get("jobs", [])
     jobs_valid = isinstance(jobs, list) and all(isinstance(j, dict) for j in jobs)
     jobs = jobs if jobs_valid else []
-    opening = [j for j in jobs if j.get("jobId") == "opening-capture-" + session_date.replace("-", "") and j.get("enabled") is True and j.get("kind") == "opening_capture"]
+    target_id = contract.get("jobId", "")
+    opening = [j for j in jobs if target_id and j.get("jobId") == target_id and j.get("enabled") is True and j.get("kind") == "opening_capture"]
     gates["OPENING_JOB_PRESENT"] = len(opening) == 1
-    target_id = "opening-capture-" + session_date.replace("-", "")
     receipt = authoritative_state.get("jobs", {}).get(target_id)
     parsed_jobs = [j for j in parsed_manifest.jobs if j.job_id == target_id] if parsed_manifest else []
     compatibility = "STATE_OR_MANIFEST_AUTHORITY_UNAVAILABLE"
@@ -206,16 +285,14 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
     disposition = receipt.get("status") if receipt else None
     gates["OPENING_NOT_ALREADY_TERMINAL"] = disposition not in {"COMPLETED", "FAILED", "MISSED", "DISABLED", "BLOCKED_DEPENDENCY"}
     gates["OPENING_NOT_IN_PROGRESS"] = disposition != "RUNNING"
-    start = datetime.fromisoformat(session_date + "T08:35:00-05:00")
-    latest = start + timedelta(minutes=5)
-    # The target task is Sep09 CDT. Other dates require an explicit time contract.
-    gates["TARGET_SESSION_SUPPORTED"] = session_date == "2026-09-09"
-    gates["OPENING_SCHEDULE_CORRECT"] = len(opening) == 1 and opening[0].get("scheduledAt") == start.isoformat()
-    gates["LATEST_START_CORRECT"] = len(opening) == 1 and opening[0].get("latestStartAt") == latest.isoformat()
+    gates["TARGET_SESSION_SUPPORTED"] = gates["TARGET_SESSION_CONTRACT_VALID"] and len(parsed_jobs) == 1 and len(opening) == 1
+    gates["OPENING_SCHEDULE_CORRECT"] = start is not None and len(opening) == 1 and opening[0].get("scheduledAt") == start.isoformat()
+    gates["LATEST_START_CORRECT"] = latest is not None and len(opening) == 1 and opening[0].get("latestStartAt") == latest.isoformat()
+    gates["OPENING_SESSION_HANDOFF_CORRECT"] = len(opening) == 1 and opening[0].get("approvedRuntimeChannel") == contract.get("approvedRuntimeChannel")
     gates["PRODUCTION_CONFIG_EXPECTED"] = (bool(raw_manifest) and digest(raw_manifest) == expected_manifest_sha256.lower()
         and bool(raw_continuous) and digest(raw_continuous) == expected_continuous_sha256.lower()
         and Path(str(manifest.get("stateDirectory", ""))).resolve() == state_path.parent.resolve())
-    gates["GUARDIAN_EXPECTATIONS_VALID"] = expectations.get("schemaVersion") == 1 and expectations.get("continuousAuthorityModel") == "SEPARATE_CONTINUOUS_SERVICE"
+    gates["GUARDIAN_EXPECTATIONS_VALID"] = expectations.get("schemaVersion") == 2 and expectations.get("continuousAuthorityModel") == "SEPARATE_CONTINUOUS_SERVICE"
     gates["CANONICAL_EXPECTED"] = canonical_head == origin_head == expected_canonical and canonical_clean
     gates["NO_PAPER_LIVE_AUTHORITY"] = (jobs_valid and bool(raw_manifest) and bool(raw_continuous)
         and not any(j.get("enabled") is not False and j.get("kind") in {"paper_engineering", "shadow_opening"} for j in jobs)
@@ -224,7 +301,7 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
         and continuous.get("positionsRequested") is False and continuous.get("ordersRequested") is False)
     try:
         floor = timestamp(authoritative_state["recovery_floor_at"]) if authoritative_state.get("recovery_floor_at") else None
-        gates["OPENING_NOT_QUARANTINED"] = floor is None or start > floor
+        gates["OPENING_NOT_QUARANTINED"] = start is not None and (floor is None or start > floor)
     except StateRecoveryError:
         gates["OPENING_NOT_QUARANTINED"] = False
     epoch = authoritative_state.get("prospective_epoch", {})
@@ -233,7 +310,8 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
         validate_epoch(epoch)
         gates["EPOCH_ID_VALID"] = epoch["epochId"] == expectations.get("expectedEpochId")
         boundary = timestamp(epoch["boundaryAt"])
-        gates["EPOCH_BOUNDARY_VALID"] = boundary <= now and boundary < start
+        gates["EPOCH_BOUNDARY_VALID"] = (start is not None and boundary <= now and boundary < start
+            and epoch["boundaryAt"] == expectations.get("expectedEpochBoundary"))
         gates["EPOCH_SESSION_VALID"] = epoch["firstProspectiveSession"] == session_date
         gates["EPOCH_MANIFEST_BOUND"] = epoch["manifestSha256"] == digest(raw_manifest)
         gates["PRE_EPOCH_REPLAY_BLOCKED"] = epoch["preEpochReplayBlocked"] is True and floor is not None and floor >= boundary
@@ -248,13 +326,14 @@ def inspect_readiness(*, manifest_path: Path, state_path: Path,
         for key in ("OPENING_RELEASE_IDENTITY_EXPECTED", "OPENING_AUTHORIZED_BINDING_VALID", "OPENING_RUNTIME_BYTES_MATCH", "OPENING_LOADED_BYTES_MATCH"):
             gates[key] = False
         errors["openingRuntime"] = getattr(exc, "code", type(exc).__name__)
-    gates["OPENING_WINDOW_NOT_PASSED"] = now <= latest
+    gates["OPENING_WINDOW_NOT_PASSED"] = latest is not None and now <= latest
     failed = [key for key, value in gates.items() if value is not True]
     return {"schemaVersion": 1, "checkedAt": now.isoformat(), "sessionDate": session_date,
-            "status": "RED_NOT_READY" if failed else "GREEN_READY", "gates": gates,
+            "status": "RED_NOT_READY" if failed else "GREEN_READY", "targetSession": contract, "gates": gates,
             "failedGates": failed, "errors": errors, "authority": "READ_ONLY",
             "continuousServicePresent": "MomentumHunterContinuousRuntime" in services,
             "continuousSchedulingNote": "Separate service/configuration/identity and persisted liveness; no Automation Continuous job exists.",
             "continuousAuthorityModel": "SEPARATE_CONTINUOUS_SERVICE",
+            "continuousPhaseEvidence": phase_evidence,
             "providerReadiness": "FUTURE_PROVIDER_RESULTS_UNPROVEN",
             "mutationsPerformed": False, "executionAuthority": "NONE"}
