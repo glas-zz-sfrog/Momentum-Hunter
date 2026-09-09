@@ -55,6 +55,45 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001` source is
+`COMPLETE / CANONICAL_INTEGRATED / GOVERNANCE_ONLY`. On 2026-09-09 the
+Integration Steward qualified and fast-forwarded the exact reviewed source
+commit `b7c05b09a2030a23c9284aac7e3ff28f3500d2a9`, sole parent
+`c596c80324d24e01b32b7efecda83e362b9ae1cf`, with tree
+`704b0da7706395c6ed71be2b79f411a9a71779b5`. Canonical and detached
+qualification trees matched without conflicts. A master-only non-force backup
+passed; actual remote `master` matched the source at 2026-09-09T21:41:07Z.
+This separate shared-record closeout records that completed source integration
+and its evidence without changing the accepted policy bytes.
+
+Independent Astra policy review returned advisory ACCEPT with no findings,
+14/14 decision cases and 8/8 paired boundaries. Exact parent/tree, eight-path
+documentation scope, all 1,067 unchanged non-owned entries, five protected
+product/test/tool trees, whitespace, policy references, clean worktrees and
+bounded changed-text credential checks passed. Application tests were not run
+for this documentation-only change. Review and machine-readable source/backup
+receipt are `SECOND_EYE_REVIEW.md` and
+`SOURCE_INTEGRATION_BACKUP_RECEIPT.json` in
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001`.
+
+Apply `PRAGMATIC_GATE_AND_EVIDENCE_POLICY.md` to future work: Tier 1 fails
+closed on safety, account, execution and code authority; Tier 2 permits only
+explicitly bounded, monitored DEGRADED / QUALIFIED continuation with all four
+predicates; Tier 3 preserves research limitations and terminal UNKNOWN without
+blocking unrelated authorized work. Paper operational/research-canary limits
+are Tier 2/3 only when independent of safety/authority. Authoritative instrument,
+account, mode, risk and order custody, reviewed source, required safety proof,
+disabled-install proof and separate arming remain Tier 1. No Paper readiness,
+activation, Guardian repin or executable-gate bypass follows from this policy.
+
+The observed pre-integration source baseline was `c596c80`, four commits after
+the older leading Roadmap snapshot `2bceeea`: `46e65fb` -> `64e4ae8` ->
+`9543b2f` -> `c596c80`. This is verified Git lineage only; this task did not
+audit those prior commits' acceptance, deployment or installed readiness.
+Future consequential reliance needing missing authority proof remains gated.
+Prior product records and failures below retain their original evidence and
+verdicts; no new product bytes, runtime state or activation authority is added.
+
 `ARGUS-INTEGRATE-SCIENCE-READER-002-ATOMIC-CURSOR-REPAIR-001` is
 `COMPLETE / CANONICAL_INTEGRATED / DORMANT_READER_CAPABILITY`. Canonical
 accepted the exact one-commit Science lineage from
@@ -645,6 +684,12 @@ requires a separate current-head reconciliation and qualification task.
   authoritative instrument
   classification, current-head reconciliation, complete requalification, and
   disabled-install proof.
+  Apply the policy by consequence: operational/research-canary imperfections
+  independent of safety/authority are Tier 2/3 with explicit limits, not blanket
+  blockers. Required source/review/safety proof, authoritative instrument,
+  account/mode/risk/order custody, disabled installation and separate arming
+  remain Tier 1. Existing failed canaries and executable gate results are not
+  promoted to PASS; this qualification declares no Paper readiness.
 - Broad historical replay/statistical claims require corporate-action-safe,
   positively admitted history. `ARGUS-RESEARCH-DATA-002` supplies contracts but
   current broad datasets retain unknown basis and survivorship limitations.
@@ -756,12 +801,24 @@ authoritative ordered sequence is maintained only in `Next / Queue` below.
 This is the only authoritative statement of what happens next. Historical
 next-action language preserved elsewhere cannot supersede this queue.
 
+Apply `PRAGMATIC_GATE_AND_EVIDENCE_POLICY.md` to all future queued work.
+Classify the affected claim and consequence; preserve failed/UNKNOWN evidence
+and existing executable predicates. Read-only readmission requires accepted-FF
+evidence, ancestry and relevant input hashes without changing frozen identities.
+For Paper, bounded operational or research-canary imperfections independent of
+safety/authority are Tier 2/3; authoritative instrument/account/mode/risk/order
+custody, reviewed source, required safety proof, disabled-install proof and
+separate arming remain Tier 1. No readiness or activation is declared here.
+
 ### 1. Active
 
-1. No canonical integration-train item is active after the GUI thread-affinity
-   repair closeout. The single read-only production Observer
-   heartbeat remains active; any identity, singleton, canonical, or safety
-   anomaly fails closed and requires a separate repair directive.
+1. The pragmatic gate/evidence policy source is integrated and backed up at
+   `b7c05b09a2030a23c9284aac7e3ff28f3500d2a9` and applies to future work.
+   No active product implementation is authorized by this policy; future
+   runtime/configuration changes require separately scoped implementation,
+   applicable proof and any required activation authority.
+   Existing Observer/runtime authority remains governed by its separate
+   records and evidence, not revalidated by this documentation integration.
 
 ### 2. Ready / Next
 
@@ -807,6 +864,10 @@ next-action language preserved elsewhere cannot supersede this queue.
    successful physical exact-path acceptance, authoritative instrument
    classification, canonical reconciliation, complete requalification, and
    disabled-install proof.
+   Classify the bundled canary/operational conditions by consequence under the
+   policy above; independent Tier-2/3 imperfections alone do not establish a
+   blanket block. Required Tier-1 proof and separate arming remain unmet until
+   actually proven; no historical failure or executable result is overwritten.
 3. STAT-DATA deployment and prospective production activation remain blocked
    despite accepted canonical source integration; they require separate
    governance and deployment authority.
@@ -3619,6 +3680,13 @@ blocked and gains no authority from Paper evidence.
   rebase/force, repeat complete Hard Chew, install disabled, prove the exact
   Paper-only environment read-only, and treat one-entry arming as a separate
   gate.
+- Gate interpretation for future work: the bundled natural-runtime/research-
+  canary conditions are Tier 2/3 only where independent of safety and authority,
+  with honest limitations and bounded monitoring where required. Authoritative
+  instrument/account/mode/risk/order custody, reviewed source, required safety
+  and independent acceptance proof, disabled-install proof and separate arming
+  remain Tier 1. Preserve original canary failures and existing executable
+  predicates; this policy supplies no new PASS and does not declare Paper ready.
 - Current authority remains `CONTINUOUS_PAPER_INSTALLED = NO`,
   `ENTRY_AUTHORITY_DISABLED`, no Continuous Runtime account/position/order
   reads, and no Alpaca Live or real-order capability.

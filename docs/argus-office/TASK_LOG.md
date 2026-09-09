@@ -612,3 +612,53 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
 - Final safety state: 13 pending future openings, zero enabled Shadow/Paper
   jobs, order transmission unavailable, all three services Running/Automatic,
   and Continuous configuration/service hashes unchanged.
+
+## 2026-09-09 - Pragmatic Gate And Evidence Policy Source Integration
+
+- `ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001` source is
+  `COMPLETE / CANONICAL_INTEGRATED / GOVERNANCE_ONLY`. Frozen branch
+  `codex/ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001` at
+  `b7c05b09a2030a23c9284aac7e3ff28f3500d2a9` has sole parent
+  `c596c80324d24e01b32b7efecda83e362b9ae1cf` and exact reviewed tree
+  `704b0da7706395c6ed71be2b79f411a9a71779b5`.
+- Independent Astra policy review returned advisory ACCEPT, zero findings,
+  14/14 decision cases and 8/8 paired boundaries. The review artifact SHA-256
+  is `269A0B1ADB9D818CBC3547D334E125ADB4D22BEE10584012354DFA5089730E42`;
+  it is review evidence, not integration/activation authority.
+- The detached qualification worktree and canonical `master` fast-forwarded
+  to the exact source with zero conflicts. All eight changed paths are approved
+  documentation; all 1,067 other entries and five protected product/test/tool
+  trees match base. Identity, scope, whitespace, policy references, bounded
+  credential-pattern and clean-worktree checks passed. Application tests were
+  not run for this governance-only change.
+- A master-only non-force push succeeded. Actual remote `master`, local
+  `master` and `origin/master` matched the source at 2026-09-09T21:41:07Z,
+  with clean canonical and 0/0 ahead/behind. Actual integration/backup evidence
+  is `SOURCE_INTEGRATION_BACKUP_RECEIPT.json` in
+  `C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001`.
+- Observed prior lineage: older Roadmap snapshot `2bceeea` -> `46e65fb` ->
+  `64e4ae8` -> `9543b2f` -> baseline `c596c80`. This task verified ancestry,
+  not those prior code commits' acceptance, deployment or installed readiness.
+  Future consequential reliance requiring missing authority evidence remains
+  gated; no previous product record or failure was rewritten as a new PASS.
+- Future work applies the three-tier policy. Independent operational/research-
+  canary imperfections are Tier 2/3 with honest limits and applicable bounds;
+  authoritative instrument/account/mode/risk/order custody, reviewed source,
+  required safety proof, disabled-install and separate Paper arming remain
+  Tier 1. No Paper readiness or activation is declared.
+- No production-code, config, service, scheduler, provider/account, runtime or
+  Guardian-pin change was made. Reader, Continuous, Paper/live/execution and
+  other activation restrictions remain; the three existing lanes are untouched.
+- Separate closeout branch
+  `codex/ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001-closeout` starts at
+  the integrated source and changes only Roadmap, Branch Ledger and Task Log.
+  This shared-record closeout records the completed source integration and its
+  evidence without changing the frozen source branch or accepted policy bytes.
+- Parent-owned local Codex instructions were verified by the parent against
+  reviewed SHA-256
+  `68E82EB9ABB1813F68E9D6F28B11728E65754E3162CE3242C3A20220347BC556`.
+  `LOCAL_STARTUP_PROBE.json` in the same evidence directory records a successful
+  fresh bundled Codex 0.153.4 startup with `gpt-6-astra`, exit 0, the exact
+  policy directive loaded, and tier/authority distinctions without model tools.
+  This is instruction-adoption evidence, not an application test or production
+  readiness proof; the Integration Steward did not edit the local instructions.

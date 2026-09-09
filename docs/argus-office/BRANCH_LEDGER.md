@@ -2,6 +2,62 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001 - 2026-09-09
+
+Source classification: `COMPLETE / CANONICAL_INTEGRATED / GOVERNANCE_ONLY`.
+The frozen branch `codex/ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001`
+contains exact source head `b7c05b09a2030a23c9284aac7e3ff28f3500d2a9`,
+sole parent `c596c80324d24e01b32b7efecda83e362b9ae1cf`, and reviewed
+tree `704b0da7706395c6ed71be2b79f411a9a71779b5`. Committing the reviewed
+index changed no candidate bytes; the source branch remains frozen.
+
+Independent Astra review in `SECOND_EYE_REVIEW.md` returned advisory ACCEPT,
+zero findings, 14/14 decision cases and 8/8 paired boundaries. Review SHA-256:
+`269A0B1ADB9D818CBC3547D334E125ADB4D22BEE10584012354DFA5089730E42`.
+Integration authority was Steven's current task, the explicit Phase 2 work
+order and standing nonvisual delegation, not the advisory review disposition.
+
+Detached `QUALIFY-ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001` and then
+canonical `master` accepted the exact source using `git merge --ff-only`,
+without conflicts or other changes. The eight allowlisted documentation paths
+are the entire delta; all 1,067 non-owned entries and five protected
+product/test/tool subtree hashes match base. Parent/tree, scope, whitespace,
+policy-reference, bounded four-pattern credential and clean-worktree checks
+passed. No application tests were run; no new application behavior is claimed.
+
+Source backup used only
+`git push --porcelain --no-follow-tags origin refs/heads/master:refs/heads/master`.
+Actual `origin` remote `refs/heads/master`, local `master` and tracking
+`origin/master` matched `b7c05b09a2030a23c9284aac7e3ff28f3500d2a9` at
+2026-09-09T21:41:07Z; ahead/behind was 0/0 and canonical was clean.
+Machine-readable evidence: `SOURCE_INTEGRATION_BACKUP_RECEIPT.json` under
+`C:\Users\steve\OneDrive\Documents\ArgusReviewBundles\ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001`.
+
+Observed baseline lineage after the older Roadmap snapshot is:
+
+```text
+2bceeeadd06f5ed85943942f1c0f81b7094620f7
+46e65fbafbfd65afc25c629fa87a0313651ad472
+64e4ae85edba32dc343ed32108bd0df761fc50a5
+9543b2fee72e8e9ae4c160c926a43d26a61c00b4
+c596c80324d24e01b32b7efecda83e362b9ae1cf
+```
+
+Only Git ancestry was verified for those four prior source commits. Their
+acceptance, deployment and installed readiness were not audited or certified;
+future consequential reliance requiring missing proof remains gated.
+
+The policy applies to future work without modifying existing executable
+predicates. No service, scheduler, provider/account, config, runtime, Guardian
+pin, Paper/live/execution or activation authority was changed by this
+integration. Existing three lane branches remain untouched.
+
+This separate shared-record closeout on
+`codex/ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001-closeout` from the
+integrated source records the completed source integration in the qualification
+worktree. Its scope is only `ROADMAP.md`, `BRANCH_LEDGER.md` and `TASK_LOG.md`;
+the frozen source branch and eight accepted policy files remain unchanged.
+
 ## ARGUS-INTEGRATE-SCIENCE-READER-002-ATOMIC-CURSOR-REPAIR-001 - 2026-09-03
 
 Canonical `master` accepted the exact one-commit Science lineage from
