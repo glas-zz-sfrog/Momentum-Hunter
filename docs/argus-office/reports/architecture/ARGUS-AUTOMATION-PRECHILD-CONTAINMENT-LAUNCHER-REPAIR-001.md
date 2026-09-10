@@ -109,6 +109,12 @@ The actual PowerShell executable adapter uses the testable
 accept injected test adapters. Tests call the orchestration with inert effects
 and a virtual clock, separately from actual Windows native/host tests.
 
+JSON timestamps retain their exact string representation through every controller
+read, using PowerShell's explicit string-date contract. PowerShell without that
+supported parser option is rejected. The first frozen candidate's nonmutating
+dress exposed default JSON DateTime conversion losing UTC identity on reparse;
+that rejected attempt remains preserved. The successor does not add clock slack.
+
 Before SCM mutation, the controller requires the accepted package hash, its exact
 candidate commit/tree and Astra disposition, candidate ancestry in adopted
 canonical, exact packaged source/import closure, exact installed/controller native

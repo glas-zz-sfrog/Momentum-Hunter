@@ -1,5 +1,14 @@
 Set-StrictMode -Version Latest
 
+function ConvertFrom-MHRetryJson {
+    param([Parameter(Mandatory=$true)][string]$Text)
+    if (-not (Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) {
+        throw 'POWERSHELL_JSON_STRING_DATE_CONTRACT_REQUIRED'
+    }
+    # Timestamp strings are protocol bytes, not locale-sensitive DateTime values.
+    return ConvertFrom-Json -InputObject $Text -AsHashtable -DateKind String
+}
+
 function Invoke-MHRetryWorkflow {
     param([Parameter(Mandatory=$true)][hashtable]$Plan,
           [Parameter(Mandatory=$true)][hashtable]$Actions)
@@ -138,4 +147,4 @@ function Invoke-MHRetryWorkflow {
     }
     return $result
 }
-Export-ModuleMember -Function Invoke-MHRetryWorkflow
+Export-ModuleMember -Function Invoke-MHRetryWorkflow,ConvertFrom-MHRetryJson

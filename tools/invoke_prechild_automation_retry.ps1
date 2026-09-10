@@ -9,7 +9,8 @@ Set-StrictMode -Version Latest
 if ($PSVersionTable.PSEdition -ne 'Core' -or [Environment]::Version.Major -lt 8) { throw 'REVIEWED_POWERSHELL_CORE_REQUIRED' }
 function Hash([string]$Path) { (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
 if ((Hash $Plan) -cne $PlanSha256.ToLowerInvariant()) { throw 'RETRY_PLAN_HASH_MISMATCH' }
-$p = Get-Content -LiteralPath $Plan -Raw | ConvertFrom-Json -AsHashtable
+Import-Module (Join-Path $PSScriptRoot 'automation_retry_workflow.psm1') -Force
+$p = ConvertFrom-MHRetryJson (Get-Content -LiteralPath $Plan -Raw)
 if ($p.schemaVersion -ne 1 -or $p.task -ne 'ARGUS-AUTOMATION-PRECHILD-CONTAINMENT-LAUNCHER-REPAIR-001') { throw 'RETRY_PLAN_SCHEMA' }
 $evidence = [IO.Path]::GetFullPath($p.evidenceRoot)
 if ($evidence.StartsWith([IO.Path]::GetFullPath($p.canonicalRoot),[StringComparison]::OrdinalIgnoreCase) -or
@@ -84,7 +85,7 @@ function Observe([string]$Action,[int]$Phase,[string]$OwnershipPath='',[double]$
     $arguments=@('-B',$p.readonlyAdapter,$Action,'--config',$config.readonlyConfig,'--config-sha256',$config.readonlyConfigSha256,'--output',$output)
     if ($OwnershipPath) { $arguments += @('--ownership',$OwnershipPath,'--ownership-sha256',(Hash $OwnershipPath)) }
     Native $arguments $Seconds
-    $result=Get-Content -LiteralPath $output -Raw | ConvertFrom-Json -AsHashtable
+    $result=ConvertFrom-MHRetryJson (Get-Content -LiteralPath $output -Raw)
     if ($result.status -ne 'PASS') { throw "READONLY_OBSERVATION_REJECTED:$name" }
     return $result
 }
@@ -134,7 +135,6 @@ if ($p.acceptedCandidateCommit -notmatch '^[0-9a-f]{40}$' -or $p.acceptedCandida
     $p.acceptedPackageSha256 -notmatch '^[0-9a-f]{64}$' -or $p.astraDisposition -ne 'ACCEPT_PRECHILD_CONTAINMENT_AND_RETRY_CONTROLLER') { throw 'ADMITTED_HANDOFF_REQUIRED' }
 if (-not (Test-Path -LiteralPath $evidence -PathType Container)) { New-Item -ItemType Directory -Path $evidence | Out-Null }
 Save-New 'production-attempt-intent.json' @{at=[DateTimeOffset]::UtcNow.ToString('o');planSha256=$PlanSha256;attemptsAuthorized=1;restartAuthorized=1} | Out-Null
-Import-Module (Join-Path $PSScriptRoot 'automation_retry_workflow.psm1') -Force
 try {
 Native @('-B',(Join-Path $PSScriptRoot 'validate_prechild_retry_plan.py'),'--plan',$Plan,'--plan-sha256',$PlanSha256,'--package',$p.acceptedPackagePath) 60
 if ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne $p.serviceSid) {throw 'CONTROLLER_SERVICE_PRINCIPAL_MISMATCH'}
@@ -214,8 +214,8 @@ $actions.Stop={param($c,$budget)
     $session.Dispose();$script:session=$null
 }
 $actions.PublishReady={param($c,$budget)
-    $cfg=Get-Content -LiteralPath $p.phases[1].readonlyConfig -Raw | ConvertFrom-Json -AsHashtable
-    $expect=Get-Content -LiteralPath $cfg.expectationsPath -Raw | ConvertFrom-Json -AsHashtable
+    $cfg=ConvertFrom-MHRetryJson (Get-Content -LiteralPath $p.phases[1].readonlyConfig -Raw)
+    $expect=ConvertFrom-MHRetryJson (Get-Content -LiteralPath $cfg.expectationsPath -Raw)
     $expect.automationRuntime=$c.binding
     $expect.services.MomentumHunterAutomation.PathName=$p.phases[1].serviceDefinition
     $c.expectationsPath=Save-New 'second-generation-guardian-expectations.json' $expect
@@ -243,7 +243,7 @@ $actions.PublishReady={param($c,$budget)
 $actions.ScheduleAck={param($c,$budget)
     if (-not (Test-Path -LiteralPath $p.scheduleAckPath)) {return $null}
     [MomentumHunter.AutomationService.RetryLaunchGate]::ValidateJson([IO.File]::ReadAllBytes($p.scheduleAckPath))
-    $ack=Get-Content -LiteralPath $p.scheduleAckPath -Raw | ConvertFrom-Json -AsHashtable
+    $ack=ConvertFrom-MHRetryJson (Get-Content -LiteralPath $p.scheduleAckPath -Raw)
     if ($ack.status -ne 'PASS' -or $ack.planSha256 -cne $PlanSha256 -or
         $ack.readyRequestSha256 -cne $c.readyRequestSha256 -or $ack.expectationsSha256 -cne $c.expectationsSha256) {
         throw 'PARENT_GUARDIAN_ACK_NOT_BOUND_TO_READY_GENERATION'
