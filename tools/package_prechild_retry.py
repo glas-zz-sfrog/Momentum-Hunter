@@ -76,12 +76,32 @@ def prepare(source, stage, head, base, binary, selections):
         raise ValueError("FROZEN_SOURCE_MUST_BE_CLEAN")
     tree = git(source, "rev-parse", head + "^{tree}").decode().strip()
     archive = io.BytesIO(git(source, "archive", "--format=zip", head))
-    extract(archive, stage / "source")
+    checkout = []
+    with zipfile.ZipFile(archive) as blobs:
+        for entry in blobs.infolist():
+            if entry.is_dir():
+                continue
+            name = relative(entry.filename).as_posix()
+            original = blobs.read(entry)
+            path = source / name
+            if path.is_symlink():
+                raise ValueError("SOURCE_SYMLINK_REJECTED")
+            physical = path.read_bytes()
+            representation = checkout_representation(original, physical)
+            target = stage / "source" / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("xb") as output:
+                output.write(physical)
+            checkout.append({"path": name, "gitBlobSha256": digest(original), "physicalSha256": digest(physical),
+                "representation": representation})
+    write(stage / "GIT-CHECKOUT-BYTE-BINDING.json", {"head": head, "tree": tree, "files": checkout,
+        "runtimeVerification": "EXACT_PACKAGED_PHYSICAL_BYTES_NO_NORMALIZATION"})
     source_rows = [{"path": p.relative_to(stage / "source").as_posix(), "sha256": digest(p.read_bytes())}
         for p in sorted((stage / "source").rglob("*")) if p.is_file()]
     write(stage / "SOURCE-BYTE-INVENTORY.json", source_rows)
     write(stage / "CANDIDATE.json", {"head": head, "tree": tree, "base": base,
-        "sourceArchive": "git archive of exact commit", "sourceFileCount": len(source_rows)})
+        "sourceArchive": "exact clean physical checkout bound to Git blobs; only explicit checkout line-ending representation permitted",
+        "sourceFileCount": len(source_rows)})
     (stage / "EXACT-DIFF.patch").write_bytes(git(source, "diff", "--binary", base, head))
     (stage / "EXACT-DIFF-NAME-STATUS.txt").write_bytes(git(source, "diff", "--name-status", base, head))
     (stage / "binary").mkdir()
@@ -101,6 +121,14 @@ def prepare(source, stage, head, base, binary, selections):
             with target.open("xb") as output:
                 output.write(location.read_bytes())
     return {"status": "PREPARED_NOT_QUALIFIED", "head": head, "tree": tree}
+
+
+def checkout_representation(original, physical):
+    if original == physical:
+        return "EXACT_GIT_BLOB"
+    if b"\0" not in original and b"\r" not in original and original.replace(b"\n", b"\r\n") == physical:
+        return "EXACT_GIT_WINDOWS_CRLF_CHECKOUT"
+    raise ValueError("PHYSICAL_SOURCE_NOT_EXACT_ACCEPTED_CHECKOUT")
 
 
 SECRET_PATTERNS = {

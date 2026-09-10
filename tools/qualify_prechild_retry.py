@@ -35,6 +35,15 @@ def qualify(source, output, head, python, full_python, packaged_binary=None):
     base = subprocess.run([str(python), "-B", "-c", "import sys; print(sys._base_executable)"],
         capture_output=True, text=True, check=True, timeout=15).stdout.strip()
     results = []
+    if (source / ".git").exists():
+        tracked = subprocess.run(["git", "--no-optional-locks", "-C", str(source), "ls-files", "-z"],
+            check=True, capture_output=True, timeout=30).stdout.decode().split("\0")
+        source_paths = sorted(source / name for name in tracked if name)
+    else:
+        source_paths = sorted(p for p in source.rglob("*") if p.is_file() and not any(
+            part in {"bin", "obj", "__pycache__", ".git"} for part in p.relative_to(source).parts))
+    before_source = {p.relative_to(source).as_posix(): sha(p) for p in source_paths}
+    write(output / "SOURCE-BEFORE.json", before_source)
     def run(label, args, seconds=600, extra_env=None):
         started = time.monotonic()
         command = [str(x) for x in args]
@@ -115,6 +124,9 @@ def qualify(source, output, head, python, full_python, packaged_binary=None):
     if mismatch: failures.append("binary-source-rebuild")
     if not any(c["tierOneCount"] for c in native_counts) or any(c["tierOneNotPassed"] for c in native_counts):
         failures.append("missing-or-unpassed-tier-one-native-test")
+    drift = [name for name, expected in before_source.items() if not (source / name).is_file() or sha(source / name) != expected]
+    write(output / "SOURCE-AFTER.json", {"status": "PASS" if not drift else "FAIL", "changedPaths": drift, "fileCount": len(before_source)})
+    if drift: failures.append("source-byte-drift-during-qualification")
     summary = {"status": "PASS" if not failures else "FAIL", "failures": failures, "head": head,
         "fullPythonIncluded": full_python, "native": native_counts, "commands": results,
         "finishedAt": datetime.now(timezone.utc).isoformat(), "productionServiceOperations": 0, "providerCallsAuthorized": 0}

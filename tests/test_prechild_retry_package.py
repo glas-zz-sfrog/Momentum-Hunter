@@ -12,6 +12,15 @@ spec.loader.exec_module(package)
 
 
 class PrechildPackageTests(unittest.TestCase):
+    def test_checkout_representation_is_exact_and_narrow(self):
+        self.assertEqual("EXACT_GIT_BLOB", package.checkout_representation(b"a\nb\n", b"a\nb\n"))
+        self.assertEqual("EXACT_GIT_WINDOWS_CRLF_CHECKOUT", package.checkout_representation(b"a\nb\n", b"a\r\nb\r\n"))
+        for changed in (b"a\r\nc\r\n", b"a\r\nb\n", b"a \r\nb\r\n"):
+            with self.assertRaisesRegex(ValueError, "PHYSICAL_SOURCE_NOT_EXACT"):
+                package.checkout_representation(b"a\nb\n", changed)
+        with self.assertRaisesRegex(ValueError, "PHYSICAL_SOURCE_NOT_EXACT"):
+            package.checkout_representation(b"\0binary\n", b"\0binary\r\n")
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

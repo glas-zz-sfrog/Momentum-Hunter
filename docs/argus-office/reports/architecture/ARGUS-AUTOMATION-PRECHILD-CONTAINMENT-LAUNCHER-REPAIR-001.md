@@ -191,3 +191,11 @@ machine nonmutation. Subsequent builds disable SDK certificate initialization.
 Full-suite, package/source/binary equivalence and fresh frozen detect-only Astra
 review must all finish before a production-retry-ready handoff. This source report
 does not itself assert those unfinished gates or authorize integration.
+
+The reviewed package preserves a clean Windows checkout's physical bytes, with a
+per-file Git-blob/physical-byte mapping. Only exact Git blobs or Git's explicit LF
+to CRLF checkout representation are accepted at packaging. This is not runtime
+hash normalization: adoption still requires exact equality with packaged bytes.
+Qualification records source hashes before and after tests. A disposable clean
+checkout avoids LF-only archive sources being restored as CRLF by existing tests.
+Builds and extracted-package tests use those same physical source bytes.
