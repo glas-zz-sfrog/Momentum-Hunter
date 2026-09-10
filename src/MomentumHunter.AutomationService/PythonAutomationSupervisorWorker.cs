@@ -13,7 +13,8 @@ public sealed record PythonAutomationSupervisorOptions(
     string RepositoryRoot,
     string PythonExecutable,
     string ManifestPath,
-    TimeSpan RestartDelay)
+    TimeSpan RestartDelay,
+    string? LaunchContractPath = null)
 {
     public static PythonAutomationSupervisorOptions Create(
         IReadOnlyList<string> arguments)
@@ -29,7 +30,9 @@ public sealed record PythonAutomationSupervisorOptions(
             Path.GetFullPath(
                 configured.GetValueOrDefault("--manifest")
                 ?? defaults.ManifestPath),
-            defaults.RestartDelay);
+            defaults.RestartDelay,
+            configured.TryGetValue("--launch-contract", out var launchContract)
+                ? Path.GetFullPath(launchContract) : null);
     }
 
     public static PythonAutomationSupervisorOptions CreateDefault()
@@ -81,6 +84,7 @@ public sealed record PythonAutomationSupervisorOptions(
             "--repository-root",
             "--python-executable",
             "--manifest",
+            "--launch-contract",
         };
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         for (var index = 0; index < arguments.Count; index += 2)
@@ -139,7 +143,7 @@ public sealed class PythonAutomationSupervisorWorker(
     ILogger<PythonAutomationSupervisorWorker> logger)
     : BackgroundService
 {
-    private Process? _process;
+    private WindowsContainedProcess? _process;
     private readonly string _loadedServiceHostSha256 = ComputeLoadedServiceHostSha256();
 
     public ProcessStartInfo BuildStartInfo()
@@ -191,6 +195,8 @@ public sealed class PythonAutomationSupervisorWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        using var gate = await RetryLaunchGate.OpenAsync(options.LaunchContractPath,
+            BuildStartInfo(), stoppingToken);
         logger.LogInformation(
             "{DisplayName} started without an interactive desktop dependency.",
             ServiceIdentity.DisplayName);
@@ -198,7 +204,9 @@ public sealed class PythonAutomationSupervisorWorker(
         {
             try
             {
-                await RunSupervisorOnceAsync(stoppingToken);
+                await RunSupervisorOnceAsync(gate, stoppingToken);
+                if (!gate.Permanent)
+                    throw new InvalidOperationException("RETRY_TARGET_EXITED_BEFORE_HANDOFF");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -209,6 +217,7 @@ public sealed class PythonAutomationSupervisorWorker(
                 logger.LogError(
                     exception,
                     "Automation supervisor process failed before a normal exit.");
+                if (!gate.Permanent || !gate.HandoffComplete) throw;
             }
 
             if (!stoppingToken.IsCancellationRequested)
@@ -221,50 +230,39 @@ public sealed class PythonAutomationSupervisorWorker(
         }
     }
 
-    private async Task RunSupervisorOnceAsync(CancellationToken stoppingToken)
+    private async Task RunSupervisorOnceAsync(RetryLaunchGate gate, CancellationToken stoppingToken)
     {
         var startInfo = BuildStartInfo();
-        _process = new Process
-        {
-            StartInfo = startInfo,
-            EnableRaisingEvents = true,
-        };
-        if (!_process.Start())
-        {
-            throw new InvalidOperationException(
-                "Python automation supervisor could not be started.");
-        }
-
+        using var cycle = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        using var process = WindowsContainedProcess.CreateSuspended(startInfo,
+            stage => stoppingToken.ThrowIfCancellationRequested());
+        _process = process;
         var stdout = DrainOutputAsync(
-            _process.StandardOutput,
+            process.StandardOutput,
             message => logger.LogInformation("Supervisor: {Message}", message),
-            stoppingToken);
+            cycle.Token);
         var stderr = DrainOutputAsync(
-            _process.StandardError,
+            process.StandardError,
             message => logger.LogWarning("Supervisor: {Message}", message),
-            stoppingToken);
-
+            cycle.Token);
+        Task? monitor = null;
+        Task? exit = null;
         try
         {
-            await _process.WaitForExitAsync(stoppingToken);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            StopProcessTree();
-            throw;
+            await gate.AdmitResumeAsync(process, cycle.Token);
+            monitor = gate.MonitorAsync(process, cycle.Token);
+            exit = process.WaitForExitAsync(cycle.Token);
+            await await Task.WhenAny(exit, monitor);
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException($"Python automation supervisor exited with code {process.ExitCode}.");
         }
         finally
         {
-            await Task.WhenAll(stdout, stderr);
-        }
-
-        var exitCode = _process.ExitCode;
-        _process.Dispose();
-        _process = null;
-        if (exitCode != 0)
-        {
-            throw new InvalidOperationException(
-                $"Python automation supervisor exited with code {exitCode}.");
+            process.Abort();
+            cycle.Cancel();
+            _process = null;
+            try { await Task.WhenAll(new[] { stdout, stderr, monitor ?? Task.CompletedTask, exit ?? Task.CompletedTask }); }
+            catch (OperationCanceledException) when (cycle.IsCancellationRequested) { }
         }
     }
 
@@ -282,10 +280,7 @@ public sealed class PythonAutomationSupervisorWorker(
         }
         try
         {
-            if (!_process.HasExited)
-            {
-                _process.Kill(entireProcessTree: true);
-            }
+            _process.Abort();
         }
         catch (InvalidOperationException)
         {
