@@ -163,8 +163,44 @@ SECRET_PATTERNS = {
 }
 
 
+# These exact unchanged canonical test files were inspected, not inferred safe
+# from their names. Any byte change or different path/rule loses the exception.
+REVIEWED_TEST_FIXTURES = {
+    "source/tests/test_approved_environment_hard_chew.py": {
+        "rule": "PRIVATE_KEY",
+        "sha256": {"e4cb1b49a90dded3a64326bd0c6d018fe38d82da87228ec193c9abfc06c63f38", "d5411bfb95251a5c47571bfceb1329c7dbfe06d247e5e933ce772c105e3b306c"},
+        "reason": "Scanner-negative test literals; no private-key body.",
+    },
+    "source/tests/test_schwab_oauth_listener.py": {
+        "rule": "PRIVATE_KEY",
+        "sha256": {"3429bd1b77eadbf72550d339c529c53742b58d43eccd61f53c968fdecc20fc52", "9893012bee56f540acd01cc4ed62477fc45cd16c30647f3055439b50997f12a5"},
+        "reason": "Preexisting public localhost TLS fixture; temporary test directories only.",
+    },
+    "source/tests/test_schwab_onboarding.py": {
+        "rule": "JSON_TOKEN_VALUE",
+        "sha256": {"4042bb64d75023a5a58e5582274efeb91ecaacd822c22df8f799ddf95bf4a050", "e4fd3b9cc374dbbf501e3775bd16778cd25f7f32348e0665c428448b2019f810"},
+        "reason": "SYNTHETIC-NEW-ACCESS in mocked OAuth response.",
+    },
+    "source/tests/test_schwab_readonly.py": {
+        "rule": "JSON_TOKEN_VALUE",
+        "sha256": {"e958e488493bec3e3eff617131eef1906bdf7ace109814f9a28bb15d42179f7f", "55f511420de4e2ea534dd37b94f225cb420000f1f322758fdcbc4cf80a7b0889"},
+        "reason": "SYNTHETIC-TOKEN-VALUE redaction fixture.",
+    },
+    "source/tests/test_schwab_setup.py": {
+        "rule": "JSON_TOKEN_VALUE",
+        "sha256": {"52730e650f5b2bb107c04796fe623f63322b0a349ab3c06a008e80c08a537c0d", "c7855bdc8b17b4cfe1de5f960fed479d8f2c2e3de1657c69b298d51efb9d3673"},
+        "reason": "SYNTHETIC-REFRESH local disposable DPAPI/redaction fixture.",
+    },
+    "source/tests/test_strategy_science_recorder_contract.py": {
+        "rule": "BEARER",
+        "sha256": {"3944c97c5f8d2674ba05c6bc653bbb382151cd7204b7b8f736bd8f07d5bf74a5", "2c36040e5e2f5e28afd8cc4cd97a21c537d213372e33566932d0f04537481eb5"},
+        "reason": "FAKE-NOT-A-CREDENTIAL rejected recorder input.",
+    },
+}
+
+
 def scan(root):
-    findings, count = [], 0
+    findings, fixtures, count = [], [], 0
     for path in sorted(root.rglob("*")):
         if path.is_symlink():
             raise ValueError("HANDOFF_SYMLINK_REJECTED")
@@ -177,8 +213,13 @@ def scan(root):
         raw = path.read_bytes()
         for rule, pattern in SECRET_PATTERNS.items():
             if pattern.search(raw):
-                findings.append({"path": name, "rule": rule})
+                reviewed = REVIEWED_TEST_FIXTURES.get(name)
+                if reviewed and reviewed["rule"] == rule and digest(raw) in reviewed["sha256"]:
+                    fixtures.append({"path": name, "rule": rule, "sha256": digest(raw), "reason": reviewed["reason"]})
+                else:
+                    findings.append({"path": name, "rule": rule})
     return {"status": "PASS" if not findings else "FAIL", "scannedFiles": count, "findings": findings,
+        "reviewedPublicTestFixtures": fixtures,
         "scope": "High-signal private-key/token/credential-file scan; no credential-store reads or provider calls.",
         "limitations": "Not proof against unknown secret formats; source and evidence provenance review is additionally required."}
 

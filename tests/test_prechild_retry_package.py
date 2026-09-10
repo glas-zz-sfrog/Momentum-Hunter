@@ -13,6 +13,36 @@ spec.loader.exec_module(package)
 
 
 class PrechildPackageTests(unittest.TestCase):
+    def install_reviewed_fixture(self):
+        name = "test_schwab_oauth_listener.py"
+        path = self.stage / "source/tests" / name
+        path.parent.mkdir(parents=True)
+        path.write_bytes((Path(__file__).parent / name).read_bytes())
+        return path
+
+    def test_reviewed_public_fixture_requires_exact_path_rule_and_bytes(self):
+        self.install_reviewed_fixture()
+        report = package.scan(self.stage)
+        self.assertEqual("PASS", report["status"])
+        self.assertEqual(1, len(report["reviewedPublicTestFixtures"]))
+
+    def test_reviewed_fixture_with_added_bytes_fails_closed(self):
+        path = self.install_reviewed_fixture()
+        path.write_bytes(path.read_bytes() + b"\n# changed fixture\n")
+        self.assertEqual("FAIL", package.scan(self.stage)["status"])
+
+    def test_reviewed_fixture_at_another_path_is_not_exempt(self):
+        path = self.install_reviewed_fixture()
+        path.rename(self.stage / "unreviewed.py")
+        self.assertEqual("FAIL", package.scan(self.stage)["status"])
+
+    def test_other_secret_still_blocks_with_reviewed_fixture_present(self):
+        self.install_reviewed_fixture()
+        package.write(self.stage / "secret.json", {"access_" + "token": "X" * 48})
+        report = package.scan(self.stage)
+        self.assertEqual("FAIL", report["status"])
+        self.assertTrue(any(row["path"] == "secret.json" for row in report["findings"]))
+
     def test_prepare_binds_raw_git_blob_and_exact_physical_checkout(self):
         repo = self.root / "repo"
         repo.mkdir()
