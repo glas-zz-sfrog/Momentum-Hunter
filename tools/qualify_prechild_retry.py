@@ -81,6 +81,7 @@ def qualify(source, output, head, python, full_python, packaged_binary=None):
         "packagedBinaryMismatch": mismatch, "status": "PASS" if not mismatch else "FAIL",
         "sourceRoot": str(source), "executionBinaryRoot": str(packaged_binary or built)})
     host = (packaged_binary or built) / "MomentumHunter.AutomationService.exe"
+    env["MH_PRECHILD_TEST_ASSEMBLY"] = str(host.with_suffix(".dll"))
     fixture_root = output / "native-temp"
     fixture_root.mkdir()
     native_env = {"MH_CONTAINMENT_TEST_PYTHON": base, "MH_CONTAINMENT_TEST_VENV": str(python),
@@ -88,6 +89,8 @@ def qualify(source, output, head, python, full_python, packaged_binary=None):
         "MH_CONTAINMENT_TEST_HOST": str(host),
         "MH_CONTAINMENT_TEST_PROBE": str(source / "tests-dotnet/MomentumHunter.Containment.Probe/bin/Release/net8.0/MomentumHunter.Containment.Probe.exe")}
     fixture_before = set(fixture_root.glob("MH-Prechild-*"))
+    run("powershell-actual-publication", ["pwsh", "-NoProfile", "-NonInteractive", "-File",
+        source / "tests/test_prechild_publish_ready.ps1", "-Source", source, "-Assembly", host.with_suffix(".dll")], 45, extra_env=native_env)
     for project in ("Integration", "Presentation", "Layout"):
         # Presentation tests intentionally resolve XAML from CallerFilePath. Mapping
         # their test source to a fictional deterministic root breaks those tests.
@@ -114,7 +117,7 @@ def qualify(source, output, head, python, full_python, packaged_binary=None):
         run("python-full", [python, "-B", "-m", "unittest", "discover", "-s", "tests", "-v"], 3600)
     run("compileall", [python, "-B", "-m", "compileall", "-q", "momentum_hunter", "tools", "tests"],
         extra_env={"PYTHONPYCACHEPREFIX": str(output / "pycache")})
-    parse = "$bad=@(); foreach($f in @('tools/invoke_prechild_automation_retry.ps1','tools/automation_retry_workflow.psm1','tests/test_automation_retry_workflow.ps1','tests/test_prechild_quiesce.ps1')) {$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $f),[ref]$t,[ref]$e)|Out-Null;foreach($x in $e){$bad+=@{file=$f;error=$x.Message}}}; @($bad)|ConvertTo-Json; if($bad.Count){exit 1}"
+    parse = "$bad=@(); foreach($f in @('tools/invoke_prechild_automation_retry.ps1','tools/automation_retry_workflow.psm1','tests/test_automation_retry_workflow.ps1','tests/test_prechild_quiesce.ps1','tests/test_prechild_publish_ready.ps1')) {$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $f),[ref]$t,[ref]$e)|Out-Null;foreach($x in $e){$bad+=@{file=$f;error=$x.Message}}}; @($bad)|ConvertTo-Json; if($bad.Count){exit 1}"
     run("powershell-parse", ["pwsh", "-NoProfile", "-NonInteractive", "-Command", parse])
     native_counts = []
     for path in output.glob("*.trx"):

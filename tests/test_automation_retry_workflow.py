@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -6,6 +7,21 @@ import unittest
 
 
 class RetryWorkflowTests(unittest.TestCase):
+    def test_actual_guardian_publication_and_ack_against_native_assembly(self):
+        source = Path(__file__).resolve().parents[1]
+        assembly = Path(os.environ.get("MH_PRECHILD_TEST_ASSEMBLY", str(source /
+            "src/MomentumHunter.AutomationService/bin/Release/net8.0/MomentumHunter.AutomationService.dll")))
+        self.assertTrue(assembly.is_file(), "The exact native host build is required; no Tier-1 skip.")
+        result = subprocess.run([shutil.which("pwsh"), "-NoProfile", "-NonInteractive", "-File",
+            str(source / "tests/test_prechild_publish_ready.ps1"), "-Source", str(source), "-Assembly", str(assembly)],
+            capture_output=True, text=True, timeout=45)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        proof = json.loads(result.stdout)
+        self.assertEqual("PASS", proof["status"])
+        self.assertEqual(18, len(proof["cases"]))
+        self.assertEqual(0, proof["realScmOperations"])
+        self.assertEqual(0, proof["realProviderCalls"])
+
     def test_actual_adapter_quiesce_fences_before_any_scm_operation(self):
         source = Path(__file__).resolve().parents[1]
         result = subprocess.run([shutil.which("pwsh"), "-NoProfile", "-NonInteractive", "-File",

@@ -301,7 +301,7 @@ public sealed class WindowsContainedProcess : IDisposable
         return key + "=" + value;
     }
 
-    internal static string Quote(string argument)
+    public static string Quote(string argument)
     {
         if (argument.Contains('\0')) throw new ArgumentException("NUL_IN_ARGUMENT");
         var value = new StringBuilder("\""); var slashes = 0;
