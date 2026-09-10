@@ -30,6 +30,12 @@ public sealed class PrechildDeathMatrixTests
     [InlineData("parent-exit")]
     public async Task LauncherDeathRevokesActualChildFamily(string mode) => await Run(mode, "family-running");
 
+    [Fact]
+    public async Task ClosedBreakawayDiagnosticPublicationIsRepeatable()
+    {
+        for (var iteration = 0; iteration < 10; iteration++) await Run("breakaway", "family-running");
+    }
+
     [Theory]
     [InlineData("host-waiting")]
     [InlineData("running-family")]

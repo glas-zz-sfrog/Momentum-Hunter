@@ -89,7 +89,7 @@ var body = mode switch
     "grandchild" => "subprocess.Popen([sys.executable,'-B','-c'," + JsonSerializer.Serialize("import subprocess,sys,time;" + spawn + ";time.sleep(120)") + "])",
     "rapid" => "children=[subprocess.Popen([sys.executable,'-B','-c','pass']) for _ in range(20)]\n[p.wait() for p in children]\n" + spawn,
     "native" => "subprocess.Popen([r'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe','-NoProfile','-NonInteractive','-Command','[Threading.Thread]::Sleep(120000)'],creationflags=0x08000000)",
-    "breakaway" => "try:\n " + spawn.Replace("creationflags=8", "creationflags=0x01000000") + "\nexcept OSError as e:\n open('breakaway.txt','x').write(str(e.winerror))\nelse:\n raise Exception('BREAKAWAY_ACCEPTED')",
+    "breakaway" => "try:\n " + spawn.Replace("creationflags=8", "creationflags=0x01000000") + "\nexcept OSError as e:\n with open('breakaway.partial','x') as f:f.write(str(e.winerror))\n __import__('os').rename('breakaway.partial','breakaway.txt')\nelse:\n raise Exception('BREAKAWAY_ACCEPTED')",
     "parent-exit" => spawn + ";sys.exit(0)",
     "idle" => "pass",
     _ => throw new ArgumentException("UNKNOWN_PROBE_MODE")
