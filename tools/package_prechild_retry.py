@@ -2,7 +2,6 @@
 from __future__ import annotations
 import argparse
 import hashlib
-import io
 import json
 from pathlib import Path, PurePosixPath
 import re
@@ -26,9 +25,37 @@ def relative(name):
     return value
 
 
-def git(root, *args):
+def git(root, *args, input_data=None):
     return subprocess.run(["git", "--no-optional-locks", "-C", str(root), *args],
-        check=True, capture_output=True, timeout=60).stdout
+        input=input_data, check=True, capture_output=True, timeout=60).stdout
+
+
+def frozen_blobs(source, head):
+    entries = []
+    for row in git(source, "ls-tree", "-r", "-z", head).split(b"\0"):
+        if not row:
+            continue
+        metadata, name = row.split(b"\t", 1)
+        mode, kind, oid = metadata.decode().split()
+        if mode not in {"100644", "100755"} or kind != "blob":
+            raise ValueError("NONREGULAR_SOURCE_TREE_ENTRY")
+        entries.append((relative(name.decode()).as_posix(), oid))
+    stream = git(source, "cat-file", "--batch", input_data=("\n".join(oid for _, oid in entries) + "\n").encode())
+    offset, result = 0, []
+    for name, expected in entries:
+        end = stream.index(b"\n", offset)
+        oid, kind, size = stream[offset:end].decode().split()
+        size = int(size)
+        raw = stream[end + 1:end + 1 + size]
+        offset = end + 1 + size + 1
+        if oid != expected or kind != "blob" or len(raw) != size or stream[offset - 1:offset] != b"\n":
+            raise ValueError("GIT_BLOB_STREAM_IDENTITY_MISMATCH")
+        if hashlib.sha1(b"blob " + str(size).encode() + b"\0" + raw).hexdigest() != oid:
+            raise ValueError("GIT_OBJECT_BYTES_MISMATCH")
+        result.append((name, oid, raw))
+    if offset != len(stream):
+        raise ValueError("EXTRA_GIT_BLOB_STREAM_BYTES")
+    return result
 
 
 def extract(archive, destination):
@@ -75,25 +102,19 @@ def prepare(source, stage, head, base, binary, selections):
     if git(source, "status", "--porcelain").strip():
         raise ValueError("FROZEN_SOURCE_MUST_BE_CLEAN")
     tree = git(source, "rev-parse", head + "^{tree}").decode().strip()
-    archive = io.BytesIO(git(source, "archive", "--format=zip", head))
     checkout = []
-    with zipfile.ZipFile(archive) as blobs:
-        for entry in blobs.infolist():
-            if entry.is_dir():
-                continue
-            name = relative(entry.filename).as_posix()
-            original = blobs.read(entry)
-            path = source / name
-            if path.is_symlink():
-                raise ValueError("SOURCE_SYMLINK_REJECTED")
-            physical = path.read_bytes()
-            representation = checkout_representation(original, physical)
-            target = stage / "source" / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with target.open("xb") as output:
-                output.write(physical)
-            checkout.append({"path": name, "gitBlobSha256": digest(original), "physicalSha256": digest(physical),
-                "representation": representation})
+    for name, oid, original in frozen_blobs(source, head):
+        path = source / name
+        if path.is_symlink():
+            raise ValueError("SOURCE_SYMLINK_REJECTED")
+        physical = path.read_bytes()
+        representation = checkout_representation(original, physical)
+        target = stage / "source" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("xb") as output:
+            output.write(physical)
+        checkout.append({"path": name, "gitObjectId": oid, "gitBlobSha256": digest(original), "physicalSha256": digest(physical),
+            "representation": representation})
     write(stage / "GIT-CHECKOUT-BYTE-BINDING.json", {"head": head, "tree": tree, "files": checkout,
         "runtimeVerification": "EXACT_PACKAGED_PHYSICAL_BYTES_NO_NORMALIZATION"})
     source_rows = [{"path": p.relative_to(stage / "source").as_posix(), "sha256": digest(p.read_bytes())}

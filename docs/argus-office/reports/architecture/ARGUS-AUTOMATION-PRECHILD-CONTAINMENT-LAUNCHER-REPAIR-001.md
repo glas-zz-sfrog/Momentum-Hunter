@@ -197,5 +197,14 @@ per-file Git-blob/physical-byte mapping. Only exact Git blobs or Git's explicit 
 to CRLF checkout representation are accepted at packaging. This is not runtime
 hash normalization: adoption still requires exact equality with packaged bytes.
 Qualification records source hashes before and after tests. A disposable clean
-checkout avoids LF-only archive sources being restored as CRLF by existing tests.
+checkout binds the physical source representation used by Windows qualification.
+Git archive can itself apply checkout conversion, so it is not treated as a raw
+blob source. Packaging obtains raw objects through cat-file and verifies their
+object identities independently. No test-induced line-ending mutation is claimed.
+
+Qualification builds preserve compiler determinism and explicit SourceRevisionId
+while disabling automatic Git/SourceLink metadata and implicit source-path mapping.
+An explicit normalized PathMap is identical for checkout and extracted builds.
+This prevents repository-presence metadata from changing the packaged native DLL;
+the complete DLL/EXE/JSON closure must rebuild byte-for-byte from extracted source.
 Builds and extracted-package tests use those same physical source bytes.

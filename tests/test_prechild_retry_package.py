@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -12,6 +13,30 @@ spec.loader.exec_module(package)
 
 
 class PrechildPackageTests(unittest.TestCase):
+    def test_prepare_binds_raw_git_blob_and_exact_physical_checkout(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+        def git(*args):
+            return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True).stdout.decode().strip()
+        git("init", "--quiet")
+        git("config", "core.autocrlf", "true")
+        raw = b"# offline source fixture\n"
+        physical = raw.replace(b"\n", b"\r\n")
+        (repo / "fixture.py").write_bytes(physical)
+        git("add", "fixture.py")
+        git("-c", "user.name=Offline Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
+        head = git("rev-parse", "HEAD")
+        binary = self.root / "binary-fixture"
+        binary.mkdir()
+        (binary / "MomentumHunter.AutomationService.exe").write_bytes(b"NOT_EXECUTABLE_OFFLINE_PACKAGE_FIXTURE")
+        target = self.root / "prepared"
+        package.prepare(repo, target, head, head, binary, {})
+        proof = json.loads((target / "GIT-CHECKOUT-BYTE-BINDING.json").read_text())["files"][0]
+        self.assertEqual(package.digest(raw), proof["gitBlobSha256"])
+        self.assertEqual(package.digest(physical), proof["physicalSha256"])
+        self.assertEqual(physical, (target / "source/fixture.py").read_bytes())
+        self.assertEqual("EXACT_GIT_WINDOWS_CRLF_CHECKOUT", proof["representation"])
+
     def test_checkout_representation_is_exact_and_narrow(self):
         self.assertEqual("EXACT_GIT_BLOB", package.checkout_representation(b"a\nb\n", b"a\nb\n"))
         self.assertEqual("EXACT_GIT_WINDOWS_CRLF_CHECKOUT", package.checkout_representation(b"a\nb\n", b"a\r\nb\r\n"))

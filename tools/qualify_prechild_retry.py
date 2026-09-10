@@ -61,14 +61,15 @@ def qualify(source, output, head, python, full_python, packaged_binary=None):
         print(json.dumps(record), flush=True)
         return record
     props = ["-p:ContinuousIntegrationBuild=true", "-p:Deterministic=true", "-p:UseSharedCompilation=false",
+             "-p:DeterministicSourcePaths=false", "-p:EnableSourceControlManagerQueries=false", "-p:EnableSourceLink=false",
              "-p:SourceRevisionId=" + head, "-p:PathMap=" + str(source) + "=/_/source"]
     run("dotnet-environment", ["dotnet", "--info"], 30)
     run("python-environment", [python, "-B", "-c",
         "import sys,json,importlib.metadata as m; print(json.dumps({'executable':sys.executable,'baseExecutable':sys._base_executable,'version':sys.version,'distributions':sorted((d.metadata['Name'],d.version) for d in m.distributions())}))"], 30)
     run("powershell-environment", ["pwsh", "-NoProfile", "-NonInteractive", "-Command",
         "@{version=$PSVersionTable.PSVersion.ToString();framework=[Runtime.InteropServices.RuntimeInformation]::FrameworkDescription;executable=(Join-Path $PSHOME 'pwsh.exe');sha256=(Get-FileHash -LiteralPath (Join-Path $PSHOME 'pwsh.exe') -Algorithm SHA256).Hash}|ConvertTo-Json"], 30)
-    run("native-build", ["dotnet", "build", "src/MomentumHunter.AutomationService", "-c", "Release", *props])
-    run("probe-build", ["dotnet", "build", "tests-dotnet/MomentumHunter.Containment.Probe", "-c", "Release", *props])
+    run("native-build", ["dotnet", "build", "src/MomentumHunter.AutomationService", "-t:Rebuild", "-c", "Release", *props])
+    run("probe-build", ["dotnet", "build", "tests-dotnet/MomentumHunter.Containment.Probe", "-t:Rebuild", "-c", "Release", *props])
     built = source / "src/MomentumHunter.AutomationService/bin/Release/net8.0"
     binary = {p.name: sha(p) for p in built.iterdir() if p.is_file() and p.suffix.lower() in {".dll", ".exe", ".json"}}
     mismatch = []
